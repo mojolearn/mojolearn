@@ -430,6 +430,41 @@
       "python_tests_removed": 0,
       "source_review_only": true,
       "runtime_status": "Root compile/run owed; CPU weight suite requires MOJOLEARN_COLUMN_CPU=1; see logistic-state-weights-handoff.txt."
+    },
+    {
+      "sources": [
+        "checks/native_tests/logistic_config_suite.mojo",
+        "python/mojolearn/tests/test_logistic_scalar_native_boundary.py"
+      ],
+      "decision": "new-typed-native-contract-and-python-boundary-coverage",
+      "native_config_fixtures": 54,
+      "python_boundary_definitions": 5,
+      "python_boundary_parametrized_cases": 35,
+      "producer_dependency": "4cf077436c",
+      "python_tests_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Root native compile/run and installed Python boundary execution owed; see logistic-config-handoff.txt."
+    },
+    {
+      "kind": "orchestrator-accepted-native-results",
+      "source_commit": "281ffea7f07c18b945701733bf54dcb9697245d0",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-wave4-accepted-results.json",
+      "scope": "Local CPU and Apple GPU native executables only; not installed-wheel, performance or cross-vendor identity.",
+      "accepted": {
+        "cpu_fixtures": 128,
+        "gpu_fixtures": 10,
+        "total_fixtures": 138
+      },
+      "suite_counts": {
+        "fixed_span_contracts_cpu": 118,
+        "logistic_numeric_cpu": 4,
+        "logistic_numeric_gpu": 4,
+        "svc_probability_cpu": 3,
+        "svc_probability_gpu": 3,
+        "pca_whitening_cpu": 3,
+        "pca_whitening_gpu": 3
+      },
+      "repair": "Root replaced two mixed Int32/Int SVC permutation comparisons with one typed expected index; assertions unchanged. Original R1 failure retained."
     }
   ],
   "additional_semantic_reviews": [

@@ -3,7 +3,8 @@
   "producer_dependencies": {
     "model_state": "27a0b43246",
     "label_weights": "831ed1cba0",
-    "label_context": "19b940"
+    "label_context": "19b940",
+    "config": "4cf077436c"
   },
   "suites": [
     {
@@ -28,8 +29,21 @@
       "fixtures": 8,
       "target": "normal GPU target",
       "defines": []
+    },
+    {
+      "module": "checks.native_tests.logistic_config_suite",
+      "entry": "run_checks",
+      "fixtures": 54,
+      "target": "host-native scalar configuration",
+      "defines": []
     }
   ],
   "status": "source reviewed; compile and runtime owed to root",
-  "not_a_gate": true
+  "not_a_gate": true,
+  "python_boundary": {
+    "path": "python/mojolearn/tests/test_logistic_scalar_native_boundary.py",
+    "definitions": 5,
+    "parametrized_cases": 35,
+    "status": "installed runtime owed"
+  }
 }
