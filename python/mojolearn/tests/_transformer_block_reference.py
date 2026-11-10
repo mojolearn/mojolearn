@@ -50,7 +50,7 @@ def transformer_call(block, x, state, step):
             and hasattr(ext, "transformer_forward_fresh")):
         y = empty((b, l, block.d_model), "<f4")
         addrs, params = block._with_tails(
-            [addr_ro(x)] + [0 if a is None else addr_ro(a) for a in w] + [addr(y)],
+            [addr_ro(x, name="x")] + [0 if a is None else addr_ro(a, name="weight") for a in w] + [addr(y, name="y")],
             [b, l, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
              block.intermediate, block.window])
         ext.transformer_forward_fresh(addrs, params)
@@ -65,7 +65,8 @@ def transformer_call(block, x, state, step):
     vc = _state_buf(state.v_cache, "v_cache", n)
     s0 = int(state.cached_tokens)
     y = empty((b, l, block.d_model), "<f4")
-    head = [addr_ro(x)] + [0 if a is None else addr_ro(a) for a in w] + [addr(kc), addr(vc), addr(y)]
+    head = ([addr_ro(x, name="x")] + [0 if a is None else addr_ro(a, name="weight") for a in w]
+            + [addr(kc, name="k_cache"), addr(vc, name="v_cache"), addr(y, name="y")])
     if planes is not None:
         if not hasattr(ext, "transformer_forward_int15"):
             raise NotImplementedError(f"{what}: this binding has no transformer_forward_int15 entry")

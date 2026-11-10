@@ -570,7 +570,7 @@ def _coverage_decode_session(ml, blk, X, dm):
 
 @lane("mamba2-decode-session")
 def _(ml, X, yc, yr, Xh=None):
-    """Mamba2Block's resident decode session on the `mamba2` lane's weights:
+    """Mamba2Block's resident decode session (`Mamba2DecodeSession`) on the `mamba2` lane's weights:
     steps, sync_state and load_state (`mamba2_session_open`,
     `mamba2_session_export_state`, `mamba2_session_load_state`), held in the
     cell to the per-call step. The state is conv_window, h, buffer_xbc,
@@ -587,7 +587,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("mamba3-decode-session")
 def _(ml, X, yc, yr, Xh=None):
-    """Mamba3Block's resident decode session on the `mamba3` lane's weights:
+    """Mamba3Block's resident decode session (`Mamba3DecodeSession`) on the `mamba3` lane's weights:
     steps, sync_state and load_state (`mamba3_session_open`,
     `mamba3_session_step`, `mamba3_session_export_state`,
     `mamba3_session_load_state`), held in the cell to the per-call step. The
