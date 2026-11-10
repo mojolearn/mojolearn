@@ -43,6 +43,8 @@ struct NativeArrayLayout(Copyable, Movable):
     var order: String
 
     def __init__(out self, var shape: List[Int], itemsize: Int, var order: String = "C") raises:
+        if order != "C" and order != "F":
+            raise Error("ValueError: array order must be 'C' or 'F', not " + order)
         self.count = 1
         for dimension in shape:  # driver-loop: over native output rank metadata
             if dimension < 0:
@@ -59,6 +61,8 @@ struct NativeArrayLayout(Copyable, Movable):
         for k in range(len(shape)):  # driver-loop: over native output stride metadata
             var axis = len(shape) - 1 - k if order == "C" else k
             self.strides[axis] = step
+            if shape[axis] != 0 and step > 9223372036854775807 // shape[axis]:
+                raise Error("ValueError: array strides exceed native storage")
             step *= shape[axis]
         self.shape = shape^
         self.order = order^
