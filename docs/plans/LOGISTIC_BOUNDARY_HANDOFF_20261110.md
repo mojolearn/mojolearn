@@ -61,9 +61,9 @@ evidence directory are NumPy 2.2 `scalarmath.c.src` and `arraytypes.c.src`;
 promotion follows [NEP 50](https://numpy.org/neps/nep-0050-scalar-promotion.html)
 and the [2.2 promotion-state removal](https://numpy.org/doc/2.3/release/2.2.0-notes.html#nep-50-promotion-state-option-removed).
 
-Fitted state/admission and class labels still contain Python snapshots and
-containers; public coef/intercept/classes/config mutation must remain supported
-when those internals become typed. Weighted-fit class encoding and row weighting
+Fitted-query width/scalar validation and shared class labels still need native
+plan completion; public coef/intercept/classes/config mutation remains supported.
+Weighted-fit class encoding and row weighting
 still enter their existing compiled Python APIs. Explicit host score still calls
 its connected host owner through a compiled Python entry. Those transitive paths
 are not claimed complete. Metadata/get_params/set_params, ownership and admitted
@@ -80,6 +80,17 @@ public writable coefficient arrays and private `_w` semantics are unchanged.
 The fresh `_w` stays private through GIL-released PACK; publication happens
 after the join, with the previous failed-allocation `_w` state retained on the
 error path. This output-layout step does not complete fitted-query snapshots.
+
+The public query door no longer copies a Python dictionary of model fields.
+`LogisticQueryOwners` is an explicit UNPACK/PACK owner record containing only
+the five actual public field references consumed by a query, plus native
+presence flags. Its `finally` pin covers the entire query, including all GIL
+releases and failures. These are actual public values retained for rebinding
+safety, not Python-owned private algorithm state; the numerical interface is
+still typed QN requests. The no-longer-used `logistic_fields(copy_state)` branch
+and the score method's temporary `(X, y)` Python operation envelope are removed.
+Class labels and width comparisons remain explicitly listed above as unfinished
+transitive work; retaining owner pins is not proof that those decisions migrated.
 
 The explicit host binary prediction now gives the unchanged QN binary-code
 operation the final owned native `List[Int]` consumed by label decoding. The
