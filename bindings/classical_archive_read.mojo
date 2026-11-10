@@ -14,6 +14,7 @@ from bindings.classical_archive_output import archive_members_pack, archive_even
 from bindings.classical_archive_linear import archive_class_names_unpack, archive_print_mode_unpack, archive_linear_pack, archive_linear_fields_unpack
 from core.native_archive_linear import native_archive_string, native_linear_archive_plan
 from core.native_archive_read import native_archive_read_status
+from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
 
 
 def _archive_builtin_repr(value: PythonObject) raises -> String:
@@ -171,89 +172,103 @@ def _archive_repr_admit(value: PythonObject, context: PythonObject,
     return has_path
 
 
-struct ArchiveReprTask(Movable):
-    var operation: Int
+struct _ArchiveReprFailure(Movable):
+    # Boundary-only exception pins. A scalar repr can fail before a later
+    # graph node; native RUN selects that same first failure in display order.
+    var kind: PythonObject
     var value: PythonObject
-    var text: String
+    var traceback: PythonObject
 
-    def __init__(out self, operation: Int, value: PythonObject, var text: String):
-        self.operation = operation
-        self.value = value
-        self.text = text^
+    def __init__(out self) raises:
+        ref cpy = Python().cpython()
+        var words = List[PyObjectPtr](length=3, fill=PyObjectPtr())
+        var pointer = words.unsafe_ptr()
+        cpy.lib.get_function[NoneType]("PyErr_Fetch")(pointer, pointer + 1, pointer + 2)
+        self.kind = PythonObject(from_owned=words[0]) if words[0] else PythonObject(None)
+        self.value = PythonObject(from_owned=words[1]) if words[1] else PythonObject(None)
+        self.traceback = PythonObject(from_owned=words[2]) if words[2] else PythonObject(None)
+
+    def raise_saved(self) raises:
+        ref cpy = Python().cpython()
+        var kind = PyObjectPtr() if self.kind is None else cpy.Py_NewRef(self.kind._obj_ptr)
+        var value = PyObjectPtr() if self.value is None else cpy.Py_NewRef(self.value._obj_ptr)
+        var traceback = PyObjectPtr() if self.traceback is None else cpy.Py_NewRef(self.traceback._obj_ptr)
+        cpy.lib.get_function[NoneType]("PyErr_Restore")(kind, value, traceback)
+        var failure = stash_python_error()
+        raise failure^
 
 
-def _archive_repr_text(var text: String) -> ArchiveReprTask:
-    return ArchiveReprTask(1, PythonObject(None), text^)
+def _archive_repr_leaf_unpack(value: PythonObject, mut node: NativeArchiveReprNode,
+                              mut failures: List[_ArchiveReprFailure]) raises:
+    # Exact native leaves were admitted by the complete first pass. Capture
+    # their C-API failures without replacing the pending exception TLS slot.
+    ref cpy = Python().cpython()
+    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_Repr")(value._obj_ptr)
+    if not result:
+        node.failure = len(failures)
+        failures.append(_ArchiveReprFailure())
+        return
+    node.text = String(PythonObject(from_owned=result))
+
+
+def _archive_repr_child_unpack(value: PythonObject, mut pins: List[PythonObject],
+                               mut nodes: List[NativeArchiveReprNode],
+                               mut indices: Dict[Int, Int]) raises -> Int:
+    var identity = Int(value._obj_ptr)
+    if identity in indices:
+        return indices[identity]
+    var index = len(nodes)
+    indices[identity] = index
+    pins.append(value)
+    nodes.append(NativeArchiveReprNode())
+    return index
 
 
 def _archive_repr_paths(value: PythonObject, context: PythonObject,
                         native_types: PythonObject) raises -> String:
-    # Path-containing graphs need native formatting because standard Path
-    # repr is Python. Explicit tasks replace C recursion; an active-identity
-    # map, rather than copied ancestry lists, preserves aliases and cycles.
-    var pending = List[ArchiveReprTask]()
-    pending.append(ArchiveReprTask(0, value, ""))
-    var active = Dict[Int, Bool]()
-    var result = String()
-    while len(pending):  # driver-loop: iterative native representation formatting
-        var task = pending.pop()
-        if task.operation == 1:
-            result += task.text
-            continue
-        var item = task.value
-        var identity = Int(item._obj_ptr)
-        if task.operation == 2:
-            _ = active.pop(identity)
-            continue
+    # UNPACK snapshots native container edges, scalar display values and owner
+    # pins. Native RUN owns formatting order, cycle handling and text state.
+    var pins = List[PythonObject]()
+    var nodes = List[NativeArchiveReprNode]()
+    var indices = Dict[Int, Int]()
+    var failures = List[_ArchiveReprFailure]()
+    _ = _archive_repr_child_unpack(value, pins, nodes, indices)
+    var index = 0
+    while index < len(pins):  # unpack: admitted native object graph and owners
+        var item = pins[index]
         var kind = _archive_repr_kind(item, context, native_types)
+        var node = NativeArchiveReprNode(kind)
         if kind == 0 or kind == 7:
-            result += _archive_builtin_repr(item)
+            _archive_repr_leaf_unpack(item, node, failures)
         elif kind == 1:
             var normalized = _archive_read_path(item, context)
-            result += "PosixPath(" if py_type(item) is context["archive_path_types"][0] else "PurePosixPath("
-            result += _archive_builtin_repr(normalized)
-            result += ")"
+            node.pure_path = py_type(item) is context["archive_path_types"][1]
+            _archive_repr_leaf_unpack(normalized, node, failures)
         elif kind >= 2 and kind <= 6:
-            if identity in active:
-                result += "[...]" if kind == 2 else ("(...)" if kind == 3 else ("{...}" if kind == 4 else ("set(...)" if kind == 5 else "frozenset(...)")))
-                continue
             var members = _archive_repr_members(item, kind)
-            var size = len(members)
-            if size == 0:
-                result += "[]" if kind == 2 else ("()" if kind == 3 else ("{}" if kind == 4 else ("set()" if kind == 5 else "frozenset()")))
-                continue
-            active[identity] = True
-            pending.append(ArchiveReprTask(2, item, ""))
-            pending.append(_archive_repr_text("]" if kind == 2 else (")" if kind == 3 else ("})" if kind == 6 else "}"))))
-            if kind == 3 and size == 1:
-                pending.append(_archive_repr_text(","))
-            for i in range(size - 1, -1, -1):  # driver-loop: reverse stack order, native display order
+            for i in range(len(members)):  # unpack: exact container references
                 if kind == 4:
-                    pending.append(ArchiveReprTask(0, members[i][1], ""))
-                    pending.append(_archive_repr_text(": "))
-                    pending.append(ArchiveReprTask(0, members[i][0], ""))
+                    node.children.append(_archive_repr_child_unpack(members[i][0], pins, nodes, indices))
+                    node.children.append(_archive_repr_child_unpack(members[i][1], pins, nodes, indices))
                 else:
-                    pending.append(ArchiveReprTask(0, members[i], ""))
-                if i:
-                    pending.append(_archive_repr_text(", "))
-            result += "[" if kind == 2 else ("(" if kind == 3 else ("frozenset({" if kind == 6 else "{"))
+                    node.children.append(_archive_repr_child_unpack(members[i], pins, nodes, indices))
         else:
             var name = _archive_repr_file_name(item, context, kind)
             if len(name) == 0:
-                result += _archive_builtin_repr(item)
-                continue
-            var label = String("FileIO" if kind == 8 else ("BufferedReader" if kind == 9 else ("BufferedWriter" if kind == 10 else "BufferedRandom")))
-            if identity in active:
-                raise Error("RuntimeError: reentrant call inside _io." + label + ".__repr__")
-            active[identity] = True
-            pending.append(ArchiveReprTask(2, item, ""))
-            var suffix = String(">")
-            if kind == 8:
-                suffix = " mode=" + _archive_builtin_repr(item.mode) + " closefd=" + ("True" if Bool(py=item.closefd) else "False") + ">"
-            pending.append(_archive_repr_text(suffix^))
-            pending.append(ArchiveReprTask(0, name[0], ""))
-            result += "<_io." + label + " name="
-    return result^
+                node.kind = 0
+                _archive_repr_leaf_unpack(item, node, failures)
+            else:
+                node.children.append(_archive_repr_child_unpack(name[0], pins, nodes, indices))
+                if kind == 8:
+                    _archive_repr_leaf_unpack(item.mode, node, failures)
+                    node.closefd = Bool(py=item.closefd)
+        nodes[index] = node^
+        index += 1
+    var result = archive_repr_format(nodes)
+    if result.failure >= 0:
+        failures[result.failure].raise_saved()
+    _ = pins
+    return result.text^
 
 
 def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> String:
