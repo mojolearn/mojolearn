@@ -44,7 +44,23 @@ and CPU decision/argmax route. No tuned kernel or experiment was removed.
 
 ## Outstanding work
 
-Regularization/tolerance preparation still contains Python scalar arithmetic.
+Regularization/tolerance preparation now uses `core.logistic_config` typed
+scalar operations. Builtin, NumPy half/single/double, integer and bool promotion
+remain distinct. The shared native promotion metadata reader replaces the
+corpus-specific copy; it is consulted once only when half/single parameters
+make the promotion policy relevant. Native arithmetic produces ordered error
+events consumed by the existing native NumPy error-state/warning boundary;
+no NumPy numeric slot, Python arithmetic, builtin conversion lookup or Unicode
+mode fallback remains in this configuration path. Scalar conversions and
+public `_l1_ratio` publication remain boundary operations. Constructor refusal
+order and the later strength/tolerance conversion order are retained.
+
+The new native scalar/status plan and public scalar/error-state seams still
+owe compilation/runtime qualification. Reference sources retained in the lane
+evidence directory are NumPy 2.2 `scalarmath.c.src` and `arraytypes.c.src`;
+promotion follows [NEP 50](https://numpy.org/neps/nep-0050-scalar-promotion.html)
+and the [2.2 promotion-state removal](https://numpy.org/doc/2.3/release/2.2.0-notes.html#nep-50-promotion-state-option-removed).
+
 Fitted state/admission and class labels still contain Python snapshots and
 containers; public coef/intercept/classes/config mutation must remain supported
 when those internals become typed. Weighted-fit class encoding and row weighting
