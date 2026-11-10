@@ -1,0 +1,29 @@
+Mojolearn independent score-key fixtures (2026-11-10)
+
+Entry:checks/native_tests/label_score_keys_stress.mojo
+Suite:checks/native_tests/label_score_keys_stress_suite.mojo::run_checks
+Command:mojo run -I . checks/native_tests/label_score_keys_stress.mojo
+16 CPU-native fixtures; no GPU/Python imports. Can share an existing native
+CPU bundle with the finite lane's complementary28labels_score_keys fixtures.
+No product source or numerical kernels changed. No experiment/A/B define.
+
+Dependency:finite lane's forthcoming typed score-key commit; concrete SHA
+is recorded in the parent handoff after it freezes. Native API was reviewed
+from core/labels_score_keys.mojo while that lane finalized its source.
+
+New coverage and Python mapping are in label-score-keys-stress.json.
+The source literal collision integers were selected into the preserved
+~/mojolearn-evidence/python-mojo-migration-20261110/score-key-collision-inputs.json.
+Hash values select fixture inputs only; expected classes and inverse codes
+come from ascending integer/code-point order and fixed permutations.
+
+No existing Python test was removed because the reviewed files exercise
+actual boundaries or different encoder/metric kernels. In particular general
+encode_labels permits floating labels; score classification rejects them.
+Using the new integer/text key index to claim coverage of that float encoder
+would be wrong. Public mixed-type/float/NaN refusal, buffer ownership and
+no-callback seams stay at the boundary.
+
+Lane validation:source/API review, TOML/JSON parsing and git diff --check.
+NO compilation, execution, pytest, timing or identity was run. Those remain
+owed to the orchestrator and are not development merge runtime gates.

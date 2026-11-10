@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "native_suite": "checks/native_tests/label_score_keys_stress_suite.mojo",
+  "native_entry": "checks/native_tests/label_score_keys_stress.mojo",
+  "fixture_count": 16,
+  "parallelism": "Fixtures, row preparation and code validation use host_parallelize; bounded alphabet metadata and summaries remain local.",
+  "product_dependency": "core/labels_score_keys.mojo from the finite-tests score container migration; freeze SHA supplied in handoff",
+  "coverage": [
+    {"fixtures": 4, "kind": "overlapping UTF8/UCS4 unions", "rows": [31, 257, 65537, 262271], "oracle": "Literal code-point alphabet: empty, NUL, prefix, combining/composed forms, lone surrogate, U+10000 and two astral symbols; fixed inverse-code permutation."},
+    {"fixtures": 4, "kind": "forced linear-probe collision chains", "rows": [64, 128, 256, 448], "oracle": "65 ascending Int64 literals selected for hash collisions; numeric sorted order and first/last representative positions are independent of the hash implementation.64 present classes plus one missing colliding key."},
+    {"fixtures": 4, "kind": "detached output owners", "rows": [10, 37, 257, 65537], "oracle": "Returned inverse codes checked after borrowed UTF8/UCS4 owners, indexes and key containers leave scope, with a separate live allocation."},
+    {"fixtures": 4, "kind": "sorted versus requested class order", "oracle": "Literal duplicate-key/raw-index and dense sorted-code answers, with unknown class -1 and destination guard words."}
+  ],
+  "python_review": [
+    {"path": "python/mojolearn/tests/test_classification_metrics.py", "decision": "retain-boundary-and-distinct-metric-oracles", "reason": "Exercises confusion/precision/recall/f-score public encoding, explicit class subsets, Python binding seams, warning classes and unsupported label types. The new score-key suite covers only shared union/inverse ordering, not those metric outputs. Its mock binding controllers require separate review against the native callback contract; no controller was deleted to hide a failure."},
+    {"path": "python/mojolearn/tests/test_native_metric_scorer_helpers.py", "decision": "retain-python-boundary", "reason": "Covers poisoned Python Array methods, exact container admission, huge public integers, refused user protocols and warning delivery. These cannot be replaced by raw native key records."},
+    {"path": "python/mojolearn/tests/test_labels_native.py", "decision": "retain-distinct-encoder-and-boundary", "reason": "General labels encoder accepts floating labels and has a different native path and API. Score classification keys deliberately admit only integer/text labels. Moving its signed-zero/NaN checks onto the score-key implementation would test the wrong contract. Actual Array input, public output dtype, encoder cap, argmax and decode-gather checks remain distinct."}
+  ],
+  "remaining_boundary_seams": [
+    "Exact NumPy bool/integer/string normalization and custom hook refusal remain Python admission tests.",
+    "Float labels including signed zero, infinities and NaNs are refused before native score-key construction; no unsupported float key mode was invented.",
+    "Integers beyond Python's decimal-string limit are admitted through hexadecimal magnitude storage; boundary coverage remains required.",
+    "Public explicit duplicate class-list refusal is distinct from the internal index keep_last dictionary behavior."
+  ],
+  "deletions": "None: no existing pure test invokes this new key-index API. Retained Python tests exercise public admission or different encoder/metric paths.",
+  "validation": {"native_compile": "not run by lane", "native_execution": "not run by lane", "python_tests": "not run by lane", "identity": "not run", "timing": "not run"}
+}
