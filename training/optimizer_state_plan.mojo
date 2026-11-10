@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native optimizer state spans and host-mirror preparation decisions."""
 from bindings.tensor_view import TensorView, base_format
-from training.optimizer_public_common import PublicStep
+from training.optimizer_public_common import PublicStep, I32P, registry_offsets, eager_moments
 
 
 @fieldwise_init
@@ -74,3 +74,15 @@ def optimizer_host_moment_plan(count: Int, first_present: Bool, second_present: 
 def optimizer_checkpoint_input(rank: Int, count: Int) raises:
     if rank != 1 or count < 1:
         raise Error("ValueError: optimizer checkpoint arrays must be nonempty one-dimensional buffers")
+
+
+@fieldwise_init
+struct OptimizerRegistryPlan(Copyable, ImplicitlyCopyable, Movable):
+    var parameters: Int
+    var count: Int
+    var eager: Bool
+
+
+def optimizer_registry_plan(nbytes: List[Int], offsets: Int) raises -> OptimizerRegistryPlan:
+    var count = registry_offsets(nbytes, I32P(unsafe_from_address=offsets))
+    return OptimizerRegistryPlan(len(nbytes), count, eager_moments())

@@ -278,3 +278,21 @@ method shares these native checks; no Python staging is restored. New focused
 public cases exercise conflicting invalid arguments and unchanged parameter
 storage. Registry-versus-scalar precedence follows in the next required batch;
 root must include both repairs before its consolidated build.
+
+## Audit repair: registry preparation before final scalar decoding
+
+Constructor preparation now has typed early configuration, native registry
+preparation, then final scalar decoding, matching the established refusal order.
+The registry uses the same offsets operation and allocates each public output
+buffer once; the prepared record holds only publication owners plus a native
+OptimizerRegistryPlan. It introduces no data copy or second registry pass.
+The same prepared registry publishes in constructors, set_params and the legacy
+registry export. Live owners remain untouched until preparation succeeds, and
+failed replacement retains its prior fields/storage.
+
+Public precedence coverage now includes empty, wrong-dtype and readonly registries
+against malformed scalar options, plus set_params rollback/owner preservation.
+Root must include this commit together with the early-validation repair for the
+consolidated build. No lane compilation/tests were run, and no tuned kernel or
+valid-input numeric operation changed. Parent owns the separate TSQR final-copy
+and strided-gather coordinate optimizations; this batch does not touch them.
