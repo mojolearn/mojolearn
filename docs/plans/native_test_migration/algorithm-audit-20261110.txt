@@ -99,3 +99,10 @@ Evidence
   algorithm-audit-tsqr.diff, algorithm-audit-ridge.diff,
   algorithm-audit-linear-kernel-paths.txt and algorithm-audit-changed-files.tsv
     retain source comparison evidence. No runtime pass is implied.
+
+Resolution after snapshot
+  Root e05d26af2a removes finding 2: the final CPU elementwise operation writes
+  directly into caller coefficient storage, retaining the same opcode/formula;
+  GPU output retains its original operation and direct download. No new test
+  is added just to mirror this plumbing; existing linear owner fixtures cover
+  the result and run with the consolidated bundle. Compilation/runtime owed.

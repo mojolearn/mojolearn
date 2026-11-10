@@ -85,6 +85,7 @@ check-native-linear-owner-cpu = "mojo run -I . checks/native_tests/linear_owner_
 check-native-tsqr-host-ownership = "mojo run -I . checks/native_tests/tsqr_host_ownership.mojo"
 check-native-linear-owner-gpu = "mojo run -I . checks/native_tests/linear_owner_gpu.mojo"
 check-native-optimizer-state-input = "mojo run -I . training/checks/optimizer_state_input_check.mojo"
+check-native-optimizer-state-plan = "mojo run -I . training/checks/optimizer_state_plan_check.mojo"
 check-native-ops-optimizer-cpu = "mojo run -I . checks/native_tests/ops_optimizer_cpu.mojo"
 check-native-ops-optimizer-gpu = "mojo run -I . checks/native_tests/ops_optimizer_gpu.mojo"
 check-native-sequence-optimizer-cpu = "mojo run -I . checks/native_tests/sequence_optimizer_cpu.mojo"

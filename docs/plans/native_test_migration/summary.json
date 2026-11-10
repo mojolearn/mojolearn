@@ -277,6 +277,19 @@
       "production_dependency": "bee32a8a30",
       "source_review_only": true,
       "runtime_status": "Root compile/run owed; permits correct later private scratch writes without weakening public publication checks."
+    },
+    {
+      "path": "training/checks/optimizer_state_plan_check.mojo",
+      "decision": "native-state-span-regression",
+      "native_fixtures": 32,
+      "python_boundary_path": "python/mojolearn/tests/test_optimizer_native_moment_assignment.py",
+      "python_boundary_cases": 20,
+      "production_dependencies": [
+        "dbb3631cea",
+        "bee32a8a30"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Root compile/run owed; see optimizer-state-plan-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
