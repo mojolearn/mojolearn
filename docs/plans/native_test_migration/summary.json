@@ -2,14 +2,15 @@
   "schema": "mojolearn.native-test-migration-inventory.v1",
   "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
   "files": 616,
-  "test_definitions": 4128,
+  "test_definitions": 4127,
   "file_decisions": {
     "needs-semantic-review": 594,
     "retain-python-boundary": 5,
-    "split-needed": 12,
+    "split-needed": 11,
     "review-module-gate": 1,
     "split-migrated": 2,
-    "retain-tooling": 2
+    "retain-tooling": 2,
+    "split-partial": 1
   },
   "reviewed_files": 22,
   "not_a_gate": true,
@@ -31,6 +32,14 @@
       ],
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see ops-session-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_byte_lm_runtime_shape.py",
+      "decision": "split-partial",
+      "removed_python_definitions": 1,
+      "native_fixtures": 25,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see byte-config-handoff.txt."
     }
   ]
 }
