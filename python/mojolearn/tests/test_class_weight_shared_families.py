@@ -7,6 +7,7 @@ NumPy below prepares independent oracle inputs outside product execution.
 import numpy as np
 import pytest
 from pathlib import PurePosixPath
+from collections import OrderedDict, defaultdict
 
 from mojolearn import ExtraTreesClassifier, LinearSVC, RandomForestClassifier
 from mojolearn._cpu_reference import reference_training
@@ -70,6 +71,17 @@ def test_shared_families_keep_numeric_weight_admission(family, value):
     x, y = _data()
     with pytest.raises(ValueError, match="finite nonnegative real"):
         _model(family, {7: value}).fit(x, y)
+
+
+@pytest.mark.parametrize("family", ["rf", "et"])
+@pytest.mark.parametrize("mapping", [OrderedDict, defaultdict])
+def test_tree_weight_native_mapping_types_keep_missing_class_default(family, mapping):
+    weight = mapping(float, {7: 0.25}) if mapping is defaultdict else mapping([(7, 0.25)])
+    x, y = _data()
+    actual = _model(family, weight).fit(x, y)
+    expected = _model(family, None).fit(x, y, sample_weight=np.where(y == 7, 0.25, 1).astype("f4"))
+    np.testing.assert_array_equal(np.asarray(actual.predict_proba(x)), np.asarray(expected.predict_proba(x)))
+    assert list(weight.items()) == [(7, 0.25)]
 
 
 @pytest.mark.parametrize("family", ["rf", "et"])

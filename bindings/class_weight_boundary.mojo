@@ -18,7 +18,7 @@ comptime CLASS_WEIGHT_TREES = 2
 
 
 def class_weight_admit_dictionary[Values: Bool = True](value: PythonObject, context: PythonObject) raises:
-    # PyDict_Next reads an exact dictionary. Admit every key/value before any
+    # PyDict_Next reads the admitted native dict storage. Admit keys/values before any
     # class hashing or numeric conversion, retaining the original refusal order.
     var cursor = InlineArray[Int, 1](fill=0)
     var items = InlineArray[PyObjectPtr, 2](fill=PyObjectPtr())
@@ -46,8 +46,11 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
         # Tree constructor admission also accepts exact pathlib objects for
         # unrelated options. Those keys still have Python hash/equality hooks;
         # only native label primitives may enter the key-set operation below.
-        if py_type(value) is not b.dict:
+        if not _one_of(py_type(value), context["mapping_types"]):
             raise Error("TypeError: class_weight requires an exact native dictionary")
+        # Tree admission includes exact OrderedDict/defaultdict as well as
+        # dict. Their native dictionary storage needs no user protocol, and
+        # GetItemWithError keeps dict.get's no-default-factory semantics.
         class_weight_admit_dictionary[False](value, context)
     var keys = value
     @parameter
