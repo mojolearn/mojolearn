@@ -171,6 +171,20 @@ behavior. Exotic dtype refusal and older NumPy weak-integer promotion remain
 specific compatibility qualification points; source inspection is not runtime
 evidence. There is no timing or identity result for this batch.
 
+The fit's two-word solver info and one-word finite status, and inference's
+one-word finite status, now have native owned List storage. Their addresses
+and initial zeros are unchanged; owners live through the synchronous QN
+operation and the result/refusal reads. They no longer allocate private
+Python Array wrappers. Public outputs still use the same zero-filled native
+Array allocator and writable owners, now through its existing typed-shape
+entry instead of constructing and immediately unpacking Python shape tuples.
+Removed the superseded scratch address lookups, the unused float pointer
+alias/weight-presence local, and the obsolete probability fallback docstring.
+No row traversal, reduction, upload or tuned kernel changed. The shared label
+preparation/weight buffers remain part of the separately recorded label
+boundary dependency; this fixed-size scratch cleanup does not claim those
+row buffers or score class containers have been migrated.
+
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct
 native requests plus public LogisticRegression/host/DeviceRows tests, and later
