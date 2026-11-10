@@ -19,8 +19,8 @@ def _refusal(error):
 
 
 def _base_binding():
-    # glue: the GPU base binding whose `labels_native_api_v1` provider the
-    # label steps connect once (bindings/labels_native_abi.mojo), the module
+    # glue: the GPU base binding whose `labels_native_api_v2` provider the
+    # label steps connect once (core/labels_native_api.mojo), the module
     # `_buffer._native` resolves (always the identical binary); False on a
     # CPU-only install, where the native label path runs the same host bodies
     # in-process; a recorded refusal otherwise, including an ImportError of

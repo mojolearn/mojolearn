@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed requests and the existing v1 wire contract of shared label kernels."""
+"""Native-only label requests; v2 admission retains the v1 wire slot layout."""
 from std.memory import bitcast
 from core.hotpath_impl import HpStat, HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
-comptime LABELS_NATIVE_ABI_NAME = "mojolearn.labels.v1"
-comptime LABELS_NATIVE_FACTORY = "labels_native_api_v1"
+# v1 providers may construct Python values and require the GIL. A client that
+# releases it must require v2, even though operation and buffer slots agree.
+comptime LABELS_NATIVE_ABI_NAME = "mojolearn.labels.v2"
+comptime LABELS_NATIVE_FACTORY = "labels_native_api_v2"
 comptime LABELS_OP_MODE = 0
 comptime LABELS_OP_CAPABILITIES = 1
 comptime LABELS_OP_PREPARE_TARGETS = 2
