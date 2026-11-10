@@ -160,9 +160,12 @@ def run_fixture(fixture_id: Int) raises:
     elif fixture_id == 33:
         _prefix_refusal()
     else:
-        # Empty spans are valid no-ops and need no input/output storage.
-        var null = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=0)
-        optimizer_state_cast(0, 0, 0, 8, CAST_KIND_FLOAT, True, null, True)
+        # An empty input needs no backing storage. The output API is a
+        # non-nullable pointer, so prove its guarded destination is untouched.
+        var guard = List[UInt32](length=1, fill=0xAABBCCDD)
+        var output = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(guard.unsafe_ptr()))
+        optimizer_state_cast(0, 0, 0, 8, CAST_KIND_FLOAT, True, output, True)
+        require(guard[0] == 0xAABBCCDD, "empty state cast wrote output")
 
 
 def main() raises:
