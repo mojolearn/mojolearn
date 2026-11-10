@@ -28,8 +28,19 @@ loading, timing or identity run occurred in this lane.
    check; this repair should not be described as fixing unrestricted foreign
    module callbacks. The native owner fixture now covers a connection change.
 
-No remaining concrete source defect was identified in the reviewed scope.
-That is not a claim that the code builds or runs.
+3. **Scalar hooks before native admission, found by this audit's final pass.**
+   At `7b599a4b7d`, `n_clusters` reaches comparison and integer conversion,
+   and `tol` / `random_state` reach float / integer conversion before the
+   new `kmeans_integer` admission. `metric`, `init` scalar subclasses and
+   `oversampling_factor` also retain subclass-admitting checks before key
+   lookup or conversion. The family admission checks instance storage and
+   exact dictionary keys, not all parameter values, so it does not close
+   these paths. This is inherited boundary debt, not a kernel regression.
+   The producing lane owns the repair and hook-refusal boundary fixtures;
+   their final source review and runtime checks remain pending.
+
+The scalar-admission finding remains open at this recorded source. No build
+or runtime success is claimed.
 
 ## Call-path and ownership review
 
@@ -83,8 +94,9 @@ That is not a claim that the code builds or runs.
   the native path. Host integer fields retain `operator.index` semantics and
   Boolean refusal via `PyNumber_Index`; GPU integer conversion keeps its
   former `Int` semantics. Explicit conversions of tolerance/seed and their
-  order remain in UNPACK. Unsupported custom scalar/protocol objects are
-  refused before a conversion hook can execute.
+  order remain in UNPACK. The new `kmeans_integer` refuses unsupported scalar
+  hooks itself, but earlier public conversions still need the repair in
+  finding 3. This audit does not claim complete callback-free admission.
 - No numerical kernels or data-sized loops were rewritten. Tensor-sized
   input/initial-center/output copies and resident/fold routes are preserved.
   Metadata allocations changed: typed bounded request/result storage replaces
