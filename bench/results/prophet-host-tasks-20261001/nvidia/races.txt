@@ -1,6 +1,0 @@
-before synthetic ms=5331.571 digest=8d3c6f8fb148f95f 
-before taxi-hourly ms=6296.527 digest=66f5dd106a7a3f88 
-after synthetic ms=178.740 digest=8d3c6f8fb148f95f 
-after taxi-hourly ms=185.585 digest=66f5dd106a7a3f88 
-after-device synthetic ms=5384.926 digest=8d3c6f8fb148f95f 
-after-device taxi-hourly ms=6362.002 digest=66f5dd106a7a3f88 
