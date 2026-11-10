@@ -400,4 +400,4 @@ __getattr__ = _lazy_exports("svm")
 __all__ += _SKLEARN_LAYOUT["svm"]
 
 # Import connection only; each native public operation admits the live registry.
-_native_family_bridge.connect_bindings("_mojolearn_estimators")
+_native_family_bridge.connect_bindings("_mojolearn_estimators", "_mojolearn_x_trees")
