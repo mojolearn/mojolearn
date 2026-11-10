@@ -51,6 +51,7 @@ check-native-ops-gpu = "mojo run -I . checks/native_tests/ops_session_gpu.mojo"
 check-native-finite-scan = "mojo run -I . checks/native_tests/finite_scan.mojo"
 check-native-bf16-cpu = "mojo run -I . checks/native_tests/bf16_conversion_cpu.mojo"
 check-native-bf16-gpu = "mojo run -I . checks/native_tests/bf16_conversion_gpu.mojo"
+check-native-linear-boundary = "mojo run -I . checks/native_tests/linear_boundary_contracts.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
 check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"
