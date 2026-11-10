@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed QN requests. Boundary owners pin storage and extension images."""
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_call, native_descriptor_report
+from core.native_descriptor_call import native_descriptor_report
+from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
 comptime LOGISTIC_NATIVE_ABI = "mojolearn.logistic.native.v1"
 comptime QN_NATIVE_FIT = 0
@@ -176,23 +177,33 @@ struct QnNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def fit(self, request: QnFitRequest) raises -> Int:
-        return native_descriptor_call(self.entry, QN_NATIVE_FIT,
-            [request.x, request.y, request.coefficients, request.info, request.weights, request.status],
-            [request.rows, request.features, request.classes, request.max_iter,
-             request.linesearch_max_iter, request.memory, Int(request.intercept), Int(request.normalized), request.loss],
-            [request.l1, request.l2, request.gradient_tolerance, request.change_tolerance, request.svr_epsilon])
+        var addresses: InlineArray[Int, 6] = [request.x, request.y,
+            request.coefficients, request.info, request.weights, request.status]
+        var ints: InlineArray[Int, 9] = [request.rows, request.features,
+            request.classes, request.max_iter, request.linesearch_max_iter,
+            request.memory, Int(request.intercept), Int(request.normalized), request.loss]
+        var floats: InlineArray[Float64, 5] = [request.l1, request.l2,
+            request.gradient_tolerance, request.change_tolerance, request.svr_epsilon]
+        return native_descriptor_call_fixed(self.entry, QN_NATIVE_FIT, addresses, ints, floats)
 
     def query(self, operation: Int, request: QnQueryRequest) raises:
-        _ = native_descriptor_call(self.entry, operation,
-            [request.x, request.coefficients, request.dst, request.status],
-            [request.rows, request.features, request.targets, Int(request.intercept), Int(request.logarithm)], [])
+        var addresses: InlineArray[Int, 4] = [request.x, request.coefficients, request.dst, request.status]
+        var ints: InlineArray[Int, 5] = [request.rows, request.features,
+            request.targets, Int(request.intercept), Int(request.logarithm)]
+        var floats: InlineArray[Float64, 0] = []
+        _ = native_descriptor_call_fixed(self.entry, operation, addresses, ints, floats)
 
     def link(self, operation: Int, request: QnLinkRequest) raises:
-        _ = native_descriptor_call(self.entry, operation,
-            [request.scores, request.dst], [request.rows, request.classes], [])
+        var addresses: InlineArray[Int, 2] = [request.scores, request.dst]
+        var ints: InlineArray[Int, 2] = [request.rows, request.classes]
+        var floats: InlineArray[Float64, 0] = []
+        _ = native_descriptor_call_fixed(self.entry, operation, addresses, ints, floats)
 
     def logarithm(self, source: Int, dst: Int, count: Int) raises:
-        _ = native_descriptor_call(self.entry, QN_NATIVE_LOG, [source, dst], [count], [])
+        var addresses: InlineArray[Int, 2] = [source, dst]
+        var ints: InlineArray[Int, 1] = [count]
+        var floats: InlineArray[Float64, 0] = []
+        _ = native_descriptor_call_fixed(self.entry, QN_NATIVE_LOG, addresses, ints, floats)
 
 
 @fieldwise_init
@@ -200,14 +211,17 @@ struct QnFoldDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def fit(self, store: QnFoldStore, r: QnFitRequest, words: Int) raises -> Int:
-        return native_descriptor_call(self.entry, QN_NATIVE_FIT,
-            [r.y, r.coefficients, r.info, r.weights, words],
-            [store.base, store.base_rows, store.indices, r.rows, r.features,
-             r.classes, r.max_iter, r.linesearch_max_iter, r.memory,
-             Int(r.intercept), Int(r.normalized), r.loss],
-            [r.l1, r.l2, r.gradient_tolerance, r.change_tolerance, r.svr_epsilon])
+        var addresses: InlineArray[Int, 5] = [r.y, r.coefficients, r.info, r.weights, words]
+        var ints: InlineArray[Int, 12] = [store.base, store.base_rows,
+            store.indices, r.rows, r.features, r.classes, r.max_iter,
+            r.linesearch_max_iter, r.memory, Int(r.intercept), Int(r.normalized), r.loss]
+        var floats: InlineArray[Float64, 5] = [r.l1, r.l2,
+            r.gradient_tolerance, r.change_tolerance, r.svr_epsilon]
+        return native_descriptor_call_fixed(self.entry, QN_NATIVE_FIT, addresses, ints, floats)
 
     def query(self, operation: Int, store: QnFoldStore, r: QnQueryRequest, words: Int) raises:
-        _ = native_descriptor_call(self.entry, operation, [r.coefficients, r.dst, words],
-            [store.base, store.base_rows, store.indices, r.rows, r.features,
-             r.targets, Int(r.intercept), Int(r.logarithm)], [])
+        var addresses: InlineArray[Int, 3] = [r.coefficients, r.dst, words]
+        var ints: InlineArray[Int, 8] = [store.base, store.base_rows,
+            store.indices, r.rows, r.features, r.targets, Int(r.intercept), Int(r.logarithm)]
+        var floats: InlineArray[Float64, 0] = []
+        _ = native_descriptor_call_fixed(self.entry, operation, addresses, ints, floats)
