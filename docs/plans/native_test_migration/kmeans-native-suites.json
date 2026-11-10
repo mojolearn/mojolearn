@@ -37,8 +37,8 @@
   ],
   "python_boundary_seams": {
     "file": "python/mojolearn/tests/test_kmeans_native_boundary.py",
-    "expanded_cases": 9,
-    "coverage": "poisoned legacy dispatch, public methods, native owner cache, writable/rebound centers, copy/deepcopy, model lifetime, serialized callback refusal, nonfinite predict/transform refusal before public output"
+    "expanded_cases": 53,
+    "coverage": "poisoned legacy dispatch, public methods, native owner cache, writable/rebound centers, copy/deepcopy, model lifetime, serialized callback refusal, nonfinite predict/transform refusal before public output, scalar hook refusal, exact NumPy scalar compatibility, validation order"
   },
   "limits": "No lane compile, test, timing or identity execution. Existing Python public KMeans coverage is retained. No correctness or performance pass is claimed."
 }

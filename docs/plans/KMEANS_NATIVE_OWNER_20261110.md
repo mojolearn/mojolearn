@@ -50,7 +50,7 @@ now uses the CPython API and refuses mapping callbacks before invoking them.
 
 The suite manifest is
 `docs/plans/native_test_migration/kmeans-native-suites.json`: 26 native wire/owner
-fixtures, 6 actual CPU fixtures, 9 actual GPU fixtures and 9 Python boundary
+fixtures, 6 actual CPU fixtures, 9 actual GPU fixtures and 53 Python boundary
 cases. All native suites expose `run_checks` plus thin standalone mains. The CPU
 kernel suite requires `MOJOLEARN_COLUMN_CPU=1`. CPU fixtures use host workers;
 GPU cases run in order over the shared context.
@@ -76,3 +76,28 @@ and host runtime-family. The native host/device RUN closure contains 134 source
 files and no Python/binding imports. The five directly reached numerical
 implementation files listed above are byte-for-byte unchanged from the parent.
 These source findings are not compilation or execution evidence.
+
+Independent audit follow-up: scalar admission now precedes KMeans' first
+comparison, hash or conversion of rebound model parameters. The init/metric
+name route uses exact builtin and NumPy text identities plus a native C type
+hierarchy check, removing `isinstance` and its `__class__` protocol. Init codes
+remain exact Python integers; NumPy integer initializers still reach the
+deferred center-array admission. Oversampling retains its former builtin
+integer/float and NumPy float64 forms, including refusal of bool and NumPy
+float32. Its refusal reads the canonical type-name getset directly so a custom
+metaclass property cannot execute while constructing the message.
+
+Cluster-count admission stays after X preparation and before comparison. The
+tol and seed checks stay after initial centers and weights, immediately before
+their conversions; max-iteration and restart admission retains its later
+position. Exact NumPy text/byte and extended-real scalar conversion forms remain
+available. No kernel, tuned route, owner, output allocation or buffer copy was
+changed. The obsolete KMeans `family_is_str/int/isinstance` calls and imports
+were removed. New fixtures cover 44 scalar boundary cases, bringing the Python
+file to 51 expanded cases; those are Python hook/compatibility seams, while the
+41 numerical and native state fixtures remain in Mojo.
+
+Static syntax/fixture counts and commit/push output for this follow-up are in
+`~/mojolearn-evidence/python-mojo-migration-20261110/kmeans-scalar-admission/`.
+Compilation and installed execution of this follow-up remain owed to the
+orchestrator; earlier native execution evidence does not cover this new patch.

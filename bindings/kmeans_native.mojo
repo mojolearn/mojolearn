@@ -23,8 +23,11 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.cpython_table import cpython_table
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
+    FAMILY_F32P, family_repr, family_str,
     family_call, family_array, family_field,
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
@@ -126,16 +129,49 @@ def _kmeans_host_x(source: PythonObject, x: AdmittedX, context: PythonObject) ra
     return x.copy()
 
 
+def _kmeans_is_name(value: PythonObject, context: PythonObject) raises -> Bool:
+    # isinstance may consult a rebound object's __class__. Inspect the real
+    # type's C MRO instead, admitting only exact builtin/NumPy text storage
+    # before dictionary hashing or equality can execute.
+    var cls = py_type(value)
+    var string_type = py_type(PythonObject(""))
+    if cls is string_type:
+        return True
+    if cpython_table()[].PyType_IsSubtype(cls._obj_ptr, string_type._obj_ptr) == 0:
+        return False
+    if py_get(context, "ndarray") is not None and cls is py_call(native_numpy_dtype(context), "U").type:
+        return True
+    raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
+
+
+def _kmeans_conversion_scalar(value: PythonObject, context: PythonObject) raises:
+    # tol/seed were converted before the compiled integer admission. Keep
+    # their exact native NumPy text/byte and extended-real conversion forms.
+    # Common builtin/numeric fields return through the shared admission.
+    try:
+        host_inference_scalar(value, context)
+    except failure:
+        if py_get(context, "ndarray") is not None:
+            var cls = py_type(value)
+            var constructor = native_numpy_dtype(context)
+            var aliases = Python.tuple("U", "S", "q", "Q", "g")
+            for i in range(len(aliases)):  # driver-loop: exact native scalar ABI aliases
+                if cls is py_call(constructor, aliases[i]).type:
+                    return
+        raise failure^
+
+
 def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
     """`KMeans._metric_code`: a name from the table, or `int(metric)`."""
     var metric = family_field(fields, "metric")
-    if family_is_str(metric):
+    if _kmeans_is_name(metric, context):
         var table = context["family_kmeans_metrics"]
         if not py_contains(table, metric):
             raise Error("mojolearn: metric must be one of "
                         + family_repr(py_call(native_loaded_module("builtins").sorted, table))
                         + ", got " + family_repr(metric))
         return Int(py=table[metric])
+    _kmeans_conversion_scalar(metric, context)
     return Int(py=family_call(native_loaded_module("builtins").int, metric))
 
 
@@ -165,7 +201,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var init = family_field(fields, "init")
     var init_centroids = family_field(fields, "init_centroids")
     var init_code: Int
-    if family_is_str(init):
+    if _kmeans_is_name(init, context):
         var inits = context["family_kmeans_inits"]
         if not py_contains(inits, init):
             raise Error("mojolearn: init must be one of " + family_repr(py_call(b.sorted, inits))
@@ -177,15 +213,25 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         # user code.
         raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers "
                     + "(an array of shape (n_clusters, n_features)) or use 'k-means++' or 'random'")
-    elif family_is_int(init):
+    elif py_type(init) is b.int:
         init_code = Int(py=family_call(b.int, init))
     else:
+        if (py_type(init) is not b.bool
+                and cpython_table()[].PyType_IsSubtype(py_type(init)._obj_ptr, b.int._obj_ptr) != 0):
+            raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
         init_code = _INIT_ARRAY
         init_centroids = init
     var metric_code = _kmeans_metric(fields, context)
     var factor = family_field(fields, "oversampling_factor")
-    if family_isinstance(factor, b.bool) or not family_isinstance(factor, Python.tuple(b.int, b.float)):
-        raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + family_type_name(factor))
+    var factor_type = py_type(factor)
+    var factor_admitted = factor_type is b.int or factor_type is b.float
+    if not factor_admitted and py_get(context, "ndarray") is not None:
+        factor_admitted = factor_type is context["float64"].type
+    if not factor_admitted:
+        # Use the canonical type getset directly; a custom metaclass can
+        # override __name__ even through type.__getattribute__.
+        var name = String(py_call(b.type.__dict__["__name__"].__get__, factor_type))
+        raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + name)
     var oversampling = family_call(b.float, factor)
     var x = _kmeans_x(source, context)
     var connection = kmeans_connection(binding)
@@ -195,6 +241,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         x = _kmeans_host_x(source, x, context)
     var n = x.rows
     var d = x.cols
+    host_inference_scalar(k_obj, context)
     if Bool(py=family_call(native_loaded_module("operator").gt, k_obj, PythonObject(n))):
         raise Error("mojolearn: n_clusters=" + family_str(k_obj) + " exceeds n_samples=" + String(n))
     var k = Int(py=family_call(b.int, k_obj))
@@ -232,8 +279,12 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # Retain the original scalar admission order, then discard the former
     # Python parameter list before RUN. Host integer slots keep index semantics.
     var max_iter = family_field(fields, "max_iter")
-    var tolerance = family_call(b.float, family_field(fields, "tol"))
-    var seed = family_call(b.int, family_field(fields, "random_state"))
+    var tolerance = family_field(fields, "tol")
+    _kmeans_conversion_scalar(tolerance, context)
+    tolerance = family_call(b.float, tolerance)
+    var seed = family_field(fields, "random_state")
+    _kmeans_conversion_scalar(seed, context)
+    seed = family_call(b.int, seed)
     var n_init = family_field(fields, "n_init")
     var distances = PythonObject(None)
     var joint = transform and not fold_fit and (capabilities & KMEANS_CAP_JOINT) != 0
