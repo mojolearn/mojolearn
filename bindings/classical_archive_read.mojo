@@ -263,10 +263,14 @@ def _archive_repr_paths(value: PythonObject, context: PythonObject,
         nodes[index] = node^
         index += 1
     var result = archive_repr_format(nodes)
+    # Restore a fully initialized result before the fallible exception path.
+    # The formatted buffer moves once; no string contents are copied.
+    var text = result.text^
+    result.text = String()
     if result.failure >= 0:
         failures[result.failure].raise_saved()
     _ = pins
-    return result.text^
+    return text^
 
 
 def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> String:
