@@ -35,6 +35,13 @@ owner through RUN; replacing/refitting the model retires the old owner, whose
 native destructor releases after the last query drops it. No Python release
 callable or KMeans finalizer registration remains.
 
+Independent source review caught a missing registration for the allocated Mojo
+owner before compilation. The single owning runtime-family initializer now
+registers `_KMeansResidentOwner` with the existing guarded lookup/add/attach
+pattern. Re-entering the initializer under another package namespace attaches
+the same canonical type instead of registering it twice. Every allocating
+KMeans operation is reached through that initialized family's entry.
+
 Copy/pickle still omit `_resident_holder`, and restored models obtain their own
 resident copy on the next query. Exact dictionary copy/update at that boundary
 now uses the CPython API and refuses mapping callbacks before invoking them.
@@ -52,3 +59,12 @@ cross-vendor identity remain unmeasured; there is no speed or bits claim and no
 new A/B define. Existing public KMeans tests stay intact. This is the KMeans
 execution/ownership migration; shared public input, lifecycle and option
 admission continue to use their existing boundary helpers.
+
+Static source evidence is retained under
+`~/mojolearn-evidence/python-mojo-migration-20261110/kmeans-native-owner/`.
+The normal source walker scanned 89 roots without errors; this family affects
+three development groups on both Darwin and Linux: identical core, host core,
+and host runtime-family. The native host/device RUN closure contains 134 source
+files and no Python/binding imports. The five directly reached numerical
+implementation files listed above are byte-for-byte unchanged from the parent.
+These source findings are not compilation or execution evidence.
