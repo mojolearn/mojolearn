@@ -23,9 +23,7 @@ def connect(training):
                    for cls in guarded)  # glue: snapshot native record and array layouts
     bindings = {}
     metadata_bindings = {}
-    entries = ("optimizer_door_step", "optimizer_door_io", "optimizer_door_state",
-               "optimizer_door_state_set", "optimizer_door_load_state", "optimizer_door_zero",
-               "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
+    entries = ("optimizer_native_api_v1", "training_numeric_mode",
                "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
                "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload",
