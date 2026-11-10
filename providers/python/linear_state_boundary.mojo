@@ -20,7 +20,7 @@ struct LinearStateOwner(Movable, Writable):
     var means: PythonObject
 
     def __init__(out self, state: LinearModelState, coefficients: PythonObject, means: PythonObject):
-        self.state = state
+        self.state = state.copy()
         self.coefficients = coefficients
         self.means = means
 
