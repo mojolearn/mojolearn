@@ -3,7 +3,7 @@
 
 The typed schema, shape/refusal decisions and loaded scalar values live in
 core.native_archive_linear. This module admits native class/NumPy metadata and
-publishes the existing writable coefficient object plus its native state pin.
+publishes the writable coefficient owner plus its native state pin.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -11,11 +11,10 @@ from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_archive_output import archive_numeric_pack
-from bindings.classical_arrays import classical_numpy, classical_is_array
-from bindings.classical_archive import _archive_unpack_member, _archive_unpack_unicode, _archive_class_name_unpack
+from bindings.classical_arrays import classical_numpy
+from bindings.classical_archive import _archive_class_name_unpack
 from providers.python.linear_state_boundary import linear_state_publish
-from core.native_archive_span import ArchiveSpan
-from core.native_archive_read import NativeArchiveDecoded, NativeArchiveText
+from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_linear import NativeLinearArchivePlan, native_archive_needs_float_text
 
 
@@ -90,10 +89,8 @@ def archive_print_mode_unpack(members: List[NativeArchiveDecoded], context: Pyth
 
 
 def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
-                         members: List[NativeArchiveDecoded], ridge: Bool, context: PythonObject,
-                         var coefficients: PythonObject) raises -> PythonObject:
-    if coefficients is None:
-        coefficients = archive_numeric_pack(members[plan.coefficients], context)
+                         members: List[NativeArchiveDecoded], ridge: Bool, context: PythonObject) raises -> PythonObject:
+    var coefficients = archive_numeric_pack(members[plan.coefficients], context)
     var model = native_storage_allocate(cls)
     ref cpy = Python().cpython()
     var raw = cpython_table()[].PyObject_GenericGetDict(model._obj_ptr, PyObjectPtr())
@@ -112,52 +109,3 @@ def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
         py_setitem(fields, "solver_", "eig")
     linear_state_publish(model, coefficients, PythonObject(None), plan.features, plan.intercept, 0.0, False)
     return model
-
-
-def archive_linear_fields_unpack(arrays: PythonObject, context: PythonObject,
-                                  mut pins: List[PythonObject]) raises -> List[NativeArchiveDecoded]:
-    """Compatibility UNPACK for the shared host-archive owner's result map.
-
-    The generic host archive owner still exposes this map at its format
-    boundary. Direct Ridge/OLS load bypasses it and consumes native members.
-    """
-    if py_type(arrays) is not py_type(Python.dict()):
-        raise Error("TypeError: archive model fields require a native dictionary")
-    _archive_metadata_keys(arrays)
-    var names: List[String] = ["format", "estimator", "meta", "numeric_mode", "coef", "intercept", "alpha"]
-    var result = List[NativeArchiveDecoded]()
-    for name in names:
-        var value = py_get(arrays, PythonObject(name))
-        if value is None:
-            continue
-        pins.append(value)
-        var member = NativeArchiveDecoded()
-        member.name = name
-        if classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"]):
-            var admitted = _archive_unpack_member(name, value, context, pins)
-            admitted.prepare()
-            member.layout.dtype = admitted.dtype
-            member.layout.shape = admitted.shape.copy()
-            member.layout.width = admitted.width
-            member.layout.count = admitted.size // admitted.width
-            member.layout.payload = ArchiveSpan(admitted.source, admitted.size)
-            swap(member.owned, admitted.owned)
-        else:
-            while py_type(value) is py_type(Python.list()):
-                if len(value) == 0:
-                    break
-                value = value[0]
-            member.layout.count = 0 if py_type(value) is py_type(Python.list()) else 1
-            member.layout.kind = 1 if py_type(value) is py_type(PythonObject("")) else 2
-            var text = NativeArchiveText()
-            if member.layout.count:
-                if member.layout.kind == 1:
-                    text.points = _archive_unpack_unicode(value, context)
-                elif py_type(value) is context["archive_bytes_type"]:
-                    var address = cpython_table()[].PyBytes_AsString(value._obj_ptr)
-                    text.bytes = ArchiveSpan(address, len(value))
-                else:
-                    raise Error("TypeError: archive text fields require native strings, bytes or list containers")
-                member.texts.append(text^)
-        result.append(member^)
-    return result^
