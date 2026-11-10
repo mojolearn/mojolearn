@@ -196,3 +196,15 @@ def test_archive_release_identity_requires_its_single_generator_file(tmp_path):
     with pytest.raises(ValueError, match='generator inputs differ'):
         host.check_member_stamp('fixture', stamp, identity, {'fixture': rows},
                                 {gs.ARCHIVE_TABLE: gs.sha256(table)}, inventory)
+
+
+def test_renderer_preserves_an_existing_non_directory_cache_entry(tmp_path, monkeypatch):
+    home = tmp_path / 'home'
+    occupied = home / '.cache/mojolearn'
+    occupied.parent.mkdir(parents=True)
+    occupied.write_text('existing user-owned cache entry')
+    monkeypatch.setattr(gs.Path, 'home', lambda: home)
+    assert gs.verify(gs.UNICODE_TABLE, TABLE, INPUTS) == SHA
+    assert occupied.read_text() == 'existing user-owned cache entry'
+    scratch = home / 'mojolearn-evidence/generated-source-render'
+    assert scratch.is_dir() and not list(scratch.iterdir())

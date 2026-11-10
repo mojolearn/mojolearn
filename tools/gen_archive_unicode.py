@@ -140,7 +140,7 @@ def render_payload(name_count: int, names: str, offsets: str, digits: str, cjk: 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", type=Path, default=Path.home() / ".cache/mojolearn/archive-unicode")
+    parser.add_argument("--source-dir", type=Path, default=Path.home() / ".cache/mojolearn-archive-unicode")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] / "core/archive_unicode_names_generated.mojo")
     args = parser.parse_args()
     text, names, digits = generate(args.source_dir)
