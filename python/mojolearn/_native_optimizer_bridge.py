@@ -86,6 +86,7 @@ def connect(training):
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,
+        "type_name": vars(type)["__name__"].__get__,
         "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "longlong", "ulonglong", "float16", "float32", "float64", "longdouble"),
         "guards": guards, "bindings": bindings,
         "training_metadata_bindings": metadata_bindings,

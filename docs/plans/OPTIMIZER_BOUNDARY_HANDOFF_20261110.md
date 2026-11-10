@@ -313,3 +313,26 @@ future edits. Public constructor signatures, output types and native kernels are
 unchanged. Root owes import/public-method tests after the coherent constructor
 repairs; this lane has run no tests or compilation. Source review is not timing
 or correctness evidence.
+
+## Remaining optimizer admission containers
+
+The end-to-end read found Python key-list staging in external checkpoint/instance
+metadata admission. Exact dictionaries now use the cached native PyDict_Next;
+exact OrderedDict inputs retain their iterator order (including move_to_end),
+without a copied Python list. That iterator is solely an external-input lifetime
+pin under the GIL; no iterator or Python value reaches RUN. Native fixed string
+and tuple identities replace mutable builtins lookups on those paths.
+
+The existing OptDoor connection now retains one typed PyObject_Repr function
+pointer for already-admitted scalar failure text, replacing its builtins module
+owner and repr call. Its SharedSlot layout is versioned V2; the global CPython
+table is unchanged. Error type names use the setup-retained native type.__name__
+descriptor. Removed: temporary Python key lists, builtins owner/lookup helpers
+and dead imports. No tensor data traversal or kernel changed.
+
+Two public OrderedDict refusal-order/rollback cases are added; the lane has not
+run them. Root owes compilation of the training/classical closure and focused
+optimizer admission tests. Native RUN remains PublicStep/OptHyper/LrSpec and
+native address/count vectors; public API fields, output checkpoint dictionaries,
+module/capsule owners and exported-buffer leases stay in UNPACK/PACK. Schedule
+preparation and inter-helper IO/load boxing remain the next concrete cleanup.

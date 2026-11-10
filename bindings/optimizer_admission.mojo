@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optimizer admission runs before native code encounters any Python hook.
-from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.p3_numpy_types import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
 
@@ -89,7 +91,6 @@ def opt_schedule(value: PythonObject, context: PythonObject) raises:
 def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: optimizer input nesting exceeds the native limit")
-    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"]) or opt_numpy(cls, context):
         return
@@ -98,11 +99,34 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
             opt_value(value[i], context, depth + 1)
         return
     if opt_exact(cls, context["mapping_types"]):
-        var keys = py_call(context["container_types"][0], value)
-        for i in range(len(keys)):  # driver-loop: over validate names before keyed native dictionary reads
-            if py_type(keys[i]) is not b.str:
-                raise Error("TypeError: optimizer state requires native string keys")
-            opt_value(value[keys[i]], context, depth + 1)
+        var table = cpython_table()
+        if cls is context["container_types"][2]:
+            var position = List[Int](length=1, fill=0)
+            var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+            while table[].PyDict_Next(value._obj_ptr, Int(position.unsafe_ptr()),
+                    Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: exact external dictionary entries
+                var key = PythonObject(from_borrowed=pair[0])
+                if py_type(key) is not context["scalar_types"][5]:
+                    raise Error("TypeError: optimizer state requires native string keys")
+                opt_value(PythonObject(from_borrowed=pair[1]), context, depth + 1)
+        else:
+            # Exact OrderedDict has its own order after move_to_end. Keep that
+            # admission/refusal order without materializing a Python key list.
+            ref cpy = Python().cpython()
+            var pointer = table[].PyObject_GetIter(value._obj_ptr)
+            if not pointer:
+                raise cpy.unsafe_get_error()
+            var iterator = PythonObject(from_owned=pointer)
+            while True:  # driver-loop: exact external OrderedDict keys, under the GIL
+                var item = table[].PyIter_Next(iterator._obj_ptr)
+                if not item:
+                    if table[].PyErr_Occurred():
+                        raise cpy.unsafe_get_error()
+                    break
+                var key = PythonObject(from_owned=item)
+                if py_type(key) is not context["scalar_types"][5]:
+                    raise Error("TypeError: optimizer state requires native string keys")
+                opt_value(value[key], context, depth + 1)
         return
     if cls is context["container_types"][5]:
         var owner = value.obj
@@ -133,16 +157,17 @@ def _opt_owner_keys(owner: PythonObject, context: PythonObject) raises -> Python
     if not opt_exact(py_type(owner), context["owners"]):
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
-    var b = native_loaded_module("builtins")
     # Key admission kept per dictionary under the dict watcher
     # (bindings/native_class_admission.mojo); Python 3.10/3.11 scan per call.
-    if py_type(fields) is not b.dict or not dict_keys_admitted(fields):
-        var keys = py_call(context["container_types"][0], fields)
-        for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
-            if py_type(keys[i]) is not b.str:
+    if not dict_keys_admitted(fields):
+        var table = cpython_table()
+        var position = List[Int](length=1, fill=0)
+        var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+        while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
+                Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: exact instance dictionary names
+            if py_type(PythonObject(from_borrowed=pair[0])) is not context["scalar_types"][5]:
                 raise Error("TypeError: optimizer metadata requires native string keys")
-        if py_type(fields) is b.dict:
-            dict_keys_admit(fields)
+        dict_keys_admit(fields)
     return fields
 
 
