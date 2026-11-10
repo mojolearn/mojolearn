@@ -1,0 +1,39 @@
+Logistic native-test input/oracle preparation (2026-11-10; suite not wired yet)
+
+Reviewed four Python families: multiclass surface6 definitions, native binary
+predict2, host logistic27, native CV/logistic6. The inventory records actual
+boundaries and eligible numerical parts, not a name-based migration count.
+
+Preserve original workloads and inputs
+  The original _fixture function was extracted by Python AST and invoked only
+  as a fixture-data generator, without importing Mojolearn or executing fit,
+  prediction or tests. Exact inputs for600x4/64x4/200x4,seed0 are recorded as
+  17,280 bytes under checks/native_tests/fixtures/. Their manifest records the
+  source commit/function, NumPy version, dimensions, encoding and byte digests.
+  These are INPUTS, never expected model outputs or identity reference hashes.
+  The existing Python fixture remains available for boundary cases; no simpler
+  distribution or reduced workload replaces its normal-noise planted classes.
+  Generation script/log retained in ~/mojolearn-evidence/integ-finish-20261110/
+  generate_logistic_fixture_inputs.py and logistic-input-generation.log.
+
+Native helper ready
+  checks/native_tests/logistic_numeric_fixtures.mojo reads standard fixture
+  files using native file IO, parallel-decodes words into owned guarded buffers,
+  and provides independent Float64 sigmoid/softmax, strict binary threshold,
+  lowest-index maximum, probability bounds/row sums and planted accuracy.
+  Original1e-12 probability/sum bounds and accuracy>0.9 remain. No Python
+  imports/callbacks, same-function fit oracle, output-bit reference or kernel
+  changes. Read fixtures from repository working directory as existing tasks do.
+
+Pending
+  Producer is freezing typed QN fit/query request/descriptor APIs. The actual
+  CPU/GPU importable suites will call that API after the handoff. No test is
+  removed or claimed migrated by this preparation commit. All public buffer,
+  class decoding, writable _w, save/load, host adapter, callback/protocol and
+  owner lifetime tests remain. No compile/test/timing/identity by this lane.
+
+Recorded accepted prior work
+  Updated summary.json with root accepted-results evidence for ARIMA, Prophet,
+  optimizer descriptor/device/owner CPU and Apple GPU native executables.
+  These are local native runs, not installed-wheel tests or cross-vendor identity.
+  Root retains raw failures and distinguishes later accepted repaired sources.

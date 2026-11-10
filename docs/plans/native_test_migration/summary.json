@@ -425,6 +425,26 @@
       "path": "python/mojolearn/tests/test_optim_maximize_seam.py",
       "decision": "split-needed",
       "reason": "Signed-zero maximize relation and gradient mutation math are eligible for typed native PublicStep checks: four optimizer settings, clipping on/off, two fixtures, three steps plus independent sign-bit/separation oracle. Existing Python driver is registered in tools/identity_lanes/neural.checks with sabotage patch, so replace driver and final-verifier registration together after native coverage exists; keep Python non-bool admission. No identity run or deletion yet."
+    },
+    {
+      "path": "python/mojolearn/tests/test_logistic_multiclass_surface.py",
+      "decision": "split-needed",
+      "reason": "Reviewed: full600x4/3-class/max_iter100 numerical accuracy, first-max, probability normalization and independent Float64 softmax;64x4/max_iter5 zero-weight tie and200x4/binary/max_iter50 strict threshold are native candidates. Preserve public classes/shapes/dtypes, writable _w replacement, L1/elasticnet exception type, save/load+host adapter and string labels. Original input arrays recorded byte-for-byte in native fixtures; typed producer API pending."
+    },
+    {
+      "path": "python/mojolearn/tests/test_logistic_native_predict.py",
+      "decision": "retain-python-boundary",
+      "reason": "Both definitions test real Python-boundary behavior: predict must not call patched decision_function; labels retain actual float/object Python output types. Add independent native score/threshold cases without deleting these callback/decode seams. Replace any score-derived expected labels with literal independently calculated labels in the coordinated native batch."
+    },
+    {
+      "path": "python/mojolearn/tests/test_host_logistic_native.py",
+      "decision": "split-needed",
+      "reason": "Reviewed all27 definitions. Most are actual host archive/load, buffer-format conversion, class-container/scalar/writable-state decode, lifetime, refused protocols/callbacks, nested warnings/score and no-NumPy process contracts. Frozen _legacy_host_inference.logistic calls the same compiled kernels; it is orchestration parity, not an independent numerical oracle. No-intercept weight layout and tie/extreme/zero-probability math are eligible future typed native cases; retain their public writable-state/admission aspects and all real format/owner seams."
+    },
+    {
+      "path": "python/mojolearn/tests/test_native_cv_logistic.py",
+      "decision": "retain-python-boundary",
+      "reason": "Reviewed six definitions: public constructor/get_params/set_params, actual native-call audit, mutable fitted weights, wrong-width exception, CV/search estimator reconstruction, user callback/metaclass hash refusal and explicit host binding choice. These are Python/model-selection integration boundaries, not pure QN kernel tests; retain them while independent fit/query math moves to native suites."
     }
   ],
   "integration_reported_results": [
@@ -500,6 +520,74 @@
         "sequence_input_plan": "producer self-aliasing String slice compile failure; root owns repair"
       },
       "note": "No lane rerun; preserved failures remain pending. Linear tests pin integer-address owners after final use."
+    },
+    {
+      "reported_by": "root; accepted-results artifact inspected",
+      "runtime_scope": "local Mac CPU and Apple GPU native executables; not installed wheels or cross-vendor identity",
+      "source_artifact": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/bundled-repair-native-accepted-results.json",
+      "complete_passed_suites": [
+        {
+          "name": "optimizer_owner_cpu",
+          "fixtures": 22,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "prophet_state_cpu",
+          "fixtures": 6,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "arima_state_cpu",
+          "fixtures": 8,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "optimizer_device_cpu",
+          "fixtures": 52,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "optimizer_descriptor_cpu",
+          "fixtures": 25,
+          "source_commit": "d277f02e4913cf496000d2aa7b6f34830505cfeb",
+          "evidence": "bundled-repair3-native-cpu-result.json"
+        },
+        {
+          "name": "arima_state_gpu",
+          "fixtures": 8,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "prophet_state_gpu",
+          "fixtures": 6,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "optimizer_device_gpu",
+          "fixtures": 57,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "optimizer_owner_gpu",
+          "fixtures": 22,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "optimizer_descriptor_gpu",
+          "fixtures": 25,
+          "source_commit": "d277f02e4913cf496000d2aa7b6f34830505cfeb",
+          "evidence": "bundled-repair3-native-gpu-result.json"
+        }
+      ],
+      "note": "No lane rerun. Earlier descriptor invalid-op11 failures and compiler capture failures remain preserved in root raw evidence; accepted descriptor suites use repaired count sentinel at d277f02e. Logistic source fixtures are separate and not yet compiled."
     }
   ]
 }
