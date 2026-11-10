@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Temporary TSQR owners overlap without replacing a retained factorization."""
 from core.host_parallel import host_parallelize
-from core.hostptr import f32_ptr
+from x_decomp.cells import F32Ptr
 from x_decomp.tsqr_host import ts_factor_host, ts_apply_host, TS_HOST_STATE
 
 
@@ -25,8 +25,8 @@ def temporary(fixture: Int) raises:
     var cols = 2 + fixture % 5
     var a = values(rows, cols, fixture)
     var r = List[Float32](length=cols * cols, fill=0)
-    ts_factor_host(f32_ptr(Int(a.unsafe_ptr())), f32_ptr(Int(a.unsafe_ptr())),
-                   f32_ptr(Int(r.unsafe_ptr())), rows, cols, 0, False)
+    ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
+                   F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), rows, cols, 0, False)
     # Independent Gram equality: R'R equals A'A, without choosing QR signs.
     # Fixtures run across the pool; each oracle's tiny dot folds are ordered.
     for i in range(cols):
@@ -45,8 +45,8 @@ def temporary(fixture: Int) raises:
 def main() raises:
     var a = values(17, 3, 31)
     var r = List[Float32](length=9, fill=0)
-    ts_factor_host(f32_ptr(Int(a.unsafe_ptr())), f32_ptr(Int(a.unsafe_ptr())),
-                   f32_ptr(Int(r.unsafe_ptr())), 17, 3, 0, True)
+    ts_factor_host(F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
+                   F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), 17, 3, 0, True)
     var failures = List[Int](length=32, fill=0)
     var failed = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(failures.unsafe_ptr()))
     def task(fixture: Int) {imm failed}:
@@ -62,7 +62,7 @@ def main() raises:
     require(slot[].live and slot[].m == 17 and slot[].n == 3, "temporary fit replaced retained TSQR")
     var eye: List[Float32] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
     var q = List[Float32](length=51, fill=0)
-    ts_apply_host(f32_ptr(Int(eye.unsafe_ptr())), f32_ptr(Int(q.unsafe_ptr())), 17, 3, 3)
+    ts_apply_host(F32Ptr(unsafe_from_address=Int(eye.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(q.unsafe_ptr())), 17, 3, 3)
     require(not slot[].live, "applied TSQR state was not released")
     for row in range(17):
         for col in range(3):
