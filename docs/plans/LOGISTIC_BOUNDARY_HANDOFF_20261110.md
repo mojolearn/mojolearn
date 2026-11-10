@@ -64,8 +64,8 @@ and the [2.2 promotion-state removal](https://numpy.org/doc/2.3/release/2.2.0-no
 Fitted-query width/scalar validation and shared class labels still need native
 plan completion; public coef/intercept/classes/config mutation remains supported.
 Weighted-fit class encoding, class-weight mapping and scalar preparation still
-need native-container completion. Explicit host score still calls
-its connected host owner through a compiled Python entry. Those transitive paths
+need native-container completion. Score's shared label/union/code containers
+also remain outstanding. Those transitive paths
 are not claimed complete. Metadata/get_params/set_params, ownership and admitted
 buffer preparation must also receive the final end-to-end review.
 
@@ -127,6 +127,19 @@ the shared owner's layout replaces the old one. All transitive xtrees context
 consumers belong to this build closure. No device-plan reading, kernel change
 or additional per-operation data allocation was introduced. Concurrent first
 use of the actual descriptor remains required runtime coverage.
+
+Explicit host score now reuses the host Logistic admission/inference function
+directly. `host_inference_state` contains the existing watched class-kind and
+layout admission; `host_logistic_query_boundary` contains the former Logistic
+branch's exact field/class/fitted/mode admission order. Public host inference
+and Logistic score share both helpers. The old `host_predict` callable/tuple
+connection and score's compiled-Python-entry calls through the classical/tree
+doors are removed. Caller-frame/output-format rules, mutable public fields,
+warnings, input preparation and QN kernels remain unchanged. The shared
+accuracy implementation is still being migrated separately; this does not
+claim its class/union containers are native. Root owes public host Logistic
+score/refusal/output-format tests and regression coverage for the other host
+families that reuse the extracted class-kind admission.
 
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct

@@ -65,7 +65,7 @@ def connect():
     return call, context
 
 
-def connect_host(cls, context, estimators_host, host_predict, host_context):
+def connect_host(cls, context, estimators_host, host_context):
     # glue: called only by _classical_host at its explicit CPU API setup. The
     # explicit host class fits and scores on the CPU estimators binding
     # (identical only, `_HostBound._bind`); its predict is the classical host
@@ -84,12 +84,10 @@ def connect_host(cls, context, estimators_host, host_predict, host_context):
             entries[name] = entry
     except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
         entries = _refusal(error)
-    if not isinstance(host_predict, BuiltinFunctionType):
-        raise TypeError(f"{cls.__name__} requires the compiled classical host inference owner")
     refusal = (f"ImportError: mojolearn: the host {cls.__name__} serves "
                "_mojolearn_estimators only, not _mojolearn_x_trees")
     host.update(lr_bindings={"identical": entries}, lr_x_trees={"identical": refusal},
-                lr_host_model=True, lr_host_predict=(host_predict, host_context))
+                lr_host_model=True, lr_host_score_context=host_context)
     context.setdefault("lr_host_contexts", {})[cls] = host
 
 
