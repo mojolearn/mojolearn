@@ -6,8 +6,8 @@
   "file_decisions": {
     "needs-semantic-review": 574,
     "retain-python-boundary": 22,
-    "split-partial": 2,
-    "split-migrated": 9,
+    "split-partial": 1,
+    "split-migrated": 10,
     "review-module-gate": 1,
     "retain-tooling": 2,
     "split-needed": 6
@@ -185,6 +185,16 @@
         "checks/native_tests/sequence_optimizer_gpu.mojo"
       ],
       "handoff": "docs/plans/native_test_migration/sequence-optimizer-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "change": "Complete Adafactor Float64 oracle migration: matrix5x4/vector3, six steps, original settings/tolerances. Direct per-call CPU2/GPU2 plus resident GPU2 parameter/moment checks; keep thin public options/publication. No NumPy optimizer equation driver remains in this file.",
+      "native_checks": [
+        "checks/native_tests/adafactor_cpu.mojo",
+        "checks/native_tests/adafactor_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/adafactor-handoff.txt",
       "source_review_only": true
     }
   ],
