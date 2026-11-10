@@ -1,3 +1,5 @@
+from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE LINEAR LANE'S GPU BINDING (lane/algos-linear, 2026-09-27).
@@ -47,6 +49,11 @@ def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> Pyt
     if na <= 0:
         return PythonObject(-1)
     return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
+
+
+def ridge_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = RIDGE_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -319,6 +326,7 @@ def build__mojolearn_x_linear() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[ridge_fit_native_api_v1_binding]("ridge_fit_native_api_v1")
         # lane a8c: the fold store is the IDENTICAL base binding's, so only
         # an IDENTICAL GPU build reads a device fold
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:

@@ -1,3 +1,4 @@
+from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 """CPU binding for the `_mojolearn_estimators` family: KernelDensity (the
 CPU training lane, phase 1, 2026-09-13) and, since the classical host
 inference lane the same day, the INFERENCE entries of LinearRegression,
@@ -963,6 +964,11 @@ def _dbscan_fit_run(
 
 
 
+def linear_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_FIT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def linear_predict_native_api_v1_binding() raises -> PythonObject:
     var api = LINEAR_PREDICT_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1638,6 +1644,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
+        module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[qn_proba_binding]("qn_proba")
         module.def_function[ols_predict_wide_binding]("ols_predict_wide")

@@ -9,11 +9,12 @@
 # the same dimension checks, the same float32 rounding of the scalar, the same
 # typed entry. The caller (bindings/kit_call.mojo) releases the GIL around
 # these, as the doors did.
-from x_decomp.api import ew_run, gemm_run, sqdist_run, move_run
+from x_decomp.api import ew_run, gemm_run, sqdist_run, move_run, idn_flags_run, tsqr_r_run, ols_tsqr_r_run, order_f_run, svd_run, rank_above_run, geqrf_run, orgqr_run
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.descriptor_schema import (
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE, xd_dim,
+    XD_FLAGS, XD_TSQR_R, XD_OLS_TSQR_R, XD_ORDER, XD_SVD, XD_RANK, XD_ORTH_DIAG, XD_GEQRF, XD_ORGQR,
 )
 
 
@@ -31,7 +32,7 @@ def xd_float(floats: Int, i: Int) raises -> Float64:
 
 
 def xd_is_address_op(op: Int) -> Bool:
-    return op >= XD_EW and op <= XD_MOVE
+    return (op >= XD_EW and op <= XD_MOVE) or op == XD_FLAGS or op == XD_TSQR_R or op == XD_OLS_TSQR_R or op == XD_ORDER or op == XD_SVD or op == XD_RANK or op == XD_ORTH_DIAG or op == XD_GEQRF or op == XD_ORGQR
 
 
 def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) raises -> Int:
@@ -68,4 +69,26 @@ def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) rai
         move_run(p[0], xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), count, xd_dim(p[2]), xd_dim(p[3]), xd_dim(p[4]),
                  xd_dim(p[5]), xd_dim(p[6]), xd_dim(p[7]), xd_dim(p[8]), xd_dim(p[9]))
         return count
+    if op == XD_FLAGS:
+        return idn_flags_run()
+    if op == XD_TSQR_R:
+        return tsqr_r_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_dim(p[0]), xd_dim(p[1]), xd_dim(p[2]), p[3] != 0)
+    if op == XD_OLS_TSQR_R:
+        return ols_tsqr_r_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f32(a[3]), a[4], xd_dim(p[0]), xd_dim(p[1]))
+    if op == XD_ORDER:
+        order_f_run(a[0], xd_dim(p[0]), a[1])
+        return p[0]
+    if op == XD_SVD:
+        svd_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_dim(p[0]), xd_dim(p[1]))
+        return p[1]
+    if op == XD_RANK:
+        return rank_above_run(a[0], xd_dim(p[0]), xd_float(floats, 0))
+    if op == XD_ORTH_DIAG:
+        E.orth_diag(xd_f32(a[0]), xd_dim(p[0]), xd_dim(p[1]), xd_f32(a[1]))
+        return p[1]
+    if op == XD_GEQRF:
+        return geqrf_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[0]), xd_dim(p[1]))
+    if op == XD_ORGQR:
+        orgqr_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_dim(p[0]), xd_dim(p[1]), xd_dim(p[2]), xd_dim(p[3]))
+        return p[3]
     raise Error("x_decomp native ABI: not a host-address operation " + String(op))

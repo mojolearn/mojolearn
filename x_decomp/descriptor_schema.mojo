@@ -51,7 +51,22 @@ comptime XD_DEV_ISO_GATHER_MIN = 18  # i: [d, im, sq, q, dc, nn, one, dn, imn]
 # synchronisation; the caller refuses). Replaces the host scan before the
 # manifold kit's resident upload (bindings/mani_kit.mojo from_snapshot).
 comptime XD_DEV_UPLOAD_FINITE = 19  # a: [src]  i: [id, n]
-comptime XD_OPERATION_COUNT = 20
+# Existing TSQR/SVD primitives used by the typed LinearRegression owner.
+comptime XD_FLAGS = 20        # -> existing idn_flags_run route bits
+comptime XD_TSQR_R = 21       # a: [x, y, r] i: [rows, cols, nrhs, keep]
+comptime XD_OLS_TSQR_R = 22   # a: [x, y, r, mean, ymean] i: [rows, cols]
+comptime XD_ORDER = 23        # a: [x, dst] i: [n]
+comptime XD_DEV_REDUCE = 24   # i: [x, dst, n, op]
+comptime XD_DEV_ORDER = 25    # i: [x, skip, dst, count, n, negate, has_skip]
+comptime XD_SVD = 26          # a: [x, s, v] i: [rows, cols]
+comptime XD_DEV_SVD = 27      # a: [s, v] i: [x, rows, cols]
+comptime XD_RANK = 28         # a: [s] i: [n] f: [rtol]
+comptime XD_ORTH_DIAG = 29    # a: [x, diag] i: [rows, cols]
+comptime XD_DEV_ORTH_DIAG = 30 # a: [diag] i: [x, dst, rows, cols]
+comptime XD_GEQRF = 31        # a: [x, tau] i: [rows, cols]
+comptime XD_ORGQR = 32        # a: [h, tau, q] i: [rows, cols, k, qc]
+comptime XD_VENDOR = 33       # -> xd_vendor_code(compiled vendor)
+comptime XD_OPERATION_COUNT = 34
 
 comptime XD_CAP_HOST = 1       # the host-address operations
 comptime XD_CAP_RESIDENT = 2   # the device-resident operations
@@ -94,6 +109,28 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (0, 13, 0)
     if op == XD_DEV_ISO_GATHER_MIN:
         return (0, 9, 0)
+    if op == XD_FLAGS or op == XD_VENDOR:
+        return (0, 0, 0)
+    if op == XD_TSQR_R or op == XD_ORGQR:
+        return (3, 4, 0)
+    if op == XD_OLS_TSQR_R:
+        return (5, 2, 0)
+    if op == XD_ORDER:
+        return (2, 1, 0)
+    if op == XD_DEV_REDUCE:
+        return (0, 4, 0)
+    if op == XD_DEV_ORDER:
+        return (0, 7, 0)
+    if op == XD_SVD:
+        return (3, 2, 0)
+    if op == XD_DEV_SVD:
+        return (2, 3, 0)
+    if op == XD_RANK:
+        return (1, 1, 1)
+    if op == XD_ORTH_DIAG or op == XD_GEQRF:
+        return (2, 2, 0)
+    if op == XD_DEV_ORTH_DIAG:
+        return (1, 4, 0)
     raise Error("x_decomp native ABI: unknown operation " + String(op))
 
 
@@ -111,3 +148,17 @@ def xd_dim(v: Int) raises -> Int:
     if v < 0 or v > 2147483647:
         raise Error("x_decomp: dimension out of range")
     return v
+
+
+def xd_vendor_code(name: String) -> Int:
+    if name == "cpu":
+        return 0
+    if name == "metal":
+        return 1
+    if name == "cuda":
+        return 2
+    if name == "hip":
+        return 3
+    if name == "none":
+        return 4
+    return -1
