@@ -108,18 +108,10 @@ def optimizer_keyword_refusal(key: String, where: String) raises:
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "torch's own deprecated alias for `reduction`. Refused rather than translated, because translating it silently reproduces the ambiguity torch deprecated it for" + " (python/mojolearn/_training_impl.py)")
     if key == "reduce":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "torch's own deprecated alias for `reduction`; see `size_average`" + " (python/mojolearn/_training_impl.py)")
-    if key == "dropout":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
     if key == "device":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "the device is chosen by the binary that loaded, and its accelerator API is readable with `vendor_used()` (python/mojolearn/_backend.py)" + " (python/mojolearn/_training_impl.py)")
     if key == "dtype":
         raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "float32 only. MIXED PRECISION IS NOT COVERED and a non-float32 array is refused by name rather than cast" + " (python/mojolearn/_training_impl.py)")
-    if key == "distributed":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
-    if key == "world_size":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
-    if key == "rank":
-        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
     raise Error("TypeError: mojolearn." + where + ": unexpected keyword " + key + "=. This surface takes only "
         + "the parameters in its WHAT IS HONORED table; an unknown keyword is refused rather than "
         + "ignored, because a keyword that is accepted and does nothing is a caller who believes "
