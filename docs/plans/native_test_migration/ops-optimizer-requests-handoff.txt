@@ -1,0 +1,50 @@
+Mojolearn canonical typed Ops optimizer request/state checks, 2026-11-10
+
+Dependency and scope
+  Frozen producer e0af392644, autograd/optimizer_requests.mojo and canonical
+  OpsSession.optimizer(request), optimizer_state_value, and typed
+  load_optimizer_state. Pilot confirmed fields frozen. This batch imports
+  those canonical APIs; production is not changed or copied into the lane.
+  Earlier packed-list/tuple numerical fixtures stay unchanged and supported.
+
+17 CPU fixtures / 3 GPU fixtures
+  Three canonical operation fixtures: SGD momentum .5/dampening .25, Adam,
+  AdamW decay .25. lr .125, beta1/beta2 .5, eps .25; sum(I @ parameter)
+  supplies an exact gradient of one for four parameters. Two-step expectations
+  are independent closed forms: SGD p-.28125 (exact words); Adam p-.2;
+  AdamW (p*.96875-.1)*.96875-.1 (absolute1e-6 for float32 arithmetic).
+  Literal first/second moments, bias powers, kind/step/mu fields and absent
+  handles are asserted. Typed one-step snapshot is copied into a separate
+  session via OpsOptimizerRestoreRequest, then stepped against the same
+  independent closed form. Source checkpoint buffers remain unchanged and
+  the restore request retains step1 while the new owner advances to step2.
+  Metadata CPU cases: three kind/schedule string-code combinations, two
+  unknown-code refusals, seven/eight-float packed request mapping including
+  optional dampening, three invalid config lengths, all restore fields, and
+  three invalid restore lengths. These assert exact fields/refusals; they do
+  not purport to be numerical optimizer tests.
+
+Parallelism, ownership and boundary distinction
+  CPU independent fixtures run on host_parallelize; metadata units allocate
+  no executor. Each optimizer's two state transitions are dependent. GPU
+  submission is ordered for existing DeviceExec shared context/pool; the
+  numerical kernels remain parallel. No concurrency/speed claim for GPU.
+  Native input/output Lists and checkpoint copies own all memory. No Python
+  support/runtime objects/callbacks in these tests. Public Python dict/error/
+  callback/owner-pin checks remain in their existing modules; nothing deleted
+  from the packed native math checks or actual Python boundary coverage.
+
+Root compile/run commands; lane has not compiled/run
+  bash tools/compile_slot.sh pixi run check-native-ops-requests-cpu
+  bash tools/compile_slot.sh pixi run check-native-ops-requests-gpu
+  Compile-only after the producer dependency, with normal compiler flags:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/ops_optimizer_requests_cpu.mojo -o "$HOME/mojolearn-evidence/ops-requests-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/ops_optimizer_requests_gpu.mojo -o "$HOME/mojolearn-evidence/ops-requests-gpu"
+  Run each exact binary. Public binding family remains _mojolearn_x_sequence;
+  this test-only batch adds no loader/build scheme or public entry.
+
+Status
+  Producer interface/source/TOML/JSON/diff review only; compilation/runtime
+  owed. No additional Python deletion identified because this batch checks
+  newly extracted typed producer contracts. No product/kernel changes, old
+  hashes, identity, timing, rented job or A/B define.
