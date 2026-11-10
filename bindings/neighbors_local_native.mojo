@@ -41,9 +41,10 @@ from bindings.family_common import (
     family_isinstance,
 )
 from bindings.classical_labels import (
-    labels_cast, labels_class_ratio_f64, labels_fsum_f64, classical_encode_labels,
+    labels_cast, labels_fsum_f64, classical_encode_labels,
     classical_decode_labels, classical_accuracy,
 )
+from bindings.labels_descriptor_boundary import labels_class_ratio_f64
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
 from bindings.admitted_input import admitted_finite_refuse
 from checks.numerics import pinned_mul_f64

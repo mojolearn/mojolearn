@@ -45,7 +45,7 @@ def class_weight_rows_admitted[Profile: Int = CLASS_WEIGHT_CLASSICAL](
     _ = inputs^
     if plan.all_one:
         return PythonObject(None)
-    var output = admitted_storage_native(List[Int](n), "<f4", context, as_array=True)
+    var output = admitted_storage_native(List[Int](length=1, fill=n), "<f4", context, as_array=True)
     if n:
         _ = label_weights_run[Profile == CLASS_WEIGHT_SVC](xtrees, LABEL_WEIGHTS_ROWS,
             LabelWeightsRequest(Int(py=codes._addr), Int(plan.words.unsafe_ptr()),
