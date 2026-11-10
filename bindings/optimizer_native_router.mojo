@@ -14,10 +14,10 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import (
-    door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry,
+    door_ready, refuse_kwargs, new_array, TensorView, tensor_view,
     door_step, door_io, door_state, door_state_set, door_load_state, door_zero, door_clip, door_accumulate,
 )
-from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode
+from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
@@ -225,7 +225,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
     try:
         _ = optimizer_construct(owner, args, config["numeric_mode"], context)
         if py_get(saved, "_res") is not None and py_get(saved, "_res_binding") is not None:
-            _ = py_call(resident_entry(saved["_res_binding"], "optimizer_resident_close"), saved["_res"])
+            optimizer_close_slot(saved["_res_binding"], Int(py=saved["_res"]))
     except error:
         _ = py_call(fields.clear)
         _ = py_call(fields.update, saved)

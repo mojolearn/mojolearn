@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Optimizer descriptor UNPACK: exact factories and lifetime pins stay here."""
-from std.python import PythonObject
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from core.native_descriptor_call import native_descriptor_call
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import (
@@ -61,3 +62,14 @@ def optimizer_driver(provider: PythonObject) raises -> OptimizerNativeDriver:
 def optimizer_native_mode(provider: PythonObject) raises -> Int:
     var index = _optimizer_connection(provider)
     return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].modes[index]
+
+
+def optimizer_close_slot(module: PythonObject, handle: Int) raises:
+    var provider = optimizer_provider(module)
+    var driver = optimizer_driver(provider)
+    if driver.host:
+        _ = driver.close(handle)
+    else:
+        with GILReleased(Python()):
+            _ = driver.close(handle)
+    _ = provider

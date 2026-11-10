@@ -15,6 +15,10 @@ trait OptKernels:
         ...
 
     @staticmethod
+    def free_device(handle: Int) raises -> Int:
+        ...
+
+    @staticmethod
     def is_host() -> Bool:
         ...
 
