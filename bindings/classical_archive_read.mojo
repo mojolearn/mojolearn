@@ -11,7 +11,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str
 from bindings.classical_archive_input import ArchiveReadInput, archive_input_unpack
 from bindings.classical_archive_output import archive_members_pack, archive_events_pack
-from bindings.classical_archive_linear import archive_class_names_unpack, archive_print_mode_unpack, archive_linear_pack, archive_linear_fields_unpack
+from bindings.classical_archive_linear import archive_class_names_unpack, archive_print_mode_unpack, archive_linear_pack
 from core.native_archive_linear import native_archive_string, native_linear_archive_plan
 from core.native_archive_read import native_archive_read_status
 from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
@@ -376,7 +376,7 @@ def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, c
         if plan.class_mismatch:
             raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
                         + plan.saved_as + ", not " + ancestry[0])
-        return archive_linear_pack(cls, plan, members, ridge, context, PythonObject(None))
+        return archive_linear_pack(cls, plan, members, ridge, context)
     finally:
         admitted.close()
 
@@ -402,26 +402,8 @@ def classical_host_model(path: PythonObject, context: PythonObject) raises -> Py
         if plan.class_mismatch:
             raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
                         + plan.saved_as + ", not " + ancestry[0])
-        var model = archive_linear_pack(cls, plan, members, ridge, context, PythonObject(None))
+        var model = archive_linear_pack(cls, plan, members, ridge, context)
         py_setitem(_archive_model_fields(model), "estimator", PythonObject(saved_as))
         return model
     finally:
         admitted.close()
-
-
-def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonObject, ridge: Bool,
-                            context: PythonObject) raises -> PythonObject:
-    # Compatibility boundary for the generic host-archive owner. All schema
-    # decisions share the typed plan; retain the existing coefficient owner.
-    var pins = List[PythonObject]()
-    var members = archive_linear_fields_unpack(arrays, context, pins)
-    var ancestry = archive_class_names_unpack(cls)
-    var print_mode = archive_print_mode_unpack(members, context)
-    var plan = native_linear_archive_plan(members, ancestry, ridge, classical_numpy(context), print_mode)
-    if plan.class_mismatch:
-        raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
-                    + plan.saved_as + ", not " + ancestry[0])
-    var model = archive_linear_pack(cls, plan, members, ridge, context, arrays["coef"])
-    _ = pins
-    _ = arrays
-    return model

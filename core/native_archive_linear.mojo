@@ -75,16 +75,20 @@ def native_archive_needs_float_text(members: List[NativeArchiveDecoded]) -> Bool
     return False
 
 
+def native_archive_ancestry_matches(saved_as: String, ancestry: List[String]) -> Bool:
+    for name in ancestry:
+        if name == saved_as:
+            return True
+    return False
+
+
 def native_linear_archive_plan(members: List[NativeArchiveDecoded], ancestry: List[String],
                                 ridge: Bool, numpy: Bool, print_mode: Int = 2147483647) raises -> NativeLinearArchivePlan:
     var result = NativeLinearArchivePlan()
     if native_archive_string(members, "format", numpy, print_mode) != "mojolearn-linear-1":
         raise Error("model archive format does not match mojolearn-linear-1")
     result.saved_as = native_archive_string(members, "estimator", numpy, print_mode)
-    var known = False
-    for name in ancestry:
-        known = known or name == result.saved_as
-    if not known:
+    if not native_archive_ancestry_matches(result.saved_as, ancestry):
         result.class_mismatch = True
         return result^
     var meta = native_archive_exact(members, "meta", "<i8", numpy)

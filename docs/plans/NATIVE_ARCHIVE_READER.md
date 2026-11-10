@@ -70,12 +70,25 @@ metadata without calling warning hooks. PACK emits those events through the
 existing admitted native warning boundary in member order, including warnings
 that precede a later dtype/payload refusal.
 
-Direct Ridge/OLS loads bypass the intermediate Python result dictionary. Their
+Direct and generic Ridge/OLS loads bypass the intermediate Python result
+dictionary. Their
 native plan retains saved mode, ancestry checks, exact dtype/shape refusals,
 intercept/alpha bits and constructor defaults; PACK creates the public model
 and publishes its native fitted-state record. No mean array is invented for
-loaded models. The shared generic host-archive map has a compatibility UNPACK
-adapter into the same native plan and retains the existing coefficient owner.
+loaded models. Generic dispatch feeds native members directly to that plan,
+retains its class/name/layout refusal order, and publishes the coefficient
+owner once with the saved C/F order flag. The obsolete map-to-member UNPACK
+adapter, optional existing-coefficient branch, and throwaway class probe
+allocation are deleted. Twelve Python boundary cases cover all three generic
+entry forms, both estimators and both order flags, input release, writable
+coefficients, public rebinding, native fitted-state reconciliation and save
+readback. This changes no fit/predict/update kernel or numerical formula.
+Affected development owners include `runtime_trees` and `runtime_classical`;
+shared reader/output consumers remain in the orchestrator's source closure.
+Native command remains `bash tools/compile_slot.sh pixi run
+check-native-archive-linear`; installed seam command adds `python -m pytest
+-n auto python/mojolearn/tests/test_linear_archive_generic_native.py`.
+No compilation or runtime checks were executed by this lane.
 Historical numeric/bytes metadata spelling is native too, including NumPy's
 legacy print configuration. Thirty-seven parallel native fixtures cover these
 schema/refusal/formatting contracts. Scalar spelling follows the published
@@ -105,7 +118,7 @@ the existing public exception/protocol tests remain unchanged.
 The MinMaxScaler native plan preserves class-layout admission, ancestry,
 schema/refusal order, signed counts, clip metadata and unmodified Float32/64
 bits. Save owns metadata as Mojo bytes and borrows the five current public
-statistic buffers. Load publishes each writable C-order statistic with one
+statistic buffers. Direct load publishes each writable C-order statistic with one
 payload copy, removing the intermediate Python result map and duplicate array
 copy. The old dedicated map builder and temporary Python metadata arrays are
 deleted. The shared endpoint admission now returns a native pair; its existing

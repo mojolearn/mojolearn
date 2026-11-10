@@ -9,13 +9,13 @@ from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
 from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
-from bindings.classical_archive_read import _archive_read_input, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
+from bindings.classical_archive_read import _archive_read_input, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_archive import _archive_class_name_unpack
 from bindings.classical_archive_output import archive_events_pack, archive_members_pack
-from bindings.classical_archive_linear import archive_print_mode_unpack
+from bindings.classical_archive_linear import archive_print_mode_unpack, archive_class_names_unpack, archive_linear_pack
 from bindings.minmax_archive_native import minmax_archive_decoded
 from core.native_archive_read import NativeArchiveDecoded, native_archive_read_status
-from core.native_archive_linear import native_archive_string
+from core.native_archive_linear import native_archive_string, native_archive_ancestry_matches, native_linear_archive_plan
 from bindings.classical_arrays import classical_numpy, classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
 from bindings.host_array_native import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
@@ -100,6 +100,23 @@ def host_archive_object(cls: PythonObject, arrays: PythonObject, context: Python
     if not known:
         raise Error("model archive estimator does not match its connected class")
     return host_archive_allocate(cls, context)
+
+
+def host_archive_linear_decoded(cls: PythonObject, members: List[NativeArchiveDecoded],
+                                 ridge: Bool, context: PythonObject, print_mode: Int) raises -> PythonObject:
+    # Preserve generic admission before schema metadata, without allocating the
+    # former throwaway probe instance. Only the final fitted owner is created.
+    var native_type = py_type(py_type(PythonObject("")))
+    if py_type(cls) is not native_type:
+        raise Error("TypeError: native archive classes require an ordinary native class layout")
+    var ancestry = archive_class_names_unpack(cls)
+    var numpy = classical_numpy(context)
+    var saved = native_archive_string(members, "estimator", numpy, print_mode)
+    if not native_archive_ancestry_matches(saved, ancestry):
+        raise Error("model archive estimator does not match its connected class")
+    host_archive_check_layout(cls, context)
+    var plan = native_linear_archive_plan(members, ancestry, ridge, numpy, print_mode)
+    return archive_linear_pack(cls, plan, members, ridge, context)
 
 
 def host_archive_mode(arrays: PythonObject, fields: PythonObject, context: PythonObject) raises:
@@ -2772,6 +2789,8 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
     result.estimator = estimator
     if fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler":
         result.value = minmax_archive_decoded(cls, members, context, print_mode)
+    elif fmt == "mojolearn-linear-1":
+        result.value = host_archive_linear_decoded(cls, members, estimator == "Ridge", context, print_mode)
     else:
         # Families awaiting typed schema migration retain their original PACK;
         # decode warnings/errors were already emitted exactly once above.
@@ -2787,12 +2806,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     var estimator = decoded.estimator
     var arrays = decoded.value
     var model = PythonObject(None)
-    if fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler":
+    if (fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler") or fmt == "mojolearn-linear-1":
         model = decoded.value
-    elif fmt == "mojolearn-linear-1":
-        # Admit the class layout before the existing linear builder allocates.
-        var probe = host_archive_object(cls, arrays, context)
-        model = classical_archive_build(cls, arrays, path, estimator == "Ridge", context)
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
         model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", path, context)
     elif fmt == "mojolearn-cd-1":
