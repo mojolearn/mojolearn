@@ -63,6 +63,7 @@ check-native-bf16-linalg-cpu = "mojo run -I . checks/native_tests/bf16_linalg_cp
 check-native-bf16-linalg-gpu = "mojo run -I . checks/native_tests/bf16_linalg_gpu.mojo"
 check-native-logistic-contracts = "mojo run -I . checks/native_tests/logistic_contracts.mojo"
 check-native-label-driver = "mojo run -I . checks/native_tests/labels_driver.mojo"
+check-native-label-accuracy = "mojo run -I . checks/native_tests/labels_accuracy.mojo"
 check-native-archive-writer = "mojo run -I . checks/native_tests/archive_writer.mojo"
 check-native-rankn-math-cpu = "mojo run -I . checks/native_tests/rankn_math_cpu.mojo"
 check-native-rankn-math-gpu = "mojo run -I . checks/native_tests/rankn_math_gpu.mojo"
