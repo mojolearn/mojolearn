@@ -38,7 +38,7 @@ def download[E: Exec & Movable & Deinitable](mut s: OpsSession[E], h: Int) raise
 def one_step[E: Exec & Movable & Deinitable](mut s: OpsSession[E], opt: Int, param: Int, identity: Int) raises:
     # sum(I @ parameter) has derivative one in every parameter cell.
     var product = s.run_op(OPS_MATMUL, [identity, param], [], [])
-    s.backward(s.run_op(OPS_SUM, [product], [], []), False)
+    s.backward(s.run_op(OPS_SUM, [product], [-1], []), False)
     s.step(opt, [param])
 
 

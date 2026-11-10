@@ -295,7 +295,7 @@ def _refusals[E: Exec & Movable & Deinitable](mut s: OpsSession[E], mut unrecord
         refused = True
     require(refused, "step without backward accepted")
     var product = s.run_op(OPS_MATMUL, [c, w], [], [])
-    s.backward(s.run_op(OPS_SUM, [product], [], []), False)
+    s.backward(s.run_op(OPS_SUM, [product], [-1], []), False)
     for fixture_id in range(3):  # dependent refusal attempts on unchanged optimizer state
         refused = False
         try:
