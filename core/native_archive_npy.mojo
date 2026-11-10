@@ -46,7 +46,7 @@ struct NativeNpyParser(Movable):
     var warnings: List[ArchiveLiteralWarning]
 
     def __init__(out self, raw: ArchiveSpan, python_minor: Int, python_micro: Int):
-        self.raw = raw
+        self.raw = raw.copy()
         self.at = 0
         self.python_minor = python_minor
         self.python_micro = python_micro
