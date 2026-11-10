@@ -107,6 +107,8 @@ check-native-theta-state-cpu = "mojo run -I . checks/native_tests/theta_state_cp
 check-native-theta-state-gpu = "mojo run -I . checks/native_tests/theta_state_gpu.mojo"
 check-native-arima-state-cpu = "mojo run -I . checks/native_tests/arima_state_cpu.mojo"
 check-native-arima-state-gpu = "mojo run -I . checks/native_tests/arima_state_gpu.mojo"
+check-native-prophet-state-cpu = "mojo run -I . checks/native_tests/prophet_state_cpu.mojo"
+check-native-prophet-state-gpu = "mojo run -I . checks/native_tests/prophet_state_gpu.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
 check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"

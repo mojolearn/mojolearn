@@ -2,7 +2,7 @@
 
 ARIMA, Holt-Winters and Theta numerical/state comparisons live in direct native
 checks. Keep actual public output owners, read-only fitted arrays, refits and
-finalizers here. Prophet numerical coverage remains pending migration.
+finalizers here. All four numerical fitted-state families have native checks.
 """
 import gc
 
@@ -117,11 +117,30 @@ def test_theta_changed_horizon_publication_and_cache_owners():
     assert isinstance(model.model_, list) and tuple(model.model_) == first_names
 
 
-def test_prophet_predict_repeats_bits():
+def test_prophet_prediction_publishes_distinct_result_and_trend_owners():
     t = np.arange(120, dtype=np.float64)
     y = (np.sin(t / 7.0) + t / 50.0).astype(np.float32)
     model = ml.ProphetForecaster().fit(t, y)
     future = np.arange(130, dtype=np.float64)
-    a = np.asarray(model.predict(future))
-    b = np.asarray(model.predict(future))
-    np.testing.assert_array_equal(a.view(np.uint32), b.view(np.uint32))
+    first = np.asarray(model.predict(future))
+    first_trend_owner = model.trend_
+    first_trend = np.asarray(first_trend_owner)
+    first_bytes = first.tobytes()
+    trend_bytes = first_trend.tobytes()
+    params_owner = model.params_
+    params_bytes = np.asarray(params_owner).tobytes()
+    second = np.asarray(model.predict(future))
+    second_trend = np.asarray(model.trend_)
+    # Repeated numeric words and independent state equations now live in
+    # prophet_state_{cpu,gpu}_suite.mojo. Keep actual Python publication here.
+    for result in (first, first_trend, second, second_trend):
+        assert result.shape == (130,) and result.dtype == np.float32
+    assert model.trend_ is not first_trend_owner
+    assert not np.shares_memory(first, second)
+    assert not np.shares_memory(first_trend, second_trend)
+    assert model.params_ is params_owner
+    assert np.asarray(params_owner).tobytes() == params_bytes
+    assert first.tobytes() == first_bytes and first_trend.tobytes() == trend_bytes
+    del model
+    gc.collect()
+    assert first.tobytes() == first_bytes and first_trend.tobytes() == trend_bytes
