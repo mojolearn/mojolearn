@@ -1,3 +1,4 @@
+from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 """CPython boundary for the verified DBSCAN, PCA, tSVD, OLS, Ridge and logistic kernels.
 
 Kept in a separate extension so the independently changing primary binding
@@ -31,38 +32,8 @@ from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from checks.numerics import NUMERIC_FAST as _OLS_FAST
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
-#: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
-#: equilibrated normal equations (DEVIATION 2620) with X and y uploaded once
-#: (`ols_fit_resident`) instead of the blocked TSQR under FAST on Apple.
-#: Default since the M3 A/B (lane/apple-fast-olsne 9f5cf2a77, n=1): taxi
-#: 286 -> 110 ms, r2 .9088 same; istella 2,921 -> 842 ms, r2 .3325 -> .3319.
-#: MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF turns it off; the old
-#: MOJOLEARN_FAST_OLS_NORMAL_EQ define is now harmless. IDENTICAL
-#: and the other vendors keep main's route. Read by Python
-#: through `ols_normal_eq_default`.
-comptime OLS_FAST_NORMAL_EQ = (
-    GLOBAL_NUMERIC_MODE == _OLS_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
-)
-
-#: Lane apple-fast-ridgespeed (2026-10-03): Ridge.fit with X and y uploaded
-#: once (`ridge_fit_resident`) instead of the four host trips of the Python
-#: centering route. FAST on Apple only; same kernels and words. Read by
-#: Python through `ridge_resident_default`. Default since the M3 A/B
-#: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
-#: taxi 57.1 -> 24.5 ms, istella 1,405 -> 724 ms). Off with
-#: -D MOJOLEARN_RIDGE_RESIDENT_OFF (which also turns RIDGE_NO_U off); the
-#: old -D MOJOLEARN_RIDGE_RESIDENT define is now harmless.
-comptime RIDGE_FAST_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == _OLS_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
-)
+from glm.linear_route_controls import OLS_FAST_NORMAL_EQ, RIDGE_FAST_RESIDENT
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -977,6 +948,11 @@ def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: 
 
 
 
+def linear_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def linear_predict_native_api_v1_binding() raises -> PythonObject:
     var api = LINEAR_PREDICT_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1745,6 +1721,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
+        m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")
         m.def_function[ols_predict_wide_binding]("ols_predict_wide")

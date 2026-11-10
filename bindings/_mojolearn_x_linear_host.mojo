@@ -1,3 +1,5 @@
+from x_linear.ridge_descriptor_host import RIDGE_FIT_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for `_mojolearn_x_linear` (lane/algos-linear, 2026-09-27).
@@ -70,6 +72,11 @@ def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> Pyt
     if na <= 0:
         return PythonObject(-1)
     return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
+
+
+def ridge_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = RIDGE_FIT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -225,6 +232,7 @@ def build__mojolearn_x_linear_host() -> PythonObject:
         m.def_function[x_linear_host_column_binding]("x_linear_host_column")
         m.def_function[x_linear_host_sabotage_binding]("x_linear_host_sabotage")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[ridge_fit_native_api_v1_binding]("ridge_fit_native_api_v1")
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
