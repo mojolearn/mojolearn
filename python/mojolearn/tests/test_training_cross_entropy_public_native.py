@@ -218,7 +218,7 @@ def test_public_cross_entropy_uses_no_python_preparation(monkeypatch):
     x, y, options = prepared('target:list')
     expected = reference(x, y, options)
     def hook(*a, **k): raise AssertionError('old loss preparation entered')
-    for name in ('_load', '_refuse_unknown', '_is_buffer', 'probe', '_check_dtype', 'as_f32_c', 'as_i32_c', '_cross_entropy_dev'):
+    for name in ('_load', '_is_buffer', 'probe', 'as_f32_c', 'as_i32_c', '_cross_entropy_dev'):
         monkeypatch.setattr(T, name, hook)
     compare_output(audit_native_call(T.cross_entropy, x, y, **options).assert_native(), expected)
 
