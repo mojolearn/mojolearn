@@ -103,6 +103,15 @@ trait QnNativeKernels:
     def multiclass() -> Bool: ...
 
 
+def qn_fold_f32_ptr(address: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+    # The resident-fold ABI used bindings.msel_device._mdx_f32_ptr before
+    # typed dispatch. Preserve its positivity/alignment refusal and text;
+    # core.hostptr.f32_ptr alone only rejects a null pointer.
+    if address <= 0 or address % 4 != 0:
+        raise Error("pca_transform_fold: pointers must be positive and float32-aligned")
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
+
+
 def qn_native_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
                     ff: Int, nf: Int, result: Int) raises:
     var addresses = 0

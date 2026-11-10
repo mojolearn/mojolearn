@@ -253,6 +253,11 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
             indices = host_tree_argmax(Int(py=classical_address(scores)), rows, targets)
         elif operation == "host_infer_decision_function":
             out = scores
+    # Raw addresses do not keep converted input/weight owners alive through
+    # the synchronous descriptor call (which releases the GIL).
+    _ = x^
+    _ = weights^
+    _ = scores^
     if operation == "host_infer_predict":
         out = _host_logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
     var b = native_loaded_module("builtins")
