@@ -35,3 +35,21 @@ and qualify installed-wheel archive decoding with the build environment hidden.
 This lane has not run tooling tests, native builds, installed-wheel tests, or
 performance measurements. Existing native codec fixture results alone do not
 qualify installed-wheel discovery. No kernel or algorithm output bits change.
+
+## Supplemental packaging environment
+
+The compiler SDK is not assumed to contain every codec. In particular, the
+current macOS default SDK lacks Zstd, while the existing pinned `pkg`
+environment supplies it. Both release staging invocations therefore declare
+`--codec-lib` using that packaging environment's library directory. The SDK
+remains the first source for codec roots it already supplies; an unused copy
+in the supplemental environment does not cause a duplicate-byte refusal.
+
+Transitive dependencies keep the provenance of the environment that needs
+them. If both closures actually require the same name from different origins,
+staging requires equal bytes; a real conflict refuses assembly. Equal copies
+retain SDK provenance. Linux records the codec directory and each selected
+source in its normal manifest; macOS records codec source paths and SHA-256
+values in the staging log. The shared build-time selection helper is included
+in release identities only for source revisions that contain it, preserving
+historical identities. No compiler environment is installed or modified.
