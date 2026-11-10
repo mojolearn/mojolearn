@@ -7,6 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.sequential_description import sequential_fields
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_model_records import bump_model_generation
+from providers.python.linear_state_boundary import linear_state_clear
 
 
 def classical_parameter_names(ridge: Bool) raises -> PythonObject:
@@ -94,6 +95,7 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool,
     # Generation word (bindings/native_model_records.mojo): the dictionary
     # watcher sees this update; the explicit bump also covers a dictionary
     # that could not be watched being cleared in place.
+    linear_state_clear(model)
     _ = bump_model_generation(model)
     return model
 
