@@ -16,7 +16,8 @@ Mojo objects? We need to get rid of Python objects."
   protocol with Python lists as arguments.
 - **Target.** A public call is three steps. UNPACK turns the Python call into one plain Mojo request value. RUN is
   pure Mojo and takes only Mojo values. PACK turns the Mojo result value into the Python object. Python object types
-  appear in the unpack and pack files and nowhere else, and a push check with no tags and no exemptions enforces it.
+  appear in the unpack and pack files and nowhere else. Typed interfaces and executed-call tests establish the
+  boundary; the retired source-count guard is not evidence that this target has been reached.
 - **Not touched.** Hand-tuned kernels, fused paths and every kernel's arithmetic (AGENTS.md "A measured winner is
   never deleted on reasoning"). This design changes what calls the kernels, never the kernels. Bits do not move.
 - **Order.** Pilot on ONE small family, compiled, tested and measured, before a second family starts. Then family by

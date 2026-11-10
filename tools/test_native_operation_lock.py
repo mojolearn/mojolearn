@@ -7,7 +7,7 @@ CORE = (ROOT/'core/operation_lock.mojo').read_text()
 BOUNDARY = (ROOT/'providers/python/operation_lock_pyapi.mojo').read_text()
 
 
-def test_native_lock_has_no_python_dependency_or_object_layout_cast():
+def test_native_lock_dependencies_resolve_and_avoids_object_layout_cast():
     _, failures = audit(ROOT, ('core.operation_lock',))
     assert not failures, failures
     for name in ('PythonObject', 'PyThread_', 'PyObject_', '_thread.RLock'):

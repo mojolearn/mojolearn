@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_tape_execution_closures_are_native():
+def test_tape_execution_dependencies_resolve():
     for module in ('mamba.native_tape_dispatch',):
         _, failures = audit(ROOT, (module,))
         assert not failures, failures
