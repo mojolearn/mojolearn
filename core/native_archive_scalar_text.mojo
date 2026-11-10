@@ -102,8 +102,9 @@ def archive_float_text(bits: UInt64, width: Int, print_mode: Int) raises -> Stri
     var exponent = Int(String(exponential[byte=marker + 1:]))
     var negative = exponential.startswith("-")
     var digits = String("")
+    var bytes = exponential.as_bytes()
     for i in range(1 if negative else 0, marker):
-        if exponential[byte=i] != 46:
+        if bytes[i] != 46:
             digits += String(exponential[byte=i:i + 1])
     var point = exponent + 1
     var result = String("-") if negative else String("")
