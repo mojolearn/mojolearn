@@ -6,6 +6,9 @@ Payload span sizes remain the admitted caller's responsibility.
 """
 from core.host_parallel import host_parallelize
 from core.logistic_native_api import qn_fold_f32_ptr, qn_native_spans
+from checks.native_tests.logistic_descriptor_fixtures import (
+    logistic_driver_fixture, logistic_fold_fixture, logistic_fixed_fixture, logistic_concurrent_fixture,
+)
 
 
 def _require(ok: Bool, message: String) raises:
@@ -104,7 +107,7 @@ def _invalid_span(unit: Int) raises:
 
 
 def run_checks() raises:
-    comptime FIXTURES = 35
+    comptime FIXTURES = 118
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
@@ -113,8 +116,16 @@ def run_checks() raises:
                 _fold_pointer(unit)
             elif unit < 19:
                 _valid_span(unit - 8)
-            else:
+            elif unit < 35:
                 _invalid_span(unit - 19)
+            elif unit < 43:
+                logistic_driver_fixture(unit - 35)
+            elif unit < 48:
+                logistic_fold_fixture(unit - 43)
+            elif unit < 54:
+                logistic_fixed_fixture(unit - 48)
+            else:
+                logistic_concurrent_fixture(unit - 54)
         except problem:
             print("FAIL logistic_contracts fixture", unit, String(problem))
             failures_ptr.unsafe_store(unit, 1)
