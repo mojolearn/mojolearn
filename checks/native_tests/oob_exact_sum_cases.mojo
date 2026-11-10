@@ -33,7 +33,7 @@ def run_oob_fixture[device: Bool](fixture_id: Int) raises:
     elif target_id == 4:
         y = List[Float32](length=65, fill=1.0)
     var n = len(y)
-    var counts = List[Int32](length=n, fill=2 if covered else 0)
+    var counts = List[Int32](length=n, fill=Int32(2 if covered else 0))
     var acc = List[Float64](length=n, fill=0)
     for i in range(n):
         if covered:
