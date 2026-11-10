@@ -9,7 +9,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.sequential_admission import sequential_admit_value
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.pca_metadata import pca_dictionary, pca_fields, pca_initialize, pca_get_params, pca_set_params, pca_entries

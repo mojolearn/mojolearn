@@ -13,7 +13,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_arrays import classical_typed, classical_is_array, classical_input
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_warnings import classical_warning, _warning_fields
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.sequential_admission import _one_of, sequential_admit_value

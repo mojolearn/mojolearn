@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_arrays import classical_array, classical_address
-from bindings.classical_metadata import classical_fit_replacements_admit
+from providers.python.linear_metadata_boundary import classical_fit_replacements_admit
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_get, py_type, py_setitem

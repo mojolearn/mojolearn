@@ -9,7 +9,7 @@ from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import _flatten_labels, labels_shape_of
 from bindings.classical_exceptions import classical_not_fitted_class
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral, metric_warn
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category

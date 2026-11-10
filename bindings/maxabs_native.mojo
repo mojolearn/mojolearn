@@ -11,7 +11,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_address, classical_typed
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _input, _ptr, _stage, _copy_row
