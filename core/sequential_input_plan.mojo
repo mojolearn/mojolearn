@@ -219,10 +219,13 @@ def sequence_write(plan: SequenceInputPlan, destination: Int, float32_target: Bo
     var target_kind = CAST_KIND_FLOAT if float32_target else sequence_kind_code(plan.kind)
     var tasks = host_predict_task_count_work(plan.count, plan.count * max(width, 8))
     var chunk = host_predict_chunk(plan.count, tasks)
-    var words = plan.words.unsafe_ptr()
-    var kinds = plan.kinds.unsafe_ptr()
-    var arrays = plan.arrays.unsafe_ptr()
-    var segments = plan.segments.unsafe_ptr()
+    # The synchronous join below retains the plan through every task. Expose
+    # read-only untracked spans, as the shared conversion kernels do, rather
+    # than capturing the borrowed parameter's lexical origin in a worker.
+    var words = Pointer[UInt64, ImmUntrackedOrigin](unsafe_from_address=Int(plan.words.unsafe_ptr()))
+    var kinds = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(plan.kinds.unsafe_ptr()))
+    var arrays = Pointer[SequenceArray, ImmUntrackedOrigin](unsafe_from_address=Int(plan.arrays.unsafe_ptr()))
+    var segments = Pointer[SequenceSegment, ImmUntrackedOrigin](unsafe_from_address=Int(plan.segments.unsafe_ptr()))
     var segment_count = len(plan.segments)
     var count = plan.count
 
