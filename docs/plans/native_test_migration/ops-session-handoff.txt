@@ -1,0 +1,71 @@
+Mojolearn native ops-session test migration, 2026-11-10
+
+Scope
+  checks/native_tests/ops_session_cases.mojo calls OpsSession[E] directly,
+  with owned Mojo lists, CastIn and ShapeN. No Python imports/objects or
+  binding calls. No product code, kernel, arithmetic or defaults changed.
+
+Coverage per executor (28 fixtures)
+  0-9: sub, div, minimum, tensor pow, equal with copy, not_equal,
+       greater_equal, less_equal, logical_and, logical_or.
+  10-15: ceil, sign, round (includes 3.5 tie), logical_not, scalar pow,
+         unsqueeze including rank-3 shape.
+  16-20: MAE mean/sum, Huber mean delta=1, BCE logits mean/sum.
+  21-23: accuracy, ROC AUC, log loss.
+  24-27: permutation membership, scalar sum, rank-4 average pool,
+         step-scheduler initial and advanced learning rates.
+  These replace the full NumPy numerical/oracle checks and scheduler
+  assertions in test_ops_session_coverage.py. Both native executors use
+  the same cases, inputs and expected-value logic. No recorded hashes.
+
+Independent expectations
+  Literal ceil/sign/round/pool outputs and label/rank counts; Float64
+  arithmetic, exp/log/log1p implement the independent binary/loss/log-loss
+  oracles. No product helper computes the expectations. The original
+  operation/loss tolerances remain, including exact accuracy/scheduler
+  assertions. Permutation asserts integer range and each index once.
+  No blanket tolerance increase or expected-hash refresh.
+
+Parallel plan
+  CPU: 28 independent owned host sessions through existing host_parallelize.
+  GPU: existing parallel element kernels; ordered fixture submissions.
+  DeviceExec shares sequence_ctx() and its pool; concurrent sessions would
+  race its ownership. This is a stated native-context limitation, not proof
+  of parallel session safety. No new test runner/build system was added.
+
+Retained Python boundary checks and reasons
+  Binary/unary: public method routing sentinels, NumPy dtype and shape.
+  Losses: reduction string admission/mapping, ndarray and scalar packing.
+  Metrics/permutation/pooling: public arguments, result types and shapes.
+  Optimizer/profile: Python result types (native learning-rate state moved).
+  All dead-handle, closed-session, poison/shape/reduction refusals, and
+  nonnumeric scalar refusal cases remain. They test public Python error
+  translation/admission, not just internal arithmetic.
+  NumPy remains solely for fixture buffers and packed-buffer checks here;
+  NumPy arithmetic references and reference lambdas were removed.
+
+Orchestrator commands (lane has NOT compiled or run tests)
+  bash tools/compile_slot.sh pixi run check-native-ops-cpu
+  bash tools/compile_slot.sh pixi run check-native-ops-gpu
+  Compile-only form for either executable:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/ops_session_cpu.mojo -o "$HOME/mojolearn-evidence/native-ops-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/ops_session_gpu.mojo -o "$HOME/mojolearn-evidence/native-ops-gpu"
+  Queue target-specific Mojo compilation using the normal target flags.
+  Affected existing binding for retained Python tests: _mojolearn_x_sequence.
+  Retained installed-wheel test selection:
+  python3 -m pytest mojolearn/tests/test_ops_session_coverage.py
+  Save complete logs in evidence; report compilation separately from runs.
+
+Status and remaining work
+  Source review only. CPU/GPU compile and runtime checks are RUN OWED to
+  orchestrator, as are retained Python boundary checks when appropriate.
+  Existing nonzero batch: root reports 60 checks passed after syntax fixes;
+  its corrected source is in root integration and is frozen during builds.
+  Inventory: 616 Python test files, 4,128 definitions; 22 reviewed,
+  594 explicitly pending semantic review. Two files now split/migrated.
+  Definition counts are not parametrized executed cases. Inventory is
+  documentation, not a source guard or pass/fail gate.
+  Independent finite-scan migration handed to root for another agent.
+  Deletions: Python NumPy numerical oracles and scheduler state assertions.
+  Product bits/performance change: none. A/B define: none (test-only).
+  No box job queued; this lane performs no compiles, tests or identity runs.

@@ -1,0 +1,60 @@
+{
+  "schema": "mojolearn.native-test-migration-inventory.v1",
+  "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
+  "files": 616,
+  "test_definitions": 4127,
+  "file_decisions": {
+    "needs-semantic-review": 589,
+    "retain-python-boundary": 9,
+    "retain-tooling": 2,
+    "review-module-gate": 1,
+    "split-migrated": 2,
+    "split-needed": 11,
+    "split-partial": 2
+  },
+  "reviewed_files": 27,
+  "not_a_gate": true,
+  "limitations": [
+    "Definitions are source functions, not parametrized execution cases.",
+    "File names and native in a name do not establish migration suitability.",
+    "Unreviewed rows are explicit; this inventory does not claim a complete semantic classification.",
+    "Module-style gates with no pytest definitions are not zero coverage.",
+    "No tests or compiles were executed to prepare this inventory."
+  ],
+  "post_snapshot_changes": [
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "decision": "split-migrated",
+      "native_fixtures_per_executor": 28,
+      "executors": [
+        "HostExec",
+        "DeviceExec"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see ops-session-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_byte_lm_runtime_shape.py",
+      "decision": "split-partial",
+      "removed_python_definitions": 1,
+      "native_fixtures": 25,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see byte-config-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "decision": "split-partial",
+      "native_narrow_roundtrip_words": 264105,
+      "native_raw_widen_words": 65536,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see bf16-conversion-handoff.txt."
+    }
+  ],
+  "additional_semantic_reviews": [
+    "test_neural_dtype_diagnostics.py",
+    "test_ops_rankn.py",
+    "test_sequence_dtype_alias_native.py",
+    "test_sequence_scalar_cast_status.py",
+    "test_sequence_temporal_cast_contract.py"
+  ]
+}

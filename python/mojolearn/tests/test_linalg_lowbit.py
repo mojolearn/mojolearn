@@ -49,26 +49,25 @@ def _vals(shape, seed):
     return (sign * mant * np.ldexp(1.0, e)).astype(np.float32)
 
 
-def test_widening_is_the_shift_and_narrowing_is_rne():
+def test_bf16_conversion_packs_expected_shapes_and_dtypes():
+    # Exhaustive RNE/shift word checks now run directly in Mojo through the
+    # typed host entries and GPU kernels (checks/native_tests/bf16_conversion_*).
+    # This test retains the public ndarray and raw host-binding buffer seams.
     g = _gpu()
-    x = _vals((37, 53), 1)
+    x = np.array([[1.25, -2.5], [0.0, 1.0]], np.float32)
     bits = np.asarray(g.to_bf16(x))
     assert bits.dtype == np.uint16 and bits.shape == x.shape
-    # host binding, the same seam
+    assert bits[0, 0] == 0x3FA0  # Public route and result-packing sentinel.
     h = _host()
     hb = np.empty(x.shape, np.uint16)
-    h.to_bf16(_addr(hb), _addr(np.ascontiguousarray(x)), [x.size])
-    assert np.array_equal(bits, hb)
-    # NumPy spelling of round-to-nearest-even on the low 16 bits
-    u = x.view(np.uint32)
-    ref = ((u + 0x7FFF + ((u >> 16) & 1)) >> 16).astype(np.uint16)
-    assert np.array_equal(bits, ref)
-    # widening is exactly the shift, on the GPU and on the host
+    assert h.to_bf16(_addr(hb), _addr(x), [x.size]) == x.size
+    assert hb[0, 0] == 0x3FA0
     wide = np.asarray(g.from_bf16(bits))
-    assert np.array_equal(wide.view(np.uint32), bits.astype(np.uint32) << 16)
+    assert wide.dtype == np.float32 and wide.shape == x.shape
+    assert wide[0, 0] == 1.25
     hw = np.empty(x.shape, np.float32)
-    h.from_bf16(_addr(hw), _addr(bits), [bits.size])
-    assert np.array_equal(hw.view(np.uint32), wide.view(np.uint32))
+    assert h.from_bf16(_addr(hw), _addr(bits), [bits.size]) == bits.size
+    assert hw[0, 0] == 1.25
 
 
 @pytest.mark.parametrize("m,n,k,ta,tb", [

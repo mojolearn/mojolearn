@@ -44,6 +44,13 @@ check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
 # DEVIATION 2560/2561: enqueue_fill equals enqueue_memset and a host oracle
 # byte for byte (154 fills), once per side of the 2560 switch (rule 8).
 check-device-zero = "mojo run -I . core/device_zero_check.mojo"
+# Pure Mojo numerical checks migrated out of Python API tests.
+check-native-nonzero = "mojo run -I . checks/native_tests/nonzero_scan.mojo"
+check-native-ops-cpu = "mojo run -I . checks/native_tests/ops_session_cpu.mojo"
+check-native-ops-gpu = "mojo run -I . checks/native_tests/ops_session_gpu.mojo"
+check-native-finite-scan = "mojo run -I . checks/native_tests/finite_scan.mojo"
+check-native-bf16-cpu = "mojo run -I . checks/native_tests/bf16_conversion_cpu.mojo"
+check-native-bf16-gpu = "mojo run -I . checks/native_tests/bf16_conversion_gpu.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
 check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"

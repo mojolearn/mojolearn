@@ -50,7 +50,11 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
+from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
+from core.linear_boundary_types import LinearPredictRequest
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -71,7 +75,6 @@ from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flag
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_finite_scan import host_finite_status
-from core.classical_ridge_impl import classical_widen_f32_f64
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -81,7 +84,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
     host_inverse_transform_into,
-    host_ols_predict_into,
     host_pca_transform_into,
     host_pca_whiten_inverse_transform_into,
     host_pca_whiten_transform_into,
@@ -961,64 +963,46 @@ def _dbscan_fit_run(
 # 2026-09-13). Each keeps the GPU binding's name, arity and params list.
 
 
+
+def linear_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_FIT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def linear_predict_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_PREDICT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def ols_predict_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """`LinearRegression.predict` and `Ridge.predict` on the host:
-    `out[n_rows] = X[n_rows x n_features] . coef + intercept` by
-    `host_ols_predict`. params, as in the GPU binding: n_rows, n_features,
-    intercept (a float; `Float32(Float64(...))` as there). Returns 0."""
+    """Legacy address door; shares the typed prediction implementation."""
     if len(params) != 3:
         raise Error("ols_predict: params must contain n_rows, n_features, intercept")
-    var x_address = _index(x_addr)
-    var coef_address = _index(coef_addr)
-    var op = f32_ptr(_index(out_addr))
-    var nr = _index(params[0])
-    var nf = _index(params[1])
-    var intercept = Float32(Float64(py=params[2]))
+    var xp = f32_ptr(_index(x_addr))
+    var cp = f32_ptr(_index(coef_addr))
+    var dst = f32_ptr(_index(out_addr))
+    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
+        _index(params[0]), _index(params[1]), Float64(py=params[2]), False)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        # DEVIATION 2920: X read in place, the rows split across the host
-        # thread policy, the predictions written straight to `out`.
-        host_ols_predict_into(
-            f32_ptr(x_address), f32_ptr(coef_address), op, nr, nf, intercept,
-            host_predict_task_count(nr),
-        )
+        linear_predict_host(request)
     return PythonObject(0)
 
 
 def ols_predict_wide_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """`ols_predict` with a float64 output: the same float32 predictions,
-    each widened exactly to float64 as it is written, with the GIL released.
-    params: n_rows, n_features, intercept. Returns 0."""
+    """Legacy address door; shares the typed prediction implementation."""
     if len(params) != 3:
         raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
-    var x_address = _index(x_addr)
-    var coef_address = _index(coef_addr)
-    var wide = f64_ptr(_index(out_addr))
-    var nr = _index(params[0])
-    var nf = _index(params[1])
-    var intercept = Float32(Float64(py=params[2]))
-    var narrow = List[Float32](length=max(nr, 1), fill=0)
-    var np = f32_ptr(Int(narrow.unsafe_ptr()))
+    var xp = f32_ptr(_index(x_addr))
+    var cp = f32_ptr(_index(coef_addr))
+    var dst = f64_ptr(_index(out_addr))
+    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
+        _index(params[0]), _index(params[1]), Float64(py=params[2]), True)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        host_ols_predict_into(
-            f32_ptr(x_address), f32_ptr(coef_address), np, nr, nf, intercept,
-            host_predict_task_count(nr),
-        )
-        classical_widen_f32_f64(Int(np), Int(wide), nr)
-    _ = narrow^
+        linear_predict_host(request)
     return PythonObject(0)
 
 
@@ -1659,6 +1643,8 @@ def build__mojolearn_estimators_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
+        module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
+        module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[qn_proba_binding]("qn_proba")
         module.def_function[ols_predict_wide_binding]("ols_predict_wide")

@@ -175,9 +175,5 @@ def test_generalized_invalid_dimensions(kwargs):
         Shape(**kwargs)
 
 
-def test_large_configuration_is_host_only():
-    cfg = Shape(batch=1, length=2048, d_model=768, n_heads=12, n_kv=12,
-                head_dim=64, intermediate=2048, n_layers=12, vocab_size=50257)
-    assert cfg.n_tensors == 110
-    assert cfg.n_total == 162147840  # untied embedding/head, existing Llama-shaped blocks
-    assert cfg.offsets[-1] == sum(entry['size'] for entry in Trainer.parameter_registry(cfg))
+# Large host-only registry arithmetic is tested directly through ByteConfig in
+# training/checks/byte_lm_config_check.mojo (no Python trainer or model allocation).

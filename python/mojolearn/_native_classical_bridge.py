@@ -19,26 +19,12 @@ def _decomp_cells(decomp):
     # binding (the selected device's, or the CPU one for the Host* classes).
     from types import BuiltinFunctionType
     cells = {}
-    required_cells = ("vendor", "numeric_mode", "tsqr_r", "ew", "gemm", "colsum", "rowsum",
-                      "move", "order_f", "svd", "rank_above", "orth_diag", "geqrf", "orgqr")
-    optional_cells = ("idn_flags", "ols_tsqr_r", "dev_ew", "dev_alloc", "dev_free", "dev_upload",
-                      "dev_download", "dev_gemm", "dev_colsum", "dev_rowsum", "dev_move",
-                      "dev_reduce", "dev_order_f", "dev_orth_diag", "dev_svd")
-    for suffix in required_cells + optional_cells:  # glue: cache only compiled decomp entry points during connection
-        name = "x_decomp_" + suffix
-        try:
-            entry = getattr(decomp, name)
-        except (AttributeError, ImportError):
-            if suffix in required_cells:
-                raise
-            continue
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"classical TSQR owner requires compiled {name}")
-        cells[name] = entry
-    if "x_decomp_dev_ew" in cells:
-        for suffix in optional_cells[3:-1]:  # glue: complete native resident family admission
-            if "x_decomp_" + suffix not in cells:
-                raise ImportError(f"classical TSQR resident entry missing: {suffix}")
+    # The native table owns all primitive dispatch and capability decisions.
+    name = "x_decomp_native_api_v1"
+    entry = getattr(decomp, name)
+    if not isinstance(entry, BuiltinFunctionType):
+        raise TypeError(f"classical TSQR owner requires compiled {name}")
+    cells[name] = entry
     return cells
 
 
@@ -53,7 +39,7 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     object.__setattr__(owner, "numeric_mode", "identical")
     module = host_ridge_class._bind(owner, "_mojolearn_estimators")
     cpu = {}
-    names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
+    names = ("estimators_vendor", "estimators_numeric_mode", "linear_predict_native_api_v1", "linear_fit_native_api_v1", "ols_predict",
              "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
              "lm_center", "lm_intercept", "lm_scale_rows", "py2mojo_rows")
     optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
@@ -77,11 +63,11 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
         cpu["decomp"] = _decomp_cells(decomp)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         cpu["decomp"] = type(error).__name__ + ": " + str(error)
-    linear_fit = getattr(linear, "x_linear_fit", None)
-    if linear_fit is not None:  # only a weighted or one-column HostRidge fit needs it
+    linear_fit = getattr(linear, "ridge_fit_native_api_v1", None)
+    if linear_fit is not None:  # compiled native Ridge descriptor
         if not isinstance(linear_fit, BuiltinFunctionType):
-            raise TypeError("explicit host model requires compiled x_linear_fit")
-        cpu["x_linear_fit"] = linear_fit
+            raise TypeError("explicit host model requires compiled ridge_fit_native_api_v1")
+        cpu["ridge_fit_native_api_v1"] = linear_fit
     connected = {mode: dict(cpu) for mode in context["classical_bindings"]}  # glue: one CPU entry family per connected mode
     context.update(classical_bindings=connected, classical_explicit_cpu=True,
                    classical_metric_vendor=context["vendor"], vendor="cpu")
@@ -266,7 +252,7 @@ def connect(ridge_class, linear_class=None):
             estimator = _backend.binding("_mojolearn_estimators", mode)
             linear = _backend.binding("_mojolearn_x_linear", mode)
             entries = {}
-            required = ("estimators_vendor", "estimators_numeric_mode", "lm_col_sums",
+            required = ("estimators_vendor", "estimators_numeric_mode", "linear_predict_native_api_v1", "linear_fit_native_api_v1", "lm_col_sums",
                         "lm_means_finish", "lm_center", "lm_intercept", "ridge_fit", "ols_predict")
             optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
                         "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
@@ -284,10 +270,10 @@ def connect(ridge_class, linear_class=None):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"classical owner requires compiled {name}")
                 entries[name] = entry
-            entry = linear.x_linear_fit
+            entry = linear.ridge_fit_native_api_v1
             if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError("classical owner requires compiled x_linear_fit")
-            entries["x_linear_fit"] = entry
+                raise TypeError("classical owner requires compiled ridge_fit_native_api_v1")
+            entries["ridge_fit_native_api_v1"] = entry
             if linear_class is not None:
                 try:
                     entries["decomp"] = _decomp_cells(_backend.binding("_mojolearn_x_decomp", mode))
