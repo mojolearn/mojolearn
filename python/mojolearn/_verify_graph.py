@@ -1108,7 +1108,8 @@ def integer_loop_state_refusal():
             control = _invoke(restored.load_control, control_path)
             _refuses(lambda: _invoke(control["body"].while_loop, a,
                                     condition=control["condition"], max_iterations=1),
-                     "state outputs must hold floating-point values", ValueError)
+                     ("holds integer ids; its state input must be ids",
+                      "must hold the kind of its state input"), ValueError)
     return outputs
 
 
