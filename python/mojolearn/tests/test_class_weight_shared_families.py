@@ -6,6 +6,7 @@ NumPy below prepares independent oracle inputs outside product execution.
 """
 import numpy as np
 import pytest
+from pathlib import PurePosixPath
 
 from mojolearn import ExtraTreesClassifier, LinearSVC, RandomForestClassifier
 from mojolearn._cpu_reference import reference_training
@@ -69,3 +70,30 @@ def test_shared_families_keep_numeric_weight_admission(family, value):
     x, y = _data()
     with pytest.raises(ValueError, match="finite nonnegative real"):
         _model(family, {7: value}).fit(x, y)
+
+
+@pytest.mark.parametrize("family", ["rf", "et"])
+def test_tree_weight_key_rejects_path_equality_before_set_membership(family, monkeypatch):
+    # Exact paths are valid for other estimator parameters, but are not native
+    # label keys. Force an integer hash collision to expose unsafe membership.
+    key = PurePosixPath("class-weight-key")
+    original_hash = PurePosixPath.__hash__
+    original_equal = PurePosixPath.__eq__
+    calls = []
+
+    def path_hash(self):
+        return hash(1) if self is key else original_hash(self)
+
+    def path_equal(self, other):
+        if self is key:
+            calls.append("eq")
+            raise AssertionError("path equality executed inside native fit")
+        return original_equal(self, other)
+
+    monkeypatch.setattr(PurePosixPath, "__hash__", path_hash)
+    weight = {key: 0.5}
+    monkeypatch.setattr(PurePosixPath, "__eq__", path_equal)
+    x, y = _data()
+    with pytest.raises(TypeError, match="exact native"):
+        _model(family, weight).fit(x, y)
+    assert calls == []
