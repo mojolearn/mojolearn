@@ -55,11 +55,6 @@ def test_constructor_metadata_and_signature_are_native(cls, monkeypatch):
     assert clean(cls._get_param_names) == sorted(params)
     assert type(clean(cls._get_param_names)) is list
     assert clean(model.__sklearn_is_fitted__) is False
-    if "sklearn" in sys.modules or _sklearn_available():
-        import sklearn.utils  # noqa: F401  (sklearn asks for tags after importing itself)
-        tags = clean(model.__sklearn_tags__)
-        assert tags.estimator_type == "regressor" and tags.target_tags.required
-        assert dataclasses.asdict(tags)["input_tags"]["two_d_array"] is True
     assert clean(getattr, model, "__class__") is cls
     assert clean(getattr, model, "fit").__self__ is model
     assert clean(getattr, model, "numeric_mode") == "identical"
@@ -70,12 +65,14 @@ def test_constructor_metadata_and_signature_are_native(cls, monkeypatch):
     clean(model.predict, np.ones((1, 3), "f4"), error=ValueError)
 
 
-def _sklearn_available():
-    try:
-        import sklearn  # noqa: F401
-        return True
-    except ImportError:
-        return False
+@pytest.mark.parametrize("cls", CLASSES)
+def test_sklearn_tag_metadata(cls):
+    # AGENTS.md exempts sklearn's tag construction only; product operations
+    # remain subject to the native-call audit in the other tests here.
+    pytest.importorskip("sklearn.utils")
+    tags = cls(numeric_mode="identical").__sklearn_tags__()
+    assert tags.estimator_type == "regressor" and tags.target_tags.required
+    assert dataclasses.asdict(tags)["input_tags"]["two_d_array"] is True
 
 
 @pytest.mark.parametrize("cls", (Ridge, LinearRegression))
