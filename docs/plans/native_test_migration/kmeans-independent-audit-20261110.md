@@ -2,7 +2,8 @@
 
 Reviewed production `3a5b05c487` against its parent
 `ddbc4fc751434ce9a7a8c489cb1529a8e5ed7ec5`, then reviewed repairs
-`d00701687d` and `7b599a4b7d`. The final reviewed source is `7b599a4b7d`.
+`d00701687d`, `7b599a4b7d` and `c1e916c795`. The final reviewed source
+is `c1e916c795`.
 This is source review only: no compilation, product execution, installed
 loading, timing or identity run occurred in this lane.
 
@@ -36,11 +37,19 @@ loading, timing or identity run occurred in this lane.
    lookup or conversion. The family admission checks instance storage and
    exact dictionary keys, not all parameter values, so it does not close
    these paths. This is inherited boundary debt, not a kernel regression.
-   The producing lane owns the repair and hook-refusal boundary fixtures;
-   their final source review and runtime checks remain pending.
+   Repair `c1e916c795` admits scalar storage immediately before the first
+   relevant operation and replaces the name/code `isinstance` paths with
+   exact type/C subtype checks. Custom `__class__` properties and scalar
+   subclasses cannot enter those operations. Exact NumPy string names,
+   numeric/text/byte conversion forms and deferred initial-center array
+   admission remain. NumPy integer init codes are not silently reclassified
+   as builtin integers; oversampling keeps its narrower accepted scalar set.
+   The canonical type-name getset supplies refusal text without invoking a
+   custom metaclass's `__name__` property. Earlier invalid input, metric,
+   center and weight refusals retain their order before later scalar checks.
 
-The scalar-admission finding remains open at this recorded source. No build
-or runtime success is claimed.
+No remaining concrete source defect was identified in the reviewed scope.
+This is not a claim that the code builds or runs.
 
 ## Call-path and ownership review
 
@@ -94,9 +103,9 @@ or runtime success is claimed.
   the native path. Host integer fields retain `operator.index` semantics and
   Boolean refusal via `PyNumber_Index`; GPU integer conversion keeps its
   former `Int` semantics. Explicit conversions of tolerance/seed and their
-  order remain in UNPACK. The new `kmeans_integer` refuses unsupported scalar
-  hooks itself, but earlier public conversions still need the repair in
-  finding 3. This audit does not claim complete callback-free admission.
+  order remain in UNPACK. Repair `c1e916c795` extends exact native admission
+  to the earlier conversions and name lookups identified in finding 3.
+  This source conclusion is limited to the reviewed call paths.
 - No numerical kernels or data-sized loops were rewritten. Tensor-sized
   input/initial-center/output copies and resident/fold routes are preserved.
   Metadata allocations changed: typed bounded request/result storage replaces
@@ -119,8 +128,10 @@ before/after the migration: `cluster/estimator.mojo`,
 `core/core_host_impl.mojo` and `cluster/host/kmeans_oracle.mojo`.
 
 The producing lane's `e18ebd3562` and `7b599a4b7d` supply 26 descriptor/owner,
-6 CPU kernel and 9 GPU kernel fixtures plus seven Python boundary cases.
-They were not compiled or run by this audit. Actual registered-owner
+6 CPU kernel and 9 GPU kernel fixtures. Repair `c1e916c795` adds 44 Python
+boundary cases, bringing that file to 10 test definitions / 51 expanded
+cases. The source AST was parsed and its parameter lists counted; none of
+these fixtures were compiled or run by this audit. Actual registered-owner
 allocation, readonly/rebound storage behavior, copy/getstate independence,
 in-flight retirement and allocation-failure cleanup remain runtime evidence
 owed. These checks do not add an installed-wheel gate to development merges.
