@@ -236,3 +236,24 @@ public fields are compatibility mirrors/UNPACK inputs, not a new backend.
 Root owes direct span/refusal fixtures and public assignment/rollback/ownership
 coverage, plus compile. Remaining cleanup includes checkpoint input preparation,
 registry metadata and private legacy Python helpers; the family is not complete.
+
+## Parallel checkpoint preparation
+
+Checkpoint and beta-array admission now captures native TensorViews and export
+pins once. Rank/count and endian/stride planning use those values; converted
+checkpoint storage is prepared through the existing shared allocator. Removed:
+repeated Python ndim/size/strides/itemsize/address reads and dtype.isnative checks
+from these paths. Native checkpoint conversion runs after the GIL is released.
+
+`optimizer_state_cast` now splits independent output elements through the
+existing host worker policy. Its conversion expressions and input bytes are
+unchanged. Worker refusal records select the earliest invalid input index, so
+exception type/text does not depend on scheduling. Converted scratch is private
+and published only on success; disjoint later scratch chunks may complete when
+another chunk refuses. The native fixture lane is updating its incidental serial
+scratch-tail assumption while retaining source, guard, error and public atomicity
+coverage. Empty conversion remains valid; nonempty null/out-of-range spans refuse.
+
+Root owes the existing 35 native conversion fixtures, parallel/error cases,
+public checkpoint admission/ownership/rollback tests and compile. No update
+kernel changed and no performance/identity claim is made.
