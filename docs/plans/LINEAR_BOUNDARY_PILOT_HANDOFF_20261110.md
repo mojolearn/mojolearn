@@ -21,16 +21,24 @@ Root owns compilation and measurement. The lane has run no builds or tests.
 - Constructor, get/set params and fitted-state metadata: native parameter names,
   validation and key decisions in `core/linear_metadata.mojo`. Explicit boundary
   code transfers exact external parameter owners using CPython dictionary APIs.
-- Save/load/hash: separate archive lane owns the remaining migration. Public
-  attribute protocol admission remains boundary work and needs final call-graph
-  review with the archive changes. The complete pilot is not yet accepted.
+- Save/hash: the separate archive lane's native writer/hash batch is incorporated;
+  public dispatch uses its native byte ownership and serialization. Archive read
+  completion remains with that lane. The complete pilot is not yet accepted.
+- Shared float32 admission: `core/admitted_f32_plan.mojo` owns rank, shape,
+  byte-order, borrow/layout/cast, target and weight decisions. Existing parallel
+  cast, finite and weight kernels run with the GIL released. The classical X
+  shape verdict is reused, and pilot callers consume the admitted native address
+  and dimensions. Exact exporter/protocol admission and owner pins remain in
+  the boundary.
 
 ## Ownership contract
 
 Public `coef_` and `_x_mean` arrays remain writable and rebindable. They do not
 become read-only views merely because an older design document proposed that.
 Before prediction, the boundary admits the current coefficient owner and reads
-its current buffer descriptor, count, feature count and intercept. Native code
+its current buffer descriptor, count, feature count and intercept. Public scalar
+and coefficient owners are captured before data preparation releases the GIL,
+so concurrent refits cannot mix scalar owners from different snapshots. Native code
 receives those values, so external changes remain visible.
 
 `LinearModelState` contains native addresses, dimensions, scalars and flags.
@@ -69,6 +77,13 @@ weighted/unweighted fits, intercept on/off, one-feature Ridge, TSQR full-rank
 and deficient-rank inputs, the generic OLS route, prediction output dtype,
 score range I/O, parameter resets, mutable/rebound fitted attributes and archive
 roundtrips. Compilation alone does not establish any of those behaviors.
+
+Remaining transitive review includes shared input-exporter adapters, registry
+reuse and internal DeviceRows ingress. Their Python objects retain external
+owners, while data traversal already calls native routines; they must not be
+counted as complete merely from a filename or import scan. Public attribute and
+exception-class operations are Python protocol admission/packing, and remain
+subject to exact-type/hook refusal review. Archive read remains outstanding.
 
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD

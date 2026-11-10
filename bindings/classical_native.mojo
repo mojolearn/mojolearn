@@ -12,7 +12,7 @@ from providers.python.linear_ols_boundary import classical_ols_fit
 from providers.python.linear_score_boundary import classical_linear_score
 from providers.python.linear_metadata_boundary import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
-from bindings.classical_archive import classical_archive_save
+from bindings.classical_archive import classical_archive_save, classical_archive_hash as classical_host_hash
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
@@ -25,7 +25,7 @@ from bindings.classical_pandas import classical_admit_value, classical_admit_fie
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
-from bindings.classical_host_owner import classical_host_entries, classical_host_hash
+from bindings.classical_host_owner import classical_host_entries
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_caller import classical_caller_outside
 from bindings.native_loaded_module import native_loaded_module, NativeModules
