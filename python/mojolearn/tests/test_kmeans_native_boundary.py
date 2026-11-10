@@ -88,7 +88,7 @@ def test_nonfinite_query_is_refused_before_public_output(method):
     before = np.asarray(model.cluster_centers_).copy()
     query = _data()
     query[0, 0] = np.nan
-    with pytest.raises(ValueError, match="finite"):
+    with pytest.raises(ValueError, match="NaN or infinity"):
         getattr(model, method)(query)
     np.testing.assert_array_equal(np.asarray(model.cluster_centers_), before)
 
