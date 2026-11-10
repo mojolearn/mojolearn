@@ -5,6 +5,9 @@ does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
+from core.linear_boundary_types import LinearPredictRequest
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 # SPDX-License-Identifier: Apache-2.0
@@ -104,11 +107,9 @@ from decomposition.tsvd_resident_state import (
     tsvd_transform_resident_device,
     tsvd_inverse_resident_device,
 )
-from core.p3_linear_impl import ols_predict_wide_device
 from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
-    ols_predict_host,
     qn_decision_function_device,
     qn_decision_function_host,
     qn_fit_host,
@@ -975,51 +976,41 @@ def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: 
     return PythonObject(0)
 
 
+
+def linear_predict_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_PREDICT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def ols_predict_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """GPU matrix-vector prediction; Python adds the scalar intercept."""
+    """Legacy address door; shares the typed prediction implementation."""
     if len(params) != 3:
         raise Error("ols_predict: params must contain n_rows, n_features, intercept")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var intercept = Float32(Float64(py=params[2]))
+    var dst = _f32_ptr(Int(py=out_addr))
+    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
+        Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]), False)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ols_predict_host(ctx, xp, cp, op, nr, nf, intercept)
-        ctx.synchronize()
+        linear_predict_device(request)
     return PythonObject(0)
 
 
 def ols_predict_wide_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """`ols_predict` with a float64 output: the same float32 kernel and
-    words, each prediction widened exactly to float64 as it is written to
-    `out` (the public predict's dtype). One call and one output buffer, the
-    widening done with the GIL released (Apple GPUs have no float64, so the
-    exact widen stays on the host side of the download). params: n_rows,
-    n_features, intercept. Returns 0."""
+    """Legacy address door; shares the typed prediction implementation."""
     if len(params) != 3:
         raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
-    var wide = _f64_ptr(Int(py=out_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var intercept = Float32(Float64(py=params[2]))
+    var dst = _f64_ptr(Int(py=out_addr))
+    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
+        Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]), True)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ols_predict_wide_device(ctx, xp, cp, wide, nr, nf, intercept)
+        linear_predict_device(request)
     return PythonObject(0)
 
 
@@ -1753,6 +1744,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[lm_ols_prep_binding]("lm_ols_prep")
+        m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")
         m.def_function[ols_predict_wide_binding]("ols_predict_wide")

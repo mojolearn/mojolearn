@@ -53,7 +53,7 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     object.__setattr__(owner, "numeric_mode", "identical")
     module = host_ridge_class._bind(owner, "_mojolearn_estimators")
     cpu = {}
-    names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
+    names = ("estimators_vendor", "estimators_numeric_mode", "linear_predict_native_api_v1", "ols_predict",
              "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
              "lm_center", "lm_intercept", "lm_scale_rows", "py2mojo_rows")
     optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
@@ -266,7 +266,7 @@ def connect(ridge_class, linear_class=None):
             estimator = _backend.binding("_mojolearn_estimators", mode)
             linear = _backend.binding("_mojolearn_x_linear", mode)
             entries = {}
-            required = ("estimators_vendor", "estimators_numeric_mode", "lm_col_sums",
+            required = ("estimators_vendor", "estimators_numeric_mode", "linear_predict_native_api_v1", "lm_col_sums",
                         "lm_means_finish", "lm_center", "lm_intercept", "ridge_fit", "ols_predict")
             optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
                         "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
