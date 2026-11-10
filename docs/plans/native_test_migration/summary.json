@@ -237,6 +237,23 @@
       ],
       "handoff": "docs/plans/native_test_migration/holtwinters-state-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "path": "checks/native_tests/optimizer_descriptor_cases.mojo",
+      "decision": "new-native-producer-contract-coverage",
+      "native_fixtures_per_executor": 25,
+      "executors": [
+        "optimizer_host_v1",
+        "optimizer_gpu_v1"
+      ],
+      "removed_python_definitions": 0,
+      "retained_boundary_files": [
+        "test_optimizer_native_lifecycle.py",
+        "test_optimizer_native_array_ownership.py",
+        "test_optimizer_native_step_errors.py"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see optimizer-descriptor-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
