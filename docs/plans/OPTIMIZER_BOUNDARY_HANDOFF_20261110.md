@@ -296,3 +296,20 @@ Root must include this commit together with the early-validation repair for the
 consolidated build. No lane compilation/tests were run, and no tuned kernel or
 valid-input numeric operation changed. Parent owns the separate TSQR final-copy
 and strided-gather coordinate optimizations; this batch does not touch them.
+
+## Obsolete Python optimizer implementations removed
+
+Caller review found no production callers of the old _Optimizer initializer,
+SGD/Adam _config methods, dtype/keyword/maximize refusal helpers or their Python
+policy dictionaries. The public constructors/methods already enter the native
+boundary, so those nine definitions/tables are deleted (259 original source
+lines), along with unused buffer-helper imports. The cross-entropy seam test no
+longer poisons two deleted optimizer helpers; its active native-boundary checks
+remain. Existing schedule/generator/Samba helpers with real external callers are
+retained and are outside this optimizer deletion batch.
+
+This removes duplicate runtime-looking Python implementations that could mislead
+future edits. Public constructor signatures, output types and native kernels are
+unchanged. Root owes import/public-method tests after the coherent constructor
+repairs; this lane has run no tests or compilation. Source review is not timing
+or correctness evidence.
