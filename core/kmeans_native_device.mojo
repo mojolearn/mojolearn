@@ -84,7 +84,7 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
                 r.rows, r.features, r.clusters, centers, r.dst, r.metric, r.transform)
             return KMeansQueryResult(Int(words[0]), Int(words[1]))
         var source = _f32(r.source)
-        var centers = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
+        var centers: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None
         if r.handle < 0:
             centers = _f32(r.centers)
         var destination = _u32(r.dst)
@@ -98,13 +98,14 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
                 kmeans_predict_resident(r.handle, source, r.rows, r.features,
                     r.clusters, destination, r.metric, finite_word=finite_word)
         else:
+            var center_words = centers.value()
             var ctx = process_ctx[KMEANS_CONTEXT]()
             if r.transform:
                 kmeans_transform(ctx, source, r.rows, r.features, r.clusters,
-                    centers, _f32(r.dst), r.metric, finite_word=finite_word)
+                    center_words, _f32(r.dst), r.metric, finite_word=finite_word)
             else:
                 kmeans_predict(ctx, source, r.rows, r.features, r.clusters,
-                    centers, destination, r.metric, finite_word=finite_word)
+                    center_words, destination, r.metric, finite_word=finite_word)
             ctx.synchronize()
         return KMeansQueryResult(Int(word[0]), 0)
 
