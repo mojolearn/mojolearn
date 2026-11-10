@@ -24,8 +24,7 @@ def integer_index(unit: Int) raises:
     var wp = words.unsafe_ptr()
     var tasks = host_predict_task_count_work(max(1, count), max(1, count))
     var chunk = host_predict_chunk(max(1, count), tasks)
-    @parameter
-    def input(worker: Int):
+    def input(worker: Int) {imm chunk, imm count, imm wp, imm classes}:
         for i in range(worker * chunk, min((worker + 1) * chunk, count)):
             wp[i] = Int64((count - 1 - i) % classes - classes // 2)
     host_parallelize(input, tasks)
@@ -39,8 +38,7 @@ def integer_index(unit: Int) raises:
     var op = output.unsafe_ptr()
     var failures = List[Int](length=tasks, fill=0)
     var fp = failures.unsafe_ptr()
-    @parameter
-    def check(worker: Int):
+    def check(worker: Int) {imm chunk, imm count, imm op, imm classes, imm tasks, imm kp, imm rp, imm fp}:
         var failed = 0
         for i in range(worker * chunk, min((worker + 1) * chunk, count)):
             failed += Int(op[i + 1] != Int32((count - 1 - i) % classes))

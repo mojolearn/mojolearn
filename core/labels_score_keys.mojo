@@ -7,7 +7,7 @@ No Python hash, equality, sorting, dictionary or set operation occurs here.
 One index contains either numeric keys or text keys; admission refuses mixing.
 Big-integer keys are canonical hexadecimal magnitudes outside signed Int64.
 """
-from std.algorithm import sort
+from std.builtin.sort import sort
 from std.atomic import Atomic, Ordering
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -159,8 +159,7 @@ def _sort_distinct(keys: KeyPointer, mut rows: List[Int]):
     var units = host_predict_task_count_work(n, n * levels)
     var chunk = host_predict_chunk(n, units)
     var rp = WordPointer(unsafe_from_address=Int(rows.unsafe_ptr()))
-    @parameter
-    def initial(unit: Int):
+    def initial(unit: Int) {imm chunk, imm n, imm rp, imm keys}:
         var lo = unit * chunk
         var hi = min(lo + chunk, n)
         if lo >= hi:
@@ -178,8 +177,7 @@ def _sort_distinct(keys: KeyPointer, mut rows: List[Int]):
         var source = rp
         var target = sp
         var run_width = width
-        @parameter
-        def merge(unit: Int):
+        def merge(unit: Int) {imm chunk, imm n, imm run_width, imm keys, imm source, imm target}:
             var lo = unit * chunk
             var hi = min(lo + chunk, n)
             while lo < hi:
@@ -205,8 +203,7 @@ def _sort_distinct(keys: KeyPointer, mut rows: List[Int]):
     if Int(rp) != Int(rows.unsafe_ptr()):
         var final = WordPointer(unsafe_from_address=Int(rows.unsafe_ptr()))
         var source = rp
-        @parameter
-        def copy(unit: Int):
+        def copy(unit: Int) {imm chunk, imm n, imm final, imm source}:
             for i in range(unit * chunk, min((unit + 1) * chunk, n)):
                 final[i] = source[i]
         host_parallelize(copy, units)
@@ -237,15 +234,13 @@ struct ScoreKeyIndex(Movable):
         var units = host_predict_task_count_work(max(1, count), max(1, count) * 8)
         var chunk = host_predict_chunk(max(1, count), units)
         var slot_chunk = host_predict_chunk(capacity, units)
-        @parameter
-        def clear(unit: Int):
+        def clear(unit: Int) {imm slot_chunk, imm capacity, imm slots}:
             for i in range(unit * slot_chunk, min((unit + 1) * slot_chunk, capacity)):
                 slots[i] = -1
         host_parallelize(clear, units)
         var row_slots = List[Int](unsafe_uninit_length=count if ordered else 0)
         var positions = WordPointer(unsafe_from_address=Int(row_slots.unsafe_ptr()))
-        @parameter
-        def insert(unit: Int):
+        def insert(unit: Int) {imm chunk, imm count, imm kp, imm mask, imm slots, imm keep_last, imm ordered, imm positions}:
             for i in range(unit * chunk, min((unit + 1) * chunk, count)):
                 var slot = Int(score_key_hash(kp[i]) & UInt64(mask))
                 while True:
@@ -272,8 +267,7 @@ struct ScoreKeyIndex(Movable):
             return
         var counts = List[Int](length=units, fill=0)
         var cp = WordPointer(unsafe_from_address=Int(counts.unsafe_ptr()))
-        @parameter
-        def tally(unit: Int):
+        def tally(unit: Int) {imm chunk, imm count, imm slots, imm positions, imm cp}:
             var total = 0
             for i in range(unit * chunk, min((unit + 1) * chunk, count)):
                 total += Int(slots[positions[i]] == Int64(i))
@@ -286,8 +280,7 @@ struct ScoreKeyIndex(Movable):
             distinct += amount
         self.sorted_rows = List[Int](unsafe_uninit_length=distinct)
         var rows = WordPointer(unsafe_from_address=Int(self.sorted_rows.unsafe_ptr()))
-        @parameter
-        def compact(unit: Int):
+        def compact(unit: Int) {imm cp, imm chunk, imm count, imm slots, imm positions, imm rows}:
             var at = cp[unit]
             for i in range(unit * chunk, min((unit + 1) * chunk, count)):
                 if slots[positions[i]] == Int64(i):
@@ -298,8 +291,7 @@ struct ScoreKeyIndex(Movable):
         var sorted_rows = WordPointer(unsafe_from_address=Int(self.sorted_rows.unsafe_ptr()))
         var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(self.codes.unsafe_ptr()))
         var code_chunk = host_predict_chunk(max(1, distinct), units)
-        @parameter
-        def number(unit: Int):
+        def number(unit: Int) {imm code_chunk, imm distinct, imm codes, imm sorted_rows}:
             for i in range(unit * code_chunk, min((unit + 1) * code_chunk, distinct)):
                 codes[sorted_rows[i]] = Int32(i)
         host_parallelize(number, units)
@@ -324,8 +316,7 @@ def score_integer_keys(source: Int, count: Int) -> List[ScoreLabelKey]:
     var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source)
     var units = host_predict_task_count_work(max(1, count), max(1, count))
     var chunk = host_predict_chunk(max(1, count), units)
-    @parameter
-    def task(unit: Int):
+    def task(unit: Int) {imm chunk, imm count, imm dst, imm words}:
         for i in range(unit * chunk, min((unit + 1) * chunk, count)):
             (dst + i).unsafe_write(ScoreLabelKey(SCORE_INT, words[i], 0, 0, False))
     host_parallelize(task, units)
@@ -341,8 +332,7 @@ def score_key_join(a: List[ScoreLabelKey], b: List[ScoreLabelKey]) -> List[Score
     var bp = KeyPointer(unsafe_from_address=Int(b.unsafe_ptr()))
     var units = host_predict_task_count_work(max(1, count), max(1, count))
     var chunk = host_predict_chunk(max(1, count), units)
-    @parameter
-    def task(unit: Int):
+    def task(unit: Int) {imm chunk, imm count, imm split, imm dst, imm ap, imm bp}:
         for i in range(unit * chunk, min((unit + 1) * chunk, count)):
             if i < split:
                 (dst + i).unsafe_write(ap[i].copy())
@@ -362,8 +352,7 @@ def score_key_codes(index: ScoreKeyIndex, keys: List[ScoreLabelKey], destination
     var lookup = Pointer(to=index)
     var units = host_predict_task_count_work(max(1, count), max(1, count))
     var chunk = host_predict_chunk(max(1, count), units)
-    @parameter
-    def task(unit: Int):
+    def task(unit: Int) {imm chunk, imm count, imm dst, imm lookup, imm source, imm sorted_code}:
         for i in range(unit * chunk, min((unit + 1) * chunk, count)):
             dst[i] = Int32(lookup[].lookup(source[i], sorted_code))
     host_parallelize(task, units)
