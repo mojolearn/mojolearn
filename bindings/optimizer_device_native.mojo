@@ -2,11 +2,13 @@
 # Native ownership and consumed outputs of training device arrays.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_value, opt_scalar
-from bindings.optimizer_public_door import new_array, TensorView, tensor_view, base_format, contiguous_addr
+from bindings.optimizer_public_door import new_array, TensorView, tensor_view, base_format
+from bindings.optimizer_container_boundary import OptimizerInputOwners
+from training.optimizer_input_plan import optimizer_contiguous_address
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.native_buffer_owner import native_storage_allocate
 
@@ -195,17 +197,21 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
             return source
         var entries = device_entries(selected["module"], context)
         var view = TensorView()
-        if not tensor_view(source, view) or base_format(view.fmt) != "f":
+        var buffer_pins = OptimizerInputOwners()
+        if not tensor_view(source, view, buffer_pins) or base_format(view.fmt) != "f":
             raise Error("TypeError: mojolearn.train_to_device: a must be float32")
         if view.count() < 1:
             raise Error("ValueError: mojolearn.train_to_device: a must be nonempty")
         var keep = List[List[Float32]]()
-        var addr = contiguous_addr(source, view, keep)
+        var addr = 0
+        with GILReleased(Python()):
+            addr = optimizer_contiguous_address(view, keep)
         var upload = entries["train_dev_put"]
         if py_type(upload) is not context["device_finalizer_types"][2]:
             raise Error("TypeError: training device upload requires its compiled entry")
         var result = device_allocate(entries, view.shape, context)
         _ = py_call(upload, py_fields(result)["h"], addr, view.count())
+        _ = buffer_pins
         _ = keep^
         _ = source^
         return result
