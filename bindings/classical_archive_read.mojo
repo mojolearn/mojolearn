@@ -181,9 +181,7 @@ struct _ArchiveReprFailure(Movable):
 
     def __init__(out self) raises:
         ref cpy = Python().cpython()
-        var words = List[PyObjectPtr](length=3, fill=PyObjectPtr())
-        var pointer = words.unsafe_ptr()
-        cpy.lib.get_function[NoneType]("PyErr_Fetch")(pointer, pointer + 1, pointer + 2)
+        var words = cpy.PyErr_FetchTriple()
         self.kind = PythonObject(from_owned=words[0]) if words[0] else PythonObject(None)
         self.value = PythonObject(from_owned=words[1]) if words[1] else PythonObject(None)
         self.traceback = PythonObject(from_owned=words[2]) if words[2] else PythonObject(None)
