@@ -19,7 +19,7 @@ from core.native_archive_linear import native_archive_string, native_archive_anc
 from bindings.classical_arrays import classical_numpy, classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
 from bindings.host_array_native import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
-from bindings.scaler_lifecycle_native import scaler_archive_build
+from bindings.standard_archive_native import standard_archive_decoded
 from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_finite_scan import host_finite_status
 
@@ -2791,6 +2791,8 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
         result.value = minmax_archive_decoded(cls, members, context, print_mode)
     elif fmt == "mojolearn-linear-1":
         result.value = host_archive_linear_decoded(cls, members, estimator == "Ridge", context, print_mode)
+    elif fmt == "mojolearn-scaler-1" and estimator == "StandardScaler":
+        result.value = standard_archive_decoded(cls, members, context, print_mode)
     else:
         # Families awaiting typed schema migration retain their original PACK;
         # decode warnings/errors were already emitted exactly once above.
@@ -2806,7 +2808,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     var estimator = decoded.estimator
     var arrays = decoded.value
     var model = PythonObject(None)
-    if (fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler") or fmt == "mojolearn-linear-1":
+    if (fmt == "mojolearn-scaler-1" and (estimator == "MinMaxScaler" or estimator == "StandardScaler")) or fmt == "mojolearn-linear-1":
         model = decoded.value
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
         model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", path, context)
@@ -2814,8 +2816,6 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_cd(cls, arrays, estimator == "Lasso", path, context)
     elif fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1" or fmt == "mojolearn-rbf-sampler-1":
         model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), path, context)
-    elif fmt == "mojolearn-scaler-1" and estimator == "StandardScaler":
-        model = scaler_archive_build(cls, arrays, path, context)
     elif fmt == "mojolearn-cholesky-1":
         model = host_archive_cholesky(cls, arrays, path, context)
     elif fmt == "mojolearn-embedding-1":
