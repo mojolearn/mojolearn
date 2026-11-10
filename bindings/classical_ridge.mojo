@@ -6,12 +6,10 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
-from core.classical_ridge_impl import classical_widen_f32_f64
 from bindings.classical_arrays import classical_array, classical_word, classical_address
-from bindings.admitted_input import admit_x
 from bindings.sequential_description import sequential_fields
 from bindings.classical_metadata import classical_fit_replacements_admit
-from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
 
 
 def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -208,48 +206,3 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
     _ = y^
     _ = weights^
     return model
-
-
-def classical_linear_predict(model: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _classical_linear_predict(model, value, entries, context, False)
-
-
-def _classical_linear_predict(model: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject,
-                              wide: Bool) raises -> PythonObject:
-    # wide: write the float64 public prediction in the same native call
-    # (`ols_predict_wide`), one output buffer and no separate widening pass.
-    var fields = sequential_fields(model)
-    if py_get(fields, "coef_") is None:
-        raise Error("ValueError: call fit before predict")
-    var est = classical_estimator_name(model)
-    var x = classical_check_x(value, est, context, admitted=True)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    classical_check_width(cols, Int(py=fields["n_features_in_"]), est)
-    var coef = admit_x(fields["coef_"], 1, "coef_", context)
-    if Int(py=coef.size) != cols:
-        raise Error("coef_ length differs from fitted feature count")
-    var out = classical_array(rows, 0, context, wide)
-    _ = py_call_typed(entries["ols_predict_wide" if wide else "ols_predict"], classical_address(x),
-                      classical_address(coef), classical_address(out), Python.list(rows, cols, fields["intercept_"]))
-    _ = x^
-    _ = coef^
-    return out
-
-
-def classical_linear_predict_public(model: PythonObject, value: PythonObject,
-                                   entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    # PublicOutputsMixin historically widens the completed float32 prediction
-    # to float64. Preserve this output conversion without changing the fitted
-    # kernel or the float32 prediction consumed internally by R2 scoring.
-    # A binding with `ols_predict_wide` writes the exact float64 widening of
-    # the same float32 words in its own call (GIL released); an older binding
-    # keeps the separate widening pass below.
-    if py_get(entries, "ols_predict_wide") is not None:
-        return _classical_linear_predict(model, value, entries, context, True)
-    var narrow = classical_linear_predict(model, value, entries, context)
-    var size = Int(py=narrow.size)
-    var wide = classical_array(size, 0, context, True)
-    classical_widen_f32_f64(Int(py=classical_address(narrow)), Int(py=classical_address(wide)), size)
-    _ = narrow^
-    return wide
