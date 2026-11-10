@@ -28,6 +28,7 @@ def archive_bytes_repr(raw: ArchiveSpan) raises -> String:
     var quote = 34 if single and not double else 39
     var result = "b" + chr(quote)
     var digits = String("0123456789abcdef")
+    var hex_bytes = digits.as_bytes()
     for i in range(raw.size):
         var byte = raw.byte(i)
         if byte == quote or byte == 92:
@@ -41,7 +42,7 @@ def archive_bytes_repr(raw: ArchiveSpan) raises -> String:
         elif byte >= 32 and byte < 127:
             result += chr(byte)
         else:
-            result += "\\x" + chr(Int(digits[byte=byte >> 4])) + chr(Int(digits[byte=byte & 15]))
+            result += "\\x" + chr(Int(hex_bytes[byte >> 4])) + chr(Int(hex_bytes[byte & 15]))
     return result + chr(quote)
 
 
