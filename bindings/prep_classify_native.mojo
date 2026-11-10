@@ -33,7 +33,7 @@ from bindings.prep_lda_admission import (
 from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result, lifecycle_fitting
 from bindings.classical_validate import classical_estimator_name
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.scaler_lifecycle_native import _public_result

@@ -297,18 +297,11 @@ def connect(ridge_class, linear_class=None):
         try:
             metrics = _backend.binding("_mojolearn_x_metrics", mode)
             metric_entries = {}
-            metric_names = ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",
-                            "x_metrics_run_out", "x_metrics_run_ranges")
-            for name in metric_names:  # glue: cache raw metric program entries once at package connection
-                try:
-                    entry = getattr(metrics, name)
-                except (AttributeError, ImportError):
-                    if name in ("x_metrics_run_out", "x_metrics_run_ranges"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"classical score requires compiled {name}")
-                metric_entries[name] = entry
+            name = "metrics_program_native_api_v1"
+            entry = getattr(metrics, name)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"classical score requires compiled {name}")
+            metric_entries[name] = entry
             metric_bindings[mode] = metric_entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metric_bindings[mode] = type(error).__name__ + ": " + str(error)

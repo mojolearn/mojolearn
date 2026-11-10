@@ -21,6 +21,11 @@ Root owns compilation and measurement. The lane has run no builds or tests.
 - Constructor, get/set params and fitted-state metadata: native parameter names,
   validation and key decisions in `core/linear_metadata.mojo`. Explicit boundary
   code transfers exact external parameter owners using CPython dictionary APIs.
+- Mode normalization and connected-provider mode/vendor checks use native
+  metadata. Unicode whitespace spellings retain the prior accepted behavior
+  without calling Python string methods. Public mode/vendor reads use the same
+  descriptor table, and fitted admission no longer boxes a Boolean only to
+  immediately unbox it.
 - Save/hash: the separate archive lane's native writer/hash batch is incorporated;
   public dispatch uses its native byte ownership and serialization. Archive read
   completion remains with that lane. The complete pilot is not yet accepted.
@@ -78,12 +83,47 @@ and deficient-rank inputs, the generic OLS route, prediction output dtype,
 score range I/O, parameter resets, mutable/rebound fitted attributes and archive
 roundtrips. Compilation alone does not establish any of those behaviors.
 
-Remaining transitive review includes shared input-exporter adapters, registry
-reuse and internal DeviceRows ingress. Their Python objects retain external
-owners, while data traversal already calls native routines; they must not be
-counted as complete merely from a filename or import scan. Public attribute and
+Shared registry reuse now snapshots native owner identities, parent links,
+addresses, dimensions and finite flags. Native code traverses ancestry and scans
+buffers while boundary owners stay pinned. After reacquiring the GIL, verdicts
+are applied by owner identity and descriptor agreement, so another thread's
+registry compaction cannot make a saved index point at a different buffer.
+DeviceRows shape/store checks and gather-status decisions likewise run on native
+values; the existing gather is unchanged. Exact exporter adapters still require
+final call-graph review, and none of these changes is proof from an import scan. Public attribute and
 exception-class operations are Python protocol admission/packing, and remain
 subject to exact-type/hook refusal review. Archive read remains outstanding.
+The pandas exporter now transfers block descriptors into
+`core/pandas_input_plan.mojo`: block dimensions, dtype promotion, placements,
+nullable-mask validation and scatter decisions use Mojo values. Numeric rows
+still use the existing parallel scatter kernels, now with the GIL released and
+each source owner pinned. Exact object cells require GIL-held C-API decoding;
+they write through a native conversion/finite-policy writer directly into the
+final result, preserving the previous conversion order without a staging copy.
+This decoding cannot be parallelized under the supported GIL contract. Old
+Python owner/placement lists and duplicate metadata rereads were removed.
+Compatibility metadata wrappers for other families share the new native plan;
+those families are not claimed as otherwise migrated.
+
+Output allocation now uses `core/native_array_layout.mojo` for element counts,
+byte counts, strides and storage codes. Typed pilot/pandas callers pass native
+dimensions directly; boundary helpers pack public shape/stride tuples once.
+Python list stride staging, repeated shape boxing/unboxing and the array store's
+`buffer_info()` dispatch were removed. Zero-filled versus uninitialized storage
+choices remain the same. Sequence migration has returned to this lane and is
+implemented but not yet compiled or measured; its existing boundary tests are
+retained. Sequence traversal is iterative with at most eight container frames.
+Exact Python scalars decode to compact native word/tag vectors; consecutive
+scalar values share a single run descriptor. Array/buffer leaves retain native
+shape/stride/endian descriptors and boundary exporter pins rather than packed
+copies and Python scalar lists. A parallel native writer performs output
+conversion, preserving Python-number-to-double-to-float semantics. Ndarray
+outputs use existing uninitialized byte storage. Compatibility and NumPy-free
+`array.array` stores use the existing zero allocator because it has no supported
+uninitialized constructor; this route adds a fill before the parallel write and
+needs performance qualification. Removed the recursive helper chain, Python
+append/extend staging, boxed shape metadata between migrated helpers, packed
+array-leaf copies, and the obsolete half-widen/narrow temporary-store module.
 
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD

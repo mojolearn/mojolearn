@@ -40,7 +40,7 @@ from bindings.native_array_view import native_array_ndarray_view
 from providers.python.array_metadata_pyapi import array_slot_once
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.classical_arrays import classical_wrap_array
-from bindings.classical_score import classical_r2_score
+from providers.python.linear_score_boundary import classical_r2_score
 from bindings.classical_warnings import classical_warning
 from bindings.prep_native_estimator import prep_native_context, prep_native_split
 from bindings.msel_inputs import msel_admit

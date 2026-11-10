@@ -5,18 +5,27 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.sequential_inputs import sequential_input
 from core.cast_in import CastIn, CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
+from core.native_array_layout import NativeArrayLayout
+from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
 
 
 def sequential_array(mut mods: NativeModules, shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = mods.module("builtins")
-    var count = 1
-    for k in range(len(shape)):  # driver-loop: over array rank metadata
-        count *= Int(py=shape[k])
-    var storage = py_call(context["native_bytearray_type"], count * Int(py=dtype.itemsize))
+    return sequential_array_native(mods, native_shape_unpack(shape), dtype, context)
+
+
+def sequential_array_native(mut mods: NativeModules, shape: List[Int], dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    var layout = NativeArrayLayout(shape.copy(), Int(py=dtype.itemsize))
+    var packed_shape = native_shape_pack(layout.shape)
+    var storage = py_call(context["native_bytearray_type"], layout.nbytes)
     mods.released()
-    var windowed_result13 = py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
+    var windowed_result13 = py_call(context["ndarray"], packed_shape, dtype=dtype, buffer=storage)
     mods.released()
     return windowed_result13^
+
+
+def sequential_array_native(shape: List[Int], dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    var mods = NativeModules()
+    return sequential_array_native(mods, shape, dtype, context)
 
 
 def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:

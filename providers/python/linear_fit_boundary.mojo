@@ -7,9 +7,9 @@ vectors, route decisions and solver launches belong to linear_ridge_run.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_arrays import classical_array, classical_address
-from bindings.classical_metadata import classical_fit_replacements_admit
-from providers.python.linear_parameter_boundary import classical_ridge_parameters
-from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
+from providers.python.linear_metadata_boundary import classical_fit_replacements_admit
+from providers.python.linear_parameter_boundary import linear_ridge_parameters_values
+from bindings.classical_validate import classical_check_x_snapshot, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.py_balanced import py_setitem
 from bindings.sequential_description import sequential_fields
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
@@ -22,19 +22,25 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
     entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     classical_fit_replacements_admit(fields, True, context)
+    var alpha_source = fields["alpha"]
+    var solver_source = fields["solver"]
+    var normalize_source = fields["normalize"]
+    var intercept_source = fields["fit_intercept"]
     var est = classical_estimator_name(model)
-    var x = classical_check_x(args[0], est, context, admitted=True)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
+    var admitted_x = classical_check_x_snapshot(args[0], est, context, admitted=True)
+    var x = admitted_x.array
+    var rows = admitted_x.rows
+    var cols = admitted_x.cols
     var y = classical_check_y(args[1], rows, est, context, admitted=True)
-    classical_ridge_parameters(fields)
+    var alpha = linear_ridge_parameters_values(alpha_source, solver_source, normalize_source)
+    var intercept = Bool(py=intercept_source)
     var weights = classical_check_weights_input(args[2], rows, context, admitted=True)
     var coef = classical_array(cols, 0, context)
     var mean = classical_array(cols, 0, context)
-    var request = LinearFitRequest(Int(py=classical_address(x)), Int(py=classical_address(y)),
+    var request = LinearFitRequest(admitted_x.address, Int(py=classical_address(y)),
         0 if weights is None else Int(py=classical_address(weights)),
         Int(py=classical_address(coef)), Int(py=classical_address(mean)), rows, cols,
-        Bool(py=fields["fit_intercept"]), Float64(py=fields["alpha"]))
+        intercept, alpha)
     var provider = neural_descriptor_connect_factory_once(
         entries["linear_fit_native_api_v1"], String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
     var weighted_provider = neural_descriptor_connect_factory_once(
@@ -47,6 +53,7 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
             result = linear_ridge_run(entry, weighted_entry, request)
     finally:
         _ = x
+        _ = admitted_x
         _ = y
         _ = weights
         _ = coef
