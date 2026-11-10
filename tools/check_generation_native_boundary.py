@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Diagnostic local dependency inventory.
 
-Native CPython imports/calls are allowed anywhere under the 2026-10-28 owner
-rule. The default audit follows providers/bindings rather than exempting their
-algorithms, and flags unresolved local dependencies. It cannot prove dynamic
-targets, admitted types, interpreter execution, hooks or transitive
-runtime safety. The runtime endpoint ledger and source review remain separate.
+The target architecture confines Python support to the actual UNPACK/PACK
+boundaries. The default inventory follows providers/bindings rather than
+exempting their algorithms and flags unresolved local dependencies. Resolving
+those imports does not establish that the architecture is satisfied. This tool
+cannot prove dynamic targets, admitted types, interpreter execution, hooks or
+transitive runtime safety; executed-call checks and source review remain separate.
 
 --require-native-only is an optional architectural assertion for a deliberately
 pure root, not product execution policy and not a mandatory source/push gate.
