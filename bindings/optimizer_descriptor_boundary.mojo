@@ -8,24 +8,28 @@ from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_connect_once, neural_descriptor_connect_factory_once,
 )
 from training.optimizer_native_api import (
-    OPTIMIZER_NATIVE_ABI, OPT_NATIVE_COUNT, OPT_NATIVE_HOST, OPT_NATIVE_MODE, OptimizerNativeDriver,
+    OPTIMIZER_NATIVE_ABI, OPT_NATIVE_COUNT, OPT_NATIVE_HOST, OPT_NATIVE_MODE, OPT_NATIVE_DEVICE_AVAILABLE, OptimizerNativeDriver,
 )
+
+
+@fieldwise_init
+struct OptimizerConnection(Movable):
+    var owner: PythonObject
+    var driver: OptimizerNativeDriver
+    var mode: Int
+    var device: Bool
 
 
 struct OptimizerConnections(Defaultable, Movable):
     # GIL-owned boundary cache. Providers pin extension images, capsule tables
     # and factories; algorithm calls receive only the typed driver copy.
-    var owners: List[PythonObject]
-    var drivers: List[OptimizerNativeDriver]
-    var modes: List[Int]
+    var records: List[OptimizerConnection]
 
     def __init__(out self):
-        self.owners = List[PythonObject]()
-        self.drivers = List[OptimizerNativeDriver]()
-        self.modes = List[Int]()
+        self.records = List[OptimizerConnection]()
 
 
-comptime OPTIMIZER_CONNECTIONS = SharedSlot[OptimizerConnections, "MojolearnOptimizerBoundaryConnectionsV1"]
+comptime OPTIMIZER_CONNECTIONS = SharedSlot[OptimizerConnections, "MojolearnOptimizerBoundaryConnectionsV2"]
 
 
 def optimizer_provider(module: PythonObject) raises -> PythonObject:
@@ -41,27 +45,33 @@ def optimizer_provider_entries(entries: PythonObject) raises -> PythonObject:
 
 def _optimizer_connection(provider: PythonObject) raises -> Int:
     var cache = OPTIMIZER_CONNECTIONS.get_or_create_ptr()
-    for i in range(len(cache[].owners)):  # driver-loop: over connected native extension images
-        if cache[].owners[i] is provider:
+    for i in range(len(cache[].records)):  # driver-loop: over connected native extension images
+        if cache[].records[i].owner is provider:
             return i
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
     var host = native_descriptor_call(entry, OPT_NATIVE_HOST, [], [], []) != 0
     var mode = native_descriptor_call(entry, OPT_NATIVE_MODE, [], [], [])
-    var index = len(cache[].owners)
-    cache[].owners.append(provider)
-    cache[].drivers.append(OptimizerNativeDriver(entry, host))
-    cache[].modes.append(mode)
+    var device = native_descriptor_call(entry, OPT_NATIVE_DEVICE_AVAILABLE, [], [], []) != 0
+    var index = len(cache[].records)
+    # Publish one complete native record. Parallel owner/metadata vectors
+    # could otherwise have different lengths after an allocation failure.
+    cache[].records.append(OptimizerConnection(provider, OptimizerNativeDriver(entry, host), mode, device))
     return index
 
 
 def optimizer_driver(provider: PythonObject) raises -> OptimizerNativeDriver:
     var index = _optimizer_connection(provider)
-    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].drivers[index].copy()
+    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].records[index].driver.copy()
 
 
 def optimizer_native_mode(provider: PythonObject) raises -> Int:
     var index = _optimizer_connection(provider)
-    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].modes[index]
+    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].records[index].mode
+
+
+def optimizer_device_available(provider: PythonObject) raises -> Bool:
+    var index = _optimizer_connection(provider)
+    return OPTIMIZER_CONNECTIONS.get_or_create_ptr()[].records[index].device
 
 
 def optimizer_close_slot(module: PythonObject, handle: Int) raises:

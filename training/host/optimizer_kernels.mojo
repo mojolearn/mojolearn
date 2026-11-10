@@ -21,6 +21,22 @@ struct HostOptKernels(OptKernels):
         raise Error("RuntimeError: optimizer: a CPU-only install has no device tensor allocation")
 
     @staticmethod
+    def device_available() -> Bool:
+        return False
+
+    @staticmethod
+    def allocate_device(count: Int) raises -> Int:
+        raise Error("RuntimeError: this build has no training device arrays (identical GPU builds only)")
+
+    @staticmethod
+    def upload_device(handle: Int, address: Int, count: Int) raises -> Int:
+        raise Error("RuntimeError: this build has no training device arrays (identical GPU builds only)")
+
+    @staticmethod
+    def download_device(handle: Int, address: Int, count: Int) raises -> Int:
+        raise Error("RuntimeError: this build has no training device arrays (identical GPU builds only)")
+
+    @staticmethod
     def is_host() -> Bool:
         return True
 

@@ -378,3 +378,47 @@ possibly rebound fields. Numerical kernels/state upload order are unchanged.
 The stale shared training device-upload caller was independently repaired in
 14ab3618f9 using the existing native gather and retained export/Array owners.
 Root owes the existing IO/checkpoint/lifetime cases; no lane runs occurred.
+
+## Typed shared training-device ownership and transfers
+
+The shared TrainDeviceArray path now enters the existing optimizer descriptor
+for allocation, upload, download and free. Existing `train_dev_alloc/put/get/free`
+operations and their DeviceContext/GIL scopes are retained. The descriptor adds
+DEVICE_AVAILABLE=11 (zero integer words), ALLOCATE_DEVICE=12 (one count),
+UPLOAD_DEVICE=13 and DOWNLOAD_DEVICE=14 (handle/address/count). Operations 0..10
+and their wire shapes are unchanged; OPT_NATIVE_COUNT is 15. OptKernels and its
+host/GPU implementations expose `device_available()->Bool`,
+`allocate_device(count:Int)->Int`, and `upload_device`/`download_device` taking
+three Int words and returning Int. Host/off-switch capability remains false.
+The capability is cached once per admitted descriptor connection.
+
+The old Python release-function/handle pair is a native DeviceHandleLease with
+an OptimizerNativeDriver, Int handle and Bool ownership bit. It frees unpublished
+allocations through the typed driver on publication failure. A completed public
+device object retains its module/base/handle API fields; finalization uses the
+same typed driver and leaves its owner fields available for retry after failed
+free. Upload retains the admitted Py_buffer and Array memoryview owners through
+the native gather and native transfer; its final output owner is unpublished
+until it is returned. No extra data copy or tensor algorithm is introduced.
+
+Shape/count/reshape/upload storage decisions live in the new
+`training/optimizer_device_storage_plan.mojo`. The pre-existing multi-GPU
+`optimizer_device_plan.mojo` is unchanged. Shape publication builds the final
+Python tuple directly; metadata admission uses native dictionary iteration.
+Download refuses a rebound count that would overrun the shape-sized output;
+a supported prefix-sized download remains available. Removed: Python shape/key
+lists, mutable builtin constructor calls, compiled-Python per-transfer dispatch,
+the release-function lease and four dead import-time train_dev_* connection
+entries. Existing compiled legacy exports remain supported.
+
+Descriptor connection metadata and its required extension owner pin now publish
+as one complete record instead of separate vectors, so allocation failure cannot
+leave owner/driver/mode/capability vector lengths inconsistent. This boundary
+record is not algorithm state; RUN still receives a copied native driver only.
+
+Root owes compilation of `_mojolearn_training`, `_mojolearn_training_host`, core
+and tokenizer router closures, native descriptor capability/span cases, and
+public device transfer/view/failure-cleanup/lifetime tests. No lane compile/test
+or timing has run. Numerical kernels and rounding are unchanged; performance
+remains unmeasured. Optimizer private control mirrors on the Python owner are a
+separate remaining migration, not hidden by this device boundary completion.

@@ -18,7 +18,11 @@ comptime OPT_NATIVE_CLOSE = 7
 comptime OPT_NATIVE_HOST = 8
 comptime OPT_NATIVE_MODE = 9
 comptime OPT_NATIVE_FREE_DEVICE = 10
-comptime OPT_NATIVE_COUNT = 11
+comptime OPT_NATIVE_DEVICE_AVAILABLE = 11
+comptime OPT_NATIVE_ALLOCATE_DEVICE = 12
+comptime OPT_NATIVE_UPLOAD_DEVICE = 13
+comptime OPT_NATIVE_DOWNLOAD_DEVICE = 14
+comptime OPT_NATIVE_COUNT = 15
 
 
 struct OptimizerStepCall(Movable):
@@ -68,7 +72,9 @@ def optimizer_native_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         raise Error("native optimizer: unknown operation or missing result storage")
     var addresses = 1 if operation <= OPT_NATIVE_ACCUMULATE else 0
     var integers = 4 if operation == OPT_NATIVE_DOWNLOAD or operation == OPT_NATIVE_UPLOAD else (
-        1 if operation == OPT_NATIVE_OPEN or operation == OPT_NATIVE_CLOSE or operation == OPT_NATIVE_FREE_DEVICE else 0)
+        3 if operation == OPT_NATIVE_UPLOAD_DEVICE or operation == OPT_NATIVE_DOWNLOAD_DEVICE else (
+        1 if operation == OPT_NATIVE_OPEN or operation == OPT_NATIVE_CLOSE or operation == OPT_NATIVE_FREE_DEVICE
+            or operation == OPT_NATIVE_ALLOCATE_DEVICE else 0))
     if na != addresses or np != integers or nf != 0:
         raise Error("native optimizer: request span counts differ from the operation")
     if (na > 0 and aa == 0) or (np > 0 and pp == 0):
@@ -113,8 +119,19 @@ def optimizer_native_dispatch[K: OptKernels](operation: Int, aa: Int, na: Int, p
             value = K.free_device(p[0])
         elif operation == OPT_NATIVE_HOST:
             value = Int(K.is_host())
-        else:
+        elif operation == OPT_NATIVE_MODE:
             value = 1 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
+        elif operation == OPT_NATIVE_DEVICE_AVAILABLE:
+            value = Int(K.device_available())
+        else:
+            if not K.device_available():
+                raise Error("RuntimeError: this build has no training device arrays (identical GPU builds only)")
+            if operation == OPT_NATIVE_ALLOCATE_DEVICE:
+                value = K.allocate_device(p[0])
+            elif operation == OPT_NATIVE_UPLOAD_DEVICE:
+                value = K.upload_device(p[0], p[1], p[2])
+            else:
+                value = K.download_device(p[0], p[1], p[2])
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
         return 0
     except problem:
@@ -166,3 +183,15 @@ struct OptimizerNativeDriver(Copyable, Movable):
 
     def free_device(self, handle: Int) raises -> Int:
         return native_descriptor_call(self.entry, OPT_NATIVE_FREE_DEVICE, [], [handle], [])
+
+    def device_available(self) raises -> Bool:
+        return native_descriptor_call(self.entry, OPT_NATIVE_DEVICE_AVAILABLE, [], [], []) != 0
+
+    def allocate_device(self, count: Int) raises -> Int:
+        return native_descriptor_call(self.entry, OPT_NATIVE_ALLOCATE_DEVICE, [], [count], [])
+
+    def upload_device(self, handle: Int, address: Int, count: Int) raises -> Int:
+        return native_descriptor_call(self.entry, OPT_NATIVE_UPLOAD_DEVICE, [], [handle, address, count], [])
+
+    def download_device(self, handle: Int, address: Int, count: Int) raises -> Int:
+        return native_descriptor_call(self.entry, OPT_NATIVE_DOWNLOAD_DEVICE, [], [handle, address, count], [])

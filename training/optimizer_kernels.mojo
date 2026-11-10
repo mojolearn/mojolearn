@@ -19,6 +19,22 @@ trait OptKernels:
         ...
 
     @staticmethod
+    def device_available() -> Bool:
+        ...
+
+    @staticmethod
+    def allocate_device(count: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def upload_device(handle: Int, address: Int, count: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def download_device(handle: Int, address: Int, count: Int) raises -> Int:
+        ...
+
+    @staticmethod
     def is_host() -> Bool:
         ...
 

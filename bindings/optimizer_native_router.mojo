@@ -16,7 +16,7 @@ from bindings.optimizer_public_door import (
     door_ready, refuse_kwargs, OptimizerRegistryPrepared, optimizer_prepare_registry, optimizer_publish_registry, new_array, TensorView, tensor_view,
     door_step, door_io, optimizer_io, optimizer_pack_io, optimizer_load_buffers, door_state, door_state_set, door_zero, door_clip, door_accumulate,
 )
-from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
+from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot, optimizer_driver
 from core.linear_metadata import linear_mode_name
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.optimizer_config import OptimizerConstructorStart, OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available, optimizer_beta_shape, optimizer_validate_accumulation, optimizer_validate_nesterov_momentum, optimizer_validate_nesterov_dampening
@@ -31,7 +31,7 @@ from core.classical_pandas_impl import pd_raw_at, _pd_double
 from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
 from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
-from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize, device_adopt, device_release_entry
+from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize, device_adopt
 from bindings.training_linear_native import training_linear_operation
 from bindings.training_rms_native import training_rms_operation
 from bindings.training_embedding_native import training_embedding_operation
@@ -406,10 +406,13 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         _ = tensor_view(params[j], view)
         var native = device_entries(entries["module"], context)
         var result = device_new(PythonObject(None), PythonObject(None), view.shape, PythonObject(None), context)
-        var release = device_release_entry(native, context)
+        var device_provider = optimizer_provider_entries(native)
+        var device_driver = optimizer_driver(device_provider)
         var binding = entries["module"]
-        var handle = door_io(module, provider, owner, 5, PythonObject(None), "params", j)
-        return device_adopt(result, binding, handle, release)
+        var handle = optimizer_io(module, provider, owner, 5, PythonObject(None), "params", j)
+        var published = device_adopt(result, binding, handle, device_driver)
+        _ = device_provider
+        return published
     if operation == "step":
         opt_scalar(values[2], context)
         return door_step(module, provider, owner, values[0], values[1], Int(py=values[2]), values[3])
