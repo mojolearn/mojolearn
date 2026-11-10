@@ -85,7 +85,6 @@ def _check_configuration() -> Bool:
     # Lane i17-decide-nbr-lin-prep (2026-10-11), removed: A/B on main b2657cc89, one run per arm, NV L40S nv2 / AMD MI325X (docs/TOMBSTONES.md,
     # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_NV_MICROTILE"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, c38d7bc89): IDN_GEMM_NV_MICROTILE (NVIDIA packed GEMM at K window 32) was SLOWER: neural:gemm gaussian NV 48.5 -> 55.9 ms (1.15x, v0050); code at c38d7bc89^, patch experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch"
-    comptime assert not is_defined["MOJOLEARN_MSEL_UNITS_SERIAL"](), "removed 2026-11-09 (integ-w6, integ/pre-0867-w3; code at lane/p3-msel-parallel-and-process-pool@9d7f5a2af9): MSEL_UNITS_SERIAL (every CV unit on the calling thread) is redundant: units whose member fits run on a GPU run one at a time by default (bindings/native_unit_threads.mojo native_unit_device_workers); -D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL is the parallel-GPU arm (docs/TOMBSTONES.md)"
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

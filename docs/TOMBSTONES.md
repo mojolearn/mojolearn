@@ -5694,7 +5694,7 @@ Integration branch `integ/pre-0867-w3` (wave 6, compile-fix lane integ-w6, orche
   stays compiled behind `-D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL` (default off; awaits a thread-safety lane, then the A/B).
   Verdict: retired (redundant), not measured. Bits: none (same fits, same order of results).
 - Never reached main: no patch; code recoverable at the lane sha above. The define is refused by
-  `core/six_lane_experiment_guards.mojo`.
+  `core/experiment_guards_trees.mojo`.
 
 <a id="integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09"></a>
 
