@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 588,
-    "retain-python-boundary": 10,
-    "retain-tooling": 2,
+    "needs-semantic-review": 587,
+    "retain-python-boundary": 11,
+    "split-partial": 1,
+    "split-needed": 9,
     "review-module-gate": 1,
     "split-migrated": 5,
-    "split-needed": 9,
-    "split-partial": 1
+    "retain-tooling": 2
   },
-  "reviewed_files": 28,
+  "reviewed_files": 29,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -97,6 +97,15 @@
       "additional_native_conv_fixtures_per_executor": 2,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see rankn-conv-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_classical_pandas_native_owner.py",
+      "change": "Reviewed all five definitions; retain real pandas API/hook/admission/packing tests. Add 111 independent native plan/conversion/ownership fixtures without Python runtime or duplicate whole-operation test removal.",
+      "native_checks": [
+        "checks/native_tests/pandas_input_plan_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/pandas-input-plan-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
@@ -149,6 +158,20 @@
       "cpu_fixtures_passed": 10,
       "gpu_fixtures_passed": 10,
       "source_status": "Root explicitly typed conditional Int32 fill (e0157cb5eb). No product changes."
+    },
+    {
+      "reported_by": "root",
+      "checks": [
+        "rankn_math_cpu",
+        "rankn_math_gpu",
+        "rankn_graph_cpu",
+        "rankn_graph_gpu",
+        "rankn_conv_cpu",
+        "rankn_conv_gpu"
+      ],
+      "status": "compile and runtime passed unmodified",
+      "evidence": "~/mojolearn-evidence/integ-finish-20261110/rankn-{math,graph,conv}-{cpu,gpu}-{build,run}.log and result.json",
+      "note": "Reported by orchestrator; not executed by this lane; no timing or identity claim."
     }
   ]
 }
