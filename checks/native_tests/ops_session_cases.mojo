@@ -17,8 +17,9 @@ from autograd.losses import REDUCTION_MEAN, REDUCTION_SUM
 from autograd.model import SCHED_STEP
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn, CAST_KIND_FLOAT
+from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
-from sequence.ops import FP, OPT_SGD
+from sequence.ops import OPT_SGD
 
 comptime OPS_SESSION_FIXTURES = 28
 
@@ -44,7 +45,7 @@ def _upload[E: Exec & Movable & Deinitable](mut s: OpsSession[E], values: List[F
 def _check_tensor[E: Exec & Movable & Deinitable](mut s: OpsSession[E], h: Int, expected: List[Float64], dims: List[Int], rtol: Float64 = 1e-6, atol: Float64 = 1e-6) raises:
     require(s.shape_nd(h).same(ShapeN.of(dims)), "tensor result shape")
     var actual = List[Float32](length=len(expected), fill=0)
-    s.download(h, FP(actual.unsafe_ptr()))
+    s.download(h, f32_ptr(Int(actual.unsafe_ptr())))
     for i in range(len(expected)):
         _close(actual[i], expected[i], rtol, atol, "tensor element " + String(i))
 
@@ -214,7 +215,7 @@ def run_ops_session_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[E]
         var dims: List[Int] = [7, 1]
         require(s.shape_nd(h).same(ShapeN.of(dims)), "permutation shape")
         var values = List[Float32](length=7, fill=-1)
-        s.download(h, FP(values.unsafe_ptr()))
+        s.download(h, f32_ptr(Int(values.unsafe_ptr())))
         var seen = List[Int](length=7, fill=0)
         for v in values:
             require(v >= 0 and v < 7 and v == Float32(Int(v)), "permutation index range and integrality")
