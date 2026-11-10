@@ -8,6 +8,7 @@
 # Regenerated once on 2026-11-09 (lane p4-python-enforcement-loops) from the integration head e68654a757,
 # when driver-loop tags started to be judged, small-loop notes needed a constant bound, cpu-route stopped exempting
 # and inline iteration became a hit. Rows main lacks hold only for hits main (or that tree) carries.
+# 2026-11-09 (lane i4-main-fence): rows for hits main c5a75411a6 carries that the regeneration from e68654a757 missed (that tree lacked or reworded them); each holds only because main's tree carries it.
 bindings/_mojolearn.mojo:574: for i in range(no):  # small-loop(no: model outputs, one class count each): parameter list, not data
 bindings/_mojolearn.mojo:688: for i in range(no):  # small-loop(no: model outputs, one class count each): parameter list, not data
 bindings/_mojolearn.mojo:2457: for i in range(no):  # small-loop(no: model outputs, one class count each): parameter list, not data
@@ -157,17 +158,20 @@ bindings/_mojolearn_tokenizer_host.mojo:1097: for j in range(len(ids)):  # small
 bindings/_mojolearn_tokenizer_host.mojo:1128: for key in [String("bos_token"), String("eos_token")]:  # small-loop(the two special-token names)
 bindings/_mojolearn_training.mojo:331: for i in range(want):  # small-loop(want: device array handles of one op call): reads handle list, not data
 bindings/_mojolearn_training.mojo:555: for i in range(want):  # small-loop(want: buffer addresses of one op call): reads pointer list, not data
+bindings/_mojolearn_training.mojo:657: for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+bindings/_mojolearn_training.mojo:677: for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
 bindings/_mojolearn_training.mojo:744: for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
 bindings/_mojolearn_training.mojo:902: for i in range(len(values)):  # small-loop(values: state addresses or cursor words of one program call): argument words, not data
 bindings/_mojolearn_training.mojo:909: for i in range(len(out)):  # small-loop(out: state addresses of one program call): argument words, not data
 bindings/_mojolearn_training.mojo:917: for i in range(len(words)):  # small-loop(words: two cursor words per layer): result words, not data
 bindings/_mojolearn_training.mojo:931: for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
 bindings/_mojolearn_training_host.mojo:325: for i in range(want):  # small-loop(address argument words: a fixed count per entry point)
+bindings/_mojolearn_training_host.mojo:418: for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+bindings/_mojolearn_training_host.mojo:438: for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
 bindings/_mojolearn_transformer.mojo:336: for i in range(n):  # small-loop(n: block scalar params, base plus the 17 option tail): validated count of launch parameters, not data
 bindings/_mojolearn_transformer.mojo:362: for i in range(n):  # small-loop(n: block buffer addresses, base plus the 11 option tail): validated count of tensor addresses, not data
 bindings/_mojolearn_transformer.mojo:454: for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
 bindings/_mojolearn_transformer.mojo:579: for i in range(len(addrs)):  # small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
-bindings/_mojolearn_transformer.mojo:646: for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
 bindings/_mojolearn_transformer.mojo:863: for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
 bindings/_mojolearn_transformer.mojo:924: for i in range(len(addrs)):  # small-loop(addrs: validated decode tensor addresses, 11 plus 11 plus 21): reads pointer list, not data
 bindings/_mojolearn_transformer.mojo:929: for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
@@ -526,6 +530,7 @@ bindings/classical_labels.mojo:1688: var present = py_call(b.sorted, py_call(_la
 bindings/classical_labels.mojo:1776: var classes = py_call(b.sorted, py_call(b.set, labels.values))
 bindings/classical_labels.mojo:1800: var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
 bindings/classical_metadata.mojo:75: + ". Valid parameters are: " + String(py_call(bi.repr, py_call(bi.sorted, classical_parameter_names(ridge)))) + ".")
+bindings/classical_pandas.mojo:171: for k in range(len(value)):  # driver-loop: over native operation argument containers
 bindings/classical_pandas.mojo:448: for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
 bindings/classical_tsqr.mojo:386: for part in range(2):
 bindings/classical_warnings.mojo:57: for j in range(len(mro)):  # driver-loop: over the warning exception ancestry
@@ -1498,6 +1503,7 @@ bindings/prep_iterimp_native.mojo:689: for r in range(len(orders)):  # cpu-route
 bindings/prep_iterimp_native.mojo:692: for i in range(len(orders[r])):  # cpu-route: the user estimator, fitted once per feature (user code)
 bindings/prep_iterimp_native.mojo:832: for s in range(len(sequence)):  # cpu-route: the fitted user estimators, one predict per step (user code)
 bindings/prep_labels_native.mojo:135: for i in range(len(values)):  # driver-loop: over a fitted category or label word list
+bindings/prep_labels_native.mojo:398: for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
 bindings/prep_labels_native.mojo:469: for i in range(len(classes)):  # cpu-route: non-str object labels, the explicit label input step
 bindings/prep_labels_native.mojo:530: for i in range(len(values)):  # cpu-route: Python code objects read once, the explicit label input step
 bindings/prep_labels_native.mojo:543: for t in range(len(codes)):  # cpu-route: one class object per code, the explicit label output step
@@ -1639,6 +1645,7 @@ bindings/sequential_admission.mojo:149: for i in range(len(values)):  # driver-l
 bindings/sequential_admission.mojo:167: for k in range(len(value)):  # driver-loop: over native input container owners and metadata
 bindings/sequential_description.mojo:277: for k in range(len(self.sample_dims)):  # driver-loop: over retained native sample dimensions
 bindings/sequential_description.mojo:328: for k in range(len(sample), 8):  # driver-loop: over unused sample dimension slots
+bindings/sequential_inputs.mojo:211: for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
 bindings/sequential_weights.mojo:110: for k in range(len(requests)):  # driver-loop: over typed source tensor descriptors
 bindings/small_mlp_items.mojo:87: for axis in range(1, len(dims)):  # small-loop(trailing native Array rank)
 bindings/small_mlp_items.mojo:100: for i in range(count):  # driver-loop: native row views retain captured storage, never copy scalar words
@@ -1648,6 +1655,7 @@ bindings/small_mlp_native.mojo:229: for i in range(len(dims)):  # small-loop(sha
 bindings/small_mlp_native.mojo:305: for i in range(len(dims)):  # small-loop(dims: array rank words)
 bindings/small_mlp_native.mojo:517: for i in range(4):  # small-loop(the four optimizer flag words)
 bindings/small_mlp_native.mojo:896: for i in range(len(listed)):  # driver-loop: over the caller's session batches
+bindings/small_mlp_native.mojo:913: for axis in range(len(shape)):  # small-loop(session shape words)
 bindings/small_mlp_native.mojo:916: for i in range(len(listed)):  # driver-loop: over the caller's session batches
 bindings/small_mlp_native.mojo:983: for i in range(len(dims)):  # small-loop(descriptor shape words)
 bindings/small_mlp_native.mojo:1083: while offset < len(data):  # driver-loop: over partial OS writes of the checkpoint bytes
@@ -1800,6 +1808,7 @@ bindings/trees_public_gbdt_fit.mojo:91: for _ in range(precision):  # small-loop
 bindings/trees_public_gbdt_fit.mojo:346: for i in range(have, 3):  # small-loop(defaults): at most three tail defaults
 bindings/trees_public_gbdt_fit.mojo:421: return py_call(ndarray.tolist, value)
 bindings/trees_public_gbdt_fit.mojo:423: return py_call(context["array_type"].tolist, value)
+bindings/trees_public_gbdt_fit.mojo:575: for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
 bindings/trees_public_gbdt_fit.mojo:653: for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
 bindings/trees_public_gbdt_fit.mojo:658: for j in range(2):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
 bindings/trees_public_gbdt_fit.mojo:680: for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
@@ -1822,6 +1831,7 @@ bindings/trees_public_lifecycle_native.mojo:44: raise Error("Invalid parameter(s
 bindings/trees_public_meta.mojo:581: for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair
 bindings/trees_public_meta.mojo:1301: rows = py_call(b.list, py_call(b.map, b.list, target))  # cpu-route: label objects (str/mixed) no Array holds
 bindings/trees_public_meta.mojo:1311: var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
+bindings/trees_public_meta.mojo:1404: var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
 bindings/trees_public_meta.mojo:1503: rows = py_call(b.list, py_call(b.map, b.list, y))  # cpu-route: label objects (str/mixed) no Array holds
 bindings/trees_public_meta.mojo:1513: var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
 bindings/trees_public_meta.mojo:1559: for i in range(len(targets)):  # driver-loop: over members
@@ -2054,6 +2064,7 @@ providers/python/autograd_program_pyapi.mojo:87: for k in range(nd):  # small-lo
 providers/python/autograd_program_pyapi.mojo:99: for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
 providers/python/autograd_program_pyapi.mojo:112: for r in range(nd):  # small-loop(nd: input tensor rank): stride metadata, not array elements
 providers/python/autograd_program_pyapi.mojo:145: for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
+providers/python/autograd_program_pyapi.mojo:252: for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
 providers/python/autograd_program_pyapi.mojo:378: for k in range(len(plan.source_nodes)):  # driver-loop: over source node provenance
 providers/python/autograd_program_pyapi.mojo:382: for k in range(len(plan.last_use)):  # driver-loop: over logical reference use metadata
 providers/python/autograd_program_pyapi.mojo:426: for j in range(len(s[].program_trace.nodes)):  # driver-loop: over diagnostic rows
