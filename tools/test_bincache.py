@@ -1361,3 +1361,24 @@ class OneMacCacheTests(unittest.TestCase):
         self.assertEqual(bc.seed_archive(release_dir, self.key, self.fields,
                                          {"MOJOLEARN_BINCACHE_SEED_DIRS": str(mac)}), str(mac))
         bc.verify_archive(str(release_dir / (self.key + ".tar.gz")), self.key, self.fields)
+
+
+def test_archive_generator_is_a_single_file_without_excluding_other_build_tools(tmp_path):
+    import generated_sources as gs
+    for rel, text in {
+        gs.ARCHIVE_GENERATOR: '# generator one\n',
+        gs.ARCHIVE_PIN: 'comptime PIN = 1\n',
+        'tools/generated_sources.py': '# build preparation\n',
+        'bindings/build_fixture.sh': 'python3 tools/generated_sources.py prepare\npython3 tools/gen_archive_unicode.py\n',
+    }.items():
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    before = bc.generator_inputs(tmp_path, {gs.ARCHIVE_TABLE})
+    assert set(before) == set(gs.GENERATED[gs.ARCHIVE_TABLE])
+    (tmp_path / 'tools/unrelated.py').write_text('# unrelated\n')
+    assert bc.generator_inputs(tmp_path, {gs.ARCHIVE_TABLE}) == before
+    inputs, _ = bc.executed_inputs(tmp_path, tmp_path / 'bindings/build_fixture.sh')
+    assert 'tools/generated_sources.py' in inputs and gs.ARCHIVE_GENERATOR not in inputs
+    (tmp_path / gs.ARCHIVE_GENERATOR).write_text('# generator two\n')
+    assert bc.generator_inputs(tmp_path, {gs.ARCHIVE_TABLE}) != before

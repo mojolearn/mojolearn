@@ -61,8 +61,8 @@ def _value(row: Int, column: Int, seed: Int) -> Float32:
 
 def _fill(mut x: List[Float32], mut y: List[Float32], rows: Int, cols: Int,
     intercept: Bool, ridge: Bool, fixture_id: Int, seed: Int):
-    var xp = x.unsafe_ptr()
-    var yp = y.unsafe_ptr()
+    var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr()))
+    var yp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(y.unsafe_ptr()))
     def row_task(row: Int) {imm xp, imm yp, imm cols, imm intercept, imm ridge, imm fixture_id, imm seed}:
         var target = Float64(1.25) if intercept else Float64(0)
         for col in range(cols):
@@ -84,11 +84,13 @@ def _fill(mut x: List[Float32], mut y: List[Float32], rows: Int, cols: Int,
                         scale = 128
                     value *= scale
                 elif fixture_id >= 10:
-                    value = Float32(row == col)
+                    value = 1.0 if row == col else 0.0
             xp.unsafe_store(row * cols + col, value)
             target += Float64(value) * Float64(col + 1) * (Float64(0.5) if ridge else Float64(0.25))
         yp.unsafe_store(row, Float32(target))
     host_parallelize(row_task, rows)
+    _ = x
+    _ = y
 
 
 def _ridge_oracle(x: List[Float32], y: List[Float32], weights: List[Float32],

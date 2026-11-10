@@ -68,7 +68,7 @@ WHAT IS NOT COVERED, REFUSED BY NAME RATHER THAN HALF-BUILT
 ------------------------------------------------------------
 **Mixed precision and distributed training.** Every entry point here refuses
 a non-float32 array by name rather than casting it, and nothing here is aware
-of a second process. See `_NOT_COVERED` below. Dropout, initialization and
+of a second process. See the native policy in `training/optimizer_config.mojo`. Dropout, initialization and
 the learning-rate schedule JOINED this surface with the Samba stack lane:
 `Generator` (position-keyed Philox, `core/philox_neural.mojo`), the three
 `*LR` schedules (exact rational arithmetic, no host libm) and
@@ -116,10 +116,9 @@ from ._arrays import _addr, _addr_ro
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, memory_at, zeros
+from ._buffer import as_f32_c, as_i32_c, memory_at
 from ._bufcheck import (
-    base_format, dtype_name, is_integer, is_native_f32, memcopy, memzero,
-    nelems, probe,
+    is_integer, is_native_f32, probe,
 )
 from ._mode import NumericModeMixin
 
@@ -170,44 +169,8 @@ _IGNORE_INDEX_DEFAULT = -100
 # ===================================================================
 # THE THREE THINGS THIS SURFACE DOES NOT COVER
 # ===================================================================
-# Named here, raised from `_refuse_out_of_scope` below, so that a caller who
-# reaches for one gets the word "not covered" and not a plausible number.
-# A paper draft lists exactly these three as outside the lane and this
-# module is what has to keep that sentence true.
-_NOT_COVERED = {
-    "mixed precision": (
-        "MIXED PRECISION IS NOT COVERED. Every buffer on this surface is "
-        "float32 (loss contract section 1, optimizer contract section 1) and "
-        "there is no float16 or bfloat16 anywhere in the two profiles: no "
-        "master-weight copy, no loss scaler, no autocast, and no gated "
-        "measurement of what a half-precision accumulation would do to the "
-        "bits. A float16 array is REFUSED BY NAME here rather than upcast, "
-        "because upcasting it silently would answer a question about float32 "
-        "and label it as an answer about float16."
-    ),
-    "dropout": (
-        "dropout is not an OPTIMIZER option. It is an op on this surface: "
-        "`Generator(seed).dropout(x, p)` draws its mask from the "
-        "position-keyed Philox stream in core/philox_neural.mojo (a pure "
-        "function of seed, stream id and element index, never of the launch "
-        "geometry) and `Generator.dropout_backward(dy, key)` replays it. "
-        "Stochastic depth and any other sampling stay uncovered."
-    ),
-    "distributed": (
-        "DISTRIBUTED TRAINING IS NOT COVERED. Nothing here is aware of a "
-        "second process or a second device: there is no all-reduce, no "
-        "gradient bucket and no rank. A cross-device gradient sum is another "
-        "reduction and would need its own contract clause, its own fixture "
-        "and its own sabotage before it could carry the identity claim the "
-        "single-device path carries."
-    ),
-}
-
-
-def _refuse_out_of_scope(topic, where):
-    raise NotImplementedError(
-        "mojolearn." + where + ": " + _NOT_COVERED[topic]
-    )
+# Fixed native refusal policy lives in training/optimizer_config.mojo and
+# training/optimizer_input_plan.mojo; this Python surface owns no duplicate table.
 
 
 # ===================================================================
@@ -264,60 +227,6 @@ def _is_buffer(x):
     return True
 
 
-def _check_dtype(arrays, name, where, *, inplace):
-    """float32 or REFUSED BY NAME. Never cast. Returns the `Probe` of every
-    array, in order, for the callers that size and address them.
-
-    A silent upcast from float16 would answer a float32 question and label it
-    as a half-precision answer, which is the mixed-precision refusal this
-    module opens with. float64 is refused for the reason `_buffer.py` gives
-    at the library boundary: there is no float64 on a Metal device and every
-    kernel in this library is float32, so a float64 array here is a caller
-    who believes something about the arithmetic that is not true.
-
-    `inplace=True` (parameters and gradients, which `_unpack_into` writes
-    BACK INTO) additionally requires the buffer to be C-CONTIGUOUS and
-    WRITABLE, refused by name (DEVIATION 2403). The NumPy spelling copied a
-    strided tensor on the way in and wrote it back element-wise on the way
-    out; without NumPy a strided write-back would be a Python element loop
-    over the model, which the numpy-free contract forbids on this path.
-    """
-    probes = []
-    for i, a in enumerate(arrays):  # glue: probes each parameter tensor
-        pb = probe(a)
-        dn = dtype_name(a, pb)
-        if base_format(pb.format) == "e" or dn in ("float16", "bfloat16"):
-            _refuse_out_of_scope("mixed precision", where)
-        if not is_native_f32(pb.format):
-            raise TypeError(
-                "mojolearn.%s: %s[%d] has dtype %s; this surface is float32 "
-                "only (loss contract section 1, optimizer contract section "
-                "1) and refuses rather than casts, because a cast changes "
-                "which arithmetic answered and leaves the label unchanged "
-                "(python/mojolearn/_training_impl.py)"
-                % (where, name, i, dn)
-            )
-        if nelems(pb.shape) < 1:
-            raise ValueError(
-                "mojolearn.%s: %s[%d] is empty, shape %r; an empty tensor is "
-                "REFUSED and not skipped -- the clip would fold a zero-length "
-                "GEMM, which no gate in this tree has run "
-                "(training/estimator.mojo)" % (where, name, i, pb.shape)
-            )
-        if inplace and (not pb.c_contiguous or pb.readonly):
-            raise ValueError(
-                "mojolearn.%s: %s[%d] must be C-contiguous and writable; it "
-                "is written back IN PLACE (the torch.optim contract, the "
-                "trailing underscore on clip_grad_norm_) and a strided or "
-                "read-only buffer cannot be. Pass np.ascontiguousarray(...) "
-                "of it, or a writable mojolearn.Array "
-                "(python/mojolearn/_training_impl.py, DEVIATION 2403)"
-                % (where, name, i)
-            )
-        probes.append(pb)
-    return probes
-
-
 # ===================================================================
 # THE OPTIMIZERS
 # ===================================================================
@@ -342,7 +251,12 @@ _IO_QUERY, _IO_PARAMS_UP, _IO_PARAMS_DOWN, _IO_GRADS_UP, _IO_GRADS_DOWN, _IO_PAR
 
 
 class _Optimizer(NumericModeMixin):
-    """The shared half of `SGD`, `Adam` and `AdamW`.
+    """The shared public connection for `SGD`, `Adam` and `AdamW`.
+
+    Constructors and methods enter the compiled optimizer once. Native plans
+    own configuration, registry and state decisions; Python retains the public
+    methods and objects exposed to callers. There is no Python initializer or
+    configuration implementation to fall back to.
 
     ONE PARAMETER GROUP PER OPTIMIZER. `torch.optim` accepts a list of dicts
     so that different tensors carry different learning rates; the certified
@@ -357,60 +271,13 @@ class _Optimizer(NumericModeMixin):
     _mojolearn_native_public = True
     __getattribute__ = object.__getattribute__
     _BINDING = _EXT_NAME
-    _KIND = None
 
-    def __init__(self, params, where, lr_schedule=None, accumulation_steps=1,
-                 resident=None):
-        self._where = where
-        #: The optimizer state's native slot (training/optimizer_public.mojo):
-        #: its handle once the first step opened it, the module that owns it,
-        #: whether the slot keeps the state on the host, and whether the host
-        #: mirrors `_m` / `_v` are current.
-        self._res = None
-        self._res_binding = None
-        self._res_host = False
-        self._host_fresh = True
-        self._resident_wanted = resident
-        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
-        _numeric_profile.require_training("mojolearn.%s" % where)
-        #: A schedule object with `lr_at(t)` (t ONE-BASED), or None. When set,
-        #: each step's learning rate is the schedule's value at that step and
-        #: `lr` is overwritten with it.
-        if lr_schedule is not None and not hasattr(lr_schedule, "lr_at"):
-            raise TypeError(
-                "mojolearn.%s: lr_schedule must have an lr_at(step) method "
-                "(ConstantLR, WarmupLinearLR, WarmupCosineLR) "
-                "(python/mojolearn/_training_impl.py)" % where
-            )
-        self.lr_schedule = lr_schedule
-        #: The declared microbatch count A of optimizer contract clause 9.2.
-        #: `step_accumulated` refuses a different count by name.
-        a = int(accumulation_steps)
-        if a < 1 or (a & (a - 1)) != 0:
-            raise ValueError(
-                "mojolearn.%s: accumulation_steps must be a power of two >= 1 "
-                "(optimizer contract clause 9.2 condition 4), got %r "
-                "(python/mojolearn/_training_impl.py)" % (where, accumulation_steps)
-            )
-        self.accumulation_steps = a
-        # ONE native call (the tier-free core binding: an optimizer is built
-        # before its numeric mode is known): `params` as the tensor list,
-        # refused by name unless float32, non-empty, C-contiguous and
-        # writable; `offsets` (J + 1 int32, `offsets[j] .. offsets[j + 1]` is
-        # tensor j of the flat registry); `n_total`; SGD's per-tensor
-        # `buf_initialized` flag (contract 7.3b, CARRIED STATE that belongs in
-        # a checkpoint beside `exp_avg`); and the host mirrors `_m` / `_v` of
-        # `exp_avg` and `exp_avg_sq`, allocated on first need (with the
-        # optimizer under MOJOLEARN_OPT_LAZY_MOMENTS=0, the A/B).
-        _buffers._native("optimizer_door_init")(self, params)  # import-time: the parameter registry offsets are host metadata built once with the optimizer
-        #: ONE-BASED. The first step of a run is `t = 1`.
-        self.t = 0
-        self.packed_ = None
-        #: The pre-clip global gradient norm of the most recent step, or None
-        #: when that step ran with `max_norm=None`.
-        self.total_norm_ = None
-        #: The clamped coefficient the most recent step applied, or None.
-        self.clip_coef_ = None
+
+    def __getstate__(self):
+        return _OPT_NATIVE("export_owner", self, (), None, _OPT_CONTEXT)
+
+    def __setstate__(self, state):
+        return _OPT_NATIVE("restore_owner", self, (state,), None, _OPT_CONTEXT)
 
     # -- the state: a native slot, mirrored on the host on access -----------
     @property
@@ -568,7 +435,7 @@ class _Optimizer(NumericModeMixin):
 # it and silently equal the plain update. maximize: torch's -grad at the top of the step, before the
 # coupled decay and the momentum buffer (training/maximize.mojo, DEVIATION 6200). One launch per
 # tensor for SGD; per-parameter groups refused because two clips do not equal one (contract 3.5).
-# Mixed precision: see `_NOT_COVERED` at the top of this file.
+# Mixed precision: see the native optimizer input plan refusal.
 class SGD(_Optimizer):
     """Stochastic gradient descent, as `torch.optim.SGD`, over float32 buffers (NumPy arrays, `array.array` or `mojolearn.Array`; any writable buffer-protocol object).
 
@@ -634,29 +501,11 @@ class SGD(_Optimizer):
     >>> norm = opt.step([g], max_norm=1.0)
     """
 
-    _KIND = _KIND_SGD
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
                  weight_decay=0.0, nesterov=False, lr_schedule=None,
                  accumulation_steps=1, maximize=False, resident=None, *, numeric_mode=None, **kwargs):
         return _OPT_NATIVE("construct", self, (params, _KIND_SGD, lr, (0.9, 0.999), 1e-8, weight_decay, momentum, dampening, nesterov, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
-
-    def _config(self):
-        return {
-            "lr": self.lr,
-            # beta1, beta2 and eps are in the params list for every
-            # algorithm because ONE ORDER for three algorithms is one thing
-            # to keep in step instead of three. SGD's kernel never reads
-            # them; these are the reference's Adam defaults so that a card
-            # comparing two runs sees the same bits in the unread slots.
-            "beta1": 0.9,
-            "beta2": 0.999,
-            "eps": 1e-8,
-            "weight_decay": self.weight_decay,
-            "momentum": self.momentum,
-            "dampening": self.dampening,
-            "nesterov": 1 if self.nesterov else 0,
-        }
 
 
 # Optimizer contract 7.2, coupled weight decay; AdamW (7.4) differs by an order, not a
@@ -738,26 +587,11 @@ class Adam(_Optimizer):
     >>> opt.step([np.ones_like(w)])
     """
 
-    _KIND = _KIND_ADAM
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
                  maximize=False, resident=None, *, numeric_mode=None, **kwargs):
         return _OPT_NATIVE("construct", self, (params, _KIND_ADAM, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
-
-    def _config(self):
-        return {
-            "lr": self.lr,
-            "beta1": self.betas[0],
-            "beta2": self.betas[1],
-            "eps": self.eps,
-            "weight_decay": self.weight_decay,
-            # Read only by SGD's kernel. Present so that one params list
-            # serves three algorithms; the reference's SGD defaults.
-            "momentum": 0.0,
-            "dampening": 0.0,
-            "nesterov": 0,
-        }
 
 
 # Optimizer contract 7.4: decoupled decay `p * (1 - lr*wd)`; the only difference from `Adam` is the
@@ -782,7 +616,6 @@ class AdamW(Adam):
     >>> opt.step([np.ones_like(w)])
     """
 
-    _KIND = _KIND_ADAMW
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
@@ -790,108 +623,8 @@ class AdamW(Adam):
         return _OPT_NATIVE("construct", self, (params, _KIND_ADAMW, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
 
 
-#: torch parameter names this surface does not have, and the reason each is
-#: refused. Refused BY NAME rather than swallowed by `**kwargs`, because a
-#: keyword that is accepted and ignored is a caller who believes something
-#: about their run that is not true.
-_REFUSED_KWARGS = {
-    "amsgrad": (
-        "the profile EXCLUDES amsgrad and the exclusion is load bearing: "
-        "`max(v_max, v)` would create the profile's first -0.0 vs +0.0 "
-        "selection hazard, where the order of a compare decides which of two "
-        "equal-comparing values survives (optimizer contract 8c, and "
-        "clip_coefficient's docstring in "
-        "training/checks/optimizer_oracle.mojo)"
-    ),
-    "foreach": (
-        "an EXECUTION knob. Adam here is ONE launch over the whole flat "
-        "buffer and SGD is one launch per tensor, because SGD carries a "
-        "per-tensor flag; the choice is the profile's and not the caller's "
-        "(training/checks/optimizer.mojo::identical_optimizer_step)"
-    ),
-    "fused": (
-        "an EXECUTION knob, and in torch it is a different arithmetic as well"
-    ),
-    "capturable": (
-        "CUDA-graph capture; nothing on this surface captures, and the step "
-        "synchronizes before it returns "
-        "(training/checks/optimizer.mojo::identical_optimizer_step)"
-    ),
-    "differentiable": (
-        "there is no autograd in this library, which is also why `step` takes "
-        "the gradients as an argument"
-    ),
-    "params_groups": (
-        "one `OptimizerConfig` per optimizer. Two parameter groups would be "
-        "two calls with two registries and two clips, and two clips do not "
-        "equal one: the clip coefficient is a function of every gradient in "
-        "ITS registry (optimizer contract 3.5)"
-    ),
-    "param_groups": (
-        "one `OptimizerConfig` per optimizer; see `params_groups`"
-    ),
-    "weight": (
-        "a per-class weight vector is REFUSED BY NAME (loss contract section "
-        "11): a weighted mean's denominator is a SUM OF FLOATS and would need "
-        "a fold, a clause, a fixture and a sabotage of its own, where `count` "
-        "today is an INTEGER and therefore exact, order-free and vendor-free "
-        "(contract 5.5, `ce_count` in training/checks/loss_oracle.mojo)"
-    ),
-    "size_average": (
-        "torch's own deprecated alias for `reduction`. Refused rather than "
-        "translated, because translating it silently reproduces the ambiguity "
-        "torch deprecated it for"
-    ),
-    "reduce": (
-        "torch's own deprecated alias for `reduction`; see `size_average`"
-    ),
-    "dropout": None,
-    "device": (
-        "the device is chosen by the binary that loaded, and its accelerator "
-        "API is readable with `vendor_used()` (python/mojolearn/_backend.py)"
-    ),
-    "dtype": (
-        "float32 only. MIXED PRECISION IS NOT COVERED and a non-float32 "
-        "array is refused by name rather than cast"
-    ),
-    "distributed": None,
-    "world_size": None,
-    "rank": None,
-}
-
-
-def _maximize_flag(maximize, where):
-    """`maximize` as a strict bool: torch reads it as a bool, and a string
-    or a number here is a caller who meant something else."""
-    if not isinstance(maximize, bool):
-        raise TypeError(
-            "mojolearn.%s: maximize must be True or False, got %r "
-            "(python/mojolearn/_training_impl.py)" % (where, maximize)
-        )
-    return maximize
-
-
-def _refuse_unknown(kwargs, where):
-    """Every keyword this surface does not have, refused BY NAME."""
-    for k in kwargs:  # glue: refuses unknown keyword arguments
-        if k in ("dropout",):
-            _refuse_out_of_scope("dropout", where)
-        if k in ("distributed", "world_size", "rank"):
-            _refuse_out_of_scope("distributed", where)
-        why = _REFUSED_KWARGS.get(k)
-        if why:
-            raise TypeError(
-                "mojolearn.%s: %s= is REFUSED BY NAME -- %s "
-                "(python/mojolearn/_training_impl.py)" % (where, k, why)
-            )
-        raise TypeError(
-            "mojolearn.%s: unexpected keyword %s=. This surface takes only "
-            "the parameters in its WHAT IS HONORED table; an unknown keyword "
-            "is refused rather than ignored, because a keyword that is "
-            "accepted and does nothing is a caller who believes something "
-            "about their run that is not true "
-            "(python/mojolearn/_training_impl.py)" % (where, k)
-        )
+# Keyword admission and named refusals are implemented by the native optimizer
+# configuration plan; Python forwards the caller's keyword dictionary once.
 
 
 # ===================================================================
@@ -1253,8 +986,6 @@ class WarmupLinearLR(_Schedule):
     """
 
     kind = "linear"
-
-
 
 
 # lane/neural-net-experiment (2026-09-30): the cosine schedule's value is
@@ -1669,17 +1400,6 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
 # calls are the host entries' own, on the same values: the same bits.
 # IDENTICAL GPU builds only (training/dev_tensors.mojo); elsewhere
 # `train_to_device` refuses by name. No arithmetic here.
-_DEV_ENTRIES = ("train_dev_alloc", "train_dev_free", "train_dev_put", "train_dev_get",
-                "linear_forward_dev", "linear_backward_dev", "ce_loss_dev")
-
-
-def _dev_binding(numeric_mode, where):
-    binding = _load(numeric_mode)
-    if not all(callable(getattr(binding, n, None)) for n in _DEV_ENTRIES):  # glue: checks binding entry names
-        raise RuntimeError(
-            "mojolearn.%s: this build has no training device arrays (IDENTICAL "
-            "GPU builds only; MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF turns them off)" % where)
-    return binding
 
 
 class TrainDeviceArray(object):
@@ -1700,81 +1420,10 @@ class TrainDeviceArray(object):
         """The array as a host `mojolearn.Array` (one download)."""
         return _OPT_NATIVE("device_host", self, (), None, _OPT_CONTEXT)
 
-def _is_dev(x):
-    return isinstance(x, TrainDeviceArray)
-
 
 def train_to_device(a, numeric_mode=None):
     """float32 array `a` as a `TrainDeviceArray` (uploaded once, here)."""
     return _OPT_NATIVE("device_upload", None, (a,), numeric_mode, _OPT_CONTEXT)
-
-
-def _all_dev(where, **named):
-    if not all(_is_dev(v) for v in named.values()):  # glue: checks argument kinds
-        raise TypeError(
-            "mojolearn.%s: device and host arrays are mixed (%s); pass every "
-            "array through train_to_device, or none"
-            % (where, ", ".join(k for k in named)))  # glue: argument names for the message
-
-
-def _linear_forward_dev(a, w, numeric_mode):
-    _all_dev("linear_forward", a=a, weight=w)
-    binding = _dev_binding(numeric_mode, "linear_forward")
-    if len(w.shape) != 2 or len(a.shape) < 1 or a.shape[-1] != w.shape[1]:
-        raise ValueError("mojolearn.linear_forward: a has K=%r, weight has shape %r" % (a.shape[-1:], w.shape))
-    n, k = w.shape
-    m = a.size // k
-    c = TrainDeviceArray._new(binding, a.shape[:-1] + (n,))
-    binding.linear_forward_dev([c.h, a.h, w.h], [int(m), int(n), int(k)])
-    return c
-
-
-def _linear_backward_dev(dc, a, w, numeric_mode):
-    _all_dev("linear_backward", dc=dc, a=a, weight=w)
-    binding = _dev_binding(numeric_mode, "linear_backward")
-    if len(w.shape) != 2 or len(a.shape) < 1 or a.shape[-1] != w.shape[1]:
-        raise ValueError("mojolearn.linear_backward: a has K=%r, weight has shape %r" % (a.shape[-1:], w.shape))
-    n, k = w.shape
-    m = a.size // k
-    if dc.size != m * n or dc.shape[-1] != n:
-        raise ValueError("mojolearn.linear_backward: dc must be (M, N)")
-    da = TrainDeviceArray._new(binding, a.shape)
-    dw = TrainDeviceArray._new(binding, (n, k))
-    binding.linear_backward_dev([da.h, dw.h, dc.h, a.h, w.h], [int(m), int(n), int(k)])
-    return da, dw
-
-
-def _cross_entropy_dev(logits, targets, ignore_index, red, num_items, return_grad, label_smoothing,
-                       numeric_mode):
-    """`cross_entropy` on a `TrainDeviceArray` of logits: the gradient, when
-    asked for, is returned as a device array; the loss and row losses are
-    host values as before."""
-    binding = _dev_binding(numeric_mode, "cross_entropy")
-    if len(logits.shape) != 2:
-        raise ValueError("mojolearn.cross_entropy: logits must be 2-D (N, V), got shape %r" % (logits.shape,))
-    n_rows, vocab = logits.shape
-    if not _is_buffer(targets):
-        targets = Array.from_list(targets, "<i8")
-    yp = probe(targets)
-    if yp.ndim != 1 or not is_integer(yp.format):
-        raise TypeError("mojolearn.cross_entropy: targets must be a 1-D integer array of class indices")
-    y, _ = as_i32_c(targets, ndim=1, name="targets")
-    if y.shape[0] != n_rows:
-        raise ValueError("mojolearn.cross_entropy: logits has %d rows and targets has %d" % (n_rows, y.shape[0]))
-    loss_out = zeros((1,), "<f4")
-    row_out = empty((n_rows,), "<f4")
-    grad = TrainDeviceArray._new(binding, logits.shape) if return_grad else None
-    # `ce_loss`'s params list, word for word (see `cross_entropy`)
-    plist = [int(n_rows), int(vocab), int(ignore_index), int(red),
-             int(0 if num_items is None else num_items), int(1 if return_grad else 0),
-             float(label_smoothing)]
-    binding.ce_loss_dev(addr(loss_out, name="loss"), addr(row_out, name="row_loss"),
-                        addr_ro(y, name="targets"),
-                        [grad.h if grad is not None else logits.h, logits.h], plist)
-    value = row_out if red == _REDUCTION_NONE else float(loss_out[0])
-    if return_grad:
-        return value, grad
-    return value
 
 
 # Through the certified GEMM at OP_NT.
@@ -1931,3 +1580,6 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
 from ._native_optimizer_bridge import connect as _connect_native_optimizer
 import sys as _optimizer_sys
 _OPT_NATIVE, _OPT_CONTEXT = _connect_native_optimizer(_optimizer_sys.modules[__name__])
+
+from ._native_loaded_modules import connect_module as _connect_native_training_module
+_connect_native_training_module(__name__, _optimizer_sys.modules[__name__], ('_OPT_CONTEXT',))  # glue: publish the completed optimizer boundary connection at import

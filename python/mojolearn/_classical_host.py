@@ -1438,7 +1438,7 @@ try:
     _logistic_host = _backend.load_host_module(_HOST_BASENAME)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _logistic_host_error:
     _logistic_host = _logistic_host_error
-_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _native_classical, _CLASSICAL)
+_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _CLASSICAL)
 
 
 # Import-time connection of complete explicit CPU prediction owners.
@@ -1451,7 +1451,7 @@ def _connect_host_inference():
     entries = {}
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
-                                                          "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "qn_proba", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
+                                                          "logistic_native_api_v1", "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "qn_proba", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:

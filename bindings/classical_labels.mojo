@@ -46,6 +46,8 @@ from bindings.label_input_sources import (
 from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
 from core.shared_slot import SharedSlot
+from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
+from bindings.label_weights_boundary import label_weights_run
 from bindings.kit_call import kit_connect, kit_provider, kit_capabilities, kit_call
 from bindings.labels_native_abi import (
     LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT, LABELS_CAP_DEVICE,
@@ -1072,7 +1074,7 @@ def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, c
 # ---------------------------------------------------------- class weights
 
 
-def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
+def labels_class_weight_rows[NativeWeights: Bool = False](class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     """`_class_weights._class_weight_rows(class_weight, classes, codes,
     xbind)` with int32 codes on the x_trees binding: per-row float32
@@ -1096,10 +1098,16 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
     var objects = Python.list()
     if py_type(class_weight) is b.str:
         var counts = admitted_vector(k, "<i4", context)
-        var count_entry = labels_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
-                                     "ImportError")
-        _ = py_call_typed(count_entry, PythonObject(labels_address(labels.codes) if n else 0),
-                          PythonObject(labels_address(counts)), Python.list(n, k))
+        comptime if NativeWeights:
+            _ = label_weights_run(xtrees, LABEL_WEIGHTS_COUNTS,
+                LabelWeightsRequest(labels_address(labels.codes) if n else 0, labels_address(counts), 0, n, k))
+        else:
+            # Other unmigrated classifier owners still connect these public
+            # legacy entries. Logistic's specialization has no Python call.
+            var count_entry = labels_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
+                                         "ImportError")
+            _ = py_call_typed(count_entry, PythonObject(labels_address(labels.codes) if n else 0),
+                              PythonObject(labels_address(counts)), Python.list(n, k))
         _ = counts  # keep the Python object alive through the native call above
         var wide = admitted_vector(k, "<i8", context)
         labels_cast(labels_address(counts), "<i4", labels_address(wide), "<i8", k, context)
@@ -1159,10 +1167,14 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
         raise Error("class weights must have positive total")
     var out = admitted_vector(n, "<f4", context)
     if n:
-        var rows_entry = labels_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
-                                    "ImportError")
-        _ = py_call_typed(rows_entry, PythonObject(labels_address(labels.codes)), PythonObject(labels_address(narrowed)),
-                          PythonObject(labels_address(out)), Python.list(n, k))
+        comptime if NativeWeights:
+            _ = label_weights_run(xtrees, LABEL_WEIGHTS_ROWS,
+                LabelWeightsRequest(labels_address(labels.codes), labels_address(narrowed), labels_address(out), n, k))
+        else:
+            var rows_entry = labels_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
+                                        "ImportError")
+            _ = py_call_typed(rows_entry, PythonObject(labels_address(labels.codes)), PythonObject(labels_address(narrowed)),
+                              PythonObject(labels_address(out)), Python.list(n, k))
         _ = narrowed  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
     return out

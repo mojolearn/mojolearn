@@ -77,6 +77,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from training.optimizer_native_gpu import OPTIMIZER_NATIVE_GPU_API
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 from checks.vendor import COMPILED_VENDOR
@@ -1336,6 +1337,11 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_training.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def optimizer_native_api_binding() raises -> PythonObject:
+    var api = OPTIMIZER_NATIVE_GPU_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_training() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
@@ -1393,6 +1399,7 @@ def build__mojolearn_training() -> PythonObject:
         # TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
         # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
+        m.def_function[optimizer_native_api_binding]("optimizer_native_api_v1")
         m.def_function[samba_resident_native_handle_binding]("samba_resident_native_handle_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")

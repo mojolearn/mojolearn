@@ -33,6 +33,16 @@ def check_fixture(fixture_id: Int) raises:
     check_quantized(again, again_exp, codes, exponents, rows, cols)
     for i in range(count):
         require(bitcast[DType.uint32](source[i]) == bitcast[DType.uint32](original[i]), "weight input mutated")
+    # Integer addresses carry no ownership. Keep every borrowed allocation
+    # alive through its last native call, including re-quantization's input.
+    _ = source
+    _ = original
+    _ = bits
+    _ = restored
+    _ = codes
+    _ = exponents
+    _ = again
+    _ = again_exp
 
 
 def main() raises:

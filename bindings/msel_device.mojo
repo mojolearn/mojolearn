@@ -35,7 +35,9 @@ from core.msel_device import (
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
-from glm.qn_fold import qn_fit_fold, qn_infer_fold
+from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_fit, logistic_fold_query
+from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_PROBA
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
 
 #: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
@@ -301,6 +303,11 @@ def pca_transform_fold_binding(
     return Python.list(Int(words[0]), Int(words[1]))
 
 
+def logistic_fold_native_api_v1_binding() raises -> PythonObject:
+    var api = LOGISTIC_FOLD_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def qn_fit_fold_binding(
     ids: PythonObject,
     y_addr: PythonObject,
@@ -347,11 +354,11 @@ def qn_fit_fold_binding(
     var words = List[Int32](length=2, fill=Int32(0))
     var wordp = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var iters = 0
+    var request = QnFitRequest(0, Int(yp), Int(wp), Int(ip), Int(swp) if has_sw else 0, 0,
+        nr, nf, nc, max_iter, ls_max, mem, fit_intercept, normalized, loss,
+        l1, l2, grad_tol, change_tol, svr_eps)
     with GILReleased(Python()):
-        var ctx = msel_fold_entry_context()
-        iters = qn_fit_fold(ctx, base_id, base_rows, index_id, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol,
-                            change_tol, max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
-                            loss, svr_eps, wordp)
+        iters = logistic_fold_fit(QnFoldStore(base_id, base_rows, index_id), request, Int(wordp))
     var finite = Int(words[0])
     var in_range = Int(words[1])
     _ = words^
@@ -388,10 +395,13 @@ def qn_infer_fold_binding(
     var nc = Int(py=params[3])
     var mode = Int(py=params[4])
     var log_out = Int(py=params[5]) != 0
-    var words: Tuple[Int32, Int32]
+    var words = List[Int32](length=2, fill=0)
+    var operation = QN_NATIVE_DECISION if mode == 0 else (QN_NATIVE_BINARY if mode == 1 else QN_NATIVE_PROBA)
+    if mode < 0 or mode > 2:
+        raise Error("qn_infer_fold: mode must be decision (0), codes (1) or proba (2)")
+    var request = QnQueryRequest(0, Int(cp), oa, 0, nr, nf, nc, fi, log_out)
     with GILReleased(Python()):
-        var ctx = msel_fold_entry_context()
-        words = qn_infer_fold(ctx, base_id, base_rows, index_id, cp, oa, nr, nf, fi, nc, mode, log_out)
+        logistic_fold_query(operation, QnFoldStore(base_id, base_rows, index_id), request, Int(words.unsafe_ptr()))
     return Python.list(Int(words[0]), Int(words[1]))
 
 

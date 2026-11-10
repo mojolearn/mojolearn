@@ -26,6 +26,7 @@ import tarfile
 import time
 
 import bincache
+import generated_sources as gs
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = "mojolearn-native-only-v1"
@@ -331,17 +332,27 @@ def main(argv=None):
     compiler = version.stdout + version.stderr
     (args.out / "compiler-version.txt").write_text(compiler)
     args.preparation_failures = {}
-    prepared = {}
+    prerequisites = sorted({step for case in cases for step in case.get("build_prerequisites", [])})
+    def prepare(prerequisite):
+        command = shlex.split(prerequisite)
+        outputs = [rel for rel, known in gs.COMMANDS.items() if command == known]
+        if len(outputs) != 1:
+            raise ValueError("unreviewed native smoke build prerequisite")
+        rel = outputs[0]
+        # Native execution still runs without Python. These independent build
+        # inputs are generated, byte-verified and retained before compilation.
+        command = [sys.executable, "tools/generated_sources.py", "prepare", "--output", rel,
+                   "--repo", str(args.source_root), "--evidence",
+                   str(args.out / "generated-sources" / Path(rel).stem)]
+        result = run_command(command, args.out / gs.LOG_NAMES[rel], args.compile_timeout, args.source_root)
+        return prerequisite, result
+    with ThreadPoolExecutor(max_workers=gs.generation_workers(len(prerequisites))) as pool:
+        prepared = dict(pool.map(prepare, prerequisites))
     for case in cases:
-        for prerequisite in case.get("build_prerequisites", []):
-            if prerequisite not in prepared:
-                command = shlex.split(prerequisite)
-                if command != ["sh", "tokenizer/tools/gen_unicode_table.sh"]:
-                    raise ValueError("unreviewed native smoke build prerequisite")
-                result = run_command(command, args.out / "unicode-table-build.log", args.compile_timeout, args.source_root)
-                prepared[prerequisite] = result
-            if prepared[prerequisite]["exit_code"] or prepared[prerequisite]["timeout"]:
-                args.preparation_failures[case["id"]] = [prepared[prerequisite]]
+        failed = [prepared[step] for step in case.get("build_prerequisites", [])
+                  if prepared[step]["exit_code"] or prepared[step]["timeout"]]
+        if failed:
+            args.preparation_failures[case["id"]] = failed
     write_json(args.out / "preparation.json", prepared)
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         records = list(pool.map(lambda c: build_case(c, args, compiler), cases))
