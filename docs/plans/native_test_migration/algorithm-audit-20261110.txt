@@ -106,3 +106,11 @@ Resolution after snapshot
   GPU output retains its original operation and direct download. No new test
   is added just to mirror this plumbing; existing linear owner fixtures cover
   the result and run with the consolidated bundle. Compilation/runtime owed.
+
+Archive repair source review
+  Owner 98d003df3a resolves finding 1: final native text owners are allocated
+  uninitialized, and workers placement-initialize every assigned cell, including
+  empty cells after decode errors. Ordered worker-local first-error summaries
+  replace the per-cell serial scan. Native decode formulas and numeric early
+  return remain unchanged. Nine direct native fixtures accompany the repair;
+  root owns compilation/runtime. Owner 21ae6d801f fixes finding 3's NaN literal.

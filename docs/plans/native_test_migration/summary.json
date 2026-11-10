@@ -290,6 +290,16 @@
       ],
       "source_review_only": true,
       "runtime_status": "Root compile/run owed; see optimizer-state-plan-handoff.txt."
+    },
+    {
+      "path": "training/checks/optimizer_input_copy_check.mojo",
+      "decision": "native-strided-copy-regression",
+      "native_fixtures": 16,
+      "large_output_cells_per_fixture": 265189,
+      "large_fixtures": 2,
+      "production_dependency": "0b35406ae6",
+      "source_review_only": true,
+      "runtime_status": "Root combined compile/run owed; see optimizer-input-copy-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
