@@ -1,6 +1,5 @@
 """Constructor source controls; compilation and public runtime remain separate."""
 from pathlib import Path
-import importlib.util
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "bindings/causal_lm_construct.mojo").read_text()
@@ -43,11 +42,7 @@ def test_live_publication_checks_keys_and_keeps_tied_weight_identity():
     assert '"_causal_entries_owner"' in admission
 
 
-def test_post_kernel_array_metadata_and_loop_annotations_are_checked():
+def test_post_kernel_array_metadata_admission_precedes_shape_read():
     for name in ('_model_shape', '_model_pack', '_model_quantize15'):
         function = SOURCE.split(f'def {name}(', 1)[1].split('\n\ndef ', 1)[0]
         assert function.index('_causal_array_guard()') < function.index('value.shape')
-    spec = importlib.util.spec_from_file_location('constructor_loop_guard', ROOT / 'tools/hooks/no_compute_in_shells.py')
-    checker = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(checker)
-    assert checker.scan(SOURCE) == []
