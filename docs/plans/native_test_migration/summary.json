@@ -196,6 +196,17 @@
       ],
       "handoff": "docs/plans/native_test_migration/adafactor-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "path": "autograd/optimizer_requests.mojo",
+      "producer_dependency": "e0af392644",
+      "change": "Supplement canonical OpsOptimizerRequest/StateValue/RestoreRequest paths with closed-form two-step SGD dampening, Adam and AdamW cases, typed checkpoint continuation/ownership and14 packed code/config/restore adapter metadata fixtures. Retain existing packed-interface numerical and Python boundary coverage.",
+      "native_checks": [
+        "checks/native_tests/ops_optimizer_requests_cpu.mojo",
+        "checks/native_tests/ops_optimizer_requests_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/ops-optimizer-requests-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
