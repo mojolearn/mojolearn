@@ -6,11 +6,11 @@
   "file_decisions": {
     "needs-semantic-review": 574,
     "retain-python-boundary": 22,
-    "split-partial": 1,
+    "split-partial": 2,
     "split-migrated": 9,
     "review-module-gate": 1,
     "retain-tooling": 2,
-    "split-needed": 7
+    "split-needed": 6
   },
   "reviewed_files": 42,
   "not_a_gate": true,
@@ -175,6 +175,16 @@
       ],
       "change": "Repair inert adapter test collection by reading shipping literal metadata without executing compiled bridge setup. Move former series literals to existing real Unicode boundary test; replace its split/join expectation with independent literals. Preserve pin, manifest and staging tooling.",
       "handoff": "docs/plans/native_test_migration/adapter-collection-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "change": "Move five elementwise optimizer families, two settings each, to 10 typed OptConfig/opt_step CPU/GPU fixtures with independent Float64 equations and original tolerances; retain thin public options/state packing tests. Adafactor numerical test remains pending.",
+      "native_checks": [
+        "checks/native_tests/sequence_optimizer_cpu.mojo",
+        "checks/native_tests/sequence_optimizer_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/sequence-optimizer-handoff.txt",
       "source_review_only": true
     }
   ],

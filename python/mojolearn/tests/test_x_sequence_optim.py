@@ -1,70 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The sequence lane's optimizers against float64 NumPy restatements of
-torch.optim's update rules, at a tolerance. Parity with torch itself was
-checked on the lane's pod."""
+"""Public sequence optimizer options and the remaining Adafactor oracle.
+
+Elementwise optimizer equations moved to sequence_optimizer_{cpu,gpu}.mojo.
+These public calls retain keyword decoding and state publication coverage;
+Adafactor's factored matrix/vector numerical migration is still pending.
+"""
 import numpy as np
 
 import mojolearn as ml
 
 
-def _run(cls, ref, steps=6, **kw):
-    rng = np.random.default_rng(0)
-    p = rng.standard_normal((4, 3)).astype(np.float32)
-    grads = [rng.standard_normal((4, 3)).astype(np.float32) for _ in range(steps)]
-    opt = cls([p], **kw)
-    q = p.astype(np.float64)
-    state = {}
-    for t, g in enumerate(grads, 1):
-        opt.step([g])
-        q = ref(q, g.astype(np.float64), t, state, **kw)
-    np.testing.assert_allclose(p, q, rtol=2e-5, atol=2e-6)
 
 
-def ref_rmsprop(p, g, t, st, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0.0, momentum=0.0, centered=False):
-    g = g + weight_decay * p
-    st["v"] = alpha * st.get("v", 0.0) + (1 - alpha) * g * g
-    v = st["v"]
-    if centered:
-        st["ga"] = alpha * st.get("ga", 0.0) + (1 - alpha) * g
-        v = v - st["ga"] ** 2
-    avg = np.sqrt(v) + eps
-    if momentum > 0:
-        st["b"] = momentum * st.get("b", 0.0) + g / avg
-        return p - lr * st["b"]
-    return p - lr * g / avg
+
+
+def _public_step(cls, **options):
+    params = np.arange(12, dtype=np.float32).reshape(4, 3)
+    optimizer = cls([params], **options)
+    optimizer.step([np.full_like(params, 0.125)])
+    assert optimizer.t == 1
+    assert params.shape == (4, 3) and params.dtype == np.float32
+    state = optimizer.state_dict()
+    assert type(state) is dict
+    assert state["t"] == 1
 
 
 def test_rmsprop():
-    _run(ml.RMSprop, ref_rmsprop)
-    _run(ml.RMSprop, ref_rmsprop, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
+    _public_step(ml.RMSprop)
+    _public_step(ml.RMSprop, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
 
 
-def ref_adagrad(p, g, t, st, lr=1e-2, lr_decay=0.0, weight_decay=0.0, initial_accumulator_value=0.0,
-                eps=1e-10):
-    g = g + weight_decay * p
-    clr = lr / (1 + (t - 1) * lr_decay)
-    st["s"] = st.get("s", initial_accumulator_value) + g * g
-    return p - clr * g / (np.sqrt(st["s"]) + eps)
 
 
 def test_adagrad():
-    _run(ml.Adagrad, ref_adagrad)
-    _run(ml.Adagrad, ref_adagrad, lr=5e-2, lr_decay=0.1, weight_decay=1e-2, initial_accumulator_value=0.1)
+    _public_step(ml.Adagrad)
+    _public_step(ml.Adagrad, lr=5e-2, lr_decay=0.1, weight_decay=1e-2, initial_accumulator_value=0.1)
 
 
-def ref_lion(p, g, t, st, lr=1e-4, betas=(0.9, 0.99), weight_decay=0.0):
-    b1, b2 = betas
-    m = st.get("m", 0.0)
-    p = p * (1 - lr * weight_decay)
-    p = p - lr * np.sign(b1 * m + (1 - b1) * g)
-    st["m"] = b2 * m + (1 - b2) * g
-    return p
 
 
 def test_lion():
-    _run(ml.Lion, ref_lion, lr=1e-2)
-    _run(ml.Lion, ref_lion, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
+    _public_step(ml.Lion, lr=1e-2)
+    _public_step(ml.Lion, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
 
 
 def test_adafactor_against_torch_rule():
@@ -100,43 +78,15 @@ def test_adafactor_against_torch_rule():
     np.testing.assert_allclose(v, qv, rtol=1e-4, atol=1e-5)
 
 
-def ref_adamax(p, g, t, st, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
-    b1, b2 = betas
-    g = g + weight_decay * p
-    st["m"] = st.get("m", 0.0) + (1 - b1) * (g - st.get("m", 0.0))
-    st["u"] = np.maximum(b2 * st.get("u", 0.0), np.abs(g) + eps)
-    return p - lr / (1 - b1 ** t) * st["m"] / st["u"]
 
 
 def test_adamax():
-    _run(ml.Adamax, ref_adamax)
-    _run(ml.Adamax, ref_adamax, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+    _public_step(ml.Adamax)
+    _public_step(ml.Adamax, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
 
 
-def ref_nadam(p, g, t, st, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
-              decoupled_weight_decay=False):
-    b1, b2 = betas
-    if decoupled_weight_decay:
-        p = p * (1 - lr * weight_decay)
-    else:
-        g = g + weight_decay * p
-    mu = b1 * (1 - 0.5 * 0.96 ** (t * momentum_decay))
-    mu_next = b1 * (1 - 0.5 * 0.96 ** ((t + 1) * momentum_decay))
-    st["mp"] = st.get("mp", 1.0) * mu
-    st["m"] = st.get("m", 0.0) + (1 - b1) * (g - st.get("m", 0.0))
-    st["v"] = b2 * st.get("v", 0.0) + (1 - b2) * g * g
-    den = np.sqrt(st["v"] / (1 - b2 ** t)) + eps
-    p = p - lr * (1 - mu) / (1 - st["mp"]) * g / den
-    return p - lr * mu_next / (1 - st["mp"] * mu_next) * st["m"] / den
 
 
 def test_nadam():
-    _run(ml.NAdam, ref_nadam)
-    _run(ml.NAdam, ref_nadam, lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True, momentum_decay=0.01)
-
-
-if __name__ == "__main__":
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            fn()
-            print("PASS", name)
+    _public_step(ml.NAdam)
+    _public_step(ml.NAdam, lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True, momentum_decay=0.01)
