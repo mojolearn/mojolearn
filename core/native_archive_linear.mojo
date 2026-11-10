@@ -27,10 +27,17 @@ struct NativeLinearArchivePlan(Movable):
         self.class_mismatch = False
 
 
-def native_archive_field(members: List[NativeArchiveDecoded], name: String) raises -> Int:
+def native_archive_field_index(members: List[NativeArchiveDecoded], name: String) -> Int:
     for i in range(len(members)):
         if members[i].name == name:
             return i
+    return -1
+
+
+def native_archive_field(members: List[NativeArchiveDecoded], name: String) raises -> Int:
+    var index = native_archive_field_index(members, name)
+    if index >= 0:
+        return index
     raise Error("mojolearn: model file is missing field '" + name + "'")
 
 

@@ -5,7 +5,8 @@ implementations in this source branch. Public loading still requires the
 orchestrator's affected-group compile/runtime qualification and codec wheel
 dependency qualification. Ridge/OLS schema checks and loaded scalar state now
 use `core/native_archive_linear.mojo`. Direct and generic MinMaxScaler save/load use
-`core/native_archive_minmax.mojo`; other saved-model families and their generic
+`core/native_archive_minmax.mojo`; StandardScaler uses
+`core/native_archive_standard.mojo`. Other saved-model families and their generic
 host archive builders still have schema work, so this is not a claim that
 every public load operation is Python-free.
 
@@ -146,6 +147,46 @@ python/mojolearn/tests/test_minmax_archive_generic_native.py
 python/mojolearn/tests/test_minmax_scaler_native_lifecycle.py
 python/mojolearn/tests/test_host_archive_native.py
 python/mojolearn/tests/test_classical_archive_reader_native.py`.
+
+StandardScaler direct and generic archive loading now consumes native decoded
+members, with one final writable C-order owner per statistic/count vector.
+The native plan preserves optional statistics for all four option combinations,
+integer count metadata, Float32 weighted scalar storage, Float32/Int64 vector
+counts, and the historical Float64 result for a one-element Int64 count member.
+Metadata still reads its four storage words even for accepted multidimensional
+or F-order metadata. Statistics retain raw NaN/signed-zero bytes. Count text
+continues to report its prior missing-dtype AttributeError before shape checks.
+The public scalar save admission and native count narrowing preserve Float32
+storage without creating an intermediate Python scalar array.
+
+The StandardScaler Python member dictionary, temporary metadata array,
+map-based `scaler_archive_build`, and zero-filled destination plus duplicate
+statistic/count copy are removed. Public owner pins remain in UNPACK/PACK;
+writer member preparation and decode reuse the existing native host pool.
+Final Python object publication stays ordered under the GIL. No training,
+transform, preparation-cache, reduction or tuned-kernel code changes.
+
+Sixty-two independently scheduled native fixtures live in the importable
+`checks/native_tests/archive_standard_suite.mojo::run_checks`, with the thin
+`archive_standard.mojo` standalone entry. Coverage includes option/count
+combinations, empty/negative features where historically accepted, ancestry
+and conflicting-invalid refusal order, every statistic shape/dtype/presence
+refusal, scalar rounding words, ordered native metadata bytes and borrowed
+views without an intermediate payload allocation. Seventeen Python boundary
+cases cover direct/public/explicit-host/generic routes, source release,
+C-order writable statistic/count owners, public rebinding, saved member order,
+scalar count types, and exceptional export release. Existing partial-fit,
+transform, NumPy-free and checkpoint lifecycle coverage remains unchanged.
+
+Affected development owners are `runtime_prep` and `runtime_trees`, plus
+consumers of shared native archive helpers. Commands for the orchestrator:
+`bash tools/compile_slot.sh pixi run check-native-archive-standard` and
+`python -m pytest -n auto python/mojolearn/tests/test_standard_archive_native.py
+python/mojolearn/tests/test_standard_scaler_native_lifecycle.py
+python/mojolearn/tests/test_host_scaler_training_native.py` against rebuilt
+installed code. The new suite can be imported by the existing aggregate CPU
+runner. This lane has run neither compilation nor runtime tests; wheel codec
+qualification and any performance measurements remain separate obligations.
 
 Text-cell storage is now allocated once without a serial construction pass.
 Each host worker constructs and moves its assigned owning cells directly into
