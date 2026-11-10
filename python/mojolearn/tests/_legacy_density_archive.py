@@ -84,7 +84,7 @@ def _describe(value, *, c_order):
         return descr, fortran, shape, raw
 
 def _describe_list(value):
-    from ._array import _flatten
+    from mojolearn._array import _flatten
     shape, flat = _flatten(value)
     if not flat:
         return "<f8", False, shape, b""

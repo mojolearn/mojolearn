@@ -133,7 +133,7 @@ def _native_astype(self, dtype):
     fn = _helper("cast_elements", self.size)
     if fn is None:
         return None
-    from . import _buffer
+    from mojolearn import _buffer
     store = _buffer._output_store(_CODE[dtype], self.size)
     if int(fn(self._addr, sc, store.buffer_info()[0], dc, self.size)):
         return None
