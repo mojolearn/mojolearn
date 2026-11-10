@@ -2,12 +2,11 @@
 # Archive path/file UNPACK and result/model PACK. Native Mojo owns ZIP/NPY
 # framing, bounds, dtype/layout plans, Unicode decoding and decompression.
 from std.collections import Dict
-from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
+from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call, _archive_class_name_unpack
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str
 from bindings.classical_archive_input import ArchiveReadInput, archive_input_unpack
@@ -295,23 +294,25 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
 
 def _archive_dtype_name(value: PythonObject, context: PythonObject) raises -> String:
     # The dtype a refusal names, as `_serialize._dtype_name` named it.
-    var b = native_loaded_module("builtins")
+    var strings = py_type(PythonObject(""))
+    var bytes = context["archive_bytes_type"]
+    var lists = py_type(Python.list())
     if classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"]):
         return classical_dtype_str(value, context)
-    if py_type(value) is b.str:
+    if py_type(value) is strings:
         return "<U"
-    if py_type(value) is b.bytes:
+    if py_type(value) is bytes:
         return "|S"
-    if py_type(value) is b.list:
+    if py_type(value) is lists:
         var inner = value
-        while py_type(inner) is b.list and len(inner) != 0:  # driver-loop: over the nesting depth of a stored field
+        while py_type(inner) is lists and len(inner) != 0:  # driver-loop: over the nesting depth of a stored field
             inner = inner[0]
-        if py_type(inner) is b.str:
+        if py_type(inner) is strings:
             return "<U"
-        if py_type(inner) is b.bytes:
+        if py_type(inner) is bytes:
             return "|S"
         return "list"
-    return String(py_type(value).__name__)
+    return _archive_class_name_unpack(py_type(value))
 
 
 def _archive_missing(name: String) -> String:

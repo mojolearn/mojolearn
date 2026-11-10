@@ -88,6 +88,11 @@ filenames keep their prior spelling; no path protocol or codec registry is
 called. Forty-two independent native fixtures cover valid and invalid UTF-8,
 surrogate/NUL preservation and path component ordering. The Python boundary
 retains exact file/path admission and packs the final native Unicode words.
+Save reuses the shared native linear mode parser for Unicode whitespace and
+ASCII case normalization. Archive type admission uses fixed native identities;
+string-subclass storage is checked with `PyType_IsSubtype`, and class names
+come from the immutable type descriptor. The obsolete runtime `builtins`
+lookups and Python `strip`/`lower` format calls are removed from archive files.
 
 Remaining work is codec wheel dependency qualification and affected public
 boundary tests. Existing API/protocol/exception and file ownership tests remain
