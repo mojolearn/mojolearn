@@ -267,3 +267,14 @@ bridge returns. The connection checker records exactly this export. This fixes
 the normal push refusal without a guard exemption, runtime import or new loader.
 Root owes the existing connection-tooling and fresh-import/public-constructor
 checks; product/native logic is unchanged from the prior freeze.
+
+## Audit repair: constructor refusal precedence
+
+Native early checks now preserve accumulation before maximize/beta/scalar
+conversion, and SGD Nesterov checks before lr conversion, including zero
+momentum refusing before dampening is decoded. Final scalar decoding retains
+lr then weight_decay then family-specific fields. The typed full validation
+method shares these native checks; no Python staging is restored. New focused
+public cases exercise conflicting invalid arguments and unchanged parameter
+storage. Registry-versus-scalar precedence follows in the next required batch;
+root must include both repairs before its consolidated build.

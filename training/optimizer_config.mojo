@@ -20,10 +20,26 @@ struct OptimizerConstructorConfig(Copyable, ImplicitlyCopyable, Movable):
         return String("SGD") if self.kind == 0 else (String("Adam") if self.kind == 1 else String("AdamW"))
 
     def validate(self) raises:
-        if self.accumulation < 1 or (self.accumulation & (self.accumulation - 1)) != 0:
-            raise Error("ValueError: mojolearn." + self.name() + ": accumulation_steps must be a power of two >= 1 (optimizer contract clause 9.2 condition 4)")
-        if self.kind == 0 and self.nesterov and (self.momentum == 0.0 or self.dampening != 0.0):
-            raise Error("ValueError: mojolearn.SGD: nesterov=True needs momentum > 0 and dampening == 0")
+        optimizer_validate_accumulation(self.kind, self.accumulation)
+        if self.kind == 0 and self.nesterov:
+            optimizer_validate_nesterov_momentum(self.momentum)
+            optimizer_validate_nesterov_dampening(self.dampening)
+
+
+def optimizer_validate_accumulation(kind: Int, accumulation: Int) raises:
+    if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
+        var name = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
+        raise Error("ValueError: mojolearn." + name + ": accumulation_steps must be a power of two >= 1 (optimizer contract clause 9.2 condition 4)")
+
+
+def optimizer_validate_nesterov_momentum(momentum: Float64) raises:
+    if momentum == 0.0:
+        raise Error("ValueError: mojolearn.SGD: nesterov=True needs momentum > 0 and dampening == 0")
+
+
+def optimizer_validate_nesterov_dampening(dampening: Float64) raises:
+    if dampening != 0.0:
+        raise Error("ValueError: mojolearn.SGD: nesterov=True needs momentum > 0 and dampening == 0")
 
 
 def optimizer_parameter_names(kind: Int) -> List[String]:

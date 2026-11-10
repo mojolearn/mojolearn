@@ -20,7 +20,7 @@ from bindings.optimizer_public_door import (
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
 from training.checks.optimizer_contract import microbatch_split_is_identical
-from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available, optimizer_beta_shape
+from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available, optimizer_beta_shape, optimizer_validate_accumulation, optimizer_validate_nesterov_momentum, optimizer_validate_nesterov_dampening
 from bindings.cpython_table import cpython_table
 from bindings.optimizer_container_boundary import OptimizerInputOwners
 from training.optimizer_state_plan import optimizer_checkpoint_input, optimizer_state_count
@@ -101,21 +101,34 @@ def optimizer_configuration(kind: Int, lr: PythonObject, betas_value: PythonObje
     weight_decay: PythonObject, momentum: PythonObject, dampening: PythonObject, nesterov: PythonObject,
     accumulation_value: PythonObject, maximize: PythonObject, context: PythonObject) raises -> OptimizerConstructorConfig:
     var accumulation = optimizer_integer(accumulation_value, context)
+    optimizer_validate_accumulation(kind, accumulation)
     if py_type(maximize) is not context["scalar_types"][1]:
         var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
         raise Error("TypeError: mojolearn." + where + ": maximize must be a bool")
+    var use_nesterov = False
+    if kind == 0:
+        use_nesterov = optimizer_truth(nesterov, context)
+        if use_nesterov:
+            # Preserve the original admitted scalar conversion and short-circuit:
+            # zero momentum refuses before even decoding dampening or lr.
+            optimizer_validate_nesterov_momentum(Float64(py=momentum))
+            optimizer_validate_nesterov_dampening(Float64(py=dampening))
     var betas = (Float64(0.9), Float64(0.999))
     if kind != 0:
         betas = optimizer_betas(betas_value, context)
-    var config = OptimizerConstructorConfig(kind, accumulation,
-        optimizer_float(lr, context), betas[0], betas[1],
-        Float64(1e-8) if kind == 0 else optimizer_float(eps, context),
-        optimizer_float(weight_decay, context),
-        optimizer_float(momentum, context) if kind == 0 else Float64(0),
-        optimizer_float(dampening, context) if kind == 0 else Float64(0),
-        optimizer_truth(nesterov, context) if kind == 0 else False,
+    var decoded_lr = optimizer_float(lr, context)
+    var decoded_decay = optimizer_float(weight_decay, context)
+    var decoded_momentum = Float64(0)
+    var decoded_dampening = Float64(0)
+    var decoded_eps = Float64(1e-8)
+    if kind == 0:
+        decoded_momentum = optimizer_float(momentum, context)
+        decoded_dampening = optimizer_float(dampening, context)
+    else:
+        decoded_eps = optimizer_float(eps, context)
+    var config = OptimizerConstructorConfig(kind, accumulation, decoded_lr, betas[0], betas[1],
+        decoded_eps, decoded_decay, decoded_momentum, decoded_dampening, use_nesterov,
         maximize is PythonObject(True))
-    config.validate()
     return config
 
 
