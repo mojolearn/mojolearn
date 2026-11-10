@@ -1300,6 +1300,19 @@ def attn_step_fresh_prefill(
         var b = ints[0]
         var dm = ints[1]
         var n = b * l * dm
+        # A discarded cache starts at position 0: a new entry reads the word
+        # it is built over, which still holds the previous call's position
+        # (a block session whose shape changed keeps its word buffer, so a
+        # 16-token forward then a 1-token forward refused "cached tokens must
+        # be in [0, 1], got 16"). Zero the word before a new entry reads it.
+        var known = False
+        for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
+            if (sc.attn[i].w_addr == Int(bufs[1]) and sc.attn[i].s_addr == Int(bufs[2])
+                    and sc.attn[i].q_addr == Int(bufs[3]) and _same_ints(sc.attn[i].ints, ints)):
+                known = True
+        if not known:
+            var zero: List[Int] = [0]
+            _write_words(ex, bufs[3], zero)
         var e = attn_step_entry(ex, sc, bufs, counts, ints)
         ref blk = sc.attn[e]
         var dims = _attn_dims(ints)
