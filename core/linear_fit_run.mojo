@@ -47,7 +47,7 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
         finally:
             _ = targets
             _ = values
-        return result
+        return result^
 
     var flags = native_descriptor_call(entry, LF_FLAGS, List[Int](), List[Int](), List[Float64]())
     var ymean = List[Float64](length=1, fill=0.0)
@@ -93,4 +93,4 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
     finally:
         _ = ymean
         _ = ignored_mean
-    return result
+    return result^

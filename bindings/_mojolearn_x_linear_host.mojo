@@ -1,10 +1,10 @@
-from x_linear.ridge_descriptor_host import RIDGE_FIT_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for `_mojolearn_x_linear` (lane/algos-linear, 2026-09-27).
 HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
+from x_linear.ridge_descriptor_host import RIDGE_FIT_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.host_finite_scan import host_all_finite_f32
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
