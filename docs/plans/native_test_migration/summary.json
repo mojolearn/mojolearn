@@ -413,6 +413,23 @@
       ],
       "source_review_only": true,
       "runtime_status": "Root compile/native runtime and retained installed Python checks owed; see pca-whitening-handoff.txt."
+    },
+    {
+      "sources": [
+        "checks/native_tests/logistic_model_state_suite.mojo",
+        "checks/native_tests/logistic_label_weights_cases.mojo"
+      ],
+      "decision": "new-typed-native-contract-coverage",
+      "native_model_state_fixtures": 22,
+      "native_label_weight_fixtures_per_executor": 8,
+      "dependencies": [
+        "27a0b43246",
+        "831ed1cba0",
+        "19b940"
+      ],
+      "python_tests_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Root compile/run owed; CPU weight suite requires MOJOLEARN_COLUMN_CPU=1; see logistic-state-weights-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
