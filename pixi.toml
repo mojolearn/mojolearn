@@ -78,6 +78,7 @@ check-native-archive-parser = "python3 tools/gen_archive_unicode.py && mojo run 
 check-native-archive-reader = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_reader.mojo"
 check-native-archive-unicode = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_unicode_names.mojo"
 check-native-linear-owner-cpu = "mojo run -I . checks/native_tests/linear_owner_cpu.mojo"
+check-native-tsqr-host-ownership = "mojo run -I . checks/native_tests/tsqr_host_ownership.mojo"
 check-native-linear-owner-gpu = "mojo run -I . checks/native_tests/linear_owner_gpu.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
