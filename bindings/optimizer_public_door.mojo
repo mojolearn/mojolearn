@@ -32,10 +32,11 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
 from std.python._cpython import GILReleased, PyObjectPtr
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.admitted_input import admitted_storage_native
+from training.optimizer_config import optimizer_keyword_refusal
 
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
-from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_get, py_fields
+from bindings.optimizer_public_words import optimizer_python_error
+from bindings.py_balanced import py_call, py_setitem, py_type, py_get, py_fields
 from bindings.tensor_view import (
     TensorView, shape_text, _contiguous, base_format, _format_name, _typestr_name, _array_code,
 )
@@ -84,9 +85,6 @@ struct OptDoor(Defaultable, Movable):
     var bi: PythonObject
     var array_cls: PythonObject
     var dev_cls: PythonObject
-    var arrays: PythonObject
-    var not_covered: PythonObject
-    var refused: PythonObject
 
     def __init__(out self):
         self.context = PythonObject(None)
@@ -94,9 +92,6 @@ struct OptDoor(Defaultable, Movable):
         self.bi = PythonObject(None)
         self.array_cls = PythonObject(None)
         self.dev_cls = PythonObject(None)
-        self.arrays = PythonObject(None)
-        self.not_covered = PythonObject(None)
-        self.refused = PythonObject(None)
 
 
 comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV1"]
@@ -107,8 +102,7 @@ def door_ready() raises:
 
 
 def door_ready(guarded: PythonObject) raises:
-    """Resolve the builtins, `mojolearn.Array`, `TrainDeviceArray`, the
-    `array` type and the refusal tables once per process. `guarded` is a
+    """Connect loaded native type/owner identities once per process. `guarded` is a
     context its caller has just run `opt_guards` on (the router): when it
     is the door's own context the guards are not walked a second time."""
     var d = OPT_DOOR.get_or_create_ptr()
@@ -117,17 +111,14 @@ def door_ready(guarded: PythonObject) raises:
             opt_guards(d[].context)
         return
     d[].bi = native_loaded_module("builtins")
-    var training = Python.import_module("mojolearn._training_impl")
+    var training = native_loaded_module("mojolearn._training_impl")
     d[].context = py_fields(training)["_OPT_CONTEXT"]
     if d[].context is not guarded:
         opt_guards(d[].context)
     # Keep the import connection's guarded Array layout and native storage
     # type even when a module field is replaced before the first operation.
     d[].array_cls = d[].context["array_class"]
-    d[].dev_cls = training.TrainDeviceArray
-    d[].not_covered = training._NOT_COVERED
-    d[].refused = training._REFUSED_KWARGS
-    d[].arrays = d[].context["buffer_types"][2]
+    d[].dev_cls = d[].context["device_class"]
     d[].ready = True
 
 
@@ -159,55 +150,9 @@ def type_name(value: PythonObject) raises -> String:
 # shape_text, TensorView, _contiguous, base_format, _format_name, _typestr_name and _array_code moved to bindings/tensor_view.mojo (lane a6-device-x-family-classical).
 
 
-def py_ints(values: List[Int]) raises -> PythonObject:
-    """A Python tuple of ints (a shape argument)."""
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: over shape words
-        _ = py_call(out.append, PythonObject(values[i]))
-    return py_call(_bi().tuple, out)
-
-
 def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
-    """Assemble an Array from native storage and slots; never call its Python constructor."""
-    var d = OPT_DOOR.get_or_create_ptr()
-    var b = d[].bi
-    var size = 1
-    var strides = List[Int](length=len(dims), fill=0)
-    var step = 4
-    for i in range(len(dims) - 1, -1, -1):  # driver-loop: over one native shape/stride word per dimension
-        strides[i] = step
-        step *= dims[i]
-        size *= dims[i]
-    # The import connection retains exact native scalar types. A live
-    # builtins.bytes replacement must not become a zero-storage callback.
-    var bytes_type = d[].context["scalar_types"][6]
-    var store = py_call(d[].arrays, PythonObject("f" if dtype == "<f4" else "i"), py_call(bytes_type, size * 4))
-    # The connected, guarded Array has ordinary heap storage. Use the public
-    # allocator directly; a replaced builtins.object must never run a hook.
-    var result = native_storage_allocate(d[].array_cls)
-    py_setattr(result, "_store", store)
-    py_setattr(result, "_base", PythonObject(None))
-    py_setattr(result, "_pin", PythonObject(None))
-    # Acquire the native store's buffer through CPython's public API. The
-    # mutable builtins.memoryview module field is not a runtime constructor.
-    ref cpy = Python().cpython()
-    var view_ptr = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromObject")(store._obj_ptr)
-    if not view_ptr:
-        var failure = stash_python_error()
-        raise failure^
-    var view = PythonObject(from_owned=view_ptr)
-    py_setattr(result, "_mv", view)
-    py_setattr(result, "_addr", py_call(store.buffer_info)[0])
-    py_setattr(result, "_readonly", PythonObject(False))
-    py_setattr(result, "shape", py_ints(dims))
-    py_setattr(result, "dtype", PythonObject(dtype))
-    py_setattr(result, "ndim", PythonObject(len(dims)))
-    py_setattr(result, "size", PythonObject(size))
-    py_setattr(result, "nbytes", PythonObject(size * 4))
-    py_setattr(result, "itemsize", PythonObject(4))
-    py_setattr(result, "strides", py_ints(strides))
-    py_setattr(result, "order", PythonObject("C"))
-    return result
+    """PACK an owned Array through the shared native layout/storage boundary."""
+    return admitted_storage_native(dims, dtype, OPT_DOOR.get_or_create_ptr()[].context["input_context"], as_array=True)
 
 
 def set_field(opt: PythonObject, name: String, value: PythonObject) raises:
@@ -278,7 +223,7 @@ def _array_view(obj: PythonObject, context: PythonObject, mut v: TensorView, mut
     v.addr = Int(py=addr)
     v.nbytes = Int(py=nbytes)
     v.itemsize = Int(py=itemsize)
-    v.readonly = Bool(py=py_call(context["scalar_types"][1], readonly))
+    v.readonly = optimizer_truth(readonly, context)
     var t = String(py=dtype)
     v.fmt = _array_code(t)
     for i in range(len(shape)):  # driver-loop: over shape words
@@ -461,30 +406,11 @@ def _check_grads(params: PythonObject, gs: List[PythonObject], views: List[Tenso
 
 
 def refuse_kwargs(kwargs: PythonObject, where: String) raises:
-    """`_refuse_unknown`: every keyword this surface does not have, refused
-    by name."""
-    var d = OPT_DOOR.get_or_create_ptr()
-    opt_value(kwargs, d[].context)
-    var keys = py_call(d[].context["container_types"][0], kwargs)
-    for i in range(len(keys)):  # driver-loop: over keyword argument names
-        var k = String(py=keys[i])
-        if k == "dropout":
-            var refusal = _not_covered("dropout", where)
-            raise refusal^
-        if k == "distributed" or k == "world_size" or k == "rank":
-            var refusal = _not_covered("distributed", where)
-            raise refusal^
-        var why = py_call(d[].refused.get, keys[i])
-        if truth(why):
-            raise Error(
-                "TypeError: mojolearn." + where + ": " + k + "= is REFUSED BY NAME -- " + String(py=why) + _SRC
-            )
-        raise Error(
-            "TypeError: mojolearn." + where + ": unexpected keyword " + k + "=. This surface takes only "
-            + "the parameters in its WHAT IS HONORED table; an unknown keyword is refused rather than "
-            + "ignored, because a keyword that is accepted and does nothing is a caller who believes "
-            + "something about their run that is not true" + _SRC
-        )
+    var context = OPT_DOOR.get_or_create_ptr()[].context
+    opt_value(kwargs, context)
+    var keys = optimizer_sequence_items(kwargs, context)
+    if len(keys) != 0:
+        optimizer_keyword_refusal(String(keys[0]), where)
 
 
 # ---------------------------------------------------------------------------

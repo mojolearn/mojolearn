@@ -198,3 +198,20 @@ owner-vector collection after the single admission-pin vector became sufficient.
 No optimizer update/reduction kernel changed. Root owes signed/reversed/F-order
 strided fixtures, public gradient mutation/error/lifetime checks and compile.
 End-to-end GPU measurements remain owed; this is no performance claim.
+
+## Shared output allocation and native keyword policy
+
+Optimizer arrays now use the existing admitted native storage/layout boundary,
+including its checked dimensions/strides and exact Array owner publication.
+Removed: the duplicate size/stride allocator, temporary Python bytes/list/tuple
+storage construction, buffer_info call and fresh memoryview symbol lookup.
+Fixed keyword decisions/text are native, so the remaining keyword references
+to the former `_not_covered` helper are resolved and its Python refusal caches
+are removed. The door connects its already-loaded module without importing it.
+
+The alignment query now calls its existing native contract predicate directly;
+its Python parameter list and redundant compiled-entry connection are gone.
+Remaining scalar readback uses the shared admitted native conversions. These
+are plumbing/metadata changes; kernels and profile constants are unchanged.
+Root owes full affected-closure compilation and public output/constructor/
+keyword/metadata checks. State/checkpoint planning is still outstanding.
