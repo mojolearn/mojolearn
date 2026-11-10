@@ -67,9 +67,6 @@ def connect(training):
             bindings[mode] = type(error).__name__ + ": " + str(error)
             if mode not in metadata_bindings:
                 metadata_bindings[mode] = bindings[mode]
-    init = _buffer._native("optimizer_door_init")  # import-time: native parameter registry metadata only
-    if not isinstance(init, BuiltinFunctionType):
-        raise TypeError("optimizer requires compiled optimizer_door_init")
     _numeric_profile.default_profile("training")  # glue: initialize the package's numeric-profile connection
     _backend.default_mode()  # glue: initialize metadata's shared default before public native calls
     input_context = _numpy_free_context()
@@ -90,7 +87,7 @@ def connect(training):
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,
         "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "longlong", "ulonglong", "float16", "float32", "float64", "longdouble"),
-        "guards": guards, "bindings": bindings, "init": init,
+        "guards": guards, "bindings": bindings,
         "training_metadata_bindings": metadata_bindings,
         "training_metadata_types": (str, int, BuiltinFunctionType, tuple),
         "training_metadata_strip": str.strip, "training_metadata_lower": str.lower,

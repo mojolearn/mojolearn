@@ -123,3 +123,19 @@ ownership fields when cleanup fails. Native descriptor operation count is 11
 
 Configuration/state preparation and staging cleanup remain outstanding. Root
 owes compilation and resource-failure/finalization checks. No math changed.
+
+## Typed constructor configuration
+
+Constructor scalar values and beta pairs now decode into
+`OptimizerConstructorConfig`; accumulation/Nesterov decisions use that native
+value. Public fields are packed from it. `get_params` uses native fixed name
+lists. Removed: internal Python beta tuples, the Python parameter-name list,
+constructor calls through the compiled Python registry initializer and its
+unused import-time connection. Exact admitted scalar conversion now uses
+cached CPython number/truth functions; no mutable builtin float/int/bool call
+is involved, and the established text/number conversion behavior is retained.
+
+Transactional `set_params` still stages its old dictionary/envelope and will
+be migrated next. Public field/schedule owner pins remain necessary at PACK.
+Root owes constructor/get-params/error checks and native config validation;
+this lane has not compiled or run tests.

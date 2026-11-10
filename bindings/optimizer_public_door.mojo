@@ -48,6 +48,7 @@ from training.optimizer_public_common import (
 )
 from core.shared_slot import SharedSlot
 from bindings.optimizer_descriptor_boundary import optimizer_provider, optimizer_driver
+from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_truth
 
 comptime IP = MutPointer[Int, MutUntrackedOrigin]
 comptime BP = MutPointer[UInt8, MutUntrackedOrigin]
@@ -136,23 +137,11 @@ def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises ->
 
 
 def as_float(value: PythonObject) raises -> Float64:
-    """`float(value)`."""
-    var scalars = OPT_DOOR.get_or_create_ptr()[].context["scalar_types"]
-    # An exact float is admitted by type identity and read natively (the
-    # same double `float(value)` returns); no second admission or call.
-    if py_type(value) is scalars[3]:
-        return Float64(py=value)
-    opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Float64(py=py_call(scalars[3], value))
+    return optimizer_float(value, OPT_DOOR.get_or_create_ptr()[].context)
 
 
 def truth(value: PythonObject) raises -> Bool:
-    var scalars = OPT_DOOR.get_or_create_ptr()[].context["scalar_types"]
-    # Exact bool: the value is one of the two singletons; compare pointers.
-    if py_type(value) is scalars[1]:
-        return value is PythonObject(True)
-    opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Bool(py=py_call(scalars[1], value))
+    return optimizer_truth(value, OPT_DOOR.get_or_create_ptr()[].context)
 
 
 def py_repr(value: PythonObject) raises -> String:

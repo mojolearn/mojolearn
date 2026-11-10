@@ -14,11 +14,13 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import (
-    door_ready, refuse_kwargs, new_array, TensorView, tensor_view,
+    door_ready, door_init, refuse_kwargs, new_array, TensorView, tensor_view,
     door_step, door_io, door_state, door_state_set, door_load_state, door_zero, door_clip, door_accumulate,
 )
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
+from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names
+from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_integer, optimizer_truth
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
@@ -55,13 +57,13 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
     return entries
 
 
-def optimizer_betas(source: PythonObject, context: PythonObject) raises -> PythonObject:
+def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Tuple[Float64, Float64]:
     opt_value(source, context)
     if py_type(source) is context["container_types"][1] or py_type(source) is context["container_types"][0]:
         opt_scalar(source, context)
         if len(source) != 2:
             raise Error("ValueError: betas must be a pair (beta1, beta2)")
-        return Python.tuple(py_call(context["scalar_types"][3], source[0]), py_call(context["scalar_types"][3], source[1]))
+        return (optimizer_float(source[0], context), optimizer_float(source[1], context))
     var input = context["input_context"]
     classical_connect_numpy(input)
     var value = classical_input(source, input)
@@ -78,14 +80,14 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Pytho
     var second = _pd_double(pd_raw_at(addr, stride, item, native), kind, item)
     _ = value  # keep the Python object alive through the native call above
     _ = value^
-    return Python.tuple(first, second)
+    return (first, second)
 
 
 def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # values: params, kind, lr, betas, eps, weight_decay, momentum,
     # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs.
     var fields = py_fields(owner)
-    var kind = Int(py=values[1])
+    var kind = optimizer_integer(values[1], context)
     var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
     opt_schedule(values[9], context)
     for i in [2, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: over scalar constructor configuration words
@@ -101,16 +103,25 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
         profile = PythonObject(String(env) if env.byte_length() > 0 else String("fp32_v1"))
     if not Bool(py=context["profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
-    var accumulation = Int(py=py_call(context["scalar_types"][2], values[10]))
-    if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
-        raise Error("ValueError: mojolearn." + where + ": accumulation_steps must be a power of two >= 1 (optimizer contract clause 9.2 condition 4)")
+    var accumulation = optimizer_integer(values[10], context)
     if py_type(values[11]) is not context["scalar_types"][1]:
         raise Error("TypeError: mojolearn." + where + ": maximize must be a bool")
-    if kind == 0 and Bool(py=values[8]) and (Float64(py=values[6]) == 0.0 or Float64(py=values[7]) != 0.0):
-        raise Error("ValueError: mojolearn.SGD: nesterov=True needs momentum > 0 and dampening == 0")
-    var betas = values[3] if kind == 0 else optimizer_betas(values[3], context)
-    py_setitem(fields, "_where", PythonObject(where))
-    py_setitem(fields, "_KIND", PythonObject(kind))
+    var betas = (Float64(0.9), Float64(0.999))
+    if kind != 0:
+        betas = optimizer_betas(values[3], context)
+    var config = OptimizerConstructorConfig(kind, accumulation,
+        optimizer_float(values[2], context), betas[0], betas[1],
+        Float64(1e-8) if kind == 0 else optimizer_float(values[4], context),
+        optimizer_float(values[5], context),
+        optimizer_float(values[6], context) if kind == 0 else Float64(0),
+        optimizer_float(values[7], context) if kind == 0 else Float64(0),
+        optimizer_truth(values[8], context) if kind == 0 else False,
+        values[11] is PythonObject(True))
+    config.validate()
+    # PACK publishes public scalar mirrors only after typed configuration
+    # validation. Params/schedule/mode/resident retain their boundary owners.
+    py_setitem(fields, "_where", PythonObject(config.name()))
+    py_setitem(fields, "_KIND", PythonObject(config.kind))
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_res", PythonObject(None))
     py_setitem(fields, "_res_binding", PythonObject(None))
@@ -118,22 +129,21 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     py_setitem(fields, "_host_fresh", PythonObject(True))
     py_setitem(fields, "_resident_wanted", values[12])
     py_setitem(fields, "lr_schedule", values[9])
-    py_setitem(fields, "accumulation_steps", PythonObject(accumulation))
-    # typed: the registry refusal keeps its class (ValueError: params is empty)
-    _ = py_call_typed(context["init"], owner, values[0])
+    py_setitem(fields, "accumulation_steps", PythonObject(config.accumulation))
+    _ = door_init(owner, values[0])
     py_setitem(fields, "t", PythonObject(0))
     for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: over three optional result words
         py_setitem(fields, PythonObject(name), PythonObject(None))
-    py_setitem(fields, "lr", py_call(context["scalar_types"][3], values[2]))
-    py_setitem(fields, "weight_decay", py_call(context["scalar_types"][3], values[5]))
-    py_setitem(fields, "maximize", values[11])
-    if kind == 0:
-        py_setitem(fields, "momentum", py_call(context["scalar_types"][3], values[6]))
-        py_setitem(fields, "dampening", py_call(context["scalar_types"][3], values[7]))
-        py_setitem(fields, "nesterov", py_call(context["scalar_types"][1], values[8]))
+    py_setitem(fields, "lr", PythonObject(config.lr))
+    py_setitem(fields, "weight_decay", PythonObject(config.weight_decay))
+    py_setitem(fields, "maximize", PythonObject(config.maximize))
+    if config.kind == 0:
+        py_setitem(fields, "momentum", PythonObject(config.momentum))
+        py_setitem(fields, "dampening", PythonObject(config.dampening))
+        py_setitem(fields, "nesterov", PythonObject(config.nesterov))
     else:
-        py_setitem(fields, "betas", Python.tuple(py_call(context["scalar_types"][3], betas[0]), py_call(context["scalar_types"][3], betas[1])))
-        py_setitem(fields, "eps", py_call(context["scalar_types"][3], values[4]))
+        py_setitem(fields, "betas", Python.tuple(config.beta1, config.beta2))
+        py_setitem(fields, "eps", PythonObject(config.eps))
     return PythonObject(None)
 
 
@@ -161,15 +171,11 @@ def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonOb
 def optimizer_params(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(owner)
     var kind = Int(py=fields["_KIND"])
-    # Public constructor names are fixed. Preserve their established lexical
-    # insertion order without calling a mutable builtins.sorted field.
-    var names = Python.list("accumulation_steps", "betas", "eps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay")
-    if kind == 0:
-        names = Python.list("accumulation_steps", "dampening", "lr", "lr_schedule", "maximize", "momentum", "nesterov", "numeric_mode", "params", "resident", "weight_decay")
+    var names = optimizer_parameter_names(kind)
     var result = Python.dict()
-    for i in range(len(names)):  # driver-loop: over fixed public constructor parameter names
-        var name = names[i]
-        py_setitem(result, name, fields["_resident_wanted"] if String(name) == "resident" else fields[name])
+    for i in range(len(names)):  # driver-loop: pack fixed public constructor parameter names
+        var name = PythonObject(names[i])
+        py_setitem(result, name, fields["_resident_wanted"] if names[i] == "resident" else fields[name])
     return result
 
 
