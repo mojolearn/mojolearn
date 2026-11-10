@@ -112,6 +112,7 @@ check-native-pca-whitening-cpu = "mojo run -I . checks/native_tests/pca_whitenin
 check-native-pca-whitening-gpu = "mojo run -I . checks/native_tests/pca_whitening_gpu.mojo"
 check-native-logistic-model-state = "mojo run -I . checks/native_tests/logistic_model_state.mojo"
 check-native-logistic-config = "mojo run -I . checks/native_tests/logistic_config.mojo"
+check-native-logistic-query-width = "mojo run -I . checks/native_tests/logistic_query_width.mojo"
 check-native-logistic-label-weights-cpu = "mojo run -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/logistic_label_weights_cpu.mojo"
 check-native-logistic-label-weights-gpu = "mojo run -I . checks/native_tests/logistic_label_weights_gpu.mojo"
 check-native-archive-codec = "mojo run -I . checks/native_tests/archive_codec.mojo"
