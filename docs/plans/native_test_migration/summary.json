@@ -207,6 +207,17 @@
       ],
       "handoff": "docs/plans/native_test_migration/ops-optimizer-requests-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_optim_maximize_seam.py",
+      "producer_dependency": "e8aaef8d52",
+      "change": "Supplement existing final-verifier driver with16 direct native maximize fixtures per CPU/GPU through extracted OptKernels/PublicStep. Exact four configs, clipping/seed-label/step/shape matrix; independent XOR oracle and signed-zero nonvacuity; source guards and automatic resident ownership. Python driver/registration deliberately unchanged and migration still owed.",
+      "native_checks": [
+        "checks/native_tests/optimizer_maximize_cpu.mojo",
+        "checks/native_tests/optimizer_maximize_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/optimizer-maximize-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [

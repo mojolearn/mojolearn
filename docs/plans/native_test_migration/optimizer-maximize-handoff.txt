@@ -1,0 +1,56 @@
+Mojolearn native maximize/signed-zero seam, 2026-11-10
+
+Frozen dependency
+  e8aaef8d52: training.optimizer_kernels.OptKernels implementations
+  HostOptKernels/GpuOptKernels. Test wrappers call those typed step/download
+  entries and existing native host_close/resident_close; no Python binding.
+  PublicStep/OptHyper and kernel formulas are unchanged. The GPU wrapper uses
+  the producer's _NEURAL_CTX, matching its retained context exactly.
+
+16 fixtures per CPU/GPU
+  Configs unchanged: SGD lr .01 momentum .9 Nesterov decay .01; plain SGD
+  lr .01; Adam lr .001 decay .01; AdamW lr .001 decay .01. Adam defaults
+  beta1 .9/beta2 .999/eps1e-8; dampening0. Each runs clipping off/on and seed
+  labels7/11, three dependent steps, three tensors (16,8), (16,), (3,16).
+  Native deterministic dyadic preparation replaces RNG for these NEW native
+  fixtures; it does not pretend to reproduce the Python PCG random bytes.
+  Every tensor retains -0 parameters and +0/-0/+0 gradients in its first
+  three cells. Caller tensors have independent native allocations and guards.
+  Exact state comparison includes params, first/second moments and per-tensor
+  initialized flags. The independent oracle flips gradient uint32 sign bits,
+  never calling training.maximize or a product arithmetic helper. The two
+  SGD seed7/non-clipped cases must distinguish that oracle from +0-g, or fail
+  explicitly VACUOUS. Pre-clip norms agree. Caller gradients remain exact when
+  unclipped, or equal the independent sign-flipped plain-step clipping output.
+
+Ownership/parallel execution
+  Preserve original resident=auto choice, not force resident=False. Download
+  moments from any returned native owner before closing it. Keep all raw
+  parameter/gradient/offset/init/moment owners live through their final reads.
+  CPU fixtures run in parallel, including automatic native state ownership;
+  do not serialize a shared-pool defect to make these pass. GPU fixture
+  submission is ordered for the existing shared neural context/pool; its
+  update kernels and native data preparation run in parallel. No concurrent
+  GPU session or measured busy-core claim. No timing or identity execution.
+
+Verifier migration remains owed
+  python/mojolearn/tests/test_optim_maximize_seam.py and its existing
+  tools/identity_lanes/neural.checks registration/sabotage patch are untouched.
+  They move together only after complete native replacement registration is
+  ready. The Python non-bool maximize admission assertion remains necessary.
+  Inventory stays split-needed; this is native coverage, not a claimed full
+  Python deletion. No new source guard, identity runner or build scheme.
+
+Root commands, lane has not compiled/run
+  bash tools/compile_slot.sh pixi run check-native-optimizer-maximize-cpu
+  bash tools/compile_slot.sh pixi run check-native-optimizer-maximize-gpu
+  Compile-only with normal flags/target after dependency:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_maximize_cpu.mojo -o "$HOME/mojolearn-evidence/optimizer-maximize-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_maximize_gpu.mojo -o "$HOME/mojolearn-evidence/optimizer-maximize-gpu"
+  Run each exact binary; do not launch global identity from this handoff.
+  Binding family: _mojolearn_training via existing typed dispatch.
+
+Status
+  Source/JSON/TOML/diff review only; compile/runtime owed. No product/kernel
+  changes, historical hash changes, A/B define, box or release activity.
+  Nothing deleted: final-verifier migration remains explicitly coordinated.
