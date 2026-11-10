@@ -107,40 +107,35 @@ def test_matmul_bf16_both_operands_bf16():
     assert np.array_equal(c.view(np.uint32), hc.view(np.uint32))
 
 
-@pytest.mark.parametrize("m,n,k", [(1, 32, 32), (2, 96, 127), (7, 33, 129), (16, 64, 1000), (1, 1024, 512)])
-def test_matmul_int8_matches_host(m, n, k):
+def test_int8_input_forms_and_raw_bindings_pack_native_buffers():
+    # Quantizer, integer dot-product and dequantizer numerical oracles now
+    # run directly in checks/native_tests/int8_linalg_* for all five shapes.
     g = _gpu()
     h = _host()
-    a = _vals((m, k), 30 + k)
-    b = _vals((n, k), 40 + k)
-    qa, ea = g.quantize_int8(a)
-    qb, eb = g.quantize_int8(b)
-    qa, ea, qb, eb = (np.asarray(v) for v in (qa, ea, qb, eb))
-    assert qa.dtype == np.int8 and ea.dtype == np.int32 and ea.shape == (m,)
-    assert np.all(np.abs(qa.astype(np.int32)) <= 127)
-    # the host quantizer produces the same codes and exponents
-    hqa = np.empty((m, k), np.int8)
-    hea = np.empty((m,), np.int32)
-    h.quantize_int8(_addr(hqa), _addr(hea), _addr(a), [m, k])
-    assert np.array_equal(qa, hqa) and np.array_equal(ea, hea)
-    # the product: float32 in, (codes, exponents) in, host oracle, all equal
+    a = np.array([[1.0, 0.0], [0.0, 1.0]], np.float32)
+    b = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], np.float32)
+    qa, ea = (np.asarray(v) for v in g.quantize_int8(a))
+    qb, eb = (np.asarray(v) for v in g.quantize_int8(b))
+    assert qa.dtype == np.int8 and qa.shape == (2, 2)
+    assert ea.dtype == np.int32 and ea.shape == (2,)
+    assert qb.dtype == np.int8 and qb.shape == (3, 2)
+    assert eb.dtype == np.int32 and eb.shape == (3,)
+    hqa, hea = np.empty((2, 2), np.int8), np.empty((2,), np.int32)
+    assert h.quantize_int8(_addr(hqa), _addr(hea), _addr(a), [2, 2]) == 4
+    assert hqa[0, 0] == 64 and hea[0] == -6
     c1 = np.asarray(g.matmul_int8(a, b))
     c2 = np.asarray(g.matmul_int8((qa, ea), (qb, eb)))
-    hc = np.empty((m, n), np.float32)
-    h.gemm_int8(_addr(hc), _addr(qa), _addr(ea), _addr(qb), _addr(eb), [m, n, k])
-    assert np.array_equal(c1.view(np.uint32), c2.view(np.uint32))
-    assert np.array_equal(c1.view(np.uint32), hc.view(np.uint32))
-    # an exact integer spelling of the same contract, in NumPy
-    acc = qa.astype(np.int64) @ qb.astype(np.int64).T
-    ref = (acc.astype(np.float32) * np.ldexp(np.float32(1.0), ea[:, None] + eb[None, :]).astype(np.float32)).astype(np.float32)
-    ref[np.abs(ref) < np.float32(1.1754943508222875e-38)] = 0.0
-    assert np.array_equal(c1.view(np.uint32), ref.view(np.uint32))
-    # dequantization is exact and equal on both sides
+    assert c1.dtype == c2.dtype == np.float32 and c1.shape == c2.shape == (2, 3)
+    assert np.array_equal(c1, c2)  # Both admitted Python input forms route identically.
+    assert c1[0, 0] == 1.0
+    hc = np.empty((2, 3), np.float32)
+    assert h.gemm_int8(_addr(hc), _addr(qa), _addr(ea), _addr(qb), _addr(eb), [2, 3, 2]) == 6
+    assert hc[0, 0] == 1.0
     y = np.asarray(g.dequantize_int8(qb, eb))
-    hy = np.empty((n, k), np.float32)
-    h.dequantize_int8(_addr(hy), _addr(qb), _addr(eb), [n, k])
-    assert np.array_equal(y.view(np.uint32), hy.view(np.uint32))
-    assert np.array_equal(y, qb.astype(np.float32) * np.ldexp(np.float32(1.0), eb)[:, None].astype(np.float32))
+    assert y.dtype == np.float32 and y.shape == (3, 2) and y[0, 0] == 1.0
+    hy = np.empty((3, 2), np.float32)
+    assert h.dequantize_int8(_addr(hy), _addr(qb), _addr(eb), [3, 2]) == 6
+    assert hy[0, 0] == 1.0
 
 
 def test_refusals_are_by_name():
