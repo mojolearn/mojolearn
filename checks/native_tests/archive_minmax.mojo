@@ -90,7 +90,7 @@ def _valid(unit: Int) raises:
     _require(plan.clip == (unit == 2), "signed nonzero clip metadata")
     _require(plan.mode == ("fast" if unit == 1 else "identical"), "saved mode")
     _require(bitcast[DType.uint64](plan.lower) == 0x8000000000000000, "lower negative-zero bits")
-    _require(bitcast[DType.uint64](plan.upper) == 0x7FF8000000000000042, "upper NaN payload, without constructor revalidation")
+    _require(bitcast[DType.uint64](plan.upper) == 0x7FF8000000000042, "upper NaN payload, without constructor revalidation")
     _require(len(plan.statistics) == 5, "all five statistic owners")
     for i in range(5):
         _require(plan.statistics[i] == i + 5, "statistic order")
