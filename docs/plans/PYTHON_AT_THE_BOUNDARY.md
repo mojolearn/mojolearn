@@ -260,8 +260,10 @@ Sizes are binding-file counts from the audit's per-family table (179 families, 8
 | 7 | host, archive, array, native_*, params, tsa, autoarima and the remaining ~120 small families | ~470 | L in total, S each | long tail; mechanical once the types exist |
 
 Waves 1 to 6 touch disjoint files and can run as parallel lanes once `core/boundary_types.mojo`,
-`core/state_registry.mojo` and `core/entry_table.mojo` are frozen by the pilot. Each wave is compiled, smoked and
-tested before it merges; no wave merges on compile alone.
+`core/state_registry.mojo` and `core/entry_table.mojo` are frozen by the pilot. Collect completed changes into one
+integration build, reuse unchanged compiled groups, fix compilation failures, and merge when the affected code
+compiles. Development merges do not require wheel import or smoke gates (Andrew, 2026-11-10). Native correctness
+tests, installed runtime tests, performance measurements and the final release identity check are separate evidence.
 
 The design spans roughly 840 files; the pilot and rollout need successive implementation, compile, test and
 measurement rounds. Owner starting order, 2026-11-10: compile the current integration branch and merge it into main

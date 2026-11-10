@@ -36,11 +36,12 @@ struct ArimaWords(Movable):
             "ARIMA wrote outside a native buffer")
 
     def fill(mut self, value: Float32):
-        var p = self.words.unsafe_ptr()
+        var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(self.words.unsafe_ptr()))
         var count = self.count
         def cell(index: Int) {imm p, imm value}:
             p[index + 1] = value
         host_parallelize(cell, count)
+        _ = self.words
 
 
 def same_words(actual: ArimaWords, expected: List[Float32], label: String) raises:

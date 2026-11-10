@@ -206,10 +206,11 @@ struct RawWords(Movable):
         self.count = count
         self.words = List[UInt32](length=count + 2, fill=WORD_GUARD)
         if values:
-            var p = self.words.unsafe_ptr()
+            var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(self.words.unsafe_ptr()))
             def cell(index: Int) {imm p}:
                 p[index + 1] = pattern(index)
             host_parallelize(cell, count)
+            _ = self.words
 
     def address(self) -> Int:
         return Int(self.words.unsafe_ptr()) + 4
