@@ -215,3 +215,24 @@ Remaining scalar readback uses the shared admitted native conversions. These
 are plumbing/metadata changes; kernels and profile constants are unchanged.
 Root owes full affected-closure compilation and public output/constructor/
 keyword/metadata checks. State/checkpoint planning is still outstanding.
+
+## Typed state snapshots and bounded checkpoint spans
+
+`OptimizerStateSnapshot` now supplies native handle/residency/pristine/moment
+addresses to the existing PublicStep, and native plans decide host freshness,
+lazy mirror allocation and checkpoint lengths. Public moment/state arrays are
+unpacked once into retained TensorViews; load validation reads native dimensions
+rather than Python size properties.
+
+A concrete unsafe path is fixed: moment assignment previously passed any writable
+buffer address to an upload of n_total floats. Native span validation now refuses
+wrong dtype, extent, layout, readonly/null storage and shape overflow before a
+read/upload. A valid assignment uploads first and publishes its public field only
+after success. Valid writable/rebound FP32 state still aliases the caller's buffer;
+checkpoint loading still owns its converted/copied storage. No algorithm/state
+pool kernel changes. Native resident pools remain the actual buffer owners;
+public fields are compatibility mirrors/UNPACK inputs, not a new backend.
+
+Root owes direct span/refusal fixtures and public assignment/rollback/ownership
+coverage, plus compile. Remaining cleanup includes checkpoint input preparation,
+registry metadata and private legacy Python helpers; the family is not complete.

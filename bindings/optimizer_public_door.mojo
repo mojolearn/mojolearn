@@ -34,6 +34,10 @@ from bindings.cpython_table import cpython_table
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.admitted_input import admitted_storage_native
 from training.optimizer_config import optimizer_keyword_refusal
+from training.optimizer_state_plan import (
+    OptimizerStateSnapshot, optimizer_state_span, optimizer_checkpoint_spans,
+    optimizer_state_download_needed, optimizer_host_moment_plan,
+)
 
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.py_balanced import py_call, py_setitem, py_type, py_get, py_fields
@@ -426,18 +430,23 @@ def _resident_word(value: PythonObject) raises -> Int:
     return 1
 
 
+def state_address(value: PythonObject, count: Int, name: String, mut pins: OptimizerInputOwners) raises -> Int:
+    var view = TensorView()
+    if not tensor_view(value, view, pins):
+        raise Error("TypeError: optimizer " + name + " requires a native state buffer")
+    return optimizer_state_span(view, count, name)
+
+
 def _state_into(opt: PythonObject, mut req: PublicStep, mut pins: OptimizerInputOwners) raises:
-    """`_state_words`: handle, resident, pristine and the mirrors' addresses."""
-    # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
     var res = fields["_res"]
-    req.handle = -1 if res is None else Int(py=res)
-    req.resident_wanted = _resident_word(fields["_resident_wanted"])
-    req.pristine = truth(fields["_pristine"])
-    var m = fields["_m"]
-    var v = fields["_v"]
-    req.m_addr = 0 if m is None else write_addr(m, "exp_avg", pins)
-    req.v_addr = 0 if v is None else write_addr(v, "exp_avg_sq", pins)
+    var first = fields["_m"]
+    var second = fields["_v"]
+    var state = OptimizerStateSnapshot(-1 if res is None else Int(py=res),
+        _resident_word(fields["_resident_wanted"]), truth(fields["_pristine"]),
+        0 if first is None else state_address(first, req.n_total, "exp_avg", pins),
+        0 if second is None else state_address(second, req.n_total, "exp_avg_sq", pins))
+    state.apply(req)
 
 
 def host_moments(opt: PythonObject) raises:
@@ -445,9 +454,10 @@ def host_moments(opt: PythonObject) raises:
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
     var n = Int(py=fields["n_total"])
-    if fields["_m"] is None:
+    var plan = optimizer_host_moment_plan(n, fields["_m"] is not None, fields["_v"] is not None)
+    if plan[0]:
         set_field(opt, "_m", new_array([n], "<f4"))
-    if fields["_v"] is None:
+    if plan[1]:
         set_field(opt, "_v", new_array([n], "<f4"))
 
 
@@ -794,14 +804,17 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
 def _sync_host(module: PythonObject, provider: PythonObject, opt: PythonObject) raises:
     """`_download`: the slot's state into the mirrors, when they are stale,
     through the module that owns the slot."""
-    if py_fields(opt)["_res"] is None or truth(py_fields(opt)["_host_fresh"]):
+    var fields = py_fields(opt)
+    var slot = fields["_res"]
+    var handle = -1 if slot is None else Int(py=slot)
+    if not optimizer_state_download_needed(handle, truth(fields["_host_fresh"])):
         return
     host_moments(opt)
     var buffer_pins = OptimizerInputOwners()
-    var h = Int(py=py_fields(opt)["_res"])
-    var m = write_addr(py_fields(opt)["_m"], "exp_avg", buffer_pins)
-    var v = write_addr(py_fields(opt)["_v"], "exp_avg_sq", buffer_pins)
-    var n = Int(py=py_fields(opt)["n_total"])
+    var h = handle
+    var n = Int(py=fields["n_total"])
+    var m = state_address(fields["_m"], n, "exp_avg", buffer_pins)
+    var v = state_address(fields["_v"], n, "exp_avg_sq", buffer_pins)
     var owner = py_fields(opt)["_res_binding"]
     var connection = provider if owner is module else optimizer_provider(owner)
     var driver = optimizer_driver(connection)
@@ -867,14 +880,15 @@ def door_state_set(module: PythonObject, provider: PythonObject, opt: PythonObje
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
     opt_value(value, OPT_DOOR.get_or_create_ptr()[].context)
     var name = String("exp_avg") if which == STATE_EXP_AVG else String("exp_avg_sq")
-    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
-    set_field(opt, "_pristine", PythonObject(False))
     var buffer_pins = OptimizerInputOwners()
-    var a = 0 if value is None else write_addr(value, name, buffer_pins)
+    var count = Int(py=py_fields(opt)["n_total"])
+    var a = 0 if value is None else state_address(value, count, name, buffer_pins)
     if which == STATE_EXP_AVG:
         _upload(module, provider, opt, a, 0)
     else:
         _upload(module, provider, opt, 0, a)
+    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
+    set_field(opt, "_pristine", PythonObject(False))
     _ = buffer_pins
     return PythonObject(None)
 
@@ -896,20 +910,17 @@ def door_load_state(
     var v = es if truth(c2) else copy_array(es)
     var n_total = Int(py=py_fields(opt)["n_total"])
     var owhere = String(py=py_fields(opt)["_where"])
-    if Int(py=m.size) != n_total:
-        raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg holds " + String(Int(py=m.size))
-                    + " floats, this optimizer's registry is " + String(n_total))
-    if Int(py=v.size) != n_total:
-        raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg_sq holds " + String(Int(py=v.size))
-                    + " floats, this optimizer's registry is " + String(n_total))
+    var buffer_pins = OptimizerInputOwners()
+    var first_view = TensorView()
+    var second_view = TensorView()
     var init_view = TensorView()
-    if not tensor_view(bi, init_view) or init_view.count() != len(py_fields(opt)["params"]):
-        raise Error("ValueError: buf_initialized does not match the optimizer parameter registry")
+    if not tensor_view(m, first_view, buffer_pins) or not tensor_view(v, second_view, buffer_pins) or not tensor_view(bi, init_view, buffer_pins):
+        raise Error("TypeError: optimizer checkpoint requires native state buffers")
+    optimizer_checkpoint_spans(first_view, second_view, init_view, n_total, len(py_fields(opt)["params"]), owhere)
     set_field(opt, "_m", m)
     set_field(opt, "_v", v)
     set_field(opt, "_pristine", PythonObject(False))
-    var buffer_pins = OptimizerInputOwners()
-    _upload(module, provider, opt, write_addr(m, "exp_avg", buffer_pins), write_addr(v, "exp_avg_sq", buffer_pins))
+    _upload(module, provider, opt, first_view.addr, second_view.addr)
     _ = buffer_pins
     set_field(opt, "_host_fresh", PythonObject(True))
     set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
