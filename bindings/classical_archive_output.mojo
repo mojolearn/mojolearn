@@ -117,8 +117,10 @@ def archive_member_pack(member: NativeArchiveDecoded, context: PythonObject) rai
     return archive_text_nest_pack(member, 0, 0)
 
 
-def archive_members_pack(members: List[NativeArchiveDecoded], context: PythonObject) raises -> PythonObject:
-    archive_events_pack(members, context)
+def archive_members_pack(members: List[NativeArchiveDecoded], context: PythonObject,
+                         emit_events: Bool = True) raises -> PythonObject:
+    if emit_events:
+        archive_events_pack(members, context)
     var result = Python.dict()
     for i in range(len(members)):
         py_setitem(result, PythonObject(members[i].name), archive_member_pack(members[i], context))

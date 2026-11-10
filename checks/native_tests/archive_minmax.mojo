@@ -64,7 +64,7 @@ def _class() -> NativeMinMaxArchiveClass:
     return result^
 
 
-def _valid(unit: Int) raises:
+def _valid(unit: Int, generic: Bool = False) raises:
     var members = _members()
     var cls = _class()
     if unit == 1:
@@ -84,7 +84,7 @@ def _valid(unit: Int) raises:
             members[i].layout.fortran = True
     elif unit == 5:
         members.append(_text("extra", "retained but irrelevant"))
-    var plan = native_minmax_archive_plan(members, cls, True)
+    var plan = native_minmax_archive_plan(members, cls, True, 2147483647, generic)
     _require(plan.features == (0 if unit == 3 else 2), "feature count")
     _require(plan.samples == (-1 if unit == 2 else 7), "signed sample count stays unchanged")
     _require(plan.clip == (unit == 2), "signed nonzero clip metadata")
@@ -96,10 +96,11 @@ def _valid(unit: Int) raises:
         _require(plan.statistics[i] == i + 5, "statistic order")
 
 
-def _refused(members: List[NativeArchiveDecoded], cls: NativeMinMaxArchiveClass, expected: String) raises:
+def _refused(members: List[NativeArchiveDecoded], cls: NativeMinMaxArchiveClass, expected: String,
+             generic: Bool = False) raises:
     var refused = False
     try:
-        _ = native_minmax_archive_plan(members, cls, True)
+        _ = native_minmax_archive_plan(members, cls, True, 2147483647, generic)
     except problem:
         refused = True
         _require(String(problem) == expected, "MinMax archive refusal: " + String(problem))
@@ -177,13 +178,14 @@ def _refusal(unit: Int) raises:
     _refused(members, cls, expected)
 
 
-def _statistic_refusal(unit: Int) raises:
+def _statistic_refusal(unit: Int, generic: Bool = False) raises:
     var members = _members()
     var cls = _class()
     var index = 5 + unit // 4
     var kind = unit % 4
     var name = members[index].name
-    var expected = String("MinMaxScaler saved statistic does not match n_features_in_")
+    var expected = String("model " + name + " shape does not match saved metadata" if generic
+                          else "MinMaxScaler saved statistic does not match n_features_in_")
     if kind == 0:
         members[index].name = "ignored"
         expected = "mojolearn: model file is missing field '" + name + "'"
@@ -194,7 +196,67 @@ def _statistic_refusal(unit: Int) raises:
         members[index].layout.shape = [1, 2]
     else:
         members[index].layout.count = 1
-    _refused(members, cls, expected)
+    _refused(members, cls, expected, generic)
+
+
+def _generic_refusal(unit: Int) raises:
+    var members = _members()
+    var cls = _class()
+    var expected = String("")
+    # Conflicting invalid inputs prove the generic public refusal order,
+    # independently of the direct MinMax class loader's different order.
+    if unit == 0:
+        members[2].layout.dtype = "<f8"
+        cls.layout_error = 2
+        expected = "mojolearn: model field 'meta' has dtype <f8, the format stores <i8; refusing to cast a model file"
+    elif unit == 1:
+        members[2].layout.count = 2
+        members[2].layout.shape = [1, 2]
+        members[3].layout.count = 0
+        expected = "model meta must hold 3 fields"
+    elif unit == 2:
+        members[2].layout.shape = [1, 3]
+        members[3].layout.count = 0
+        expected = "model meta must be a one-dimensional field vector"
+    elif unit == 3:
+        members[3].layout.dtype = "<i8"
+        expected = "mojolearn: model field 'feature_range' has dtype <i8, the format stores <f8; refusing to cast a model file"
+    elif unit == 4:
+        members[3].layout.count = 1
+        members[3].layout.shape = [1, 1]
+        members[4] = _text("numeric_mode", "wrong")
+        expected = "model feature_range must hold 2 fields"
+    elif unit == 5:
+        members[3].layout.shape = [1, 2]
+        members[4] = _text("numeric_mode", "wrong")
+        expected = "model feature_range must be a one-dimensional field vector"
+    elif unit == 6:
+        members[4] = _text("numeric_mode", "wrong")
+        cls.layout_error = 1
+        expected = "invalid saved numeric_mode"
+    elif unit == 7:
+        cls.layout_error = 1
+        members[1].name = "ignored"
+        expected = "TypeError: native archive classes require an ordinary native class layout"
+    elif unit == 8:
+        members[1].name = "ignored"
+        cls.layout_error = 2
+        expected = "mojolearn: model file is missing field 'estimator'"
+    elif unit == 9:
+        cls.names = ["Other"]
+        cls.layout_error = 2
+        expected = "model archive estimator does not match its connected class"
+    elif unit == 10:
+        cls.layout_error = 2
+        members[5].name = "ignored"
+        expected = "TypeError: Python finalizer hooks are not accepted by native archive loading"
+    elif unit == 11:
+        cls.layout_error = 3
+        expected = "TypeError: Python dictionary descriptors are not accepted by native archive loading"
+    else:
+        cls.layout_error = 4
+        expected = "TypeError: native archive loading requires a native instance dictionary"
+    _refused(members, cls, expected, True)
 
 
 def _saved_members() raises:
@@ -259,7 +321,7 @@ def _view(unit: Int) raises:
 
 
 def main() raises:
-    comptime FIXTURES = 54
+    comptime FIXTURES = 93
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
@@ -274,8 +336,14 @@ def main() raises:
                 _saved_members()
             elif unit < 52:
                 _save_refusal(unit - 47)
-            else:
+            elif unit < 54:
                 _view(unit - 52)
+            elif unit < 60:
+                _valid(unit - 54, True)
+            elif unit < 73:
+                _generic_refusal(unit - 60)
+            else:
+                _statistic_refusal(unit - 73, True)
         except problem:
             print("FAIL archive_minmax fixture", unit, String(problem))
             failures_ptr.unsafe_store(unit, 1)

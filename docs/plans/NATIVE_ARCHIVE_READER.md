@@ -4,9 +4,9 @@ Writer/hash execution and the generic archive reader now use native format
 implementations in this source branch. Public loading still requires the
 orchestrator's affected-group compile/runtime qualification and codec wheel
 dependency qualification. Ridge/OLS schema checks and loaded scalar state now
-use `core/native_archive_linear.mojo`. Direct MinMaxScaler save/load uses
-`core/native_archive_minmax.mojo`; other saved-model families and the generic
-host archive dispatch still have schema work, so this is not a claim that
+use `core/native_archive_linear.mojo`. Direct and generic MinMaxScaler save/load use
+`core/native_archive_minmax.mojo`; other saved-model families and their generic
+host archive builders still have schema work, so this is not a claim that
 every public load operation is Python-free.
 
 `core/native_archive_codec.mojo` uses public C APIs and owns each decoder's state
@@ -109,12 +109,28 @@ statistic buffers. Load publishes each writable C-order statistic with one
 payload copy, removing the intermediate Python result map and duplicate array
 copy. The old dedicated map builder and temporary Python metadata arrays are
 deleted. The shared endpoint admission now returns a native pair; its existing
-Python-pair wrapper remains for unchanged lifecycle callers. Fifty-four direct
-Mojo fixtures cover schema/refusals, native metadata bytes and borrowed views;
-one Python seam checks ownership after input close, writable arrays and save
-readback. The separate generic `host_archive_minmax` map path is unchanged and
-remains migration work. Affected development owner: `runtime_prep`; its source
-closure also changes through `minmax_metadata.mojo`. No estimator kernel changes.
+Python-pair wrapper remains for unchanged lifecycle callers. Ninety-three direct
+Mojo fixtures cover both loader policies, conflicting-invalid refusal order,
+native metadata bytes and borrowed views. The generic loader now selects its
+format/estimator from native decoded members, passes MinMax directly to the same
+typed plan and final PACK, and retains the input owner through that PACK. Other
+families still use their existing array-map adapter, after warning/error events
+are emitted once. The obsolete `host_archive_minmax` map builder is deleted.
+The direct Python seam and seven generic boundary cases cover ownership after
+input close, writable independent arrays, save readback and exceptional export
+release. Decoded native payloads are released before legacy schema builders
+run, retaining their existing buffer lifetimes. Native finalizer
+descriptors admitted by the generic host loader remain admitted; custom hooks
+remain refused. Affected development owners: `runtime_prep` and `runtime_trees`,
+plus existing consumers of shared archive output. No estimator kernel changes.
+All additions remain uncompiled and unrun in this lane; the orchestrator owns
+qualification, including the existing reader/public host archive seams.
+Native command: `bash tools/compile_slot.sh pixi run check-native-archive-minmax`.
+Installed boundary command: `python -m pytest -n auto
+python/mojolearn/tests/test_minmax_archive_generic_native.py
+python/mojolearn/tests/test_minmax_scaler_native_lifecycle.py
+python/mojolearn/tests/test_host_archive_native.py
+python/mojolearn/tests/test_classical_archive_reader_native.py`.
 
 Text-cell storage is now allocated once without a serial construction pass.
 Each host worker constructs and moves its assigned owning cells directly into

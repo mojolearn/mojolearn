@@ -22,7 +22,8 @@ from core.native_archive_minmax import (
 )
 
 
-def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject) raises -> NativeMinMaxArchiveClass:
+def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject,
+                                 generic: Bool = False) raises -> NativeMinMaxArchiveClass:
     var result = NativeMinMaxArchiveClass()
     var native_type = py_type(py_type(PythonObject("")))
     if py_type(cls) is not native_type:
@@ -31,19 +32,24 @@ def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject) raise
     var type_fields = native_type.__dict__
     var mro = py_call(type_fields["__mro__"].__get__, cls)
     var descriptor_type = py_type(context["archive_memoryview_type"].obj)
+    if generic:
+        descriptor_type = context["host_archive_dict_descriptor_type"]
     var dictionary = False
+    var finalizer = False
     for i in range(len(mro)):  # unpack: exact native class namespace metadata
-        var fields = py_call(type_fields["__dict__"].__get__, mro[i])
-        if py_contains(fields, "__del__"):
-            result.layout_error = 2
-            return result^
-        if not dictionary and py_contains(fields, "__dict__"):
-            if py_type(fields["__dict__"]) is not descriptor_type:
-                result.layout_error = 3
-                return result^
-            dictionary = True
         result.names.append(_archive_class_name_unpack(mro[i]))
-    if not dictionary:
+        var fields = py_call(type_fields["__dict__"].__get__, mro[i])
+        if (not generic or not finalizer) and py_contains(fields, "__del__"):
+            if not generic or (fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor")
+                    and fields["__del__"] is not py_get(context, "host_archive_peer_finalizer_descriptor")):
+                if not result.layout_error:
+                    result.layout_error = 2
+            finalizer = True
+        if not dictionary and py_contains(fields, "__dict__"):
+            if py_type(fields["__dict__"]) is not descriptor_type and not result.layout_error:
+                result.layout_error = 3
+            dictionary = True
+    if not dictionary and not result.layout_error:
         result.layout_error = 4
     return result^
 
@@ -94,14 +100,17 @@ def minmax_archive_save(model: PythonObject, path: PythonObject, context: Python
 
 
 def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
-                         members: List[NativeArchiveDecoded], context: PythonObject) raises -> PythonObject:
+                         members: List[NativeArchiveDecoded], context: PythonObject,
+                         generic: Bool = False) raises -> PythonObject:
     var model = native_storage_allocate(cls)
     var fields = py_fields(model)
     py_setitem(fields, "copy", True)
     py_setitem(fields, "numeric_mode", PythonObject(None))
     py_setitem(fields, "clip", plan.clip)
     py_setitem(fields, "feature_range", Python.tuple(plan.lower, plan.upper))
-    var output_context = py_get(context, "output_context", context)
+    var output_context = context
+    if not generic:
+        output_context = py_get(context, "output_context", context)
     var names = native_minmax_statistic_names()
     for i in range(len(names)):  # pack: fixed public statistic owners, under the GIL
         var view = native_minmax_statistic_view(members[plan.statistics[i]])
@@ -114,6 +123,14 @@ def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
     py_setitem(fields, "clip_", plan.clip)
     _ = members
     return model
+
+
+def minmax_archive_decoded(cls: PythonObject, members: List[NativeArchiveDecoded],
+                           context: PythonObject, print_mode: Int) raises -> PythonObject:
+    """Generic loader PACK over its still-owned native decoded archive."""
+    var metadata = _minmax_archive_class_unpack(cls, context, True)
+    var plan = native_minmax_archive_plan(members, metadata, classical_numpy(context), print_mode, True)
+    return _minmax_archive_pack(cls, plan, members, context, True)
 
 
 def minmax_archive_load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
