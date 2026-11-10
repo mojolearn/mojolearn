@@ -300,6 +300,18 @@
       "production_dependency": "0b35406ae6",
       "source_review_only": true,
       "runtime_status": "Root combined compile/run owed; see optimizer-input-copy-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "decision": "arima-numerical-and-state-migration",
+      "native_fixtures_per_target": 8,
+      "queries_per_fixture": 4,
+      "full_mle_fit_cases": 2,
+      "independent_closed_form_states": 6,
+      "remaining_python_tests": 5,
+      "remaining_numerical_family": "Prophet",
+      "source_review_only": true,
+      "runtime_status": "Root combined compile/run owed; see arima-state-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
