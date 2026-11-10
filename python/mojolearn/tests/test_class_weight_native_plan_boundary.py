@@ -9,9 +9,13 @@ from mojolearn._native_labels_bridge import labels_entry, LABELS_OP_CLASS_WEIGHT
 
 
 def _rows(weight, classes, codes, binding=None):
-    entry, context = labels_entry()
     xbind = _trees_x_bind() if binding is None else binding
     table = {"label_weights_native_api_v1": xbind.label_weights_native_api_v1}
+    return _rows_table(weight, classes, codes, table)
+
+
+def _rows_table(weight, classes, codes, table):
+    entry, context = labels_entry()
     return entry(LABELS_OP_CLASS_WEIGHT_ROWS,
                  (weight, classes, Array.from_list(codes, "<i4"), table), context)
 
@@ -59,3 +63,58 @@ def test_class_weight_uses_descriptor_without_legacy_compiled_calls(monkeypatch)
     got = _rows("balanced", [1, 7], [0, 1, 1], xbind)
     assert got.tolist() == [1.5, 0.75, 0.75]
     assert called == []
+
+
+@pytest.mark.parametrize("kind", ["mapping", "dict-subclass", "key", "str-subclass", "mutated"])
+def test_class_weight_provider_table_refuses_hooks_before_lookup(kind):
+    calls = []
+
+    class Mapping:
+        def __getitem__(self, key):
+            calls.append("getitem")
+            raise AssertionError("mapping hook executed")
+
+    class Dictionary(dict):
+        def __getitem__(self, key):
+            calls.append("getitem")
+            raise AssertionError("dictionary subclass hook executed")
+
+    class Key:
+        def __hash__(self):
+            return hash("label_weights_native_api_v1")
+
+        def __eq__(self, other):
+            calls.append("eq")
+            raise AssertionError("key equality hook executed")
+
+    class Text(str):
+        __hash__ = str.__hash__
+
+        def __eq__(self, other):
+            calls.append("eq")
+            raise AssertionError("string subclass equality hook executed")
+
+    if kind == "mapping":
+        table = Mapping()
+    elif kind == "dict-subclass":
+        table = Dictionary()
+    elif kind == "str-subclass":
+        table = {Text("label_weights_native_api_v1"): None}
+    elif kind == "key":
+        table = {Key(): None}
+    else:
+        table = {"label_weights_native_api_v1": _trees_x_bind().label_weights_native_api_v1}
+        assert _rows_table({1: 0.5}, [1], [0], table).tolist() == [0.5]
+        table.clear()
+        table[Key()] = None
+    calls.clear()
+    with pytest.raises(TypeError, match="exact dictionary|exact strings"):
+        _rows_table({1: 0.5}, [1], [0], table)
+    assert calls == []
+
+
+def test_class_weight_unit_values_skip_provider_and_preserve_zero_bits():
+    # An unused provider is never admitted or called on the all-unit path.
+    assert _rows_table({1: 1}, [1], [0], object()) is None
+    got = _rows({1: -0.0, 2: 0.5}, [1, 2], [0, 1, 0])
+    np.testing.assert_array_equal(np.asarray(got).view(np.uint32), [0x80000000, 0x3F000000, 0x80000000])
