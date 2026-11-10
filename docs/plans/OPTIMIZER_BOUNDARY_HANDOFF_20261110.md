@@ -361,3 +361,20 @@ refusal now). The tests lane owns the obsolete schedule_entries poison-case
 repair. Existing direct native schedule math fixtures remain applicable; root
 owes compilation/public mutation, conversion and config tests for this batch.
 No lane compilation, test execution or performance claim is made.
+
+## Typed IO/checkpoint control words
+
+Optimizer IO now returns its native integer result to the public router. Query
+and ownership decisions no longer box that result to a Python float and decode
+it again. The documented raw/legacy result is boxed only by its PACK helper;
+unpublished device allocations retain native free-on-publication-failure.
+
+Checkpoint load keeps the decoded step native until final public-field packing,
+and directly passes its final owned state outputs to the shared upload boundary.
+It removes the internal True/True/True ownership envelope while preserving the
+legacy compiled entry's external flags and conversion order. The public router
+still re-admits the owner after GIL-released state conversion, before reading
+possibly rebound fields. Numerical kernels/state upload order are unchanged.
+The stale shared training device-upload caller was independently repaired in
+14ab3618f9 using the existing native gather and retained export/Array owners.
+Root owes the existing IO/checkpoint/lifetime cases; no lane runs occurred.

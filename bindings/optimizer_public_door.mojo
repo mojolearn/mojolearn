@@ -757,9 +757,9 @@ def door_step(
     return total
 
 
-def door_io(
+def optimizer_io(
     module: PythonObject, provider: PythonObject, opt: PythonObject, op_code: Int, tensors: PythonObject, name: String, tensor: Int
-) raises -> PythonObject:
+) raises -> Int:
     """`_io`: the device transfers of `params_to_device`, `params_to_host`,
     `grads_to_device`, `grads_to_host`, `param_device` and the query.
     Returns the result word."""
@@ -799,7 +799,7 @@ def door_io(
         keep_slot(opt, r[0], module, False)
         # A device allocation's handle stays an integer through publication.
         # The caller has prepared its owner before asking for this allocation.
-        return PythonObject(r[1]) if op_code == 5 else PythonObject(Float64(r[1]))
+        return r[1]
     except error:
         if op_code == 5:
             try:
@@ -808,6 +808,27 @@ def door_io(
             except:
                 pass
         raise error^
+
+def optimizer_pack_io(provider: PythonObject, operation: Int, value: Int) raises -> PythonObject:
+    """PACK a public legacy IO result; release an unpublished device handle."""
+    try:
+        return PythonObject(value) if operation == 5 else PythonObject(Float64(value))
+    except error:
+        if operation == 5:
+            var driver = optimizer_driver(provider)
+            try:
+                with GILReleased(Python()):
+                    _ = driver.free_device(value)
+            except:
+                pass
+        raise error^
+
+
+def door_io(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    operation: Int, tensors: PythonObject, name: String, tensor: Int) raises -> PythonObject:
+    var value = optimizer_io(module, provider, opt, operation, tensors, name, tensor)
+    return optimizer_pack_io(provider, operation, value)
+
 
 
 def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
@@ -934,6 +955,21 @@ def door_load_state(
     opt_value(bi, OPT_DOOR.get_or_create_ptr()[].context)
     var m = ea if truth(c1) else copy_array(ea)
     var v = es if truth(c2) else copy_array(es)
+    optimizer_load_buffers(module, provider, opt, m, v, bi)
+    set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
+    set_field(opt, "t", t)
+    return PythonObject(None)
+
+
+def optimizer_load_buffers(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    m: PythonObject, v: PythonObject, bi: PythonObject) raises:
+    """UNPACK owned checkpoint outputs, run the native span/upload plan, PACK mirrors.
+
+    Only API buffer owners cross this helper. Converted step/count/copy-policy
+    words stay native in the public router; legacy entry flags are decoded by
+    their own external UNPACK wrapper above.
+    """
+    # Both callers admit the current owner immediately before this boundary.
     var n_total = Int(py=py_fields(opt)["n_total"])
     var owhere = String(py=py_fields(opt)["_where"])
     var buffer_pins = OptimizerInputOwners()
@@ -949,9 +985,6 @@ def door_load_state(
     _upload(module, provider, opt, first_view.addr, second_view.addr)
     _ = buffer_pins
     set_field(opt, "_host_fresh", PythonObject(True))
-    set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
-    set_field(opt, "t", t)
-    return PythonObject(None)
 
 
 comptime _NORM_TYPE_REFUSAL = (

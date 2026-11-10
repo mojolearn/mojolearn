@@ -14,7 +14,7 @@ from bindings.optimizer_public_words import optimizer_python_error, stash_python
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import (
     door_ready, refuse_kwargs, OptimizerRegistryPrepared, optimizer_prepare_registry, optimizer_publish_registry, new_array, TensorView, tensor_view,
-    door_step, door_io, door_state, door_state_set, door_load_state, door_zero, door_clip, door_accumulate,
+    door_step, door_io, optimizer_io, optimizer_pack_io, optimizer_load_buffers, door_state, door_state_set, door_zero, door_clip, door_accumulate,
 )
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
@@ -426,11 +426,18 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         if not opt_exact(py_type(state), context["mapping_types"]):
             raise Error("TypeError: optimizer checkpoint must be a native dictionary")
         opt_scalar(state["t"], context)
-        var t = PythonObject(optimizer_integer(state["t"], context))
+        var t = optimizer_integer(state["t"], context)
         var m = optimizer_state_array(state["exp_avg"], False, context)
         var v = optimizer_state_array(state["exp_avg_sq"], False, context)
         var initialized = optimizer_state_array(state["buf_initialized"], True, context)
-        return door_load_state(module, provider, owner, t, m, PythonObject(True), v, PythonObject(True), initialized, PythonObject(True))
+        # Conversion released the GIL: retain the previous door's fresh owner
+        # admission before reading fields another thread could have rebound.
+        opt_owner(owner, context)
+        optimizer_load_buffers(module, provider, owner, m, v, initialized)
+        var fields = py_fields(owner)
+        py_setitem(fields, "buf_initialized", initialized)
+        py_setitem(fields, "t", PythonObject(t))
+        return PythonObject(None)
     if operation == "zero":
         return door_zero(owner, values[0])
     if operation == "resident":
@@ -447,15 +454,15 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             return fields["params"]
         opt_scalar(values[2], context)
         opt_scalar(values[3], context)
-        var result = door_io(module, provider, owner, op, tensors, String(py=values[2]), Int(py=values[3]))
+        var result = optimizer_io(module, provider, owner, op, tensors, String(py=values[2]), Int(py=values[3]))
         if op == 0:
-            return PythonObject(optimizer_truth(result, context))
+            return PythonObject(result != 0)
         if op == 1 or op == 3:
             py_setitem(fields, "_p_dev" if op == 1 else "_g_dev", PythonObject(True))
             return owner
         if op == 2 or op == 4:
             return tensors
-        return result
+        return optimizer_pack_io(provider, op, result)
     if operation == "clip":
         return door_clip(provider, values[0], values[1], values[2], values[3], values[4])
     if operation == "accumulate":
