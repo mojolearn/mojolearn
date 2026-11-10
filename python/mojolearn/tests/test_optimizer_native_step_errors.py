@@ -40,7 +40,7 @@ def test_native_step_refuses_replaced_compiled_entry(monkeypatch):
     calls = []
     def hook(*args):
         calls.append(args)
-    monkeypatch.setitem(T._OPT_CONTEXT["bindings"]["identical"], "optimizer_door_step", hook)
+    monkeypatch.setitem(T._OPT_CONTEXT["bindings"]["identical"], "optimizer_native_api_v1", hook)
     result = audit_native_call(owner.step, [np.ones(8, dtype="f4")])
     assert type(result.exception) is TypeError, result.report()
     assert not calls

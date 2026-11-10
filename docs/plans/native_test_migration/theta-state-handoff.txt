@@ -1,0 +1,54 @@
+Mojolearn native Theta fitted-state migration, 2026-11-10
+
+Coverage
+  Eight fixtures per CPU/GPU through sequence.ops_impl.theta_impl and
+  theta_forecast_impl, with HostExec/DeviceExec. No Python objects/imports.
+  Four constant-series fixtures select all four Theta models with fixed
+  alpha=1, theta=2; independent exact expected forecast is each series' level.
+  Two static linear fixtures use slope2 and fixed alpha=1/theta=2; independent
+  exact closed form is last_y + j + 1. Every cell compared by f32 word, no
+  tolerance or product helper supplies those expectations. Batch3, n8.
+  Two automatic seasonal fixtures preserve original 3x60 observations
+  (flat index modulo7 +10), period7, initial horizon7 then horizon14;
+  multiplicative original and added additive decomposition. Original numerical
+  contract was full-fit/tail equality, not an external reference. Native checks
+  retain that exact comparison and additionally compare all8 fitted-info words.
+  Every fixture also returns to horizon5 and compares its full fit. Fitted
+  observations/info are unchanged after tail; all output buffer guards checked.
+  All full-fit/tail comparisons supplement six independent closed forms;
+  they are not presented as independent oracle evidence by themselves.
+
+Python boundary and remaining migration
+  test_tsa_resident_state.py retains five definitions. Theta now checks actual
+  result dictionary and Array shape/dtype, changed/cached horizon packing,
+  distinct output objects/nonaliasing buffers, previous info owner unchanged,
+  and selected-model list publication. Removed its duplicate fresh public fit
+  and repeated NumPy numerical/word comparisons, now direct native coverage.
+  ARIMA/exogenous ARIMA and Prophet numerical portions remain pending.
+  test_x_sequence_theta.py is untouched: its independent external statsforecast
+  reference and separate batch/single/decomposition checks are not claimed
+  replaced. No deletion or weakening of external correctness evidence.
+
+Parallel plan
+  Independent CPU fixtures use host_parallelize/private HostExec. Input and
+  comparison cells use native host_parallelize. GPU submissions ordered for
+  existing shared sequence context/pool; forecast/fit kernels parallel over
+  series. Changing horizons within a fixture are dependent state operations.
+  No concurrent GPU-owner claim or measured busy-core/performance result.
+
+Root commands; lane has not compiled/run
+  bash tools/compile_slot.sh pixi run check-native-theta-state-cpu
+  bash tools/compile_slot.sh pixi run check-native-theta-state-gpu
+  Compile-only, existing default identical settings:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/theta_state_cpu.mojo -o "$HOME/mojolearn-evidence/theta-state-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/theta_state_gpu.mojo -o "$HOME/mojolearn-evidence/theta-state-gpu"
+  Run exact binaries separately; expected8 per target. Production dependencies
+  already in lane's integration base; no new producer interface required.
+  Public family _mojolearn_x_sequence / _mojolearn_x_sequence_host; retain installed
+  pytest test_tsa_resident_state.py (Theta works on host and GPU).
+
+Status
+  Source, Python AST, JSON/TOML and git diff checks only; RUN OWED at root.
+  No product/kernel changes, output-bit compatibility requirement, switch,
+  loader/build mechanism, rented box, timing, identity or release. Removed
+  the old Python numerical comparison/duplicate-fit work described above.

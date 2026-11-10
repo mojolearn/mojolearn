@@ -38,23 +38,26 @@ explained variances, and nonfinite outputs are refused on the public
 whitening path. Native input validation also checks dimensions, pointer spans
 and output overlap before opening the device context.
 
-The Python source tests in `python/mojolearn/tests/test_pca_whitening_surface.py`
-cover ABI routing, older partial bindings, fitted row retention, the unchanged
-unwhitened calls and finite-state refusals with host sentinels. Three opt-in
-remote tests cover exact planted zero scaling/round-trip, unit sample variance
-after fitting, and the strict skip threshold. Existing lower-level
-`decomposition/checks/pca_check.mojo::check_whiten_edges` covers signed zeros,
-subnormals, threshold neighbors and deliberate incorrect arithmetic controls.
+The Python tests in `python/mojolearn/tests/test_pca_whitening_surface.py`
+retain actual writable fitted-state, dtype/layout, zero-singular admission and
+nonfinite input refusals. Three numerical fixtures now call native CPU/GPU
+functions directly in `checks/native_tests/pca_whitening_{cpu,gpu}_suite.mojo`:
+exact planted zero scaling/round-trip, unit sample variance after fitting, and
+the strict skip threshold. Original matrices, settings and tolerances remain.
+Existing `decomposition/checks/pca_check.mojo::check_whiten_edges` retains its
+signed-zero, subnormal, threshold-neighbor and arithmetic-control coverage.
 
-Only the root agent may execute validation, under its remote CUDA/HIP resource
-guard. A bounded public gate after rebuilding is:
+Only the orchestrator compiles and executes these checks. The native suites are
+importable into the existing consolidated runners; standalone task paths are:
 
 ```sh
-MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_RUN_PCA_WHITEN_GPU=1 \
-  python -m pytest -q python/mojolearn/tests/test_pca_whitening_surface.py
+bash tools/compile_slot.sh pixi run check-native-pca-whitening-cpu
+bash tools/compile_slot.sh pixi run check-native-pca-whitening-gpu
 ```
 
-This change is authored and unqualified. No tests, builds, models or
-measurements were executed when it was written. Existing kernel code and
-historical cards do not establish new Python-path, installed-wheel, or
-cross-vendor whitening qualification; those need retained root-run evidence.
+Retained Python admission tests run against the installed wheel through the
+orchestrator's existing parallel test controller. The retired
+`MOJOLEARN_RUN_PCA_WHITEN_GPU` opt-in is no longer needed for numerical fixtures.
+Native compile/runtime and retained installed-wheel tests remain pending in
+this migration; source review is not runtime, performance or cross-vendor
+qualification. See `docs/plans/native_test_migration/pca-whitening-handoff.txt`.

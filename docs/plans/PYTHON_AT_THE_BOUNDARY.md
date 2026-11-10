@@ -1,15 +1,16 @@
 # Python at the boundary: two functions per public call, Mojo values everywhere else
 
-Design lane `b1-python-boundary-design`, 2026-11-09. Read-only on product code; this document is the only output.
-Read against `origin/integ/pre-0867-w3` at e68654a757. Nothing here was compiled or run. Every Mojo type below is a
-sketch to be settled by the pilot's compile, not a finished signature.
+Design baseline from lane `b1-python-boundary-design`, 2026-11-09, read against
+`origin/integ/pre-0867-w3` at e68654a757. The counts and example call paths below describe that snapshot.
+The Mojo types are design sketches; implementation handoffs and build records carry the current signatures,
+completed migrations and their evidence. This document does not establish compilation or runtime success.
 
 Andrew, 2026-11-09: "Why do we need to touch Python at all, why can't it be purely at the boundary, why can't we use
 Mojo objects? We need to get rid of Python objects."
 
 ## 0. One screen
 
-- **Today.** The compute kernels are clean: 0 of 1,959 kernel files touch Python. The binding layer is not a
+- **Baseline.** The compute kernels are clean: 0 of 1,959 kernel files touch Python. The binding layer is not a
   boundary, it is a layer: 825 of its 842 files handle Python objects (`~/mojolearn-evidence/py-audit-a-imports.md`
   section 1), with about 47,000 object-layer lines, about 813 calls from Mojo into Python code (141 in loops), 2,173
   loops over Python objects (607 data-sized) and 730 compiled entries that Mojo reaches through the CPython call
@@ -20,8 +21,10 @@ Mojo objects? We need to get rid of Python objects."
   boundary; the retired source-count guard is not evidence that this target has been reached.
 - **Not touched.** Hand-tuned kernels, fused paths and every kernel's arithmetic (AGENTS.md "A measured winner is
   never deleted on reasoning"). This design changes what calls the kernels, never the kernels. Bits do not move.
-- **Order.** Pilot on ONE small family, compiled, tested and measured, before a second family starts. Then family by
-  family, worst offenders first, each landing green.
+- **Order.** Reuse the pilot's native request and ownership patterns across independent families. Collect completed
+  changes into an integration branch, compile one fixed snapshot, repair compilation failures, then merge the
+  compiled work into main. Reuse unchanged compiled groups. Runtime correctness and performance evidence remain
+  separate, with the release measurement and identity requirements in `AGENTS.md`.
 - **Size.** About 840 binding files in 179 families. This is the largest program the repo has taken on. The pilot is
   small (section 6). The rollout is weeks (section 7).
 
@@ -144,13 +147,14 @@ attribute.
 - `RidgeState` is a Mojo struct (coefficients, intercept, n_features, the resident device handles, the numeric mode).
   It lives in a native registry keyed by an integer handle, the pattern `ResidentKnnIndex`, the ops session table and
   the msel store already use.
-- The Python estimator instance holds: its constructor parameters as plain Python attributes (scikit-learn's
-  `get_params`, `set_params` and `clone` read them and need nothing native), and one opaque state object whose
-  finaliser releases the handle. `clone` does not copy state. `set_params` after fit does not touch state.
+- The Python estimator exposes constructor parameters for scikit-learn compatibility and retains one opaque
+  native state owner. `get_params`, `set_params` and `clone` enter native operations; published Python attributes
+  are boundary representations, not the internal execution plan. Preserve each method's existing state semantics.
 - A fitted attribute (`coef_`, `intercept_`, `n_features_in_`, `labels_`, `components_`) is one native call:
-  `state_attribute(handle, ATTR_COEF) -> buffer view`, wrapped by PACK as a read-only array. It is computed or
-  downloaded on first request and cached in the state, so a model whose attributes nobody reads never pays for them.
-  This is also where "a weight a kernel has read is read-only" (X45c) lands for every family.
+  `state_attribute(handle, ATTR_COEF) -> buffer view`, wrapped by PACK with the public API's existing mutability.
+  In particular, Ridge/OLS coefficient arrays remain writable and replaceable. UNPACK admits the current array,
+  retains its owner and refreshes the typed descriptor; RUN never follows Python attributes. Existing protected
+  weight APIs retain their protection. Lazy materialization is allowed only when it preserves these semantics.
 - Pickling is one native reduce: `state_dump(handle) -> one bytes buffer` with a layout version, and
   `state_load(bytes) -> handle`. Audit B found Python running once per Array field today (`_array.py:278`, `:530`,
   `:892`).
@@ -180,7 +184,8 @@ attribute.
 
 ## 5. Typed boundaries and execution evidence
 
-Owner direction, 2026-11-10: delete the kernel-path/token source guard and the shell-loop source counter. Do not
+Owner direction, 2026-11-10: retire the Python source-count/graph compliance gates, including the kernel-path,
+shell-loop, host-route, runtime-import and public-runtime counters. Do not
 extend them, restore them under another name, or replace them with a source-count baseline gate. Excluding
 binding/provider code or rejecting necessary UNPACK/PACK loops cannot establish that an operation avoids Python.
 
@@ -231,15 +236,16 @@ after, one UNPACK (3 buffer reads, 3 scalars), one RUN, one PACK.
 What is deleted with the pilot: the Python-dict parameter reads, `classical_ridge_parameters`' Python comparisons,
 the `entries[...]` calls and their `Python.list` packing for this door, the Python-array scratch allocations.
 
-Gate before any second family starts:
+Pilot evidence, recorded separately from development merge approval:
 
 1. Compile green on the Mac and the NVIDIA / AMD cross-compile.
-2. Import, the Ridge and LinearRegression test files, and the light smoke pass on the Mac.
+2. The Ridge and LinearRegression tests and focused public import/runtime checks on the Mac.
 3. Focused correctness and lifetime tests of the compiled pilot. No identity runs or old-version digest matching
    during development: cross-vendor identity is recorded once after the final source freeze, before release.
 4. Measured on NVIDIA and AMD against the base: ols and ridge fit and predict on the board rows, and the call
    overhead on a 16-row fit and a single-row predict (where the object-layer cost is the whole time). The pilot is
-   kept only if nothing is slower.
+   accepted for release only if nothing is slower. These measurements do not gate writing subsequent migration
+   batches; completed code is collected and compiled together under the 2026-11-10 development merge rule below.
 
 ## 7. Rollout after the pilot
 
@@ -258,8 +264,10 @@ Sizes are binding-file counts from the audit's per-family table (179 families, 8
 | 7 | host, archive, array, native_*, params, tsa, autoarima and the remaining ~120 small families | ~470 | L in total, S each | long tail; mechanical once the types exist |
 
 Waves 1 to 6 touch disjoint files and can run as parallel lanes once `core/boundary_types.mojo`,
-`core/state_registry.mojo` and `core/entry_table.mojo` are frozen by the pilot. Each wave is compiled, smoked and
-tested before it merges; no wave merges on compile alone.
+`core/state_registry.mojo` and `core/entry_table.mojo` are frozen by the pilot. Collect completed changes into one
+integration build, reuse unchanged compiled groups, fix compilation failures, and merge when the affected code
+compiles. Development merges do not require wheel import or smoke gates (Andrew, 2026-11-10). Native correctness
+tests, installed runtime tests, performance measurements and the final release identity check are separate evidence.
 
 The design spans roughly 840 files; the pilot and rollout need successive implementation, compile, test and
 measurement rounds. Owner starting order, 2026-11-10: compile the current integration branch and merge it into main
@@ -276,34 +284,36 @@ That starting instruction does not turn compilation into runtime correctness or 
    repo in some form (descriptor tables, the ops session table, existing GIL release in the doors). If the pilot finds
    one missing, the answer is the ask for Modular, not a workaround.
 3. **Lifetime bugs.** Borrowed caller arrays, cached attribute buffers and released handles are where this can go
-   wrong. Today's runtime bugs were of this kind. The generation check and the read-only attribute views are the
-   guard; the pilot's tests must include use-after-release and pickle round trips.
+   wrong. Check handle generations, retain borrowed owners through their last native use, and test mutation,
+   replacement, use-after-release and pickle round trips. Temporary native scratch is owned per operation;
+   a process-wide slot is not a substitute for concurrent callers' separate state.
 4. **Public behaviour.** Error types and messages must not change; the pilot diffs them against the base's tests.
-   Fitted attributes become read-only views. Parameter validation order may shift between type and value errors.
+   Preserve fitted-attribute mutability and validation order; moving storage to Mojo does not authorize narrowing
+   the supported Python interface.
 5. **Bits.** Matching an older version's output is not a requirement. Preserve algorithm correctness and quality;
    the final frozen release must agree across the supported GPU vendors and the required CPU reference column.
 6. **Scope creep.** This design does not move any algorithm, does not touch a tuned kernel and does not change the
    executor. A lane that finds itself editing a kernel has left the design.
 
-Stop conditions: the pilot is slower on any measured row and one fix round does not recover it; or the pilot needs a
-Mojo feature that does not exist; or the Mac cannot compile the pilot binding. In each case the pilot is reverted (it
-is one family behind one merge) and the finding is written up.
+Fix compiler failures and measured regressions without restoring Python execution or replacing a measured winning
+kernel on reasoning alone. A missing Mojo feature gets a minimal reproducer and an upstream ask; it does not get a
+Python workaround. Record unbuilt targets and unmeasured performance separately from accepted native correctness.
 
-## 9. Open questions for Andrew
+## 9. Implementation decisions
 
-1. **Pilot family.** Ridge and LinearRegression first, then LogisticRegression. Recommendation: yes.
+1. **Initial family.** Ridge and LinearRegression establish the typed boundary; the rollout continues across the
+   remaining families and shared input, archive and optimizer paths.
 2. **The full rollout gates 0.8.67.** Decided by Andrew on 2026-11-09 and reaffirmed on 2026-11-10: complete the
    Python-object to Mojo-value migration and the applicable test migration before release. Do not defer the full
    rollout to a later release or propose a release date.
 3. **`mojolearn.Array`.** Keep it as a thin Python class over a native storage handle, with every method one native
    call and no Mojo code reading `_store`. Recommendation: yes.
-4. **List and string inputs.** Accept them with one typed flatten in UNPACK, or refuse lists and require arrays.
-   Recommendation: accept, one pass.
+4. **List and string inputs.** Preserve supported inputs through native admission and typed preparation.
 5. **User callables.** Refuse every user-supplied callable (KMeans `init`, custom scorers, custom estimators inside
    search and pipelines) before its hook runs, with the native alternative named. Recommendation: yes; it is today's
    rule with its one exception removed.
 6. **Entry tables.** Replace the 730 calls to compiled entries through the CPython call protocol with published
    native function tables. Recommendation: yes; it is part of the contract, and it is what removes the per-call
    Python lists.
-7. **Fitted attributes read-only and computed on first request.** Recommendation: yes; it matches the read-only
-   weights decision and avoids downloads nobody asked for.
+7. **Fitted attributes.** Preserve each public attribute's mutability, replacement and ownership behavior.
+   Internal typed state and optional lazy materialization must respect that boundary contract.

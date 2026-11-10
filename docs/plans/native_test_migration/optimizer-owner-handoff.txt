@@ -1,0 +1,65 @@
+Typed optimizer owner/control and real public lifetime checks (2026-11-10)
+
+Dependency and source
+  Producer7ded28ac82, parentc3bea14b71, introduces the pure
+  training.optimizer_owner_control.OptimizerOwnerControl and boundary provider
+  pin/operation leases. Read producer OPTIMIZER_BOUNDARY_HANDOFF_20261110.md.
+  New checks/native_tests/optimizer_owner_cases.mojo and importable
+  optimizer_owner_{cpu,gpu}_suite.mojo; thin optimizer_owner_{cpu,gpu}.mojo entries.
+  Product/kernel/owner-control source untouched in this lane.
+
+Native coverage:22 per target
+  Eighteen independent pure controls: all three optimizer identities/default
+  ownership; busy-operation refusal and successful retry, with a simultaneously
+  busy independent owner; all eight pristine/materialized-moment truth-table
+  combinations; ignored negative attach/empty repeated close; close publication
+  resets storage facts while retaining identity/pristine/active operation state.
+  Four actual descriptor resource fixtures per target: attach/IO/close and
+  idempotent close while a replacement slot is alive; copied close-request RUN
+  followed by separate finish_close publication under the active lease; failed
+  close and explicit retry retaining the same driver/handle and freshness flags;
+  ignored second attach, exact original-slot release and later reattachment.
+  Failed-close stimulus is a real descriptor slot already externally released,
+  not a mock callback. Exact error text and untouched download output guards
+  are asserted. Actual moment IO plus replacement-slot survival independently
+  observes correct handle targeting and no duplicate close. No old hashes or
+  function-to-itself numerical oracle; kernel equations are outside this batch.
+
+Public lifecycle migration:4 definitions /10 parametrized cases
+  Keep harmless partially constructed _Optimizer finalization with poisoned
+  Python __getattribute__ and native-call audit.
+  Replace fake _res=17 + SimpleNamespace events.append close observation with
+  real SGD/Adam/AdamW step/finalize, no Python getter, residency publication,
+  double finalization, same native wrapper identity, and public parameter
+  buffers surviving finalization/destruction. Exact handle release moved to
+  native fixtures above; no observability-only private query was introduced.
+  Replace fake Python close callback with the actual connected descriptor
+  factory admission seam: Python callback refused without invocation, fresh
+  owner control/parameters/step unchanged, retained real owner cleanup bypasses
+  the poisoned factory, and the refused owner retries after factory restoration.
+  Add active Python exception preservation during actual native finalization.
+  Existing producer24 copy/pickle/reconstruction/legacy-host restore cases in
+  test_optimizer_native_owner_copy.py are untouched. No fabricated legacy
+  control fields, callback dispatch compatibility path or removed assertions
+  solely to make tests pass. Pure state now lives in Mojo; Python owns real seams.
+
+Parallel plan and commands for root
+  Eighteen pure owner fixtures run across host_parallelize workers. Actual
+  resource transitions are ordered on both targets because the existing host
+  and GPU descriptor pools have shared handle tables. No concurrent-pool safety
+  or measured utilization claim. Device kernels/worker policy unchanged.
+  bash tools/compile_slot.sh pixi run check-native-optimizer-owner-cpu
+  bash tools/compile_slot.sh pixi run check-native-optimizer-owner-gpu
+  Bundled imports checks.native_tests.optimizer_owner_{cpu,gpu}_suite.run_checks
+  with distinct aliases. Existing standalone compilation:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_owner_cpu.mojo -o "$HOME/mojolearn-evidence/optimizer-owner-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_owner_gpu.mojo -o "$HOME/mojolearn-evidence/optimizer-owner-gpu"
+  Actual entries training.host.optimizer_native.optimizer_host_v1 and
+  training.optimizer_native_gpu.optimizer_gpu_v1; product training and shared
+  runtime_neural owner boundary are producer build dependencies, no new product
+  group source in this commit. Installed Python lifecycle file remains required.
+
+Status
+  Source/call-path review, AST/JSON/TOML parse and diff check only. Root native
+  compile/run and installed Python tests OWED. No lane tests/build/box execution,
+  A/B define, performance claim, identity, old reference update or release action.

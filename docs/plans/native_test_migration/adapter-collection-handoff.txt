@@ -1,0 +1,37 @@
+Mojolearn adapter packaging collection repair, 2026-11-10
+
+Cause and repair
+  test_adapters.py imported adapters/_shipped.py under an unrelated module
+  name. The runtime module now connects a native package entry at import time,
+  so its relative imports fail during this intentionally inert tooling suite's
+  collection. Read only the five literal shipping metadata constants through
+  ast.literal_eval. Their exact comparisons to manifest metadata remain.
+  Pin consistency checks their complete major.minor prefix directly; this is
+  packaging configuration inspection, not a runtime version implementation.
+
+Coverage preserved
+  Remove duplicate test_series from inert tooling only. Its 2.13.1, 2.13.0,
+  2.13.0+cu130 and 2.12.0 literals join the existing installed native Unicode
+  boundary case, with independent literal expected strings instead of a Python
+  split/join oracle. Sixteen text cases each run as exact str and hostile str
+  subclass, preserving embedded NUL, non-ASCII, lone surrogate, plus/dot order
+  and empty segments. The optional real TorchVersion and non-coercion cases
+  remain. Public native C-API admission/result ownership cannot be tested by
+  Mojo-only strings; no unnecessary second native scanner was introduced.
+  No product/provider changes, callback path, Python runtime fallback, source
+  architecture guard, new build scheme or loader introduced.
+
+Orchestrator checks (lane has not run)
+  Existing tooling runner: pytest packaging/adapters/test_adapters.py, with
+  its normal parallel file suite scheduling. No product compile needed for
+  the packaging fix. Installed native boundary:
+  pytest python/mojolearn/tests/test_framework_version_metadata.py
+  Current _mojolearn_x_sequence ops_import_model entry must be installed for
+  that boundary test. The optional TorchVersion case may skip without Torch;
+  report that separately. No Mojo helper compile added or claimed necessary.
+
+Status/removals
+  AST and diff review only; root owns runtime checks. Removed unrelated-module
+  import of compiled _shipped bridge, duplicate inert version test and Python
+  split/join expected-value driver. Pin/manifest/staging source tests retained
+  as tooling. No kernel/arithmetic/identity changes, no timing or box job.

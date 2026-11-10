@@ -2,7 +2,7 @@
 # Exact native metric target/score/weight buffers, captured once per input.
 from std.python import Python, PythonObject
 from bindings.admitted_input import AdmittedTyped, admitted_typed_c, admitted_shape_tuple
-from bindings.optimizer_public_door import base_format
+from bindings.tensor_view import base_format
 from bindings.family_common import family_repr, FAMILY_F32P
 from core.family_cast_impl import family_min_f32, family_max_f32
 from core.host_finite_scan import host_all_finite_f32

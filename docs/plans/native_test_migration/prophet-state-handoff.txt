@@ -1,0 +1,62 @@
+Prophet fitted-state native tests (2026-11-10)
+
+Source and coverage: six fixtures per CPU/GPU
+  checks/native_tests/prophet_state_cases.mojo: shared native owning inputs,
+  states, feature preparation, queries and independent expected equations.
+  prophet_state_{cpu,gpu}_suite.mojo export run_checks(); matching thin
+  prophet_state_{cpu,gpu}.mojo entries retain ordinary standalone pixi tasks.
+  Fixture0 preserves test_tsa_resident_state's default fit: one series120
+  observations, t=0..119, y=Float32(sin(t/7)+t/50), linear additive growth,
+  weekly period7/order3, no daily/yearly/holidays,25 automatic changepoints
+  over floor(120*0.8)=96 history points, prior10,tau0.05,max_iter2000.
+  Predict130 future times twice as before; add a137-time changed query.
+  Native std.math.sin prepares the independent fixture input equation; no
+  old expected hash, NumPy runtime or different product algorithm is involved.
+  Five supplied states each contain three series and predict17/23 days,
+  including negative time, exact changepoint hits and future extrapolation.
+  Independent Float64 formulas cover constant/linear/piecewise-linear trend,
+  additive two-column holiday effects, multiplicative holiday effects and
+  per-series output scaling. Dyadic values allow exact expected FP32 words;
+  no numerical tolerance or function-under-test oracle in these five cases.
+
+Actual paths and ownership
+  CPU fit is sequence.ops_impl.prophet_fit_impl; GPU fit calls the public
+  binding's existing sequence.fit_team_impl.prophet_fit_team_impl directly.
+  The tuned GPU team fit remains intact. Native prep uses prophet_features
+  and prophet_changepoints; prediction calls prophet_predict_days_impl.
+  Compare two fused calls and the separate feature+prophet_predict_impl path
+  for both forecast and trend. These are repeat/fusion parity checks, not
+  independent fit correctness evidence; full-fit outputs must also be finite.
+  Guard owning input/scratch/state/output spans, require fitted params/info/
+  Fourier orders/changepoints and holiday inputs remain unchanged. All List
+  owners stay live after integer-address calls, no Python objects or callbacks.
+
+Python retained/deleted
+  Replace only Prophet's repeated-output numerical comparison in
+  test_tsa_resident_state.py. Keep original public fit settings and its130-time
+  predictions while asserting actual float32 output shapes, separate result
+  and trend allocations, new trend publication, unchanged fitted parameter
+  owner, prior output preservation and output lifetime after model destruction.
+  Five Python definitions remain; all four numerical families in this file now
+  have native batches (compile/runtime evidence is recorded separately).
+  External Prophet-library comparisons, preparation/admission, archive and
+  Python native-ownership tests are untouched. No supported feature removed.
+
+Parallel plan and root commands
+  CPU independent fixtures use host_parallelize with a private HostExec each;
+  input and oracle cells use existing host worker policy. GPU submits fixture
+  states in order on its existing shared context; existing kernels parallelize
+  the work. No claim of concurrent GPU contexts or measured busy cores.
+  bash tools/compile_slot.sh pixi run check-native-prophet-state-cpu
+  bash tools/compile_slot.sh pixi run check-native-prophet-state-gpu
+  Compile-only paths, through the same existing toolchain:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/prophet_state_cpu.mojo -o "$HOME/mojolearn-evidence/prophet-state-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/prophet_state_gpu.mojo -o "$HOME/mojolearn-evidence/prophet-state-gpu"
+  Bundled import checks.native_tests.prophet_state_{cpu,gpu}_suite.run_checks
+  with distinct local aliases. Public bindings _mojolearn_x_sequence and
+  _mojolearn_x_sequence_host; installed public test file remains required.
+
+Status
+  Source/AST/TOML/JSON/diff inspection only. Compile/runtime OWED at root.
+  Product source, algorithms and kernel arithmetic untouched; no A/B define,
+  new test loader, box job, timing, identity or release action.

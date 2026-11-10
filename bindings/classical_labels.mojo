@@ -27,7 +27,7 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_attr import py_attr
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
@@ -35,7 +35,14 @@ from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _p
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
-from bindings.arena_prog_native import _metrics_run
+from bindings.arena_prog_native import _metrics_run_plan
+from bindings.metrics_plan_admission import MetricArenaOwner
+from core.metrics_program_plan import MetricProgramPlan
+from core.labels_accuracy_plan import label_accuracy_plan
+from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
+from bindings.labels_score_boundary import (
+    ScoreKeyOwner, score_keys_unpack, score_keys_pack, score_keys_pack_pair, score_keys_index, score_keys_union,
+)
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds, labels_refusal
 from bindings.label_snapshot_native import label_array_list
@@ -45,13 +52,12 @@ from bindings.label_input_sources import (
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
-from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
-from bindings.label_weights_boundary import label_weights_run
+from bindings.class_weight_boundary import class_weight_admit_dictionary
+from bindings.class_weight_rows_boundary import class_weight_rows_admitted
 from bindings.labels_descriptor_boundary import (
     labels_prepare_targets, labels_reduce_stat, labels_argmax_rows as labels_argmax_run,
-    labels_gather, labels_class_ratio_f64, labels_fsum_f64,
+    labels_gather, labels_fsum_f64,
 )
-from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.label_input_sources import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
 from bindings.admitted_input import (
@@ -61,7 +67,7 @@ from bindings.admitted_input import (
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.p3_labels_metrics_native import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
-    p3_integral_list, p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
+    p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -929,155 +935,27 @@ def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, c
 # ---------------------------------------------------------- class weights
 
 
-def labels_class_weight_rows[NativeWeights: Bool = False](class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
+def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
                             context: PythonObject) raises -> PythonObject:
-    """`_class_weights._class_weight_rows(class_weight, classes, codes,
-    xbind)` with int32 codes on the x_trees binding: per-row float32
-    weights from a dict or 'balanced', or None when every class weight is
-    1. The counts and the per-row gather are the binding's kernels; only
-    the k class weights are read here."""
+    """Per-row Float32 weights through the existing native class-weight ops."""
     var b = labels_builtins()
     if class_weight is None:
         return PythonObject(None)
-    if py_type(class_weight) is not b.str and py_type(class_weight) is not b.dict:
+    var kind = py_type(class_weight)
+    if kind is not b.str and kind is not b.dict:
         raise Error("TypeError: class_weight requires an exact native string or dictionary")
-    if py_type(class_weight) is b.dict:
-        var items = py_call(b.list, class_weight.items())
-        for i in range(len(items)):  # driver-loop: admit keys before native hashing and values before numeric conversion
-            _ = labels_admit_primitive(items[i][0], context)
-            _ = labels_admit_primitive(items[i][1], context)
+    if kind is b.dict:
+        class_weight_admit_dictionary(class_weight, context)
     var classes = classifier_label_list(labels.classes, context)
     _ = labels_label_kind(classes, context)
     var k = len(classes)
     var n = labels.n
-    var objects = Python.list()
-    if py_type(class_weight) is b.str:
-        var counts = admitted_vector(k, "<i4", context)
-        comptime if NativeWeights:
-            _ = label_weights_run(xtrees, LABEL_WEIGHTS_COUNTS,
-                LabelWeightsRequest(labels_address(labels.codes) if n else 0, labels_address(counts), 0, n, k))
-        else:
-            # Other unmigrated classifier owners still connect these public
-            # legacy entries. Logistic's specialization has no Python call.
-            var count_entry = labels_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
-                                         "ImportError")
-            _ = py_call_typed(count_entry, PythonObject(labels_address(labels.codes) if n else 0),
-                              PythonObject(labels_address(counts)), Python.list(n, k))
-        _ = counts  # keep the Python object alive through the native call above
-        var wide = admitted_vector(k, "<i8", context)
-        labels_cast(labels_address(counts), "<i4", labels_address(wide), "<i8", k, context)
-        _ = wide  # keep the Python object alive through the native call above
-        _ = counts  # keep the Python object alive through the native call above
-        var w64 = admitted_vector(k, "<f8", context)
-        if k and labels_class_ratio_f64(context, labels_address(wide), k, n, 0, labels_address(w64)) != 0:
-            raise Error("ZeroDivisionError: division by zero")
-        _ = wide  # keep the Python object alive through the native calls above
-        _ = w64  # keep the Python object alive through the native calls above
-        var p = _F64P(unsafe_from_address=labels_address(w64))
-        _ = w64  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the k class weights for the argument checks below
-            _ = py_call(objects.append, PythonObject(p[i]))
-            _ = w64  # keep the Python object alive through the native call above
-    else:
-        if py_type(class_weight) is not b.dict:
-            raise Error("TypeError: class_weight must be 'balanced', None or a dict")
-        var keys = py_call(b.list, class_weight)
-        for i in range(len(keys)):  # driver-loop: over user class_weight keys, admitted before hashing/comparison
-            var kt = py_type(keys[i])
-            if not labels_text_type(kt, context) and not labels_real_type(kt, context):
-                raise Error("TypeError: class_weight keys must be native numbers or strings")
-        var unknown = py_call(py_call(b.set, keys).difference, classes)
-        if len(unknown) > 0:
-            raise Error("class_weight contains labels absent from y")
-        for i in range(k):  # driver-loop: over user class_weight dict per class
-            _ = py_call(objects.append, py_call(class_weight.get, classes[i], PythonObject(1.0)))
-    var values = List[Float64]()
-    var all_one = True
-    for i in range(k):  # driver-loop: over class weight argument checks
-        var v = objects[i]
-        var t = py_type(v)
-        var kind = labels_admit_primitive(v, context)
-        if kind != 3 and kind != 4:
-            raise Error("class weights must be finite nonnegative real numbers")
-        var f = Float64(py=py_call(b.float, v))
-        if not isfinite(f) or f < 0:
-            raise Error("class weights must be finite nonnegative real numbers")
-        values.append(f)
-        all_one = all_one and Bool(py=v == PythonObject(1))
-    if all_one:
-        return PythonObject(None)
-    var narrowed = admitted_vector(k, "<f4", context)
-    var q = _F32P(unsafe_from_address=labels_address(narrowed))
-    _ = narrowed  # keep the Python object alive through the native call above
-    var top = Float32(0)
-    for i in range(k):  # driver-loop: over the k class weights narrowed to float32
-        var f32 = Float32(values[i])
-        if not isfinite(f32) or (values[i] > 0 and f32 == 0):
-            raise Error("class weights must remain finite and nonzero when positive in Float32")
-        q[i] = f32
-        _ = narrowed  # keep the Python object alive through the native call above
-        if i == 0 or f32 > top:
-            top = f32
-    if top <= 0:
-        raise Error("class weights must have positive total")
-    var out = admitted_vector(n, "<f4", context)
-    if n:
-        comptime if NativeWeights:
-            _ = label_weights_run(xtrees, LABEL_WEIGHTS_ROWS,
-                LabelWeightsRequest(labels_address(labels.codes), labels_address(narrowed), labels_address(out), n, k))
-        else:
-            var rows_entry = labels_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
-                                        "ImportError")
-            _ = py_call_typed(rows_entry, PythonObject(labels_address(labels.codes)), PythonObject(labels_address(narrowed)),
-                              PythonObject(labels_address(out)), Python.list(n, k))
-        _ = narrowed  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-    return out
+    return class_weight_rows_admitted(class_weight, classes, labels.codes, n, k,
+                                      kind is b.str, xtrees, context)
 
-
-def labels_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject, labels: ClassicalLabels,
-                        xtrees: PythonObject, context: PythonObject) raises -> AdmittedX:
-    """`_expansion_trees._trees_weighted_rows`: the checked sample weights
-    times the class_weight row weights, one correctly rounded float32
-    product per row (`x_trees_mul_f32`); the sample weights alone when no
-    class weight differs from 1."""
-    var sw = admit_weight_words(sample_weight, labels.n, context)
-    if class_weight is None:
-        return sw^
-    var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
-    if rows is None:
-        return sw^
-    var out = admitted_vector(labels.n, "<f4", context)
-    var mul = labels_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
-    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(labels_address(rows)), PythonObject(labels_address(out)),
-                      Python.list(labels.n))
-    _ = out  # keep the Python object alive through the native call above
-    _ = rows  # keep the Python object alive through the native call above
-    _ = sw^
-    return admitted_words(out, labels_address(out), labels.n, 1)
-
-
-def labels_class_rows_only(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
-                          context: PythonObject) raises -> Optional[AdmittedX]:
-    """The class_weight row weights without sample weights, or None."""
-    var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
-    if rows is None:
-        return None
-    return admitted_words(rows, labels_address(rows), labels.n, 1)
 
 
 # x_metrics stage ops (`_expansion_metrics._OPS`) and cm_epi kinds.
-comptime _OP_GROUP_SORT = 0
-comptime _OP_GROUP_SUM = 1
-comptime _OP_PAIR_KEY = 2
-comptime _OP_OFF_DIFF = 56
-comptime _OP_CM_EPI = 59
-comptime _CM_COUNT = 2
-comptime _CM_WSUM_LEAF = 7
-comptime _CM_WSUM_FOLD = 8
-comptime _WSUM_BLOCK = 256
-comptime _NONE = -1
-comptime _PARAMS = 14
 comptime _INT32_MAX = 2147483647
 
 
@@ -1285,23 +1163,19 @@ def labels_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyt
 # ------------------------------------------------------------ accuracy
 
 
-struct ScoreLabels(Copyable, Movable):
-    """`_classification_encoded`'s answer: encoded integer labels (sorted
-    distinct Python ints and one int32 code per row) or a list of Python
-    str or int labels; `kind` 'integer' or 'string'."""
+struct ScoreLabels(Movable):
+    """Native label keys with boundary-owned input/output storage pins."""
     var encoded: Bool
-    var classes: PythonObject
+    var owner: ScoreKeyOwner
     var codes: PythonObject
-    var values: PythonObject
     var n: Int
     var kind: String
 
-    def __init__(out self, encoded: Bool, classes: PythonObject, codes: PythonObject, values: PythonObject,
+    def __init__(out self, encoded: Bool, var owner: ScoreKeyOwner, codes: PythonObject,
                  n: Int, kind: String):
         self.encoded = encoded
-        self.classes = classes
+        self.owner = owner^
         self.codes = codes
-        self.values = values
         self.n = n
         self.kind = kind
 
@@ -1353,14 +1227,24 @@ def _native_classification(var values: PythonObject, context: PythonObject) rais
     if typestr != "<i4" and typestr != "<i8" and typestr != "<u4" and typestr != "<u1":
         return None
     # A bool buffer's classes are read as the ints 0 and 1 (`int(c)`).
-    var labels = _native_labels(view, False, context)
-    return ScoreLabels(True, labels.classes, labels.codes, PythonObject(None), labels.n, "integer")
+    # Preserve the existing device/host encoder, but keep its class words
+    # native instead of boxing them and later probing Python sets/dicts.
+    var n = Int(py=view.size)
+    var classes = List[Int64](unsafe_uninit_length=n)
+    var codes = admitted_vector(n, "<i4", context)
+    var k = labels_prepare_targets(context, Int(py=classical_address(view)), _encode_code(typestr), n,
+                                   Int(classes.unsafe_ptr()), labels_address(codes), 0, 0, 0)
+    var owner = ScoreKeyOwner()
+    with GILReleased(Python()):
+        owner.keys = score_integer_keys(Int(classes.unsafe_ptr()), k)
+    _ = classes^
+    _ = view
+    return ScoreLabels(True, owner^, codes, n, "integer")
 
 
 def _classification_labels(values: PythonObject, name: String, context: PythonObject) raises -> ScoreLabels:
     """`_metrics_impl._classification_labels`: one-dimensional single-label
     data of str or integer labels (bools read as ints)."""
-    var b = labels_builtins()
     var shape = labels_shape_of(values, context)
     if len(shape) != 1:
         raise Error(name + " must be one-dimensional single-label data")
@@ -1376,23 +1260,10 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
         all_str = all_str and kind == 1
         all_int = all_int and (kind == 2 or kind == 3)
     _ = kinds^  # no cached classification spans the following conversions
-    var out = Python.list()
     if all_str:
-        # `str(v)` of an exact str is v itself: the flat list (a fresh list)
-        # is the converted one (p3-labels-metrics).
-        if labels_all_exact_str(labels):
-            return ScoreLabels(False, PythonObject(None), PythonObject(None), labels, n, "string")
-        for i in range(n):  # cpu-route: NumPy str_ labels to exact str, the explicit label input step
-            _ = py_call(out.append, py_call(b.str, labels[i]))
-        return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "string")
+        return ScoreLabels(False, score_keys_unpack(labels, True, context), PythonObject(None), n, "string")
     if all_int:
-        # Exact ints kept, bools 0 / 1, NumPy integer scalars their exact int
-        # (C calls into one presized list; p3-labels-metrics).
-        var bool_types = Python.tuple()
-        if py_get(context, "ndarray") is not None:
-            bool_types = Python.tuple(context["numeric_dtypes"][Python.tuple("b", 1)].type)
-        return ScoreLabels(False, PythonObject(None), PythonObject(None), p3_integral_list(labels, bool_types),
-                           n, "integer")
+        return ScoreLabels(False, score_keys_unpack(labels, False, context), PythonObject(None), n, "integer")
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -1400,40 +1271,29 @@ def _classification_labels(values: PythonObject, name: String, context: PythonOb
 def _classification_encoded(values: PythonObject, name: String, context: PythonObject) raises -> ScoreLabels:
     var fast = _native_classification(values, context)
     if fast:
-        return fast.value().copy()
+        return fast.take()
     return _classification_labels(values, name, context)
 
 
-def _label_set(labels: ScoreLabels) raises -> PythonObject:
-    var b = labels_builtins()
-    return py_call(b.set, labels.classes if labels.encoded else labels.values)
-
-
-def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_expansion_metrics._codes`: each label's index in `order` (-1 when
-    absent) as an int32 Array; encoded labels map their class table once and
-    gather per row (`gather_i32`)."""
-    var index = Python.dict()
-    for i in range(len(order)):  # driver-loop: over the distinct class labels
-        py_setitem(index, order[i], PythonObject(i))
-    var out = admitted_vector(labels.n, "<i4", context)
+def _codes(labels: ScoreLabels, index: ScoreKeyIndex, context: PythonObject,
+           sorted_code: Bool = True) raises -> PythonObject:
+    """Map native keys once, then retain the existing encoded-row gather."""
+    var output = admitted_vector(labels.n, "<i4", context)
     if labels.encoded:
-        var k = len(labels.classes)
-        var table = admitted_vector(k, "<i4", context)
-        var t = _I32P(unsafe_from_address=labels_address(table))
-        _ = table  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the distinct class labels
-            t[i] = Int32(Int(py=py_get(index, labels.classes[i], PythonObject(-1))))
-            _ = table  # keep the Python object alive through the native call above
-        labels_gather(context, LABELS_GATHER_I32, labels_address(table), k, labels_address(labels.codes), labels.n,
-                      labels_address(out))
-        _ = table  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        return out
-    # One borrowed read and one C dict probe per row (p3-labels-metrics).
-    p3_dict_codes(index, labels.values, labels_address(out), -1)
-    _ = out  # keep the Python object alive through the native writes above
-    return out
+        var k = len(labels.owner.keys)
+        var table = List[Int32](unsafe_uninit_length=k)
+        with GILReleased(Python()):
+            score_key_codes(index, labels.owner.keys, Int(table.unsafe_ptr()), sorted_code)
+        labels_gather(context, LABELS_GATHER_I32, Int(table.unsafe_ptr()), k,
+                      labels_address(labels.codes), labels.n, labels_address(output))
+        _ = table^
+    else:
+        var address = labels_address(output)
+        with GILReleased(Python()):
+            score_key_codes(index, labels.owner.keys, address, sorted_code)
+    _ = labels
+    _ = index
+    return output
 
 
 def _refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
@@ -1443,70 +1303,10 @@ def _refuse_multilabel(y: PythonObject, name: String, caller: String, context: P
                     + "IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
 
 
-struct _Program(Movable):
-    """The fields of an `_expansion_metrics._Prog` the native runner reads:
-    its size, input records, stage records and skipped ranges."""
-    var size: Int
-    var inputs: PythonObject
-    var stages: PythonObject
-    var skip: PythonObject
-
-    def __init__(out self) raises:
-        self.size = 0
-        self.inputs = Python.list()
-        self.stages = Python.list()
-        self.skip = Python.list()
-
-    def alloc(mut self, n: Int) raises -> Int:
-        var off = self.size
-        self.size += max(n, 0)
-        if self.size > _INT32_MAX:
-            raise Error("mojolearn metrics: the problem exceeds the Int32 arena bound")
-        return off
-
-    def put(mut self, array: PythonObject, count: Int) raises -> Int:
-        """`put` / `put_i32` of a C-order float32 or int32 Array."""
-        var off = self.alloc(count)
-        _ = py_call(self.inputs.append, Python.tuple(PythonObject(off), array))
-        _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + count)))
-        return off
-
-    def scratch(mut self, n: Int) raises -> Int:
-        var off = self.alloc(n)
-        if n > 0:
-            _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + n)))
-        return off
-
-    def stage(mut self, op: Int, total: Int, params: List[Int]) raises:
-        if len(params) > _PARAMS:
-            raise Error("x_metrics: too many stage parameters")
-        var record = Python.list(PythonObject(op), PythonObject(total))
-        for i in range(_PARAMS):  # small-loop(params): the fourteen fixed parameter words of one stage
-            _ = py_call(record.append, PythonObject(params[i] if i < len(params) else 0))
-        _ = py_call(self.stages.append, record)
-
-    def group(mut self, key: Int, n: Int, m: Int, weights: Int) raises -> Tuple[Int, Int]:
-        """`_expansion_metrics._group` (values=_NONE, vstride=1, width=1)."""
-        var off = self.alloc(m + 1)
-        var order = self.scratch(n)
-        var out = self.alloc(m)
-        self.stage(_OP_GROUP_SORT, 1, [key, n, m, off, order])
-        if m:
-            self.stage(_OP_GROUP_SUM, m, [off, order, _NONE, 1, weights, out, 1])
-        return (off, out)
-
-    def counts(mut self, off: Int, m: Int) raises -> Int:
-        """`_expansion_metrics._counts`."""
-        var out = self.alloc(m)
-        if m:
-            self.stage(_OP_OFF_DIFF, m, [off, m, out])
-        return out
-
-
-def _run(var program: _Program, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_run(prog, numeric_mode)`: the shared native program runner over a
-    program object holding these fields. Returns the arena store."""
-    var b = labels_builtins()
+def _accuracy_run(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
+                  context: PythonObject) raises -> MetricArenaOwner:
+    # UNPACK the connected runner context once. All stage/offset state is
+    # already native; the existing runner retains resident/range behavior.
     var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "mojolearn._expansion_metrics")
     if module is None:
@@ -1514,20 +1314,7 @@ def _run(var program: _Program, mode: PythonObject, context: PythonObject) raise
     var prog_context = py_get(py_fields(module), "_PROG_CONTEXT")
     if prog_context is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")
-    var prog = py_call(context["labels_namespace"])
-    var fields = py_fields(prog)
-    py_setitem(fields, "size", PythonObject(program.size))
-    py_setitem(fields, "_inputs", program.inputs)
-    py_setitem(fields, "_stages", program.stages)
-    py_setitem(fields, "_skip", program.skip)
-    py_setitem(fields, "_outs", PythonObject(None))
-    py_setitem(fields, "arena", PythonObject(None))
-    _ = _metrics_run(prog, mode, prog_context)
-    return fields["arena"]
-
-
-def _arena_address(arena: PythonObject) raises -> Int:
-    return Int(py=py_call(arena.buffer_info)[0])
+    return _metrics_run_plan(plan, inputs, mode, prog_context)
 
 
 def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
@@ -1535,7 +1322,6 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     """`_expansion_metrics.accuracy_fraction(y_true, prediction,
     sample_weight, mode)`: the (weighted) matched fraction from the device
     COUNT tail."""
-    var b = labels_builtins()
     var caller = String("accuracy_score")
     _refuse_multilabel(y_true, "y_true", caller, context)
     _refuse_multilabel(prediction, "y_pred", caller, context)
@@ -1552,10 +1338,14 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     var w: Optional[AdmittedX] = None
     if weighted:
         w = labels_sample_weight_f32(sample_weight, n, caller, context)
-    var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
-    var L = len(present)
-    var yt = _codes(true, present, context)
-    var yp = _codes(pred, present, context)
+    var joined = score_keys_union(true.owner, pred.owner)
+    var index = score_keys_index(joined)
+    var L = len(index.sorted_rows)
+    var yt = _codes(true, index, context)
+    var yp = _codes(pred, index, context)
+    _ = joined^
+    _ = true
+    _ = pred
     return _accuracy_codes(yt, yp, n, L, w^, mode, context)
 
 
@@ -1570,56 +1360,24 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     var weighted = False
     if w:
         weighted = True
-    # `_Sums(true, pred, w, present, mode, tail=_cm_stage(..., COUNT, 11))`.
-    var prog = _Program()
-    var a = prog.put(yt, n)
-    var bb = prog.put(yp, n)
-    var matched = prog.scratch(n)
-    prog.stage(_OP_PAIR_KEY, n, [a, bb, matched, L, 1])
-    var W = _NONE
+    var plan = label_accuracy_plan(n, L, weighted)
+    # Only lifetime pins cross the runner's existing boundary. No Python
+    # stage records, input tuples, skip pairs or private program instance.
+    var inputs: List[PythonObject] = [yt, yp]
     var w_array = PythonObject(None)
     if weighted:
         w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
-        W = prog.put(w_array, n)
-    var g0 = prog.group(matched, n, L, W)
-    var g1 = prog.group(a, n, L, W)
-    var g2 = prog.group(bb, n, L, W)
-    if weighted:
-        # every row in group 0: the total weight grouping
-        var zero = prog.scratch(n)
-        prog.stage(_OP_PAIR_KEY, n, [a, a, zero, 1, 2])
-        _ = prog.group(zero, n, 1, W)
-    if not weighted:
-        _ = prog.counts(g0[0], L)
-        _ = prog.counts(g1[0], L)
-        _ = prog.counts(g2[0], L)
-    # `_cm_stage(prog, groups, w, n, L, _CM_COUNT, 11)`.
-    var out = prog.alloc(11)
-    var tp = g0[1] if weighted else g0[0]
-    var tot = n
-    if weighted:
-        # `_wsum_sf64(prog, L)`: the soft binary64 hit and weight total.
-        var nb = max(1, (n + _WSUM_BLOCK - 1) // _WSUM_BLOCK)
-        var s = prog.scratch(4 * nb)
-        prog.stage(_OP_CM_EPI, nb, [_CM_WSUM_LEAF, matched, W, n, s, L])
-        var stride = 1
-        while stride < nb:  # driver-loop: over the fold levels (log2 of the block count)
-            prog.stage(_OP_CM_EPI, (nb - stride + 2 * stride - 1) // (2 * stride), [_CM_WSUM_FOLD, s, stride, nb])
-            stride *= 2
-        tot = s
-    prog.stage(_OP_CM_EPI, 1, [_CM_COUNT, tp, L, 1 if weighted else 0, tot, out])
-    var arena = _run(prog^, mode, context)
-    var base = _arena_address(arena)
-    _ = arena  # keep the Python object alive through the native call above
-    _ = yt  # the code vectors stay alive through the program run above
+        inputs.append(w_array)
+    var arena = _accuracy_run(plan.program, inputs, mode, context)
+    var base = arena.base
+    var result_at = plan.result_offset
+    _ = yt
     _ = yp
     _ = w^
     _ = w_array^
-    if weighted and Int(_I32P(unsafe_from_address=base + 4 * out)[0]) != 0:
+    if weighted and Int(_I32P(unsafe_from_address=base + 4 * result_at)[0]) != 0:
         raise Error("ZeroDivisionError: float division by zero")
-    _ = arena  # keep the Python object alive through the native calls above
-    var fraction = _F64P(unsafe_from_address=base + 4 * (out + 8))[0]
-    _ = arena  # keep the Python object alive through the native call above
+    var fraction = _F64P(unsafe_from_address=base + 4 * (result_at + 8))[0]
     _ = arena^
     return fraction
 
@@ -1634,14 +1392,14 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
 
 
 def _encoded_side(labels: ScoreLabels, context: PythonObject) raises -> ClassicalLabels:
-    """One side of a metric pair as (its sorted distinct labels, one int32
-    code per row into them): encoded labels already are; a value list maps
-    through the sorted set of its values (one C dict probe per row)."""
+    """PACK a side's public class list after native distinct-key planning."""
     if labels.encoded:
-        return ClassicalLabels(labels.classes, labels.codes, labels.n)
-    var b = labels_builtins()
-    var classes = py_call(b.sorted, py_call(b.set, labels.values))
-    return ClassicalLabels(classes, _codes(labels, classes, context), labels.n)
+        return ClassicalLabels(score_keys_pack(labels.owner, List[Int](), True), labels.codes, labels.n)
+    var index = score_keys_index(labels.owner.keys)
+    var classes = score_keys_pack(labels.owner, index.sorted_rows)
+    var codes = _codes(labels, index, context)
+    _ = labels
+    return ClassicalLabels(classes, codes, labels.n)
 
 
 def labels_union_encode(y_true: PythonObject, y_pred: PythonObject, caller: String,
@@ -1653,7 +1411,6 @@ def labels_union_encode(y_true: PythonObject, y_pred: PythonObject, caller: Stri
     pred_classes, pred_codes, kind, present)`: each side's sorted distinct
     labels and int32 codes into them, the kind ('string' or 'integer') and
     the sorted union of the two label sets."""
-    var b = labels_builtins()
     _refuse_multilabel(y_true, "y_true", caller, context)
     _refuse_multilabel(y_pred, "y_pred", caller, context)
     var true = _classification_encoded(y_true, "y_true", context)
@@ -1664,7 +1421,10 @@ def labels_union_encode(y_true: PythonObject, y_pred: PythonObject, caller: Stri
         raise Error("TypeError: mojolearn " + caller + ": y_true and y_pred must use the same label type")
     if true.n > _INT32_MAX:
         raise Error("ValueError: mojolearn " + caller + ": at most INT32_MAX rows")
-    var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
+    var joined = score_keys_union(true.owner, pred.owner)
+    var index = score_keys_index(joined)
+    var present = score_keys_pack_pair(true.owner, pred.owner, index.sorted_rows)
+    _ = joined^
     var t = _encoded_side(true, context)
     var p = _encoded_side(pred, context)
     return Python.tuple(t.classes, t.codes, p.classes, p.codes, PythonObject(true.kind), present)
@@ -1750,7 +1510,13 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
     var w: Optional[AdmittedX] = None
     if sample_weight is not None:
         w = labels_sample_weight_f32(sample_weight, n, caller, context)
-    var yt = _codes(true, classes, context)
+    # Preserve dictionary assignment semantics for rebound duplicate classes:
+    # the final matching class wins, while unknown labels retain code -1.
+    var order = score_keys_unpack(classes, kind == "string", context)
+    var index = score_keys_index(order.keys, keep_last=True, ordered=False)
+    var yt = _codes(true, index, context, sorted_code=False)
+    _ = order
+    _ = true
     var yp = codes
     if code_dtype == "<i8":
         yp = admitted_vector(n, "<i4", context)

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native optimizer buffer-layout and gradient-shape plans."""
 from bindings.tensor_view import TensorView, base_format, shape_text
+from std.memory import memcpy
 from core.classical_pandas_impl import pd_raw_at
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -124,14 +125,41 @@ def optimizer_contiguous_address(view: TensorView, mut keep: List[List[Float32]]
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=destination)
         var first = task * chunk
         var last = min(count, first + chunk)
-        for i in range(first, last):  # parallel-work: disjoint output elements per host worker
-            var remaining = i
-            var offset = 0
-            for axis in range(rank - 1, -1, -1):  # driver-loop: tensor coordinate words
-                var coordinate = remaining % shape[axis]
-                remaining //= shape[axis]
-                offset += coordinate * strides[axis]
-            dst[i] = UInt32(pd_raw_at(source, offset, 4, True))
+        if first >= last:
+            return
+        var coordinates = List[Int](length=rank, fill=0)
+        var remaining = first
+        var offset = 0
+        for axis in range(rank - 1, -1, -1):  # driver-loop: initialize one worker's tensor coordinates
+            coordinates[axis] = remaining % shape[axis]
+            remaining //= shape[axis]
+            offset += coordinates[axis] * strides[axis]
+        var cursor = first
+        while cursor < last:  # parallel-work: disjoint output spans per host worker
+            var run = min(last - cursor, shape[rank - 1] - coordinates[rank - 1]) if rank else 1
+            var step = strides[rank - 1] if rank else 0
+            if step == 4:
+                # Copy contiguous inner spans directly, including unaligned
+                # exports. General signed strides retain exact raw-word loads.
+                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination + cursor * 4),
+                    src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source + offset), count=run * 4)
+            else:
+                for i in range(run):  # parallel-work: this worker's strided inner span
+                    dst[cursor + i] = UInt32(pd_raw_at(source, offset + i * step, 4, True))
+            cursor += run
+            if cursor == last:
+                break
+            offset += run * step
+            coordinates[rank - 1] += run
+            # Carry once per inner span, not a division/modulo walk per value.
+            for axis in range(rank - 1, -1, -1):  # driver-loop: advance tensor coordinates
+                if coordinates[axis] < shape[axis]:
+                    break
+                offset -= coordinates[axis] * strides[axis]
+                coordinates[axis] = 0
+                if axis:
+                    coordinates[axis - 1] += 1
+                    offset += strides[axis - 1]
     if count > 0:
         if tasks <= 1:
             _gather(0)

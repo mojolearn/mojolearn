@@ -1,0 +1,73 @@
+Native optimizer device descriptor/storage/lease checks (2026-11-10)
+
+Frozen producer dependencies
+  679a558c69: descriptor operations11–14, count15, shared device storage plan.
+  c3bea14b71: actual pure OptimizerDeviceHandle used by boundary cleanup, and
+  optimizer_device_transfer_span called before descriptor transfers.
+  Producer owns these APIs; no product/kernel edits in this test batch.
+
+Sources/tasks
+  checks/native_tests/optimizer_device_cases.mojo: shared pure fixtures.
+  optimizer_device_{cpu,gpu}_suite.mojo export run_checks(); matching thin
+  optimizer_device_{cpu,gpu}.mojo standalone entries contain main only.
+  Existing optimizer_descriptor_cases.mojo changes only its out-of-range
+  operation sentinel from retired-invalid11 to OPT_NATIVE_COUNT. Existing
+  operation0–10/error/ownership fixtures and their expected words stay intact.
+
+Coverage: CPU52, GPU57 fixtures
+  Common49:20 malformed C-ABI calls (five per operation11–14),28 pure native
+  storage-plan cases, one device-availability check. Malformed calls verify
+  nonzero status, exactly one error-sink call, complete exact error text and
+  untouched result storage; cover address/integer/float count mismatches,
+  missing result and missing request spans, plus unknown operation count15.
+  Plan cases cover scalar/matrix/empty shape, negative dimensions/count overflow,
+  reshape size disagreement, legal download prefixes/output overflow, native
+  float32 upload format/itemsize/nonempty/exact byte extent/null source, readonly
+  reversed-stride source preparation, scalar upload, transfer negative/overflow
+  count, zero span, null/negative/wrapping address and exact upper address bound.
+  Pure span-only fixtures never dereference synthetic addresses.
+
+  CPU adds explicit unsupported allocate/upload/download refusals, preserving
+  all source words. CPU availability must be false; no device allocation occurs.
+  GPU adds three exact raw-bit roundtrips (1,13,4097 cells) through actual
+  allocate/upload/download descriptors. Source ownership may be replaced after
+  synchronized upload; downloads and shorter prefixes preserve signed zeros,
+  positive/negative NaN payloads, infinities, subnormals and finite words, with
+  source/destination bounds and untouched tails checked independently as UInt32.
+  One GPU fixture checks bad allocation sizes and both transfer directions'
+  negative/overflow/zero/excess counts, null/negative/wrapping spans, invalid and
+  released handles; host output and existing device contents remain unchanged.
+  Four GPU fixtures exercise actual OptimizerDeviceHandle: normal scope cleanup,
+  cleanup when native publication raises (original error retained), detached
+  published ownership, and explicit/idempotent release before replacement
+  allocation. Scoped teardown cannot free a subsequently allocated replacement.
+  No mocked lease or Python runtime import in the new native suites.
+
+Parallel policy
+  Common malformed-envelope/metadata fixtures do not enter the device pool;
+  they run across existing host workers on both targets. CPU unsupported calls
+  also run independently. GPU allocation/transfer/lease fixtures remain ordered
+  for the existing shared neural context/handle pool; native device work is
+  unchanged. Raw-word input/oracle checks use host_parallelize.
+  No busy-core, timing, concurrent GPU-context or cross-vendor identity claim.
+
+Root compile/run commands
+  bash tools/compile_slot.sh pixi run check-native-optimizer-device-cpu
+  bash tools/compile_slot.sh pixi run check-native-optimizer-device-gpu
+  For consolidated executables, import
+  checks.native_tests.optimizer_device_cpu_suite.run_checks and
+  checks.native_tests.optimizer_device_gpu_suite.run_checks with distinct aliases.
+  Existing optimized standalone build paths:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_device_cpu.mojo -o "$HOME/mojolearn-evidence/optimizer-device-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_device_gpu.mojo -o "$HOME/mojolearn-evidence/optimizer-device-gpu"
+  Descriptor entries: training.host.optimizer_native.optimizer_host_v1 and
+  training.optimizer_native_gpu.optimizer_gpu_v1. Include existing descriptor
+  suites because their invalid-op boundary changed with producer count15.
+
+Status and retained seams
+  Source/TOML/JSON/diff inspection only; root compile/runtime OWED. No lane
+  build/test/box, identity or timing. No tolerances, old hashes or product math.
+  New meaningful contracts validate actual migration, so no Python numerical
+  tests were removed in this batch. Existing public failed-publication/pinning
+  tests remain; pending owner-control producer follow-up owns replacements for
+  obsolete private-field fabrication in test_optimizer_native_lifecycle.py.

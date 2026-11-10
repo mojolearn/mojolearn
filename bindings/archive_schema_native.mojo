@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Schema-driven `save` for the public estimator classes.
 #
-# Each public class connects one fixed tuple of save steps at class
-# definition (python/mojolearn/_native_archive_bridge.py `register`). This
-# owner reads the fitted fields from the instance dictionary, applies the
+# Classes connect save steps or a fixed native family name at definition
+# (python/mojolearn/_native_archive_bridge.py `register`). Typed families
+# bypass the step interpreter and its temporary maps. For remaining schemas,
+# this owner reads fitted fields from the instance dictionary, applies the
 # steps' refusals, packs the metadata vectors and writes the deterministic
 # NPZ through `classical_archive_write`: the same member names, dtypes,
 # shapes and bytes the 0.8.55 Python writer (`_serialize.write_npz`) wrote.
@@ -164,9 +165,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_archive import classical_archive_write, _archive_array
+from bindings.classical_archive import classical_archive_write, _archive_array, _archive_unpack_member, _archive_class_name_unpack
 from bindings.classical_archive_read import _archive_builtin_repr
 from bindings.trees_public_iforest import iforest_validate
+from bindings.cholesky_archive_native import cholesky_archive_write
+from providers.python.array_layout_boundary import native_shape_unpack
+from core.linear_metadata import linear_mode_name
+from core.native_archive_cholesky import NativeCholeskyArchiveSaved, native_cholesky_save_factor
 
 
 def _schema_dictionary(value: PythonObject) raises:
@@ -1104,6 +1109,60 @@ def _schema_gp_state(fields: PythonObject, steps: PythonObject, context: PythonO
             _gp_scalar_fields(own, Python.tuple("log_marginal_likelihood_value_", "n_iter_", "nb_"), context)
 
 
+def _cholesky_archive_field(values: List[PythonObject], present: List[Bool], names: List[String],
+                            index: Int, owner_name: String) raises -> PythonObject:
+    if not present[index]:
+        raise Error("AttributeError: '" + owner_name + "' object has no attribute '" + names[index] + "'")
+    return values[index]
+
+
+def _cholesky_archive_mode(var mode: PythonObject, context: PythonObject) raises -> String:
+    host_inference_scalar(mode, context, True)
+    if mode is None or not Bool(py=mode):
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var failure = String("ValueError: mojolearn Cholesky: cannot save invalid numeric_mode ")
+    if py_type(mode) is not py_type(PythonObject("")):
+        raise Error(failure + _schema_repr_shown(mode))
+    try:
+        return linear_mode_name(String(mode))
+    except:
+        raise Error(failure + _archive_builtin_repr(mode))
+
+
+def _cholesky_archive_save(model: PythonObject, fields: PythonObject, path: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+    _schema_dictionary(fields)
+    var name = _archive_class_name_unpack(py_type(model))
+    var names: List[String] = ["L_", "numeric_mode", "n_", "info_", "nb_", "_logdet", "jitter_", "jitter"]
+    var values = List[PythonObject]()
+    var present = List[Bool]()
+    for field in names:  # unpack: snapshot fixed public owner pins before conversions can release the GIL
+        present.append(py_contains(fields, PythonObject(field)))
+        values.append(py_get(fields, PythonObject(field)))
+    if not present[0]:
+        raise Error("RuntimeError: mojolearn Cholesky: call fit before save")
+    var state = NativeCholeskyArchiveSaved()
+    state.mode = _cholesky_archive_mode(values[1], context)
+    var pins = List[PythonObject]()
+    var factor = _archive_unpack_member("L", values[0], context, pins)
+    state.n = _schema_int(_cholesky_archive_field(values, present, names, 2, name), "n_", context)
+    # Keep the original public shape (including rank zero). Buffer admission
+    # may use a rank-one descriptor for scalar serialization, but validation
+    # must still report the public field's own shape without copying its data.
+    var shape = native_shape_unpack(values[0].shape)
+    native_cholesky_save_factor(factor.dtype, shape, state.n)
+    state.info = _schema_int(_cholesky_archive_field(values, present, names, 3, name), "info_", context)
+    state.nb = _schema_int(_cholesky_archive_field(values, present, names, 4, name), "nb_", context)
+    state.logdet = _schema_float(_cholesky_archive_field(values, present, names, 5, name), context)
+    state.jitter = _schema_float(_cholesky_archive_field(values, present, names, 6, name), context)
+    var jitter = _cholesky_archive_field(values, present, names, 7, name)
+    if jitter is not None:
+        state.jitter_parameter = _schema_float(jitter, context)
+    var result = cholesky_archive_write(path, factor^, state, pins, context)
+    _ = values
+    return result
+
+
 def archive_schema_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     """`model.save(path)` for a class with a connected save schema."""
     # Validate connected class descriptors and dictionary keys before lookup
@@ -1115,6 +1174,10 @@ def archive_schema_save(model: PythonObject, path: PythonObject, context: Python
         raise Error("TypeError: " + String(cls.__name__) + " has no connected save schema")
     # A fitted field may be an ndarray when the caller loaded NumPy.
     classical_connect_numpy(context)
+    if py_type(steps) is py_type(PythonObject("")):
+        if String(steps) == "native_cholesky":
+            return _cholesky_archive_save(model, admitted, path, context)
+        raise Error("TypeError: unsupported native saved schema")
     # A shallow copy: "choice" steps add derived fields, never to the model.
     var fields = py_call(native_loaded_module("builtins").dict, admitted)
     _schema_gp_state(fields, steps, context)

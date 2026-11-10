@@ -292,10 +292,11 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
   tags, are evidence to review, never exemptions; an empty baseline is not proof. Native execution and device
   behavior establish compliance; source-graph reachability does not distinguish admission from GPU computation.
-- **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard and the
-  shell-loop counter and GPU-route source-graph fence from push and CI. Do not restore them under another name
+- **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard,
+  shell-loop counter, GPU-route source-graph fence, runtime-import counter and public-runtime source-count gate
+  from push and CI. Do not restore them under another name
   or replace them with source-count gates. They excluded binding dependence or rejected required UNPACK/PACK
-  work, including native host input conversion before GPU execution.
+  work, including native host input conversion and reading mutable admitted module metadata.
   Their counts never proved a Python-free operation. Complete the typed Mojo boundary migration and retain
   actual runtime correctness checks.
 
@@ -444,6 +445,10 @@ them for you.
   condition else 0.0`. Copy a string slice into a temporary before assigning it back to the source.
 - Mojo 1.0's custom `sort` comparator is a local `@parameter` closure, passed with `cmp_fn` over a
   mutable `Span`; a top-level thin function does not satisfy its capturing comparator signature.
+  Import it from `std.builtin.sort`. In contrast, `host_parallelize` takes a runtime closure with
+  explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
+- `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
+  Put `comptime assert` inside a function body, never at module scope.
 
 ## Logs and context
 

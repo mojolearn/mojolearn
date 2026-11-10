@@ -26,7 +26,10 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
-from bindings.optimizer_public_door import new_array, same_shape, base_format, py_ints, door_ready
+from bindings.optimizer_public_door import new_array, door_ready
+from bindings.tensor_view import base_format
+from training.optimizer_input_plan import same_shape
+from providers.python.array_layout_boundary import native_shape_pack
 from bindings.optimizer_device_native import shape_count, device_shape
 from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
 from bindings.sequence_device_native import seq_device_make, sequence_device_operation
@@ -227,7 +230,7 @@ def _ids(value: PythonObject, context: PythonObject) raises -> PythonObject:
         embedding_cast_refusal(address, code, layout.count)
     _ = packed^
     _ = pin^
-    return Python.tuple(out, out._addr, layout.count, py_ints(layout.shape))
+    return Python.tuple(out, out._addr, layout.count, native_shape_pack(layout.shape))
 
 
 # ---------------------------------------------------------------- forward
@@ -644,7 +647,7 @@ def _device_snapshot(value: PythonObject, context: PythonObject) raises -> Pytho
     if py_type(handle) is not _b().int:
         raise Error("TypeError: device tensor handle requires a native integer")
     _ = shape_count(shape)
-    return Python.tuple(binding, py_ints(shape), handle)
+    return Python.tuple(binding, native_shape_pack(shape), handle)
 
 
 def _is_device(value: PythonObject, context: PythonObject) raises -> Bool:

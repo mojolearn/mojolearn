@@ -3,9 +3,12 @@
 Writer/hash execution and the generic archive reader now use native format
 implementations in this source branch. Public loading still requires the
 orchestrator's affected-group compile/runtime qualification and codec wheel
-dependency qualification. Linear model schema construction below the reader
-still has Python object state to migrate; generic reader migration is not a
-claim that every public load operation is Python-free.
+dependency qualification. Ridge/OLS schema checks and loaded scalar state now
+use `core/native_archive_linear.mojo`. Direct and generic MinMaxScaler save/load use
+`core/native_archive_minmax.mojo`; StandardScaler uses
+`core/native_archive_standard.mojo`. Other saved-model families and their generic
+host archive builders still have schema work, so this is not a claim that
+every public load operation is Python-free.
 
 `core/native_archive_codec.mojo` uses public C APIs and owns each decoder's state
 and result bytes. A single compressed stream is dependent; independent members
@@ -68,8 +71,191 @@ metadata without calling warning hooks. PACK emits those events through the
 existing admitted native warning boundary in member order, including warnings
 that precede a later dtype/payload refusal.
 
-Remaining work is typed linear schema/state construction, codec wheel dependency
-qualification, and affected public boundary tests. Existing API/protocol/
-exception and file ownership tests remain in place. The old Python-object ZIP,
+Direct and generic Ridge/OLS loads bypass the intermediate Python result
+dictionary. Their
+native plan retains saved mode, ancestry checks, exact dtype/shape refusals,
+intercept/alpha bits and constructor defaults; PACK creates the public model
+and publishes its native fitted-state record. No mean array is invented for
+loaded models. Generic dispatch feeds native members directly to that plan,
+retains its class/name/layout refusal order, and publishes the coefficient
+owner once with the saved C/F order flag. The obsolete map-to-member UNPACK
+adapter, optional existing-coefficient branch, and throwaway class probe
+allocation are deleted. Twelve Python boundary cases cover all three generic
+entry forms, both estimators and both order flags, input release, writable
+coefficients, public rebinding, native fitted-state reconciliation and save
+readback. This changes no fit/predict/update kernel or numerical formula.
+Affected development owners include `runtime_trees` and `runtime_classical`;
+shared reader/output consumers remain in the orchestrator's source closure.
+Native command remains `bash tools/compile_slot.sh pixi run
+check-native-archive-linear`; installed seam command adds `python -m pytest
+-n auto python/mojolearn/tests/test_linear_archive_generic_native.py`.
+No compilation or runtime checks were executed by this lane.
+Historical numeric/bytes metadata spelling is native too, including NumPy's
+legacy print configuration. Thirty-seven parallel native fixtures cover these
+schema/refusal/formatting contracts. Scalar spelling follows the published
+[NumPy scalar formatting source](https://github.com/numpy/numpy/blob/v2.3.0/numpy/_core/src/multiarray/scalartypes.c.src)
+and reuses Mojolearn's existing binary32 formatter.
+
+Filesystem byte decoding and pathlib component spelling now use
+`core/native_archive_path.mojo`, including UTF-8 surrogateescape, the distinct
+POSIX `//` root and lexical dot removal for pathlib reads. Exact string/byte
+filenames keep their prior spelling; no path protocol or codec registry is
+called. Forty-two independent native fixtures cover valid and invalid UTF-8,
+surrogate/NUL preservation and path component ordering. The Python boundary
+retains exact file/path admission and packs the final native Unicode words.
+Save reuses the shared native linear mode parser for Unicode whitespace and
+ASCII case normalization. Archive type admission uses fixed native identities;
+string-subclass storage is checked with `PyType_IsSubtype`, and class names
+come from the immutable type descriptor. The obsolete runtime `builtins`
+lookups and Python `strip`/`lower` format calls are removed from archive files.
+Path-containing error names are unpacked to a typed graph; native Mojo formats
+container delimiters, aliases, cycles and file names with an iterative task
+stack. Python references only pin input owners and captured native exceptions
+at the boundary. Display-order failure selection retains the first exception
+even when a later graph node was admitted earlier. Thirty-four direct native
+fixtures cover this graph contract, including deep names and file recursion;
+the existing public exception/protocol tests remain unchanged.
+
+The MinMaxScaler native plan preserves class-layout admission, ancestry,
+schema/refusal order, signed counts, clip metadata and unmodified Float32/64
+bits. Save owns metadata as Mojo bytes and borrows the five current public
+statistic buffers. Direct load publishes each writable C-order statistic with one
+payload copy, removing the intermediate Python result map and duplicate array
+copy. The old dedicated map builder and temporary Python metadata arrays are
+deleted. The shared endpoint admission now returns a native pair; its existing
+Python-pair wrapper remains for unchanged lifecycle callers. Ninety-three direct
+Mojo fixtures cover both loader policies, conflicting-invalid refusal order,
+native metadata bytes and borrowed views. Generic loading retains the saved
+rank-one C/F order flag; direct scaler loading retains its C-order output.
+The generic loader now selects its
+format/estimator from native decoded members, passes MinMax directly to the same
+typed plan and final PACK, and retains the input owner through that PACK. Other
+families still use their existing array-map adapter, after warning/error events
+are emitted once. The obsolete `host_archive_minmax` map builder is deleted.
+The direct Python seam and thirteen generic boundary cases cover ownership after
+input close, writable independent arrays, save readback and exceptional export
+release. Decoded native payloads are released before legacy schema builders
+run, retaining their existing buffer lifetimes. Native finalizer
+descriptors admitted by the generic host loader remain admitted; custom hooks
+remain refused. Affected development owners: `runtime_prep` and `runtime_trees`,
+plus existing consumers of shared archive output. No estimator kernel changes.
+All additions remain uncompiled and unrun in this lane; the orchestrator owns
+qualification, including the existing reader/public host archive seams.
+Native command: `bash tools/compile_slot.sh pixi run check-native-archive-minmax`.
+Installed boundary command: `python -m pytest -n auto
+python/mojolearn/tests/test_minmax_archive_generic_native.py
+python/mojolearn/tests/test_minmax_scaler_native_lifecycle.py
+python/mojolearn/tests/test_host_archive_native.py
+python/mojolearn/tests/test_classical_archive_reader_native.py`.
+
+StandardScaler direct and generic archive loading now consumes native decoded
+members, with one final writable C-order owner per statistic/count vector.
+The native plan preserves optional statistics for all four option combinations,
+integer count metadata, Float32 weighted scalar storage, Float32/Int64 vector
+counts, and the historical Float64 result for a one-element Int64 count member.
+Metadata still reads its four storage words even for accepted multidimensional
+or F-order metadata. Statistics retain raw NaN/signed-zero bytes. Count text
+continues to report its prior missing-dtype AttributeError before shape checks.
+The public scalar save admission and native count narrowing preserve Float32
+storage without creating an intermediate Python scalar array.
+
+The StandardScaler Python member dictionary, temporary metadata array,
+map-based `scaler_archive_build`, and zero-filled destination plus duplicate
+statistic/count copy are removed. Public owner pins remain in UNPACK/PACK;
+writer member preparation and decode reuse the existing native host pool.
+Final Python object publication stays ordered under the GIL. No training,
+transform, preparation-cache, reduction or tuned-kernel code changes.
+
+Sixty-two independently scheduled native fixtures live in the importable
+`checks/native_tests/archive_standard_suite.mojo::run_checks`, with the thin
+`archive_standard.mojo` standalone entry. Coverage includes option/count
+combinations, empty/negative features where historically accepted, ancestry
+and conflicting-invalid refusal order, every statistic shape/dtype/presence
+refusal, scalar rounding words, ordered native metadata bytes and borrowed
+views without an intermediate payload allocation. Seventeen Python boundary
+cases cover direct/public/explicit-host/generic routes, source release,
+C-order writable statistic/count owners, public rebinding, saved member order,
+scalar count types, and exceptional export release. Existing partial-fit,
+transform, NumPy-free and checkpoint lifecycle coverage remains unchanged.
+
+Affected development owners are `runtime_prep` and `runtime_trees`, plus
+consumers of shared native archive helpers. Commands for the orchestrator:
+`bash tools/compile_slot.sh pixi run check-native-archive-standard` and
+`python -m pytest -n auto python/mojolearn/tests/test_standard_archive_native.py
+python/mojolearn/tests/test_standard_scaler_native_lifecycle.py
+python/mojolearn/tests/test_host_scaler_training_native.py` against rebuilt
+installed code. The new suite can be imported by the existing aggregate CPU
+runner. This lane has run neither compilation nor runtime tests; wheel codec
+qualification and any performance measurements remain separate obligations.
+
+Cholesky save and generic/public load now use
+`core/native_archive_cholesky.mojo`. Save captures only its eight public field
+pins, admits them in the prior order, and creates native integer/float metadata
+bytes; it no longer copies an instance dictionary or builds a member map or
+Python scalar arrays. Its old schema-step tuple is replaced by the import-time
+`native_cholesky` family connection. Subclasses retain the saved estimator name
+`Cholesky`; missing fields, scalar admission, false/default and normalized modes,
+factor dtype/shape checks and failed-factor saves retain their public behavior.
+The discarded full factor copy formerly made only to check dtype/shape is gone.
+
+Load retains generic class/hook admission, then native mode, dtype, joint-count
+and factor-shape decisions in their former order. Final state includes the
+original info/block values, NaN/signed-zero words and exact minus-one/None jitter
+sentinel. C-order factors use the existing one-copy output pack. F-order factors
+are gathered directly into their final writable C-order owner with the GIL
+released and both owners pinned. The former intermediate Python factor and
+serial reorder on this route are removed. The gather is extracted from the
+already-parallel `NativeArchiveMember.prepare` implementation, retaining its
+partition policy and byte operations for the writer too; no solver kernel or
+numerical algorithm changes. Legacy families still using the shared serial
+host reorder are unchanged and remain migration work.
+
+Fifty-four native fixtures are importable as
+`checks.native_tests.archive_cholesky_suite.run_checks`. Independent raw-word
+oracles assemble UInt64 values from bytes (never the bounded address parser),
+covering signed integers and NaN payloads. Coverage also includes accepted
+metadata ranks, optional jitter, every refusal stage, empty save/invalid load,
+member ownership/order, C/F/negative/padded strides at four widths, empty copies,
+and a 257-by-263 gather with parallel initialization and independent checking.
+Fourteen Python boundary cases cover public/explicit/generic loaders, both
+saved orders, writable independent factor owners after input release, read-only
+rebound F/negative-stride buffers, scalar state admissions, normalized mode,
+unchanged serialized bytes, exception quoting and refused conversion hooks.
+Existing Cholesky numerical and public archive tests remain unchanged.
+
+Root's public-owner lifetime repair `10e615c641` is adopted in this lane as
+`013491f906`: the final generic envelope retains its admitted public class pin
+for hook and public iforest/forest/GBDT selection. It creates no probe instance.
+Affected primary owners for Cholesky are `runtime_classical` and `runtime_trees`;
+shared archive output/writer changes also invalidate their normal consumers.
+Commands: `bash tools/compile_slot.sh pixi run check-native-archive-cholesky`
+and installed `python -m pytest -n auto
+python/mojolearn/tests/test_cholesky_archive_native.py
+python/mojolearn/tests/test_host_archive_native.py`. The existing native writer
+suite also covers the extracted gather. No compilation, runtime or performance
+result is claimed by this lane for this batch; the orchestrator owns those runs.
+
+Text-cell storage is now allocated once without a serial construction pass.
+Each host worker constructs and moves its assigned owning cells directly into
+that final allocation. Every slot is initialized even when its decode fails,
+so error unwinding can safely destroy the whole list. A worker keeps its first
+logical error; the caller scans worker summaries in chunk order. The removed
+per-cell error array and serial error scan are no longer proportional overhead
+on large text payloads. Numeric members retain their early-return path. Ten
+direct native fixtures cover C/F Unicode and byte cells, embedded NULs,
+supplementary code points, empty/zero-width input, input-owner release, and
+multiple errors whose serialized and logical orders differ. Final owner-size
+overflow is refused before allocation, including zero-width text arrays whose
+declared count cannot be bounded by payload bytes.
+
+This uses the supported uninitialized List allocation and pointer
+`unsafe_write` placement API, which must initialize rather than assign over
+owning elements: [Mojo List source](https://github.com/modular/modular/blob/main/mojo/stdlib/std/collections/list.mojo)
+and [Mojo 1.0 pointer API migration](https://github.com/modular/modular/blob/main/Mojo/docs/site/releases/v1.0.0.md).
+Compilation and runtime coverage remain pending with the orchestrator.
+
+Remaining work is codec wheel dependency qualification and affected public
+boundary tests. Existing API/protocol/exception and file ownership tests remain
+in place. The old Python-object ZIP,
 NPY and Unicode parser/codec helpers and their import-time codec dependencies
 are removed with the native reader connection; no callback fallback remains.
