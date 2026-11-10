@@ -2,7 +2,6 @@
 # Archive UNPACK/PACK: admit existing native buffers/files and retain owners.
 # Format bytes, CRCs, member metadata and strided storage live in native Mojo.
 from std.builtin.sort import sort
-from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
@@ -16,6 +15,7 @@ from bindings.cpython_table import cpython_table
 from core.sha256 import sha256_hex, sha256_hex_addr
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_path import archive_filesystem_decode, archive_path_join, archive_path_normalize
+from core.linear_metadata import linear_mode_name
 from core.native_archive_write import (
     NativeArchiveMember, archive_contiguous_strides, archive_unicode,
     archive_linear_members, archive_prepare, archive_local, archive_central, archive_footer,
@@ -203,13 +203,22 @@ def _archive_array(value: PythonObject, context: PythonObject) raises -> PythonO
 
 def _archive_str_list(value: PythonObject) raises -> Bool:
     """A non-empty flat list whose every item is a str (or str subclass)."""
-    var b = native_loaded_module("builtins")
-    if py_type(value) is not b.list or len(value) == 0:
+    if py_type(value) is not py_type(Python.list()) or len(value) == 0:
         return False
+    var native_str = py_type(PythonObject(""))
+    ref cpy = Python().cpython()
+    var subtype = cpy.lib.get_function[Int32]("PyType_IsSubtype")
     for i in range(len(value)):  # driver-loop: over the distinct str class labels of one model
-        if not Bool(py=py_call(b.isinstance, value[i], b.str)):
+        if subtype(py_type(value[i])._obj_ptr, native_str._obj_ptr) == 0:
             return False
     return True
+
+
+def _archive_class_name_unpack(cls: PythonObject) raises -> String:
+    # Read the immutable type descriptor directly, without a metaclass hook
+    # or a mutable builtins.type/str module attribute.
+    var native_type = py_type(py_type(PythonObject("")))
+    return String(py=py_call(native_type.__dict__["__name__"].__get__, cls))
 
 
 def _archive_unpack_unicode(value: PythonObject, context: PythonObject) raises -> List[UInt32]:
@@ -401,17 +410,17 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not py_type(PythonObject("")):
         raise Error("cannot save invalid numeric_mode")
-    # Exact-str C methods are input normalization at UNPACK, preserving the
-    # existing Unicode whitespace/case behavior of the public mode option.
-    mode = mode.strip().lower()
-    var selected = String(mode)
-    if selected != "fast" and selected != "identical":
+    var source = String(mode)
+    var selected = String("")
+    try:
+        selected = linear_mode_name(source)
+    except:
         raise Error("cannot save invalid numeric_mode")
     var pins = List[PythonObject]()
     # Every save reads the current writable/rebound public coefficient field.
     var coef = _archive_unpack_member("coef", fields["coef_"], context, pins)
     var alpha = Float64(py=fields["alpha"]) if ridge else Float64(0)
-    var members = archive_linear_members(coef^, String(py_type(model).__name__), selected,
+    var members = archive_linear_members(coef^, _archive_class_name_unpack(py_type(model)), selected,
         Int(py=fields["n_features_in_"]), Float64(py=fields["intercept_"]), Bool(py=fields["fit_intercept"]), ridge, alpha)
     var opened = _archive_open(path, context)
     var file = opened[0]
