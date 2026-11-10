@@ -39,26 +39,9 @@ def _archive_model_fields(value: PythonObject) raises -> PythonObject:
 
 
 def _archive_read_path(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var path = _archive_path(value, context)
-    var cls = py_type(value)
-    var paths = context["archive_path_types"]
-    if cls is not paths[0] and cls is not paths[1]:
-        # Keep accepted native bytes-path UTF-8/surrogateescape normalization.
-        return path
-    # Standard pathlib passes this lexical POSIX spelling to open: remove
-    # empty and dot components, keep dot-dot and exactly two leading slashes.
-    # Read the admitted native component storage without __fspath__/__str__.
-    var parts = py_call(path.split, "/")
-    var kept = Python.list()
-    for i in range(len(parts)):  # driver-loop: stored POSIX path components
-        if len(parts[i]) and parts[i] != PythonObject("."):
-            _ = py_call(kept.append, parts[i])
-    var prefix = PythonObject("")
-    if Bool(py=py_call(path.startswith, "/")):
-        prefix = PythonObject("//" if Bool(py=py_call(path.startswith, "//"))
-                              and not Bool(py=py_call(path.startswith, "///")) else "/")
-    var normalized = prefix + py_call(PythonObject("/").join, kept)
-    return normalized if len(normalized) != 0 else PythonObject(".")
+    # Only pathlib component storage receives lexical normalization; exact
+    # str and bytes retain their original filename spelling and error state.
+    return _archive_path(value, context, True)
 
 
 def _archive_repr_types() raises -> PythonObject:

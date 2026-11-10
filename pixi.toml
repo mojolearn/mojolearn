@@ -77,6 +77,7 @@ check-native-archive-codec = "mojo run -I . checks/native_tests/archive_codec.mo
 check-native-archive-parser = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_parser.mojo"
 check-native-archive-reader = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_reader.mojo"
 check-native-archive-linear = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_linear.mojo"
+check-native-archive-path = "mojo run -I . checks/native_tests/archive_path.mojo"
 check-native-archive-unicode = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_unicode_names.mojo"
 check-native-linear-owner-cpu = "mojo run -I . checks/native_tests/linear_owner_cpu.mojo"
 check-native-tsqr-host-ownership = "mojo run -I . checks/native_tests/tsqr_host_ownership.mojo"

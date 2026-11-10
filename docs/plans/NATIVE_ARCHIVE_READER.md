@@ -81,6 +81,14 @@ schema/refusal/formatting contracts. Scalar spelling follows the published
 [NumPy scalar formatting source](https://github.com/numpy/numpy/blob/v2.3.0/numpy/_core/src/multiarray/scalartypes.c.src)
 and reuses Mojolearn's existing binary32 formatter.
 
+Filesystem byte decoding and pathlib component spelling now use
+`core/native_archive_path.mojo`, including UTF-8 surrogateescape, the distinct
+POSIX `//` root and lexical dot removal for pathlib reads. Exact string/byte
+filenames keep their prior spelling; no path protocol or codec registry is
+called. Forty-two independent native fixtures cover valid and invalid UTF-8,
+surrogate/NUL preservation and path component ordering. The Python boundary
+retains exact file/path admission and packs the final native Unicode words.
+
 Remaining work is codec wheel dependency qualification and affected public
 boundary tests. Existing API/protocol/exception and file ownership tests remain
 in place. The old Python-object ZIP,
