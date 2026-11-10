@@ -2,15 +2,15 @@
   "schema": "mojolearn.native-test-migration-inventory.v1",
   "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
   "files": 616,
-  "test_definitions": 4127,
+  "test_definitions": 4126,
   "file_decisions": {
     "needs-semantic-review": 588,
     "retain-python-boundary": 10,
     "retain-tooling": 2,
     "review-module-gate": 1,
-    "split-migrated": 3,
+    "split-migrated": 4,
     "split-needed": 9,
-    "split-partial": 3
+    "split-partial": 2
   },
   "reviewed_files": 28,
   "not_a_gate": true,
@@ -69,6 +69,13 @@
       "native_fixtures_per_executor": 10,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see oob-exact-sum-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "decision": "split-migrated",
+      "additional_native_bf16_gemm_fixtures_per_executor": 9,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see bf16-linalg-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
@@ -77,5 +84,38 @@
     "test_sequence_dtype_alias_native.py",
     "test_sequence_scalar_cast_status.py",
     "test_sequence_temporal_cast_contract.py"
+  ],
+  "integration_reported_results": [
+    {
+      "batch": "nonzero",
+      "native_pairs_passed": 60,
+      "source_status": "Root applied syntax fixes."
+    },
+    {
+      "batch": "byte-config",
+      "native_fixtures_passed": 25
+    },
+    {
+      "batch": "ops-session-gpu",
+      "native_fixtures_passed": 28,
+      "source_status": "Root applied borrowed-pointer origin fixes."
+    },
+    {
+      "batch": "bf16-conversion-gpu",
+      "narrow_roundtrip_words_passed": 264105,
+      "raw_widen_words_passed": 65536
+    },
+    {
+      "batch": "rankn-views",
+      "cpu_fixtures_passed": 17,
+      "gpu_fixtures_passed": 17,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "int8-linalg",
+      "cpu_shapes_passed": 5,
+      "gpu_shapes_passed": 5,
+      "source_status": "Passed unmodified."
+    }
   ]
 }
