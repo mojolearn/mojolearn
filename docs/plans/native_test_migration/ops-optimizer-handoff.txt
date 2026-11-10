@@ -1,0 +1,68 @@
+Mojolearn native OpsSession optimizer migration, 2026-11-10
+
+10 direct fixtures per implementation
+  0 SGD step schedule: lr .05, step 2, gamma .5.
+  1 SGD Nesterov: lr .05, momentum .9, coupled decay .01.
+  2 Adam: lr .01; 3 Adam exponential lr .02, gamma .9, decay .001.
+  4 AdamW: lr .01, beta1 .8, beta2 .99, decoupled decay .05.
+  Each runs a 3 -> 5 ReLU -> 1 MLP, full batch 24, six epochs with 26
+  parameters. Retains exact Session versus direct native model_fit words,
+  then checks independent Float64 gradients/update equations and moments.
+  5 Adam and 6 momentum SGD checkpoint: straight five versus three + native
+  SavedParameter checkpoint + two in a second session, exact parameter words;
+  independent five-step equations/state and unchanged source checkpoint
+  tensor buffers prove restore copies instead of retaining mutable aliases.
+  7 Exact literal five-rate schedule [.1,.1,.05,.05,.025].
+  8 Zero-grad refusal, accumulation exact words and analytic MSE gradient.
+  9 Missing backward, nontrainable, duplicate and invalid optimizer refusals
+  preserve parameter/state; successful step advances once; unrecorded reset
+  refuses. Public invalid string/learning-rate/Nesterov cases stay in Python.
+
+Oracle and coverage
+  ops_optimizer_oracle.mojo imports only product operation/schedule ids and
+  the host scheduler; it does not call product arithmetic, losses, gradients
+  or optimizers for expected values. Fixed dyadic native data replaces NumPy
+  random preparation and preserves original dimensions, epochs, configurations
+  and exact checks. Positive/negative ReLU preactivations avoid the kink.
+  Float64 equations add an independent correctness oracle beyond the original
+  same-kernel exact comparison. Added six-step float32 tolerances: parameters
+  2e-6 + 1e-5*abs(reference), first state 2e-8 + 2e-4*abs(reference), second
+  state 1e-12 + 2e-4*abs(reference); analytic gradient 1e-7 + 1e-5*abs(reference).
+  These are new finite-rounding checks, not relaxed preexisting tolerances.
+  All original exact Session/model_fit, resume and zero-grad checks remain.
+  Native List owners survive the final raw pointer/address use.
+
+Python boundary retained
+  All five test definitions remain, now named for the public seam: five
+  keyword-option combinations and output publication; Python rate scalar;
+  Adam/SGD checkpoint dict keys, Python scalars, tensor handles/ndarrays and
+  snapshots surviving exporting Session.close; gradient result/refusal; and
+  all previous public step/configuration exception paths. No math oracle,
+  repeated training driver, private Sequential helper or digest driver remains.
+  Other optimizer Python lifecycle, error-class and array-owner tests remain
+  because native-only calls cannot prove their actual Python boundaries.
+
+Parallel execution and commands
+  CPU fixtures use host_parallelize with independent sessions. Oracle rows,
+  gradients and parameter updates use the existing host pool. Epochs and
+  checkpoint stages are dependent recurrence. GPU fixture submission remains
+  ordered because DeviceExec shares sequence_ctx/pool; GPU numerical work
+  uses existing parallel kernels. This is not concurrent GPU session proof.
+  No new runner/build/loader scheme, no product or kernel changes.
+  Root compile/run, lane has not compiled or run:
+    bash tools/compile_slot.sh pixi run check-native-ops-optimizer-cpu
+    bash tools/compile_slot.sh pixi run check-native-ops-optimizer-gpu
+  Compile-only equivalents use existing flags/targets:
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/ops_optimizer_cpu.mojo -o "$HOME/mojolearn-evidence/ops-optimizer-cpu"
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/ops_optimizer_gpu.mojo -o "$HOME/mojolearn-evidence/ops-optimizer-gpu"
+  Then run each exact binary. Public boundary group: _mojolearn_x_sequence,
+  pytest python/mojolearn/tests/test_ops_optimizer.py on installed artifacts.
+
+Status/removals
+  Source/AST/TOML/diff review only; compile and runtime owed to root. Native
+  dependencies are existing OpsSession, model_fit, FitConfig and OptConfig;
+  this batch does not depend on in-progress public optimizer object migration.
+  Removed Python RNG/MLP training loops, private _options/_program/_table/
+  _binding/_targets driver, NumPy comparison aggregation and OPS_OPT_DIGEST
+  hash output. No expected historical hashes changed. A/B: none. No timing,
+  identity, rented jobs or busy-core claim. Product arithmetic unchanged.

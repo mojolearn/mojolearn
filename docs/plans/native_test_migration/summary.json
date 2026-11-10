@@ -7,10 +7,10 @@
     "needs-semantic-review": 582,
     "retain-python-boundary": 15,
     "split-partial": 1,
-    "split-migrated": 8,
+    "split-migrated": 9,
     "review-module-gate": 1,
     "retain-tooling": 2,
-    "split-needed": 7
+    "split-needed": 6
   },
   "reviewed_files": 34,
   "not_a_gate": true,
@@ -156,6 +156,16 @@
         "training/checks/optimizer_state_input_check.mojo"
       ],
       "handoff": "docs/plans/native_test_migration/optimizer-state-input-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_optimizer.py",
+      "change": "Replace Python numerical training/comparison/schedule/resume/reset loops and private Sequential drivers with 10 native fixtures per CPU/GPU; preserve five real Python API boundary definitions. Add independent Float64 optimizer/MLP/state oracle alongside original exact orchestration and resume assertions.",
+      "native_checks": [
+        "checks/native_tests/ops_optimizer_cpu.mojo",
+        "checks/native_tests/ops_optimizer_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/ops-optimizer-handoff.txt",
       "source_review_only": true
     }
   ],
