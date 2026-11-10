@@ -14,6 +14,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.archive_unicode_native import _archive_unicode_failure
 from bindings.cpython_table import cpython_table
 from core.sha256 import sha256_hex, sha256_hex_addr
+from core.native_archive_span import ArchiveSpan
+from core.native_archive_path import archive_filesystem_decode, archive_path_join, archive_path_normalize
 from core.native_archive_write import (
     NativeArchiveMember, archive_contiguous_strides, archive_unicode,
     archive_linear_members, archive_prepare, archive_local, archive_central, archive_footer,
@@ -53,7 +55,30 @@ def _archive_methods(file: PythonObject, context: PythonObject) raises -> Python
     raise Error("TypeError: checkpoints require a native binary file or standard path; Python file protocols cannot execute")
 
 
-def _archive_path(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def _archive_path_words_unpack(value: PythonObject) raises -> List[UInt32]:
+    # Only exact native strings reach this boundary. Filesystem strings may
+    # contain surrogateescaped bytes, so do not apply model-text admission.
+    ref cpy = Python().cpython()
+    var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(value._obj_ptr)
+    if count < 0:
+        raise cpy.unsafe_get_error()
+    var result = List[UInt32](capacity=count)
+    var api = cpython_table()
+    for i in range(count):  # unpack: exact native filesystem Unicode storage
+        result.append(api[].PyUnicode_ReadChar(value._obj_ptr, i))
+    return result^
+
+
+def _archive_path_words_pack(points: List[UInt32]) raises -> PythonObject:
+    var result = cpython_table()[].PyUnicode_FromKindAndData(Int32(4), Int(points.unsafe_ptr()), len(points))
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    _ = points
+    return PythonObject(from_owned=result)
+
+
+def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = False) raises -> PythonObject:
     # Retain the standard pathlib layouts at package connection. Mutable
     # builtins/pathlib names must not authorize a caller's Python protocols.
     var native_str = py_type(PythonObject(""))
@@ -61,7 +86,13 @@ def _archive_path(value: PythonObject, context: PythonObject) raises -> PythonOb
     if cls is native_str:
         return value
     if cls is context["archive_bytes_type"]:
-        return py_call(value.decode, "utf-8", "surrogateescape")
+        var address = cpython_table()[].PyBytes_AsString(value._obj_ptr)
+        if address == 0:
+            raise Python().cpython().unsafe_get_error()
+        var points = archive_filesystem_decode(ArchiveSpan(address, len(value)))
+        var result = _archive_path_words_pack(points)
+        _ = value
+        return result^
     var paths = context["archive_path_types"]
     if cls is not paths[0] and cls is not paths[1]:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
@@ -90,19 +121,16 @@ def _archive_path(value: PythonObject, context: PythonObject) raises -> PythonOb
         raise Error("TypeError: path requires native component storage")
     if py_type(parts) is not py_type(Python.list()) and py_type(parts) is not py_type(Python.tuple()):
         raise Error("TypeError: path components require native storage")
-    var result = PythonObject("")
+    var native_parts = List[List[UInt32]](capacity=len(parts))
     for i in range(len(parts)):  # driver-loop: native stored filesystem components
         var part = parts[i]
         if py_type(part) is not native_str:
             raise Error("TypeError: path components require native strings")
-        if Bool(py=py_call(part.startswith, "/")) or len(result) == 0:
-            result = part
-        elif len(part) != 0:
-            # Python 3.11 stores a POSIX root as its own _parts item. Keep
-            # the distinct '//' root while joining; rstrip would collapse it.
-            result = (result + part if result == PythonObject("//")
-                      else py_call(result.rstrip, "/") + PythonObject("/") + part)
-    return result if len(result) != 0 else PythonObject(".")
+        native_parts.append(_archive_path_words_unpack(part))
+    var points = archive_path_join(native_parts)
+    if normalize:
+        points = archive_path_normalize(points)
+    return _archive_path_words_pack(points)
 
 
 def _archive_open(path: PythonObject, context: PythonObject) raises -> PythonObject:
