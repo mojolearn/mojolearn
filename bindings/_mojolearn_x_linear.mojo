@@ -1,5 +1,3 @@
-from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE LINEAR LANE'S GPU BINDING (lane/algos-linear, 2026-09-27).
@@ -10,6 +8,8 @@ x_linear_decision(x_addr, wb_addr, dims, out_addr)
     dims = [n, d, k, link]; wb is k rows of (w_0..w_{d-1}, b)
 The host binding (_mojolearn_x_linear_host.mojo) exports the same names with
 the same address contract and runs the same x_linear/ source on the CPU."""
+from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
