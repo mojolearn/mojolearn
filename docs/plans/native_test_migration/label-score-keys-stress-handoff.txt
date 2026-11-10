@@ -7,9 +7,10 @@ Command:mojo run -I . checks/native_tests/label_score_keys_stress.mojo
 CPU bundle with the finite lane's complementary28labels_score_keys fixtures.
 No product source or numerical kernels changed. No experiment/A/B define.
 
-Dependency:finite lane's forthcoming typed score-key commit; concrete SHA
-is recorded in the parent handoff after it freezes. Native API was reviewed
-from core/labels_score_keys.mojo while that lane finalized its source.
+Dependency:finite lane's frozen89c19001a00a05200b24ee0873e56fbcce0a709a.
+The producer confirmed ScoreLabelKey/ScoreKeyIndex and integer_keys/join/codes
+APIs unchanged from the reviewed source. Its own fixture lifetime follow-up
+469f937bd7 is separate; this suite retains all borrowed text owners explicitly.
 
 New coverage and Python mapping are in label-score-keys-stress.json.
 The source literal collision integers were selected into the preserved

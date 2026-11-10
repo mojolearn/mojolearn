@@ -445,6 +445,10 @@ them for you.
   condition else 0.0`. Copy a string slice into a temporary before assigning it back to the source.
 - Mojo 1.0's custom `sort` comparator is a local `@parameter` closure, passed with `cmp_fn` over a
   mutable `Span`; a top-level thin function does not satisfy its capturing comparator signature.
+  Import it from `std.builtin.sort`. In contrast, `host_parallelize` takes a runtime closure with
+  explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
+- `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
+  Put `comptime assert` inside a function body, never at module scope.
 
 ## Logs and context
 

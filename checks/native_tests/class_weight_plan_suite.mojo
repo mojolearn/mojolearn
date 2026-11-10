@@ -31,7 +31,7 @@ def publication(unit: Int) raises:
     require(all_one == (count == 0), "balanced scalar unit decision")
     var plan = class_weight_plan(values, all_one)
     require(plan.all_one == (count == 0) and len(plan.words) == count, "weight plan extent")
-    var actual = plan.words.unsafe_ptr()
+    var actual = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(plan.words.unsafe_ptr()))
     var failed = List[Int](length=tasks, fill=0)
     var fp = failed.unsafe_ptr()
     def check(worker: Int) {imm actual, imm count, imm chunk, imm fp}:

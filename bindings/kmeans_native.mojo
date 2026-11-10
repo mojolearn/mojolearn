@@ -3,10 +3,9 @@
 # `fit`, `predict`, `transform`, `fit_predict`, `fit_transform`). The shell
 # hands over the binding `_bind` resolved for the model's numeric mode; this
 # owner reads the parameters, makes the refusals the Python method made (same
-# wording, same order), allocates the outputs, runs the binding's
-# `kmeans_fit` / `kmeans_predict` / `kmeans_transform` with the argument lists
-# `bindings/_mojolearn.mojo` documents, and stores the fitted attributes. The
-# kernels and their inputs are unchanged, so the bits are too.
+# wording, same order), allocates the outputs, executes typed native requests
+# through the admitted compiled provider, and stores the fitted attributes.
+# Numerical kernels, fused operations and their inputs remain unchanged.
 # Lane migrate-classical-b2: `fit_transform` uploads X once
 # (`kmeans_fit_transform`), and `predict` / `transform` read the fitted
 # centroids from a device copy minted at the first query after a fit
@@ -24,96 +23,38 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.cpython_table import cpython_table
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
-    family_call, family_entry, family_array, family_nonfinite, family_field,
+    FAMILY_F32P, family_repr, family_str,
+    family_call, family_array, family_field,
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
-from bindings.cpython_table import cpython_table
-from core.shared_slot import SharedSlot
+from core.kmeans_native_api import (
+    KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest,
+    KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD, KMEANS_CAP_HOST,
+)
+from bindings.kmeans_descriptor_boundary import (
+    kmeans_connection, kmeans_capabilities, kmeans_run_fit, kmeans_run_query, kmeans_integer,
+)
+from bindings.kmeans_owner_boundary import (
+    kmeans_owner_matching, kmeans_owner_handle, kmeans_owner_prepare,
+    kmeans_owner_getstate, kmeans_owner_setstate,
+)
 
 comptime _INIT_ARRAY = 2
 comptime _HOLDER = "_resident_holder"
 
 
-def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """The binding's compiled entry `name`, or None where the loaded binding
-    has no such door (the CPU host binding refuses an absent name with
-    ImportError, a module with AttributeError: both mean "no residency
-    here", and the pending exception is discarded)."""
-    if _kmeans_door_absent(binding, name):
-        return PythonObject(None)
-    try:
-        return family_entry(binding, name, context)
-    except error:
-        if String(error) != PYTHON_ERROR_PENDING:
-            raise error
-        _ = optimizer_python_error(error)
-        ref cpy = Python().cpython()
-        cpython_table()[].PyErr_Clear()
-        _kmeans_mark_absent(binding, name)
-        return PythonObject(None)
-
-
 def _kmeans_release(model: PythonObject) raises:
-    """Drop the resident centroids, if held, through the minting binding's
-    `kmeans_centers_release`. Quiet on a binding that cannot be reached any
-    more and on a handle already released (a copied instance)."""
-    var b = native_loaded_module("builtins")
-    var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
-    if holder is None or py_type(holder) is not b.dict:
-        return
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
-    if held is None:
-        return
-    py_setitem(holder, "index", PythonObject(None))
-    try:
-        _ = py_call(py_call(b.getattr, held[2], PythonObject("kmeans_centers_release")), held[1])
-    except:
-        pass
-
-
-struct _KMeansDoorless(Defaultable, Movable):
-    # Bindings found to have no `kmeans_centers_prepare` door (the CPU host
-    # binding): probing them raised and cleared an ImportError on every
-    # query. Strong references, so an address is never reused while listed;
-    # the binding modules live for the process anyway.
-    # p3-neighbors-cluster: (binding, door name) pairs, so every optional
-    # door (`kmeans_fit_transform` too, probed on every fit_transform) is
-    # probed once per binding; the layout changed, so the global's name did.
-    var bindings: List[PythonObject]
-    var names: List[String]
-
-    def __init__(out self):
-        self.bindings = List[PythonObject]()
-        self.names = List[String]()
-
-
-comptime _KMEANS_DOORLESS = SharedSlot[_KMeansDoorless, "MojolearnKMeansDoorlessV3"]
-
-
-def _kmeans_door_absent(binding: PythonObject, name: String) raises -> Bool:
-    var g = _KMEANS_DOORLESS.get_or_create_ptr()
-    for i in range(len(g[].bindings)):  # small-loop(bindings: the few connected KMeans bindings without a door)
-        if g[].bindings[i] is binding and g[].names[i] == name:
-            return True
-    return False
-
-
-def _kmeans_mark_absent(binding: PythonObject, name: String) raises:
-    var g = _KMEANS_DOORLESS.get_or_create_ptr()
-    if len(g[].bindings) < 64:
-        g[].bindings.append(binding)
-        g[].names.append(name)
-
-
-def _kmeans_doorless(binding: PythonObject) raises -> Bool:
-    return _kmeans_door_absent(binding, "kmeans_centers_prepare")
+    # Removing the model's reference retires the owner. A query still using
+    # it pins the native handle until its own execution has finished.
+    py_setitem(py_fields(model), _HOLDER, PythonObject(None))
 
 
 def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -> Bool:
@@ -128,69 +69,30 @@ def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -
     return classical_is_f32(centers, context) and classical_c_order(centers, context)
 
 
-def _kmeans_held(fields: PythonObject, binding: PythonObject, centers: PythonObject, k: Int,
-                 d: Int) raises -> PythonObject:
-    """The held resident record `((centers, k, d), handle, binding)` when it
-    was minted from this very `cluster_centers_` object (the record keeps a
-    reference to it, so it cannot be replaced by a new array at the same
-    address) by this binding at this shape, else None. A record is minted
-    only for a read-only mojolearn Array (p3-neighbors-cluster, replacing the
-    per-query SHA-256 of the centroid words): an in-place edit raises
-    NumPy's read-only error instead of diverging from the device copy."""
-    var b = native_loaded_module("builtins")
-    var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
-    if holder is None or py_type(holder) is not b.dict:
-        return PythonObject(None)
-    var held = py_get(holder, PythonObject("index"), PythonObject(None))
-    if held is None:
-        return PythonObject(None)
-    if held[0][0] is centers and held[2] is binding and Int(py=held[0][1]) == k and Int(py=held[0][2]) == d:
-        return held
-    return PythonObject(None)
+def _kmeans_held(model: PythonObject, fields: PythonObject, binding: PythonObject,
+                 centers: PythonObject, k: Int, d: Int, connection: Int) raises -> PythonObject:
+    var owner = py_get(fields, _HOLDER, PythonObject(None))
+    return owner if kmeans_owner_matching(owner, model, centers, binding, connection, k, d) else PythonObject(None)
 
 
-def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: PythonObject, c: PythonObject,
-                     k: Int, d: Int, context: PythonObject) raises -> PythonObject:
-    """The handle of the device copy of the fitted centroids `c` (the
-    admitted float32 words of `cluster_centers_`), uploaded at the first
-    query after a fit and reused while `cluster_centers_` is the same object,
-    the binding is the one that minted it (the object is read-only)
-    (`_kmeans_held`); None where the binding has no resident door. The
-    holder dictionary changes, never the model's `__dict__` keys after a
-    fit."""
+def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: PythonObject,
+    c: PythonObject, k: Int, d: Int, connection: Int, context: PythonObject) raises -> PythonObject:
+    if (kmeans_capabilities(connection) & KMEANS_CAP_RESIDENT) == 0:
+        return PythonObject(None)
     var fields = py_fields(model)
-    if _kmeans_doorless(binding):
-        return PythonObject(None)
-    var held = _kmeans_held(fields, binding, centers, k, d)
+    var held = _kmeans_held(model, fields, binding, centers, k, d, connection)
     if held is not None:
-        return held[1]
-    # p3-neighbors-cluster (hazard class A): the record is keyed by the
-    # identity of `cluster_centers_`, never its values, so only storage that
-    # can be made read-only is held on the device; any other (a
-    # caller-assigned ndarray) takes the per-call upload, which reads the
-    # current words every query.
+        return held
+    # Writable/rebound caller arrays still use per-query uploads. Only the
+    # same freezable Array owner can cache its already-admitted device copy.
     if not fitted_is_freezable(centers, context):
         return PythonObject(None)
     _ = fitted_freeze(centers, context)
-    var prepare = _kmeans_optional_entry(binding, "kmeans_centers_prepare", context)
-    if prepare is None:
-        return PythonObject(None)
-    var b = native_loaded_module("builtins")
-    var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
-    if holder is None or py_type(holder) is not b.dict:
-        holder = Python.dict()
-        py_setitem(fields, _HOLDER, holder)
-    if py_get(holder, PythonObject("index"), PythonObject(None)) is not None:
-        _kmeans_release(model)
-    var handle = family_call(prepare, classical_address(c), Python.list(PythonObject(k), PythonObject(d)))
-    # The minting binding travels with the handle: the release (here, and
-    # the native finalizer when the instance is dropped) is its own
-    # `kmeans_centers_release`.
-    # The native finalizer (bindings/host_archive_lifetime.mojo) reads a
-    # 3-tuple (key, handle, binding).
-    py_setitem(holder, "index", Python.tuple(Python.tuple(centers, PythonObject(k), PythonObject(d)),
-                                             handle, binding))
-    return handle
+    _kmeans_release(model)
+    var owner = kmeans_owner_prepare(model, centers, binding, connection,
+        Int(py=classical_address(c)), k, d)
+    py_setitem(fields, _HOLDER, owner)
+    return owner
 
 
 # TOMBSTONE: _kmeans_nonfinite / _kmeans_f32 (KMeans' own "X contains a NaN or an infinity; ... refused by name" wording and its host scan of X) deleted 2026-11-09 by lane a7d-device-x-decomp-cluster; code recoverable at 5b5490960d.
@@ -227,16 +129,49 @@ def _kmeans_host_x(source: PythonObject, x: AdmittedX, context: PythonObject) ra
     return x.copy()
 
 
+def _kmeans_is_name(value: PythonObject, context: PythonObject) raises -> Bool:
+    # isinstance may consult a rebound object's __class__. Inspect the real
+    # type's C MRO instead, admitting only exact builtin/NumPy text storage
+    # before dictionary hashing or equality can execute.
+    var cls = py_type(value)
+    var string_type = py_type(PythonObject(""))
+    if cls is string_type:
+        return True
+    if cpython_table()[].PyType_IsSubtype(cls._obj_ptr, string_type._obj_ptr) == 0:
+        return False
+    if py_get(context, "ndarray") is not None and cls is py_call(native_numpy_dtype(context), "U").type:
+        return True
+    raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
+
+
+def _kmeans_conversion_scalar(value: PythonObject, context: PythonObject) raises:
+    # tol/seed were converted before the compiled integer admission. Keep
+    # their exact native NumPy text/byte and extended-real conversion forms.
+    # Common builtin/numeric fields return through the shared admission.
+    try:
+        host_inference_scalar(value, context)
+    except failure:
+        if py_get(context, "ndarray") is not None:
+            var cls = py_type(value)
+            var constructor = native_numpy_dtype(context)
+            var aliases = Python.tuple("U", "S", "q", "Q", "g")
+            for i in range(len(aliases)):  # driver-loop: exact native scalar ABI aliases
+                if cls is py_call(constructor, aliases[i]).type:
+                    return
+        raise failure^
+
+
 def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
     """`KMeans._metric_code`: a name from the table, or `int(metric)`."""
     var metric = family_field(fields, "metric")
-    if family_is_str(metric):
+    if _kmeans_is_name(metric, context):
         var table = context["family_kmeans_metrics"]
         if not py_contains(table, metric):
             raise Error("mojolearn: metric must be one of "
                         + family_repr(py_call(native_loaded_module("builtins").sorted, table))
                         + ", got " + family_repr(metric))
         return Int(py=table[metric])
+    _kmeans_conversion_scalar(metric, context)
     return Int(py=family_call(native_loaded_module("builtins").int, metric))
 
 
@@ -266,7 +201,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var init = family_field(fields, "init")
     var init_centroids = family_field(fields, "init_centroids")
     var init_code: Int
-    if family_is_str(init):
+    if _kmeans_is_name(init, context):
         var inits = context["family_kmeans_inits"]
         if not py_contains(inits, init):
             raise Error("mojolearn: init must be one of " + family_repr(py_call(b.sorted, inits))
@@ -278,25 +213,35 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         # user code.
         raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers "
                     + "(an array of shape (n_clusters, n_features)) or use 'k-means++' or 'random'")
-    elif family_is_int(init):
+    elif py_type(init) is b.int:
         init_code = Int(py=family_call(b.int, init))
     else:
+        if (py_type(init) is not b.bool
+                and cpython_table()[].PyType_IsSubtype(py_type(init)._obj_ptr, b.int._obj_ptr) != 0):
+            raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
         init_code = _INIT_ARRAY
         init_centroids = init
     var metric_code = _kmeans_metric(fields, context)
     var factor = family_field(fields, "oversampling_factor")
-    if family_isinstance(factor, b.bool) or not family_isinstance(factor, Python.tuple(b.int, b.float)):
-        raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + family_type_name(factor))
+    var factor_type = py_type(factor)
+    var factor_admitted = factor_type is b.int or factor_type is b.float
+    if not factor_admitted and py_get(context, "ndarray") is not None:
+        factor_admitted = factor_type is context["float64"].type
+    if not factor_admitted:
+        # Use the canonical type getset directly; a custom metaclass can
+        # override __name__ even through type.__getattribute__.
+        var name = String(py_call(b.type.__dict__["__name__"].__get__, factor_type))
+        raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + name)
     var oversampling = family_call(b.float, factor)
     var x = _kmeans_x(source, context)
-    var fold_fit = PythonObject(None)
-    if x.store.active():
-        fold_fit = _kmeans_optional_entry(binding, "kmeans_fit_fold", context)
-        if fold_fit is None or sample_weight is not None:
-            x = _kmeans_host_x(source, x, context)
-            fold_fit = PythonObject(None)
+    var connection = kmeans_connection(binding)
+    var capabilities = kmeans_capabilities(connection)
+    var fold_fit = x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0 and sample_weight is None
+    if x.store.active() and not fold_fit:
+        x = _kmeans_host_x(source, x, context)
     var n = x.rows
     var d = x.cols
+    host_inference_scalar(k_obj, context)
     if Bool(py=family_call(native_loaded_module("operator").gt, k_obj, PythonObject(n))):
         raise Error("mojolearn: n_clusters=" + family_str(k_obj) + " exceeds n_samples=" + String(n))
     var k = Int(py=family_call(b.int, k_obj))
@@ -331,57 +276,44 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     if sample_weight is not None:
         weights = admit_family_weights(sample_weight, n, True, context).keep
         n_weights = n
-    # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_fit_binding: n_samples,
-    # n_features, n_clusters, n_weights, max_iter, tol, seed, n_init, init,
-    # metric, oversampling_factor.
-    var params = Python.list()
-    _ = py_call(params.append, PythonObject(n))
-    _ = py_call(params.append, PythonObject(d))
-    _ = py_call(params.append, k_obj)
-    _ = py_call(params.append, PythonObject(n_weights))
-    _ = py_call(params.append, family_field(fields, "max_iter"))
-    _ = py_call(params.append, family_call(b.float, family_field(fields, "tol")))
-    _ = py_call(params.append, family_call(b.int, family_field(fields, "random_state")))
-    _ = py_call(params.append, family_field(fields, "n_init"))
-    _ = py_call(params.append, PythonObject(init_code))
-    _ = py_call(params.append, PythonObject(metric_code))
-    _ = py_call(params.append, oversampling)
-    var result: PythonObject
+    # Retain the original scalar admission order, then discard the former
+    # Python parameter list before RUN. Host integer slots keep index semantics.
+    var max_iter = family_field(fields, "max_iter")
+    var tolerance = family_field(fields, "tol")
+    _kmeans_conversion_scalar(tolerance, context)
+    tolerance = family_call(b.float, tolerance)
+    var seed = family_field(fields, "random_state")
+    _kmeans_conversion_scalar(seed, context)
+    seed = family_call(b.int, seed)
+    var n_init = family_field(fields, "n_init")
     var distances = PythonObject(None)
-    var joint = PythonObject(None)
-    if fold_fit is not None:
-        # Lane a7d: the fold's rows gathered on the device out of model
-        # selection's resident base (finite and range words returned).
-        result = family_call(fold_fit, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
-                             classical_address(centers), classical_address(labels), params)
-        _ = labels  # keep the Python object alive through the native call above
-        _ = centers  # keep the Python object alive through the native call above
-        door_rows_refuse(Int(py=result[4]), Int(py=result[5]), _KMEANS_EST, x.store.base_rows)
-    else:
-        # Lane a7d: a borrowed X is tested by the entry (finite flag, the
-        # status word comes back as result[4]).
-        var test = not x.finite
-        if test:
-            _ = py_call(params.append, PythonObject(1))
-        if transform:
-            joint = _kmeans_optional_entry(binding, "kmeans_fit_transform", context)
-        if joint is not None:
-            distances = family_array(Python.tuple(n, k), "<f4", context)
-            result = family_call(joint, PythonObject(x.address), classical_address(centers), classical_address(labels),
-                                 classical_address(weights), classical_address(distances), params)
-            _ = labels  # keep the Python object alive through the native call above
-            _ = centers  # keep the Python object alive through the native call above
-            _ = distances  # keep the Python object alive through the native call above
-            _ = weights  # keep the Python object alive through the native call above
-        else:
-            var fit = family_entry(binding, "kmeans_fit", context)
-            result = family_call(fit, PythonObject(x.address), classical_address(centers), classical_address(labels),
-                                 classical_address(weights), params)
-            _ = labels  # keep the Python object alive through the native call above
-            _ = centers  # keep the Python object alive through the native call above
-            _ = weights  # keep the Python object alive through the native call above
-        if test:
-            admitted_finite_refuse(Int(py=result[4]), _KMEANS_EST)
+    var joint = transform and not fold_fit and (capabilities & KMEANS_CAP_JOINT) != 0
+    if joint:
+        distances = family_array(Python.tuple(n, k), "<f4", context)
+    var host = (capabilities & KMEANS_CAP_HOST) != 0
+    var native_clusters = kmeans_integer(k_obj, host, context)
+    var native_iterations = kmeans_integer(max_iter, host, context)
+    var native_tolerance = Float64(py=tolerance)
+    var native_seed = kmeans_integer(seed, host, context)
+    var native_restarts = kmeans_integer(n_init, host, context)
+    var native_oversampling = Float64(py=oversampling)
+    var fold = KMeansFoldStore()
+    if fold_fit:
+        fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
+    var request = KMeansFitRequest(x.address, Int(py=classical_address(centers)),
+        Int(py=classical_address(labels)), 0 if fold_fit else Int(py=classical_address(weights)),
+        Int(py=classical_address(distances)) if joint else 0,
+        n, d, native_clusters, n_weights, native_iterations, native_seed, native_restarts,
+        init_code, metric_code, not x.finite, native_tolerance, native_oversampling, fold)
+    var result = kmeans_run_fit(connection, request)
+    _ = labels
+    _ = centers
+    _ = distances
+    _ = weights
+    if fold_fit:
+        door_rows_refuse(result.finite, result.range_error, _KMEANS_EST, x.store.base_rows)
+    elif not x.finite:
+        admitted_finite_refuse(result.finite, _KMEANS_EST)
     _ = x^
     _ = weights^
     # p3-neighbors-cluster: the fitted centroids are read-only from fit on,
@@ -390,15 +322,14 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = fitted_freeze(centers, context)
     py_setitem(fields, "cluster_centers_", centers)
     py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "inertia_", result[0])
-    py_setitem(fields, "n_iter_", result[1])
-    py_setitem(fields, "sum_scale_", result[2])
-    py_setitem(fields, "weight_scale_", result[3])
+    py_setitem(fields, "inertia_", PythonObject(result.inertia))
+    py_setitem(fields, "n_iter_", PythonObject(result.iterations))
+    py_setitem(fields, "sum_scale_", PythonObject(result.sum_scale))
+    py_setitem(fields, "weight_scale_", PythonObject(result.weight_scale))
     py_setitem(fields, "n_features_in_", PythonObject(d))
     # The last fit's resident centroids are released; the next query
     # uploads the new ones once (`_kmeans_resident`).
     _kmeans_release(model)
-    py_setitem(fields, _HOLDER, Python.dict())
     if transform:
         if distances is None:
             return _kmeans_inference(model, binding, source, True, context)
@@ -447,12 +378,11 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
                       Int(py=source.shape[1]), 2, True, False)
     else:
         x = _kmeans_x(source, context)
-    var fold_query = PythonObject(None)
-    if x.store.active():
-        fold_query = _kmeans_optional_entry(binding, "kmeans_transform_fold" if transform else "kmeans_predict_fold",
-                                            context)
-        if fold_query is None:
-            x = _kmeans_host_x(source, x, context)
+    var connection = kmeans_connection(binding)
+    var capabilities = kmeans_capabilities(connection)
+    var fold_query = x.store.active() and (capabilities & KMEANS_CAP_FOLD) != 0
+    if x.store.active() and not fold_query:
+        x = _kmeans_host_x(source, x, context)
     var n = x.rows
     var d = x.cols
     var shape = centers.shape
@@ -461,7 +391,7 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         raise Error("mojolearn: X has " + String(d) + " features, KMeans was fitted with " + String(dc))
     var k = Int(py=shape[0])
     var c = PythonObject(None)
-    var handle = PythonObject(None)
+    var resident = PythonObject(None)
     var resolved = False
     if _kmeans_centers_ready(centers, context):
         # Perf + correctness (lane pass2-cluster-nbr, hazard H3): the
@@ -469,12 +399,12 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         # needs the same object, binding and shape; records are held only
         # for a read-only Array (p3-neighbors-cluster, replacing the per-query
         # SHA-256), so an in-place edit raises instead of serving stale words.
-        var held = _kmeans_held(fields, binding, centers, k, d)
+        var held = _kmeans_held(model, fields, binding, centers, k, d, connection)
         if held is not None:
             # Minted only for this read-only Array (`_kmeans_resident`).
-            handle = held[1]
+            resident = held
             resolved = True
-        elif _kmeans_doorless(binding):
+        elif (capabilities & KMEANS_CAP_RESIDENT) == 0:
             # Host column (no resident door): the admission of a ready
             # array is its finite scan; the same refusal as the cast's.
             if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))), k * d):
@@ -485,53 +415,37 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     if not resolved:
         c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
         k = Int(py=c.shape[0])
-        handle = _kmeans_resident(model, binding, centers, c, k, d, context)
-    # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_predict_binding and
-    # kmeans_transform_binding: n_samples, n_features, n_clusters, metric.
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(metric_code))
-    var out: PythonObject
+        resident = _kmeans_resident(model, binding, centers, c, k, d, connection, context)
+    var destination: PythonObject
     if transform:
-        out = family_array(Python.tuple(n, k), "<f4", context)
+        destination = family_array(Python.tuple(n, k), "<f4", context)
     else:
-        out = family_array(Python.tuple(n), "<i4", context)
-    if fold_query is not None:
-        # The fold entry reads the host centroid words (a resident handle is
-        # the per-binding copy of another context; the fold runs on the
-        # store's own context).
+        destination = family_array(Python.tuple(n), "<i4", context)
+    var fold = KMeansFoldStore()
+    if fold_query:
+        # Fold kernels run on the store context and retain their existing
+        # host-centroid upload, even when another context caches the centers.
         if c is None:
             c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
-        var words = family_call(fold_query, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
-                                classical_address(c), classical_address(out), params)
-        _ = c  # keep the Python object alive through the native call above
-        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), _KMEANS_EST, x.store.base_rows)
-        _ = x^
-        _ = c^
-        return out
-    var test = not x.finite
-    if test:
-        _ = py_call(params.append, PythonObject(1))
-    var status: PythonObject
-    if transform:
-        if handle is not None:
-            status = family_call(family_entry(binding, "kmeans_transform_resident", context), handle,
-                                 PythonObject(x.address), classical_address(out), params)
-        else:
-            status = family_call(family_entry(binding, "kmeans_transform", context), PythonObject(x.address),
-                                 classical_address(c), classical_address(out), params)
-            _ = c  # keep the Python object alive through the native call above
-    else:
-        if handle is not None:
-            status = family_call(family_entry(binding, "kmeans_predict_resident", context), handle,
-                                 PythonObject(x.address), classical_address(out), params)
-        else:
-            status = family_call(family_entry(binding, "kmeans_predict", context), PythonObject(x.address),
-                                 classical_address(c), classical_address(out), params)
-            _ = c  # keep the Python object alive through the native call above
-    if test:
-        admitted_finite_refuse(Int(py=status), _KMEANS_EST)
+        fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
+    var handle = kmeans_owner_handle(resident) if resident is not None and not fold_query else -1
+    var request = KMeansQueryRequest(x.address,
+        Int(py=classical_address(c)) if c is not None else 0,
+        Int(py=classical_address(destination)), n, d, k, metric_code,
+        not x.finite, transform, handle, fold)
+    var result = kmeans_run_query(connection, request)
+    # In-flight queries pin the exact native owner even if another call
+    # replaces the model's centroid field or resident owner while GIL is free.
+    _ = resident
+    _ = centers
+    _ = c
+    if fold_query:
+        door_rows_refuse(result.finite, result.range_error, _KMEANS_EST, x.store.base_rows)
+    elif not x.finite:
+        admitted_finite_refuse(result.finite, _KMEANS_EST)
     _ = x^
     _ = c^
-    return out
+    return destination
 
 
 def _kmeans_operation_route(model: PythonObject, operation: String, args: PythonObject,
@@ -550,13 +464,9 @@ def _kmeans_operation_route(model: PythonObject, operation: String, args: Python
         # A pickle or a deepcopy carries no device handle: it is meaningful
         # only in the process and registry that minted it. The copy uploads
         # its own centroids at its first query.
-        var state = py_call(native_loaded_module("builtins").dict, py_fields(model))
-        _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
-        return state
+        return kmeans_owner_getstate(model)
     if operation == "family_kmeans_setstate":
-        var fields = py_fields(model)
-        _ = py_call(fields.update, args[0])
-        py_setitem(fields, _HOLDER, Python.dict())
+        kmeans_owner_setstate(model, args[0])
         return PythonObject(None)
     if operation == "family_kmeans_predict":
         return _kmeans_inference(model, args[0], args[1], False, context, admitted)

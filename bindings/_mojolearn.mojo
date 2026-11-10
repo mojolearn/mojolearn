@@ -244,6 +244,8 @@ from neighbors.estimator import (
     rbc_knn_search,
 )
 from core.shared_slot import SharedSlot
+from core.kmeans_native_api import KMEANS_NATIVE_ABI
+from core.kmeans_native_device import kmeans_device_native_v1
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -732,6 +734,24 @@ def knn_regress_resident_binding(
             h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status, fold[0], fold[1], fold[2]
         )
     return PythonObject(used)
+
+
+struct KMeansDeviceNativeTable(Defaultable, Movable):
+    var name: String
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.name = String(KMEANS_NATIVE_ABI)
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(kmeans_device_native_v1)
+
+
+comptime KMEANS_NATIVE_TABLE = SharedSlot[KMeansDeviceNativeTable, ("MojolearnKMeansDeviceNativeIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKMeansDeviceNativeFastV1")]
+
+
+def kmeans_native_api_v1_binding() raises -> PythonObject:
+    var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 def kmeans_fit_binding(
@@ -2039,6 +2059,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[knn_classify_resident_binding]("knn_classify_resident")
         m.def_function[knn_regress_resident_binding]("knn_regress_resident")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
+        m.def_function[kmeans_native_api_v1_binding]("kmeans_native_api_v1")
         m.def_function[kmeans_predict_binding]("kmeans_predict")
         m.def_function[kmeans_transform_binding]("kmeans_transform")
         m.def_function[kmeans_fit_transform_binding]("kmeans_fit_transform")
