@@ -346,6 +346,18 @@
       "python_tests_removed": 0,
       "source_review_only": true,
       "runtime_status": "Root consolidated compile/run owed; see optimizer-device-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_lifecycle.py",
+      "decision": "native-owner-control-state-migration",
+      "native_fixtures_per_target": 22,
+      "parallel_pure_control_fixtures": 18,
+      "ordered_real_handle_fixtures": 4,
+      "public_python_definitions": 4,
+      "public_parametrized_cases": 10,
+      "producer_dependency": "7ded28ac82",
+      "source_review_only": true,
+      "runtime_status": "Root consolidated compile/run owed; see optimizer-owner-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
