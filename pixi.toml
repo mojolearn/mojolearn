@@ -46,6 +46,7 @@ check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
 check-device-zero = "mojo run -I . core/device_zero_check.mojo"
 # Pure Mojo numerical checks migrated out of Python API tests.
 check-native-nonzero = "mojo run -I . checks/native_tests/nonzero_scan.mojo"
+check-native-finite-scan = "mojo run -I . checks/native_tests/finite_scan.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
 check-device-zero-memset = "mojo run -D MOJOLEARN_2560_MEMSET_FILL=1 -I . core/device_zero_check.mojo"

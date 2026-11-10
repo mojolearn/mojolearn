@@ -1,15 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The public doors refuse NaN and infinity wherever the bad word sits, now
-that the finiteness test is one SIMD scan split across the host's cores
-(core/host_finite_scan.mojo; 0.8.66 regressions C1 and C2).
+# Copyright 2026 Andrew Hendel. Part of Mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Python API coverage for admitted finite/nonfinite input layouts.
 
-The inputs are large enough (262,144 words) to be split into several tasks,
-and the bad word is placed at the first word, inside a task, on a task
-boundary region and at the last word, in float32 C order (the borrowed scan),
-float64 (the parallel cast), Fortran order and a row-strided view. A finite
-input still fits and gives the same result as its C-order float32 copy.
-Run under pytest: `cd python && python3 -m pytest mojolearn/tests/test_parallel_finite_scan.py`.
+The large word-position sweep lives in checks/native_tests/finite_scan.mojo
+and calls the native scans directly. These small fixtures retain the Python
+buffer admission, estimator fit/query refusal, and equivalent-layout behavior
+that a pure Mojo test cannot exercise.
 """
 
 import pytest
@@ -18,8 +14,8 @@ np = pytest.importorskip("numpy")
 
 import mojolearn as ml
 
-ROWS, COLS = 4096, 64
-POSITIONS = [0, 1, ROWS * COLS // 3, ROWS * COLS // 2 - 1, ROWS * COLS // 2, ROWS * COLS - 1]
+ROWS, COLS = 32, 8
+LAYOUTS = ("c", "f", "f64", "strided")
 
 
 def _x(dtype=np.float32):
@@ -27,13 +23,16 @@ def _x(dtype=np.float32):
     return rng.standard_normal((ROWS, COLS)).astype(dtype)
 
 
-def _layouts(x):
-    yield "c", np.ascontiguousarray(x)
-    yield "f", np.asfortranarray(x)
-    yield "f64", np.ascontiguousarray(x, dtype=np.float64)
+def _layout(x, layout):
+    if layout == "c":
+        return np.ascontiguousarray(x)
+    if layout == "f":
+        return np.asfortranarray(x)
+    if layout == "f64":
+        return np.ascontiguousarray(x, dtype=np.float64)
     wide = np.zeros((ROWS * 2, COLS), dtype=x.dtype)
     wide[::2] = x
-    yield "strided", wide[::2]
+    return wide[::2]
 
 
 def _fitters():
@@ -47,34 +46,33 @@ def _fitters():
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
-@pytest.mark.parametrize("position", POSITIONS)
+@pytest.mark.parametrize("layout", LAYOUTS)
 @pytest.mark.parametrize("estimator", sorted(_fitters()))
-def test_nonfinite_refused_at_every_position(estimator, position, bad):
+def test_fit_refuses_nonfinite_admitted_layout(estimator, layout, bad):
     fit = _fitters()[estimator]
     base = _x()
-    base.reshape(-1)[position] = bad
-    for layout, X in _layouts(base):
-        with pytest.raises(Exception, match=r"(?i)nan|inf|finite"):
-            fit(X)
+    base[ROWS // 2, COLS // 2] = bad
+    with pytest.raises(Exception, match=r"(?i)nan|inf|finite"):
+        fit(_layout(base, layout))
 
 
 @pytest.mark.parametrize("estimator", ["kmeans", "pca"])
-def test_nonfinite_refused_at_predict(estimator):
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_query_refuses_nonfinite_admitted_layout(estimator, layout):
     X = _x()
     model = _fitters()[estimator](X)
-    for position in POSITIONS:
-        Q = X.copy()
-        Q.reshape(-1)[position] = np.nan
-        with pytest.raises(Exception, match=r"(?i)nan|inf|finite"):
-            (model.predict if estimator == "kmeans" else model.transform)(Q)
+    Q = X.copy()
+    Q[ROWS // 2, COLS // 2] = np.nan
+    with pytest.raises(Exception, match=r"(?i)nan|inf|finite"):
+        (model.predict if estimator == "kmeans" else model.transform)(_layout(Q, layout))
 
 
-def test_finite_layouts_fit_the_same():
+@pytest.mark.parametrize("layout", ["c", "f", "strided"])
+def test_finite_layouts_fit_the_same(layout):
     X = _x()
     y = np.arange(ROWS, dtype=np.float32) % 7
     ref = np.asarray(ml.Ridge().fit(X, y).coef_)
-    for layout, Xl in _layouts(X):
-        if layout == "f64":
-            continue  # a float64 input may keep float64 fitted state; its refusals are tested above
-        got = np.asarray(ml.Ridge().fit(Xl, y).coef_)
-        assert np.array_equal(got.view(np.uint32), ref.view(np.uint32)), layout
+    # A float64 input may preserve float64 fitted state; its admission and
+    # refusals are covered above, without requiring a float32 fitted dtype.
+    got = np.asarray(ml.Ridge().fit(_layout(X, layout), y).coef_)
+    assert np.array_equal(got.view(np.uint32), ref.view(np.uint32)), layout
