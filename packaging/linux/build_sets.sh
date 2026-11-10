@@ -1011,7 +1011,7 @@ fi
 say "patchelf: $PATCHELF"
 ENV_LIB="$(pixi run -e "$PIXI_ENV" python3 -c 'import sys,os; print(os.path.join(sys.prefix,"lib"))' | tail -1)"
 say "pixi env lib: $ENV_LIB"
-pixi run -e pkg python packaging/linux/stage_libs.py --set "$SET" --env-lib "$ENV_LIB" \
+pixi run -e pkg python packaging/linux/stage_libs.py --set "$SET" --env-lib "$ENV_LIB" --codec-lib "$REPO/.pixi/envs/pkg/lib" \
   --manifest "$SET/manifest.json" --patchelf "$PATCHELF" \
   2>&1 | tee "$DEST/build_logs/stage.log"
 STAGE_RC=${PIPESTATUS[0]}

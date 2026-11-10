@@ -1,9 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public linear-layer preparation, routing and output ownership; kernels unchanged.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.optimizer_container_boundary import OptimizerInputOwners
 from bindings.py_balanced import py_call, py_type, py_fields, py_get
 from bindings.optimizer_admission import opt_value
-from bindings.optimizer_public_door import TensorView, tensor_view, contiguous_addr, base_format, new_array, py_ints
+from bindings.optimizer_public_door import tensor_view, new_array
+from bindings.tensor_view import TensorView, base_format
+from training.optimizer_input_plan import optimizer_contiguous_address
+from providers.python.array_layout_boundary import native_shape_pack
 from bindings.optimizer_device_native import device_entries, device_shape, device_allocate, shape_count
 
 
@@ -37,8 +42,8 @@ def linear_dimensions(a: List[Int], weight: List[Int], grad: List[Int], backward
     return [m, n, k]
 
 
-def linear_host_view(value: PythonObject, name: String, where: String, mut view: TensorView) raises:
-    if not tensor_view(value, view) or base_format(view.fmt) != "f" or view.itemsize != 4:
+def linear_host_view(value: PythonObject, name: String, where: String, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises:
+    if not tensor_view(value, view, buffer_pins) or base_format(view.fmt) != "f" or view.itemsize != 4:
         raise Error("TypeError: mojolearn." + where + ": " + name + " must be float32")
     if shape_count(view.shape) == 0:
         raise Error("ValueError: mojolearn." + where + ": " + name + " must be nonempty")
@@ -83,14 +88,14 @@ def linear_device(operation: String, a: PythonObject, weight: PythonObject, grad
         var shape = ashape.copy()
         shape[len(shape) - 1] = dims[1]
         var result = device_allocate(native, shape, context)
-        _ = py_call(entry, Python.list(py_fields(result)["h"], af["h"], wf["h"]), py_ints(dims))
+        _ = py_call(entry, Python.list(py_fields(result)["h"], af["h"], wf["h"]), native_shape_pack(dims))
         _ = a_owner^
         _ = weight_owner^
         _ = gradient_owner^
         return result
     var da = device_allocate(native, ashape, context)
     var dw = device_allocate(native, wshape, context)
-    _ = py_call(entry, Python.list(py_fields(da)["h"], py_fields(dw)["h"], gf["h"], af["h"], wf["h"]), py_ints(dims))
+    _ = py_call(entry, Python.list(py_fields(da)["h"], py_fields(dw)["h"], gf["h"], af["h"], wf["h"]), native_shape_pack(dims))
     var result = Python.tuple(da, dw)
     _ = a_owner^
     _ = weight_owner^
@@ -100,60 +105,69 @@ def linear_device(operation: String, a: PythonObject, weight: PythonObject, grad
 
 def training_linear_operation(operation: String, values: PythonObject, entries: PythonObject,
                               context: PythonObject) raises -> PythonObject:
-    var backward = operation == "linear_backward"
-    if len(values) != (3 if backward else 2):
-        raise Error("TypeError: invalid linear-layer argument envelope")
-    opt_value(values, context)
-    var entry = entries[PythonObject(operation)]
-    if py_type(entry) is not context["device_finalizer_types"][2]:
-        raise Error("TypeError: linear layer requires its connected compiled entry")
-    var a = values[1] if backward else values[0]
-    var weight = values[2] if backward else values[1]
-    var gradient = values[0] if backward else PythonObject(None)
-    var cls = context["device_class"]
-    if py_type(a) is cls or py_type(weight) is cls or (backward and py_type(gradient) is cls):
-        return linear_device(operation, a, weight, gradient, entries, context)
-    var av = TensorView()
-    var wv = TensorView()
-    var gv = TensorView()
-    linear_host_view(a, "a", operation, av)
-    linear_host_view(weight, "weight", operation, wv)
-    if backward:
-        linear_host_view(gradient, "dc", operation, gv)
-    if len(av.shape) == 0:
-        # Input indexing preceded weight unpacking in both host wrappers.
-        raise Error("IndexError: tuple index out of range")
-    var kernel_weight_shape = wv.shape.copy()
-    if backward:
-        if len(wv.shape) == 0 or len(gv.shape) == 0:
+    var buffer_pins = OptimizerInputOwners()
+    try:
+        var backward = operation == "linear_backward"
+        if len(values) != (3 if backward else 2):
+            raise Error("TypeError: invalid linear-layer argument envelope")
+        opt_value(values, context)
+        var entry = entries[PythonObject(operation)]
+        if py_type(entry) is not context["device_finalizer_types"][2]:
+            raise Error("TypeError: linear layer requires its connected compiled entry")
+        var a = values[1] if backward else values[0]
+        var weight = values[2] if backward else values[1]
+        var gradient = values[0] if backward else PythonObject(None)
+        var cls = context["device_class"]
+        if py_type(a) is cls or py_type(weight) is cls or (backward and py_type(gradient) is cls):
+            return linear_device(operation, a, weight, gradient, entries, context)
+        var av = TensorView()
+        var wv = TensorView()
+        var gv = TensorView()
+        linear_host_view(a, "a", operation, av, buffer_pins)
+        linear_host_view(weight, "weight", operation, wv, buffer_pins)
+        if backward:
+            linear_host_view(gradient, "dc", operation, gv, buffer_pins)
+        if len(av.shape) == 0:
+            # Input indexing preceded weight unpacking in both host wrappers.
             raise Error("IndexError: tuple index out of range")
-        # The old host backward wrapper read N from weight.shape[0] and
-        # consumed its first N*K contiguous values; it did not unpack a
-        # matrix shape. Preserve safe rank-one/oversized native buffers,
-        # including promoted NumPy scalars when K=1. Refuse a short buffer
-        # before the unchanged raw-pointer kernel can read beyond it.
-        kernel_weight_shape = [wv.shape[0], av.shape[len(av.shape) - 1]]
-        if shape_count(wv.shape) < shape_count(kernel_weight_shape):
-            raise Error("ValueError: linear backward weight buffer is shorter than N*K")
-    var dims = linear_dimensions(av.shape, kernel_weight_shape, gv.shape, backward)
-    var keep = List[List[Float32]]()
-    var aa = contiguous_addr(a, av, keep)
-    var wa = contiguous_addr(weight, wv, keep)
-    if not backward:
-        var shape = av.shape.copy()
-        shape[len(shape) - 1] = dims[1]
-        var result = new_array(shape, "<f4")
-        _ = py_call(entry, Python.list(result._addr, aa, wa), py_ints(dims))
+        var kernel_weight_shape = wv.shape.copy()
+        if backward:
+            if len(wv.shape) == 0 or len(gv.shape) == 0:
+                raise Error("IndexError: tuple index out of range")
+            # The old host backward wrapper read N from weight.shape[0] and
+            # consumed its first N*K contiguous values; it did not unpack a
+            # matrix shape. Preserve safe rank-one/oversized native buffers,
+            # including promoted NumPy scalars when K=1. Refuse a short buffer
+            # before the unchanged raw-pointer kernel can read beyond it.
+            kernel_weight_shape = [wv.shape[0], av.shape[len(av.shape) - 1]]
+            if shape_count(wv.shape) < shape_count(kernel_weight_shape):
+                raise Error("ValueError: linear backward weight buffer is shorter than N*K")
+        var dims = linear_dimensions(av.shape, kernel_weight_shape, gv.shape, backward)
+        var keep = List[List[Float32]]()
+        var aa = 0
+        var wa = 0
+        with GILReleased(Python()):
+            aa = optimizer_contiguous_address(av, keep)
+            wa = optimizer_contiguous_address(wv, keep)
+        if not backward:
+            var shape = av.shape.copy()
+            shape[len(shape) - 1] = dims[1]
+            var result = new_array(shape, "<f4")
+            _ = py_call(entry, Python.list(result._addr, aa, wa), native_shape_pack(dims))
+            _ = keep^
+            _ = a^
+            _ = weight^
+            return result
+        var ga = 0
+        with GILReleased(Python()):
+            ga = optimizer_contiguous_address(gv, keep)
+        var da = new_array(av.shape, "<f4")
+        var dw = new_array(kernel_weight_shape, "<f4")
+        _ = py_call(entry, Python.list(da._addr, dw._addr, ga, aa, wa), native_shape_pack(dims))
         _ = keep^
         _ = a^
         _ = weight^
-        return result
-    var ga = contiguous_addr(gradient, gv, keep)
-    var da = new_array(av.shape, "<f4")
-    var dw = new_array(kernel_weight_shape, "<f4")
-    _ = py_call(entry, Python.list(da._addr, dw._addr, ga, aa, wa), py_ints(dims))
-    _ = keep^
-    _ = a^
-    _ = weight^
-    _ = gradient^
-    return Python.tuple(da, dw)
+        _ = gradient^
+        return Python.tuple(da, dw)
+    finally:
+        _ = buffer_pins^

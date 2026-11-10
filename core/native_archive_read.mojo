@@ -98,7 +98,7 @@ def native_archive_member(raw: ArchiveSpan, directory: NativeZipDirectory, index
     result.name = directory.entries[index].stem
     try:
         var compressed = native_zip_payload(raw, directory.entries[index], directory.central_start)
-        var source = compressed
+        var source = compressed.copy()
         if directory.entries[index].method != 0:
             result.owned = archive_inflate(compressed, directory.entries[index].method, directory.entries[index].unpacked)
             source = ArchiveSpan(Int(result.owned.unsafe_ptr()), len(result.owned))

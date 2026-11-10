@@ -35,7 +35,7 @@ def _fixture(unit: Int) raises:
                 _require(len(members[0].owned) > 0, "compressed member owns decoded bytes")
             else:
                 _require(len(members[0].owned) == 0, "stored member borrows without copying")
-            var data = members[0].layout.payload
+            var data = members[0].layout.payload.copy()
             _require(data.size == 12, "numeric payload size")
             _require(data.uint(0, 4) == 0x80000000, "negative zero bits unchanged")
             _require(data.uint(4, 4) == 0x7FC12345, "NaN payload bits unchanged")

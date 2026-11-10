@@ -1,3 +1,7 @@
+> The source-graph push/CI fence was retired on 2026-11-10 under the owner instruction to delete broken
+> source guards. It treated required host input preparation as GPU computation. The GPU execution rules below
+> remain; historical checker vocabulary and baseline counts are diagnostic history, not current gates.
+
 # Host loops on the GPU path (Andrew, 2026-10-17)
 
 The CPU is the driver of the GPU path, as it is in PyTorch: it walks the model

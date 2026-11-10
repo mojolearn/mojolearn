@@ -2,10 +2,8 @@
 # Explicit CPU model operations. Each connected family enters one native
 # owner; other families remain unchanged until their full contract is ported.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_class_admission import class_record, class_admit
+from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _ordinary_torch
 from bindings.classical_exceptions import classical_require_fitted
@@ -18,16 +16,16 @@ from bindings.host_svr_native import host_svr_admit_state, host_svr_predict
 from bindings.host_svc_native import host_svc_admit_state, host_svc_inference
 from bindings.host_kde_native import host_kde_admit_state, host_kde_inference
 from bindings.host_iforest_native import host_iforest_admit_option, host_iforest_admit_state, host_iforest_inference
-from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
+from bindings.host_logistic_native import host_logistic_classes
+from bindings.host_logistic_query_boundary import host_logistic_operation
+from bindings.host_inference_state import host_inference_state
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_array_native import host_archive_typed
-from bindings.host_tree_native import host_tree_input, host_tree_constructor_fields, host_tree_scalar, host_tree_wide
+from bindings.host_tree_native import host_tree_input, host_tree_scalar, host_tree_wide
 from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 
-
-comptime _HOST_KIND_SLOT = "host_inference_kind_v1"
 
 
 def host_inference_entry(name: String, context: PythonObject) raises -> PythonObject:
@@ -40,33 +38,18 @@ def host_inference_entry(name: String, context: PythonObject) raises -> PythonOb
 
 
 def host_inference_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject, error_context: PythonObject, public: Bool) raises -> PythonObject:
-    classical_connect_numpy(context)
-    var fields = host_tree_constructor_fields(model, context)
+    var state = host_inference_state(model, context)
+    var fields = state[0]
+    var kind = state[1].copy()
+    if kind == "logistic":
+        return host_logistic_operation(model, fields, operation, args[0], context, error_context, public)
     var b = native_loaded_module("builtins")
-    # The owner kind of the class is kept per class state (class_record; the
-    # payload is the kind str, so the record never retains the class): the
-    # type watcher drops it when the class or an ancestor changes (lane
-    # ne1-e-table, row N225). The stored-field admissions below stay per
-    # call until the model record (bindings/native_model_records.mojo) holds them.
-    var mods = NativeModules()
-    var cls = py_type(model)
-    var kind = class_record(mods, _HOST_KIND_SLOT, cls)
-    if kind is None:
-        var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-        for i in range(len(mro)):  # driver-loop: fixed explicit CPU class ancestry
-            kind = py_get(context["host_inference_kinds"], mro[i])
-            if kind is not None:
-                break
-        if kind is None:
-            raise Error("TypeError: no native explicit CPU prediction owner for this class")
-        class_admit(mods, _HOST_KIND_SLOT, cls, kind)
-    var logistic = String(kind) == "logistic"
     var svc = String(kind) == "svc"
     var kde = String(kind) == "kde"
     var iforest = String(kind) == "iforest"
     var iforest_options = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "n_jobs", "verbose", "output_type")
     var labels = PythonObject(None)
-    if (logistic or svc) and py_contains(fields, "classes_"):
+    if svc and py_contains(fields, "classes_"):
         labels = host_logistic_classes(fields["classes_"], context)
     var keys = py_call(b.list, fields.keys())
     for i in range(len(keys)):  # driver-loop: admitted stored model values
@@ -76,7 +59,7 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         var kde_option = kde and (name == "bandwidth" or name == "kernel" or name == "metric")
         if iforest and py_contains(iforest_options, keys[i]):
             host_iforest_admit_option(fields[keys[i]], context)
-        elif not kde_option and (not (logistic or svc) or name != "classes_"):
+        elif not kde_option and (not svc or name != "classes_"):
             classical_admit_value(fields[keys[i]], context)
     host_inference_scalar(py_get(fields, "_mojolearn_fitted", False), context, True)
     host_inference_scalar(py_get(fields, "_mojolearn_fitting", False), context, True)
@@ -88,8 +71,6 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var projection = String(kind) == "pca" or String(kind) == "tsvd"
     if projection:
         host_projection_admit_state(fields, String(kind) == "pca", context)
-    if logistic and py_contains(fields, "fit_intercept"):
-        host_inference_scalar(fields["fit_intercept"], context, True)
     if svc:
         host_svc_admit_state(fields, context)
     if iforest:
@@ -126,8 +107,6 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         return host_svc_inference(model, fields, labels, operation, args[0], context, public)
     if svr:
         return host_svr_predict(model, fields, args[0], context, public)
-    if logistic:
-        return host_logistic_inference(model, fields, labels, operation, args[0], context, public)
     classical_admit_value(args, context)
     var cd = String(kind) == "cd"
     if cd and not py_contains(fields, "coef_"):

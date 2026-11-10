@@ -1,0 +1,45 @@
+Samba optimizer-owner integration test repair (2026-11-10)
+
+Scope/dependency
+  Pure optimizer owner producer 7ded28ac82; requires boundary_pilot's subsequent
+  Samba construct/step/state consumer repair (freeze pending at this commit).
+  No production edits. Logistic input/oracle checkpoint ec10fb7687 is frozen;
+  wiring typed QN71c1b26f53 fixtures remains pending, with Python tests retained.
+
+Retained coverage: nine definitions, 24 parametrized cases
+  test_samba_construct_native.py: four definitions/12 cases, same six seeded
+  shape/layer/tie/lazy combinations, explicit-weight aliases, schedule refusal,
+  and four invalid-weight forms. Native __getstate__ exposes the serialized
+  pristine flag; assert it equals the selected lazy policy and excludes the
+  live native owner. Keep _m/_v laziness and every initial-value/address/view
+  assertion. The removed runtime _pristine Python mirror is no longer queried.
+  test_samba_step_native.py: five definitions/12 cases, same six standard
+  step combinations, misalignment atomicity, schedule refusal, two rebound
+  owners and two device clipping settings. The independent primitive recipe
+  receives explicit device_parameters=True only in the fixture that uploads
+  parameters. No private device-flag query selects its path.
+  Rebound owners retain byte/alias/moment/RNG checks and compare actual versus
+  expected public residency. The obsolete Python provider _res_binding identity
+  observation is replaced by actual native-owner operations; pure handle close,
+  provider retention and lifecycle are covered separately in owner suites and
+  test_optimizer_native_lifecycle.py, not by reintroducing dispatch mirrors.
+  Device owners assert public residency and download actual/expected clipped
+  device gradients through grads_to_host, with distinct initialized sentinels,
+  original output-list identity and byte comparisons. Existing stale host-flat,
+  parameter download, moment bytes, clipping and two-step checks remain intact.
+  No fixture sizes, algorithms, seeds, stopping settings or tolerances changed.
+
+Pending test migration
+  The initializer and independent full training recipe still use Python test
+  preparation/orchestration; this repair does not count them as Mojo-migrated.
+  Real constructor, writable parameters, provider/owner pins, callback admission
+  and public publication assertions remain Python-boundary coverage.
+
+Checks/status
+  Source review, Python AST/JSON parsing and git diff --check only. No imports
+  of Mojolearn, compilation, product tests, boxes, timing or identity executed.
+  Root owns installed-wheel tests for both listed files, with its established
+  parallel Python test controller. Product build groups are the producer's
+  training/runtime_neural groups; no new native check source in this batch.
+  RUN OWED after the Samba owner consumer dependency is frozen and compiled.
+  Deleted only obsolete private-control observations; product bits and A/B none.

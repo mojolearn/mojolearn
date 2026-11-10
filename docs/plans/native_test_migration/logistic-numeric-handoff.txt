@@ -1,0 +1,75 @@
+Native LogisticRegression numerical migration (2026-11-10)
+
+Frozen producer dependency and sources
+  Producer71c1b26f53, parent7b8db97ebd: core.logistic_native_api typed QN
+  requests/driver; glm.host.logistic_native_host.qn_host_native_v1 and
+  glm.logistic_native_device.qn_device_native_v1 actual descriptor entries.
+  Input/oracle preparationec10fb7687 supplies original input bytes and helper.
+  New logistic_numeric_cases.mojo, logistic_numeric_{cpu,gpu}_suite.mojo and
+  thin logistic_numeric_{cpu,gpu}.mojo entries under checks/native_tests/.
+  No product/kernel/algorithm changes, Python imports or Python callbacks.
+
+Four native fixtures per target
+  0: Original600x4 seed0 three-class normal-noise planted fixture, max_iter100.
+     Preserve C1/L2, intercept, normalized penalty, loss softmax, memory5,
+     linesearch50, gradient tolerance1e-4/change tolerance1e-4*0.01 and finite scan.
+     Native retcode0, first maximum of scores/probabilities, all probabilities
+     in[0,1], row sums within1e-12, independent Float64 exp softmax within1e-12,
+     training accuracy strictly above0.9. No fitted-output/hash reference.
+  1: Original200x4 seed0 inputs with binary y=(class==1), max_iter50, same
+     original defaults above but logistic loss. Preserve strict score>0 codes;
+     additionally check independent stable Float64 sigmoid/row normalization.
+  2: Original64x4 inputs with exact zero three-class coefficient state; all
+     scores zero, probabilities exactly1/3, codes first class0. The original
+     public fit(max_iter5) and _w replacement test remains to check re-admission.
+  3: Original six-row/two-feature signed-zero fixture from native-predict seam,
+     explicit coefficients[1,-1], no intercept. Exact scores[-2,0,0,2,2,-2],
+     codes[0,0,0,1,1,0], independently linked probabilities. The Python test
+     still poisons decision_function and checks decoded labels[-7,-7,-7,11,11,-7].
+  All fixtures guard caller output spans and finite-status words, retain native
+  owners through calls and check raw feature/label/coefficient words unchanged.
+  Exact input bytes/provenance in fixtures/logistic-inputs.json; these are inputs,
+  never old-version expected outputs. Run from repository cwd for fixture IO.
+
+Actual call paths and parallel plan
+  Fit/decision/probability/binary code calls use QnNativeDriver; its descriptors
+  preserve existing host fit and tuned fused GPU score/link/argmax operations.
+  CPU multiclass code fallback directly calls core.host_helpers_impl.argmax_rows_f32,
+  the actual kernel of the existing public host wrapper. Independent fixture
+  graphs run with host_parallelize; each graph retains local inputs/scratch.
+  The current host fallback has an existing serial row scan; this test does
+  not replace it or claim a speed improvement. Root was notified of that debt.
+  GPU submissions ordered because existing process_ctx is shared. Preserve
+  QN_DEV_ARGMAX selection; when disabled, actual device_argmax_rows labels
+  fallback is called, never a fixture-written scan. Input decode/oracle checks
+  parallelize rows. No GPU concurrency, utilization, timing or identity claim.
+
+Python coverage kept and removed
+  test_logistic_multiclass_surface.py keeps all six definitions and every
+  original fit workload. Rename only the first to fit_public_layout and retain
+  public class/coef/intercept/score/probability/prediction dtypes and shapes.
+  Remove numerical exp/sum/argmax/accuracy assertions and _argmax_first helper
+  only because fixtures0/1 now own them directly. Keep zero-_w publication,
+  named L1/elasticnet refusal, save/load/host adapter and string-label checks.
+  test_logistic_native_predict.py keeps both definitions, actual public mutable
+  coefficients/classes and patched-method refusal; score-derived expected
+  labels become literal independent values. No supported feature test removed.
+  Host27 and CV6 reviewed definitions remain unchanged: their real buffer,
+  callback, metaclass, writable state, label and archive seams still need Python.
+  Config/fit-state owner migration is a later producer batch, not claimed done.
+
+Commands/status for root consolidated build
+  Import checks.native_tests.logistic_numeric_cpu_suite.run_checks and the
+  corresponding GPU suite under distinct aliases in the existing bundles.
+  Standalone existing tasks:
+    bash tools/compile_slot.sh pixi run check-native-logistic-numeric-cpu
+    bash tools/compile_slot.sh pixi run check-native-logistic-numeric-gpu
+  Or build with the existing compiler invocation:
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/logistic_numeric_cpu.mojo -o "$HOME/mojolearn-evidence/logistic-numeric-cpu"
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/logistic_numeric_gpu.mojo -o "$HOME/mojolearn-evidence/logistic-numeric-gpu"
+  Then run from repository cwd, recording full outputs. Producer product groups
+  estimators on host and identical targets cover the actual QN entries; native test imports
+  themselves use the pure modules only. Retained Python files require the
+  orchestrator's installed-wheel test controller; no lane invocation happened.
+  Static source/API review, Python AST/TOML/JSON parsing and diff check only.
+  COMPILE/RUN OWED. No product bit changes, A/B define, release action or boxes.

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Private OLS owner qualification against the retained driver and algebra."""
+"""OLS Python admission, callback and fitted-output publication contracts."""
 import numpy as np
 import pytest
 
@@ -75,34 +75,26 @@ def fixture(case):
 @pytest.mark.parametrize("case", ["full_rank", "no_intercept", "one_feature", "weighted",
                                   "weighted_no_intercept", "scalar_weight", "rank_deficient",
                                   "constant_column", "zero_rank", "column_units", "normal_equations_shape"])
-def test_ols_native_preserves_driver_bits_and_independent_predictions(case):
+def test_ols_native_publishes_fitted_outputs(case):
     x, y, intercept, weight = fixture(case)
-    legacy = LinearRegression(fit_intercept=intercept).fit(x, y, sample_weight=weight)
-    expected_coef = np.asarray(legacy.coef_).copy()
-    expected_bias = np.float64(legacy.intercept_)
-    expected_pred = np.asarray(legacy.predict(x)).copy()
+    # Numerical full/rank-deficient/weighted solves and consumed predictions
+    # are independent native fixtures in linear_owner_{cpu,gpu}.mojo.
+    before_x, before_y = x.copy(), y.copy()
     native = LinearRegression(fit_intercept=intercept)
     assert clean(audit_native_call(native_fit, native, x, y, weight)) is native
     prediction = clean(audit_native_call(native_predict, native, x))
-    np.testing.assert_array_equal(bits(native.coef_), bits(expected_coef))
-    assert np.float64(native.intercept_).view("u8") == expected_bias.view("u8")
-    np.testing.assert_array_equal(bits(prediction), bits(expected_pred))
-    # Independent weighted float64 least squares; compare consumed predictions
-    # since rank-deficient models can have several equivalent coefficients.
-    wd = np.ones(len(x)) if weight is None else np.broadcast_to(weight, (len(x),)).astype("f8")
-    xd, yd = x.astype("f8"), y.astype("f8")
-    mx = np.average(xd, axis=0, weights=wd) if intercept else np.zeros(x.shape[1])
-    my = np.average(yd, weights=wd) if intercept else 0.0
-    sw = np.sqrt(wd)
-    answer = np.linalg.lstsq((xd - mx) * sw[:, None], (yd - my) * sw, rcond=None)[0]
-    independent = (xd - mx) @ answer + my
-    np.testing.assert_allclose(prediction, independent, rtol=5e-4, atol=3e-4)
+    assert np.asarray(native.coef_).shape == (x.shape[1],)
+    assert np.asarray(native.coef_).dtype == np.dtype("f4")
+    assert np.asarray(native.intercept_).shape == ()
+    assert native.n_features_in_ == x.shape[1]
+    assert np.asarray(prediction).shape == (len(x),)
+    assert np.asarray(prediction).dtype.kind == "f"
+    np.testing.assert_array_equal(x, before_x)
+    np.testing.assert_array_equal(y, before_y)
 
 
 def test_ols_native_preserves_wide_minimum_norm_support_boundary():
     x, y, intercept, weight = fixture("wide_minimum_norm")
-    independent_coef = np.linalg.lstsq(x.astype("f8"), y.astype("f8"), rcond=None)[0]
-    np.testing.assert_array_equal(independent_coef, [0.25, 0.5, 0.0])
     native = LinearRegression(fit_intercept=intercept)
     audit = audit_native_call(native_fit, native, x, y, weight)
     if CONTEXT["vendor"] == "cpu":
@@ -117,11 +109,11 @@ def test_ols_native_preserves_wide_minimum_norm_support_boundary():
         return
     assert clean(audit) is native
     prediction = clean(audit_native_call(native_predict, native, x))
-    legacy = LinearRegression(fit_intercept=intercept).fit(x, y, sample_weight=weight)
-    np.testing.assert_array_equal(bits(native.coef_), bits(legacy.coef_))
-    np.testing.assert_array_equal(bits(prediction), bits(legacy.predict(x)))
-    np.testing.assert_allclose(native.coef_, independent_coef, rtol=5e-4, atol=3e-4)
-    np.testing.assert_allclose(prediction, x.astype("f8") @ independent_coef, rtol=5e-4, atol=3e-4)
+    # Direct native fixtures check the independent [0.25, 0.5, 0] minimum
+    # norm coefficients. Keep this public result/error publication boundary.
+    assert np.asarray(native.coef_).shape == (3,)
+    assert native.n_features_in_ == 3
+    assert np.asarray(prediction).shape == (2,)
 
 
 @pytest.mark.parametrize("layout", ["fortran", "negative_stride", "nested", "memoryview", "float64", "float16"])

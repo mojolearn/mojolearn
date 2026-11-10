@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from core.logistic_native_api import QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_DECISION, QN_NATIVE_PROBA
+from core.logistic_query_state import logistic_query_integer_width
 from bindings.logistic_descriptor_boundary import logistic_run_query, logistic_run_log
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_type_fields
@@ -197,8 +198,7 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
     _ = prepared^
     var rows = Int(py=x.shape[0])
     var features = Int(py=x.shape[1])
-    if features != Int(py=fields["n_features_in_"]):
-        raise Error("LogisticRegression feature count differs from fit")
+    logistic_query_integer_width(features, Int(py=fields["n_features_in_"]), True)
     var count = len(labels)
     if count < 2:
         raise Error("LogisticRegression requires at least two fitted classes")
@@ -223,14 +223,14 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
     var out = PythonObject(None)
     var indices = List[Int]()
     if operation == "host_infer_predict" and targets == 1:
-        var codes = host_archive_typed(Python.tuple(rows), "<i8", context["output_context"])
+        # The native decoder already consumes machine-word codes. The QN
+        # ABI writes int64, the same word on every supported LP64 target;
+        # write directly into that owned native list instead of allocating
+        # a Python Array and copying each completed code into the list.
+        indices = List[Int](length=rows, fill=0)
         logistic_run_query(context["host_inference_entries"], QN_NATIVE_BINARY,
             QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(weights)),
-                Int(py=classical_address(codes)), 0, rows, features, 1, intercept, False))
-        var values = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(codes)))
-        for i in range(rows):  # driver-loop: native completed class-code publication
-            indices.append(Int(values[i]))
-        _ = codes^
+                Int(indices.unsafe_ptr()), 0, rows, features, 1, intercept, False))
     elif operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba":
         # Decision and link in one native call (no Python scores array).
         var probabilities = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])

@@ -57,7 +57,9 @@ def test_native_constructor_preserves_seeded_initialization_and_views(
     assert list(parameters) == list(expected)
     assert list(model.arrays) == list(expected)
     assert model.optimizer.accumulation_steps == 2
-    assert model.optimizer._pristine is lazy
+    optimizer_state = audit_native_call(model.optimizer.__getstate__).assert_native()
+    assert optimizer_state["_native_optimizer_pristine"] is lazy
+    assert "_native_optimizer_owner" not in optimizer_state
     assert (model.optimizer._m is None) is lazy
     assert (model.optimizer._v is None) is lazy
     for i, (name, shape) in enumerate(config.registry()):

@@ -68,6 +68,7 @@ from training.neural_session_mlp_host import nn_mlp_sessions_host
 from std.os import abort
 from training.host.native_primitive_dispatch import NATIVE_HOST_TRAINING_PRIMITIVE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from training.host.optimizer_native import OPTIMIZER_NATIVE_HOST_API
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
@@ -616,11 +617,17 @@ def neural_primitives_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def optimizer_native_api_binding() raises -> PythonObject:
+    var api = OPTIMIZER_NATIVE_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_training_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_training_host")
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
+        module.def_function[optimizer_native_api_binding]("optimizer_native_api_v1")
         module.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_function[training_host_numeric_mode_binding]("training_host_numeric_mode")

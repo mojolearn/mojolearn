@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The measure of the public runtime migration (docs/plans/PUBLIC_RUNTIME_MIGRATION.md).
+"""Source review inventory for the public runtime migration.
+
+This heuristic is not a compliance verdict, push gate or evidence of executed
+behavior. Its source classifications identify code for semantic review; typed
+interfaces and execution tests establish the actual native boundary.
 
 The contract: a public operation hands its arguments to ONE native call that
 validates, prepares, executes and produces the result. Python-side validation,

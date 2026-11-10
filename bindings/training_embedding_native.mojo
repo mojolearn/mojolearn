@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public embedding input preparation and ownership; numerical entries unchanged.
 from std.python import Python, PythonObject
+from bindings.optimizer_container_boundary import OptimizerInputOwners
 from bindings.native_loaded_module import native_loaded_module
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_value, opt_numpy
 from bindings.optimizer_public_words import stash_python_error
-from bindings.optimizer_public_door import TensorView, tensor_view, new_array, contiguous_addr, py_ints
+from bindings.optimizer_public_door import tensor_view, new_array
+from bindings.tensor_view import TensorView
+from training.optimizer_input_plan import optimizer_contiguous_address
+from providers.python.array_layout_boundary import native_shape_pack
 from std.memory import memcpy
 from bindings.optimizer_device_native import shape_count
 from bindings.training_rms_native import rms_host_view
@@ -35,68 +39,73 @@ def embedding_native_call(entry: PythonObject, args: PythonObject, list_store: B
 
 def embedding_array_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
                            mut leaf_depth: Int, leaves: PythonObject) raises:
-    var value_owner = value
-    var view = TensorView()
-    _ = tensor_view(value, view)
-    if leaf_depth >= 0 and leaf_depth != depth + len(view.shape):
-        raise Error("ValueError: embedding indices must be rectangular")
-    leaf_depth = depth + len(view.shape)
-    for j in range(len(view.shape)):  # driver-loop: nested Array shape metadata
-        if depth + j == len(dims):
-            dims.append(view.shape[j])
-        elif dims[depth + j] != view.shape[j]:
+    var buffer_pins = OptimizerInputOwners()
+    try:
+        var value_owner = value
+        var view = TensorView()
+        _ = tensor_view(value, view, buffer_pins)
+        if leaf_depth >= 0 and leaf_depth != depth + len(view.shape):
             raise Error("ValueError: embedding indices must be rectangular")
-    if len(dims) != leaf_depth:
-        raise Error("ValueError: embedding indices must be rectangular")
-    var count = shape_count(view.shape)
-    var packed = embedding_pack(view.addr, view.shape, view.strides, view.itemsize, False, 0, count)
-    var pointer = packed.unsafe_ptr()
-    var dtype = String(value.dtype)
-    # The dtype is decided once per Array, not by a string chain per element.
-    var code = 0
-    if dtype == "<f4":
-        code = 1
-    elif dtype == "<f8":
-        code = 2
-    elif dtype == "<f2":
-        code = 3
-    elif dtype == "<i8":
-        code = 4
-    elif dtype == "<i4":
-        code = 5
-    elif dtype == "<u4":
-        code = 6
-    elif dtype == "<u2":
-        code = 7
-    elif dtype == "<i1":
-        code = 8
-    elif dtype == "<u1":
-        code = 9
-    if code == 0 and count > 0:
-        raise Error("TypeError: nested index Array has an unsupported dtype")
-    for i in range(count):  # driver-loop: serialize nested native Array leaves into the admitted index envelope
-        var scalar = PythonObject(None)
-        if code == 1:
-            scalar = PythonObject(Float64(pointer.bitcast[Float32]()[i]))
-        elif code == 2:
-            scalar = PythonObject(pointer.bitcast[Float64]()[i])
-        elif code == 3:
-            scalar = PythonObject(Float64(f16_bits_to_f32(pointer.bitcast[UInt16]()[i])))
-        elif code == 4:
-            scalar = PythonObject(Int(pointer.bitcast[Int64]()[i]))
-        elif code == 5:
-            scalar = PythonObject(Int(pointer.bitcast[Int32]()[i]))
-        elif code == 6:
-            scalar = PythonObject(Int(pointer.bitcast[UInt32]()[i]))
-        elif code == 7:
-            scalar = PythonObject(Int(pointer.bitcast[UInt16]()[i]))
-        elif code == 8:
-            scalar = PythonObject(Int(pointer.bitcast[Int8]()[i]))
-        else:
-            scalar = PythonObject(Int(pointer[i]))
-        py_call(leaves.append, scalar)
-    _ = packed^
-    _ = value_owner^
+        leaf_depth = depth + len(view.shape)
+        for j in range(len(view.shape)):  # driver-loop: nested Array shape metadata
+            if depth + j == len(dims):
+                dims.append(view.shape[j])
+            elif dims[depth + j] != view.shape[j]:
+                raise Error("ValueError: embedding indices must be rectangular")
+        if len(dims) != leaf_depth:
+            raise Error("ValueError: embedding indices must be rectangular")
+        var count = shape_count(view.shape)
+        var packed = embedding_pack(view.addr, view.shape, view.strides, view.itemsize, False, 0, count)
+        var pointer = packed.unsafe_ptr()
+        var dtype = String(value.dtype)
+        # The dtype is decided once per Array, not by a string chain per element.
+        var code = 0
+        if dtype == "<f4":
+            code = 1
+        elif dtype == "<f8":
+            code = 2
+        elif dtype == "<f2":
+            code = 3
+        elif dtype == "<i8":
+            code = 4
+        elif dtype == "<i4":
+            code = 5
+        elif dtype == "<u4":
+            code = 6
+        elif dtype == "<u2":
+            code = 7
+        elif dtype == "<i1":
+            code = 8
+        elif dtype == "<u1":
+            code = 9
+        if code == 0 and count > 0:
+            raise Error("TypeError: nested index Array has an unsupported dtype")
+        for i in range(count):  # driver-loop: serialize nested native Array leaves into the admitted index envelope
+            var scalar = PythonObject(None)
+            if code == 1:
+                scalar = PythonObject(Float64(pointer.bitcast[Float32]()[i]))
+            elif code == 2:
+                scalar = PythonObject(pointer.bitcast[Float64]()[i])
+            elif code == 3:
+                scalar = PythonObject(Float64(f16_bits_to_f32(pointer.bitcast[UInt16]()[i])))
+            elif code == 4:
+                scalar = PythonObject(Int(pointer.bitcast[Int64]()[i]))
+            elif code == 5:
+                scalar = PythonObject(Int(pointer.bitcast[Int32]()[i]))
+            elif code == 6:
+                scalar = PythonObject(Int(pointer.bitcast[UInt32]()[i]))
+            elif code == 7:
+                scalar = PythonObject(Int(pointer.bitcast[UInt16]()[i]))
+            elif code == 8:
+                scalar = PythonObject(Int(pointer.bitcast[Int8]()[i]))
+            else:
+                scalar = PythonObject(Int(pointer[i]))
+            py_call(leaves.append, scalar)
+        _ = packed^
+        _ = value_owner^
+    finally:
+        _ = buffer_pins^
+
 
 
 def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
@@ -202,7 +211,7 @@ def embedding_int_list(value: PythonObject) raises -> PythonObject:
     # forward([1, 2]) read allocator words as ids (test_cluster_input_refusals::
     # test_embedding_refuses_float_ids: "id 341002080 at position 0").
     _ = codes^
-    return Python.tuple(out, out._addr, count, py_ints(shape))
+    return Python.tuple(out, out._addr, count, native_shape_pack(shape))
 
 
 def embedding_numpy_dtype(value: PythonObject, context: PythonObject) raises:
@@ -260,7 +269,7 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
     return Python.tuple(store, 1 if floating else 3)
 
 
-def embedding_indices(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def embedding_indices(value: PythonObject, context: PythonObject, mut buffer_pins: OptimizerInputOwners) raises -> PythonObject:
     var fast = embedding_int_list(value)
     if fast is not None:
         return Python.tuple(fast[0], fast[1], fast[2])
@@ -286,7 +295,7 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
     var bytes = List[UInt8]()
     var count = 0
     var source_addr = 0
-    if tensor_view(value, view):
+    if tensor_view(value, view, buffer_pins):
         count = shape_count(view.shape)
         if count == 0:
             raise Error("ValueError: embedding indices must be nonempty")
@@ -390,36 +399,42 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
 
 def training_embedding_operation(operation: String, values: PythonObject, entries: PythonObject,
                                  context: PythonObject) raises -> PythonObject:
-    var backward = operation == "embedding_backward"
-    if len(values) != (3 if backward else 2):
-        raise Error("TypeError: invalid embedding argument envelope")
-    var entry = entries[PythonObject(operation)]
-    if py_type(entry) is not context["device_finalizer_types"][2]:
-        raise Error("TypeError: embedding requires its connected compiled entry")
-    var input = values[0]
-    var view = TensorView()
-    rms_host_view(input, "dy" if backward else "weight", operation, view)
-    if len(view.shape) != 2:
-        raise Error("ValueError: mojolearn." + operation + ": " + ("dy must be (N, D)" if backward else "weight must be (V, D)"))
-    var ids = embedding_indices(values[1], context)
-    var count = Int(py=ids[2])
-    if backward and count != view.shape[0]:
-        raise Error("ValueError: mojolearn.embedding_backward: ids and dy row counts differ")
-    var vocab = view.shape[0]
-    if backward:
-        vocab = Int(py=training_scalar_number(values[2], operation, context, True))
-        if vocab < 0:
-            raise Error("ValueError: negative embedding vocabulary size")
-    _ = shape_count([vocab, view.shape[1]])
-    var result = new_array([vocab if backward else count, view.shape[1]], "<f4")
-    var keep = List[List[Float32]]()
-    var address = contiguous_addr(input, view, keep)
-    if backward:
-        # The public contract converted vocab for allocation and again for
-        # launch metadata; preserve native scalar warnings from both calls.
-        vocab = Int(py=training_scalar_number(values[2], operation, context, True))
-    _ = py_call(entry, Python.list(result._addr, address, ids[1]), Python.list(count, vocab, view.shape[1]))
-    _ = keep^
-    _ = input^
-    _ = ids^
-    return result
+    var buffer_pins = OptimizerInputOwners()
+    try:
+        var backward = operation == "embedding_backward"
+        if len(values) != (3 if backward else 2):
+            raise Error("TypeError: invalid embedding argument envelope")
+        var entry = entries[PythonObject(operation)]
+        if py_type(entry) is not context["device_finalizer_types"][2]:
+            raise Error("TypeError: embedding requires its connected compiled entry")
+        var input = values[0]
+        var view = TensorView()
+        rms_host_view(input, "dy" if backward else "weight", operation, view, buffer_pins)
+        if len(view.shape) != 2:
+            raise Error("ValueError: mojolearn." + operation + ": " + ("dy must be (N, D)" if backward else "weight must be (V, D)"))
+        var ids = embedding_indices(values[1], context, buffer_pins)
+        var count = Int(py=ids[2])
+        if backward and count != view.shape[0]:
+            raise Error("ValueError: mojolearn.embedding_backward: ids and dy row counts differ")
+        var vocab = view.shape[0]
+        if backward:
+            vocab = Int(py=training_scalar_number(values[2], operation, context, True))
+            if vocab < 0:
+                raise Error("ValueError: negative embedding vocabulary size")
+        _ = shape_count([vocab, view.shape[1]])
+        var result = new_array([vocab if backward else count, view.shape[1]], "<f4")
+        var keep = List[List[Float32]]()
+        var address = 0
+        with GILReleased(Python()):
+            address = optimizer_contiguous_address(view, keep)
+        if backward:
+            # The public contract converted vocab for allocation and again for
+            # launch metadata; preserve native scalar warnings from both calls.
+            vocab = Int(py=training_scalar_number(values[2], operation, context, True))
+        _ = py_call(entry, Python.list(result._addr, address, ids[1]), Python.list(count, vocab, view.shape[1]))
+        _ = keep^
+        _ = input^
+        _ = ids^
+        return result
+    finally:
+        _ = buffer_pins^

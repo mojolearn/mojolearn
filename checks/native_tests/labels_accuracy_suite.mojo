@@ -30,16 +30,16 @@ def _score(unit: Int) raises:
     # independent inputs, and the production runner owns stage parallelism.
     for i in range(rows):
         var code = (i * 3 + 2) % 7
-        var match = (i % 4) < (variant % 3 + 1)
+        var matched = (i % 4) < (variant % 3 + 1)
         words[actual + i] = UInt32(code)
         # Out-of-range codes are misses, even when both vectors contain -1.
-        words[predicted + i] = UInt32(code if match else -1)
-        hits += Int(match)
+        words[predicted + i] = UInt32(code if matched else -1)
+        hits += Int(matched)
         if weighted:
             var weight = 1 + i % 4
             words[weight_at + i] = bitcast[DType.uint32](Float32(weight))
             total_weight += weight
-            if match:
+            if matched:
                 hit_weight += weight
     run_program_host(Int(words), plan.program.size, Int(plan.program.stages.unsafe_ptr()),
                      len(plan.program.stages) // 16)
@@ -85,8 +85,7 @@ def run_checks() raises:
     comptime FIXTURES = 40
     var failures = List[Int](length=FIXTURES, fill=0)
     var failed_at = failures.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    @parameter
-    def task(unit: Int):
+    def task(unit: Int) {imm failed_at}:
         try:
             if unit < 36:
                 _score(unit)

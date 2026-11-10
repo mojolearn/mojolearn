@@ -662,9 +662,19 @@ def strat_fold_assign_i32_binding(
 def reduce_stat_binding(addr: PythonObject, code: PythonObject, n: PythonObject,
     what: PythonObject) raises -> PythonObject:
     var count = Int(py=n)
-    var native_code = Int(py=code)
-    var address = Int(py=addr)
-    var operation = Int(py=what)
+    var native_code: Int
+    var address: Int
+    var operation: Int
+    # The enabled integer-sum door used to admit code/address before what;
+    # otherwise both the reduction door and host entry admitted what first.
+    comptime if IDN_HPDEV_ISUM:
+        native_code = Int(py=code)
+        address = Int(py=addr)
+        operation = Int(py=what)
+    else:
+        operation = Int(py=what)
+        native_code = Int(py=code)
+        address = Int(py=addr)
     var result: HpStat
     with GILReleased(Python()):
         result = labels_device_reduce(address, native_code, count, operation)
@@ -729,10 +739,21 @@ def normal_init_f32_binding(
 def cast_elements_binding(src_addr: PythonObject, src_code: PythonObject, dst_addr: PythonObject,
     dst_code: PythonObject, n: PythonObject) raises -> PythonObject:
     var count = Int(py=n)
-    var source_code = Int(py=src_code)
-    var target_code = Int(py=dst_code)
-    var source = Int(py=src_addr)
-    var target = Int(py=dst_addr)
+    var source_code: Int
+    var target_code: Int
+    var source: Int
+    var target: Int
+    # Preserve the old host-entry coercion order when its device switch is off.
+    comptime if IDN_HPDEV_CAST:
+        source_code = Int(py=src_code)
+        target_code = Int(py=dst_code)
+        source = Int(py=src_addr)
+        target = Int(py=dst_addr)
+    else:
+        source = Int(py=src_addr)
+        target = Int(py=dst_addr)
+        source_code = Int(py=src_code)
+        target_code = Int(py=dst_code)
     var result = 0
     with GILReleased(Python()):
         result = labels_device_cast(source, source_code, target, target_code, count)

@@ -6,6 +6,7 @@ backend retains its existing encode, cast, unique, finite and reduction kernels.
 """
 from core.hotpath_impl import HpStat
 from core.labels_native_api import LabelsPrepareRequest
+from core.labels_admission import labels_prepare_count, labels_prepare_label_count
 
 comptime PT_ENCODE_CAP = 4096
 comptime PT_W_NONFINITE = -3
@@ -30,12 +31,10 @@ trait LabelsPreparationKernels:
 
 def labels_prepare_targets[K: LabelsPreparationKernels](r: LabelsPrepareRequest) raises -> Int:
     var count = r.count
-    if count < 0:
-        raise Error("prepare_targets: n must be non-negative, got " + String(count))
+    labels_prepare_count(count)
     var classes = 0
     if r.labels != 0:
-        if count < 1:
-            raise Error("prepare_targets: labels need n >= 1")
+        labels_prepare_label_count(count)
         if r.classes == 0 or r.codes == 0:
             raise Error("prepare_targets: null label output address")
         var code = r.label_code

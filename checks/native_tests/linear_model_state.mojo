@@ -55,7 +55,7 @@ def _request[WIDE: Bool](fault: Int) raises:
         state.coef_count = cols
         expected = "rows and cols must be positive"
     # Copying metadata does not copy or consume the caller's buffers.
-    var snapshot = state
+    var snapshot = state.copy()
     state.features = 99
     var refused = False
     try:

@@ -290,11 +290,13 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Preserve supported interfaces through native implementation; do not remove a feature to claim compliance.
   Measure the gain; do not assume removing Python makes every workload faster.
 - Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
-  tags, are debt to remove, never exemptions; an empty baseline is not proof. The no-host-routes push hook enforces
-  the rule.
-- **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard and the
-  shell-loop counter from push and CI. Do not restore them under another name or replace them with source-count
-  gates. The first excluded the binding/provider dependence; the second rejected required UNPACK/PACK loops.
+  tags, are evidence to review, never exemptions; an empty baseline is not proof. Native execution and device
+  behavior establish compliance; source-graph reachability does not distinguish admission from GPU computation.
+- **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard,
+  shell-loop counter, GPU-route source-graph fence, runtime-import counter and public-runtime source-count gate
+  from push and CI. Do not restore them under another name
+  or replace them with source-count gates. They excluded binding dependence or rejected required UNPACK/PACK
+  work, including native host input conversion and reading mutable admitted module metadata.
   Their counts never proved a Python-free operation. Complete the typed Mojo boundary migration and retain
   actual runtime correctness checks.
 
@@ -332,8 +334,8 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>` (`tools/lean_worktree.sh` when old
   evidence is not needed). Commit after every edit and push often. Never `git stash`, rebase, `reset --hard` or
   `checkout --` someone else's edits. Never mutate another agent's worktree.
-- **Never `git push --no-verify`.** The pre-push host-route fence judges a branch only on what it adds over its
-  merge-base with main. A push to main is judged on the whole tree; if main is red, fix main first (2026-10-07).
+- **Never `git push --no-verify`.** Run the remaining push hooks normally. The retired runtime source guards
+  must not be restored; native correctness and GPU behavior remain requirements.
 - **Nothing in `/private/tmp`** (wiped on reboot). Briefs, notes and scripts live in the worktree or
   `~/mojolearn-evidence/`.
 - **Use bash, not zsh,** for loops and variable expansion: zsh does not word-split `$FLAGS`.
@@ -435,8 +437,14 @@ them for you.
 - Mojo frees a local at its last named use. A device buffer, ring or list that a view, a pointer or a
   queued launch still reads must be named again after that use (keep it alive past the final copy),
   or the later read hits freed storage.
-- Compile-green is not a gate. A packed wheel must import and pass the light smoke on the Mac before
-  it is merged to main, built for measurement or sent to a box.
+- Development integration merges require compilation of the affected code (Andrew, 2026-11-10).
+  Do not add packed-wheel import or smoke gates to that merge. Report native correctness tests,
+  installed runtime tests, measurements and release identity separately; compilation proves none of them.
+- Compile repairs from the native migration (2026-11-10): `Copyable` alone does not allow an implicit
+  copy; use `.copy()` for borrowed descriptors. Construct floating Boolean fixtures with `1.0 if
+  condition else 0.0`. Copy a string slice into a temporary before assigning it back to the source.
+- Mojo 1.0's custom `sort` comparator is a local `@parameter` closure, passed with `cmp_fn` over a
+  mutable `Span`; a top-level thin function does not satisfy its capturing comparator signature.
 
 ## Logs and context
 

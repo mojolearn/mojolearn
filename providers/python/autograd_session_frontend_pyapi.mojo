@@ -126,7 +126,6 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     py_setitem(fields, "_program_fit", connection["fit"])
     py_setitem(fields, "_program_class", program_class)
     py_setitem(fields, "_distributed_binding", connection["distributed"])
-    py_setitem(fields, "_opt_kind", Python.dict())
     var scope = List[Int](length=2, fill=0)
     var addresses: List[Int] = [Int(scope.unsafe_ptr())]
     var options: List[Int] = [1 if recording else 0, 1 if key == "identical" else 0]

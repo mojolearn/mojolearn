@@ -1,0 +1,46 @@
+Mojolearn native rank-N broadcast/axis-softmax checks, 2026-11-10
+
+Scope per executor (four fixtures)
+  Broadcast y=((A+B)*C)/D with shapes (2,3,4), (1,3,1), (1,4), (2,1,4).
+  Every forward element and every analytic gradient element for all four
+  inputs is checked. Float64 scalar operations with explicit fp32 stage
+  roundings form the forward expectation; scalar analytic derivative sums
+  form gradients. Exact forward equality preserves array_equal semantics,
+  including equal signed zeros. The former NumPy effective tolerances are
+  retained: A gradient rtol1e-6/atol1e-8, others rtol1e-5/atol1e-5.
+  Three axis operations on (4,6,5): softmax axis1, log-softmax axis0 and
+  default-last-axis softmax. Independent Float64 exp/log with explicit
+  coordinate traversal computes every expected value. Previous tolerances
+  remain (rtol1e-5, softmax atol1e-6/log-softmax atol1e-5).
+  Native deterministic signed rational fixtures replace NumPy RNG inputs;
+  shapes, axes, derivative formulas and assertion strictness remain.
+
+Execution
+  Direct OpsSession HostExec/DeviceExec calls, owned Mojo lists and shapes,
+  no Python objects/imports/callbacks or product math used as an oracle.
+  Four independent host sessions run through host_parallelize. Device
+  fixtures submit in order because DeviceExec owns a shared context/pool;
+  existing kernels provide GPU parallel work. No concurrency/scaling claim.
+
+Python changes and pending migration
+  Removed full broadcast/gradient and axis-softmax NumPy numerical oracles
+  and their double-run/digest calls. Python keeps shape/dtype/gradient
+  result packing and literal public-axis/route sentinels. The small broadcast
+  buffer fixture is now literal, and the axis-route fixture is 2 x 2 x 2.
+  Batched attention, concat/split/take, convolution/pooling and finite-
+  difference gradients remain numerical Python tests pending migration.
+
+Orchestrator commands (source reviewed only)
+  bash tools/compile_slot.sh pixi run check-native-rankn-math-cpu
+  bash tools/compile_slot.sh pixi run check-native-rankn-math-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_math_cpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-math-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_math_gpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-math-gpu"
+  Apply standard target flags for NVIDIA/AMD compile legs.
+  Retained Python binding: _mojolearn_x_sequence.
+  Python boundary selection: test_ops_rankn.py -k 'broadcast_and_gradient or axis_softmax_methods'.
+
+Status
+  CPU/GPU compile/run are RUN OWED to root. No box/identity/timing queued.
+  Product/kernel/defaults unchanged. A/B define: none (test-only).
+  Root reports earlier BF16 GEMM CPU/GPU nine fixtures each passed unmodified.

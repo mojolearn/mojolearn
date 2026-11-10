@@ -49,26 +49,14 @@ def native_scalar_buffer(value: PythonObject) raises -> NativeScalarBuffer:
     return native_scalar_buffer_dtype(value, value.dtype)
 
 
-def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises -> NativeScalarBuffer:
-    # Callers have admitted the exact native ndarray/scalar and primitive
-    # dtype. A caller that already captured dtype supplies that same object;
-    # the original API captures it once above. Its native descriptor supplies
-    # width/code/byte order without
-    # NumPy computation. Requesting PEP3118 format would reject byte-swapped
-    # long double even though its raw buffer bytes are supported.
-    var width = Int(py=dtype.itemsize)
-    var code = String(dtype.char)
-    var order = String(dtype.byteorder)
-    var little = order != ">"  # all supported host ABIs are little-endian
+def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> InlineArray[UInt8, 32]:
+    """Copy one exact admitted scalar's public buffer into fixed private bytes.
+
+    Numeric and temporal metadata share this UNPACK. No element protocol or
+    NumPy operation runs; the caller admits its owner and native dtype first.
+    """
     if width < 1 or width > 32:
         raise Error("TypeError: numeric scalar decoding requires one primitive buffer element")
-    var complex = code == "F" or code == "D" or code == "G"
-    var component_width = width
-    if complex:
-        if width % 2 != 0:
-            raise Error("TypeError: complex scalar storage requires two equal components")
-        component_width //= 2
-        code = String("f") if code == "F" else String("d") if code == "D" else String("g")
     # Py_buffer is a public CPython structure, ten pointer-sized words on
     # our supported 64-bit CPython targets; word 2 is len, word 3 itemsize.
     # PyBUF_FULL_RO without PyBUF_FORMAT (0x118) asks for native shape and
@@ -96,11 +84,30 @@ def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises 
         # Keep the Py_buffer storage alive past the release on every path
         # (ASAP destruction could free it before PyBuffer_Release reads it).
         _ = len(view)
-    width = component_width
+    _ = view^
+    _ = value
+    return bytes^
+
+
+def native_scalar_buffer_dtype(value: PythonObject, dtype: PythonObject) raises -> NativeScalarBuffer:
+    # Callers have admitted the exact native ndarray/scalar and primitive
+    # dtype. A caller that already captured dtype supplies that same object;
+    # the original API captures it once above. Requesting PEP3118 format
+    # would reject byte-swapped long double despite supported raw bytes.
+    var width = Int(py=dtype.itemsize)
+    var code = String(dtype.char)
+    var little = String(dtype.byteorder) != ">"
+    var complex = code == "F" or code == "D" or code == "G"
+    if complex and width % 2 != 0:
+        raise Error("TypeError: complex scalar storage requires two equal components")
+    var bytes = native_scalar_buffer_bytes(value, width)
+    var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    if complex:
+        width //= 2
+        code = String("f") if code == "F" else String("d") if code == "D" else String("g")
     var real = native_scalar_real(data, 0, code, width, little)
     var imag = NativeRealBits()
     if complex:
         imag = native_scalar_real(data, width, code, width, little)
     _ = bytes^
-    _ = view^
     return NativeScalarBuffer(real, imag, complex, code == "g")

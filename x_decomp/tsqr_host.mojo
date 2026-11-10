@@ -16,7 +16,8 @@ it computes, so the bits are the same at every thread count.
 THE FACTORED STATE. `ts_factor_host(..., keep=True)` keeps the factored
 matrix, the panels' T factors, the tree tiles and the tree's tau in ONE
 process slot until `ts_apply_host` (or `ts_free_host`) uses it; a new factor
-replaces it."""
+with `keep=True` replaces it. Temporary factorizations own their state locally
+and leave the explicit retained factorization alone."""
 from std.memory import memcpy
 
 from checks.numerics import ftz, identical_div, identical_sqrt
@@ -406,31 +407,30 @@ def _capply_level_host(pcb: F32Ptr, ptl: F32Ptr, ptau: F32Ptr, n: Int, k: Int, n
 
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
-def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
-    """R (n x n, n = d + nrhs) of [a | bp] (m x d and m x nrhs, row major)
-    into r; with `keep` the factored state stays for `ts_apply_host`."""
+def _ts_factor_host_into(mut state: _TsHost, a: F32Ptr, bp: F32Ptr, r: F32Ptr,
+                         m: Int, d: Int, nrhs: Int):
+    """Factor into the caller's native owner; every scratch span stays live."""
     var n = d + nrhs
-    ts_free_host()
-    var st = TS_HOST_STATE.get_or_create_ptr()
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
-    st[].a = List[Float32](length=m * n, fill=Float32(0.0))
-    st[].t = List[Float32](length=nb * npan * _TT, fill=Float32(0.0))
-    st[].t2 = List[Float32](length=(nb * npair * TS_T2) if TS_WY_PAIR else 1, fill=Float32(0.0))
-    st[].tiles = List[Float32](length=nb * n * n, fill=Float32(0.0))
-    st[].tau = List[Float32](length=nb * n, fill=Float32(0.0))
-    var pa = _p(st[].a)
-    var pt = _p(st[].t)
-    var pt2 = _p(st[].t2)
-    var ptl = _p(st[].tiles)
-    var ptau = _p(st[].tau)
+    state.a = List[Float32](length=m * n, fill=Float32(0.0))
+    state.t = List[Float32](length=nb * npan * _TT, fill=Float32(0.0))
+    state.t2 = List[Float32](length=(nb * npair * TS_T2) if TS_WY_PAIR else 1, fill=Float32(0.0))
+    state.tiles = List[Float32](length=nb * n * n, fill=Float32(0.0))
+    state.tau = List[Float32](length=nb * n, fill=Float32(0.0))
+    var pa = _p(state.a)
+    var pt = _p(state.t)
+    var pt2 = _p(state.t2)
+    var ptl = _p(state.tiles)
+    var ptau = _p(state.tau)
     if nrhs == 0:
         memcpy(dest=pa, src=a, count=m * n)
     else:
-        for i in range(m):
+        def pack_row(i: Int) {imm pa, imm a, imm bp, imm n, imm d, imm nrhs}:
             memcpy(dest=pa + i * n, src=a + i * d, count=d)
             memcpy(dest=pa + i * n + d, src=bp + i * nrhs, count=nrhs)
+        host_parallelize(pack_row, m)
 
     def _blk(b: Int) {imm pa, imm pt, imm pt2, imm ptl, imm m, imm n, imm nb, imm npan, imm npair}:
         var lo = ts_block_lo(b)
@@ -447,12 +447,24 @@ def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, 
         _combine_level_host(ptl, ptau, n, nb, s)
         s *= TS_TREE_ARITY
     memcpy(dest=r, src=ptl, count=n * n)
+    state.m = m
+    state.n = n
+    state.live = True
+
+
+def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+    """R of [a | bp]; optionally retain the factorization for ts_apply_host."""
     if keep:
-        st[].m = m
-        st[].n = n
-        st[].live = True
-    else:
+        # The explicit factor/apply API owns its one retained factorization.
         ts_free_host()
+        var slot = TS_HOST_STATE.get_or_create_ptr()
+        _ts_factor_host_into(slot[], a, bp, r, m, d, nrhs)
+    else:
+        # Temporary OLS/Ridge factorizations can overlap. Sharing the retained
+        # slot freed another fit's panels while its workers were still using
+        # them. Own this call's buffers without touching a retained factor.
+        var owned = _TsHost()
+        _ts_factor_host_into(owned, a, bp, r, m, d, nrhs)
 
 
 def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
