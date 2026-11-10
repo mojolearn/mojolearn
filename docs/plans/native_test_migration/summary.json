@@ -82,10 +82,10 @@
     }
   ],
   "file_decisions": {
-    "needs-semantic-review": 567,
+    "needs-semantic-review": 566,
     "retain-python-boundary": 23,
     "split-partial": 2,
-    "split-migrated": 14,
+    "split-migrated": 15,
     "split-needed": 7,
     "review-module-gate": 1,
     "retain-tooling": 2
@@ -606,9 +606,23 @@
       "producer_dependency": "71c1b26f53",
       "source_review_only": true,
       "runtime_status": "Root compile/native run and retained installed Python boundary execution owed; see logistic-numeric-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_svc_probability.py",
+      "decision": "split-migrated",
+      "python_numerical_definitions_removed": 3,
+      "python_boundary_definitions_retained": 4,
+      "python_boundary_parametrized_cases": 5,
+      "native_fixtures_per_executor": 3,
+      "executors": [
+        "svm.host.svc_proba and svm.impl.svc_rows",
+        "svm.impl.svc_epilogue and svm.impl.svc_rows on device"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Root compile/native runtime and retained installed Python checks owed; see svc-probability-handoff.txt."
     }
   ],
-  "reviewed_files": 49,
+  "reviewed_files": 50,
   "schema": "mojolearn.native-test-migration-inventory.v1",
   "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
   "test_definitions": 4126
