@@ -27,7 +27,6 @@ names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
 from std.memory import memcpy
-from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
@@ -46,6 +45,7 @@ from bindings.tensor_view import (
 )
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
 from sequence.lr_table import LrSpec
+from training.optimizer_schedule_plan import optimizer_decay_readback
 from training.optimizer_public_common import (
     GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut, zero_tensors,
 )
@@ -518,9 +518,8 @@ def schedule_spec_admitted(schedule: PythonObject) raises -> LrSpec:
     if kind < 5:
         var base = Float64(py=fields["base_lr"])
         var gamma = Float64(py=fields["gamma"])
-        if not isfinite(base) or not isfinite(gamma):
-            raise Error("ValueError: base_lr and gamma must be finite")
-        return LrSpec(20, Int(py=fields["_step"]) if kind == 3 else 1, 0, 0, base, gamma, 0.0, 0.0)
+        var readback = optimizer_decay_readback(base, gamma)
+        return readback.spec(Int(py=fields["_step"]) if kind == 3 else 1)
     return LrSpec(10, 1 if String(py=fields["anneal_strategy"]) == "linear" else 0,
                   1 if Bool(py=fields["three_phase"]) else 0, Int(py=fields["total_steps"]),
                   Float64(py=fields["max_lr"]), Float64(py=fields["div_factor"]),

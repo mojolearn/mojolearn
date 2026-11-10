@@ -336,3 +336,28 @@ optimizer admission tests. Native RUN remains PublicStep/OptHyper/LrSpec and
 native address/count vectors; public API fields, output checkpoint dictionaries,
 module/capsule owners and exported-buffer leases stay in UNPACK/PACK. Schedule
 preparation and inter-helper IO/load boxing remain the next concrete cleanup.
+
+## Typed built-in schedule preparation
+
+`training/optimizer_schedule_plan.mojo` now owns the scalar warmup/decay/cycle
+validation, configuration-name mapping, native evaluation request and status
+refusals. It calls the existing `lr_spec_fill` operation unchanged. Constructors
+retain their prior scalar conversion/refusal order and Float32 warmup rounding;
+readback of mutable decay fields checks finite values before decoding `_step`.
+Public schedule fields, configuration dictionaries and `_lr_spec` list results
+are still packed at the boundary and may be rebound as before.
+
+The schedule boundary uses cached PyNumber_Index and optimizer scalar decoding
+instead of mutable operator.index/int/bool calls. from_config admits four fields
+directly, constructs one typed LrSpec and allocates the guarded native owner;
+there is no internal Python name table or argument tuple. Native series/scalar
+fills run with the GIL released, retaining their native output storage. Array
+output uses a direct native buffer address instead of buffer_info dispatch.
+No schedule math, exact fallback, block size or kernel was replaced.
+
+Removed: the dead import-time schedule_entries Python dictionary and duplicate
+refusal implementation in lr_table_helpers (it imports the same pure native
+refusal now). The tests lane owns the obsolete schedule_entries poison-case
+repair. Existing direct native schedule math fixtures remain applicable; root
+owes compilation/public mutation, conversion and config tests for this batch.
+No lane compilation, test execution or performance claim is made.

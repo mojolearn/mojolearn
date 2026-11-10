@@ -16,9 +16,10 @@ from bindings.optimizer_public_words import optimizer_python_error
 from bindings.py_balanced import py_call
 from sequence.lr_exact import LrOut, onecycle_exact, pow_exact, schedule_exact
 from sequence.lr_table import (
-    F32P, F64P, LR_BEYOND, LR_ONE_BASED, LrSpec, decide_many, lr_spec_fill, onecycle_fill,
+    F32P, F64P, LrSpec, decide_many, lr_spec_fill, onecycle_fill,
     pow_values, schedule_block_values,
 )
+from training.optimizer_schedule_plan import optimizer_schedule_refusal as _lr_refusal
 
 
 def _f64p(addr: PythonObject) raises -> F64P:
@@ -70,25 +71,6 @@ def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
 # (lane optimizers-thin-glue, 2026-10-21): the value AND its refusal by name.
 # `style` names whose refusal messages a schedule raises: 0 the training
 # schedules (`_LrTable`), 1 the sequence schedules (`_Sched`), 2 OneCycleLR.
-
-
-def _lr_refusal(status: Int, t: Int, style: Int, total_steps: Int) -> Error:
-    """The exception a schedule raised for a nonzero status at step t."""
-    if style == 2 and status == LR_BEYOND:
-        return Error("ValueError: OneCycleLR: step " + String(t) + " is beyond total_steps " + String(total_steps)
-                     + " + 1 (torch refuses it too)")
-    if status == LR_ONE_BASED:
-        if style == 0:
-            return Error("ValueError: mojolearn schedule: step t is ONE-BASED, got " + String(t))
-        return Error("ValueError: schedule step t is ONE-BASED")
-    if status == 1:
-        return Error("OverflowError: mojolearn: schedule value overflows float32")
-    if status == 2:
-        return Error("ArithmeticError: mojolearn: the exact schedule value straddles a float32 rounding "
-                     "boundary within 1e-60; refusing to guess a bit")
-    if status == 3:
-        return Error("ValueError: mojolearn: cosine progress must be in [0, 1]")
-    return Error("KeyError: " + String(status))
 
 
 def lr_schedule_at_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

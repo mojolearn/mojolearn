@@ -71,14 +71,8 @@ def connect(training):
     _backend.default_mode()  # glue: initialize metadata's shared default before public native calls
     input_context = _numpy_free_context()
     input_context["native_module_type"] = ModuleType
-    schedule_entries = {}
-    for name in ("lr_schedule_at", "lr_schedule_series"):  # glue: retain native scalar schedule entries at import
-        entry = training._lr_native(name)  # import-time: compiled exact learning-rate scalar ABI, never a training/data kernel
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"schedule requires compiled {name}")
-        schedule_entries[name] = entry
     context = {
-        "schedule_entries": schedule_entries, "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
+        "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
         "array_class": Array, "array_type": array.array,
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap), "mapping_types": (dict, OrderedDict),
         # Fixed native identities; mutable builtins names cannot admit hooks.
