@@ -5,8 +5,8 @@ means and max over axis sets, NumPy broadcasting, the batched product,
 concat / split / take, softmax along an axis, conv2d and the 2-D pools, and
 their gradients in a recording session. Small, odd, non-board shapes.
 
-Views, axis reductions, first-maximum gradients, broadcasting and axis
-softmax are checked directly in checks/native_tests/rankn_*_cases.mojo;
+Views, reductions, broadcasting, axis softmax, batched attention and layout
+graphs are checked directly in checks/native_tests/rankn_*_cases.mojo;
 Python keeps their public shape, dtype, argument and buffer-packing seams. The remaining numerical cases below still
 use NumPy references and the legacy repeated-digest helper pending migration.
 """
@@ -187,23 +187,12 @@ def _bmm_run():
         return [s.numpy(scores), s.numpy(out), s.grad(q), s.grad(k), s.grad(w)]
 
 
-def test_batched_matmul_and_attention():
-    rng = _rng(4)
-    Q = rng.standard_normal((2, 3, 5, 4)).astype(np.float32)
-    K = rng.standard_normal((2, 3, 7, 4)).astype(np.float32)
-    W = rng.standard_normal((4, 6)).astype(np.float32)
-    scores, out, gq, gk, gw = _twice("bmm_attention", _bmm_run)
-    S = np.einsum("bhqd,bhkd->bhqk", Q.astype(np.float64), K.astype(np.float64))
-    assert np.allclose(scores, S, rtol=1e-4, atol=1e-4)
-    E = np.exp(0.5 * S - (0.5 * S).max(-1, keepdims=True))
-    P = E / E.sum(-1, keepdims=True)
-    O = np.einsum("bhqk,bhkd->bhqd", P, K) @ W
-    assert np.allclose(out, O, rtol=1e-4, atol=1e-4)
-    for g, shape in ((gq, Q.shape), (gk, K.shape), (gw, W.shape)):
-        assert g.shape == shape and np.isfinite(g).all()
-    gO = np.full(O.shape, 1.0 / O.size)
-    assert np.allclose(gw, np.einsum("bhqd,bhqo->do", np.einsum("bhqk,bhkd->bhqd", P, K), gO),
-                       rtol=1e-4, atol=1e-6)
+def test_attention_graph_packs_public_value_and_gradient_buffers():
+    results = _bmm_run()
+    shapes = [(2, 3, 5, 7), (2, 3, 5, 6), (2, 3, 5, 4), (2, 3, 7, 4), (4, 6)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+        assert np.isfinite(value).all()
 
 
 # ---------------------------------------------------------------- layout
@@ -227,23 +216,13 @@ def _layout_run():
             [s.grad(x) for x in xs] + [s.grad(t)]
 
 
-def test_concat_split_take():
-    rng = _rng(5)
-    parts = [rng.standard_normal((3, k, 5)).astype(np.float32) for k in (2, 1, 4)]
-    T = rng.standard_normal((3, 7, 5)).astype(np.float32)
-    out = _twice("layout", _layout_run)
-    cat, a, b, c, picked, g0, g1, g2, gt = out
-    assert np.array_equal(cat, np.concatenate(parts, axis=1))
-    for got, want in zip((a, b, c), parts):
-        assert np.array_equal(got, want)
-    assert np.array_equal(picked, T[:, [6, 0, 6, 3]])
-    assert np.array_equal(g0, 2 * parts[0]) and np.array_equal(g1, np.zeros_like(parts[1]))
-    assert np.array_equal(g2, np.full_like(parts[2], 3.0))
-    W = np.arange(60, dtype=np.float32).reshape(3, 4, 5)
-    want = np.zeros_like(T)
-    for j, idx in enumerate((6, 0, 6, 3)):  # the reference scatter-add, in the test only
-        want[:, idx] += W[:, j]
-    assert np.array_equal(gt, want)
+def test_layout_methods_pack_split_tuple_and_gradient_buffers():
+    results = _layout_run()
+    shapes = [(3, 7, 5), (3, 2, 5), (3, 1, 5), (3, 4, 5), (3, 4, 5),
+              (3, 2, 5), (3, 1, 5), (3, 4, 5), (3, 7, 5)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+    assert results[7].flat[0] == 3.0  # Public gradient handle/packing sentinel.
 
 
 # ---------------------------------------------------------------- softmax along an axis
