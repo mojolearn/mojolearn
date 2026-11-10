@@ -32,4 +32,3 @@ comptime RIDGE_FAST_RESIDENT = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )
-

@@ -4,49 +4,6 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
-from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_array, classical_address
-
-
-def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var sums = classical_array(cols, 0, context, True)
-    var m64 = classical_array(cols, 0, context, True)
-    var m32 = classical_array(cols, 0, context)
-    _ = py_call_typed(entries["lm_col_sums"], classical_address(x), classical_address(sums), Python.list(rows, cols))
-    _ = py_call_typed(entries["lm_means_finish"], classical_address(sums), classical_address(m64), classical_address(m32), Python.list(cols, rows, 0), PythonObject(0.0))
-    _ = sums^
-    return Python.tuple(m64, m32)
-
-
-def classical_center(x: PythonObject, mean: PythonObject, rows: Int, cols: Int,
-                     entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var out = classical_array(rows, cols if Int(py=x.ndim) == 2 else 0, context)
-    _ = py_call_typed(entries["lm_center"], classical_address(x), classical_address(mean), classical_address(out), Python.list(rows, cols))
-    return out
-
-
-def classical_ols_prepare(x: PythonObject, y: PythonObject, weights: PythonObject, rows: Int, cols: Int,
-                          intercept: Bool, mode: Int, prep: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`lm_ols_prep`: (work_x, work_y, xmean32, ymean64) of the general
-    route in one native call. mode 0 separate means, 1 paired, 2 weighted."""
-    var work_x = classical_array(rows, cols, context)
-    var work_y = classical_array(rows, 0, context)
-    var xm64 = classical_array(cols, 0, context, True)
-    var xm32 = classical_array(cols, 0, context)
-    var ym64 = classical_array(1, 0, context, True)
-    var ym32 = classical_array(1, 0, context)
-    var w_address = PythonObject(0) if weights is None else classical_address(weights)
-    _ = py_call_typed(prep, Python.list(classical_address(x), classical_address(y), w_address,
-                                        classical_address(work_x), classical_address(work_y),
-                                        classical_address(xm64), classical_address(xm32),
-                                        classical_address(ym64), classical_address(ym32)),
-                      Python.list(rows, cols, 1 if intercept else 0, mode))
-    _ = x  # keep the Python object alive through the native call above
-    _ = y  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    _ = xm64^
-    _ = ym32^
-    return Python.tuple(work_x, work_y, xm32, ym64)
 
 
 def classical_ridge_parameters(fields: PythonObject) raises:

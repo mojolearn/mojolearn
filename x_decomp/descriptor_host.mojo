@@ -9,7 +9,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_decomp.host import HostExec
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op
-from x_decomp.descriptor_schema import XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, xd_validate_call
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_VENDOR, xd_validate_call
 from core.shared_slot import SharedSlot
 
 
@@ -23,6 +23,8 @@ def x_decomp_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var answer = 0
         if operation == XD_MODE:
             answer = GLOBAL_NUMERIC_MODE
+        elif operation == XD_VENDOR:
+            answer = 0
         elif operation == XD_CAPABILITIES:
             answer = XD_CAP_HOST
         elif xd_is_address_op(operation):

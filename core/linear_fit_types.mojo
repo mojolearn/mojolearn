@@ -9,6 +9,8 @@ comptime LF_PREP = 3
 comptime LF_RIDGE = 4
 comptime LF_OLS = 5
 comptime LF_OLS_RESIDENT = 6
+comptime LF_MODE = 7
+comptime LINEAR_FIT_OPERATION_COUNT = 8
 comptime LF_HAS_GRAM = 1
 comptime LF_HAS_RIDGE_RESIDENT = 2
 comptime LF_PAIRED_MEANS = 4
@@ -53,7 +55,7 @@ def linear_fit_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     var addresses = 0
     var ints = 0
     var floats = 0
-    if operation == LF_FLAGS:
+    if operation == LF_FLAGS or operation == LF_MODE:
         pass
     elif operation == LF_GRAM or operation == LF_RIDGE_RESIDENT or operation == LF_OLS_RESIDENT:
         addresses = 5
@@ -88,3 +90,14 @@ def ridge_fit_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
     if p[0] <= 0 or p[1] <= 0:
         raise Error("x_linear: positive dimensions required")
+
+
+struct LinearOlsPlan(Copyable, Movable):
+    var flags: Int
+    var tsqr: Bool
+    var numeric_mode: Int
+
+    def __init__(out self, flags: Int, tsqr: Bool, numeric_mode: Int):
+        self.flags = flags
+        self.tsqr = tsqr
+        self.numeric_mode = numeric_mode

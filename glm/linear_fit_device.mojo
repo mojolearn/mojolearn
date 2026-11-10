@@ -4,7 +4,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.gram_multi_gpu import gram_plan_current
 from core.hostptr import f32_ptr, f64_ptr
 from core.linear_fit_types import (
-    LINEAR_FIT_ABI, LF_FLAGS, LF_GRAM, LF_RIDGE_RESIDENT, LF_PREP,
+    LINEAR_FIT_ABI, LF_FLAGS, LF_MODE, LF_GRAM, LF_RIDGE_RESIDENT, LF_PREP,
     LF_RIDGE, LF_OLS, LF_OLS_RESIDENT, LF_HAS_GRAM, LF_HAS_RIDGE_RESIDENT,
     LF_PAIRED_MEANS, LF_HAS_OLS_RESIDENT, linear_fit_check_spans,
 )
@@ -29,6 +29,8 @@ def linear_fit_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var value = 0
         if operation == LF_FLAGS:
             value = Int(LINEAR_GRAM_SOLVE) * LF_HAS_GRAM + Int(RIDGE_FAST_RESIDENT) * LF_HAS_RIDGE_RESIDENT + Int(C02_LINEAR_PAIR) * LF_PAIRED_MEANS + Int(OLS_FAST_NORMAL_EQ) * LF_HAS_OLS_RESIDENT
+        elif operation == LF_MODE:
+            value = GLOBAL_NUMERIC_MODE
         else:
             var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
             var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)

@@ -12,7 +12,7 @@ from bindings.classical_ridge import classical_ridge_parameters
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.py_balanced import py_setitem
 from bindings.sequential_description import sequential_fields
-from core.linear_fit_types import LINEAR_FIT_ABI, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
+from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
 from core.linear_fit_run import linear_ridge_run
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
@@ -35,7 +35,7 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         Int(py=classical_address(coef)), Int(py=classical_address(mean)), rows, cols,
         Bool(py=fields["fit_intercept"]), Float64(py=fields["alpha"]))
     var provider = neural_descriptor_connect_factory_once(
-        entries["linear_fit_native_api_v1"], String(LINEAR_FIT_ABI), 7)
+        entries["linear_fit_native_api_v1"], String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
     var weighted_provider = neural_descriptor_connect_factory_once(
         entries["ridge_fit_native_api_v1"], String(RIDGE_FIT_ABI), 1)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry

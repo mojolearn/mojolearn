@@ -19,26 +19,12 @@ def _decomp_cells(decomp):
     # binding (the selected device's, or the CPU one for the Host* classes).
     from types import BuiltinFunctionType
     cells = {}
-    required_cells = ("vendor", "numeric_mode", "tsqr_r", "ew", "gemm", "colsum", "rowsum",
-                      "move", "order_f", "svd", "rank_above", "orth_diag", "geqrf", "orgqr")
-    optional_cells = ("idn_flags", "ols_tsqr_r", "dev_ew", "dev_alloc", "dev_free", "dev_upload",
-                      "dev_download", "dev_gemm", "dev_colsum", "dev_rowsum", "dev_move",
-                      "dev_reduce", "dev_order_f", "dev_orth_diag", "dev_svd")
-    for suffix in required_cells + optional_cells:  # glue: cache only compiled decomp entry points during connection
-        name = "x_decomp_" + suffix
-        try:
-            entry = getattr(decomp, name)
-        except (AttributeError, ImportError):
-            if suffix in required_cells:
-                raise
-            continue
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"classical TSQR owner requires compiled {name}")
-        cells[name] = entry
-    if "x_decomp_dev_ew" in cells:
-        for suffix in optional_cells[3:-1]:  # glue: complete native resident family admission
-            if "x_decomp_" + suffix not in cells:
-                raise ImportError(f"classical TSQR resident entry missing: {suffix}")
+    # The native table owns all primitive dispatch and capability decisions.
+    name = "x_decomp_native_api_v1"
+    entry = getattr(decomp, name)
+    if not isinstance(entry, BuiltinFunctionType):
+        raise TypeError(f"classical TSQR owner requires compiled {name}")
+    cells[name] = entry
     return cells
 
 
