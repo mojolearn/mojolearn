@@ -144,13 +144,14 @@ attribute.
 - `RidgeState` is a Mojo struct (coefficients, intercept, n_features, the resident device handles, the numeric mode).
   It lives in a native registry keyed by an integer handle, the pattern `ResidentKnnIndex`, the ops session table and
   the msel store already use.
-- The Python estimator instance holds: its constructor parameters as plain Python attributes (scikit-learn's
-  `get_params`, `set_params` and `clone` read them and need nothing native), and one opaque state object whose
-  finaliser releases the handle. `clone` does not copy state. `set_params` after fit does not touch state.
+- The Python estimator exposes constructor parameters for scikit-learn compatibility and retains one opaque
+  native state owner. `get_params`, `set_params` and `clone` enter native operations; published Python attributes
+  are boundary representations, not the internal execution plan. Preserve each method's existing state semantics.
 - A fitted attribute (`coef_`, `intercept_`, `n_features_in_`, `labels_`, `components_`) is one native call:
-  `state_attribute(handle, ATTR_COEF) -> buffer view`, wrapped by PACK as a read-only array. It is computed or
-  downloaded on first request and cached in the state, so a model whose attributes nobody reads never pays for them.
-  This is also where "a weight a kernel has read is read-only" (X45c) lands for every family.
+  `state_attribute(handle, ATTR_COEF) -> buffer view`, wrapped by PACK with the public API's existing mutability.
+  In particular, Ridge/OLS coefficient arrays remain writable and replaceable. UNPACK admits the current array,
+  retains its owner and refreshes the typed descriptor; RUN never follows Python attributes. Existing protected
+  weight APIs retain their protection. Lazy materialization is allowed only when it preserves these semantics.
 - Pickling is one native reduce: `state_dump(handle) -> one bytes buffer` with a layout version, and
   `state_load(bytes) -> handle`. Audit B found Python running once per Array field today (`_array.py:278`, `:530`,
   `:892`).
@@ -276,34 +277,36 @@ That starting instruction does not turn compilation into runtime correctness or 
    repo in some form (descriptor tables, the ops session table, existing GIL release in the doors). If the pilot finds
    one missing, the answer is the ask for Modular, not a workaround.
 3. **Lifetime bugs.** Borrowed caller arrays, cached attribute buffers and released handles are where this can go
-   wrong. Today's runtime bugs were of this kind. The generation check and the read-only attribute views are the
-   guard; the pilot's tests must include use-after-release and pickle round trips.
+   wrong. Check handle generations, retain borrowed owners through their last native use, and test mutation,
+   replacement, use-after-release and pickle round trips. Temporary native scratch is owned per operation;
+   a process-wide slot is not a substitute for concurrent callers' separate state.
 4. **Public behaviour.** Error types and messages must not change; the pilot diffs them against the base's tests.
-   Fitted attributes become read-only views. Parameter validation order may shift between type and value errors.
+   Preserve fitted-attribute mutability and validation order; moving storage to Mojo does not authorize narrowing
+   the supported Python interface.
 5. **Bits.** Matching an older version's output is not a requirement. Preserve algorithm correctness and quality;
    the final frozen release must agree across the supported GPU vendors and the required CPU reference column.
 6. **Scope creep.** This design does not move any algorithm, does not touch a tuned kernel and does not change the
    executor. A lane that finds itself editing a kernel has left the design.
 
-Stop conditions: the pilot is slower on any measured row and one fix round does not recover it; or the pilot needs a
-Mojo feature that does not exist; or the Mac cannot compile the pilot binding. In each case the pilot is reverted (it
-is one family behind one merge) and the finding is written up.
+Fix compiler failures and measured regressions without restoring Python execution or replacing a measured winning
+kernel on reasoning alone. A missing Mojo feature gets a minimal reproducer and an upstream ask; it does not get a
+Python workaround. Record unbuilt targets and unmeasured performance separately from accepted native correctness.
 
-## 9. Open questions for Andrew
+## 9. Implementation decisions
 
-1. **Pilot family.** Ridge and LinearRegression first, then LogisticRegression. Recommendation: yes.
+1. **Initial family.** Ridge and LinearRegression establish the typed boundary; the rollout continues across the
+   remaining families and shared input, archive and optimizer paths.
 2. **The full rollout gates 0.8.67.** Decided by Andrew on 2026-11-09 and reaffirmed on 2026-11-10: complete the
    Python-object to Mojo-value migration and the applicable test migration before release. Do not defer the full
    rollout to a later release or propose a release date.
 3. **`mojolearn.Array`.** Keep it as a thin Python class over a native storage handle, with every method one native
    call and no Mojo code reading `_store`. Recommendation: yes.
-4. **List and string inputs.** Accept them with one typed flatten in UNPACK, or refuse lists and require arrays.
-   Recommendation: accept, one pass.
+4. **List and string inputs.** Preserve supported inputs through native admission and typed preparation.
 5. **User callables.** Refuse every user-supplied callable (KMeans `init`, custom scorers, custom estimators inside
    search and pipelines) before its hook runs, with the native alternative named. Recommendation: yes; it is today's
    rule with its one exception removed.
 6. **Entry tables.** Replace the 730 calls to compiled entries through the CPython call protocol with published
    native function tables. Recommendation: yes; it is part of the contract, and it is what removes the per-call
    Python lists.
-7. **Fitted attributes read-only and computed on first request.** Recommendation: yes; it matches the read-only
-   weights decision and avoids downloads nobody asked for.
+7. **Fitted attributes.** Preserve each public attribute's mutability, replacement and ownership behavior.
+   Internal typed state and optional lazy materialization must respect that boundary contract.
