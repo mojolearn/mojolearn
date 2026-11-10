@@ -2712,15 +2712,18 @@ def host_archive_build(path: PythonObject, context: PythonObject,
 
 
 struct HostArchivePacked(Movable):
-    # Boundary owners only: a connected class and the final PACK result. Typed
-    # schema keys stay native; decoded payload owners never enter this envelope.
+    # Boundary owners only: the requested/connected public classes and final
+    # PACK result. The public class retains hook identity across the boundary;
+    # no probe instance or decoded payload owner enters this envelope.
     var cls: PythonObject
+    var public_owner: PythonObject
     var value: PythonObject
     var fmt: String
     var estimator: String
 
     def __init__(out self):
         self.cls = PythonObject(None)
+        self.public_owner = PythonObject(None)
         self.value = PythonObject(None)
         self.fmt = ""
         self.estimator = ""
@@ -2785,6 +2788,7 @@ def host_archive_select_pack(path: PythonObject, context: PythonObject, requeste
         cls = requested_class
     var result = HostArchivePacked()
     result.cls = cls
+    result.public_owner = public_owner
     result.fmt = fmt
     result.estimator = estimator
     if fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler":
@@ -2804,6 +2808,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject, classical_only: Bool = False) raises -> PythonObject:
     var decoded = host_archive_unpack(path, context, requested_class, classical_only)
     var cls = decoded.cls
+    var public_owner = decoded.public_owner
     var fmt = decoded.fmt
     var estimator = decoded.estimator
     var arrays = decoded.value
