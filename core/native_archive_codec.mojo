@@ -54,7 +54,7 @@ def archive_codec_library(method: Int) raises -> Int:
         elif method == 93 and not slot[].zstd:
             var path = String("libzstd.so.1")
             comptime if CompilationTarget.is_macos():
-                path = "libzstd.1.dylib"
+                path = "@rpath/libzstd.1.dylib"
             var library = OwnedDLHandle(path, flags=2)
             if not library.check_symbol("ZSTD_createDStream") or not library.check_symbol("ZSTD_freeDStream") or not library.check_symbol("ZSTD_initDStream") or not library.check_symbol("ZSTD_decompressStream") or not library.check_symbol("ZSTD_isError"):
                 raise Error("native archive: incomplete Zstandard decoder library")

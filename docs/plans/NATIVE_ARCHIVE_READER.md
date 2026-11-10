@@ -26,7 +26,8 @@ The ABIs are LP64, the supported Linux/macOS wheel hosts. Public definitions:
 The existing `SharedSlot`/`OwnedDLHandle` mechanism retains libraries once. Linux
 names are `libz.so.1`, `libbz2.so.1.0`, `liblzma.so.5`, `libzstd.so.1`. macOS system
 paths are `/usr/lib/libz.1.dylib`, `/usr/lib/libbz2.1.0.dylib`, and
-`/usr/lib/liblzma.5.dylib`; Zstandard currently requests `libzstd.1.dylib`.
+`/usr/lib/liblzma.5.dylib`; Zstandard requests `@rpath/libzstd.1.dylib` through
+the existing wheel rpaths.
 The macOS SDK provides the first three, not Zstandard. These are discovery
 assumptions, **not wheel dependency qualification**. Existing ELF audits walk
 linked dependencies; they do not automatically stage these `dlopen` dependencies.
