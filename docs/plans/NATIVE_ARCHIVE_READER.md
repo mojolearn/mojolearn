@@ -93,6 +93,13 @@ ASCII case normalization. Archive type admission uses fixed native identities;
 string-subclass storage is checked with `PyType_IsSubtype`, and class names
 come from the immutable type descriptor. The obsolete runtime `builtins`
 lookups and Python `strip`/`lower` format calls are removed from archive files.
+Path-containing error names are unpacked to a typed graph; native Mojo formats
+container delimiters, aliases, cycles and file names with an iterative task
+stack. Python references only pin input owners and captured native exceptions
+at the boundary. Display-order failure selection retains the first exception
+even when a later graph node was admitted earlier. Thirty-four direct native
+fixtures cover this graph contract, including deep names and file recursion;
+the existing public exception/protocol tests remain unchanged.
 
 Remaining work is codec wheel dependency qualification and affected public
 boundary tests. Existing API/protocol/exception and file ownership tests remain
