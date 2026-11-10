@@ -69,9 +69,10 @@ def shuffle_fixture[A: SvcProbabilityCalls]() raises:
         # The inner fold is dependent; all fifty index checks run in parallel.
         var first_count = 0
         var other_count = 0
+        var expected = Int32(index)
         for position in range(50):
-            first_count += Int(ap[position] == index)
-            other_count += Int(cp[position] == index)
+            first_count += Int(ap[position] == expected)
+            other_count += Int(cp[position] == expected)
         if first_count != 1 or other_count != 1:
             fp.unsafe_store(index, 1)
     host_parallelize(index_contract, 50)
