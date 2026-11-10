@@ -1,0 +1,40 @@
+Mojolearn optimizer state span/assignment regression, 2026-11-10
+
+Dependencies: dbb3631cea + bee32a8a30. Producer confirmed state_span unchanged;
+bee32 adds checkpoint_input validation. No producer file edited by this lane.
+
+Native checks: training/checks/optimizer_state_plan_check.mojo, 32 fixtures
+  Admitted FP32 format prefixes/int32, scalar/matrix/empty shapes preserve
+  exact borrowed addresses. Wrong dtype/width/count/nbytes, readonly/strided/
+  nonempty-null and negative/overflow shape/count refuse with exact category
+  text. Schema validates both moments and initialized registry separately;
+  wrong first/second/flag counts, flag dtype and readonly second refuse.
+  Typed snapshot apply preserves ownership fields and unrelated request data;
+  freshness/allocation policies and nonempty-1D checkpoint input checked.
+  All metadata-only checks retain source words/guards; no invalid span read.
+  Independent fixtures run on host_parallelize, no Python runtime support.
+
+Actual Python assignment regression: test_optimizer_native_moment_assignment.py
+  16 refusal cases: two public moment properties x resident off/on x empty,
+  undersized1-for8, wrong dtype, readonly. Existing field identity, native slot,
+  freshness/pristine/t, parameters and checkpoint words remain unchanged.
+  Subsequent public step agrees with untouched control state, detecting native
+  upload corruption hidden behind unchanged Python mirrors. This is actual
+  publication/rollback evidence, not a standalone numerical oracle.
+  Four accepted ownership cases retain a contiguous NumPy view/base owner,
+  preserve exact public field identity through caller-reference deletion,
+  publish isolated checkpoint copies and retain caller storage after optimizer
+  finalization. Public property wrappers are audited directly, no test callback
+  is installed in product execution.
+
+Root commands (RUN OWED; lane has not compiled/tested)
+  bash tools/compile_slot.sh pixi run check-native-optimizer-state-plan
+  bash tools/compile_slot.sh pixi run mojo build -I . training/checks/optimizer_state_plan_check.mojo -o "$HOME/mojolearn-evidence/native-optimizer-state-plan"
+  Run the exact binary: expected32. Installed affected training family:
+  python3 -m pytest -q python/mojolearn/tests/test_optimizer_native_moment_assignment.py
+  Expected20 parametrized cases on host and supported GPU installations. CPU
+  resident=True uses the existing native host owner; it is not a GPU claim.
+
+Source/AST/metadata/diff review only. No numerical kernel changes, old hashes,
+new loader/build method, timing, identity or box. Nothing removed: this closes
+an actual admitted-storage regression and retains real Python assignment tests.
