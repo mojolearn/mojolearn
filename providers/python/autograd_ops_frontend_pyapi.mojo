@@ -3,11 +3,14 @@
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
+from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_contains
 from providers.python.autograd_python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
+from autograd.optimizer_requests import (
+    OpsOptimizerRequest, OpsOptimizerRestoreRequest, ops_optimizer_codes,
+)
 from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
@@ -596,20 +599,15 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[].zero_grad()
         return PythonObject(None)
     if op == _SOP_OPTIMIZER:
-        var kind = String(args[0])
-        var kind_code = 0 if kind == "sgd" else (1 if kind == "adam" else (2 if kind == "adamw" else -1))
-        var schedule = String(args[8])
-        var schedule_code = 0 if schedule == "constant" else (1 if schedule == "step" else (2 if schedule == "exponential" else -1))
-        if kind_code < 0 or schedule_code < 0:
-            raise Error("ValueError: invalid optimizer kind or schedule")
-        var ip = List[Int]()
-        ip = [kind_code, Int(Bool(py=args[3])), schedule_code, _int(args[9], "step_size", 1)]
-        var fp = List[Float32]()
-        fp = [_float(args[1], "lr"), _float(args[2], "momentum"), _float(args[4], "beta1"), _float(args[5], "beta2"),
-              _float(args[6], "eps"), _float(args[7], "weight_decay"), _float(args[10], "gamma")]
-        var opt = s[].optimizer(ip, fp)
-        py_setitem(session._opt_kind, opt, args[0])
-        return PythonObject(opt)
+        # UNPACK: exact supported scalar/container admission precedes every
+        # conversion; no user conversion hook can enter optimizer execution.
+        program_admit_value(args)
+        var codes = ops_optimizer_codes(String(args[0]), String(args[8]))
+        var request = OpsOptimizerRequest(codes[0], Bool(py=args[3]), codes[1],
+            _int(args[9], "step_size", 1), _float(args[1], "lr"), _float(args[2], "momentum"),
+            _float(args[4], "beta1"), _float(args[5], "beta2"), _float(args[6], "eps"),
+            _float(args[7], "weight_decay"), _float(args[10], "gamma"), Float32(0))
+        return PythonObject(s[].optimizer(request))
     if op == _SOP_STEP or op == _SOP_SCHEDULER_STEP or op == _SOP_LEARNING_RATE or op == _SOP_OPTIMIZER_STATE or op == _SOP_LOAD_OPTIMIZER_STATE:
         var opt = _int(args[0], "optimizer", 1)
         var oi = s[]._opt_index(opt)
@@ -621,37 +619,40 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             return PythonObject(None)
         if op == _SOP_LEARNING_RATE:
             return PythonObject(Float64(s[].learning_rate(opt)))
-        var kind = s[].opts[oi].cfg.kind
-        var b = native_loaded_module("builtins")
         if op == _SOP_OPTIMIZER_STATE:
-            var st = s[].optimizer_state(opt, _int(args[1], "param", 1))
-            var state = b.dict()
-            py_setitem(state, "step", st[0])
-            if kind != 0:
-                py_setitem(state, "beta1_power", Float64(st[1]))
-                py_setitem(state, "beta2_power", Float64(st[2]))
-                if st[4] != 0:
-                    py_setitem(state, "exp_avg", st[4])
-                if st[5] != 0:
-                    py_setitem(state, "exp_avg_sq", st[5])
-            elif st[4] != 0:
-                py_setitem(state, "momentum_buffer", st[4])
+            var snapshot = s[].optimizer_state_value(opt, _int(args[1], "param", 1))
+            # PACK the native snapshot directly into the documented mapping.
+            var state = Python.dict()
+            py_setitem(state, "step", snapshot.step)
+            if snapshot.kind != 0:
+                py_setitem(state, "beta1_power", Float64(snapshot.beta1_power))
+                py_setitem(state, "beta2_power", Float64(snapshot.beta2_power))
+                if snapshot.first != 0:
+                    py_setitem(state, "exp_avg", snapshot.first)
+                if snapshot.second != 0:
+                    py_setitem(state, "exp_avg_sq", snapshot.second)
+            elif snapshot.first != 0:
+                py_setitem(state, "momentum_buffer", snapshot.first)
             return state
         var state = args[2]
-        var ip = List[Int]()
-        var fp = List[Float32]()
-        ip.append(_int(state["step"], "step", 0))
-        fp = [Float32(1), Float32(1), Float32(1)]
-        if kind == 0:
-            ip.append(_int(state["momentum_buffer"], "momentum_buffer", 1) if Bool(py=state.__contains__("momentum_buffer")) else 0)
-            ip.append(0)
+        program_admit_value(state)
+        var step = _int(state["step"], "step", 0)
+        var first = 0
+        var second = 0
+        var beta1 = Float32(1)
+        var beta2 = Float32(1)
+        if s[].opts[oi].cfg.kind == 0:
+            if py_contains(state, "momentum_buffer"):
+                first = _int(state["momentum_buffer"], "momentum_buffer", 1)
         else:
-            ip.append(_int(state["exp_avg"], "exp_avg", 1) if Bool(py=state.__contains__("exp_avg")) else 0)
-            ip.append(_int(state["exp_avg_sq"], "exp_avg_sq", 1) if Bool(py=state.__contains__("exp_avg_sq")) else 0)
-            fp[0] = Float32(py=state["beta1_power"])
-            fp[1] = Float32(py=state["beta2_power"])
-        ip.append(0)
-        s[].load_optimizer_state(opt, _int(args[1], "param", 1), ip, fp)
+            if py_contains(state, "exp_avg"):
+                first = _int(state["exp_avg"], "exp_avg", 1)
+            if py_contains(state, "exp_avg_sq"):
+                second = _int(state["exp_avg_sq"], "exp_avg_sq", 1)
+            beta1 = Float32(py=state["beta1_power"])
+            beta2 = Float32(py=state["beta2_power"])
+        var request = OpsOptimizerRestoreRequest(step, first, second, 0, beta1, beta2, Float32(1))
+        s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
     var code = 0
     var hs = List[Int]()

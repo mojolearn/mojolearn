@@ -82,6 +82,10 @@ from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_inference_metadata import PreparedInferenceReplay
 from std.time import perf_counter_ns
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
+from autograd.optimizer_requests import (
+    OPS_OPT_INTS, OPS_OPT_FLOATS, OpsOptimizerRequest, OpsOptimizerStateValue, OpsOptimizerRestoreRequest,
+    ops_optimizer_request, ops_optimizer_restore_request,
+)
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 # Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
 # core's shape metadata and views, the fold / bmm / layout / conv lanes'
@@ -269,8 +273,6 @@ comptime OPS_METRIC_LOG_LOSS = 2
 comptime OPS_METRIC_ROC_AUC = 3
 
 # The packed optimizer options of `optimizer`.
-comptime OPS_OPT_INTS = 4    # kind, nesterov, schedule, step size
-comptime OPS_OPT_FLOATS = 7  # lr, momentum, beta1, beta2, eps, weight_decay, gamma
 
 comptime _SLOT_BITS = 24
 comptime _SLOT_MASK = (1 << _SLOT_BITS) - 1
@@ -1127,20 +1129,22 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         is packed as Sequential.compile packs it (sgd: f1 momentum, f2 0,
         f7 dampening; adam and adamw: f1 beta1, f2 beta2; f7 0), so the
         update's arguments are model_fit's words."""
-        if len(ints) != OPS_OPT_INTS or (len(fs) != OPS_OPT_FLOATS and len(fs) != OPS_OPT_FLOATS + 1):
-            raise Error("ops: optimizer takes 4 integers and 7 floats (8 with SGD dampening)")
-        var kind = ints[0]
+        return self.optimizer(ops_optimizer_request(ints, fs))
+
+    def optimizer(mut self, request: OpsOptimizerRequest) raises -> Int:
+        """Create an optimizer from one typed native configuration snapshot."""
+        var kind = request.kind
         if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
             raise Error("ops: the optimizer must be sgd, adam or adamw")
-        var lr = fs[0]
-        var momentum = fs[1]
-        var beta1 = fs[2]
-        var beta2 = fs[3]
-        var eps = fs[4]
-        var wd = fs[5]
-        var gamma = fs[6]
+        var lr = request.lr
+        var momentum = request.momentum
+        var beta1 = request.beta1
+        var beta2 = request.beta2
+        var eps = request.eps
+        var wd = request.weight_decay
+        var gamma = request.gamma
         # lane x8-cnn-on-executor: CNNClassifier's SGD dampening on the session optimizer
-        var dampening = fs[OPS_OPT_FLOATS] if len(fs) > OPS_OPT_FLOATS else Float32(0)
+        var dampening = request.dampening
         if not (lr > Float32(0)):
             raise Error("ops: the learning rate must be positive")
         if not (momentum >= Float32(0) and momentum < Float32(1)):
@@ -1151,25 +1155,25 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: eps must be positive")
         if not (wd >= Float32(0)):
             raise Error("ops: weight_decay must be >= 0")
-        var nesterov = ints[1] != 0
+        var nesterov = request.nesterov
         if nesterov and (kind != OPT_SGD or not (momentum > Float32(0))):
             raise Error("ops: Nesterov momentum needs sgd with momentum > 0")
         if not (dampening >= Float32(0) and dampening <= Float32(1)):
             raise Error("ops: dampening must be in [0, 1]")
         if dampening != Float32(0) and (kind != OPT_SGD or nesterov):
             raise Error("ops: dampening applies to sgd without Nesterov momentum")
-        var sched = ints[2]
+        var sched = request.schedule
         if sched < SCHED_CONSTANT or sched > SCHED_EXPONENTIAL:
             raise Error("ops: unknown learning-rate schedule code " + String(sched))
         if sched != SCHED_CONSTANT and not (gamma > Float32(0)):
             raise Error("ops: the schedule's gamma must be positive")
-        if sched == SCHED_STEP and ints[3] < 1:
+        if sched == SCHED_STEP and request.step_size < 1:
             raise Error("ops: the step schedule's step size must be at least 1")
         var f1 = momentum if kind == OPT_SGD else beta1
         var f2 = Float32(0) if kind == OPT_SGD else beta2
         var flags = 1 if nesterov else 0
         var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, dampening, lr)
-        var sched_step = ints[3] if sched == SCHED_STEP else 1
+        var sched_step = request.step_size if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
         # Failed control-checkpoint restore pops opts before its caller retires
         # partial parameter states. Keep that index addressable during cleanup,
@@ -1309,6 +1313,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self._constant(dst, r, c, 0)
 
     def optimizer_state(mut self, o: Int, h: Int) raises -> Tuple[Int, Float32, Float32, Float32, Int, Int, Int]:
+        """Existing native tuple API, packed from the canonical typed snapshot."""
+        var state = self.optimizer_state_value(o, h)
+        return (state.step, state.beta1_power, state.beta2_power, state.mu_product,
+                state.first, state.second, state.third)
+
+    def optimizer_state_value(mut self, o: Int, h: Int) raises -> OpsOptimizerStateValue:
         """(step count, beta1^t, beta2^t, NAdam's mu product, then one
         handle per state buffer: a copy of each buffer the kind uses, valid
         until reset, and 0 for one it does not use). A parameter never
@@ -1327,16 +1337,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             h2 = self._snapshot(r.s2, slot)
         if used[2]:
             h3 = self._snapshot(r.s3, slot)
-        return (r.t, r.pw1, r.pw2, r.mu_prod, h1, h2, h3)
+        return OpsOptimizerStateValue(self.opts[oi].cfg.kind, r.t, r.pw1, r.pw2, r.mu_prod, h1, h2, h3)
 
     def load_optimizer_state(mut self, o: Int, h: Int, ints: List[Int], fs: List[Float32]) raises:
         """Set (optimizer o, parameter h)'s state: ints = [step count, then
         one tensor handle per state buffer (0 for a buffer the kind does
         not use)], fs = [beta1^t, beta2^t, NAdam's mu product], the words
         `optimizer_state` returns. Each buffer is copied on the executor."""
-        if len(ints) != 4 or len(fs) != 3:
-            raise Error("ops: load_optimizer_state takes 4 integers and 3 floats")
-        if ints[0] < 0:
+        self.load_optimizer_state(o, h, ops_optimizer_restore_request(ints, fs))
+
+    def load_optimizer_state(mut self, o: Int, h: Int, state: OpsOptimizerRestoreRequest) raises:
+        """Restore typed scalar state and borrowed tensor handles on the executor."""
+        if state.step < 0:
             raise Error("ops: the optimizer state's step count must be >= 0")
         var oi = self._opt_index(o)
         var slot = self._param_slot(h, "load_optimizer_state")
@@ -1355,7 +1367,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # every handle checked before any copy
         var srcs = List[FP]()
         for k in range(3):  # driver-loop: over the three state buffers
-            var hk = ints[1 + k]
+            var hk = state.first if k == 0 else (state.second if k == 1 else state.third)
             if not used[k]:
                 if hk != 0:
                     raise Error("ops: this optimizer keeps no state buffer " + String(k + 1))
@@ -1374,10 +1386,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 a.p0 = srcs[k]
                 a.p1 = dsts[k]
                 self.ex.launch[OP_COPY](a, n)
-        self.opt_states[si].t = ints[0]
-        self.opt_states[si].pw1 = fs[0]
-        self.opt_states[si].pw2 = fs[1]
-        self.opt_states[si].mu_prod = fs[2]
+        self.opt_states[si].t = state.step
+        self.opt_states[si].pw1 = state.beta1_power
+        self.opt_states[si].pw2 = state.beta2_power
+        self.opt_states[si].mu_prod = state.mu_product
 
     # ------------------------------------------------------------ operations
     def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int, integer_words: Bool = False) raises -> Int:
