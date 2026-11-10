@@ -83,10 +83,10 @@ def tensor_values(seed: Int, tensor: Int, count: Int, epoch: Int, parameter: Boo
 def hyperparameters(config: Int, maximize: Bool, clip: Bool) -> OptHyper:
     # Original SGD Nesterov+decay, plain SGD, Adam decay, AdamW settings.
     if config == 0:
-        return OptHyper(0, 1, maximize, 0.01, 0.9, 0.999, 1e-8, 0.01, 0.9, 0, 1 if clip else 0)
+        return OptHyper(0, 1, maximize, 0.01, 0.9, 0.999, 1e-8, 0.01, 0.9, 0, Float64(1 if clip else 0))
     if config == 1:
-        return OptHyper(0, 0, maximize, 0.01, 0.9, 0.999, 1e-8, 0, 0, 0, 1 if clip else 0)
-    return OptHyper(1 if config == 2 else 2, 0, maximize, 0.001, 0.9, 0.999, 1e-8, 0.01, 0, 0, 1 if clip else 0)
+        return OptHyper(0, 0, maximize, 0.01, 0.9, 0.999, 1e-8, 0, 0, 0, Float64(1 if clip else 0))
+    return OptHyper(1 if config == 2 else 2, 0, maximize, 0.001, 0.9, 0.999, 1e-8, 0.01, 0, 0, Float64(1 if clip else 0))
 
 
 @fieldwise_init
