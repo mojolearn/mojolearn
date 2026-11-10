@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native optimizer buffer-layout and gradient-shape plans."""
 from bindings.tensor_view import TensorView, base_format, shape_text
+from core.classical_pandas_impl import pd_raw_at
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 comptime _SRC = " (python/mojolearn/_training_impl.py)"
 comptime _MIXED_PRECISION = "MIXED PRECISION IS NOT COVERED. Every buffer on this surface is float32 (loss contract section 1, optimizer contract section 1) and there is no float16 or bfloat16 anywhere in the two profiles: no master-weight copy, no loss scaler, no autocast, and no gated measurement of what a half-precision accumulation would do to the bits. A float16 array is REFUSED BY NAME here rather than upcast, because upcasting it silently would answer a question about float32 and label it as an answer about float16."
@@ -88,3 +91,52 @@ def optimizer_accumulation_shapes(probes: List[List[TensorView]]) raises -> Int:
                     + String(k) + " has shape " + shape_text(probes[i][k].shape)
                     + ", microbatch 0 has " + shape_text(probes[0][k].shape))
     return count
+
+
+def optimizer_contiguous_address(view: TensorView, mut keep: List[List[Float32]]) raises -> Int:
+    """Borrow contiguous input; gather strided FP32 bytes in parallel otherwise.
+
+    The boundary retains the admitted export. Work splits by output elements
+    using the existing host worker policy; no Python buffer is re-exported and
+    no arithmetic/conversion changes the copied floating-point bits.
+    """
+    if view.c_contig:
+        return view.addr
+    var rank = len(view.shape)
+    if len(view.strides) != rank or view.itemsize != 4:
+        raise Error("native optimizer: invalid strided float32 metadata")
+    var count = 1
+    for axis in range(rank):  # driver-loop: admitted tensor dimension words
+        var extent = view.shape[axis]
+        if extent < 0 or (extent > 0 and count > 9223372036854775807 // extent):
+            raise Error("native optimizer: strided tensor size overflow")
+        count *= extent
+    if count > 9223372036854775807 // 4 or view.nbytes != count * 4 or (count > 0 and view.addr == 0):
+        raise Error("native optimizer: invalid strided float32 storage")
+    var store = List[Float32](length=max(count, 1), fill=Float32(0))
+    var destination = Int(store.unsafe_ptr())
+    var source = view.addr
+    var shape = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(view.shape.unsafe_ptr()))
+    var strides = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(view.strides.unsafe_ptr()))
+    var tasks = host_predict_task_count_work(count, count * 4)
+    var chunk = host_predict_chunk(count, tasks)
+    def _gather(task: Int) {imm count, imm chunk, imm rank, imm shape, imm strides, imm source, imm destination}:
+        var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=destination)
+        var first = task * chunk
+        var last = min(count, first + chunk)
+        for i in range(first, last):  # parallel-work: disjoint output elements per host worker
+            var remaining = i
+            var offset = 0
+            for axis in range(rank - 1, -1, -1):  # driver-loop: tensor coordinate words
+                var coordinate = remaining % shape[axis]
+                remaining //= shape[axis]
+                offset += coordinate * strides[axis]
+            dst[i] = UInt32(pd_raw_at(source, offset, 4, True))
+    if count > 0:
+        if tasks <= 1:
+            _gather(0)
+        else:
+            host_parallelize(_gather, tasks)
+    _ = view
+    keep.append(store^)
+    return destination

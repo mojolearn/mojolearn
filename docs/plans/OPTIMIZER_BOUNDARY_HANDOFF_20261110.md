@@ -182,3 +182,19 @@ Remaining: strided preparation still calls PyBuffer_ToContiguous; registry and
 checkpoint/output planning plus persistent optimizer state still need migration.
 No family-complete or performance claim is made. Root owes compilation, direct
 layout/owner fixtures and public mutation/concurrency/refusal checks.
+
+## Native strided gradient preparation
+
+Strided FP32 gradients now gather raw words with the existing native host
+parallel worker policy. Contiguous spans remain borrowed. The plan consumes
+only the admitted address, shape and signed strides, retaining the original
+bit patterns (including signed zero and nonfinite payloads) without numeric
+conversion. Boundary owners/exports remain pinned; gather runs with the GIL
+released and synchronously joins before the optimizer kernel executes.
+
+Removed: PyBuffer_ToContiguous, the second buffer export, fabricated Py_buffer
+records for Array storage, their release helper, and the redundant microbatch
+owner-vector collection after the single admission-pin vector became sufficient.
+No optimizer update/reduction kernel changed. Root owes signed/reversed/F-order
+strided fixtures, public gradient mutation/error/lifetime checks and compile.
+End-to-end GPU measurements remain owed; this is no performance claim.

@@ -12,7 +12,7 @@ What the door does is argument conversion only:
   * the caller's parameter and gradient tensors are read through the
     buffer protocol (`PyObject_GetBuffer`, retained through native execution) or, for a `mojolearn.Array`,
     off its own storage fields; a strided read-only input is made
-    C-contiguous by `PyBuffer_ToContiguous` into memory this door owns;
+    C-contiguous by the parallel native optimizer input plan;
   * dtype, emptiness, layout, count and shape are refused with the
     messages the Python glue raised;
   * built-in schedules supply admitted native configuration words; Python
@@ -50,7 +50,7 @@ from bindings.optimizer_descriptor_boundary import optimizer_provider, optimizer
 from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_truth, optimizer_integer
 from bindings.optimizer_container_boundary import optimizer_sequence_items, optimizer_pack_list, OptimizerInputOwners, OptimizerBufferLease
 from training.optimizer_input_plan import (
-    same_shape, check_views, _check_view, _addrs_of, optimizer_gradient_count, optimizer_gradient_shape, optimizer_accumulation_shapes,
+    check_views, _check_view, _addrs_of, optimizer_gradient_count, optimizer_gradient_shape, optimizer_accumulation_shapes, optimizer_contiguous_address,
 )
 
 comptime IP = MutPointer[Int, MutUntrackedOrigin]
@@ -248,11 +248,6 @@ def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     return True
 
 
-def _release_buffer(mut view: List[Int]) raises:
-    var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    cpython_table()[].PyBuffer_Release(p)
-
-
 def _array_view(obj: PythonObject, context: PythonObject, mut v: TensorView, mut pins: OptimizerInputOwners) raises:
     """`opt_value`'s Array admission and `tensor_view`'s Array facts from one
     read of each retained native slot descriptor (same errors, same values)."""
@@ -364,46 +359,6 @@ def tensor_view(obj: PythonObject, mut v: TensorView, mut pins: OptimizerInputOw
     pins.buffers.append(lease^)
     return True
 
-
-def contiguous_addr(obj: PythonObject, v: TensorView, mut keep: List[List[Float32]]) raises -> Int:
-    """The address of `obj`'s values in C order (`_buffer.as_f32_c` of a
-    float32 tensor): its own memory when it is C-contiguous, else a copy
-    `PyBuffer_ToContiguous` makes into `keep`."""
-    if v.c_contig:
-        return v.addr
-    ref cpy = Python().cpython()
-    var n = v.count()
-    var store = List[Float32](length=max(n, 1), fill=Float32(0.0))
-    var dst = store.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var view = List[Int](length=10, fill=0)
-    var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var shape = v.shape.copy()
-    var strides = v.strides.copy()
-    var held = False
-    if v.is_array:
-        # an F-order Array: its storage described with its own strides
-        p[0] = v.addr
-        p[2] = v.nbytes
-        p[3] = v.itemsize
-        p.bitcast[Int32]()[8] = Int32(1)
-        p.bitcast[Int32]()[9] = Int32(len(shape))
-        p[6] = Int(shape.unsafe_ptr())
-        p[7] = Int(strides.unsafe_ptr())
-    else:
-        if not _get_buffer(obj, view):
-            raise Error("TypeError: mojolearn: tensor does not support the buffer protocol")
-        held = True
-    var rc = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(dst, p, n * 4, Int8(67))
-    if held:
-        _release_buffer(view)
-    _ = view^
-    _ = shape^
-    _ = strides^
-    if rc != 0:
-        raise cpy.unsafe_get_error()
-    keep.append(store^)
-    var last = len(keep) - 1
-    return Int(keep[last].unsafe_ptr())
 
 
 # ---------------------------------------------------------------------------
@@ -731,15 +686,16 @@ def door_step(
             var gs = as_seq_views(parts[i], label, owhere, views, buffer_pins)
             check_views(views, label, owhere, req.a_count == 1)
             _check_grads(params, gs, views, owhere, where, pviews, have_pviews, buffer_pins)
-            for k in range(len(views)):  # driver-loop: over parameter buffers
-                if req.a_count > 1:
-                    # read-only inputs: strided buffers are made contiguous
-                    req.g_addr.append(contiguous_addr(gs[k], views[k], keep))
-                else:
-                    if views[k].readonly:
-                        raise Error("ValueError: mojolearn: tensor is read-only, refusing to write to it")
-                    req.g_addr.append(views[k].addr)
-                req.g_bytes.append(views[k].nbytes)
+            with GILReleased(Python()):
+                for k in range(len(views)):  # driver-loop: over parameter buffers
+                    if req.a_count > 1:
+                        # read-only inputs: strided buffers are made contiguous
+                        req.g_addr.append(optimizer_contiguous_address(views[k], keep))
+                    else:
+                        if views[k].readonly:
+                            raise Error("ValueError: mojolearn: tensor is read-only, refusing to write to it")
+                        req.g_addr.append(views[k].addr)
+                    req.g_bytes.append(views[k].nbytes)
     elif p_dev and not (grads is None) and (
         (py_type(grads) is d[].dev_cls) or (
             (py_type(grads) is d[].context["container_types"][0] or py_type(grads) is d[].context["container_types"][1]) and len(grads) > 0
@@ -1101,12 +1057,10 @@ def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, toke
         raise Error("ValueError: mojolearn.accumulate_grads: no microbatches")
     var first = TensorView()
     var single = tensor_view(parts[0], first, buffer_pins)
-    var seqs = List[List[PythonObject]]()
     var probes = List[List[TensorView]]()
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
         var views = List[TensorView]()
-        var owners = as_seq_views(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", views, buffer_pins)
-        seqs.append(owners^)
+        _ = as_seq_views(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", views, buffer_pins)
         probes.append(views^)
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
         check_views(probes[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False)
@@ -1118,10 +1072,10 @@ def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, toke
             raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
     var keep = List[List[Float32]]()
     var in_addrs = List[Int]()
-    for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        ref sq = seqs[i]
-        for k in range(j0):  # driver-loop: over parameter buffers
-            in_addrs.append(contiguous_addr(sq[k], probes[i][k], keep))
+    with GILReleased(Python()):
+        for i in range(len(probes)):  # driver-loop: admitted native microbatch plans
+            for k in range(j0):  # driver-loop: parameter buffers
+                in_addrs.append(optimizer_contiguous_address(probes[i][k], keep))
     var nbytes = List[Int]()
     var out_addrs = List[Int]()
     var result = List[PythonObject]()
