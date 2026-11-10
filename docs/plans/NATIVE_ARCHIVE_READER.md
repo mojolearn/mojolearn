@@ -111,12 +111,14 @@ copy. The old dedicated map builder and temporary Python metadata arrays are
 deleted. The shared endpoint admission now returns a native pair; its existing
 Python-pair wrapper remains for unchanged lifecycle callers. Ninety-three direct
 Mojo fixtures cover both loader policies, conflicting-invalid refusal order,
-native metadata bytes and borrowed views. The generic loader now selects its
+native metadata bytes and borrowed views. Generic loading retains the saved
+rank-one C/F order flag; direct scaler loading retains its C-order output.
+The generic loader now selects its
 format/estimator from native decoded members, passes MinMax directly to the same
 typed plan and final PACK, and retains the input owner through that PACK. Other
 families still use their existing array-map adapter, after warning/error events
 are emitted once. The obsolete `host_archive_minmax` map builder is deleted.
-The direct Python seam and seven generic boundary cases cover ownership after
+The direct Python seam and thirteen generic boundary cases cover ownership after
 input close, writable independent arrays, save readback and exceptional export
 release. Decoded native payloads are released before legacy schema builders
 run, retaining their existing buffer lifetimes. Native finalizer
