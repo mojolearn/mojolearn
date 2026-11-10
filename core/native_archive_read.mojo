@@ -7,6 +7,7 @@ in the existing host pool. Public Python containers are created only at PACK.
 """
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from std.sys.info import size_of
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_zip import NativeZipDirectory, native_zip_directory, native_zip_payload
 from core.native_archive_codec import archive_inflate
@@ -45,6 +46,8 @@ def native_archive_text_cells(mut member: NativeArchiveDecoded) raises:
     if member.layout.kind == 0:
         return
     var count = member.layout.count
+    if count < 0 or count > 9223372036854775807 // size_of[NativeArchiveText]():
+        raise Error("MemoryError: archive text cell count exceeds native storage")
     var tasks = host_predict_task_count_work(count, max(count, member.layout.payload.size))
     var chunk = host_predict_chunk(count, tasks)
     var errors = List[String](length=tasks, fill=String(""))
