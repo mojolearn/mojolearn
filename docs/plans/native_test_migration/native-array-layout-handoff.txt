@@ -1,0 +1,45 @@
+Mojolearn native array-layout checks, 2026-11-10
+
+45 independent fixtures, direct core.native_array_layout APIs
+  18 literal layouts: rank-zero scalar, vector, C/F matrices, singleton axes,
+  zero axes in each position, ordinary empty strides, representable zero
+  strides with a MAX_INT axis, MAX_INT byte count with one-byte items, and
+  native_matrix_shape vector/empty/one-column conventions.
+  Check count, nbytes, itemsize, order, every shape/stride and deep metadata
+  copies. Huge shapes allocate only metadata Lists, never backing data.
+  9 supported dtype widths and buffer codes: f8/i8/f4/i4/u4/f2/u2/u1/i1.
+  6 unsupported dtype spellings/widths/endian formats refuse through both
+  native_array_itemsize and native_array_code.
+  12 named refusals: negative axes including after zero, element-count and
+  byte-count overflow, zero/negative item width, invalid order, C/F stride
+  multiplication overflow on zero-count shapes, including near-limit cases.
+  In particular [0, MAX_INT] C and [MAX_INT, 0] F with itemsize 2 must refuse.
+  Safe reversed-order counterparts with zero strides remain admitted.
+
+Dependencies and ownership
+  Pilot 41f1537550 plus overflow/order repair 71edb575b8; own-lane equivalents
+  f046fafd50 and cf88d6b764. No production edits in the test commit.
+  Root identified the zero-count/stride issue; boundary_pilot owns its fix.
+  host_parallelize dispatches all independent cases on the existing pool.
+  Small metadata walks and assertions within a case depend on that one plan.
+  Pure native values throughout; no Python dtype objects/imports/callbacks.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-array-layout
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/native_array_layout_check.mojo -o "$HOME/mojolearn-evidence/native-array-layout"
+  Then run the exact binary. This host metadata check has no GPU kernels.
+  Production dependency affects bindings/admitted_input.mojo,
+  bindings/classical_arrays.mojo, bindings/sequential_arrays.mojo and
+  bindings/classical_pandas.mojo; use the pilot's affected development groups.
+
+Python tests and status
+  No Python tests removed. Native layout metadata does not replace buffer
+  protocol, export/read-only/lifetime/audit-hook, Python constructor/indexing
+  and actual storage tests in test_native_array_storage.py,
+  test_native_array_operations.py and test_native_array_view_lifetime.py.
+  These files have not been fully semantically inventoried in this batch;
+  no claim is made that all their numerical cases must remain Python.
+  Source review and diff checks only. Compile/run owed to root.
+  No product kernels/defaults, timing, boxes or identity. A/B: none.
+  Nothing removed: this is independent coverage for a newly native owner.
