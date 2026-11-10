@@ -35,11 +35,21 @@ install_name_tool rewrites a load command, and an unsigned dylib is killed on
 load on Apple silicon rather than merely warned about.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
+
+# zlib, bzip2 and liblzma use macOS /usr/lib ABIs. Zstd is not a system
+# library: native archive decoding opens @rpath/libzstd.1.dylib explicitly.
+ARCHIVE_CODEC_LIBRARIES = ("libzstd.1.dylib",)
+
+
+def workers(units):
+    return max(1, min(units, os.cpu_count() or 1))
+
 
 
 def rpath_deps(path):
@@ -57,23 +67,31 @@ def rpath_deps(path):
     return deps
 
 
-def closure(root, env_lib):
-    """Every dylib reachable from `root` through @rpath, breadth first."""
-    seen, queue, order = set(), [root], []
-    while queue:
-        cur = queue.pop(0)
-        for dep in rpath_deps(cur):
-            if dep in seen:
-                continue
+def closure(root, env_lib, dynamic=()):
+    """Declared dlopen roots and @rpath dependencies, by parallel frontiers."""
+    queue = list(root) if isinstance(root, (list, tuple)) else [root]
+    seen, order = set(), []
+    for dep in dynamic:
+        if not (env_lib / dep).is_file():
+            raise SystemExit(f"stage_dylibs: native archive codec {dep} is missing from {env_lib}")
+        if dep not in seen:
             seen.add(dep)
             order.append(dep)
-            cand = env_lib / dep
-            if not cand.exists():
-                raise SystemExit(
-                    f"ERROR: {dep} is required by {pathlib.Path(cur).name} "
-                    f"but is not in {env_lib}"
-                )
-            queue.append(cand)
+            queue.append(env_lib / dep)
+    while queue:
+        frontier, queue = queue, []
+        with ThreadPoolExecutor(max_workers=workers(len(frontier))) as pool:
+            results = list(pool.map(rpath_deps, frontier))
+        for cur, dependencies in zip(frontier, results):
+            for dep in dependencies:
+                if dep in seen:
+                    continue
+                seen.add(dep)
+                order.append(dep)
+                candidate = env_lib / dep
+                if not candidate.exists():
+                    raise SystemExit(f"ERROR: {dep} is required by {pathlib.Path(cur).name} but is not in {env_lib}")
+                queue.append(candidate)
     return order
 
 
@@ -133,7 +151,7 @@ def add_rpath(path, value):
     )
 
 
-def verify_closed(ext, dylibs_dir):
+def verify_closed(ext, dylibs_dir, dynamic=()):
     """Every @rpath dep of every staged file must resolve inside .dylibs/.
 
     THIS IS THE GATE. It is static, so it holds on the build machine, where a
@@ -141,7 +159,7 @@ def verify_closed(ext, dylibs_dir):
     disk.
     """
     have = {p.name for p in dylibs_dir.glob("*.dylib")}
-    missing = []
+    missing = ["native archive dlopen -> " + name for name in dynamic if name not in have]
     for f in [ext, *sorted(dylibs_dir.glob("*.dylib"))]:
         for dep in rpath_deps(f):
             if dep not in have:
@@ -197,16 +215,13 @@ def main():
         shutil.rmtree(dylibs)
     dylibs.mkdir(parents=True)
 
-    needed = []
-    for ext in exts:
-        for name in closure(ext, env_lib):
-            if name not in needed:
-                needed.append(name)
-    for name in needed:
+    needed = closure(exts, env_lib, ARCHIVE_CODEC_LIBRARIES)
+    def stage_library(name):
         shutil.copy2(env_lib / name, dylibs / name)
-        # They reference EACH OTHER, so each needs to find its siblings.
         add_rpath(dylibs / name, "@loader_path")
-        sign(dylibs / name)
+        # Signing happens after all load-command edits below.
+    with ThreadPoolExecutor(max_workers=workers(len(needed))) as pool:
+        list(pool.map(stage_library, needed))
 
     # REUSED EXTENSIONS (MOJOLEARN_STAGE_SKIP, build_release_wheel.sh,
     # 2026-09-23): taken from the published wheel, so already staged and
@@ -238,7 +253,7 @@ def main():
     print(f"  staged {len(needed)}: {', '.join(needed)}")
     for ext in exts:
         print(f"  for {ext.relative_to(root)}:")
-        verify_closed(ext, dylibs)
+        verify_closed(ext, dylibs, ARCHIVE_CODEC_LIBRARIES)
 
 
 if __name__ == "__main__":
