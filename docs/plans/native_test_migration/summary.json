@@ -6,9 +6,9 @@
   "file_decisions": {
     "needs-semantic-review": 594,
     "retain-python-boundary": 5,
-    "split-needed": 13,
+    "split-needed": 12,
     "review-module-gate": 1,
-    "split-migrated": 1,
+    "split-migrated": 2,
     "retain-tooling": 2
   },
   "reviewed_files": 22,
@@ -19,5 +19,18 @@
     "Unreviewed rows are explicit; this inventory does not claim a complete semantic classification.",
     "Module-style gates with no pytest definitions are not zero coverage.",
     "No tests or compiles were executed to prepare this inventory."
+  ],
+  "post_snapshot_changes": [
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "decision": "split-migrated",
+      "native_fixtures_per_executor": 28,
+      "executors": [
+        "HostExec",
+        "DeviceExec"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see ops-session-handoff.txt."
+    }
   ]
 }
