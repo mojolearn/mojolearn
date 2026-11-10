@@ -1032,10 +1032,11 @@ def optimizer_load_buffers(module: PythonObject, provider: PythonObject, opt: Py
     if not tensor_view(m, first_view, buffer_pins) or not tensor_view(v, second_view, buffer_pins) or not tensor_view(bi, init_view, buffer_pins):
         raise Error("TypeError: optimizer checkpoint requires native state buffers")
     optimizer_checkpoint_spans(first_view, second_view, init_view, n_total, len(py_fields(opt)["params"]), owhere)
+    # A refused native upload must retain the previous public state owners.
+    _upload(record[], first_view.addr, second_view.addr, n_total)
     set_field(opt, "_m", m)
     set_field(opt, "_v", v)
     record[].control.pristine = False
-    _upload(record[], first_view.addr, second_view.addr, n_total)
     _ = buffer_pins
     record[].control.host_fresh = True
     _ = lease

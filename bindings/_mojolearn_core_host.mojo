@@ -206,6 +206,10 @@ from core.core_host_impl import (
     transpose_to_f32,
 )
 from core.shared_slot import SharedSlot
+from core.kmeans_native_api import KMEANS_NATIVE_ABI
+from core.kmeans_native_host import kmeans_host_native_v1
+from core.native_descriptor_abi import NativeDescriptorCall
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 
 #: Reported by `core_host_sabotage()`. The helpers move bytes and fold
@@ -853,6 +857,24 @@ def rbc_knn_search_binding(
 # ===========================================================================
 
 
+struct KMeansHostNativeTable(Defaultable, Movable):
+    var name: String
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.name = String(KMEANS_NATIVE_ABI)
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(kmeans_host_native_v1)
+
+
+comptime KMEANS_NATIVE_TABLE = SharedSlot[KMeansHostNativeTable, ("MojolearnKMeansHostNativeIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKMeansHostNativeFastV1")]
+
+
+def kmeans_native_api_v1_binding() raises -> PythonObject:
+    var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def kmeans_fit_binding(
     x_addr: PythonObject,
     out_centroids_addr: PythonObject,
@@ -1112,6 +1134,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
         module.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         module.def_function[kmeans_fit_binding]("kmeans_fit")
+        module.def_function[kmeans_native_api_v1_binding]("kmeans_native_api_v1")
         module.def_function[kmeans_predict_binding]("kmeans_predict")
         module.def_function[kmeans_transform_binding]("kmeans_transform")
         module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")

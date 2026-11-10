@@ -5,10 +5,8 @@ from core.label_weights_native_api import LabelWeightsDriver
 from xtrees.label_weights_native import label_weights_native_v1
 from checks.native_tests.logistic_label_weights_cases import LABEL_WEIGHT_FIXTURES, fixture, require
 
-comptime assert TARGET_COLUMN != COLUMN_CPU
-
-
 def run_checks() raises:
+    comptime assert TARGET_COLUMN != COLUMN_CPU
     var failed = 0
     for fixture_id in range(LABEL_WEIGHT_FIXTURES):
         try:

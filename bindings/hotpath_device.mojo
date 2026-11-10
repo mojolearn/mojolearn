@@ -56,7 +56,6 @@ The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
 negative control still answers wrong on purpose.
 """
 
-from core.hotpath_device_impl import device_all_finite_span
 from std.math import isfinite
 from std.memory import bitcast
 from std.python import Python, PythonObject
@@ -72,14 +71,12 @@ from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
     arange_i64_binding as host_arange_i64_binding,
     bincount_i64_binding as host_bincount_i64_binding,
-    cast_elements_binding as host_cast_elements_binding,
     check_indices_i64_binding as host_check_indices_i64_binding,
     count_mask_u8_binding as host_count_mask_u8_binding,
     equal_elements_binding as host_equal_elements_binding,
     first_seen_i32_binding as host_first_seen_i32_binding,
     fold_ids_binding as host_fold_ids_binding,
     fold_pair_f32_binding as host_fold_pair_f32_binding,
-    gather_i32_binding as host_gather_i32_binding,
     indices_overlap_i64_binding as host_indices_overlap_i64_binding,
     leave_range_i64_binding as host_leave_range_i64_binding,
     normal_init_f32_binding as host_normal_init_f32_binding,
@@ -88,7 +85,6 @@ from bindings.hotpath_helpers import (
     select_folds_i64_binding as host_select_folds_i64_binding,
     select_mask_u8_i64_binding as host_select_mask_u8_i64_binding,
     strat_fold_assign_i32_binding as host_strat_fold_assign_i32_binding,
-    reduce_stat_binding as host_reduce_stat_binding,
     threshold_labels_i64_binding as host_threshold_labels_i64_binding,
     uniform_init_f32_binding as host_uniform_init_f32_binding,
 )
@@ -101,11 +97,9 @@ from core.hotpath_device import (
     HPD_MAX_N,
     HPD_U32,
     HPD_U8,
-    device_all_integral,
     device_arange_skip_i64,
     device_bincount_i64,
     device_bincount2_i32,
-    device_cast_elements,
     device_cast_f64_to_f32,
     device_check_indices_i64,
     device_count_mask_u8,
@@ -113,14 +107,11 @@ from core.hotpath_device import (
     device_equal_elements,
     device_first_seen_i32,
     device_fold_pair_f32,
-    device_gather_i32,
     device_gather_u64,
     device_indices_overlap_i64,
-    device_isum,
     device_kfold_ids,
     device_mask_from_indices_u8,
     device_normal_init_f32,
-    device_reduce_arg,
     device_select_fold_i64,
     device_select_folds_i64,
     device_select_mask_u8_i64,
@@ -138,34 +129,30 @@ from core.input_device import (
     device_transpose_to_f32,
 )
 from core.neural_context import process_ctx
-
-
-comptime _HPDEV_BASE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not HOTPATH_SABOTAGE
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+from core.label_device_steps import (
+    LABELS_DEVICE_BASE as _HPDEV_BASE, LABELS_DEVICE_ELEM as IDN_HPDEV_ELEM,
+    LABELS_DEVICE_REDUCE as IDN_HPDEV_REDUCE, LABELS_DEVICE_ISUM as IDN_HPDEV_ISUM,
+    LABELS_DEVICE_CAST as IDN_HPDEV_CAST, LABELS_DEVICE_INPUT as _HPDEV_INPUT,
+    LABELS_DEVICE_CONTEXT as _HPDEV_SLOT, labels_device_reduce, labels_device_cast,
+    labels_device_gather_i32, labels_device_try_finite,
 )
-comptime IDN_HPDEV_ELEM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ELEM_OFF"]()
+from bindings.labels_stat_boundary import labels_stat_pack
+from core.hotpath_impl import HpStat
+
+
 comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_LABELS_OFF"]()
 comptime IDN_HPDEV_FOLDS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
-comptime IDN_HPDEV_REDUCE = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
 #: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
-comptime IDN_HPDEV_ISUM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ISUM_OFF"]()
 #: lane fix-s1-shared: cast_elements between two dtypes on the device.
-comptime IDN_HPDEV_CAST = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_CAST_OFF"]()
 #: lane fix-s1-shared: normal_init_f32 drawn on the device.
 comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"]()
 #: lane cpu2-l1-input: the input fixes (see the module docstring). On in
 #: every numeric mode; only the sabotage builds keep the host loops.
-comptime _HPDEV_INPUT = not HOTPATH_SABOTAGE
 
 #: The base binding's process-lifetime context slot
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
 #: DeviceContext.
-comptime _HPDEV_SLOT = (
-    "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
-)
 
 #: Largest k x n_folds table the stratified helpers build.
 comptime _HPDEV_MAX_TABLE = 1 << 26
@@ -195,26 +182,17 @@ def equal_elements_binding(
     return host_equal_elements_binding(a_addr, b_addr, code, n, dst_addr)
 
 
-def gather_i32_binding(
-    table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
-    n: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """`gather_i32`, on the device; an out-of-range code reruns the host
-    helper, which raises."""
-    comptime if IDN_HPDEV_ELEM:
-        var count = Int(py=n)
-        var nt = Int(py=n_table)
-        var t = Int(py=table_addr)
-        var c = Int(py=codes_addr)
-        var d = Int(py=dst_addr)
-        if count >= 1 and count <= HPD_MAX_N and nt >= 1 and nt <= HPD_MAX_N and t != 0 and c != 0 and d != 0:
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var ok = False
-            with GILReleased(Python()):
-                ok = device_gather_i32(ctx, t, nt, c, count, d)
-            if ok:
-                return PythonObject(0)
-    return host_gather_i32_binding(table_addr, n_table, codes_addr, n, dst_addr)
+def gather_i32_binding(table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
+    n: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
+    var count = Int(py=n)
+    var classes = Int(py=n_table)
+    var table = Int(py=table_addr)
+    var codes = Int(py=codes_addr)
+    var dst = Int(py=dst_addr)
+    var result = 0
+    with GILReleased(Python()):
+        result = labels_device_gather_i32(table, classes, codes, count, dst)
+    return PythonObject(result)
 
 
 def hpdev_try_gather_u64(
@@ -673,93 +651,34 @@ def strat_fold_assign_i32_binding(
 # ---------------------------------------------------------------------------
 
 #: `reduce_stat`'s reductions (`bindings/hotpath_helpers.mojo` HP_MIN ...).
-comptime _RS_MIN = 0
-comptime _RS_MAX = 1
-comptime _RS_ARGMAX = 3
-comptime _RS_INTEGRAL = 4
-comptime _RS_ISUM = 5
 
 
-def _peek[dt: DType](addr: Int, i: Int) -> PythonObject:
-    """Element i as `reduce_stat` returns a minimum or maximum: a float as
-    float64, an integer as an int. One scalar read of the caller's buffer."""
-    var p = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=addr)
-    var v = p.unsafe_load(i)
-    comptime if dt.is_floating_point():
-        return PythonObject(v.cast[DType.float64]())
-    else:
-        return PythonObject(Int(v))
 
 
-def _first_is_nan(addr: Int, code: Int) -> Bool:
-    if code == HPD_F32:
-        var v = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr).unsafe_load(0)
-        return v != v
-    if code == HPD_F64:
-        var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr).unsafe_load(0)
-        return w != w
-    return False
 
 
-def reduce_stat_binding(
-    addr: PythonObject, code: PythonObject, n: PythonObject, what: PythonObject,
-) raises -> PythonObject:
-    """`reduce_stat`: min, max and argmax as a device tile reduction over
-    (ordered key, index) pairs, and the integral test as a device predicate.
-    A NaN first element (Python's answer is then that NaN, or index 0) and
-    the float sum take the host helper. The exact integer sum (what = 5) is a
-    device tile fold under IDN_HPDEV_ISUM (any order is exact)."""
+
+
+def reduce_stat_binding(addr: PythonObject, code: PythonObject, n: PythonObject,
+    what: PythonObject) raises -> PythonObject:
+    var count = Int(py=n)
+    var native_code: Int
+    var address: Int
+    var operation: Int
+    # The enabled integer-sum door used to admit code/address before what;
+    # otherwise both the reduction door and host entry admitted what first.
     comptime if IDN_HPDEV_ISUM:
-        var icount = Int(py=n)
-        var ic = Int(py=code)
-        var ia = Int(py=addr)
-        if (
-            Int(py=what) == _RS_ISUM and icount >= 1 and icount <= HPD_MAX_N and ia != 0
-            and (ic == HPD_I32 or ic == HPD_I64 or ic == HPD_U32 or ic == HPD_U8)
-        ):
-            var ictx = process_ctx[_HPDEV_SLOT]()
-            var hi_w = UInt64(0)
-            var lo_w = UInt64(0)
-            with GILReleased(Python()):
-                var t = device_isum(ictx, ia, ic, icount)
-                hi_w = t[0]
-                lo_w = t[1]
-            return Python.tuple(
-                PythonObject(Int(bitcast[DType.int64](hi_w))),
-                PythonObject(Int(lo_w >> 32)),
-                PythonObject(Int(lo_w & UInt64(0xFFFFFFFF))),
-            )
-    comptime if IDN_HPDEV_REDUCE:
-        var count = Int(py=n)
-        var w = Int(py=what)
-        var c = Int(py=code)
-        var a = Int(py=addr)
-        if count >= 1 and count <= HPD_MAX_N and a != 0 and c >= HPD_F32 and c <= HPD_U8:
-            if w == _RS_INTEGRAL and (c == HPD_F32 or c == HPD_F64):
-                var ctx = process_ctx[_HPDEV_SLOT]()
-                var ok = False
-                with GILReleased(Python()):
-                    ok = device_all_integral(ctx, a, c, count)
-                return PythonObject(1 if ok else 0)
-            if (w == _RS_MIN or w == _RS_MAX or w == _RS_ARGMAX) and not _first_is_nan(a, c):
-                var ctx = process_ctx[_HPDEV_SLOT]()
-                var at = 0
-                with GILReleased(Python()):
-                    at = device_reduce_arg(ctx, a, c, count, w != _RS_MIN)
-                if w == _RS_ARGMAX:
-                    return PythonObject(at)
-                if c == HPD_F32:
-                    return _peek[DType.float32](a, at)
-                if c == HPD_F64:
-                    return _peek[DType.float64](a, at)
-                if c == HPD_I32:
-                    return _peek[DType.int32](a, at)
-                if c == HPD_I64:
-                    return _peek[DType.int64](a, at)
-                if c == HPD_U32:
-                    return _peek[DType.uint32](a, at)
-                return _peek[DType.uint8](a, at)
-    return host_reduce_stat_binding(addr, code, n, what)
+        native_code = Int(py=code)
+        address = Int(py=addr)
+        operation = Int(py=what)
+    else:
+        operation = Int(py=what)
+        native_code = Int(py=code)
+        address = Int(py=addr)
+    var result: HpStat
+    with GILReleased(Python()):
+        result = labels_device_reduce(address, native_code, count, operation)
+    return labels_stat_pack(result)
 
 
 # ---------------------------------------------------------------------------
@@ -815,35 +734,30 @@ def normal_init_f32_binding(
 # ---------------------------------------------------------------------------
 
 #: `cast_elements`' dtype codes (bindings/hotpath_helpers.mojo HP_F32 ... HP_U8).
-comptime _CAST_LAST_CODE = 5
 
 
-def cast_elements_binding(
-    src_addr: PythonObject, src_code: PythonObject, dst_addr: PythonObject,
-    dst_code: PythonObject, n: PythonObject,
-) raises -> PythonObject:
-    """`cast_elements` between two different dtypes, on the device
-    (`core/hotpath_device.mojo::device_cast_elements`). A same-dtype call (a
-    byte copy, or float32's signaling-NaN quieting in place), an input the
-    device does not cover, and any element the host helper refuses run the
-    host helper, which returns its own status or raises its own words."""
+def cast_elements_binding(src_addr: PythonObject, src_code: PythonObject, dst_addr: PythonObject,
+    dst_code: PythonObject, n: PythonObject) raises -> PythonObject:
+    var count = Int(py=n)
+    var source_code: Int
+    var target_code: Int
+    var source: Int
+    var target: Int
+    # Preserve the old host-entry coercion order when its device switch is off.
     comptime if IDN_HPDEV_CAST:
-        var count = Int(py=n)
-        var sc = Int(py=src_code)
-        var dc = Int(py=dst_code)
-        var sa = Int(py=src_addr)
-        var da = Int(py=dst_addr)
-        if (
-            count >= 1 and count <= HPD_MAX_N and sa != 0 and da != 0 and sc != dc
-            and sc >= 0 and sc <= _CAST_LAST_CODE and dc >= 0 and dc <= _CAST_LAST_CODE
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var ok = False
-            with GILReleased(Python()):
-                ok = device_cast_elements(ctx, sa, sc, da, dc, count)
-            if ok:
-                return PythonObject(0)
-    return host_cast_elements_binding(src_addr, src_code, dst_addr, dst_code, n)
+        source_code = Int(py=src_code)
+        target_code = Int(py=dst_code)
+        source = Int(py=src_addr)
+        target = Int(py=dst_addr)
+    else:
+        source = Int(py=src_addr)
+        target = Int(py=dst_addr)
+        source_code = Int(py=src_code)
+        target_code = Int(py=dst_code)
+    var result = 0
+    with GILReleased(Python()):
+        result = labels_device_cast(source, source_code, target, target_code, count)
+    return PythonObject(result)
 
 
 # ---------------------------------------------------------------------------
@@ -867,19 +781,8 @@ def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bo
 
 
 def hpdev_try_all_finite(addr: Int, n: Int, is_f64: Bool) raises -> Int:
-    """The device `all_finite_f32` / `all_finite_f64` for the base binding:
-    1 (all finite) or 0, or -1 when the caller must run its host loop. One
-    status word comes back; NaN, +inf and -inf fail and subnormals pass, by
-    bits, as `isfinite` decides on the host."""
-    comptime if _HPDEV_INPUT:
-        if n < 1 or addr == 0:
-            return -1
-        var ctx = process_ctx[_HPDEV_SLOT]()
-        var ok = True
-        with GILReleased(Python()):
-            ok = device_all_finite_span(ctx, addr, n, is_f64)
-        return 1 if ok else 0
-    return -1
+    with GILReleased(Python()):
+        return labels_device_try_finite(addr, n, is_f64)
 
 
 def hpdev_try_transpose_to_f32(

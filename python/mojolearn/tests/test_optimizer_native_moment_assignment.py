@@ -35,7 +35,7 @@ def test_moment_assignment_refuses_before_publishing_or_uploading(name, resident
     before = _snapshot(owner)
     assert before == _snapshot(control)
     old_first, old_second = owner.exp_avg, owner.exp_avg_sq
-    field_state = (owner._m, owner._v, owner._res, owner._pristine, owner._host_fresh, owner.t)
+    field_state = (owner._m, owner._v, owner._native_optimizer_owner, owner.t, bool(owner.resident_))
     parameter_bytes = parameter.tobytes()
     candidate = np.ones(0 if bad_kind == "empty" else 1 if bad_kind == "undersized" else 8,
                         dtype="f8" if bad_kind == "dtype" else "f4")
@@ -48,13 +48,54 @@ def test_moment_assignment_refuses_before_publishing_or_uploading(name, resident
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not audit.report()[key], audit.report()
     assert owner._m is field_state[0] and owner._v is field_state[1]
-    assert (owner._res, owner._pristine, owner._host_fresh, owner.t) == field_state[2:]
+    assert owner._native_optimizer_owner is field_state[2]
+    assert (owner.t, bool(owner.resident_)) == field_state[3:]
     assert owner.exp_avg is old_first and owner.exp_avg_sq is old_second
     assert _snapshot(owner) == before
     assert parameter.tobytes() == parameter_bytes and candidate.tobytes() == candidate_bytes
     # A native resident state must also be unchanged, not merely the Python
     # mirrors inspected above. The next public step must agree with an
     # untouched control owner; this is rollback coverage, not a math oracle.
+    audit_native_call(owner.step, [gradient]).assert_native()
+    audit_native_call(control.step, [gradient]).assert_native()
+    assert parameter.tobytes() == control_parameter.tobytes()
+    assert _snapshot(owner) == _snapshot(control)
+
+
+def test_checkpoint_upload_refusal_preserves_published_and_resident_state():
+    parameter = np.arange(8, dtype="f4") / 8
+    control_parameter = parameter.copy()
+    owner = T.AdamW([parameter], resident=True, numeric_mode="identical")
+    control = T.AdamW([control_parameter], resident=True, numeric_mode="identical")
+    gradient = np.full(8, 0.25, dtype="f4")
+    audit_native_call(owner.step, [gradient]).assert_native()
+    audit_native_call(control.step, [gradient]).assert_native()
+    before = _snapshot(owner)
+    old_first, old_second = owner.exp_avg, owner.exp_avg_sq
+    old_initialized = owner.buf_initialized
+    old_native_owner = owner._native_optimizer_owner
+    candidate = {
+        "t": 99,
+        "exp_avg": np.full(4, 7, dtype="f4"),
+        "exp_avg_sq": np.full(4, 11, dtype="f4"),
+        "buf_initialized": np.zeros(1, dtype="i4"),
+    }
+    # Exercise a real descriptor refusal after buffer admission: the native
+    # slot still holds eight values, while the rebound count admits four.
+    # No fabricated handle, replacement callback or mock provider is involved.
+    owner.n_total = 4
+    try:
+        audit = audit_native_call(owner.load_state_dict, candidate)
+    finally:
+        owner.n_total = 8
+    assert audit.exception is not None, audit.report()
+    assert "holds 8 floats, the call names 4" in str(audit.exception)
+    for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+        assert not audit.report()[key], audit.report()
+    assert owner._native_optimizer_owner is old_native_owner
+    assert owner.exp_avg is old_first and owner.exp_avg_sq is old_second
+    assert owner.buf_initialized is old_initialized
+    assert _snapshot(owner) == before
     audit_native_call(owner.step, [gradient]).assert_native()
     audit_native_call(control.step, [gradient]).assert_native()
     assert parameter.tobytes() == control_parameter.tobytes()

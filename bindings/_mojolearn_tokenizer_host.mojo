@@ -99,6 +99,10 @@ from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
 from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
+from bindings.optimizer_owner_boundary import OptimizerOwner
+from std.python.bindings import lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
 from bindings.sequence_device_native import sequence_tensor_finalize_c
@@ -1177,10 +1181,25 @@ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def register_optimizer_owner(mut module: PythonModuleBuilder) raises:
+    # The optimizer's public entry lives here. Register its private owner once
+    # before any operation can allocate it, and reuse the type on reinitialization.
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[OptimizerOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[OptimizerOwner].name())):
+            raise error
+        _ = module.add_type[OptimizerOwner]("_OptimizerOwner")
+        return
+    py_type_attach(module.module, "_OptimizerOwner", existing)
+
+
 def build__mojolearn_tokenizer_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
+        register_optimizer_owner(module)
         transport_initialize()
         module.def_py_c_function(transport_c, "native_transport_call")
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")

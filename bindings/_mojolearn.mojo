@@ -83,8 +83,6 @@ from core.experiment_guards_base import BASE_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.mojolearn_shell_impl import (
-    all_finite_host_f32,
-    all_finite_host_f64,
     cast_f64_to_f32_host,
     nonzero_f64_count_host,
     nonzero_f64_fill_host,
@@ -95,7 +93,6 @@ from core.dense_coo import (
     nonzero_f32_fill as dense_nonzero_f32_fill,
 )
 from core.dense_coo_device import knn_affinity_f32_device
-from core.label_encode_device import device_unique_inverse
 # lane cpu2-l2-labels: the label helpers below run their device twins
 # directly, on every tier (no host loop left in this GPU binding).
 from core.hotpath_device import (
@@ -106,11 +103,8 @@ from core.hotpath_device import (
     HPD_MAX_N,
     HPD_U32,
     HPD_U8,
-    device_class_ratio_f64,
-    device_encode_labels,
-    device_gather_u64,
 )
-from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
+from core.label_rows_device import LRD_MAX_N, device_argmax_last_f32
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
     lr_schedule_exact_binding,
@@ -161,7 +155,6 @@ from bindings.hotpath_device import (
     # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
     # host loops below and in bindings/array_helpers.mojo are the host column
     # and the fallback for what a twin does not cover)
-    hpdev_try_all_finite,
     hpdev_try_transpose_to_f32,
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
@@ -205,15 +198,12 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+from core.native_descriptor_abi import NativeDescriptorCall
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from bindings.labels_native_abi import (
-    LABELS_NATIVE_ABI_NAME, LABELS_CAP_DEVICE, LABELS_OP_MODE, LABELS_OP_CAPABILITIES,
-    LABELS_OP_PREPARE_TARGETS, LABELS_OP_REDUCE_STAT, LABELS_OP_ARGMAX_F32, LABELS_OP_ARGMAX_F64,
-    LABELS_OP_GATHER_I32, LABELS_OP_GATHER_I64, LABELS_OP_GATHER_F64, LABELS_OP_CLASS_RATIO_F64,
-    labels_reduce_stat_encode,
-)
+from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
+from core.labels_native_device import LabelsDeviceKernels, labels_device_native_v2 as labels_native_entry
+from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape
+from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_prepare, labels_legacy_address
 
 from checks.vendor import COMPILED_VENDOR
 
@@ -254,6 +244,8 @@ from neighbors.estimator import (
     rbc_knn_search,
 )
 from core.shared_slot import SharedSlot
+from core.kmeans_native_api import KMEANS_NATIVE_ABI
+from core.kmeans_native_device import kmeans_device_native_v1
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -742,6 +734,24 @@ def knn_regress_resident_binding(
             h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status, fold[0], fold[1], fold[2]
         )
     return PythonObject(used)
+
+
+struct KMeansDeviceNativeTable(Defaultable, Movable):
+    var name: String
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.name = String(KMEANS_NATIVE_ABI)
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(kmeans_device_native_v1)
+
+
+comptime KMEANS_NATIVE_TABLE = SharedSlot[KMeansDeviceNativeTable, ("MojolearnKMeansDeviceNativeIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKMeansDeviceNativeFastV1")]
+
+
+def kmeans_native_api_v1_binding() raises -> PythonObject:
+    var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 def kmeans_fit_binding(
@@ -1499,56 +1509,22 @@ def nonzero_f64_fill_binding(
 # ===========================================================================
 
 
-def all_finite_f32_binding(
-    addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """1 if every one of the `n` float32 values at `addr` is finite, else 0
-    (DEVIATION 2322). `n == 0` is 1: an empty buffer has no non-finite
-    element. A negative `n` is refused rather than read.
-
-    NaN, +inf and -inf all fail; subnormals PASS, because they are finite
-    numbers and `isfinite` says so. This is the test
-    `bindings/_mojolearn_estimators.mojo::_pca_whiten_finite` applies,
-    one element at a time, with no SIMD width and no early-exit trick a
-    different backend could reorder: the FIRST non-finite element ends the
-    scan and the answer is the same whichever element it was.
-    """
-    var p = _f32_ptr(Int(py=addr))
+def all_finite_f32_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var address = Int(py=addr)
     var count = Int(py=n)
-    if count < 0:
-        raise Error(
-            "all_finite_f32: n must be non-negative, got " + String(count)
-        )
-    # lane cpu2-l1-input: the scan on the device (one status word back).
-    var dev = hpdev_try_all_finite(Int(py=addr), count, False)
-    if dev >= 0:
-        return PythonObject(dev)
-    # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
-    var ok: Int = 1
+    var result = 0
     with GILReleased(Python()):
-        ok = all_finite_host_f32(p, count)
-    return PythonObject(ok)
+        result = LabelsDeviceKernels.finite(address, count, False)
+    return PythonObject(result)
 
 
-def all_finite_f64_binding(
-    addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """`all_finite_f32_binding` over float64 values (DEVIATION 2323); the
-    same rules, including subnormals passing and `n == 0` answering 1."""
-    var p = _f64_ptr(Int(py=addr))
+def all_finite_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var address = Int(py=addr)
     var count = Int(py=n)
-    if count < 0:
-        raise Error(
-            "all_finite_f64: n must be non-negative, got " + String(count)
-        )
-    var dev = hpdev_try_all_finite(Int(py=addr), count, True)
-    if dev >= 0:
-        return PythonObject(dev)
-    # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
-    var ok: Int = 1
+    var result = 0
     with GILReleased(Python()):
-        ok = all_finite_host_f64(p, count)
-    return PythonObject(ok)
+        result = LabelsDeviceKernels.finite(address, count, True)
+    return PythonObject(result)
 
 
 # NumPy-free host byte gathering. These do no learning:
@@ -1644,48 +1620,32 @@ def scatter_rows_bytes_binding(
 # ===========================================================================
 
 
-def _encode_labels_binding[dt: DType](
-    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
-    max_classes: PythonObject, codes_addr: PythonObject,
-) raises -> PythonObject:
-    """The ORDER RULE's encoder over `n` values of `dt` at `src_addr`, on the
-    device: the sorted distinct values land at `classes_addr` (capacity
-    `max_classes`) and one int32 code per row at `codes_addr`. Returns the
-    class count, or -1 when the cap was exceeded or a label is NaN (nothing
-    is promised about either output then; `_labels._encode_labels_native`
-    then runs `unique_inverse`)."""
+def _encode_labels_binding[dt: DType](src_addr: PythonObject, n: PythonObject,
+    classes_addr: PythonObject, max_classes: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
     var count = Int(py=n)
-    var cap = Int(py=max_classes)
-    if count < 1:
-        raise Error("encode_labels: n must be positive, got " + String(count))
-    if cap < 1:
-        raise Error("encode_labels: max_classes must be positive")
-    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-        raise Error("encode_labels: null buffer address")
-    if count > HPD_MAX_N:
-        return PythonObject(-1)
+    var capacity = Int(py=max_classes)
+    var source = Int(py=src_addr)
+    var classes = Int(py=classes_addr)
+    var codes = Int(py=codes_addr)
     var code = -1
     comptime if dt == DType.float32:
-        code = HPD_F32
+        code = 0
     comptime if dt == DType.float64:
-        code = HPD_F64
+        code = 1
     comptime if dt == DType.int32:
-        code = HPD_I32
+        code = 2
     comptime if dt == DType.int64:
-        code = HPD_I64
+        code = 3
     comptime if dt == DType.uint32:
-        code = HPD_U32
+        code = 4
     comptime if dt == DType.uint8:
-        code = HPD_U8
+        code = 5
     if code < 0:
         raise Error("encode_labels: dtype without a device encoder")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var k = -1
+    var result = 0
     with GILReleased(Python()):
-        k = device_encode_labels(
-            ctx, Int(py=src_addr), code, count, Int(py=classes_addr), cap, Int(py=codes_addr)
-        )
-    return PythonObject(k)
+        result = LabelsDeviceKernels.encode(source, code, count, classes, capacity, codes)
+    return PythonObject(result)
 
 
 def encode_labels_f32_binding(
@@ -1730,64 +1690,40 @@ def encode_labels_u8_binding(
     return _encode_labels_binding[DType.uint8](src_addr, n, classes_addr, max_classes, codes_addr)
 
 
-def _gather_u64_device(
-    name: String, table_addr: PythonObject, n_table: PythonObject,
-    codes_addr: PythonObject, n: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """`dst[i] = table[codes[i]]` over 64-bit table words and int64 codes
-    on the device (`core/hotpath_device.mojo::device_gather_u64`, a move of
-    words, so one kernel serves int64 and float64 tables). Lane
-    cpu2-l2-labels: the host loop that ran here on FAST and on every refusal
-    is gone; the host column keeps it (`bindings/host_helpers.mojo`). A code
-    outside `[0, n_table)` raises before any byte of `dst` is written."""
+def _gather_u64_device(name: String, table_addr: PythonObject, n_table: PythonObject,
+    codes_addr: PythonObject, n: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
     var count = Int(py=n)
-    var nt = Int(py=n_table)
-    if count < 0 or nt < 1:
-        raise Error(name + ": n must be non-negative and the table non-empty")
+    var classes = Int(py=n_table)
+    labels_gather_shape(name, count, classes)
     if count == 0:
         return PythonObject(0)
-    if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error(name + ": null buffer address")
-    if count > HPD_MAX_N or nt > HPD_MAX_N:
-        raise Error(name + ": more rows than the device gather holds")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var ok = False
+    var message = name + ": null buffer address"
+    var table = labels_legacy_address(table_addr, message)
+    var codes = labels_legacy_address(codes_addr, message)
+    var dst = labels_legacy_address(dst_addr, message)
+    var request = LabelsGatherRequest(table, codes, dst, classes, count)
+    var kind = 1 if name == "gather_i64" else 2
     with GILReleased(Python()):
-        ok = device_gather_u64(
-            ctx, Int(py=table_addr), nt, Int(py=codes_addr), count, Int(py=dst_addr)
-        )
-    if not ok:
-        raise Error(name + ": code out of range")
+        LabelsDeviceKernels.gather(kind, request)
     return PythonObject(0)
 
 
-def class_ratio_f64_binding(
-    counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,
-) raises -> PythonObject:
-    """Per-class ratios of k int64 class counts on the device (lane
-    py-runtime-b, `core/hotpath_device.mojo::device_class_ratio_f64`): mode
-    0, scikit-learn's 'balanced' weight n / (k * count_c); mode 1, the prior
-    count_c / n, in soft binary64 (the words of Python's `int / int`; the host
-    column is `bindings/array_helpers.mojo`). Returns nonzero when a mode-0
-    count is zero (the caller raises ZeroDivisionError)."""
-    var kk = Int(py=k)
-    var nn = Int(py=n)
-    var m = Int(py=mode)
-    if kk <= 0:
+def class_ratio_f64_binding(counts_addr: PythonObject, k: PythonObject, n: PythonObject,
+    mode: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    var classes = Int(py=k)
+    var count = Int(py=n)
+    var native_mode = Int(py=mode)
+    if classes <= 0:
         return PythonObject(0)
-    if m != 0 and m != 1:
-        raise Error("class_ratio_f64: mode is 0 (balanced) or 1 (prior)")
-    if m == 1 and nn == 0:
-        raise Error("class_ratio_f64: the prior of zero rows")
-    if Int(py=counts_addr) == 0 or Int(py=out_addr) == 0:
-        raise Error("class_ratio_f64: null buffer address")
-    if kk > HPD_MAX_N:
-        raise Error("class_ratio_f64: more classes than the kernel holds")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var zeros = 0
+    labels_ratio_shape(classes, count, native_mode)
+    var message = String("class_ratio_f64: null buffer address")
+    var counts = labels_legacy_address(counts_addr, message)
+    var dst = labels_legacy_address(out_addr, message)
+    var request = LabelsRatioRequest(counts, dst, classes, count, native_mode)
+    var result = 0
     with GILReleased(Python()):
-        zeros = device_class_ratio_f64(ctx, Int(py=counts_addr), kk, nn, m, Int(py=out_addr))
-    return PythonObject(zeros)
+        result = LabelsDeviceKernels.ratio(request)
+    return PythonObject(result)
 
 
 def gather_i64_binding(
@@ -1808,31 +1744,19 @@ def gather_f64_binding(
     return _gather_u64_device("gather_f64", table_addr, n_table, codes_addr, n, dst_addr)
 
 
-def _argmax_rows_device(
-    name: String, wide: Bool, scores_addr: PythonObject, n_rows: PythonObject,
-    n_cols: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """Row-wise first-max-wins argmax over a C-order [n_rows, n_cols] block
-    into int64 codes (DEVIATION 2500), the rule of `_labels.argmax_rows`:
-    strictly greater replaces, so ties keep the lowest column, and a NaN
-    never replaces, so a row whose column 0 is NaN answers 0. On the device
-    (`core/label_rows_device.mojo`, lane cpu2-l2-labels: integer order keys
-    of the IEEE words, the host column's bytes on every vendor); the host
-    loop that ran here is gone, the host column keeps it
-    (`bindings/host_helpers.mojo`)."""
+def _argmax_rows_device(name: String, wide: Bool, scores_addr: PythonObject,
+    n_rows: PythonObject, n_cols: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
     var rows = Int(py=n_rows)
     var cols = Int(py=n_cols)
-    if rows < 0 or cols < 1:
-        raise Error(name + ": n_rows must be non-negative and n_cols positive")
+    labels_argmax_shape(name, rows, cols)
     if rows == 0:
         return PythonObject(0)
-    if Int(py=scores_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error(name + ": null buffer address")
-    if rows > LRD_MAX_N or cols > LRD_MAX_N:
-        raise Error(name + ": more rows or columns than the device argmax holds")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var message = name + ": null buffer address"
+    var scores = labels_legacy_address(scores_addr, message)
+    var dst = labels_legacy_address(dst_addr, message)
+    var request = LabelsArgmaxRequest(scores, dst, rows, cols)
     with GILReleased(Python()):
-        device_argmax_rows(ctx, Int(py=scores_addr), wide, rows, cols, Int(py=dst_addr))
+        LabelsDeviceKernels.argmax(wide, request)
     return PythonObject(0)
 
 
@@ -2032,34 +1956,9 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     return PythonObject(0)
 
 
-def unique_inverse_binding(
-    src_addr: PythonObject, n: PythonObject, kind: PythonObject,
-    classes_addr: PythonObject, codes_addr: PythonObject,
-) raises -> PythonObject:
-    """`np.unique(y, return_inverse=True)` for `n` 64-bit labels at
-    `src_addr` (`kind` 0: float64, 1: int64) on the device
-    (`core/label_encode_device.mojo`, cpu-gpu-cleanup w2-pyglue): the sorted
-    distinct values' 64 bits land at `classes_addr` (n slots), one int32
-    code per row at `codes_addr`. Returns the class count. A NaN label
-    raises the ORDER RULE's message. The core host binding runs the host
-    twin (`core/label_encode.mojo`) under this name."""
-    var count = Int(py=n)
-    var k_ind = Int(py=kind)
-    if count < 1:
-        raise Error("unique_inverse: n must be positive, got " + String(count))
-    if k_ind != 0 and k_ind != 1:
-        raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
-    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-        raise Error("unique_inverse: null buffer address")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var k: Int
-    with GILReleased(Python()):
-        k = device_unique_inverse(
-            ctx, Int(py=src_addr), count, k_ind, Int(py=classes_addr), Int(py=codes_addr)
-        )
-    if k == -2:
-        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
-    return PythonObject(k)
+def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
+    return labels_legacy_unique[LabelsDeviceKernels](src_addr, n, kind, classes_addr, codes_addr)
 
 
 # ===========================================================================
@@ -2088,193 +1987,48 @@ def unique_inverse_binding(
 # scikit-learn's message for each). Labels are checked before weights.
 # ===========================================================================
 
-comptime PT_ENCODE_CAP = 4096
-comptime PT_W_NONFINITE = -3
-comptime PT_W_NEGATIVE = -4
-comptime PT_W_ALL_ZERO = -5
-comptime PT_ALLOW_NEGATIVE = 1
-comptime PT_ALLOW_ALL_ZERO = 2
 
-
-def _pt_encode(
-    y_addr: PythonObject, y_code: Int, n: PythonObject, classes_addr: Int,
-    cap: Int, codes_addr: PythonObject,
-) raises -> Int:
-    """The capped encoder `encode_labels_<dt>` for dtype code `y_code`."""
-    var ca = PythonObject(classes_addr)
-    var cp = PythonObject(cap)
-    if y_code == 0:
-        return Int(py=encode_labels_f32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 1:
-        return Int(py=encode_labels_f64_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 2:
-        return Int(py=encode_labels_i32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 3:
-        return Int(py=encode_labels_i64_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 4:
-        return Int(py=encode_labels_u32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 5:
-        return Int(py=encode_labels_u8_binding(y_addr, n, ca, cp, codes_addr))
-    raise Error("prepare_targets: label dtype code must be 0..5, got " + String(y_code))
-
-
-def prepare_targets_binding(
-    y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
-    classes_addr: PythonObject, codes_addr: PythonObject,
-    w_addr: PythonObject, w_code: PythonObject, w_flags: PythonObject,
-) raises -> PythonObject:
-    """See the block comment above."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("prepare_targets: n must be non-negative, got " + String(count))
-    var k = 0
-    if Int(py=y_addr) != 0:
-        if count < 1:
-            raise Error("prepare_targets: labels need n >= 1")
-        if Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-            raise Error("prepare_targets: null label output address")
-        var yc = Int(py=y_code)
-        var wide_kind = 0 if (yc == 0 or yc == 1) else 1
-        var wide_code = 1 if wide_kind == 0 else 3
-        var cap = count if count < PT_ENCODE_CAP else PT_ENCODE_CAP
-        if yc == wide_code:
-            # 64-bit labels: the encoder writes the classes in place
-            k = _pt_encode(y_addr, yc, n, Int(py=classes_addr), cap, codes_addr)
-        else:
-            var tmp = List[UInt64](length=cap, fill=0)
-            var tmp_addr = Int(tmp.unsafe_ptr())
-            k = _pt_encode(y_addr, yc, n, tmp_addr, cap, codes_addr)
-            if k > 0:
-                # widen the k classes (exact: float32 -> float64, int -> int64)
-                _ = cast_elements_binding(
-                    PythonObject(tmp_addr), y_code, classes_addr,
-                    PythonObject(wide_code), PythonObject(k),
-                )
-            _ = tmp^
-        if k < 0:
-            # more classes than the cap, or a NaN label: `unique_inverse` over
-            # the widened labels (no cap; it raises the NaN refusal)
-            if yc == wide_code:
-                k = Int(py=unique_inverse_binding(
-                    y_addr, n, PythonObject(wide_kind), classes_addr, codes_addr
-                ))
-            else:
-                var wide = List[UInt64](length=count, fill=0)
-                var wide_addr = Int(wide.unsafe_ptr())
-                var st = Int(py=cast_elements_binding(
-                    y_addr, y_code, PythonObject(wide_addr), PythonObject(wide_code), n
-                ))
-                if st != 0:
-                    raise Error("prepare_targets: labels do not widen to 64 bits")
-                k = Int(py=unique_inverse_binding(
-                    PythonObject(wide_addr), n, PythonObject(wide_kind), classes_addr, codes_addr
-                ))
-                _ = wide^
-    if Int(py=w_addr) != 0 and count > 0:
-        var wc = Int(py=w_code)
-        var flags = Int(py=w_flags)
-        var fin: Int
-        if wc == 1:
-            fin = Int(py=all_finite_f64_binding(w_addr, n))
-        elif wc == 0:
-            fin = Int(py=all_finite_f32_binding(w_addr, n))
-        else:
-            raise Error("prepare_targets: weight dtype code must be 0 or 1, got " + String(wc))
-        if fin == 0:
-            return PythonObject(PT_W_NONFINITE)
-        var lo = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(0)))
-        if (flags & PT_ALLOW_NEGATIVE) == 0 and lo < 0:
-            return PythonObject(PT_W_NEGATIVE)
-        if (flags & PT_ALLOW_ALL_ZERO) == 0:
-            var hi = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(1)))
-            if not (hi > 0 or lo < 0):
-                return PythonObject(PT_W_ALL_ZERO)
-    return PythonObject(k)
+def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject, w_addr: PythonObject,
+    w_code: PythonObject, w_flags: PythonObject) raises -> PythonObject:
+    return labels_legacy_prepare[LabelsDeviceKernels](y_addr, y_code, n,
+        classes_addr, codes_addr, w_addr, w_code, w_flags)
 
 
 # ===========================================================================
-# labels_native_api_v1 (lane s1, S3; bindings/labels_native_abi.mojo): the
+# labels_native_api_v2 (native-only execution; core/labels_native_api.mojo): the
 # label path's base-binding steps over THIS binding's device helpers, on the
 # kit_call descriptor ABI. Each operation calls the same entry the Python
 # callable table called (same validation, same kernels, same order), so no
-# byte moves. The caller keeps the GIL (kit_call release_gil=False): every
-# entry below releases it around its own kernel launch.
+# byte moves. The boundary releases the GIL and pins owners across the
+# complete typed native operation; the entry never constructs Python objects.
 # ===========================================================================
 
 
-def _lw(v: Int) -> PythonObject:
-    return PythonObject(v)
-
-
-def labels_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
-    if op == LABELS_OP_MODE:
-        return Int(GLOBAL_NUMERIC_MODE)
-    if op == LABELS_OP_CAPABILITIES:
-        return LABELS_CAP_DEVICE
-    if op == LABELS_OP_PREPARE_TARGETS:
-        if len(a) != 4 or len(p) != 4:
-            raise Error("labels native ABI: prepare_targets takes 4 addresses and 4 words")
-        return Int(py=prepare_targets_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]), _lw(a[2]),
-                                              _lw(a[3]), _lw(p[2]), _lw(p[3])))
-    if op == LABELS_OP_REDUCE_STAT:
-        if len(a) != 2 or len(p) != 3:
-            raise Error("labels native ABI: reduce_stat takes 2 addresses and 3 words")
-        return labels_reduce_stat_encode(reduce_stat_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(p[2])), a[1])
-    if op == LABELS_OP_ARGMAX_F32 or op == LABELS_OP_ARGMAX_F64:
-        if len(a) != 2 or len(p) != 2:
-            raise Error("labels native ABI: argmax_rows takes 2 addresses and 2 words")
-        if op == LABELS_OP_ARGMAX_F64:
-            _ = argmax_rows_f64_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]))
-        else:
-            _ = argmax_rows_f32_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]))
-        return 0
-    if op == LABELS_OP_GATHER_I32 or op == LABELS_OP_GATHER_I64 or op == LABELS_OP_GATHER_F64:
-        if len(a) != 3 or len(p) != 2:
-            raise Error("labels native ABI: gather takes 3 addresses and 2 words")
-        if op == LABELS_OP_GATHER_I32:
-            _ = gather_i32_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
-        elif op == LABELS_OP_GATHER_I64:
-            _ = gather_i64_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
-        else:
-            _ = gather_f64_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
-        return 0
-    if op == LABELS_OP_CLASS_RATIO_F64:
-        if len(a) != 2 or len(p) != 3:
-            raise Error("labels native ABI: class_ratio_f64 takes 2 addresses and 3 words")
-        return Int(py=class_ratio_f64_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(p[2]), _lw(a[1])))
-    raise Error("labels native ABI: unknown operation")
-
-
-def labels_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
-                     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    try:
-        if result == 0 or nf != 0:
-            raise Error("labels native ABI: invalid result or scalar span")
-        var a = native_descriptor_words(aa, na)
-        var p = native_descriptor_words(pp, np)
-        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = labels_native_operation(op, a, p)
-        return 0
-    except problem:
-        native_descriptor_report(problem, context, sink)
-        return 1
-
-
-struct LabelsNativeTable(Defaultable, Movable):
+struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
     var name: String
     var entries: List[NativeDescriptorCall]
 
     def __init__(out self):
-        self.name = String(LABELS_NATIVE_ABI_NAME)
+        self.name = String(ABI)
         self.entries = List[NativeDescriptorCall]()
-        self.entries.append(labels_native_v1)
+        self.entries.append(labels_native_entry)
 
 
 # The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
 # IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
-comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable, ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
+comptime LABELS_LEGACY_NATIVE_TABLE = SharedSlot[LabelsNativeTable["mojolearn.labels.v1"], ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
+comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable[LABELS_NATIVE_ABI_NAME], ("MojolearnLabelsNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV3")]
 
 
 def labels_native_api_v1_binding() raises -> PythonObject:
+    # Existing consumers keep the GIL. Retain their factory/name while sharing
+    # the same native operations; new callers require v2 before releasing it.
+    var table = LABELS_LEGACY_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
+def labels_native_api_v2_binding() raises -> PythonObject:
     var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
 
@@ -2288,6 +2042,7 @@ def build__mojolearn() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
+        m.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -2304,6 +2059,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[knn_classify_resident_binding]("knn_classify_resident")
         m.def_function[knn_regress_resident_binding]("knn_regress_resident")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
+        m.def_function[kmeans_native_api_v1_binding]("kmeans_native_api_v1")
         m.def_function[kmeans_predict_binding]("kmeans_predict")
         m.def_function[kmeans_transform_binding]("kmeans_transform")
         m.def_function[kmeans_fit_transform_binding]("kmeans_fit_transform")

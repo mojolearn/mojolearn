@@ -16,8 +16,9 @@ from bindings.native_error_class import error_without_class
 from bindings.native_caller_frame import native_caller_globals
 from bindings.classical_attributes import classical_connect_numpy, classical_getattribute, classical_check_layout
 from bindings.classical_arrays import classical_typed, classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_i64, classical_dtype_str
-from bindings.classical_archive import classical_archive_write
-from bindings.classical_archive_read import classical_archive_read, _archive_exact, _archive_string
+from bindings.classical_archive import _archive_class_name_unpack
+from bindings.standard_archive_native import standard_archive_write, standard_archive_load as scaler_archive_load
+from core.native_archive_standard import NativeStandardArchiveSaved, native_standard_statistic_names
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import native_pandas_exact, classical_admit_value
@@ -511,110 +512,38 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
 
 
 def scaler_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
+    # UNPACK: public slots and optional owner pins only. Native archive code
+    # owns metadata bytes, scalar count narrowing, member order and ZIP/NPY.
     var fields = py_fields(model)
     if not _fitted(fields):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var b = native_loaded_module("builtins")
     var seen = fields["n_samples_seen_"]
-    var integer = py_type(seen) is b.int
-    var meta = classical_typed(Python.tuple(4), "<i8", context["output_context"])
-    var mp = I64P(unsafe_from_address=Int(py=classical_address(meta)))
-    _ = meta  # keep the Python object alive through the native call above
-    mp[0] = Int64(_features(fields))
-    _ = meta  # keep the Python object alive through the native call above
-    mp[1] = Int64(py=seen) if integer else Int64(-1)
-    _ = meta  # keep the Python object alive through the native call above
-    mp[2] = Int64(_bool(fields["with_mean_"],context))
-    _ = meta  # keep the Python object alive through the native call above
-    mp[3] = Int64(_bool(fields["with_std_"],context))
-    _ = meta  # keep the Python object alive through the native call above
-    var arrays = Python.dict(format="mojolearn-scaler-1", estimator=py_type(model).__name__, numeric_mode=fields["numeric_mode_"], meta=meta)
+    var integer = py_type(seen) is py_type(PythonObject(0))
+    var features = _features(fields)
+    var integer_count = Int64(py=seen) if integer else Int64(-1)
+    var with_mean = _bool(fields["with_mean_"], context)
+    var with_std = _bool(fields["with_std_"], context)
+    var saved = NativeStandardArchiveSaved(features, integer_count, with_mean, with_std)
+    var estimator = _archive_class_name_unpack(py_type(model))
+    var mode = fields["numeric_mode_"]
+    var count_kind = 0
+    var scalar_count = Float64(0)
     if not integer:
-        if not classical_is_array(seen,context):
-            if py_type(seen) is not b.float:
+        count_kind = 2
+        if not classical_is_array(seen, context):
+            if py_type(seen) is not py_type(PythonObject(0.0)):
                 raise Error("TypeError: StandardScaler counts must be native numbers or count buffers")
-            var scalar = classical_typed(Python.tuple(1), "<f4", context["output_context"])
-            _ptr(scalar)[0] = Float32(py=seen)
-            _ = scalar  # keep the Python object alive through the native call above
-            seen = scalar
-        py_setitem(arrays,"n_samples_seen",seen)
-    var names = Python.tuple("mean","var","scale")
-    for k in range(3):  # small-loop(stats: three saved statistic names)
-        var value = fields[names[k]+"_"]
+            count_kind = 1
+            scalar_count = Float64(py=seen)
+    var statistics = List[PythonObject]()
+    var names = native_standard_statistic_names()
+    for name in names:  # unpack: three optional public statistic owner pins
+        var value = fields[PythonObject(name + "_")]
         if value is not None:
-            _ = _statistic(value,_features(fields),String(names[k]),context)
-            py_setitem(arrays,names[k],value)
-    return classical_archive_write(path,arrays,context)
-
-
-def scaler_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    if String(_archive_string(arrays,"format",context)) != "mojolearn-scaler-1":
-        raise Error("model archive format does not match mojolearn-scaler-1")
-    var saved = _archive_string(arrays,"estimator",context)
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
-    var known = False
-    for k in range(len(ancestry)):  # driver-loop: native loading class ancestry names
-        known = known or Bool(py=ancestry[k].__name__ == saved)
-    if not known:
-        raise Error("model estimator does not match loading class")
-    var mode = _archive_string(arrays,"numeric_mode",context)
-    if String(mode) != "fast" and String(mode) != "identical":
-        raise Error("invalid saved numeric_mode")
-    var meta = _archive_exact(arrays,"meta","<i8",context)
-    if Int(py=meta.size) != 4:
-        raise Error("StandardScaler meta must hold four fields")
-    var d = classical_i64(meta,0)
-    var wm = classical_i64(meta,2) != 0
-    var ws = classical_i64(meta,3) != 0
-    var model = py_call(b.object.__new__,cls)
-    _ = scaler_initialize(model,Python.tuple(True,wm,ws,PythonObject(None)))
-    var fields = py_fields(model)
-    var output_context = py_get(context,"output_context",context)
-    var names = Python.tuple("mean","var","scale")
-    for k in range(3):  # small-loop(stats: saved StandardScaler statistics)
-        var present = wm or ws if k == 0 else ws
-        if present != py_contains(arrays,names[k]):
-            raise Error("StandardScaler saved statistics do not match with_mean and with_std")
-        var value = PythonObject(None)
-        if present:
-            var stored = _archive_exact(arrays,String(names[k]),"<f4",context)
-            if Int(py=stored.ndim) != 1 or Int(py=stored.size) != d:
-                raise Error("StandardScaler saved statistic does not match n_features_in_")
-            value = classical_typed(Python.tuple(d),"<f4",output_context)
-            memcpy(dest=_ptr(value),src=_ptr(stored),count=d)
-            _ = stored  # keep the Python object alive through the native call above
-            _ = value  # keep the Python object alive through the native call above
-            _ = stored^
-        py_setitem(fields,names[k]+"_",value)
-    var seen = PythonObject(classical_i64(meta,1))
-    if classical_i64(meta,1) < 0:
-        var stored = py_get(arrays,"n_samples_seen")
-        if stored is None:
-            raise Error("StandardScaler n_samples_seen is missing")
-        var dtype = classical_dtype_str(stored,context)
-        if (dtype != "<f4" and dtype != "<i8") or Int(py=stored.ndim) != 1 or (Int(py=stored.size) != 1 and Int(py=stored.size) != d):
-            raise Error("StandardScaler n_samples_seen does not match n_features_in_")
-        if Int(py=stored.size) == 1:
-            seen = PythonObject(Float64(_ptr(stored)[0])) if dtype == "<f4" else PythonObject(Float64(classical_i64(stored,0)))
-            _ = stored  # keep the Python object alive through the native call above
-        else:
-            seen = classical_typed(Python.tuple(d),dtype,output_context)
-            memcpy(dest=MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seen))), src=MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(stored))), count=d*(4 if dtype == "<f4" else 8))
-            _ = stored  # keep the Python object alive through the native call above
-            _ = seen  # keep the Python object alive through the native call above
-        _ = stored^
-    py_setitem(fields,"n_features_in_",d)
-    py_setitem(fields,"n_samples_seen_",seen)
-    py_setitem(fields,"numeric_mode_",mode)
-    py_setitem(fields,"with_mean_",wm)
-    py_setitem(fields,"with_std_",ws)
-    _ = meta^
-    return model
-
-
-def scaler_archive_load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    return scaler_archive_build(cls,classical_archive_read(path,context),path,context)
+            _ = _statistic(value, features, name, context)
+        statistics.append(value)
+    return standard_archive_write(path, context, estimator, saved, mode, seen,
+                                  count_kind, scalar_count, statistics)
 
 
 def _outside(context: PythonObject, depth: Int) raises -> Bool:

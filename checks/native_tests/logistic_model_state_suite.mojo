@@ -73,6 +73,9 @@ def packed_fixture(fixture_id: Int) raises:
         if index < weight_count + 2 and actual_source[index] != expected_source[index]:
             fp.unsafe_store(index, 1)
     host_parallelize(output_word, count)
+    # Raw pointers do not retain their owner. Keep the original source alive
+    # through its immutability comparison, then deliberately release it below.
+    _ = source
     var failed = 0
     for value in failures:
         failed += value

@@ -19,9 +19,9 @@ struct HostKernelCells(KernelMethodsCellCalls):
         var model = kmh_nystroem_fit(x, 80, 6, kernel, 3, gamma, 1.0, 12, UInt64(1))
         require(len(model.indices) == 12, "Nystroem host basis index extent")
         for i in range(12):
-            require(0 <= model.indices[i] and model.indices[i] < 80, "Nystroem host basis index outside input")
+            require(model.indices[i] >= 0 and model.indices[i] < 80, "Nystroem host basis index outside input")
         var basis = List[Float32](length=72, fill=Float32(0))
-        var ip = model.indices.unsafe_ptr()
+        var ip = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(model.indices.unsafe_ptr()))
         var xp = x.unsafe_ptr()
         var bp = basis.unsafe_ptr()
         def gather(at: Int) {imm ip, imm xp, imm bp}:

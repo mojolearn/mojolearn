@@ -9,25 +9,28 @@
 # `qn_decision_function` and the score metrics are the Python methods' own,
 # in the same order with the same arguments: the bits do not move.
 from std.memory import memcpy
-from std.collections import Dict
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
 from bindings.native_loaded_module import native_loaded_module
-from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+    FAMILY_F32P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
     family_entry, family_array,
 )
 from bindings.svm_mixture_native import _qn_scores
 from core.admitted_weights import admitted_fill
-from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name, classical_encode_labels
+from bindings.class_weight_boundary import CLASS_WEIGHT_SVC
+from bindings.class_weight_rows_boundary import class_weight_rows_admitted
+from bindings.label_weights_boundary import label_weights_run
+from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
+from providers.python.estimator_binding_pyapi import estimator_binding_mode
+from bindings.classical_labels import labels_type_name, classical_encode_labels
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.svc_common import (
-    svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite, svc_base,
-    svc_mode, svc_binding, svc_zero_division, svc_shape_of, svc_labels_1d, svc_sorted_classes,
+    svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy,
+    svc_mode, svc_binding, svc_shape_of, svc_labels_1d, svc_sorted_classes,
     svc_decode, svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
 )
 
@@ -86,112 +89,15 @@ def _class_weight_message(model: PythonObject, class_weight: PythonObject) raise
 
 def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes: PythonObject,
                        xbind: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_class_weights._class_weight_rows` on the x_trees binding with int32
-    codes: the per-row float32 class weight, or None when every class weight
-    is 1."""
+    """SVC admission over the shared native per-row weight plan."""
     var b = svc_builtins()
-    var itertools = native_loaded_module("itertools")
     var n = Int(py=codes.size)
     var k = len(classes)
-    var values: PythonObject
-    if py_type(class_weight) is b.str:
-        var counts = family_array(Python.tuple(PythonObject(k)), "<i4", context)
-        _ = family_call(family_entry(xbind, "x_trees_code_counts", context),
-                        classical_address(codes) if n > 0 else PythonObject(0), classical_address(counts),
-                        Python.list(PythonObject(n), PythonObject(k)))
-        _ = counts  # keep the Python object alive through the native call above
-        var wide = family_array(Python.tuple(PythonObject(k)), "<i8", context)
-        var wide_words = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(wide)))
-        var count_words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(counts)))
-        for i in range(k):  # driver-loop: over the classes (the exact int32 -> int64 widening of astype)
-            wide_words[i] = Int64(count_words[i])
-            _ = wide  # keep the Python object alive through the native call above
-            _ = counts  # keep the Python object alive through the native call above
-        var w64 = family_array(Python.tuple(PythonObject(k)), "<f8", context)
-        if k > 0 and Int(py=family_call(svc_base("class_ratio_f64", context), classical_address(wide), PythonObject(k),
-                                         PythonObject(n), PythonObject(0), classical_address(w64))) != 0:
-            svc_zero_division(False)
-        _ = wide  # keep the Python object alive through the native calls above
-        _ = w64  # keep the Python object alive through the native calls above
-        _ = wide^
-        _ = counts^
-        values = Python.list()
-        var weight_words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(w64)))
-        var append_value = values.append
-        for i in range(k):  # driver-loop: over the classes
-            _ = py_call(append_value, PythonObject(weight_words[i]))
-            _ = w64  # keep the Python object alive through the native call above
-    else:
-        if py_type(class_weight) is not b.dict:
-            raise Error("TypeError: class_weight must be 'balanced', None or a dict")
-        var keys = py_call(b.list, class_weight)
-        for i in range(len(keys)):  # driver-loop: over user class_weight keys, admitted before hashing/comparison
-            var kt = py_type(keys[i])
-            if not labels_text_type(kt, context) and not labels_real_type(kt, context):
-                raise Error("TypeError: class_weight keys must be native numbers or strings")
-        var unknown = family_call(family_call(b.set, keys).difference, classes)
-        if len(unknown) > 0:
-            raise Error("class_weight contains labels absent from y")
-        values = family_call(b.list, family_call(b.map, class_weight.get, classes, family_call(itertools.repeat, PythonObject(1.0))))
-    var all_one = True
-    # Keep element admission (mixed scalar classes are supported), but resolve
-    # each encountered exact type only once in this GIL-held validation loop.
-    # values retains every scalar/type until the local identity table dies.
-    var kinds = Dict[Int, Int]()
-    var decoded = List[Float64](capacity=k)
-    var float_type = b.float
-    var one = PythonObject(1)
-    ref cpy = Python().cpython()
-    var compare = cpy.lib.get_function[Int32]("PyObject_RichCompareBool")
-    for i in range(k):  # driver-loop: over the classes (the class weight argument checks)
-        var v = values[i]
-        var cls = py_type(v)
-        var identity = Int(cls._obj_ptr)
-        if identity not in kinds:
-            kinds[identity] = labels_primitive_kind(cls, context)
-        if kinds[identity] < 3:
-            raise Error("class weights must be finite nonnegative real numbers")
-        var f = Float64(py=family_call(float_type, v))
-        if not svc_isfinite(f) or f < 0:
-            raise Error("class weights must be finite nonnegative real numbers")
-        # Compare the original admitted scalar, not its rounded Float64 value:
-        # a long-double value near one must not become an all-one shortcut.
-        var equal = compare(v._obj_ptr, one._obj_ptr, Int32(2))
-        if equal < 0:
-            raise cpy.unsafe_get_error()
-        if equal == 0:
-            all_one = False
-        decoded.append(f)
-    _ = one
-    _ = values  # owns the scalar classes used as keys until validation ends
-    if all_one:
-        return PythonObject(None)
-    var narrowed = family_array(Python.tuple(PythonObject(k)), "<f4", context)
-    var np = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(narrowed)))
-    _ = narrowed  # keep the Python object alive through the native call above
-    var top = Float32(0)
-    for i in range(k):  # driver-loop: over the classes (the float32 narrowing and its checks)
-        var f = decoded[i]
-        np[i] = Float32(f)
-        _ = narrowed  # keep the Python object alive through the native call above
-        var g = Float64(np[i])
-        _ = narrowed  # keep the Python object alive through the native call above
-        if not svc_isfinite(g) or (f > 0 and g == 0):
-            raise Error("class weights must remain finite and nonzero when positive in Float32")
-        if i == 0 or np[i] > top:
-            top = np[i]
-            _ = narrowed  # keep the Python object alive through the native call above
-        _ = narrowed  # keep the Python object alive through the native calls above
-    if not top > 0:
-        raise Error("class weights must have positive total")
-    var out = family_array(Python.tuple(PythonObject(n)), "<f4", context)
-    if n > 0:
-        _ = family_call(family_entry(xbind, "x_trees_class_rows", context), classical_address(codes),
-                        classical_address(narrowed), classical_address(out), Python.list(PythonObject(n), PythonObject(k)))
-        _ = out  # keep the Python object alive through the native call above
-        _ = narrowed  # keep the Python object alive through the native call above
-    _ = narrowed^
-    return out
+    var balanced = py_type(class_weight) is b.str
+    if not balanced and py_type(class_weight) is not b.dict:
+        raise Error("TypeError: class_weight must be 'balanced', None or a dict")
+    return class_weight_rows_admitted[CLASS_WEIGHT_SVC](class_weight, classes, codes, n, k,
+                                                       balanced, xbind, context)
 
 
 def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: PythonObject,
@@ -214,18 +120,17 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
             raise Error(_class_weight_message(model, class_weight))
     elif py_type(class_weight) is not b.dict:
         raise Error(_class_weight_message(model, class_weight))
-    var xb = svc_binding("_mojolearn_x_trees", svc_mode(fields), context)
+    var xb = estimator_binding_mode(svc_mode(fields), "_mojolearn_x_trees", context)
     var cw = _class_weight_rows(class_weight, family_call(b.list, classes), codes, xb, context)
     if cw is None:
         return sw
-    var out = family_array(Python.tuple(PythonObject(n)), "<f4", context)
-    _ = family_call(family_entry(xb, "x_trees_mul_f32", context), classical_address(sw), classical_address(cw),
-                    classical_address(out), Python.list(PythonObject(n)))
-    _ = cw  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
+    var output = family_array(Python.tuple(PythonObject(n)), "<f4", context)
+    _ = label_weights_run[True](xb, LABEL_WEIGHTS_MULTIPLY,
+        LabelWeightsRequest(Int(py=classical_address(sw)), Int(py=classical_address(cw)),
+                            Int(py=classical_address(output)), n, 0))
     _ = sw^
     _ = cw^
-    return out
+    return output
 
 
 def _qn_fit_one_target(fields: PythonObject, binding: PythonObject, x: PythonObject, y_enc: PythonObject,

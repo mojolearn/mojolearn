@@ -155,12 +155,6 @@ struct LinearKit(Movable):
         tsqr_fill_indices(f32_ptr(self.host(result)), start, stop)
         return result
 
-    def write_result(mut self, index: Int, address: Int, count: Int) raises:
-        if self.matrices[index].device >= 0:
-            _ = self.call(XD_DEV_DOWNLOAD, [address], [self.matrices[index].device, count], [])
-        else:
-            memcpy(dest=f32_ptr(address), src=f32_ptr(self.host(index)), count=count)
-
     def broadcast(self, a: Int, b: Int) raises -> Int:
         if self.matrices[a].rows == self.matrices[b].rows and self.matrices[a].cols == self.matrices[b].cols:
             return 0
@@ -172,7 +166,8 @@ struct LinearKit(Movable):
             return 3
         raise Error("classical TSQR: invalid internal broadcast")
 
-    def ew(mut self, op: Int, a: Int, b: Int = -1, c: Int = -1, scalar: Float64 = 0.0) raises -> Int:
+    def ew(mut self, op: Int, a: Int, b: Int = -1, c: Int = -1, scalar: Float64 = 0.0,
+           host_destination: Int = 0) raises -> Int:
         var ib = b
         var ic = c
         if b < 0 or c < 0:
@@ -193,7 +188,9 @@ struct LinearKit(Movable):
             var dc = self.device(ic)
             _ = self.call(XD_DEV_EW, [], self.prefixed([da, db, dc, self.matrices[out].device], params), [scalar])
             return out
-        var out = self.zeros(rows, cols)
+        # The final host operation can write directly into its caller-owned
+        # coefficient buffer. All intermediate storage stays owned by this kit.
+        var out = self.borrowed(host_destination, rows, cols) if host_destination else self.zeros(rows, cols)
         if rows * cols:
             var aa = self.address(a)
             var ab = self.address(ib)
@@ -471,7 +468,10 @@ def linear_tsqr_solve(ra: Int, cols: Int, coef: Int, entry: NativeDescriptorCall
         var weighted = kit.ew(2, utc, invt)
         var x = kit.mm(vt, weighted, ta=True)
         var st = kit.transpose(scale)
-        x = kit.ew(2, x, st)
-        kit.write_result(x, coef, cols)
+        # Preserve the final elementwise operation and the GPU's one download.
+        # The host result needs neither another allocation nor a final copy.
+        x = kit.ew(2, x, st, host_destination=0 if kit.resident else coef)
+        if kit.resident and cols:
+            _ = kit.call(XD_DEV_DOWNLOAD, [coef], [kit.matrices[x].device, cols], [])
     finally:
         kit.close()

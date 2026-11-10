@@ -6,17 +6,19 @@ Parsing, layout, decompression and text decoding have already completed in the
 native host pool. Arrays receive one writable owned copy of native payload bytes.
 """
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_setitem
 from bindings.optimizer_public_words import stash_python_error
-from bindings.classical_arrays import classical_numpy, classical_wrap_layout
+from bindings.classical_arrays import classical_numpy, classical_wrap_layout, classical_typed_native, classical_address
 from bindings.classical_archive import _archive_file_call
 from bindings.classical_warnings import classical_warning
 from providers.python.array_layout_boundary import native_shape_pack
 from core.native_array_layout import NativeArrayLayout, native_array_code
 from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_npy import ArchiveLiteralWarning
+from core.native_archive_write import archive_contiguous_strides
+from core.native_archive_copy import archive_copy_bytes
 
 
 def archive_warning_pack(warning: ArchiveLiteralWarning, context: PythonObject) raises:
@@ -75,6 +77,23 @@ def archive_numeric_pack(member: NativeArchiveDecoded, context: PythonObject) ra
     return result^
 
 
+def archive_f32_c_pack(member: NativeArchiveDecoded, context: PythonObject) raises -> PythonObject:
+    """Publish a schema-checked Float32 member in the required C-order layout."""
+    if not member.layout.fortran or len(member.layout.shape) < 2:
+        return archive_numeric_pack(member, context)
+    var result = classical_typed_native(member.layout.shape.copy(), "<f4", context)
+    var destination = Int(py=classical_address(result))
+    var strides = archive_contiguous_strides(member.layout.shape, 4, True)
+    # Gather directly into the final owner; no intermediate Python array or
+    # native gathered-payload copy. Both input and output pins span the join.
+    with GILReleased(Python()):
+        archive_copy_bytes(member.layout.payload.address, member.layout.shape,
+                           strides, member.layout.count, 4, destination)
+    _ = result
+    _ = member
+    return result
+
+
 def archive_text_cell_pack(member: NativeArchiveDecoded, index: Int) raises -> PythonObject:
     var result = PyObjectPtr()
     if member.layout.kind == 1:
@@ -117,8 +136,10 @@ def archive_member_pack(member: NativeArchiveDecoded, context: PythonObject) rai
     return archive_text_nest_pack(member, 0, 0)
 
 
-def archive_members_pack(members: List[NativeArchiveDecoded], context: PythonObject) raises -> PythonObject:
-    archive_events_pack(members, context)
+def archive_members_pack(members: List[NativeArchiveDecoded], context: PythonObject,
+                         emit_events: Bool = True) raises -> PythonObject:
+    if emit_events:
+        archive_events_pack(members, context)
     var result = Python.dict()
     for i in range(len(members)):
         py_setitem(result, PythonObject(members[i].name), archive_member_pack(members[i], context))

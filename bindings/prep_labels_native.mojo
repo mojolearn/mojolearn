@@ -575,10 +575,10 @@ def _multilabel_buffer(y: PythonObject, shape: PythonObject, context: PythonObje
                 context)
     _ = view  # keep the Python object alive through the native call above
     var addr = labels_address(wide)
-    if not _truth(labels_reduce_stat(context, addr, 1, size, 4)):
+    if labels_reduce_stat(context, addr, 1, size, 4).i == 0:
         raise Error(REFUSE_MULTIOUTPUT)
-    var lo = Float64(py=labels_reduce_stat(context, addr, 1, size, 0))
-    var hi = Float64(py=labels_reduce_stat(context, addr, 1, size, 1))
+    var lo = labels_reduce_stat(context, addr, 1, size, 0).f
+    var hi = labels_reduce_stat(context, addr, 1, size, 1).f
     var src = F64P(unsafe_from_address=addr)
     var hits = 0
     for i in range(size):  # driver-loop: over the indicator's values (the native equality counts)

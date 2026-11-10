@@ -47,10 +47,11 @@ struct ProphetDays(Movable):
     def __init__(out self, count: Int, offset: Int):
         self.count = count
         self.words = List[Float64](length=count + 2, fill=Float64(99999.25))
-        var p = self.words.unsafe_ptr()
+        var p = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(self.words.unsafe_ptr()))
         def cell(index: Int) {imm p, imm offset}:
             p[index + 1] = Float64(index + offset)
         host_parallelize(cell, count)
+        _ = self.words
 
     def address(self) -> Int:
         return Int(self.words.unsafe_ptr()) + 8
