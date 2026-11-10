@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 581,
-    "retain-python-boundary": 16,
+    "needs-semantic-review": 574,
+    "retain-python-boundary": 22,
     "split-partial": 1,
     "split-migrated": 9,
     "review-module-gate": 1,
     "retain-tooling": 2,
-    "split-needed": 6
+    "split-needed": 7
   },
-  "reviewed_files": 35,
+  "reviewed_files": 42,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -203,6 +203,41 @@
       "path": "python/mojolearn/tests/test_transformer_state_refusals.py",
       "decision": "retain-python-boundary",
       "reason": "All four cases mutate public Python state fields, check named exception precedence and preservation of previously published KV bytes, restore fields and resume. Replacing these with typed-state-only fixtures would lose boundary admission/publication atomicity coverage."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_array_ownership.py",
+      "decision": "retain-python-boundary",
+      "reason": "All eight definitions require actual Python builtin replacements, fresh-interpreter connected storage ownership, ndarray/memoryview publication, owner destruction or device output pins. Small numerical sentinels check that published owned buffers remain valid; retain these boundary tests."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_config_order.py",
+      "decision": "retain-python-boundary",
+      "reason": "Actual replaced builtins.sorted callback refusal, Python config insertion order/object identity, set_params return identity and publication atomicity; retain Python seam."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_container_admission.py",
+      "decision": "retain-python-boundary",
+      "reason": "Five definitions mutate actual Python list/dict/set/bytearray/memoryview exports, inject hostile hooks and distinguish exact refusal precedence from clean native calls. Byte comparisons detect state publication during refused operations, not a standalone optimizer oracle."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_scalar_constructors.py",
+      "decision": "retain-python-boundary",
+      "reason": "Three definitions poison actual Python float/int/bool constructors and test refusal plus clean resume, scalar/config packing and consumed device outputs. Paired state comparisons prove refusal atomicity and public packing, so typed arithmetic alone cannot replace them."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_public_native.py",
+      "decision": "retain-python-boundary",
+      "reason": "Fifteen definitions audit actual public calls across NumPy/array.array/Mojolearn buffers, schedules, dict schemas, owner pins, error classes, callbacks and get/set_params publication. Typed state/math checks supplement these; retain interface comparisons and precise Python lifecycle/admission assertions."
+    },
+    {
+      "path": "python/mojolearn/tests/test_sequence_optimizer_public_native.py",
+      "decision": "retain-python-boundary",
+      "reason": "Ten definitions audit actual public sequence constructors, tuple/state property identity, mixed/strided Python buffers, checkpoint schemas/broadcast, hostile hooks, device owners/finalizers and direct int64 conversion publication. Retain Python seams; pure numerical recipes live separately in test_x_sequence_optim.py."
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "decision": "split-needed",
+      "reason": "Six independent NumPy numerical oracle definitions are eligible: two configs each RMSprop/Adagrad/Lion/Adamax/NAdam plus Adafactor matrix/vector recurrence. Preserve current tolerances and float64 equations in direct typed native checks before deleting drivers; migration pending."
     }
   ],
   "integration_reported_results": [
