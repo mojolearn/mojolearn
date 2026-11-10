@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_input import admit_x
 from bindings.classical_arrays import classical_address
-from bindings.classical_validate import classical_check_x, classical_estimator_name
+from bindings.classical_validate import classical_check_x_snapshot, classical_estimator_name
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_get, py_type
 from bindings.sequential_description import sequential_fields
@@ -29,24 +29,30 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var state = LinearModelState()
-    state.has_coef = py_get(fields, "coef_") is not None
+    var coefficient_source = py_get(fields, "coef_")
+    state.has_coef = coefficient_source is not None
     linear_state_require_coef(state)
+    # Capture public state while holding the GIL, before data preparation
+    # releases it. A concurrent refit cannot mix old/new scalar owners.
+    var feature_source = fields["n_features_in_"]
+    var intercept_source = fields["intercept_"]
     var est = classical_estimator_name(model)
-    var x = classical_check_x(args[0], est, context, admitted=True)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    state.features = Int(py=fields["n_features_in_"])
+    var admitted_x = classical_check_x_snapshot(args[0], est, context, admitted=True)
+    var x = admitted_x.array
+    var rows = admitted_x.rows
+    var cols = admitted_x.cols
+    state.features = Int(py=feature_source)
     linear_state_check_width(state, cols, est)
-    var coef = admit_x(fields["coef_"], 1, "coef_", context)
+    var coef = admit_x(coefficient_source, 1, "coef_", context)
     state.coef_count = Int(py=coef.size)
     linear_state_check_coefficients(state, cols)
     state.coef = Int(py=classical_address(coef))
-    state.intercept = Float64(py=fields["intercept_"])
+    state.intercept = Float64(py=intercept_source)
     var target = admit_x(args[1], 1, "y", context)
     var target_rows = Int(py=target.size)
     linear_r2_check_target(rows, target_rows)
     var target_address = Int(py=classical_address(target))
-    var x_address = Int(py=classical_address(x))
+    var x_address = admitted_x.address
     var prediction_provider = neural_descriptor_connect_factory_once(
         entries["linear_predict_native_api_v1"], String(LINEAR_PREDICT_ABI), 1)
     var metrics_provider = _linear_metrics_provider(context)
@@ -61,6 +67,7 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
                 target_address, target_rows, vendor, mode, est)
     finally:
         _ = x
+        _ = admitted_x
         _ = coef
         _ = target
         _ = prediction_provider
