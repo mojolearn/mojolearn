@@ -78,10 +78,14 @@ and deficient-rank inputs, the generic OLS route, prediction output dtype,
 score range I/O, parameter resets, mutable/rebound fitted attributes and archive
 roundtrips. Compilation alone does not establish any of those behaviors.
 
-Remaining transitive review includes shared input-exporter adapters, registry
-reuse and internal DeviceRows ingress. Their Python objects retain external
-owners, while data traversal already calls native routines; they must not be
-counted as complete merely from a filename or import scan. Public attribute and
+Shared registry reuse now snapshots native owner identities, parent links,
+addresses, dimensions and finite flags. Native code traverses ancestry and scans
+buffers while boundary owners stay pinned. After reacquiring the GIL, verdicts
+are applied by owner identity and descriptor agreement, so another thread's
+registry compaction cannot make a saved index point at a different buffer.
+DeviceRows shape/store checks and gather-status decisions likewise run on native
+values; the existing gather is unchanged. Exact exporter adapters still require
+final call-graph review, and none of these changes is proof from an import scan. Public attribute and
 exception-class operations are Python protocol admission/packing, and remain
 subject to exact-type/hook refusal review. Archive read remains outstanding.
 

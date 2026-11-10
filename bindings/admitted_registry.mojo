@@ -22,8 +22,7 @@
 #   admitted_hold_rows_of(parent, array, address, rows, cols)
 #                     hold rows gathered out of a held `parent` with the
 #                     parent's verdict (finite, or deferred with the link)
-#   admitted_held_finite(index) / admitted_held_parent(index) /
-#   admitted_held_set_finite(index)
+#   admitted_held_finite(index) / admitted_held_set_finite(index)
 #                     the row's recorded verdict, its parent, and the record
 #   admitted_scope_open() -> Bool
 #   admitted_held_index(source) -> Int
@@ -62,6 +61,7 @@ from std.ffi import external_call
 from std.python import PythonObject
 
 from core.shared_slot import SharedSlot
+from core.admitted_held_plan import HeldBufferDescriptor
 
 #: Layout version of `AdmittedRegistry` (core/shared_slot.mojo rule). V2: the
 #: layout word, the per-row thread and the per-thread depth. V3 (lane s2):
@@ -261,11 +261,54 @@ def admitted_held_finite(index: Int) raises -> Bool:
     return _registry()[].verdicts[index] == 1
 
 
-def admitted_held_parent(index: Int) raises -> PythonObject:
-    """The held matrix the row was gathered out of, or None."""
-    return _registry()[].parents[index]
-
-
 def admitted_held_set_finite(index: Int) raises:
     """Record that the held row's words were tested finite."""
     _registry()[].verdicts[index] = 1
+
+
+struct AdmittedHeldSnapshot(Movable):
+    var buffers: List[HeldBufferDescriptor]
+    var owners: List[PythonObject]
+    var index: Int
+
+    def __init__(out self, var buffers: List[HeldBufferDescriptor], var owners: List[PythonObject], index: Int):
+        self.buffers = buffers^
+        self.owners = owners^
+        self.index = index
+
+
+def admitted_held_snapshot(index: Int) raises -> AdmittedHeldSnapshot:
+    """UNPACK one calling-thread registry snapshot and pin its buffer owners.
+
+    Native RUN never follows Python parent objects or borrows registry Lists
+    that another thread can compact while the GIL is released.
+    """
+    var g = _registry()
+    var me = _thread()
+    var buffers = List[HeldBufferDescriptor]()
+    var owners = List[PythonObject]()
+    var selected = -1
+    for k in range(len(g[].items)):  # unpack: the calling thread's retained buffer descriptors
+        if g[].threads[k] == me:
+            if k == index:
+                selected = len(buffers)
+            var parent = 0 if g[].parents[k] is None else Int(g[].parents[k]._obj_ptr)
+            buffers.append(HeldBufferDescriptor(Int(g[].items[k]._obj_ptr), parent,
+                g[].addresses[k], g[].rows[k], g[].cols[k], g[].verdicts[k] == 1))
+            owners.append(g[].items[k])
+    return AdmittedHeldSnapshot(buffers^, owners^, selected)
+
+
+def admitted_held_apply(snapshot: AdmittedHeldSnapshot, proved: List[Int]) raises:
+    """PACK finite verdicts after RUN; another thread may have compacted rows."""
+    var g = _registry()
+    for i in range(len(proved)):  # pack: native finite verdicts for retained owners
+        var old = proved[i]
+        if old < 0 or old >= len(snapshot.buffers):
+            raise Error("admitted input: invalid finite-verdict proof")
+        var current = admitted_held_index(snapshot.owners[old])
+        if current >= 0:
+            if (g[].addresses[current] == snapshot.buffers[old].address
+                    and g[].rows[current] == snapshot.buffers[old].rows
+                    and g[].cols[current] == snapshot.buffers[old].cols):
+                admitted_held_set_finite(current)
