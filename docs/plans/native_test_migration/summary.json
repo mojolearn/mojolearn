@@ -106,6 +106,15 @@
       ],
       "handoff": "docs/plans/native_test_migration/pandas-input-plan-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "path": "core/native_array_layout.mojo",
+      "change": "Add 45 independent native metadata, supported dtype, copy ownership and named overflow/refusal fixtures for the extracted layout owner. Python storage/API tests remain; no full classification of those files is claimed.",
+      "native_checks": [
+        "checks/native_tests/native_array_layout_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/native-array-layout-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
