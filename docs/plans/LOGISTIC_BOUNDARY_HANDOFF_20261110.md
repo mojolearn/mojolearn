@@ -81,6 +81,13 @@ The fresh `_w` stays private through GIL-released PACK; publication happens
 after the join, with the previous failed-allocation `_w` state retained on the
 error path. This output-layout step does not complete fitted-query snapshots.
 
+The explicit host binary prediction now gives the unchanged QN binary-code
+operation the final owned native `List[Int]` consumed by label decoding. The
+temporary Python int64 Array and serial per-row append/copy are removed. The
+LP64 descriptor word width, class-code values, decoder, source/weight/provider
+pins and all numerical kernels remain unchanged. This removes one output
+allocation/copy without introducing a new output path or a borrowed list.
+
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct
 native requests plus public LogisticRegression/host/DeviceRows tests, and later
