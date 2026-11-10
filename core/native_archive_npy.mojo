@@ -213,7 +213,8 @@ def native_npy_dtype(mut layout: NativeNpyLayout, descr: List[UInt32], python_mi
     layout.width = value * 4 if layout.kind == 1 else value
 
 
-def native_npy_layout(raw: ArchiveSpan, python_minor: Int, python_micro: Int = 0) raises -> NativeNpyLayout:
+def native_npy_layout_collect(raw: ArchiveSpan, python_minor: Int, python_micro: Int,
+                              mut warnings: List[ArchiveLiteralWarning]) raises -> NativeNpyLayout:
     if raw.size < 10:
         raise Error("not an npy member (bad magic)")
     var magic: List[Int] = [147, 78, 85, 77, 80, 89]
@@ -228,12 +229,23 @@ def native_npy_layout(raw: ArchiveSpan, python_minor: Int, python_micro: Int = 0
     if header_size > raw.size - begin:
         raise Error("truncated npy header")
     var parser = NativeNpyParser(raw.slice(begin, header_size), python_minor, python_micro)
-    var result = parser.parse()
+    var result = NativeNpyLayout()
+    try:
+        result = parser.parse()
+    finally:
+        # Warning delivery is PACK. Preserve warnings that precede a later
+        # shape/dtype/payload refusal, instead of silently losing them.
+        warnings = parser.warnings.copy()
     var offset = begin + header_size
     if result.width > 0 and result.count > (raw.size - offset) // result.width:
         raise Error("npy member does not hold the bytes required by its shape and dtype")
     result.payload = raw.slice(offset, result.count * result.width)
     return result^
+
+
+def native_npy_layout(raw: ArchiveSpan, python_minor: Int, python_micro: Int = 0) raises -> NativeNpyLayout:
+    var warnings = List[ArchiveLiteralWarning]()
+    return native_npy_layout_collect(raw, python_minor, python_micro, warnings)
 
 
 def native_npy_text_source(layout: NativeNpyLayout, logical: Int) -> Int:

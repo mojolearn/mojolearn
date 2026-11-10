@@ -3,6 +3,7 @@
 from core.host_parallel import host_parallelize
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_read import native_archive_read
+from core.native_archive_npy import native_npy_layout_collect, ArchiveLiteralWarning
 from core.native_archive_codec import archive_codec_library
 from checks.native_tests.archive_reader_vectors import archive_reader_fixture
 
@@ -49,13 +50,39 @@ def _fixture(unit: Int) raises:
     _ = source
 
 
+def _warning_before_failure(unit: Int) raises:
+    var header = String("{'descr': '<\\q4', 'fortran_order': False, 'shape': (1,), }\n")
+    if unit == 1:
+        header = "{'descr': '<\\q\\xQ4', 'fortran_order': False, 'shape': (1,), }\n"
+    var source: List[UInt8] = [147, 78, 85, 77, 80, 89, 1, 0]
+    source.append(UInt8(header.byte_length()))
+    source.append(0)
+    for byte in header.as_bytes():
+        source.append(byte)
+    var warnings = List[ArchiveLiteralWarning]()
+    var error = String("")
+    try:
+        _ = native_npy_layout_collect(ArchiveSpan(Int(source.unsafe_ptr()), len(source)), 12, 0, warnings)
+    except problem:
+        error = String(problem)
+    _require(error.byte_length() > 0, "malformed descriptor refused")
+    if unit == 0:
+        _require(error == "unsupported npy dtype" and len(warnings) == 1 and warnings[0].kind == 1, "warning retained before later dtype failure")
+    else:
+        _require(len(warnings) == 0, "strict malformed escape suppresses pending invalid-escape warning")
+    _ = source
+
+
 def main() raises:
-    comptime FIXTURES = 8
+    comptime FIXTURES = 10
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
         try:
-            _fixture(unit)
+            if unit < 8:
+                _fixture(unit)
+            else:
+                _warning_before_failure(unit - 8)
         except problem:
             print("FAIL archive_reader fixture", unit, String(problem))
             failures_ptr.unsafe_store(unit, 1)

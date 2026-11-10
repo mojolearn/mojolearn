@@ -11,7 +11,7 @@ from core.native_archive_zip import NativeZipDirectory, native_zip_directory, na
 from core.native_archive_codec import archive_inflate
 from core.native_archive_write import archive_zlib, archive_crc32
 from core.native_archive_unicode import archive_decode_utf32
-from core.native_archive_npy import NativeNpyLayout, native_npy_layout, native_npy_text_source
+from core.native_archive_npy import NativeNpyLayout, ArchiveLiteralWarning, native_npy_layout_collect, native_npy_text_source
 
 
 struct NativeArchiveText(Movable):
@@ -28,12 +28,16 @@ struct NativeArchiveDecoded(Movable):
     var layout: NativeNpyLayout
     var owned: List[UInt8]
     var texts: List[NativeArchiveText]
+    var warnings: List[ArchiveLiteralWarning]
+    var error: String
 
     def __init__(out self):
         self.name = ""
         self.layout = NativeNpyLayout()
         self.owned = List[UInt8]()
         self.texts = List[NativeArchiveText]()
+        self.warnings = List[ArchiveLiteralWarning]()
+        self.error = ""
 
 
 def native_archive_text_cells(mut member: NativeArchiveDecoded) raises:
@@ -73,21 +77,24 @@ def native_archive_member(raw: ArchiveSpan, directory: NativeZipDirectory, index
                           python_minor: Int, python_micro: Int, library: Int) raises -> NativeArchiveDecoded:
     var result = NativeArchiveDecoded()
     result.name = directory.entries[index].stem
-    var compressed = native_zip_payload(raw, directory.entries[index], directory.central_start)
-    var source = compressed.copy()
-    if directory.entries[index].method != 0:
-        result.owned = archive_inflate(compressed, directory.entries[index].method, directory.entries[index].unpacked)
-        source = ArchiveSpan(Int(result.owned.unsafe_ptr()), len(result.owned))
-    if source.size != directory.entries[index].unpacked:
-        raise Error("ZIP member length differs from its directory")
-    if archive_crc32(library, 0, source.address, source.size) != directory.entries[index].crc:
-        raise Error("ZIP member CRC mismatch")
-    result.layout = native_npy_layout(source, python_minor, python_micro)
-    native_archive_text_cells(result)
+    try:
+        var compressed = native_zip_payload(raw, directory.entries[index], directory.central_start)
+        var source = compressed.copy()
+        if directory.entries[index].method != 0:
+            result.owned = archive_inflate(compressed, directory.entries[index].method, directory.entries[index].unpacked)
+            source = ArchiveSpan(Int(result.owned.unsafe_ptr()), len(result.owned))
+        if source.size != directory.entries[index].unpacked:
+            raise Error("ZIP member length differs from its directory")
+        if archive_crc32(library, 0, source.address, source.size) != directory.entries[index].crc:
+            raise Error("ZIP member CRC mismatch")
+        result.layout = native_npy_layout_collect(source, python_minor, python_micro, result.warnings)
+        native_archive_text_cells(result)
+    except problem:
+        result.error = String(problem)
     return result^
 
 
-def native_archive_read(raw: ArchiveSpan, python_minor: Int, python_micro: Int = 0) raises -> List[NativeArchiveDecoded]:
+def native_archive_read_status(raw: ArchiveSpan, python_minor: Int, python_micro: Int = 0) raises -> List[NativeArchiveDecoded]:
     var directory = native_zip_directory(raw)
     var selected = List[Int]()
     var members = List[NativeArchiveDecoded]()
@@ -95,21 +102,24 @@ def native_archive_read(raw: ArchiveSpan, python_minor: Int, python_micro: Int =
         if directory.entries[index].is_npy:
             selected.append(index)
             members.append(NativeArchiveDecoded())
-    var errors = List[String](length=len(selected), fill=String(""))
     var library = archive_zlib()
     var dp = MutPointer(to=directory)
     var indices = selected.unsafe_ptr()
     var output = members.unsafe_ptr()
-    var failures = errors.unsafe_ptr()
-    def decode(unit: Int) {imm raw, imm dp, imm indices, imm output, imm failures, imm python_minor, imm python_micro, imm library}:
+    def decode(unit: Int) {imm raw, imm dp, imm indices, imm output, imm python_minor, imm python_micro, imm library}:
         try:
             output[unit] = native_archive_member(raw, dp[], indices[unit], python_minor, python_micro, library)
         except problem:
-            failures[unit] = String(problem)
+            output[unit].error = String(problem)
     host_parallelize(decode, len(selected))
-    for error in errors:
-        if error.byte_length():
-            raise Error(error)
     _ = selected
     _ = directory
+    return members^
+
+
+def native_archive_read(raw: ArchiveSpan, python_minor: Int, python_micro: Int = 0) raises -> List[NativeArchiveDecoded]:
+    var members = native_archive_read_status(raw, python_minor, python_micro)
+    for i in range(len(members)):
+        if members[i].error.byte_length():
+            raise Error(members[i].error)
     return members^
