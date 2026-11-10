@@ -5,12 +5,12 @@
   "test_definitions": 4126,
   "file_decisions": {
     "needs-semantic-review": 587,
-    "retain-python-boundary": 12,
+    "retain-python-boundary": 13,
     "split-partial": 1,
     "review-module-gate": 1,
     "split-migrated": 6,
     "retain-tooling": 2,
-    "split-needed": 7
+    "split-needed": 6
   },
   "reviewed_files": 29,
   "not_a_gate": true,
@@ -147,6 +147,21 @@
       "path": "python/mojolearn/tests/test_cpu_kernel_variants.py",
       "decision": "retain-python-boundary",
       "reason": "All four definitions exercise Python registry, package, saved model and degree transport/refusal contracts. No raw GPU kernel test hidden by the filename."
+    },
+    {
+      "path": "python/mojolearn/tests/test_neural_block_native.py",
+      "decision": "split-needed",
+      "reason": "Forward/step/ragged equivalence uses retained test drivers with independent kernel arguments across six loaded model families. Moving that oracle needs a typed block fixture; retain real checkpoint loading, Python weight dictionaries/options, public construction/state/buffers, poisoned callbacks and lengths admission. No backward check exists in this file."
+    },
+    {
+      "path": "python/mojolearn/tests/test_samba_state_native.py",
+      "decision": "split-needed",
+      "reason": "Five definitions are Python checkpoint schema/registry, alias ownership, public snapshot/restore, corrupted-field admission and RNG serialization contracts. The apply case contains an independent generic optimizer/schedule recipe suitable for future direct typed-state checks while preserving public dictionary immutability and poisoned callback assertions."
+    },
+    {
+      "path": "python/mojolearn/tests/test_transformer_state_refusals.py",
+      "decision": "retain-python-boundary",
+      "reason": "All four cases mutate public Python state fields, check named exception precedence and preservation of previously published KV bytes, restore fields and resume. Replacing these with typed-state-only fixtures would lose boundary admission/publication atomicity coverage."
     }
   ],
   "integration_reported_results": [
