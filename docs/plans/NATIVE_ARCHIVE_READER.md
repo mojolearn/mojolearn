@@ -1,8 +1,11 @@
 # Native archive reader implementation
 
-The writer/hash migration is active. The reader is still the existing public
-reader while its native replacements are built. The decoder primitives do not
-make the public load operation Python-free yet.
+Writer/hash execution and the generic archive reader now use native format
+implementations in this source branch. Public loading still requires the
+orchestrator's affected-group compile/runtime qualification and codec wheel
+dependency qualification. Linear model schema construction below the reader
+still has Python object state to migrate; generic reader migration is not a
+claim that every public load operation is Python-free.
 
 `core/native_archive_codec.mojo` uses public C APIs and owns each decoder's state
 and result bytes. A single compressed stream is dependent; independent members
@@ -42,21 +45,31 @@ time; Zstandard fixtures directly encode the published raw/RLE block format.
 The executable itself uses no Python. Zstandard library absence is a dependency
 failure, not a skipped/passed fixture.
 
-The next primitives are in `core/native_archive_zip.mojo` (ZIP/ZIP64 metadata,
+The parser primitives are in `core/native_archive_zip.mojo` (ZIP/ZIP64 metadata,
 duplicate-name precedence and overlap checks), `native_archive_npy.mojo` (NPY
 v1/v2/v3 grammar, dtype and layout), `native_archive_unicode.mojo` (strict
 UTF-8/UTF-32 and literal escapes), and `native_archive_cp437.mojo` (fixed native
 filename mapping). These are exercised by 94 parallel parser fixtures, with
 hand-authored NPY bytes and fixed independent stdlib ZIP fixture bytes.
 
+Decoded numeric members preserve their input bits. Stored members borrow the
+admitted input owner, compressed members own Mojo byte lists, and typed text
+cells hold native scalars/spans. Exact BytesIO input borrows its existing buffer;
+native files use the already-connected mmap owner or native readinto when mapping
+is unavailable. PACK makes one writable public data copy and uses the shared
+native Array layout API. Caller-owned files stay open. Ten parallel direct reader
+fixtures cover all five ZIP methods, signed zero/NaN payloads, Unicode/bytes
+Fortran layout, CRC refusal, and warning/error ordering.
+
 Name/decimal lookup is supplied by the separate versioned native Unicode data
 module; its generation/provenance and interpreter patch profiles are documented
 in `ARCHIVE_UNICODE_PROVENANCE_20261110.md`. Literal decode returns native warning
-metadata without calling warning hooks. Boundary warning delivery and exact
-exception translation still need integration before activation.
+metadata without calling warning hooks. PACK emits those events through the
+existing admitted native warning boundary in member order, including warnings
+that precede a later dtype/payload refusal.
 
-Before reader activation, complete native file-buffer admission, decoded-member
-ownership/packing, typed linear schema/state construction, codec wheel dependency
-qualification, and boundary warning/error behavior. Existing API/protocol/
-exception and file ownership tests remain in place. No legacy reader code is
-deleted until its replacement covers these interfaces.
+Remaining work is typed linear schema/state construction, codec wheel dependency
+qualification, and affected public boundary tests. Existing API/protocol/
+exception and file ownership tests remain in place. The old Python-object ZIP,
+NPY and Unicode parser/codec helpers and their import-time codec dependencies
+are removed with the native reader connection; no callback fallback remains.

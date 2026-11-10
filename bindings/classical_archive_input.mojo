@@ -90,7 +90,8 @@ def archive_input_unpack(file: PythonObject, close_file: Bool, context: PythonOb
             result.span = ArchiveSpan(result.view[0], size)
         elif size > 0:
             result.owned = List[UInt8](length=size, fill=0)
-            var view = cpython_table()[].PyMemoryView_FromMemory(Int(result.owned.unsafe_ptr()), size, Int32(0x200))
+            var view = Python().cpython().lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
+                result.owned.unsafe_ptr(), size, Int32(0x200))
             if not view:
                 var failure = stash_python_error()
                 raise failure^
