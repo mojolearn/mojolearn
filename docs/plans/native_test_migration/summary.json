@@ -254,6 +254,20 @@
       ],
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see optimizer-descriptor-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "decision": "split-partial",
+      "native_family": "Theta fitted state and changed horizons",
+      "native_fixtures_per_executor": 8,
+      "executors": [
+        "HostExec",
+        "DeviceExec"
+      ],
+      "removed_python_definitions": 0,
+      "removed_python_numerical_work": "Fresh duplicate public Theta fit, NumPy full-fit/tail word comparisons; retained actual cached object/publication ownership seam.",
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see theta-state-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
