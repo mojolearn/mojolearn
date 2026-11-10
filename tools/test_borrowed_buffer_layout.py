@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_native_buffer_layout_has_no_python_dependency_or_numeric_conversion():
+def test_native_buffer_dependencies_resolve_and_layout_avoids_numeric_conversion():
     _, failures=audit(ROOT,('core.borrowed_buffer',))
     assert not failures, failures
     source=(ROOT/'core/borrowed_buffer.mojo').read_text()

@@ -7,9 +7,9 @@ kept in the repo so the public runtime inventory can follow a public method THRO
 native door instead of stopping at the first native call. Source only: nothing is built,
 imported or run.
 
-The door layer is the Mojo that may touch Python: bindings/ and providers/python/ (the
-LAYERS table of tools/hooks/no_python_in_kernels.py; kernel files touch no Python, which
-that checker enforces, so a walk stops at them).
+This inventory covers bindings/ and providers/python/. Its walk stops outside those
+directories; it does not establish that other files avoid Python or that a public
+operation is Python-free. The retired kernel source guard is not evidence for either claim.
 
 Every door line that touches Python gets one class:
 

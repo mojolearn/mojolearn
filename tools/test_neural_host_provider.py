@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_cpu_descriptor_closure_has_no_python_or_device_backedge():
+def test_cpu_descriptor_dependencies_resolve():
     seen, failures=audit(ROOT,('core.neural_host_dispatch',))
     assert not failures, failures
     assert 'core.mojolearn_neural_host_impl' in seen
