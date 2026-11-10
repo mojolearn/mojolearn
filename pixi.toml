@@ -52,6 +52,7 @@ check-native-linear-state = "mojo run -I . checks/native_tests/linear_model_stat
 check-native-logistic-contracts = "mojo run -I . checks/native_tests/logistic_contracts.mojo"
 check-native-label-driver = "mojo run -I . checks/native_tests/labels_driver.mojo"
 check-native-label-accuracy = "mojo run -I . checks/native_tests/labels_accuracy.mojo"
+check-native-label-score-keys = "mojo run -I . checks/native_tests/labels_score_keys.mojo"
 check-native-archive-writer = "mojo run -I . checks/native_tests/archive_writer.mojo"
 check-native-archive-codec = "mojo run -I . checks/native_tests/archive_codec.mojo"
 check-native-archive-parser = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_parser.mojo"
