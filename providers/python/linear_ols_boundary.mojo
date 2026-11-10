@@ -10,6 +10,7 @@ from bindings.py_balanced import py_get, py_type, py_setitem
 from bindings.sequential_description import sequential_fields
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, LinearFitRequest, LinearFitResult, LinearOlsPlan
 from core.linear_ols_run import linear_ols_plan, linear_ols_run
+from providers.python.linear_state_boundary import linear_state_publish
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, xd_vendor_code
 
@@ -68,4 +69,5 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     py_setitem(fields, "n_features_in_", cols)
     py_setitem(fields, "input_copied_", not (x is args[0]))
     py_setitem(fields, "_mojolearn_fitted", True)
+    linear_state_publish(model, coef, mean, cols, result.intercept, result.ymean, not (x is args[0]))
     return model

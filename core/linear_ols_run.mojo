@@ -95,4 +95,4 @@ def linear_ols_run(entry: NativeDescriptorCall, decomp: NativeDescriptorCall,
     finally:
         _ = ymean
         _ = ignored_mean
-    return result
+    return result^

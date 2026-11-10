@@ -1,10 +1,10 @@
-from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 """CPython boundary for the verified DBSCAN, PCA, tSVD, OLS, Ridge and logistic kernels.
 
 Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
+from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
 from core.linear_boundary_types import LinearPredictRequest

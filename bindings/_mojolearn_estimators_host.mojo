@@ -1,4 +1,3 @@
-from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 """CPU binding for the `_mojolearn_estimators` family: KernelDensity (the
 CPU training lane, phase 1, 2026-09-13) and, since the classical host
 inference lane the same day, the INFERENCE entries of LinearRegression,
@@ -51,6 +50,7 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
+from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
 from core.linear_boundary_types import LinearPredictRequest
