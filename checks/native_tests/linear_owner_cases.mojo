@@ -84,7 +84,7 @@ def _fill(mut x: List[Float32], mut y: List[Float32], rows: Int, cols: Int,
                         scale = 128
                     value *= scale
                 elif fixture_id >= 10:
-                    value = Float32(row == col)
+                    value = 1.0 if row == col else 0.0
             xp.unsafe_store(row * cols + col, value)
             target += Float64(value) * Float64(col + 1) * (Float64(0.5) if ridge else Float64(0.25))
         yp.unsafe_store(row, Float32(target))
