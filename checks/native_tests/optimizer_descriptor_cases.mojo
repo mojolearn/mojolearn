@@ -9,7 +9,7 @@ other math calls explicitly use caller-owned moments.
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_call_spans
 from core.native_call_output import NativeCallOutput
-from training.optimizer_native_api import OptimizerNativeDriver
+from training.optimizer_native_api import OptimizerNativeDriver, OPT_NATIVE_COUNT
 from training.optimizer_public_common import PublicStep, OptHyper
 
 comptime DESCRIPTOR_COMMON_FIXTURES = 24
@@ -60,7 +60,7 @@ def malformed(entry: NativeDescriptorCall, fixture_id: Int) raises:
         # All eleven operations reject a surplus address before dereferencing it.
         na += 1
     elif fixture_id == 11 or fixture_id == 12:
-        op = -1 if fixture_id == 11 else 11
+        op = -1 if fixture_id == 11 else OPT_NATIVE_COUNT
         expected = "native optimizer: unknown operation or missing result storage"
     elif fixture_id == 13:
         op = 8
