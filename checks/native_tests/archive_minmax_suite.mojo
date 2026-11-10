@@ -86,7 +86,7 @@ def _valid(unit: Int) raises:
         members.append(_text("extra", "retained but irrelevant"))
     var plan = native_minmax_archive_plan(members, cls, True)
     _require(plan.features == (0 if unit == 3 else 2), "feature count")
-    _require(plan.samples == (-1 if unit == 2 else 7), "signed sample count stays unchanged")
+    _require(plan.samples == Int64(-1 if unit == 2 else 7), "signed sample count stays unchanged")
     _require(plan.clip == (unit == 2), "signed nonzero clip metadata")
     _require(plan.mode == ("fast" if unit == 1 else "identical"), "saved mode")
     _require(bitcast[DType.uint64](plan.lower) == 0x8000000000000000, "lower negative-zero bits")

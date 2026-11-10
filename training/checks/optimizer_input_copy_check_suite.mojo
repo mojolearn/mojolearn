@@ -65,7 +65,7 @@ def small_fixture(fixture_id: Int) raises:
     def prepare(index: Int) {imm sp, imm start}:
         var word = fixture_word(index)
         for byte in range(4):
-            sp[start + 4 * index + byte] = UInt8((word >> (8 * byte)) & 255)
+            sp[start + 4 * index + byte] = UInt8((word >> UInt32(8 * byte)) & 255)
     host_parallelize(prepare, 16)
     var original = source.copy()
     var view = TensorView()
@@ -133,7 +133,7 @@ def small_fixture(fixture_id: Int) raises:
         # remain independent, while the contiguous borrowed path must alias.
         def mutate(index: Int) {imm sp, imm start}:
             for byte in range(4):
-                sp[start + 4 * index + byte] = UInt8((MUTATED >> (8 * byte)) & 255)
+                sp[start + 4 * index + byte] = UInt8((MUTATED >> UInt32(8 * byte)) & 255)
         host_parallelize(mutate, 16)
         for i in range(len(order)):
             var wanted = MUTATED if view.c_contig else fixture_word(order[i])
