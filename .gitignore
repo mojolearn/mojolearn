@@ -32,6 +32,7 @@ __pycache__/
 # unicodedata by tokenizer/tools/gen_unicode_table.sh (2026-09-15). No data
 # file is tracked; the pin is in tokenizer/impl/unicode_class.mojo.
 tokenizer/impl/unicode_table_generated.mojo
+core/archive_unicode_names_generated.mojo
 
 # Agent worktrees: transient, and each is its own git repo
 .claude/worktrees/
