@@ -10,7 +10,7 @@ from providers.python.linear_fit_boundary import classical_ridge_fit
 from providers.python.linear_predict_boundary import classical_linear_predict, classical_linear_predict_public
 from providers.python.linear_ols_boundary import classical_ols_fit
 from providers.python.linear_score_boundary import classical_linear_score
-from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_names
+from providers.python.linear_metadata_boundary import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
@@ -197,7 +197,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var ridge = Bool(py=kind)
         var linear = not ridge
         if operation == "param_names":
-            var names = py_call(b.list, classical_parameter_names(ridge))
+            var names = classical_parameter_list(ridge)
             return names.steal_data()
         if not class_operation:
             _ = classical_check_layout_call(call, model, context)
