@@ -181,7 +181,8 @@ attribute.
 
 ## 5. Typed boundaries and execution evidence
 
-Owner direction, 2026-11-10: delete the kernel-path/token source guard and the shell-loop source counter. Do not
+Owner direction, 2026-11-10: retire the Python source-count/graph compliance gates, including the kernel-path,
+shell-loop, host-route, runtime-import and public-runtime counters. Do not
 extend them, restore them under another name, or replace them with a source-count baseline gate. Excluding
 binding/provider code or rejecting necessary UNPACK/PACK loops cannot establish that an operation avoids Python.
 

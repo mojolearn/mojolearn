@@ -1,3 +1,7 @@
+> Current direction (2026-11-10): the source-count compliance gate was retired.
+> Inventories and historical debt records remain review aids, not merge gates or runtime proof.
+> See `PYTHON_AT_THE_BOUNDARY.md` for the typed boundary implementation.
+
 # Public runtime migration
 
 Andrew, 2026-10-21. This plan defines the contract for every public method, how we measure it, where the

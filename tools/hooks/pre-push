@@ -18,17 +18,6 @@
 # them against the merge-base with main (the record is permanent, Andrew 2026-10-28). Both modes
 # judge against the merge-base; removing the test file itself is refused too.
 #
-# The seventh fence (2026-11-06): no_runtime_import_module.py --tree refuses a new
-# `Python.import_module(` call in bindings/ or providers/ .mojo files outside an
-# import-time initializer (a `def PyInit_*` body or a line tagged `# import-time:`)
-# beyond tools/hooks/runtime_import_module_baseline.txt. Same main/--branch judging rule.
-#
-# The sixth fence (2026-10-28): tools/tests/test_no_python_runtime.py, when the pushed tree has
-# it, runs the public runtime endpoint ledger on an exported copy of the pushed commit and
-# refuses a prohibited_source endpoint that is neither an owner exception
-# (experiments/python_audit_20261028/allowed_exceptions.tsv) nor recorded debt (prohibited_debt.tsv),
-# or an unresolved count above the pin. Static source scan only; nothing is imported.
-#
 # Which refs the remaining checks judge:
 #   refs/heads/main                       the whole tree
 #   refs/heads/<anything else>            --branch: only what it adds over its
@@ -57,7 +46,7 @@ here=$(dirname "$0")
 # installed copies never update themselves (an Oct 8 copy refused tagged driver loops on 2026-10-17): say so when the
 # checkout's hooks differ from the installed ones
 top=$(git rev-parse --show-toplevel 2>/dev/null)
-for f in pre-push mojo_import_graph.py rebuild_fence.py no_runtime_import_module.py; do
+for f in pre-push mojo_import_graph.py rebuild_fence.py; do
     if [ -f "$top/tools/hooks/$f" ] && ! cmp -s "$top/tools/hooks/$f" "$here/$f"; then
         echo "pre-push: the installed $f differs from tools/hooks/$f in this checkout; run bash tools/hooks/install.sh" >&2
     fi
@@ -106,30 +95,7 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
         rm -f "$connections"
         [ $status -eq 0 ] || { echo "pre-push: REFUSED by native package connection declarations" >&2; exit 4; }
     fi
-    # the no-runtime-import_module check (2026-11-06), same branch/main judging rule
-    if [ -f "$here/no_runtime_import_module.py" ]; then python3 "$here/no_runtime_import_module.py" --tree "$local_sha" $mode || exit 4; fi
-    # the no-Python-in-runtime gate (2026-10-28), when the pushed tree carries it: the endpoint
-    # ledger of the pushed commit, run from an exported copy of that commit, must list every
-    # prohibited_source endpoint as an owner exception or recorded debt and keep the unresolved
-    # count within its pin (tools/tests/test_no_python_runtime.py; both modes judge the whole tree)
-    if git cat-file -e "$local_sha:tools/tests/test_no_python_runtime.py" 2>/dev/null; then
-        gate=$(mktemp -d "${TMPDIR:-/tmp}/no-python-runtime.XXXXXX") || exit 4
-        # the door walk (tools/mojo_door_sites.py) reads bindings/ and providers/python/ and the door
-        # baseline; older trees without them archive what they have
-        door_paths=""
-        for p in bindings providers/python tools/mojo_door_sites.py tools/hooks/public_runtime_door_baseline.tsv; do
-            git cat-file -e "$local_sha:$p" 2>/dev/null && door_paths="$door_paths $p"
-        done
-        if ! git archive "$local_sha" python/mojolearn packaging/native_only tools/public_runtime_inventory.py \
-                tools/tests/test_no_python_runtime.py experiments/python_audit_20261028 $door_paths | tar -x -C "$gate"; then
-            rm -rf "$gate"; exit 4
-        fi
-        python3 "$gate/tools/tests/test_no_python_runtime.py" >"$gate/gate.log" 2>&1
-        status=$?
-        grep -E '^no-python-runtime:|^  python/|^  mojolearn\.|^  (new|regressed|python-on-path|glue-heavy)|Error|unresolved endpoints' "$gate/gate.log" | head -n 30 >&2
-        rm -rf "$gate"
-        [ $status -eq 0 ] || { echo "pre-push: REFUSED by the no-Python-in-runtime gate (tools/tests/test_no_python_runtime.py)" >&2; exit 4; }
-    fi
+
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
