@@ -266,10 +266,14 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   unsupported callback or protocol objects before invoking them, with a clear native alternative.
 - **Exported graph boundary (Andrew, 2026-10-27).** Never execute a user's Python `forward`, exporter or
   serialization callback inside product execution; the API may require an already exported graph.
-- **Direct CPython C-API calls are allowed during execution (Andrew, 2026-10-28)**, including inside loops. A C-API
-  call can invoke Python hooks: audit the operation and admitted types, keep exact-type checks, lifetimes, error
-  propagation and GIL safety. Hoist invariant admission and reuse plans and buffers. Do not move algorithm work
-  into provider directories to evade checks.
+- **Python objects only at the public boundary (Andrew, 2026-11-10).** Python objects, Python library imports and
+  CPython interaction belong only in the actual UNPACK/PACK functions of each public operation. RUN uses typed
+  Mojo values for requests, options, dimensions, model and optimizer state, buffers and results, and native calls
+  between compiled modules. A Mojo wrapper around a PythonObject is not a migration. Preserve the public API and
+  borrowed-buffer lifetimes through explicit native ownership; do not hide Python work in provider directories.
+  Direct C-API calls within UNPACK/PACK may still invoke Python hooks: retain exact-type admission, error
+  propagation and GIL safety, and hoist invariant admission. The 2026-10-28 permission for native C-API calls does
+  not authorize Python objects or Python support inside RUN.
 - **scikit-learn tags (owner, 2026-10-24).** `__sklearn_tags__` and helpers used solely to build its tag metadata
   may run in Python. Native operations must not call back into tag handling. Audit it separately from runtime
   violations. No other metadata protocol is exempt.
@@ -278,9 +282,11 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes
   the smallest reproducer and the ask for Modular, and reports; it does not write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
   uses an entry is recorded in release evidence and is never called Python-free.
-- Python test and benchmark controllers, test data preparation and independent oracles are testing tools. Keep
-  them distinct from product execution and honest about timing boundaries. Installing a Python package is not a
-  runtime repair.
+- **Move native correctness tests to Mojo (Andrew, 2026-11-10).** Kernel, numerical and native state/lifetime tests
+  belong in Mojo. Retain Python tests for the actual Python API boundary and framework interoperability, including
+  buffer admission, exceptions, returned objects and refusal of callbacks. Python test/benchmark controllers and
+  boundary fixtures or independent external oracles are testing tools, never product execution or a fallback.
+  Keep timing boundaries honest. Installing a Python package is not a runtime repair.
 - Preserve supported interfaces through native implementation; do not remove a feature to claim compliance.
   Measure the gain; do not assume removing Python makes every workload faster.
 - Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
