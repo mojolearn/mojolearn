@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The Python surface of the two low-bit profiles, gated BITWISE against the
-CPU host binding (the same oracles the CPU identity gate runs) and against
-NumPy for the one seam NumPy can spell exactly (the bf16 widening is a
-shift). Lane lane/identical-lowbit-inference, 2026-09-17;
-gemm/IDENTICAL_LOWBIT_CONTRACT.md.
+"""Python buffer, dtype, transpose and refusal contracts for low-bit linalg.
 
-Runs only when the identical linalg extension AND the linalg host binding
-are built in this checkout; skips by name otherwise.
+Numerical BF16 conversions/GEMM and INT8 quantize/GEMM/dequantize cases run
+directly in Mojo (checks/native_tests/{bf16_conversion,bf16_linalg,int8_linalg}_*).
+These small cases retain public input-form dispatch, packed outputs, raw host
+binding pointer/count ABI and named errors. They require the corresponding
+installed identical linalg bindings.
 """
 import os
 
@@ -70,41 +69,29 @@ def test_bf16_conversion_packs_expected_shapes_and_dtypes():
     assert hw[0, 0] == 1.25
 
 
-@pytest.mark.parametrize("m,n,k,ta,tb", [
-    (1, 32, 32, False, True), (1, 64, 128, False, True), (2, 96, 127, False, True),
-    (7, 33, 129, False, True), (5, 9, 256, False, False), (9, 5, 300, True, False),
-    (129, 129, 256, False, True), (1, 1024, 512, False, True),
+@pytest.mark.parametrize("ta,tb,lowbit_a", [
+    (False, True, False), (False, False, False),
+    (True, False, False), (False, True, True),
 ])
-def test_matmul_bf16_matches_host_and_widened_fp32(m, n, k, ta, tb):
+def test_bf16_operand_forms_and_transpose_flags_pack_native_buffers(ta, tb, lowbit_a):
     g = _gpu()
     h = _host()
-    a = _vals((k, m) if ta else (m, k), 10 + k)
-    b32 = _vals((n, k) if tb else (k, n), 20 + k)
-    b = np.asarray(g.to_bf16(b32))
-    c = np.asarray(g.matmul_bf16(a, b, transpose_a=ta, transpose_b=tb))
-    assert c.shape == (m, n) and c.dtype == np.float32
-    # the host oracle, bit for bit
+    a = np.array([[1.0, 2.0], [0.0, 1.0]], np.float32)
+    b = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], np.float32)
+    if ta:
+        a = np.ascontiguousarray(a.T)
+    if not tb:
+        b = np.ascontiguousarray(b.T)
+    if lowbit_a:
+        a = np.asarray(g.to_bf16(a))
+    b = np.asarray(g.to_bf16(b))
+    result = np.asarray(g.matmul_bf16(a, b, transpose_a=ta, transpose_b=tb))
+    assert result.dtype == np.float32 and result.shape == (2, 3)
+    assert result[0, 1] == 2.0 and result[0, 2] == 3.0  # Transpose/input-form routing sentinels.
+    host_result = np.empty((2, 3), np.float32)
     op = 2 if ta else (1 if tb else 0)
-    hc = np.empty((m, n), np.float32)
-    h.gemm_bf16(_addr(hc), _addr(np.ascontiguousarray(a)), _addr(b), [m, n, k, op, 0])
-    assert np.array_equal(c.view(np.uint32), hc.view(np.uint32))
-    # the fp32 profile on the exactly widened operand, bit for bit: the
-    # bf16 profile IS fp32.v1 on widened operands (contract section 0)
-    wide = np.asarray(g.from_bf16(b))
-    c32 = np.asarray(g.matmul(a, wide, transpose_a=ta, transpose_b=tb))
-    assert np.array_equal(c.view(np.uint32), c32.view(np.uint32))
-
-
-def test_matmul_bf16_both_operands_bf16():
-    g = _gpu()
-    h = _host()
-    m, n, k = 6, 40, 200
-    a = np.asarray(g.to_bf16(_vals((m, k), 3)))
-    b = np.asarray(g.to_bf16(_vals((n, k), 4)))
-    c = np.asarray(g.matmul_bf16(a, b, transpose_b=True))
-    hc = np.empty((m, n), np.float32)
-    h.gemm_bf16(_addr(hc), _addr(a), _addr(b), [m, n, k, 1, 1])
-    assert np.array_equal(c.view(np.uint32), hc.view(np.uint32))
+    h.gemm_bf16(_addr(host_result), _addr(a), _addr(b), [2, 3, 2, op, int(lowbit_a)])
+    assert host_result[0, 1] == 2.0 and host_result[0, 2] == 3.0
 
 
 def test_int8_input_forms_and_raw_bindings_pack_native_buffers():
