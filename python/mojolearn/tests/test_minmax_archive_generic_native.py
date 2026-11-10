@@ -5,6 +5,7 @@ Numerical schema/refusal matrices live in checks/native_tests/archive_minmax.moj
 NumPy prepares independent archive bytes and inspects published buffer owners.
 """
 import io
+import zipfile
 
 import numpy as np
 import pytest
@@ -14,7 +15,7 @@ from mojolearn import Array, _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
 
 
-def _saved_bytes(meta=None):
+def _saved_bytes(meta=None, fortran=False):
     stream = io.BytesIO()
     words = np.array([0x80000000, 0x7FC12345], dtype="<u4")
     values = words.view("<f4")
@@ -25,17 +26,35 @@ def _saved_bytes(meta=None):
         data_min=values, data_max=values, data_range=values, scale=values,
         min=values,
     )
-    return stream.getvalue()
+    if not fortran:
+        return stream.getvalue()
+    # A one-dimensional NumPy array is both C/F contiguous, so explicitly
+    # encode the accepted NPY Fortran flag to test the generic owner's layout.
+    vector = io.BytesIO()
+    np.lib.format.write_array_header_1_0(vector, {
+        "descr": "<f4", "fortran_order": True, "shape": (2,),
+    })
+    vector.write(values.tobytes())
+    rewritten = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(stream.getvalue())) as original:
+        with zipfile.ZipFile(rewritten, "w") as saved:
+            for name in original.namelist():
+                data = vector.getvalue() if name in {
+                    "data_min.npy", "data_max.npy", "data_range.npy", "scale.npy", "min.npy",
+                } else original.read(name)
+                saved.writestr(name, data)
+    return rewritten.getvalue()
 
 
 @pytest.mark.parametrize("route", ["host_model", "classical_host_model", "requested_class"])
 @pytest.mark.parametrize("source_kind", ["path", "caller_stream"])
-def test_generic_minmax_preserves_writable_owners_after_input_release(tmp_path, route, source_kind):
+@pytest.mark.parametrize("order", ["C", "F"])
+def test_generic_minmax_preserves_writable_owners_after_input_release(tmp_path, route, source_kind, order):
     if source_kind == "path":
         source = tmp_path / "minmax.npz"
-        source.write_bytes(_saved_bytes())
+        source.write_bytes(_saved_bytes(fortran=order == "F"))
     else:
-        source = io.BytesIO(_saved_bytes())
+        source = io.BytesIO(_saved_bytes(fortran=order == "F"))
     if route == "host_model":
         audit = audit_native_call(mojolearn.host_model, source)
     elif route == "classical_host_model":
@@ -62,7 +81,7 @@ def test_generic_minmax_preserves_writable_owners_after_input_release(tmp_path, 
     for name in names:
         value = getattr(model, name)
         assert type(value) is Array
-        assert value.shape == (2,) and value.order == "C"
+        assert value.shape == (2,) and value.order == order
         view = np.asarray(value)
         assert view.flags.writeable
         np.testing.assert_array_equal(view.view("<u4"), [0x80000000, 0x7FC12345])

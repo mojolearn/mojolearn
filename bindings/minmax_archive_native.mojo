@@ -113,8 +113,14 @@ def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
         output_context = py_get(context, "output_context", context)
     var names = native_minmax_statistic_names()
     for i in range(len(names)):  # pack: fixed public statistic owners, under the GIL
-        var view = native_minmax_statistic_view(members[plan.statistics[i]])
-        var value = archive_numeric_pack(view, output_context)
+        var value = PythonObject(None)
+        if generic:
+            # The generic map used to publish the saved rank-one order flag.
+            # Direct scaler loading deliberately publishes a C-order vector.
+            value = archive_numeric_pack(members[plan.statistics[i]], output_context)
+        else:
+            var view = native_minmax_statistic_view(members[plan.statistics[i]])
+            value = archive_numeric_pack(view, output_context)
         py_setitem(fields, PythonObject(names[i] + "_"), value)
     py_setitem(fields, "n_features_in_", plan.features)
     py_setitem(fields, "n_samples_seen_", plan.samples)
