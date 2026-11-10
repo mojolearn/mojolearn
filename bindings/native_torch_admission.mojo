@@ -32,7 +32,7 @@ struct NativeTorchBoundary(Defaultable, Movable):
         self.pre_dispatch = PythonObject(None)
 
 
-comptime NATIVE_TORCH = SharedSlot[NativeTorchBoundary, "MojolearnNativeTorchAdmissionV1"]
+comptime NATIVE_TORCH = SharedSlot[NativeTorchBoundary, "MojolearnNativeTorchAdmissionV2"]
 
 
 def _torch_type_fields(cls: PythonObject) raises -> PythonObject:
@@ -88,7 +88,7 @@ def _torch_connect() raises:
     var base_fields = _torch_type_fields(base)
     var methods = Python.dict()
     for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride"),  # small-loop(the fixed native tensor method names)
-                 String("contiguous"), String("cpu"), String("to")]:
+                 String("contiguous"), String("cpu"), String("to"), String("item"), String("numel")]:
         var entry = py_get(base_fields, name)
         if entry is None or py_type(entry) is not py_type(bi.list.append):
             raise Error("TypeError: Torch tensor conversion requires native method " + name)
@@ -228,6 +228,29 @@ def native_torch_numpy(value: PythonObject) raises -> PythonObject:
     var result = py_call(cache[].methods["numpy"], detached)
     _ = detached^
     return result
+
+
+def native_torch_scalar(value: PythonObject) raises -> Tuple[PythonObject, String]:
+    """UNPACK one scalar metadata value using retained native descriptors.
+
+    Calling TensorBase directly avoids mutable instance methods. The same
+    thread-local mode admission runs before extraction; a device scalar has
+    the synchronization already required by the previous truth conversion.
+    No tensor comparison, elementwise allocation or Python operator runs.
+    """
+    native_torch_admit(value)
+    var methods = NATIVE_TORCH.get_or_create_ptr()[].methods
+    var count = Int(py=py_call(methods["numel"], value))
+    if count == 0:
+        raise Error("RuntimeError: Boolean value of Tensor with no values is ambiguous")
+    if count != 1:
+        raise Error("RuntimeError: Boolean value of Tensor with more than one value is ambiguous")
+    var dtype = py_call(methods["dtype"].__get__, value)
+    var result = py_call(methods["item"], value)
+    var name = String(dtype)
+    _ = value
+    _ = dtype^
+    return (result^, name^)
 
 
 def native_torch_device(value: PythonObject) raises -> PythonObject:
