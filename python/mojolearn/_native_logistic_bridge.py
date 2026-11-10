@@ -3,7 +3,7 @@
 (bindings/logistic_native.mojo) and its fixed ABI."""
 
 _ESTIMATOR_ENTRIES = ("logistic_native_api_v1",)
-_X_TREES_ENTRIES = ("x_trees_code_counts", "x_trees_class_rows", "x_trees_mul_f32")
+_X_TREES_ENTRIES = ("label_weights_native_api_v1",)
 
 
 def _refusal(error):

@@ -25,6 +25,8 @@ from core.logistic_native_api import (
 from core.logistic_config import LogisticPromotion
 from core.logistic_model_state import LogisticFitLayout, logistic_target_count, logistic_fit_target_count
 from bindings.logistic_state_boundary import LogisticQueryOwners, logistic_parameters_pack
+from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
+from bindings.label_weights_boundary import label_weights_run
 from core.linear_metadata import linear_mode_name
 from bindings.logistic_config_boundary import (
     logistic_scalar_text, logistic_integer, logistic_validate_configuration,
@@ -165,15 +167,12 @@ def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: Pytho
     # constructor parameter the fit already admitted), not a third admission.
     var xtrees = _table(context["lr_x_trees"], _host_mode(model, fields) if host is not None
                         else _mode(fields, context))
-    var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
+    var cw = labels_class_weight_rows[True](class_weight, labels, xtrees, context)
     if cw is None:  # every class weight is 1
         return sw^
     var out = admitted_vector(n, "<f4", context)
-    var mul = py_get(xtrees, "x_trees_mul_f32")
-    if mul is None:
-        raise Error("ImportError: the x_trees binding has no x_trees_mul_f32")
-    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(labels_address(cw)), PythonObject(labels_address(out)),
-                      Python.list(n))
+    _ = label_weights_run(xtrees, LABEL_WEIGHTS_MULTIPLY,
+        LabelWeightsRequest(sw.address, labels_address(cw), labels_address(out), n, 0))
     _ = out  # keep the Python object alive through the native call above
     _ = cw  # keep the Python object alive through the native call above
     _ = sw^

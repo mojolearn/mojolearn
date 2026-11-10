@@ -63,8 +63,8 @@ and the [2.2 promotion-state removal](https://numpy.org/doc/2.3/release/2.2.0-no
 
 Fitted-query width/scalar validation and shared class labels still need native
 plan completion; public coef/intercept/classes/config mutation remains supported.
-Weighted-fit class encoding and row weighting
-still enter their existing compiled Python APIs. Explicit host score still calls
+Weighted-fit class encoding, class-weight mapping and scalar preparation still
+need native-container completion. Explicit host score still calls
 its connected host owner through a compiled Python entry. Those transitive paths
 are not claimed complete. Metadata/get_params/set_params, ownership and admitted
 buffer preparation must also receive the final end-to-end review.
@@ -98,6 +98,24 @@ temporary Python int64 Array and serial per-row append/copy are removed. The
 LP64 descriptor word width, class-code values, decoder, source/weight/provider
 pins and all numerical kernels remain unchanged. This removes one output
 allocation/copy without introducing a new output path or a borrowed list.
+
+Weighted Logistic calls now use the fixed `mojolearn.label_weights.v1`
+descriptor for the existing xtrees code-count, class-row gather and float32
+product operations. The exact host/device kernel choice remains fixed by
+`TARGET_COLUMN`; no kernel, count algorithm, gather, product, allocation or
+data copy changed. Requests use the shared fixed-span descriptor helper, and
+the boundary pins the actual compiled provider through GIL-released RUN.
+Logistic's old three function-name connections and Python parameter-list calls
+are removed. The shared class-weight helper selects this path at compile time
+for Logistic; its old public entries remain because tree/SVC and other
+unmigrated classifier callers actually still use them. The shared mapping and
+class-label Python containers are separate outstanding work, not claimed native
+by this numerical dispatch change.
+
+This batch additionally affects both xtrees groups and the transitive shared
+label-owner closures. Root owes direct descriptor arity/span/error propagation
+fixtures plus balanced/dictionary/sample-weight public Logistic cases. Parent
+dependency `22d5da1c5f` is the lane cherry-pick of fixed-span batch `63f40d36ca`.
 
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct
