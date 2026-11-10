@@ -1,0 +1,14 @@
+Schedule provider seam repair (2026-11-10)
+
+Dependency: producer2cd449bc50 plus e0e4a43f29.
+Deleted schedule_entries context dictionary had no runtime consumers; the
+public built-in schedules already use native lr_spec_fill. Remove only the
+stale dictionary import, poison callback and table writes from
+python/mojolearn/tests/test_xseq_native_provider.py's recurrent schedule test.
+Retain poisoning of connected packed engines, audit_native_call on lr_values,
+lr_at and RNNRegressor.fit with StepLR, and callback-not-executed assertions.
+Existing schedule admission/callback tests remain untouched. No new product
+path or replacement dictionary; no native math or oracle changed.
+Python AST/diff inspection only, installed runtime test OWED at root. No lane
+compile/test, identity, timing or box job. This test remains Python because it
+checks actual Python entry routing/callback interception, not schedule math.
