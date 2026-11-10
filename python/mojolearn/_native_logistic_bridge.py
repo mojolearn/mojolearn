@@ -24,6 +24,14 @@ def connect():
 
     context = _state_context()
     context.update(label_context())
+    # glue: reuse native warning delivery for NumPy scalar configuration
+    # arithmetic; this captures metadata only and does not call its hooks.
+    from ._native_classical_warnings import connect_warnings
+    warning = connect_warnings()
+    warning.update(warning_filename=__file__, warning_lineno=1,
+                   warning_module=__name__, warning_source_line="")
+    context.update(sequence_array_warnings=warning,
+                   module_type=context["native_module_type"])
     estimators = {}
     x_trees = {}
     selected = _backend.default_mode()

@@ -22,6 +22,12 @@ from core.logistic_native_api import (
     QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY,
     QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
 )
+from core.logistic_config import LogisticPromotion
+from core.linear_metadata import linear_mode_name
+from bindings.logistic_config_boundary import (
+    logistic_scalar_text, logistic_integer, logistic_validate_configuration,
+    logistic_configuration_strengths, logistic_configuration_tolerance,
+)
 from bindings.logistic_descriptor_boundary import (
     logistic_compiled_mode, logistic_multiclass_available, logistic_run_fit,
     logistic_run_query, logistic_run_fold_fit, logistic_run_fold_query,
@@ -58,49 +64,40 @@ def _builtins() raises -> PythonObject:
 
 
 def _repr(value: PythonObject) raises -> String:
-    return String(py_call(_builtins().repr, value))
+    return logistic_scalar_text(value)
 
 
 def _name(model: PythonObject) raises -> String:
     return String(py_type(model).__name__)
 
 
-def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     """`_backend.binding(name, self.numeric_mode)`'s mode: the instance's,
     or the process default."""
-    var b = _builtins()
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
+    if py_type(mode) is not py_type(PythonObject("")):
         raise Error("numeric_mode must be fast, identical or None")
-    # `mode.strip().lower()` in native string operations, once. A word that
-    # is not then exactly "identical" or "fast" takes Python's Unicode-aware
-    # strip/lower (same refusal, same accepted spellings).
-    var name = String(String(String(mode).strip()).lower())
-    if name != "identical" and name != "fast":
-        name = String(py_call(py_call(mode.strip).lower))
-    if name != "identical" and name != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
-    return PythonObject(name)
+    return linear_mode_name(String(mode))
 
 
-def _table(tables: PythonObject, mode: PythonObject) raises -> PythonObject:
+def _table(tables: PythonObject, mode: String) raises -> PythonObject:
     # A refusal recorded at import as "<Class>: <message>" is raised again.
-    var table = tables[mode]
-    if py_type(table) is _builtins().str:
+    var table = tables[PythonObject(mode)]
+    if py_type(table) is py_type(PythonObject("")):
         raise Error(String(table))
     return table
 
 
-def _host_mode(model: PythonObject, fields: PythonObject) raises -> PythonObject:
+def _host_mode(model: PythonObject, fields: PythonObject) raises -> String:
     """`_HostBound._bind`'s mode: the explicit host classes run identical
     only."""
     var mode = py_get(fields, "numeric_mode")
-    if mode is not None and Bool(py=mode != PythonObject("identical")):
+    if mode is not None and (py_type(mode) is not py_type(PythonObject("")) or String(mode) != "identical"):
         raise Error("mojolearn: " + _name(model) + " runs IDENTICAL only on the host; this model was saved "
                     + _repr(mode))
-    return PythonObject("identical")
+    return String("identical")
 
 
 def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -129,57 +126,6 @@ def _class_constant(model: PythonObject, fields: PythonObject, name: String, con
     var value = classical_getattribute(model, PythonObject(name), context)
     classical_admit_value(value, context)
     return value
-
-
-def _int(value: PythonObject) raises -> Int:
-    return Int(py=py_call(_builtins().int, value))
-
-
-def _float(value: PythonObject) raises -> Float64:
-    return Float64(py=py_call(_builtins().float, value))
-
-
-# ------------------------------------------------------------ parameters
-
-
-def _validate_params(fields: PythonObject) raises -> PythonObject:
-    """`LogisticRegression._validate_params`: the constructor checks, run at
-    the start of `fit`. Sets `_l1_ratio` and returns it."""
-    var penalty = fields["penalty"]
-    var solver = fields["solver"]
-    var C = fields["C"]
-    var l1_ratio = fields["l1_ratio"]
-    var b = _builtins()
-    if not py_contains(Python.tuple("l1", "l2", "elasticnet", PythonObject(None)), penalty):
-        raise Error("`penalty` " + _repr(penalty) + " not supported.")
-    if Bool(py=solver != PythonObject("qn")):
-        raise Error("Only quasi-newton `qn` solver is supported, not " + String(py_call(b.str, solver)))
-    if Bool(py=C <= PythonObject(0)):
-        raise Error("C must be positive, got " + String(py_call(b.format, C)))
-    py_setitem(fields, "_l1_ratio", PythonObject(None))
-    if Bool(py=penalty == PythonObject("elasticnet")):
-        if l1_ratio is None:
-            raise Error("l1_ratio has to be specified for loss='elasticnet'")
-        if Bool(py=l1_ratio < PythonObject(0.0)) or Bool(py=l1_ratio > PythonObject(1.0)):
-            raise Error("l1_ratio value has to be between 0.0 and 1.0")
-        py_setitem(fields, "_l1_ratio", l1_ratio)
-    return fields["_l1_ratio"]
-
-
-def _qn_params(fields: PythonObject, l1_ratio: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
-    """`_get_qn_params`: (l1_strength, l2_strength), in Python's own
-    arithmetic on the parameter objects (the same doubles)."""
-    var penalty = fields["penalty"]
-    var C = fields["C"]
-    var zero = PythonObject(0.0)
-    if penalty is None:
-        return (zero, zero)
-    var strength = PythonObject(1.0) / C
-    if Bool(py=penalty == PythonObject("l1")):
-        return (strength, zero)
-    if Bool(py=penalty == PythonObject("l2")):
-        return (zero, strength)
-    return (l1_ratio * strength, (PythonObject(1.0) - l1_ratio) * strength)
 
 
 def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: PythonObject, class_weight: PythonObject,
@@ -248,7 +194,8 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     # `fields`: the admitted live storage (`logistic_fields(model, context,
     # False)`), taken once by the public door for this call.
     logistic_fit_replacements_admit(fields, context)
-    var l1_ratio = _validate_params(fields)
+    var penalty = logistic_validate_configuration(fields)
+    var promotion = LogisticPromotion()
     # Lane a7c: the finite test of a borrowed X is the qn_fit entry's (its
     # 17th field, the status word); a cast X is tested in its cast pass.
     # Lane a7c: a cross-validation fold (DeviceRows) of an identical-mode
@@ -260,7 +207,7 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     var x = PythonObject(None)
     var rows = 0
     var cols = 0
-    if (fold_entry is not None and Bool(py=_mode(fields, context) == PythonObject("identical"))
+    if (fold_entry is not None and _mode(fields, context) == "identical"
             and door_is_device_rows(source_x, context)):
         var fx = admit_x_unrecorded(source_x, _name(model), context, device_x=True)
         rows = fx.rows
@@ -294,10 +241,10 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     # LogisticRegressionCV does; no host loop over rows in this owner.
     labels_cast(labels_address(labels.codes), "<i4", labels_address(y_enc), "<f4", rows, context)
     _ = y_enc  # keep the Python object alive through the native call above
-    var strengths = _qn_params(fields, l1_ratio)
+    var strengths = logistic_configuration_strengths(fields, penalty, promotion, context)
     var l1 = strengths[0]
     var l2 = strengths[1]
-    if n_targets > 1 and Bool(py=l1 != PythonObject(0.0)):
+    if n_targets > 1 and l1 != 0.0:
         raise Error("NotImplementedError: mojolearn LogisticRegression: penalty=" + _repr(fields["penalty"]) + " with "
                     + String(n_classes) + " classes selects OWL-QN on the softmax objective, "
                     + "which runs but has no identity gate (glm/checks/"
@@ -313,17 +260,14 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     var has_sw = sw.address != 0
     _ = sw  # keep the Python object alive through the native call above
     var status = admitted_vector(1, "<i4", context)
-    var native_l1 = _float(l1)
-    var native_l2 = _float(l2)
-    var native_tolerance = _float(tol)
-    var native_change_tolerance = _float(tol * PythonObject(0.01))
+    var tolerances = logistic_configuration_tolerance(tol, promotion, context)
     var request = QnFitRequest(0 if store.active() else Int(py=classical_address(x)),
         labels_address(y_enc), labels_address(w), labels_address(info), sw.address,
         labels_address(status), rows, cols, n_classes,
-        _int(fields["max_iter"]), _int(fields["linesearch_max_iter"]),
-        _int(_class_constant(model, fields, "lbfgs_memory", context)), intercept,
+        logistic_integer(fields["max_iter"]), logistic_integer(fields["linesearch_max_iter"]),
+        logistic_integer(_class_constant(model, fields, "lbfgs_memory", context)), intercept,
         Bool(py=_class_constant(model, fields, "penalty_normalized", context)), loss,
-        native_l1, native_l2, native_tolerance, native_change_tolerance, 0.0)
+        l1, l2, tolerances[0], tolerances[1], 0.0)
     var n_iter = 0
     if store.active():
         var result = logistic_run_fold_fit(fold_entry, store, request)
@@ -454,7 +398,7 @@ def _query_x(model: PythonObject, fields: PythonObject, source: PythonObject, co
     var fold_entry = py_get(context, "logistic_fold_native_api_v1")
     var status = admitted_vector(1, "<i4", context)
     if (fold_entry is not None and py_get(context, "lr_host_model") is None
-            and Bool(py=_mode(fields, context) == PythonObject("identical"))
+            and _mode(fields, context) == "identical"
             and door_is_device_rows(source, context)):
         var fx = admit_x_unrecorded(source, _name(model), context, device_x=True)
         if fx.store.active():
