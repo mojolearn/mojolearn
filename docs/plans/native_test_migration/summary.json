@@ -126,6 +126,15 @@
       "native_fixtures_per_implementation": 3,
       "handoff": "docs/plans/native_test_migration/lowbit-weights-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "path": "core/sequential_input_plan.mojo",
+      "change": "Add 86 independent native shape, format, promotion, compact scalar run, borrowed buffer, ownership and parallel final-output fixtures for the extracted sequence plan. Preserve real Python admission/callback/API tests.",
+      "native_checks": [
+        "checks/native_tests/sequence_input_plan_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/sequence-input-plan-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
