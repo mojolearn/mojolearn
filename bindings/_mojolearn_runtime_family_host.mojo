@@ -4,18 +4,21 @@
 # docs/build/HOT_GROUPS.md section 6) so it compiles as its own merged group: the same compiled functions,
 # registered under the same names. bindings/_mojolearn_tokenizer_host.mojo keeps a native refusal under each
 # name, and import setup replaces it with this module's entry (python/mojolearn/host_surface.py
-# HOST_IMPORT_ALIASES). The Python types these entries allocate stay registered by their existing owner, which
-# import setup loads first.
+# HOST_IMPORT_ALIASES). Existing shared Python types stay registered by their
+# prior owners; the KMeans resident type is registered once in this family owner.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
-from std.python.bindings import PythonModuleBuilder
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.classical_family_door import classical_family_c
 from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
+from bindings.kmeans_owner_boundary import KMeansResidentOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -42,10 +45,25 @@ def runtime_family_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(RUNTIME_FAMILY_SABOTAGE)
 
 
+def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[KMeansResidentOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[KMeansResidentOwner].name())):
+            raise error
+        _ = module.add_type[KMeansResidentOwner]("_KMeansResidentOwner")
+        return
+    # The same initializer can be reached through both package namespaces.
+    # Attach the canonical type; never create a second native Python type.
+    py_type_attach(module.module, "_KMeansResidentOwner", existing)
+
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_family_host")
+        register_kmeans_resident_owner(module)
         module.def_py_c_function(classical_family_c, "family_native_call")
         module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")
