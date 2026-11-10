@@ -31,7 +31,7 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
-from std.python._cpython import GILReleased, PyObjectPtr
+from std.python._cpython import ExternalFunction, GILReleased, PyObjectPtr
 from bindings.admitted_input import admitted_storage_native
 from training.optimizer_config import optimizer_keyword_refusal
 from training.optimizer_state_plan import (
@@ -39,7 +39,7 @@ from training.optimizer_state_plan import (
     optimizer_state_download_needed, optimizer_host_moment_plan, OptimizerRegistryPlan, optimizer_registry_plan,
 )
 
-from bindings.optimizer_public_words import optimizer_python_error
+from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.py_balanced import py_call, py_setitem, py_type, py_get, py_fields
 from bindings.tensor_view import (
     TensorView, shape_text, _contiguous, base_format, _format_name, _typestr_name, _array_code,
@@ -82,22 +82,29 @@ comptime _SRC = " (python/mojolearn/_training_impl.py)"
 # the classes and tables the door reads, resolved once
 
 
+comptime _OptimizerRepr = ExternalFunction[
+    "PyObject_Repr", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+
+
 struct OptDoor(Defaultable, Movable):
     var context: PythonObject
     var ready: Bool
-    var bi: PythonObject
+    var scalar_repr: _OptimizerRepr.type
     var array_cls: PythonObject
     var dev_cls: PythonObject
 
     def __init__(out self):
         self.context = PythonObject(None)
         self.ready = False
-        self.bi = PythonObject(None)
+        # This owner's error formatter is resolved once with its existing
+        # connection; it never consults the mutable builtins.repr binding.
+        ref cpy = Python().cpython()
+        self.scalar_repr = _OptimizerRepr.load(cpy.lib.borrow())
         self.array_cls = PythonObject(None)
         self.dev_cls = PythonObject(None)
 
 
-comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV1"]
+comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV2"]
 
 
 def door_ready() raises:
@@ -113,7 +120,6 @@ def door_ready(guarded: PythonObject) raises:
         if d[].context is not guarded:
             opt_guards(d[].context)
         return
-    d[].bi = native_loaded_module("builtins")
     var training = native_loaded_module("mojolearn._training_impl")
     d[].context = py_fields(training)["_OPT_CONTEXT"]
     if d[].context is not guarded:
@@ -123,10 +129,6 @@ def door_ready(guarded: PythonObject) raises:
     d[].array_cls = d[].context["array_class"]
     d[].dev_cls = d[].context["device_class"]
     d[].ready = True
-
-
-def _bi() raises -> PythonObject:
-    return OPT_DOOR.get_or_create_ptr()[].bi
 
 
 def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
@@ -142,11 +144,19 @@ def truth(value: PythonObject) raises -> Bool:
 
 
 def py_repr(value: PythonObject) raises -> String:
-    return String(py=py_call(_bi().repr, value))
+    var door = OPT_DOOR.get_or_create_ptr()
+    # Repr can invoke a type slot: admit exact native scalars (and their
+    # recursively admitted containers) before entering it under the GIL.
+    opt_scalar(value, door[].context)
+    var pointer = door[].scalar_repr(value._obj_ptr)
+    if not pointer:
+        var failure = stash_python_error()
+        raise failure^
+    return String(py=PythonObject(from_owned=pointer))
 
 
 def type_name(value: PythonObject) raises -> String:
-    return String(py=py_type(value).__name__)
+    return String(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["type_name"], py_type(value)))
 
 
 
@@ -589,7 +599,6 @@ def door_step(
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
     var d = OPT_DOOR.get_or_create_ptr()
-    var bi = d[].bi
     var owhere = String(py=fields["_where"])
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
@@ -969,7 +978,6 @@ def door_clip(
     Returns the pre-clip total norm."""
     door_ready()
     var buffer_pins = OptimizerInputOwners()
-    var bi = _bi()
     refuse_kwargs(kwargs, "clip_grad_norm_")
     if as_float(norm_type) != 2.0:
         raise Error("NotImplementedError: mojolearn.clip_grad_norm_: norm_type=" + py_repr(norm_type)
@@ -1004,7 +1012,6 @@ def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, toke
     strided, combined by the clause 9.2 tree into new arrays."""
     door_ready()
     var buffer_pins = OptimizerInputOwners()
-    var bi = _bi()
     opt_value(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
     opt_scalar(tokens, OPT_DOOR.get_or_create_ptr()[].context)
     var parts = optimizer_sequence_items(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)

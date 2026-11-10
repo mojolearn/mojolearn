@@ -3,7 +3,6 @@
 from bindings.embedding_layer_native import emblayer_operation
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequence_layers_native import sequence_layers_operation
@@ -329,8 +328,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     # opt_guards just ran on this context; when it is the door's own
     # (training._OPT_CONTEXT, as connected) the door does not walk it again.
     door_ready(context)
-    var b = native_loaded_module("builtins")
-    if py_type(values) is not b.tuple:
+    if py_type(values) is not context["container_types"][1]:
         raise Error("TypeError: optimizer requires native argument tuples")
     if operation.startswith("seqdev_"):
         return sequence_device_operation(operation, owner, values, mode, context)
