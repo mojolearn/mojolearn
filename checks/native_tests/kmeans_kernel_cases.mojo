@@ -52,8 +52,8 @@ def fixture(driver: KMeansNativeDriver, unit: Int) raises:
         _ = distances
         return
     var source: List[Float32] = [-1.0, 0.0, 5.0, 0.0, 11.0, 0.0]
-    var labels = List[UInt32](length=3, fill=UInt32(99))
-    var distances = List[Float32](length=6, fill=Float32(-99.0))
+    var labels = List[UInt32](length=5, fill=UInt32(99))
+    var distances = List[Float32](length=8, fill=Float32(-99.0))
     var transform = unit == 2 or unit == 3 or unit == 7
     var metric = 1 if unit == 3 else 0
     if unit == 5:
@@ -65,14 +65,16 @@ def fixture(driver: KMeansNativeDriver, unit: Int) raises:
             # The resident operation must use its own cached device copy.
             # Changing the original host words cannot trigger a new upload.
             centers[0] = 99.0
-        var destination = Int(distances.unsafe_ptr()) if transform else Int(labels.unsafe_ptr())
+        var destination = (Int(distances.unsafe_ptr()) if transform else Int(labels.unsafe_ptr())) + 4
         var result = driver.query(KMeansQueryRequest(Int(source.unsafe_ptr()),
             0 if handle >= 0 else Int(centers.unsafe_ptr()), destination,
             3, 2, 2, metric, True, transform, handle, KMeansFoldStore()))
         if unit == 5:
             require(result.finite != 0, "query must report nonfinite input")
-            for label in labels:
-                require(label == UInt32(99), "nonfinite query must not publish labels")
+            require(result.range_error == 0, "ordinary query has no fold range error")
+            # The existing GPU path reads labels and finite status together.
+            # Private scratch may be written; the public boundary rejects the
+            # status before returning it. Do not add a scan/sync to prevent it.
         else:
             require(result.finite == 0 and result.range_error == 0, "query status")
             if transform:
@@ -80,10 +82,12 @@ def fixture(driver: KMeansNativeDriver, unit: Int) raises:
                 if metric == 1:
                     expected = [1.0, 11.0, 5.0, 5.0, 11.0, 1.0]
                 for i in range(6):
-                    _near(Float64(distances[i]), Float64(expected[i]))
+                    _near(Float64(distances[i + 1]), Float64(expected[i]))
             else:
-                require(labels[0] == UInt32(0) and labels[1] == UInt32(0) and labels[2] == UInt32(1),
+                require(labels[1] == UInt32(0) and labels[2] == UInt32(0) and labels[3] == UInt32(1),
                     "nearest center and first-center tie")
+        require(labels[0] == UInt32(99) and labels[4] == UInt32(99), "query label span guards")
+        require(distances[0] == -99.0 and distances[7] == -99.0, "query distance span guards")
     finally:
         if handle >= 0:
             driver.release(handle)

@@ -82,6 +82,17 @@ def test_native_owner_cache_and_writable_rebound_centers():
     np.testing.assert_array_equal(np.asarray(model.predict(query)), [0])
 
 
+@pytest.mark.parametrize("method", ["predict", "transform"])
+def test_nonfinite_query_is_refused_before_public_output(method):
+    model = _model().fit(_data())
+    before = np.asarray(model.cluster_centers_).copy()
+    query = _data()
+    query[0, 0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        getattr(model, method)(query)
+    np.testing.assert_array_equal(np.asarray(model.cluster_centers_), before)
+
+
 @pytest.mark.parametrize("copier", [copy.copy, copy.deepcopy])
 def test_native_resident_owner_is_not_serialized(copier):
     model = _model().fit(_data())

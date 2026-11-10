@@ -50,10 +50,16 @@ now uses the CPython API and refuses mapping callbacks before invoking them.
 
 The suite manifest is
 `docs/plans/native_test_migration/kmeans-native-suites.json`: 26 native wire/owner
-fixtures, 6 actual CPU fixtures, 9 actual GPU fixtures and 7 Python boundary
+fixtures, 6 actual CPU fixtures, 9 actual GPU fixtures and 9 Python boundary
 cases. All native suites expose `run_checks` plus thin standalone mains. The CPU
 kernel suite requires `MOJOLEARN_COLUMN_CPU=1`. CPU fixtures use host workers;
 GPU cases run in order over the shared context.
+
+The nonfinite query fixture checks the native status and output span guards.
+Existing GPU queries copy private results and finite status back together; they
+do not promise untouched scratch on invalid input. Public predict/transform
+seams check refusal before returning an output and preservation of fitted centers.
+No extra finite scan, synchronization or kernel change was added for the fixture.
 
 No compilation or test execution occurred in the lane. The orchestrator owns
 the combined compile and any installed runtime execution. NVIDIA/AMD timing and
