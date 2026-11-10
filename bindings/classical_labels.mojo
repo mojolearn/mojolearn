@@ -45,24 +45,11 @@ from bindings.label_input_sources import (
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
-from core.shared_slot import SharedSlot
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
 from bindings.label_weights_boundary import label_weights_run
-from bindings.kit_call import kit_connect, kit_provider, kit_capabilities, kit_call
-from bindings.labels_native_abi import (
-    LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT, LABELS_CAP_DEVICE,
-    LABELS_OP_MODE, LABELS_OP_CAPABILITIES, LABELS_OP_PREPARE_TARGETS, LABELS_OP_REDUCE_STAT,
-    LABELS_OP_ARGMAX_F32, LABELS_OP_ARGMAX_F64, LABELS_OP_GATHER_I32, LABELS_OP_GATHER_I64, LABELS_OP_GATHER_F64,
-    LABELS_OP_CLASS_RATIO_F64, labels_reduce_stat_decode,
-)
-from bindings.labels_host_ops import prepare_targets_binding as _host_prepare_targets
-from bindings.hotpath_helpers import reduce_stat_binding as _host_reduce_stat, gather_i32_binding as _host_gather_i32
-from bindings.host_helpers import (
-    argmax_rows_f32_binding as _host_argmax_rows_f32, argmax_rows_f64_binding as _host_argmax_rows_f64,
-    gather_i64_binding as _host_gather_i64, gather_f64_binding as _host_gather_f64,
-)
-from bindings.array_helpers import (
-    class_ratio_f64_host_binding as _host_class_ratio_f64, fsum_f64_binding as _host_fsum_f64,
+from bindings.labels_descriptor_boundary import (
+    labels_prepare_targets, labels_reduce_stat, labels_argmax_rows as labels_argmax_run,
+    labels_gather, labels_class_ratio_f64, labels_fsum_f64,
 )
 from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.label_input_sources import LABELS_LIST_INT
@@ -169,147 +156,15 @@ def labels_need(table: PythonObject, name: String, message: String, kind: String
 # TOMBSTONE: labels_helper / labels_call (the base binding's `_buffer._native` callables in the `labels_helpers` context table, one PyObject_CallObject per step) deleted 2026-11-09 by lane s1-shared-state-hardening-and-selector; code recoverable at 91863cfb35^ (244c15e707).
 # Restore: experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch.
 #
-# THE NATIVE DEVICE-OR-HOST SELECTOR (lane s1, S3; bindings/labels_native_abi.mojo).
-# The label steps below run on the GPU base binding's device helpers through
-# its `labels_native_api_v1` provider, connected once per process and kept in
-# the named slot `MojolearnLabelsProviderV2`, or, on an install with no GPU
-# base binding (the label context's `labels_base_binding` is False), on the
-# same host bodies in-process. A context without the label context at all
-# (no `labels_base_binding` key) takes the label input step only
-# (classical_encode_labels).
-
-#: Layout version of `_LabelsProvider` (core/shared_slot.mojo rule).
-comptime _LABELS_PROVIDER_LAYOUT = 2
-comptime _LABELS_PROVIDER_NAME = "MojolearnLabelsProviderV2"
-
-
-struct _LabelsProvider(Defaultable, Movable):
-    # 0 not connected yet, 1 the device provider, 2 the host column
-    var state: Int
-    var provider: PythonObject
-
-    def __init__(out self):
-        self.state = 0
-        self.provider = PythonObject(None)
-
-
-comptime _LABELS_PROVIDER = SharedSlot[_LabelsProvider, _LABELS_PROVIDER_NAME, _LABELS_PROVIDER_LAYOUT]
-
-comptime _LABELS_DEVICE = 1
-comptime _LABELS_HOST = 2
-
-
-def _labels_route(context: PythonObject) raises -> Int:
-    """`_LABELS_DEVICE` or `_LABELS_HOST`: connect the GPU base binding's
-    provider on first use (under the GIL, so one connection per process)."""
-    var slot = _LABELS_PROVIDER.get_or_create_ptr()
-    if slot[].state != 0:
-        return slot[].state
-    var base = py_get(context, "labels_base_binding")
-    if base is None:
-        raise Error("ImportError: mojolearn: the label steps need the label context (labels_base_binding)")
-    if py_type(base) is py_type(PythonObject(False)):
-        slot[].state = _LABELS_HOST
-        return _LABELS_HOST
-    if py_type(base) is py_type(PythonObject("")):
-        # the refusal the import glue recorded ("<Class>: <message>")
-        raise Error(String(base))
-    var snapshot = kit_connect(base, LABELS_NATIVE_FACTORY, LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_OPERATION_COUNT,
-                               LABELS_OP_MODE, LABELS_OP_CAPABILITIES)
-    if kit_capabilities(snapshot) != LABELS_CAP_DEVICE:
-        raise Error("ImportError: mojolearn: the base binding's labels provider is not the device provider")
-    slot[].provider = kit_provider(snapshot)
-    slot[].state = _LABELS_DEVICE
-    return _LABELS_DEVICE
-
-
-def _labels_device_call(op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
-    var slot = _LABELS_PROVIDER.get_or_create_ptr()
-    # GIL kept: the provider's entries release it around their own kernels
-    return kit_call(slot[].provider, op, addresses, ints, List[Float64](), False)
-
-
-def labels_prepare_targets(context: PythonObject, y_addr: Int, y_code: Int, n: Int, classes_addr: Int,
-                           codes_addr: Int, w_addr: Int, w_code: Int, w_flags: Int) raises -> Int:
-    """The base binding's `prepare_targets` (bindings/labels_host_ops.mojo
-    contract): k, or a negative weight status."""
-    if _labels_route(context) == _LABELS_DEVICE:
-        return _labels_device_call(LABELS_OP_PREPARE_TARGETS, [y_addr, classes_addr, codes_addr, w_addr],
-                                   [y_code, n, w_code, w_flags])
-    return Int(py=_host_prepare_targets(PythonObject(y_addr), PythonObject(y_code), PythonObject(n),
-                                        PythonObject(classes_addr), PythonObject(codes_addr), PythonObject(w_addr),
-                                        PythonObject(w_code), PythonObject(w_flags)))
-
-
-def labels_reduce_stat(context: PythonObject, addr: Int, code: Int, n: Int, what: Int) raises -> PythonObject:
-    """The base binding's `reduce_stat` (min 0, max 1, integral test 4, ...):
-    the same Python answer either way."""
-    if _labels_route(context) == _LABELS_DEVICE:
-        var out = List[Int64](length=3, fill=Int64(0))
-        var tag = _labels_device_call(LABELS_OP_REDUCE_STAT, [addr, Int(out.unsafe_ptr())], [code, n, what])
-        var value = labels_reduce_stat_decode(tag, Int(out.unsafe_ptr()))
-        _ = out^
-        return value
-    return _host_reduce_stat(PythonObject(addr), PythonObject(code), PythonObject(n), PythonObject(what))
-
-
-def labels_argmax_rows(context: PythonObject, wide: Bool, scores_addr: Int, rows: Int, cols: Int,
-                       dst_addr: Int) raises:
-    """First-max-wins row argmax into int64 codes (float64 scores when
-    `wide`)."""
-    if _labels_route(context) == _LABELS_DEVICE:
-        _ = _labels_device_call(LABELS_OP_ARGMAX_F64 if wide else LABELS_OP_ARGMAX_F32, [scores_addr, dst_addr],
-                                [rows, cols])
-        return
-    if wide:
-        _ = _host_argmax_rows_f64(PythonObject(scores_addr), PythonObject(rows), PythonObject(cols),
-                                  PythonObject(dst_addr))
-    else:
-        _ = _host_argmax_rows_f32(PythonObject(scores_addr), PythonObject(rows), PythonObject(cols),
-                                  PythonObject(dst_addr))
-
-
+# Native numerical route/ownership lives in labels_descriptor_boundary.
 comptime LABELS_GATHER_I32 = 0
 comptime LABELS_GATHER_I64 = 1
 comptime LABELS_GATHER_F64 = 2
 
 
-def labels_gather(context: PythonObject, kind: Int, table_addr: Int, n_table: Int, codes_addr: Int, n: Int,
-                  dst_addr: Int) raises:
-    """`dst[i] = table[codes[i]]` (kind LABELS_GATHER_*); a code out of range
-    raises before any write."""
-    if _labels_route(context) == _LABELS_DEVICE:
-        var op = LABELS_OP_GATHER_I32 if kind == LABELS_GATHER_I32 else (
-            LABELS_OP_GATHER_I64 if kind == LABELS_GATHER_I64 else LABELS_OP_GATHER_F64)
-        _ = _labels_device_call(op, [table_addr, codes_addr, dst_addr], [n_table, n])
-        return
-    var t = PythonObject(table_addr)
-    var k = PythonObject(n_table)
-    var c = PythonObject(codes_addr)
-    var m = PythonObject(n)
-    var d = PythonObject(dst_addr)
-    if kind == LABELS_GATHER_I32:
-        _ = _host_gather_i32(t, k, c, m, d)
-    elif kind == LABELS_GATHER_I64:
-        _ = _host_gather_i64(t, k, c, m, d)
-    else:
-        _ = _host_gather_f64(t, k, c, m, d)
-
-
-def labels_class_ratio_f64(context: PythonObject, counts_addr: Int, k: Int, n: Int, mode: Int,
-                           out_addr: Int) raises -> Int:
-    """Per-class ratios (mode 0 balanced, 1 prior) of k int64 counts;
-    nonzero when a mode-0 count is zero."""
-    if _labels_route(context) == _LABELS_DEVICE:
-        return _labels_device_call(LABELS_OP_CLASS_RATIO_F64, [counts_addr, out_addr], [k, n, mode])
-    return Int(py=_host_class_ratio_f64(PythonObject(counts_addr), PythonObject(k), PythonObject(n),
-                                        PythonObject(mode), PythonObject(out_addr)))
-
-
-def labels_fsum_f64(src_addr: Int, n: Int, out_addr: Int) raises -> Int:
-    """`fsum` of n float64 terms into out[0] (bindings/array_helpers.mojo
-    contract): a host helper in every base binding, so it runs in-process."""
-    return Int(py=_host_fsum_f64(PythonObject(src_addr), PythonObject(n), PythonObject(out_addr)))
+def labels_argmax_rows(context: PythonObject, wide: Bool, scores_addr: Int, rows: Int,
+    cols: Int, dst_addr: Int) raises:
+    labels_argmax_run(context, wide, scores_addr, rows, cols, dst_addr)
 
 
 def labels_env(name: String, default: String) -> String:
@@ -1342,9 +1197,9 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
         raise error^
 
 
-def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
+def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> Float64:
     """`Array.min()` (0) / `max()` (1) of a float32 vector: `reduce_stat`."""
-    return labels_reduce_stat(context, addr, 0, count, what)
+    return labels_reduce_stat(context, addr, 0, count, what).f
 
 
 def labels_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> AdmittedX:
@@ -1364,10 +1219,10 @@ def labels_sample_weight_f32(source: PythonObject, n: Int, caller: String, conte
         if "contains NaN or infinity" in String(error):
             raise Error(refusal)
         raise error^
-    if Bool(py=_reduce(w.address, n, 0, context) < PythonObject(0)):
+    if _reduce(w.address, n, 0, context) < 0:
         raise Error(refusal)
     _ = w  # keep the Python object alive through the native calls above
-    if not Bool(py=_reduce(w.address, n, 1, context) > PythonObject(0)):
+    if not (_reduce(w.address, n, 1, context) > 0):
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")
     _ = w  # keep the Python object alive through the native calls above
     return w^
@@ -1854,8 +1709,8 @@ def _codes_in_range(codes: PythonObject, code_dtype: String, n: Int, k: Int,
         return True
     var address = labels_address(codes)
     var native = _native_code(code_dtype)
-    var low = Int(py=labels_reduce_stat(context, address, native, n, 0))
-    var high = Int(py=labels_reduce_stat(context, address, native, n, 1))
+    var low = labels_reduce_stat(context, address, native, n, 0).i
+    var high = labels_reduce_stat(context, address, native, n, 1).i
     _ = codes  # keep the Python object alive through the native calls above
     return low >= 0 and high < k
 

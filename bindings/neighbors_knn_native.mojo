@@ -31,6 +31,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments, estima
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import isfinite
 from std.memory import memcpy
+from core.hotpath_impl import HpStat
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.admitted_family import admit_family, admit_family_meta, admit_family_owned
@@ -288,7 +289,7 @@ def _class_name(model: PythonObject) raises -> String:
     return String(py_type(model).__name__)
 
 
-def _reduce(addr: Int, code: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
+def _reduce(addr: Int, code: Int, count: Int, what: Int, context: PythonObject) raises -> HpStat:
     """`Array.min()` / `max()` / the integral test: the core helper
     `reduce_stat` over a contiguous block of `count` elements."""
     return labels_reduce_stat(context, addr, code, count, what)
@@ -802,7 +803,7 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
                                             0, 0, 0)
     _ = view  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    var integral = _truth(_reduce(Int(py=classical_address(classes_store)), _CODE_F64, n_distinct, _REDUCE_INTEGRAL, context))
+    var integral = _reduce(Int(py=classical_address(classes_store)), _CODE_F64, n_distinct, _REDUCE_INTEGRAL, context).i != 0
     _ = classes_store  # keep the Python object alive through the native call above
     return integral
 
@@ -858,15 +859,15 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
         _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
-    var low = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MIN, context)
+    var low = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MIN, context).i
     _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
-    var high = PythonObject(None)
-    if not _lt(low, PythonObject(-(1 << 31))):
-        high = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MAX, context)
+    var high = 0
+    if low >= -(1 << 31):
+        high = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MAX, context).i
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
-    if _lt(low, PythonObject(-(1 << 31))) or _gt(high, PythonObject((1 << 31) - 1)):
+    if low < -(1 << 31) or high > (1 << 31) - 1:
         raise Error("mojolearn: y does not fit int32")
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
