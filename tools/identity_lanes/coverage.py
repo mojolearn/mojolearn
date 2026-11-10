@@ -521,7 +521,7 @@ def _coverage_state_pieces(st):
     return flat, words
 
 
-def _coverage_decode_session(ml, blk, X, dm):
+def _coverage_decode_session(ml, blk, X, dm, session_type):
     """`blk.decode_session(state)` (bindings/mamba_public_native.mojo, the
     binding's `<kind>_session_open/step/export_state/load_state`) on two rows
     of the fixture slab: four steps, `sync_state`, four steps the reload
@@ -539,10 +539,9 @@ def _coverage_decode_session(ml, blk, X, dm):
 
     st = blk.allocate_state(2)
     with blk.decode_session(st) as sess:
-        # The door returns the documented class (mojolearn.mamba
-        # Mamba2DecodeSession / Mamba3DecodeSession), which is also what
-        # attributes this lane to it in tools/verification_matrix.py.
-        assert type(sess) is getattr(ml.mamba, type(blk).__name__.replace("Block", "DecodeSession")), type(sess)
+        # Each lane names its public session type explicitly so the source
+        # coverage scanner can attribute the exercised factory result.
+        assert type(sess) is session_type, type(sess)
         first = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
         sess.sync_state()
         synced = _coverage_state_pieces(st)
@@ -582,7 +581,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
-    return _coverage_decode_session(ml, ml.Mamba2Block(w), X, dm)
+    return _coverage_decode_session(ml, ml.Mamba2Block(w), X, dm, ml.mamba.Mamba2DecodeSession)
 
 
 @lane("mamba3-decode-session")
@@ -599,7 +598,7 @@ def _(ml, X, yc, yr, Xh=None):
         "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
         "D": (nh,), "out_proj.weight": (dm, di)},
         ones=("block_norm.weight",), near_one=("B_norm.weight", "C_norm.weight"))
-    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)
+    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm, ml.mamba.Mamba3DecodeSession)
 
 
 # ---------------------------------------------------------------- SambaStack.decode_session (lane fix-d1-decode-sessions, 2026-11-08)

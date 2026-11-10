@@ -4398,7 +4398,7 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "unwatched",
     "training-mlp-sessions": "unwatched",
     "samba-optimizer-state": "unwatched",
-    "samba-decode-session": "unwatched",
+    "samba-decode-session": "no reference",
     # lane verify-coverage-20261024: the public-gap lanes of the training
     # family; no release record yet.
     "public-residual-dropout": "unwatched",
