@@ -6,7 +6,8 @@ the orchestrator must provision/qualify those dependencies before running it.
 """
 from core.host_parallel import host_parallelize
 from core.native_archive_span import ArchiveSpan
-from core.native_archive_codec import archive_inflate
+from core.native_archive_codec import archive_inflate, archive_codec_library
+from core.native_archive_write import archive_zlib
 from checks.native_tests.archive_codec_vectors import archive_codec_fixture
 
 
@@ -18,6 +19,13 @@ def _require(ok: Bool, message: String) raises:
 def _codec(unit: Int) raises:
     var methods: List[Int] = [8, 12, 14, 93]
     var method = methods[unit // 7]
+    # Dependency failures must never satisfy a malformed-stream refusal.
+    # Resolve outside the expected-error block, so every affected fixture
+    # fails clearly when its codec cannot be loaded.
+    if method == 8:
+        _ = archive_zlib()
+    else:
+        _ = archive_codec_library(method)
     var variant = unit % 7
     var vector = variant if variant < 3 else 0
     var source = archive_codec_fixture(method, vector)
