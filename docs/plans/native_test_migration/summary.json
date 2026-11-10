@@ -5,11 +5,11 @@
   "test_definitions": 4127,
   "file_decisions": {
     "needs-semantic-review": 589,
-    "retain-python-boundary": 9,
+    "retain-python-boundary": 10,
     "retain-tooling": 2,
     "review-module-gate": 1,
     "split-migrated": 2,
-    "split-needed": 10,
+    "split-needed": 9,
     "split-partial": 3
   },
   "reviewed_files": 27,
@@ -55,6 +55,13 @@
       "native_fixtures_per_executor": 17,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see rankn-views-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "decision": "split-partial",
+      "additional_native_int8_fixtures_per_executor": 5,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see int8-linalg-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
