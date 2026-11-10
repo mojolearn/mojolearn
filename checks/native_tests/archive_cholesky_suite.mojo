@@ -276,6 +276,8 @@ def _copy(unit: Int) raises:
                 item = row * cols + cols - 1 - col
             for byte in range(width):
                 _require(dst[(row * cols + col) * width + byte] == UInt8(((item * width + byte) * 17 + 3) & 255), "independent strided byte oracle")
+    _ = source
+    _ = dst
 
 
 def _large_copy(empty: Bool) raises:
@@ -309,6 +311,8 @@ def _large_copy(empty: Bool) raises:
     host_parallelize(verify, tasks)
     for error in errors:
         _require(error == 0, "parallel large F-order gather")
+    _ = source
+    _ = dst
 
 
 def run_checks() raises:
