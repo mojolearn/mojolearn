@@ -177,6 +177,7 @@ def test_generator_inputs_invalidate_only_owner(repo, tmp_path):
     path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
     write(repo, "tokenizer/impl/unicode_class.mojo", "from .unicode_table_generated import value\n")
     write(repo, "tokenizer/impl/unicode_table_generated.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
     write(repo, "tokenizer/tools/generate.py", "# first generator\n")
     before = plan(repo, tmp_path)
     write(repo, "tokenizer/tools/generate.py", "# repaired generator\n")
@@ -309,6 +310,7 @@ def test_unrelated_writes_during_compile_do_not_trip_the_input_guard(repo, tmp_p
     path = repo / f"bindings/{A}.mojo"
     path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
     write(repo, "tokenizer/impl/unicode_class.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
     write(repo, "tokenizer/tools/generate.py", "# generator\n")
     row = next(r for r in plan(repo, tmp_path)["groups"] if r["stem"] == "_mojolearn_dev_trees")
     evidence = tmp_path / "evidence"
@@ -1492,7 +1494,8 @@ def test_archive_table_and_generator_enter_only_reaching_development_closure(rep
     write(repo, gs.ARCHIVE_GENERATOR, '# generator revision one\n')
     write(repo, gs.ARCHIVE_PIN, 'from core.archive_unicode_names_generated import TABLE\n')
     write(repo, gs.ARCHIVE_TABLE, 'comptime TABLE = 1\n')
-    write(repo, f'bindings/{A}.mojo', 'from core.native_archive_unicode_names import lookup\n')
+    binding = repo / f'bindings/{A}.mojo'
+    binding.write_text('from core.native_archive_unicode_names import lookup\n' + binding.read_text())
     first = plan(repo, tmp_path)
     before = {row['stem']: row['key'] for row in first['groups']}
     write(repo, gs.ARCHIVE_GENERATOR, '# generator revision two\n')

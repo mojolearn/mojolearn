@@ -104,7 +104,7 @@ def render_unicode_table(generator_bytes, pin_bytes, text, version):
     module.unicodedata = types.SimpleNamespace(unidata_version=version)
     module.table_text = lambda: text
     module.pins = lambda: pinned
-    scratch = Path.home() / ".cache/mojolearn/generated-source-render"
+    scratch = Path.home() / "mojolearn-evidence/generated-source-render"
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="render-", dir=scratch) as directory:
         module.OUT = str(Path(directory) / "unicode_table_generated.mojo")
