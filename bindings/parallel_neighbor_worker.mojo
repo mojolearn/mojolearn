@@ -116,7 +116,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
             _report(fields, "n_candidate_distances_", count)
             _report(fields, "used_query_tile_", PythonObject(None))
             # The old Array.min() uses this same native int32 reduction helper.
-            if Int(py=_reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context)) < 0:
+            if _reduce(Int(py=classical_address(ids)), 2, nq * k, 0, context).i < 0:
                 raise Error("RuntimeError: RBC returned an unfilled neighbor slot")
         else:
             var handle = _resident_handle(model, binding, index)
