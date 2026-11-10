@@ -17,7 +17,8 @@ comptime OPT_NATIVE_OPEN = 6
 comptime OPT_NATIVE_CLOSE = 7
 comptime OPT_NATIVE_HOST = 8
 comptime OPT_NATIVE_MODE = 9
-comptime OPT_NATIVE_COUNT = 10
+comptime OPT_NATIVE_FREE_DEVICE = 10
+comptime OPT_NATIVE_COUNT = 11
 
 
 struct OptimizerStepCall(Movable):
@@ -67,7 +68,7 @@ def optimizer_native_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         raise Error("native optimizer: unknown operation or missing result storage")
     var addresses = 1 if operation <= OPT_NATIVE_ACCUMULATE else 0
     var integers = 4 if operation == OPT_NATIVE_DOWNLOAD or operation == OPT_NATIVE_UPLOAD else (
-        1 if operation == OPT_NATIVE_OPEN or operation == OPT_NATIVE_CLOSE else 0)
+        1 if operation == OPT_NATIVE_OPEN or operation == OPT_NATIVE_CLOSE or operation == OPT_NATIVE_FREE_DEVICE else 0)
     if na != addresses or np != integers or nf != 0:
         raise Error("native optimizer: request span counts differ from the operation")
     if (na > 0 and aa == 0) or (np > 0 and pp == 0):
@@ -108,6 +109,8 @@ def optimizer_native_dispatch[K: OptKernels](operation: Int, aa: Int, na: Int, p
             value = K.open(p[0])
         elif operation == OPT_NATIVE_CLOSE:
             value = K.close(p[0])
+        elif operation == OPT_NATIVE_FREE_DEVICE:
+            value = K.free_device(p[0])
         elif operation == OPT_NATIVE_HOST:
             value = Int(K.is_host())
         else:
@@ -160,3 +163,6 @@ struct OptimizerNativeDriver(Copyable, Movable):
 
     def close(self, handle: Int) raises -> Int:
         return native_descriptor_call(self.entry, OPT_NATIVE_CLOSE, [], [handle], [])
+
+    def free_device(self, handle: Int) raises -> Int:
+        return native_descriptor_call(self.entry, OPT_NATIVE_FREE_DEVICE, [], [handle], [])

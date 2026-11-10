@@ -3,6 +3,7 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.optimizer_kernels import OptKernels
+from training.dev_tensors import train_dev_free
 from training.optimizer_public_common import PublicStep, PublicStepOut
 from training.optimizer_public import (
     public_step, public_io, public_clip, public_accumulate, resident_download, resident_upload, resident_open, resident_close,
@@ -21,6 +22,12 @@ struct GpuOptKernels(OptKernels):
     def close(handle: Int) raises -> Int:
         var ctx = neural_ctx[_NEURAL_CTX]()
         return resident_close(ctx, handle)
+
+    @staticmethod
+    def free_device(handle: Int) raises -> Int:
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        train_dev_free(ctx, handle)
+        return 0
 
     @staticmethod
     def is_host() -> Bool:

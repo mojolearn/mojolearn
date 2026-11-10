@@ -108,3 +108,18 @@ finalization and allocation-failure cleanup. Those must migrate before calling
 the public optimizer family complete. No update kernel changed. Root owes
 both training/core closure compilation, focused public mutation/ownership/error
 checks and native descriptor tests; end-to-end GPU measurement remains owed.
+
+## Native optimizer resource release
+
+Resident close during parameter replacement/finalization and device-handle
+cleanup after failed publication now call the typed descriptor. Removed:
+mutable builtins lookups, bound object attribute calls and compiled Python close
+calls from the optimizer finalizer, plus the obsolete `resident_entry` helper.
+Exact owner fields are read by the existing native dictionary API; module and
+capsule owners remain pinned by the descriptor boundary. Host close retains the
+GIL, GPU close/free releases it, and the established best-effort finalizer keeps
+ownership fields when cleanup fails. Native descriptor operation count is 11
+(the added operation only frees an unpublished device allocation).
+
+Configuration/state preparation and staging cleanup remain outstanding. Root
+owes compilation and resource-failure/finalization checks. No math changed.

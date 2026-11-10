@@ -965,7 +965,8 @@ def door_io(
     except error:
         if op_code == 5:
             try:
-                _ = py_call(resident_entry(module, "train_dev_free"), r[1])
+                with GILReleased(Python()):
+                    _ = driver.free_device(r[1])
             except:
                 pass
         raise error^
@@ -984,16 +985,6 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     _addrs_of(views, addrs, nbytes)
     zero_tensors(addrs, nbytes)
     return PythonObject(None)
-
-
-def resident_entry(owner: PythonObject, name: String) raises -> PythonObject:
-    var context = OPT_DOOR.get_or_create_ptr()[].context
-    if py_type(owner) is not context["module_type"]:
-        raise Error("TypeError: optimizer resident state must retain its owning native extension")
-    var entry = py_get(py_fields(owner), PythonObject(name))
-    if py_type(entry) is not py_type(_bi().len):
-        raise Error("TypeError: optimizer resident state requires a compiled native entry")
-    return entry
 
 
 def _sync_host(module: PythonObject, provider: PythonObject, opt: PythonObject) raises:

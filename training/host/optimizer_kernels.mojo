@@ -17,6 +17,10 @@ struct HostOptKernels(OptKernels):
         return host_close(handle)
 
     @staticmethod
+    def free_device(handle: Int) raises -> Int:
+        raise Error("RuntimeError: optimizer: a CPU-only install has no device tensor allocation")
+
+    @staticmethod
     def is_host() -> Bool:
         return True
 
