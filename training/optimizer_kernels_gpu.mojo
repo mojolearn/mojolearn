@@ -3,7 +3,7 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.optimizer_kernels import OptKernels
-from training.dev_tensors import train_dev_free
+from training.dev_tensors import IDN_TRAIN_DEV_TENSORS, train_dev_free, train_dev_alloc, train_dev_put, train_dev_get
 from training.optimizer_public_common import PublicStep, PublicStepOut
 from training.optimizer_public import (
     public_step, public_io, public_clip, public_accumulate, resident_download, resident_upload, resident_open, resident_close,
@@ -28,6 +28,27 @@ struct GpuOptKernels(OptKernels):
         var ctx = neural_ctx[_NEURAL_CTX]()
         train_dev_free(ctx, handle)
         return 0
+
+    @staticmethod
+    def device_available() -> Bool:
+        return IDN_TRAIN_DEV_TENSORS
+
+    @staticmethod
+    def allocate_device(count: Int) raises -> Int:
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        return train_dev_alloc(ctx, count)
+
+    @staticmethod
+    def upload_device(handle: Int, address: Int, count: Int) raises -> Int:
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        train_dev_put(ctx, handle, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), count)
+        return count
+
+    @staticmethod
+    def download_device(handle: Int, address: Int, count: Int) raises -> Int:
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        train_dev_get(ctx, handle, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), count)
+        return count
 
     @staticmethod
     def is_host() -> Bool:
