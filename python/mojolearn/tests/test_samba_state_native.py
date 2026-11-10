@@ -74,6 +74,35 @@ def _assert_state_equal(actual, expected):
             assert actual[name] == expected[name], name
 
 
+def _reference_update(model, gradients):
+    """Independent optimizer recipe on writable test-owned parameter storage.
+
+    Samba exposes read-only weights. Publish the expected checkpoint through
+    its native restore API instead of asking a generic optimizer to write
+    those public views. Neither Samba's step nor its apply operation is used.
+    """
+    expected = _reference_state(model)
+    flat = np.asarray(expected["parameters"]).copy()
+    params = [flat[model.offsets[i]:model.offsets[i + 1]].reshape(model.shapes[name])
+              for i, name in enumerate(model.names)]
+    source = model.optimizer
+    optimizer = training.AdamW(params, lr=source.lr, betas=source.betas,
+                               eps=source.eps, weight_decay=source.weight_decay,
+                               lr_schedule=source.lr_schedule,
+                               accumulation_steps=source.accumulation_steps,
+                               numeric_mode=model.numeric_mode)
+    optimizer.t = source.t
+    optimizer.exp_avg = np.asarray(expected["exp_avg"]).copy()
+    optimizer.exp_avg_sq = np.asarray(expected["exp_avg_sq"]).copy()
+    optimizer.buf_initialized = np.asarray(expected["buf_initialized"]).copy()
+    norm = optimizer.step(gradients, max_norm=model.max_norm)
+    expected.update(parameters=flat, exp_avg=optimizer.exp_avg,
+                    exp_avg_sq=optimizer.exp_avg_sq,
+                    buf_initialized=optimizer.buf_initialized, t=optimizer.t)
+    model.load_state_dict(expected)
+    return norm, optimizer.lr_
+
+
 @pytest.mark.parametrize("tied", [True, False])
 def test_native_samba_snapshot_and_reconstruction_preserve_complete_state(monkeypatch, tied):
     stack = _stack(tied)
@@ -167,7 +196,7 @@ def test_native_samba_update_matches_existing_optimizer_and_schedule(monkeypatch
     rng = np.random.default_rng(935)
     gradients = [rng.normal(0, 0.02, stack.shapes[name]).astype("f4") for name in stack.names]
     reference_gradients = [value.copy() for value in gradients]
-    stack.optimizer.step(reference_gradients, max_norm=stack.max_norm)
+    _reference_update(stack, reference_gradients)
     expected = _reference_state(stack)
     with monkeypatch.context() as patch:
         _poison(patch)

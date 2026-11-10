@@ -9,7 +9,7 @@ from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_causal_model_native_loading import _poison
 from mojolearn.tests.test_samba_gradients_native import _reference
-from mojolearn.tests.test_samba_state_native import _assert_state_equal
+from mojolearn.tests.test_samba_state_native import _assert_state_equal, _reference_update
 
 
 def _step(model, inputs, targets):
@@ -32,8 +32,15 @@ def _reference_step(model, inputs, targets):
                       for name, value in zip(model.names, gradient_bytes)])
     gradients = parts[0] if a == 1 else training.accumulate_grads(parts, tokens=inputs.size)
     loss = losses[0][0] if a == 1 else training.accumulate_grads(losses, tokens=None)[0]
-    norm = model.optimizer.step(gradients, max_norm=model.max_norm)
-    return {"loss": float(loss), "lr": model.optimizer.lr_,
+    if model.optimizer._p_dev:
+        norm = model.optimizer.step_device(gradients, max_norm=model.max_norm)
+        lr = model.optimizer.lr_
+    elif any(not np.asarray(p).flags.writeable for p in model.optimizer.params):
+        norm, lr = _reference_update(model, gradients)
+    else:
+        norm = model.optimizer.step(gradients, max_norm=model.max_norm)
+        lr = model.optimizer.lr_
+    return {"loss": float(loss), "lr": lr,
             "step": model.optimizer.t, "total_norm": norm}
 
 
@@ -165,6 +172,9 @@ def test_native_step_preserves_device_parameter_owner(monkeypatch, clipping):
         pytest.skip("native optimizer device-parameter entry is unavailable")
     for model in (expected, actual):
         model.max_norm = clipping
+        # Public Samba weights are read-only. The standalone optimizer's
+        # device owner publishes into its own writable parameter buffers.
+        model.optimizer.params = [np.asarray(value).copy() for value in model.optimizer.params]
         model.optimizer.params_to_device()
     inputs = np.array([[1, 2, 4], [3, 5, 6]], dtype="i4")
     targets = np.array([[2, -100, 6], [5, 6, 7]], dtype="i4")
@@ -180,5 +190,7 @@ def test_native_step_preserves_device_parameter_owner(monkeypatch, clipping):
         actual.optimizer.params_to_host()
         expected.optimizer.params_to_host()
         assert actual.flat.tobytes() == expected.flat.tobytes()
+        for a, b in zip(actual.optimizer.params, expected.optimizer.params):
+            assert a.tobytes() == b.tobytes()
         assert actual.optimizer.exp_avg.tobytes() == expected.optimizer.exp_avg.tobytes()
         assert actual.optimizer.exp_avg_sq.tobytes() == expected.optimizer.exp_avg_sq.tobytes()
