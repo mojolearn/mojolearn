@@ -92,8 +92,9 @@ class CorpusPublicSource(unittest.TestCase):
         advance = source.split("def _iterator_next(", 1)[1].split("def _batch_describe(", 1)[0]
         self.assertNotIn("_batch_ids(", make)
         self.assertIn("LmCorpusIteratorHandle(owner, start, start + steps)", make)
-        self.assertIn("_batch_method(handle[].owner, batch_fields, context)", advance)
-        self.assertIn("_batch_ids(handle[].owner, PythonObject(step), context, batch_fields)", advance)
+        # The iterator now uses its admitted native snapshot directly. The
+        # public boundary tests cover mutation/failure behavior; requiring the
+        # former Python-object helper calls would restore unnecessary dispatch.
         self.assertIn("except error:\n        handle[].closed = True", advance)
         self.assertIn('ExceptionType("PyExc_StopIteration")', source)
 
