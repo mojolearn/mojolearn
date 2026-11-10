@@ -5,10 +5,16 @@ This public execution owner accepts native built-in schedule configurations;
 arbitrary Python callbacks are refused before state mutation.
 """
 from providers.python.samba_execution_pyapi import samba_provider_accumulated_gradients
-from providers.python.samba_resident_pyapi import samba_resident_provider, samba_resident_session, samba_resident_native_step, samba_optimizer_execute
+from providers.python.samba_resident_pyapi import samba_resident_provider, samba_resident_session, samba_resident_native_step
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_execute
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease
+from bindings.optimizer_descriptor_boundary import optimizer_driver
+from bindings.samba_optimizer_boundary import samba_optimizer_provider, samba_optimizer_primitives, samba_optimizer_execute, samba_optimizer_transfer
+from core.samba_optimizer_plan import SambaOptimizerPlan
+from training.optimizer_public_common import OptHyper
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
 from std.memory import memcpy
@@ -23,55 +29,61 @@ from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
 
-def _samba_moments(opt: PythonObject, context: PythonObject) raises -> PythonObject:
+@fieldwise_init
+struct SambaMomentOwners(Movable):
+    var first: PythonObject
+    var second: PythonObject
+
+
+def _samba_moments(opt: PythonObject, context: PythonObject) raises -> SambaMomentOwners:
     var n = Int(py=opt["n_total"])
-    var result = Python.list()
-    for name in [String("_m"), String("_v")]:  # driver-loop: over the optimizer's two moment owners
-        if opt[name] is None:
-            py_setitem(opt, name, generation_array([n]))
-        var value = _model_f32(opt[name], name, context["neural"])
-        _model_shape(value, [n], name)
-        _ = py_call(result.append, value)
-    return result
+    if opt["_m"] is None:
+        py_setitem(opt, "_m", generation_array([n]))
+    var first = _model_f32(opt["_m"], "_m", context["neural"])
+    _model_shape(first, [n], "_m")
+    if opt["_v"] is None:
+        py_setitem(opt, "_v", generation_array([n]))
+    var second = _model_f32(opt["_v"], "_v", context["neural"])
+    _model_shape(second, [n], "_v")
+    return SambaMomentOwners(first, second)
 
 
-def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: PythonObject, provider: PythonObject, device_plan: DevicePlan) raises:
-    if opt["_res"] is not None or opt["_resident_wanted"] is PythonObject(False):
+def _samba_open_optimizer(opt: PythonObject, mut record: OptimizerOwner, entries: PythonObject,
+    context: PythonObject, model_provider: PythonObject, device_plan: DevicePlan) raises:
+    var provider = samba_optimizer_provider(entries)
+    if record.control.handle >= 0:
+        if record.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module:
+            raise Error("Samba optimizer provider belongs to another binding")
         return
-    var bi = native_loaded_module("builtins")
-    var enabled = getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0" and device_plan.setting == "1"
-    for name in [String("optimizer_resident_open"), String("optimizer_resident_close"), String("optimizer_resident_download"), String("optimizer_resident_upload"), String("optimizer_resident_step")]:  # driver-loop: over the existing resident optimizer ABI
-        enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
+    if opt["_resident_wanted"] is PythonObject(False):
+        return
+    var driver = optimizer_driver(provider)
+    var enabled = not driver.host and getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0" and device_plan.setting == "1"
     if not enabled:
         py_setitem(opt, "_resident_wanted", False)
         return
-    var open_slot = _native_function(entries, "optimizer_resident_open")
-    # `entries` is a connection namespace, not the native registry owner.
-    # The verified built-in entry retains the module required by optimizer
-    # state downloads/uploads and eventual resident-slot cleanup.
-    var owner = open_slot.__self__
-    if py_type(owner) is not context["admission"]["module_type"]:
-        raise Error("TypeError: Samba resident optimizer requires its owning native extension")
-    py_setitem(opt, "_res_binding", owner)
-    if provider is None:
-        py_setitem(opt, "_res", py_call(open_slot, opt["n_total"]))
-    else:
-        if provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not owner:
-            raise Error("Samba optimizer provider belongs to another binding")
-        py_setitem(opt, "_res", PythonObject(neural_descriptor_execute(provider, 20, [], [Int(py=opt["n_total"])], [])))
-        py_setitem(opt, "_resident_native_provider", provider)
-    if not Bool(py=opt["_pristine"]):
-        var moments = _samba_moments(opt, context)
-        if provider is None:
-            _ = py_call(_native_function(entries, "optimizer_resident_upload"), opt["_res"], moments[0]._addr, moments[1]._addr, opt["n_total"])
-        else:
-            _ = neural_descriptor_execute(provider, 23, [Int(py=moments[0]._addr), Int(py=moments[1]._addr)],
-                [Int(py=opt["_res"]), Int(py=opt["n_total"])], [])
-        _ = moments^
-    py_setitem(opt, "_host_fresh", True)
+    if model_provider is not None and model_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module is not provider.downcast_value_ptr[NeuralDescriptorProvider]()[].module:
+        raise Error("Samba optimizer provider belongs to another binding")
+    var handle = -1
+    var count = Int(py=opt["n_total"])
+    with GILReleased(Python()):
+        handle = driver.open(count)
+    # Attach immediately: a failed moment admission/upload still has one owner
+    # responsible for the slot. No raw handle escapes without an image pin.
+    record.attach(handle, driver, provider)
+    if not record.control.pristine:
+        try:
+            var moments = _samba_moments(opt, context)
+            samba_optimizer_transfer(record, Int(py=moments.first._addr), Int(py=moments.second._addr), count, True)
+            _ = moments
+        except problem:
+            record.close()
+            raise problem^
+    record.control.host_fresh = True
+    _ = provider
 
 
-def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObject, schedule: PythonObject) raises -> PythonObject:
+def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObject, schedule: PythonObject) raises -> SambaOptimizerPlan:
     # `schedule` is the snapshot samba_train_step admitted at its start; the
     # step never changes opt["lr_schedule"], so it is not taken a second time.
     var step = Int(py=opt["t"])
@@ -83,13 +95,11 @@ def _samba_step_plan(fields: PythonObject, opt: PythonObject, context: PythonObj
     if fields["max_norm"] is not None and not (max_norm > 0.0):
         raise Error("Samba: max_norm must be positive or None")
     py_setitem(opt, "t", step + 1)
-    # One list build (the 13-word plan the step entry reads), not 9 appends.
     var betas = opt["betas"]
-    var plan = Python.list(PythonObject(len(opt["params"])), PythonObject(2), PythonObject(step + 1), PythonObject(0),
-                           opt["lr"], betas[0], betas[1], opt["eps"], opt["weight_decay"],
-                           PythonObject(0.0), PythonObject(0.0), PythonObject(max_norm),
-                           PythonObject(1 if Bool(py=py_get(opt, "maximize", PythonObject(False))) else 0))
-    return plan
+    var hyper = OptHyper(2, 0, Bool(py=py_get(opt, "maximize", False)),
+        Float64(py=opt["lr"]), Float64(py=betas[0]), Float64(py=betas[1]),
+        Float64(py=opt["eps"]), Float64(py=opt["weight_decay"]), 0.0, 0.0, max_norm)
+    return SambaOptimizerPlan(len(opt["params"]), step + 1, hyper)
 
 
 def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObject, loss: PythonObject) raises -> PythonObject:
@@ -108,9 +118,8 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     return py_call(native_loaded_module("builtins").dict, result)
 
 
-def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
+def _samba_resident_step(fields: PythonObject, opt: PythonObject, mut record: OptimizerOwner, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
                          device_plan: DevicePlan, schedule: PythonObject, accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
-    var bi = native_loaded_module("builtins")
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
         return PythonObject(None)
@@ -129,8 +138,8 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         return PythonObject(None)
     if provider is None and Bool(py=caps[SAMBA_CAP_CHUNKED]):
         return PythonObject(None)
-    _samba_open_optimizer(opt, entries, context, provider, device_plan)
-    if opt["_res"] is None:
+    _samba_open_optimizer(opt, record, entries, context, provider, device_plan)
+    if record.control.handle < 0:
         return PythonObject(None)
     var session = py_get(fields, "_resident_handle")
     if provider is not None:
@@ -148,24 +157,16 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         session = py_call(_native_function(entries, "samba_resident_open"), kinds, params, fields["flat"]._addr)
         py_setitem(fields, "_resident_handle", session)
     var plan = _samba_step_plan(fields, opt, context, schedule)
-    var args = Python.list(ids.shape[0], ids.shape[1])
-    if accumulation > 1:
-        # the microbatch walk as one resident program: the a gradients are
-        # combined on the device and the optimizer steps there
-        _ = py_call(args.append, accumulation)
-        _ = py_call(args.append, total_count)
-    _ = py_call(args.extend, plan)
     var info = generation_array([3])
     var loss = generation_array([1])
-    if provider is not None:
-        samba_resident_native_step(fields, config, provider, opt, ids, targets, info, loss, plan, accumulation, total_count)
-    else:
-        _ = py_call(_native_function(entries, "samba_resident_accumulated_step" if accumulation > 1 else "samba_resident_step"), session,
-            Python.list(fields["flat"]._addr, ids._addr, targets._addr, opt["offsets"]._addr,
-                        opt["buf_initialized"]._addr, info._addr, loss._addr), args, opt["_res"])
+    var optimizer_provider = provider if provider is not None else samba_optimizer_primitives(entries)
+    samba_resident_native_step(fields, config, optimizer_provider, opt, ids, targets, info, loss,
+        plan, record.control.handle, accumulation, total_count)
+    _ = optimizer_provider
     _ = loss  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
-    py_setitem(opt, "_host_fresh", False)
+    record.control.host_fresh = False
+    record.control.pristine = False
     var scalar = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
     _ = loss  # keep the Python object alive through the native call above
     _ = loss^
@@ -239,6 +240,19 @@ def _samba_parameter_publish(flat: PythonObject, views: PythonObject, fields: Py
         py_setitem(target, py_call(bi.slice, PythonObject(None)), raw[py_call(bi.slice, begin, end)])
 
 def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = samba_fields(model)
+    var optimizer = fields["optimizer"]
+    var lease = OptimizerOwnerLease(optimizer)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    try:
+        return _samba_train_step_admitted(model, inputs, targets, context, record[])
+    finally:
+        _ = lease
+        _ = optimizer
+
+
+def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, targets: PythonObject,
+    context: PythonObject, mut record: OptimizerOwner) raises -> PythonObject:
     # The optimizer device plan, read from the environment once per step.
     var device_plan = samba_optimizer_device_plan()
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
@@ -261,12 +275,12 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if a > 1 and not microbatch_split_is_identical(b * length, a):
         raise Error("Samba: MISALIGNED microbatch split; optimizer contract clause 9.2")
     if a == 1:
-        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan, schedule)
+        var resident = _samba_resident_step(fields, opt, record, entries, ids, y, context, device_plan, schedule)
         if resident is not None:
             return resident
     var count = _samba_count(y, context)
     if a > 1:
-        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, device_plan, schedule, a, count)
+        var resident = _samba_resident_step(fields, opt, record, entries, ids, y, context, device_plan, schedule, a, count)
         if resident is not None:
             return resident
     var provider = samba_resident_provider(fields, entries)
@@ -335,7 +349,7 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
             _ = total^
         _ = losses^
         _ = stacked^
-    var device_parameters = Bool(py=py_get(opt, "_p_dev", PythonObject(False)))
+    var device_parameters = record.control.parameters_device
     var parameter_owner = PythonObject(None)
     var parameter_buffer = fields["flat"]
     if not device_parameters:
@@ -345,63 +359,46 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     if not device_parameters:
         py_setitem(opt, "packed_", True)
     var info = generation_array([3])
-    _samba_open_optimizer(opt, entries, context, provider, device_plan)
+    _samba_open_optimizer(opt, record, entries, context, provider, device_plan)
+    var optimizer_provider = samba_optimizer_primitives(entries)
+    var offsets = opt["offsets"]
+    var initialized = opt["buf_initialized"]
     if device_parameters:
-        if opt["_res"] is None or not Bool(py=py_call(bi.hasattr, entries, "optimizer_resident_step_io")):
+        if record.control.handle < 0 or not Bool(py=context["optimizer_step_io"]):
             raise Error("RuntimeError: Samba optimizer device parameters require their native resident owner")
-        # Preserve step_device semantics: forward reads the existing host
-        # weights, while the optimizer updates its device parameters. Host
-        # aliases remain stale until the caller requests params_to_host().
+        # Preserve step_device semantics and the existing upload/download mask.
         var io = 2 if fields["max_norm"] is None else 10
-        if provider is not None:
-            _ = samba_optimizer_execute(provider, 27, [Int(py=info._addr), Int(py=gradient._addr), Int(py=opt["offsets"]._addr),
-                Int(py=opt["buf_initialized"]._addr), Int(py=info._addr)], plan, Int(py=opt["_res"]), io)
-        else:
-            _ = py_call(_native_function(entries, "optimizer_resident_step_io"), info._addr, gradient._addr, opt["offsets"]._addr,
-                opt["buf_initialized"]._addr, info._addr, plan, Python.list(opt["_res"], PythonObject(io)))
-        _ = gradient  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        py_setitem(opt, "_host_fresh", False)
-        py_setitem(opt, "_g_dev", True)
-    elif opt["_res"] is not None:
-        if Int(py=plan[12]) != 0 and Bool(py=py_call(bi.hasattr, entries, "optimizer_maximize_dev")):
-            if provider is not None:
-                _ = samba_optimizer_execute(provider, 27, [Int(py=parameter_buffer._addr), Int(py=gradient._addr), Int(py=opt["offsets"]._addr),
-                    Int(py=opt["buf_initialized"]._addr), Int(py=info._addr)], plan, Int(py=opt["_res"]), 15)
-            else:
-                _ = py_call(_native_function(entries, "optimizer_resident_step_io"), parameter_buffer._addr, gradient._addr, opt["offsets"]._addr,
-                    opt["buf_initialized"]._addr, info._addr, plan, Python.list(opt["_res"], PythonObject(15)))
-            _ = parameter_buffer  # keep the Python object alive through the native call above
-            _ = gradient  # keep the Python object alive through the native call above
-            _ = info  # keep the Python object alive through the native call above
-        else:
-            if provider is not None:
-                _ = samba_optimizer_execute(provider, 26, [Int(py=parameter_buffer._addr), Int(py=gradient._addr), Int(py=opt["offsets"]._addr),
-                    Int(py=opt["buf_initialized"]._addr), Int(py=info._addr)], plan, Int(py=opt["_res"]), 0)
-            else:
-                _ = py_call(_native_function(entries, "optimizer_resident_step"), parameter_buffer._addr, gradient._addr, opt["offsets"]._addr,
-                    opt["buf_initialized"]._addr, info._addr, plan, opt["_res"])
-            _ = parameter_buffer  # keep the Python object alive through the native call above
-            _ = gradient  # keep the Python object alive through the native call above
-            _ = info  # keep the Python object alive through the native call above
-        py_setitem(opt, "_host_fresh", False)
+        _ = samba_optimizer_execute(optimizer_provider, 27,
+            [Int(py=info._addr), Int(py=gradient._addr), Int(py=offsets._addr),
+             Int(py=initialized._addr), Int(py=info._addr)], plan, record.control.handle, io)
+        record.control.host_fresh = False
+        record.control.pristine = False
+        record.control.gradients_device = True
+    elif record.control.handle >= 0:
+        var io = 15 if plan.hyper.maximize and Bool(py=context["optimizer_maximize_device"]) else 0
+        _ = samba_optimizer_execute(optimizer_provider, 27 if io else 26,
+            [Int(py=parameter_buffer._addr), Int(py=gradient._addr), Int(py=offsets._addr),
+             Int(py=initialized._addr), Int(py=info._addr)], plan, record.control.handle, io)
+        record.control.host_fresh = False
+        record.control.pristine = False
     else:
         var moments = _samba_moments(opt, context)
-        if provider is not None:
-            _ = samba_optimizer_execute(provider, 25, [Int(py=parameter_buffer._addr), Int(py=gradient._addr), Int(py=moments[0]._addr),
-                Int(py=moments[1]._addr), Int(py=opt["offsets"]._addr), Int(py=opt["buf_initialized"]._addr), Int(py=info._addr)], plan, 0, 0)
-        else:
-            _ = py_call(_native_function(entries, "optimizer_step"), parameter_buffer._addr, gradient._addr, moments[0]._addr, moments[1]._addr,
-                opt["offsets"]._addr, opt["buf_initialized"]._addr, info._addr, plan)
-        _ = parameter_buffer  # keep the Python object alive through the native call above
-        _ = gradient  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        for i in range(2):  # driver-loop: over caller-owned moment aliases
+        _ = samba_optimizer_execute(optimizer_provider, 25,
+            [Int(py=parameter_buffer._addr), Int(py=gradient._addr), Int(py=moments.first._addr),
+             Int(py=moments.second._addr), Int(py=offsets._addr),
+             Int(py=initialized._addr), Int(py=info._addr)], plan, 0, 0)
+        record.control.pristine = False
+        for i in range(2):  # driver-loop: the two writable public moment owners
             var original = opt["_m" if i == 0 else "_v"]
-            if moments[i] is not original:
+            var completed = moments.first if i == 0 else moments.second
+            if completed is not original:
                 var view = samba_moment_view(original, context)
-                py_setitem(view, py_call(bi.slice, PythonObject(None)), moments[i]._mv)
-        _ = moments^
+                py_setitem(view, py_call(bi.slice, PythonObject(None)), completed._mv)
+        _ = moments
+    _ = optimizer_provider
+    _ = offsets
+    _ = initialized
+    _ = info
     if not device_parameters:
         _samba_parameter_publish(parameter_buffer, parameter_owner[1], fields)
     _ = parameter_owner^

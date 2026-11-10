@@ -7,6 +7,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.causal_lm_public import _native_function
 from bindings.generation_buffers import generation_array
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
+from core.samba_optimizer_plan import SambaOptimizerPlan
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_adopt, neural_descriptor_resource_handle, neural_descriptor_reserved_execute
 
 
@@ -67,41 +68,31 @@ def samba_resident_address(fields: PythonObject, session: PythonObject) raises -
 
 def samba_resident_native_step(fields: PythonObject, config: PythonObject, provider: PythonObject,
                                opt: PythonObject, ids: PythonObject, targets: PythonObject,
-                               info: PythonObject, loss: PythonObject, plan: PythonObject,
-                               accumulation: Int, total_count: Int) raises:
+                               info: PythonObject, loss: PythonObject, plan: SambaOptimizerPlan,
+                               optimizer_handle: Int, accumulation: Int, total_count: Int) raises:
     var session = samba_resident_session(fields, config, provider)
     var handle = samba_resident_address(fields, session)
     # Validation remains GIL-held and BEFORE reserving model.busy, exactly as
     # the existing binding. The numerical operation consumes the validated slot.
-    var h = neural_descriptor_execute(provider, 19, [], [Int(py=opt["_res"]), Int(py=fields["n_total"])], [], False)
+    var h = neural_descriptor_execute(provider, 19, [], [optimizer_handle, Int(py=fields["n_total"])], [], False)
     var shape = ids.shape
     var p: List[Int] = [h, Int(py=shape[0]), Int(py=shape[1])]
     if accumulation > 1:
         p.append(accumulation)
         p.append(total_count)
-    for i in range(4):  # small-loop(optimizer tensor count/kind/step/nesterov)
-        p.append(Int(py=plan[i]))
-    var f = List[Float64]()
-    for i in range(4, 12):  # small-loop(optimizer eight floating settings)
-        f.append(Float64(py=plan[i]))
-    if len(plan) > 12 and Int(py=plan[12]) != 0:
+    p.append(plan.tensors)
+    p.append(plan.hyper.kind)
+    p.append(plan.step)
+    p.append(plan.hyper.nesterov)
+    var f = plan.floats()
+    if plan.hyper.maximize:
         raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
+    var parameters = fields["flat"]
+    var offsets = opt["offsets"]
+    var initialized = opt["buf_initialized"]
     _ = neural_descriptor_reserved_execute(provider, session, handle, 14, 15, 18 if accumulation > 1 else 17,
-        [Int(py=fields["flat"]._addr), Int(py=ids._addr), Int(py=targets._addr), Int(py=opt["offsets"]._addr),
-         Int(py=opt["buf_initialized"]._addr), Int(py=info._addr), Int(py=loss._addr)], p, f)
-
-
-def samba_optimizer_execute(provider: PythonObject, operation: Int, addresses: List[Int],
-                            plan: PythonObject, handle: Int, io: Int) raises -> Int:
-    var p = List[Int]()
-    if operation != 25:
-        p.append(handle)
-    if operation == 27:
-        p.append(io)
-    for i in range(4):  # small-loop(optimizer integer settings)
-        p.append(Int(py=plan[i]))
-    p.append(Int(py=plan[12]) if len(plan) == 13 else 0)
-    var f = List[Float64]()
-    for i in range(4, 12):  # driver-loop: over eight optimizer floating settings
-        f.append(Float64(py=plan[i]))
-    return neural_descriptor_execute(provider, operation, addresses, p, f)
+        [Int(py=parameters._addr), Int(py=ids._addr), Int(py=targets._addr), Int(py=offsets._addr),
+         Int(py=initialized._addr), Int(py=info._addr), Int(py=loss._addr)], p, f)
+    _ = parameters
+    _ = offsets
+    _ = initialized
