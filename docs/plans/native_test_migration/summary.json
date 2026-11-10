@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 585,
-    "retain-python-boundary": 13,
+    "needs-semantic-review": 582,
+    "retain-python-boundary": 15,
     "split-partial": 1,
     "split-migrated": 8,
     "review-module-gate": 1,
     "retain-tooling": 2,
-    "split-needed": 6
+    "split-needed": 7
   },
-  "reviewed_files": 31,
+  "reviewed_files": 34,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -147,6 +147,15 @@
         "checks/native_tests/linear_owner_gpu.mojo"
       ],
       "handoff": "docs/plans/native_test_migration/linear-owner-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "core/optimizer_state_impl.mojo",
+      "change": "Add 35 direct native checkpoint cast fixtures with literal words, strides/endian, int32 boundaries/refusals and owned scratch guards. Public error-class/finalizer/owner-pin assertions remain. OpsSession math migration is still in progress.",
+      "native_checks": [
+        "training/checks/optimizer_state_input_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/optimizer-state-input-handoff.txt",
       "source_review_only": true
     }
   ],
