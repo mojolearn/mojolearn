@@ -42,7 +42,6 @@ def class_weight_dictionary_values(value: PythonObject, classes: PythonObject,
     var is_tuple = py_type(classes) is b.tuple
     var api = cpython_table()
     ref cpy = Python().cpython()
-    var overflow = InlineArray[Int32, 1](fill=0)
     for i in range(len(classes)):  # exact scalar UNPACK requires the GIL
         var key = borrowed_item(classes, i, is_tuple)
         var raw = api[].PyDict_GetItemWithError(value._obj_ptr, key)
@@ -62,14 +61,10 @@ def class_weight_dictionary_values(value: PythonObject, classes: PythonObject,
             if cpy.PyErr_Occurred():
                 raise cpy.unsafe_get_error()
             class_weight_value(number)
-            if cls is b.float:
-                exact_one = number == 1
-            else:
-                overflow[0] = 0
-                var word = api[].PyLong_AsLongLongAndOverflow(raw, Int(overflow.unsafe_ptr()))
-                if cpy.PyErr_Occurred():
-                    raise cpy.unsafe_get_error()
-                exact_one = overflow[0] == 0 and word == 1
+            # No other integer rounds to binary64 one: neighboring integers
+            # differ by at least one, far beyond its rounding interval. Reuse
+            # the required float conversion instead of another CPython call.
+            exact_one = number == 1
         else:
             # Decode the exact NumPy scalar's buffer once. Native conversion
             # preserves binary64 rounding and exact source equality without
@@ -79,7 +74,6 @@ def class_weight_dictionary_values(value: PythonObject, classes: PythonObject,
             class_weight_value(number)
             exact_one = scalar.equals_integer(1)
         result.append_validated(number, exact_one)
-    _ = overflow^
     _ = value
     _ = classes
     return result^
