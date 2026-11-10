@@ -431,7 +431,8 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
     var k = len(classes)
     var n = labels.n
     # The public lifecycle has admitted exact constructor values before this
-    # call. Preserve the tree family's direct set(dict) key semantics.
+    # call. The shared boundary additionally refuses keys whose admitted
+    # constructor type (e.g. pathlib) still carries Python equality hooks.
     var balanced = py_type(class_weight) is trees_builtins().str
     return class_weight_rows_admitted[CLASS_WEIGHT_TREES](class_weight, classes, labels.codes,
                                                          n, k, balanced, xtrees, context)
