@@ -300,9 +300,8 @@ _DRIVER_DENY = re.compile(
 # In the loop's source or variables a data word anywhere makes it data; else a
 # structure word makes it structure. In the tag text a structure word wins and
 # a data word refutes the tag only alone. Otherwise the verdict is "unknown": the tag is kept, as
-# before, and counted as "could not judge". This table is the one place to
-# extend; tools/hooks/no_compute_in_shells.py carries the same table (each hook is
-# installed as one self-contained file), keep the two in step.
+# before, and counted as "could not judge". This table belongs to this
+# self-contained host-route checker.
 _V_DATA_PATTERNS = re.compile(r"\.shape\s*\[\s*0\s*\]|\.tolist\b|\blen\(\s*[XxYy]\w*\s*\)|\bn_samples\b|\bnnz\b"
                            r"|\bdownload\w*|\breadback\w*")
 _V_DATA_NAMES = frozenset("x y".split())
