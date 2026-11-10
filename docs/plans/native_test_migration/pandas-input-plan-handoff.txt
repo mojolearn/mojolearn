@@ -1,0 +1,61 @@
+Mojolearn native pandas preparation checks, 2026-11-10
+
+111 independent fixtures, direct core.pandas_input_plan APIs
+  18 numeric promotion pairs, each in both block orders: boolean, signed,
+  unsigned, half/single/double joins; strict float32 and conversion policy.
+  5 numeric scatter layouts: ordinary, reversed rows/columns/both and zero
+  row stride. Literal reordered output cells; owned metadata and data buffers.
+  4 integer midpoint fixtures: homogeneous integer, float32/uint64/bool mixes.
+  The literal +/-2^62 expected words preserve classical integer -> binary64
+  -> binary32 behavior around 2^62+2^38+/-1. No product cast oracle.
+  2 big-endian float32 layouts, including reversed rows.
+  7 slice placements (positive/negative/empty/exclusive stop), 4 integer
+  placement buffers (signed strides, gaps, native and big-endian int16).
+  14 named metadata refusals: empty/count/rank/dimensions/Series mismatch,
+  zero slice step, placement rank/type/size, complex, strict dtype, and
+  explicitly refused object-style conversion.
+  4 placement bounds/overlap/repeated-consumption refusals, with output guards.
+  8 nullable mask metadata/missing-value cases, including negative strides.
+  36 object writer cases: 18 literal binary64 -> binary32 words under both
+  finite policies, including signed zero, even/odd ties, subnormal ties,
+  largest finite f32, overflow, infinities and NaNs. Object addresses are
+  native integers; no Python objects exist in this test. Refusal must occur
+  before that cell's store; untouched cells and input slots remain guarded.
+  6 numeric nonfinite cases pin the distinct contract: all fresh output
+  cells are populated before aggregate refusal. Allow mode retains words.
+  3 homogeneous boolean/nullable boolean/Series policy and output cases.
+
+Ownership and parallelism
+  Metadata copies are checked by mutating original placements/shape/strides.
+  All real source buffers remain Mojo-owned until after final pointer use;
+  source words and output guards are checked, as is output/source separation.
+  host_parallelize runs the 111 independent fixtures on the existing pool.
+  Within each tiny fixture, assertions depend on one plan's state transitions.
+  There is no GPU work in this host input-preparation component and no new
+  test loader, build scheme, Python callback or source-count guard.
+
+Dependencies and preserved Python boundary coverage
+  Pilot 81b84b4bbc and 84efdfbd60 (local 3dc606ea99 and 73bbf5678a).
+  Test commit is independent after those dependencies; no production edits.
+  test_classical_pandas_native_owner.py retains all five definitions and
+  parametrized cases. They build real pandas DataFrames/Series/extension
+  masks, compare the public array boundary, audit poisoned Python hooks,
+  manager/metadata/subclass admission and actual object scalar decoding.
+  Native tests cannot replace those boundary contracts. No Python deletion
+  is claimed for this batch; it tests the newly extracted native plan.
+  Retained public path connects _mojolearn_estimators, _mojolearn_x_linear,
+  _mojolearn_x_decomp and _mojolearn_x_metrics, plus the public native door;
+  use the pilot's existing affected linear development groups for that path.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-pandas-plan
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/pandas_input_plan_check.mojo -o "$HOME/mojolearn-evidence/native-pandas-input-plan"
+  Then run that exact binary. Normal target settings apply; pure host check.
+  Public boundary follow-up: test_classical_pandas_native_owner.py against
+  the installed affected binding, with MOJOLEARN_REQUIRE_PANDAS=1.
+
+Status
+  Source review and diff checks only. Compile/run owed to orchestrator.
+  No product/kernel/default changes, box jobs, timing or identity. A/B: none.
+  Nothing removed: real pandas boundary tests still serve distinct coverage.
