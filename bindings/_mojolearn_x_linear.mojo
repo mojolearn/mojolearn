@@ -8,6 +8,8 @@ x_linear_decision(x_addr, wb_addr, dims, out_addr)
     dims = [n, d, k, link]; wb is k rows of (w_0..w_{d-1}, b)
 The host binding (_mojolearn_x_linear_host.mojo) exports the same names with
 the same address contract and runs the same x_linear/ source on the CPU."""
+from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
@@ -47,6 +49,11 @@ def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> Pyt
     if na <= 0:
         return PythonObject(-1)
     return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
+
+
+def ridge_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = RIDGE_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -319,6 +326,7 @@ def build__mojolearn_x_linear() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[ridge_fit_native_api_v1_binding]("ridge_fit_native_api_v1")
         # lane a8c: the fold store is the IDENTICAL base binding's, so only
         # an IDENTICAL GPU build reads a device fold
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:

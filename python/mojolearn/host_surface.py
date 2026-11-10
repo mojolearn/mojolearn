@@ -2184,7 +2184,7 @@ FAMILIES = (
             "ols_predict", "tsvd_transform", "pca_transform",
             # perf lanes: the wide-matrix OLS predict and the fused
             # QN probability epilogue (one native call per predict_proba)
-            "ols_predict_wide", "qn_proba",
+            "ols_predict_wide", "linear_predict_native_api_v1", "linear_fit_native_api_v1", "qn_proba",
             # ne2-g-linear: the general-route OLS/Ridge preparation in one call
             "lm_ols_prep",
             "pca_whiten_transform", "pca_whiten_inverse_transform",

@@ -20,8 +20,7 @@ from core.cast_in import cast_in_kind, NPY_HALF, NPY_FLOAT, NPY_DOUBLE
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_array_native, sequential_address
-from bindings.sequential_inputs import sequential_input, sequential_sequence_native
-from core.sequential_input_plan import sequence_array_typestr
+from bindings.sequential_inputs import sequential_input, sequential_sequence
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 from bindings.native_buffer_address import native_buffer_address
@@ -169,10 +168,19 @@ def classical_input(value: PythonObject, context: PythonObject, name: String = "
         # memoryview.tobytes packs any strides in C order, in C.
         var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes, "C"))
         return classical_wrap_array(store, view.shape, typestr, "C", context)
-    var packed = sequential_sequence_native(value, context)
-    var typestr = sequence_array_typestr(packed.kind, packed.itemsize, name)
-    var layout = NativeArrayLayout(packed.shape.copy(), packed.itemsize)
-    return classical_wrap_layout(packed.storage, layout, typestr, context)
+    var packed = sequential_sequence(value, context)
+    var kind = String(packed[1])
+    var size = Int(py=packed[2])
+    var typestr = String("<f8")
+    if kind == "b":
+        typestr = "<i1"
+    elif kind == "i":
+        typestr = "<i8"
+    elif kind != "f":
+        raise Error("TypeError: " + name + " holds integers beyond the int64 range")
+    if size != (1 if kind == "b" else 8):
+        raise Error("TypeError: " + name + " holds unsupported numbers")
+    return classical_wrap_array(packed[3], packed[0], typestr, "C", context)
 
 
 def classical_kind(value: PythonObject, context: PythonObject) raises -> String:

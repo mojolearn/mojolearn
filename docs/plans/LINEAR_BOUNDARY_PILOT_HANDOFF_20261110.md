@@ -103,7 +103,8 @@ final result, preserving the previous conversion order without a staging copy.
 This decoding cannot be parallelized under the supported GIL contract. Old
 Python owner/placement lists and duplicate metadata rereads were removed.
 Compatibility metadata wrappers for other families share the new native plan;
-those families are not claimed as otherwise migrated.
+those families are not claimed as otherwise migrated. Python sequence
+preparation is owned by the root integration lane and remains unaccepted here.
 
 Output allocation now uses `core/native_array_layout.mojo` for element counts,
 byte counts, strides and storage codes. Typed pilot/pandas callers pass native
@@ -111,19 +112,7 @@ dimensions directly; boundary helpers pack public shape/stride tuples once.
 Python list stride staging, repeated shape boxing/unboxing and the array store's
 `buffer_info()` dispatch were removed. Zero-filled versus uninitialized storage
 choices remain the same. Sequence migration has returned to this lane and is
-implemented but not yet compiled or measured; its existing boundary tests are
-retained. Sequence traversal is iterative with at most eight container frames.
-Exact Python scalars decode to compact native word/tag vectors; consecutive
-scalar values share a single run descriptor. Array/buffer leaves retain native
-shape/stride/endian descriptors and boundary exporter pins rather than packed
-copies and Python scalar lists. A parallel native writer performs output
-conversion, preserving Python-number-to-double-to-float semantics. Ndarray
-outputs use existing uninitialized byte storage. Compatibility and NumPy-free
-`array.array` stores use the existing zero allocator because it has no supported
-uninitialized constructor; this route adds a fill before the parallel write and
-needs performance qualification. Removed the recursive helper chain, Python
-append/extend staging, boxed shape metadata between migrated helpers, packed
-array-leaf copies, and the obsolete half-widen/narrow temporary-store module.
+still in progress; its existing boundary tests are retained.
 
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD

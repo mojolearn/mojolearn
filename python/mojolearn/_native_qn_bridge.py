@@ -40,7 +40,7 @@ def connect(losses):
             metrics = _backend.binding("_mojolearn_x_metrics", mode)
             metric_entries = {}
             for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",  # glue: fixed native exports
-                         "x_metrics_run_out", "x_metrics_run_ranges"):
+                         "x_metrics_run_out", "x_metrics_run_ranges", "metrics_program_native_api_v1"):
                 try:
                     entry = getattr(metrics, name)
                 except (AttributeError, ImportError):

@@ -5,6 +5,8 @@ model_selection helpers the expansion added). One entry runs a program of
 units on the device (x_metrics/common.mojo); the host binding runs the same
 units on the CPU."""
 from core.experiment_guards_base import BASE_GUARDS_OK
+from x_metrics.descriptor_device import METRICS_PROGRAM_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -17,6 +19,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.device import (
     run_program_device, run_program_device_out, run_program_device_ranges,
 )
+
+
+def metrics_program_native_api_v1_binding() raises -> PythonObject:
+    var api = METRICS_PROGRAM_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -110,6 +117,7 @@ def build__mojolearn_x_metrics() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_metrics")
         m.def_function[run_binding]("x_metrics_run")
+        m.def_function[metrics_program_native_api_v1_binding]("metrics_program_native_api_v1")
         m.def_function[run_out_binding]("x_metrics_run_out")
         m.def_function[run_ranges_binding]("x_metrics_run_ranges")
         # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.

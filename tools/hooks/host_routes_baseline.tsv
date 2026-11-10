@@ -1140,7 +1140,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_br
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in ("read", "write", "seek", "tell", "flush", "close"): # glue: validate native descriptor origin once
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in metric_names: # glue: cache raw metric program entries once at package connection
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in names + optional: # glue: retain verified compiled CPU symbols at connection
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1152,9 +1151,7 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_br
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name, value in names.items(): # glue: bindable descriptor origin
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for suffix in optional_cells[3:-1]: # glue: complete native resident family admission
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for suffix in required_cells + optional_cells: # glue: cache only compiled decomp entry points during connection
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	if host is not None and any(issubclass(cls, base) for base in host["classical_kinds"]): # glue: the two host classes
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1170,7 +1167,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	decompressor_types = (() if _bz2 is None else (_bz2.BZ2Decompressor,)) + (() if _lzma is None else (_lzma.LZMADecompressor,))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in names + optional: # glue: retain verified compiled CPU symbols at connection
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in required + optional: # glue: retain raw native symbols at setup only
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for suffix in required_cells + optional_cells: # glue: cache only compiled decomp entry points during connection
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	required += ("ols_fit", "lm_scale_rows", "py2mojo_rows")
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_warnings.py	0	for name in ("__new__", "__init__", "__str__", "__getattribute__"): # glue: validate standard exception slots at connection

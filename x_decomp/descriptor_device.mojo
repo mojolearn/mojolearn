@@ -6,6 +6,7 @@
 # typed entries of x_decomp/resident.mojo that the `dev_*_py` doors of
 # providers/python/x_decomp_resident_pyapi.mojo call, with the same checks.
 # No numeric change: the same kernels, the same operands, the same order.
+from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -13,14 +14,17 @@ from x_decomp.cells import F32Ptr
 from x_decomp.device import DevExec
 from x_decomp.resident import (
     pool_alloc, pool_free, dev_upload_run, dev_download_run, dev_ew_run, dev_gemm_run,
+    dev_svd_run, dev_orth_diag_run,
     dev_colsum_run, dev_rowsum_run, dev_sqdist_run, dev_move_run, dev_upload_finite_run,
 )
+from x_decomp.select_dev import dev_reduce_run, dev_order_f_run
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_CAP_RESIDENT,
     XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD, XD_DEV_EW, XD_DEV_GEMM,
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN, XD_DEV_UPLOAD_FINITE,
     XD_CELL_ADD, XD_CELL_MIN, XD_MV_TAKE_ROWS, XD_MV_TAKE_COLS,
+    XD_DEV_REDUCE, XD_DEV_ORDER, XD_DEV_SVD, XD_DEV_ORTH_DIAG, XD_VENDOR, xd_vendor_code,
     xd_validate_call, xd_dim,
 )
 from core.shared_slot import SharedSlot
@@ -98,6 +102,14 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
     if op == XD_DEV_ISO_GATHER_MIN:
         return xd_iso_gather_min(p[0], p[1], p[2], xd_dim(p[3]), xd_dim(p[4]), xd_dim(p[5]), p[6],
                                  xd_dim(p[7]), xd_dim(p[8]))
+    if op == XD_DEV_REDUCE:
+        return dev_reduce_run(p[0], p[1], xd_dim(p[2]), p[3])
+    if op == XD_DEV_ORDER:
+        return dev_order_f_run(p[0], p[1], p[2], p[3], xd_dim(p[4]), p[5], p[6])
+    if op == XD_DEV_SVD:
+        return dev_svd_run(p[0], xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[1]), xd_dim(p[2]))
+    if op == XD_DEV_ORTH_DIAG:
+        return dev_orth_diag_run(p[0], p[1], xd_f32(a[0]), xd_dim(p[2]), xd_dim(p[3]))
     raise Error("x_decomp native ABI: unknown resident operation " + String(op))
 
 
@@ -111,6 +123,8 @@ def x_decomp_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var answer = 0
         if operation == XD_MODE:
             answer = GLOBAL_NUMERIC_MODE
+        elif operation == XD_VENDOR:
+            answer = xd_vendor_code(String(COMPILED_VENDOR))
         elif operation == XD_CAPABILITIES:
             answer = XD_CAP_HOST | XD_CAP_RESIDENT
         elif xd_is_address_op(operation):

@@ -5,12 +5,14 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.classical_error_boundary import classical_python_error
 from bindings.sequential_description import sequential_fields
-from bindings.classical_ridge import classical_ridge_fit, classical_ridge_parameters, classical_linear_predict, classical_linear_predict_public
-from bindings.classical_ols import classical_ols_fit
-from bindings.classical_score import classical_linear_score
-from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_names
+from providers.python.linear_parameter_boundary import classical_ridge_parameters
+from providers.python.linear_fit_boundary import classical_ridge_fit
+from providers.python.linear_predict_boundary import classical_linear_predict, classical_linear_predict_public
+from providers.python.linear_ols_boundary import classical_ols_fit
+from providers.python.linear_score_boundary import classical_linear_score
+from providers.python.linear_metadata_boundary import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
-from bindings.classical_archive import classical_archive_save
+from bindings.classical_archive import classical_archive_save, classical_archive_hash as classical_host_hash
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
@@ -23,11 +25,14 @@ from bindings.classical_pandas import classical_admit_value, classical_admit_fie
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
-from bindings.classical_host_owner import classical_host_entries, classical_host_hash
+from bindings.classical_host_owner import classical_host_entries
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_caller import classical_caller_outside
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.admitted_call import AdmittedCall
+from core.linear_fit_types import LF_MODE, LF_VENDOR
+from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
+from providers.python.linear_execution_boundary import linear_execution_word
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -44,15 +49,7 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     var b = call.builtins()
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    # `mode.strip().lower()` in native string operations, once: no Python
-    # method lookups or calls. ASCII whitespace and case are handled here; a
-    # word that is not then exactly "identical" or "fast" takes Python's
-    # Unicode-aware strip/lower (same refusal, same accepted spellings).
-    var mode_name = String(String(String(mode).strip()).lower())
-    if mode_name != "identical" and mode_name != "fast":
-        mode_name = String(mode.strip().lower())
-    if mode_name != "identical" and mode_name != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
+    var mode_name = linear_mode_name(String(mode))
     mode = PythonObject(mode_name)
     var entries = context["classical_bindings"][mode]
     if py_type(entries) is b.str:
@@ -69,9 +66,9 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
         if seen is not None and seen[0] is entries and seen[1] is vendor:
             call.remember_binding("classical", mode_name, True, entries)
             return entries
-    if String(entries["estimators_vendor"]()) != String(vendor):
+    if linear_execution_word(entries, LF_VENDOR) != linear_vendor_code(String(vendor)):
         raise Error("RuntimeError: classical native vendor differs from selected execution")
-    if Int(py=entries["estimators_numeric_mode"]()) != (1 if mode_name == "identical" else 0):
+    if linear_execution_word(entries, LF_MODE) != (1 if mode_name == "identical" else 0):
         raise Error("RuntimeError: classical native mode differs from selected execution")
     if verdicts is None:
         verdicts = Python.dict()
@@ -195,7 +192,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var ridge = Bool(py=kind)
         var linear = not ridge
         if operation == "param_names":
-            var names = py_call(b.list, classical_parameter_names(ridge))
+            var names = classical_parameter_list(ridge)
             return names.steal_data()
         if not class_operation:
             _ = classical_check_layout_call(call, model, context)
@@ -278,9 +275,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         elif operation == "score" or operation == "score_public":
             result = classical_linear_score(model, args, entries, context)
         elif operation == "numeric_mode_used":
-            result = PythonObject("identical" if Int(py=entries["estimators_numeric_mode"]()) == 1 else "fast")
+            result = PythonObject("identical" if linear_execution_word(entries, LF_MODE) == 1 else "fast")
         elif operation == "vendor_used":
-            result = entries["estimators_vendor"]()
+            result = PythonObject(linear_vendor_name(linear_execution_word(entries, LF_VENDOR)))
         else:
             raise Error("unknown private classical operation")
         return result.steal_data()

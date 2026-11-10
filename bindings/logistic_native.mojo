@@ -21,7 +21,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_getattribute
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_require_fitted, classical_not_fitted_class
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.logistic_admission import logistic_storage, logistic_fields, logistic_initialize, logistic_get_params, logistic_set_params, logistic_fit_replacements_admit
 from bindings.prep_lda_admission import lda_native_context, lda_native_labels
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list

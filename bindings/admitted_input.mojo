@@ -110,11 +110,16 @@ from bindings.admitted_registry import (
 )
 from bindings.admitted_meta_scope import admitted_held_verify
 from bindings.device_rows_door import door_is_device_rows, DoorRows, DoorRowsStore, door_rows_store
-from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
+from core.admitted_f32_plan import (
+    AdmittedInputShape, admitted_numeric_kind, admitted_f32_column, admitted_f32_shape_check, admitted_f32_byte_order,
+    admitted_f32_order, admitted_f32_plan, admitted_f32_run,
+    admitted_x_shape_error, admitted_x_shape_refuse, admitted_target_present,
+    admitted_target_plan, admitted_target_shape, admitted_weight_shape, admitted_weights_run,
+)
 from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
-from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
+from core.admitted_rows_plan import admitted_rows_base, admitted_rows_indices, admitted_rows_shape, admitted_rows_store, admitted_rows_run
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from std.reflection import reflect
 from std.sys.compile import is_defined
 from bindings.py_balanced import py_setattr, py_get, py_setitem
@@ -301,7 +306,8 @@ def admitted_storage_native(shape: List[Int], typestr: String, context: PythonOb
 
 def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
             admitted: Bool = False, defer_finite: Bool = False, order: String = "C",
-            as_array: Bool = False, finite: Bool = True) raises -> PythonObject:
+            as_array: Bool = False, finite: Bool = True,
+            captured: Optional[AdmittedInputShape] = None) raises -> PythonObject:
     """The float32 array of an input of rank `ndim` in `order` ("C", or "F"
     for a 2-D input): the input itself when it already is one (borrowed),
     otherwise one cast copy into uninitialised storage. `as_array`: the
@@ -353,58 +359,48 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
         elif _ordinary_torch(py_type(source), context):
             prepared = native_torch_numpy(source)
     var value = classical_input(prepared, context, name)
-    var nd = Int(py=value.ndim)
-    var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
-    if column:
-        classical_warn_column(context)
-    if ndim >= 0 and nd != ndim and not column:
-        raise Error(name + " must be " + String(ndim) + "-D")
-    if nd > 2:
-        raise Error(name + " must be at most 2-D")
-    # ndim -1 (lane a1b): any rank up to 2, kept as it is (a fitted array).
-    var rank = nd if ndim < 0 else ndim
-    var rows = 1 if nd == 0 else Int(py=value.shape[0])
-    var cols = 1 if nd < 2 else Int(py=value.shape[1])
-    if rows < 1 or cols < 1:
-        raise Error(name + " is empty")
-    # An Array is always in native (little-endian) byte order.
-    if not classical_is_array(value, context) and not Bool(py=value.dtype.isnative):
-        raise Error("TypeError: " + name + " must be in native byte order")
+    var nd = 0
+    var rows = 1
+    var cols = 1
+    var column = False
+    var rank = ndim
+    if captured:
+        # The classical X validator already owns this exact view's shape
+        # verdict. Reuse that native snapshot; do not reread or revalidate it.
+        nd = captured.value().rank
+        rows = captured.value().rows
+        cols = captured.value().cols
+        rank = nd
+    else:
+        nd = Int(py=value.ndim)
+        rows = 1 if nd == 0 else Int(py=value.shape[0])
+        cols = 1 if nd < 2 else Int(py=value.shape[1])
+        var column_source = py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
+        column = admitted_f32_column(ndim, nd, cols, column_target, column_source)
+        if column:
+            classical_warn_column(context)
+        rank = admitted_f32_shape_check(nd, ndim, column, rows, cols, name)
+    var is_array = classical_is_array(value, context)
+    admitted_f32_byte_order(is_array or Bool(py=value.dtype.isnative), name)
     var item = Int(py=value.itemsize)
     var kind = classical_cast_kind(value, item, name, context)
     var s0 = 0 if nd == 0 else Int(py=value.strides[0])
     var s1 = 0 if nd < 2 else Int(py=value.strides[1])
-    var addr = Int(py=classical_address(value))
-    if order != "C" and order != "F":
-        raise Error("ValueError: order must be 'C' or 'F', not " + order)
-    var want_f = order == "F" and nd == 2 and not column
-    var in_order: Bool
-    if want_f:
-        # F-contiguous float32 words: unit row stride, column stride of a
-        # whole column (a single row or column is both orders).
-        in_order = (s0 == 4 or rows == 1) and (s1 == rows * 4 or cols == 1)
-    else:
-        in_order = classical_c_order(value, context)
-    var borrowed = (not column and classical_is_f32(value, context) and in_order
-                    and (not as_array or classical_is_array(value, context)))
-    var result = value if borrowed else admitted_storage_f32(rows, cols if rank == 2 else 0, context,
-                                                             "F" if want_f else "C", as_array)
-    var out = _ADM_F32P(unsafe_from_address=Int(py=classical_address(result)))
-    if not finite:
-        # The no-check mode (lane a6): a NaN-accepting door. A borrowed X
-        # is read as is; a cast X is cast and its verdict ignored.
-        if not borrowed:
-            if want_f:
-                _ = admitted_cast_f32(addr, s1, s0, cols, rows, item, kind, out)
-            else:
-                _ = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, out)
-    elif not (borrowed and defer_finite):
-        if want_f:
-            admitted_check_f32(addr, s1, s0, cols, rows, item, kind, name, borrowed, out)
-        else:
-            admitted_check_f32(addr, s0, s1, rows, cols, item, kind, name, borrowed, out)
-    _ = value^
-    _ = prepared^
+    var address = Int(py=classical_address(value))
+    var want_f = admitted_f32_order(nd, column, order)
+    var c_order = not want_f and classical_c_order(value, context)
+    var plan = admitted_f32_plan(address, rows, cols, rank, item, kind, s0, s1,
+        classical_is_f32(value, context), is_array, c_order, column, want_f, as_array, name)
+    var result = value if plan.borrowed else admitted_storage_f32(
+        plan.rows, plan.cols if plan.rank == 2 else 0, context, "F" if plan.want_f else "C", as_array)
+    var destination = Int(py=classical_address(result))
+    try:
+        with GILReleased(Python()):
+            admitted_f32_run(plan, destination, finite, defer_finite)
+    finally:
+        _ = value
+        _ = prepared
+        _ = result
     return result
 
 
@@ -574,40 +570,45 @@ def classical_refuse_sparse(source: PythonObject, est: String) raises:
 
 def _numeric(view: PythonObject, context: PythonObject) raises -> Bool:
     var kind = classical_kind(view, context)
-    return kind == "b" or kind == "i" or kind == "u" or kind == "f"
+    return admitted_numeric_kind(kind)
 
 
-def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool, order: String,
-           as_array: Bool, finite: Bool = True) raises -> PythonObject:
-    var nd = Int(py=view.ndim)
-    if nd != 2:
-        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape))
-    if not _numeric(view, context):
-        raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(native_loaded_module("builtins").memoryview, view).format) + ", which is not a numeric array")
+def _cast_x_validated(view: PythonObject, est: String, context: PythonObject,
+    defer_finite: Bool, order: String, as_array: Bool, finite: Bool,
+    captured: AdmittedInputShape) raises -> PythonObject:
     try:
-        return admit_x(view, 2, "X", context, admitted=True, defer_finite=defer_finite, order=order,
-                       as_array=as_array, finite=finite)
+        return admit_x(view, 2, "X", context, admitted=True, defer_finite=defer_finite,
+            order=order, as_array=as_array, finite=finite, captured=Optional[AdmittedInputShape](captured.copy()))
     except error:
         if String(error) == "Input X contains NaN or infinity":
             raise Error("Input X contains NaN or infinity (" + est + ").")
         raise Error(String(error))
 
 
-def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool = False,
-                  order: String = "C", as_array: Bool = False, finite: Bool = True) raises -> PythonObject:
-    # The one place for scikit-learn's X refusal text.
+def _x_shape_unpack(view: PythonObject, est: String, context: PythonObject,
+    classical: Bool) raises -> AdmittedInputShape:
+    var nd = Int(py=view.ndim)
+    var rows = 1 if nd == 0 else Int(py=view.shape[0])
+    var cols = 1 if nd < 2 else Int(py=view.shape[1])
     var kind = classical_kind(view, context)
-    if kind == "c":
-        raise Error("Complex data not supported: " + est + " got a complex X.")
-    if _numeric(view, context):
-        var nd = Int(py=view.ndim)
-        if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + _repr(view.shape) + "). " + RESHAPE_HINT)
-        if nd == 2 and Int(py=view.shape[0]) == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-        if nd == 2 and Int(py=view.shape[1]) == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-    return _cast_x(view, est, context, defer_finite, order, as_array, finite)
+    var status = admitted_x_shape_error(nd, rows, cols, admitted_numeric_kind(kind), kind == "c", classical)
+    if status:
+        var shape = _repr(view.shape) if status >= 2 and status <= 5 else String("")
+        var format = _repr(py_call(native_loaded_module("builtins").memoryview, view).format) if status == 6 else String("")
+        admitted_x_shape_refuse(status, nd, shape, format, est)
+    return AdmittedInputShape(nd, rows, cols)
+
+
+def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool, order: String,
+    as_array: Bool, finite: Bool = True) raises -> PythonObject:
+    var captured = _x_shape_unpack(view, est, context, False)
+    return _cast_x_validated(view, est, context, defer_finite, order, as_array, finite, captured)
+
+
+def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool = False,
+    order: String = "C", as_array: Bool = False, finite: Bool = True) raises -> PythonObject:
+    var captured = _x_shape_unpack(view, est, context, True)
+    return _cast_x_validated(view, est, context, defer_finite, order, as_array, finite, captured)
 
 
 def _admitted_rows(source: PythonObject, est: String, context: PythonObject, device_x: Bool,
@@ -630,36 +631,34 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
     # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch.
     var door = DoorRows(source, context)
     var base = _classical_view_storage(door.base, context, "X")
-    if Int(py=base.ndim) != 2 or not classical_is_f32(base, context) or not classical_c_order(base, context):
-        raise Error("TypeError: DeviceRows requires a float32 C-order 2-D base")
+    admitted_rows_base(Int(py=base.ndim), classical_is_f32(base, context), classical_c_order(base, context))
     var indices = _classical_view_storage(door.indices, context, "indices")
-    if (Int(py=indices.ndim) != 1 or classical_kind(indices, context) != "i" or Int(py=indices.itemsize) != 8
-            or not classical_c_order(indices, context)):
-        raise Error("TypeError: DeviceRows requires C-contiguous int64 row indices")
+    admitted_rows_indices(Int(py=indices.ndim), classical_kind(indices, context),
+        Int(py=indices.itemsize), classical_c_order(indices, context))
     var base_rows = Int(py=base.shape[0])
     var columns = Int(py=base.shape[1])
     var rows = door.rows
-    if rows == 0:
-        raise Error("Found array with 0 sample(s) (shape=(0, " + String(columns) + ")) while a minimum of 1 is required by " + est + ".")
-    if columns == 0:
-        raise Error("Found array with 0 feature(s) (shape=(" + String(rows) + ", 0)) while a minimum of 1 is required by " + est + ".")
+    admitted_rows_shape(rows, columns, est)
     var array = PythonObject(None)
     var address = 0
     var tested = False
     var store = DoorRowsStore.none()
     if device_x:
         store = door_rows_store(source, context)
-        if store.active() and (store.rows != rows or store.row_words != columns or store.base_rows != base_rows):
-            raise Error("TypeError: DeviceRows store entries differ from the fold's base and indices")
+        admitted_rows_store(store.active(), store.rows, store.row_words, store.base_rows, rows, columns, base_rows)
     if not store.active():
         array = admitted_storage_f32(rows, columns, context)
         address = Int(py=classical_address(array))
-        var status = admitted_gather_rows_f32(Int(py=classical_address(base)), base_rows, columns,
-                                              Int(py=classical_address(indices)), rows, address)
-        if status == ARG_OUT_OF_RANGE:
-            raise Error("IndexError: DeviceRows row index out of range for a base of " + String(base_rows) + " rows")
-        if status == ARG_NONFINITE and finite:
-            raise Error("Input X contains NaN or infinity (" + est + ").")
+        var base_address = Int(py=classical_address(base))
+        var indices_address = Int(py=classical_address(indices))
+        try:
+            with GILReleased(Python()):
+                admitted_rows_run(base_address, base_rows, columns, indices_address, rows, address, finite, est)
+        finally:
+            _ = base
+            _ = indices
+            _ = array
+            _ = door
         tested = finite
     var x = AdmittedX(array, source, address, rows, columns, 2, False, tested)
     x.store = store
@@ -707,10 +706,10 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
         return _admitted_rows(source, est, context, device_x, finite)
     classical_refuse_sparse(source, est)
     var view = classical_view(source, context, "X", admitted)
-    var x = _check_x_view(view, est, context, defer_finite, order, as_array, finite)
-    # _cast_x refused every rank but 2; the cast keeps the view's shape.
-    var rows = Int(py=view.shape[0])
-    var columns = Int(py=view.shape[1])
+    var captured = _x_shape_unpack(view, est, context, True)
+    var x = _cast_x_validated(view, est, context, defer_finite, order, as_array, finite, captured)
+    var rows = captured.rows
+    var columns = captured.cols
     # Borrowed exactly when the kernels read the view's own words.
     var address = Int(py=classical_address(x))
     var borrowed = address == Int(py=classical_address(view))
@@ -814,27 +813,23 @@ def admit_y(source: PythonObject, rows: Int, est: String, context: PythonObject,
     """The float fit target: present, real, one column (a column vector warns
     and is raveled), finite and as long as X; the C-order float32 vector the
     kernels read."""
-    if source is None:
-        raise Error(est + " requires y to be passed, but the target y is None.")
+    admitted_target_present(source is not None, est)
     var b = native_loaded_module("builtins")
     var view = classical_view(source, context, "y", admitted)
-    if classical_kind(view, context) == "c":
-        raise Error("Complex data not supported: " + est + " got a complex y.")
     var nd = Int(py=view.ndim)
-    var column = nd == 2 and Int(py=view.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
+    var cols = 1 if nd < 2 else Int(py=view.shape[1])
+    var column_source = py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
+    var plan = admitted_target_plan(nd, cols, column_source, classical_kind(view, context) == "c", est)
     var y = PythonObject(None)
-    if nd == 1 or column:
+    if plan:
         try:
-            y = admit_x(view, 1, "y", context, column_target=column, admitted=True)
+            y = admit_x(view, 1, "y", context, column_target=plan == 2, admitted=True)
         except error:
             if String(error) == "Input y contains NaN or infinity":
                 raise Error("Input y contains NaN or infinity (" + est + ").")
             raise Error(String(error))
     var length = 1 if nd == 0 else Int(py=view.shape[0])
-    if length != rows:
-        raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(length) + "]")
-    if y is None:
-        raise Error("mojolearn " + est + " currently requires one target")
+    admitted_target_shape(rows, length, y is not None, est)
     _ = view^
     return y
 
@@ -866,11 +861,8 @@ def admit_weights(source: PythonObject, rows: Int, context: PythonObject,
         var refusal = classical_weight_refusal(source, error)
         raise refusal
     var nd = Int(py=view.ndim)
-    if nd > 1:
-        raise Error("Sample weights must be 1D array or scalar")
-    var scalar = nd == 0
-    if not scalar and Int(py=view.shape[0]) != rows:
-        raise Error("sample_weight.shape == (" + String(Int(py=view.shape[0])) + ",), expected (" + String(rows) + ",)!")
+    var length = 1 if nd == 0 else Int(py=view.shape[0])
+    var scalar = admitted_weight_shape(nd, length, rows)
     var value = PythonObject(None)
     try:
         value = admit_x(view, 0 if scalar else 1, "sample_weight", context, admitted=True)
@@ -881,13 +873,15 @@ def admit_weights(source: PythonObject, rows: Int, context: PythonObject,
     # A scalar weight fills every one of the `rows` words of a fresh vector,
     # so the vector needs no zero fill first.
     var out = admitted_storage_f32(rows, 0, context) if scalar else value
-    var input = _ADM_F32P(unsafe_from_address=Int(py=classical_address(value)))
-    var output = _ADM_F32P(unsafe_from_address=Int(py=classical_address(out)))
-    var any_positive = admitted_check_weights_f32(input, output, rows, scalar)
-    if not any_positive:
-        raise Error("Sample weights must contain at least one non-zero number.")
-    _ = value^
-    _ = view^
+    var input_address = Int(py=classical_address(value))
+    var output_address = Int(py=classical_address(out))
+    try:
+        with GILReleased(Python()):
+            admitted_weights_run(input_address, output_address, rows, scalar)
+    finally:
+        _ = value
+        _ = view
+        _ = out
     return out
 
 
