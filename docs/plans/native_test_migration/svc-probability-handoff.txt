@@ -1,0 +1,68 @@
+SVC native probability contracts (2026-11-10)
+
+Semantic selection/dependency
+  test_svc_probability.py originally had seven definitions. Its first three
+  tested Python _svm_reference algorithms only, without invoking native product
+  kernels. They now call the actual native kernels directly in three CPU and
+  three GPU fixtures. No new producer dependency: existing svm.host.svc_proba,
+  svm.impl.svc_epilogue and svm.impl.svc_rows interfaces are unchanged.
+  No Logistic config/state or fixed-descriptor contract files were edited.
+
+Exact numerical scope
+  Shuffle: same50 entries/seeds3 and4. Each result must contain every integer
+  0..49 exactly once; repeated seed3 agrees and seed4 differs. Membership counts
+  are an independent property oracle, not a copied Feistel implementation.
+  Platt: original eight decisions[-2,-1.5,-1,-0.2,0.3,1,1.4,2.2] and labels
+  [-1,-1,-1,1,-1,1,1,1]. Actual fitted A<0; actual sigmoid at+2 greater than0.5,
+  at-2 less than0.5, with probability bounds. No copied Newton/calibration code.
+  Coupling: original3x3 matrix[0,.7,.8; .3,0,.6; .2,.4,0]. Native status success,
+  original sum-to-one bound1e-9 and p0>p1>p2, plus probability bounds.
+  Guarded destinations/scratch and raw input-word preservation added throughout.
+  No workload, tolerance, seed, matrix or algorithm simplified.
+
+Actual calls and execution structure
+  CPU host_splitmix_perm, host_platt_train, shared sp_sigmoid_predict and
+  multiclass_probability. Independent fixtures run through host_parallelize;
+  contract checks also split independent indices. Existing product host shuffle
+  and Platt reductions retain their current algorithms; no performance claim.
+  GPU device_splitmix_perm and device_platt_train use actual SVM context/kernels.
+  Thin test kernels directly call the same sp_sigmoid_predict and
+  multiclass_probability functions used by production epilogue_row. No test
+  implementation of sigmoid or coupling. Device words use software binary64,
+  as production does; host reads only completed values for independent checks.
+  Two sigmoid points run on independent threads. The coupling fixture has one
+  original three-class row, an inherently dependent solve. Fixture submissions
+  remain ordered because SVM entries share _family_ctx. No concurrency claim.
+  CPU/GPU agreement is NOT tested here; this is correctness, not identity.
+
+Python boundaries and removals
+  Removed test_shuffle_is_a_seeded_permutation, test_sigmoid_train_separates_and_orients,
+  test_coupling_is_a_distribution and their now-unused _svm_reference import.
+  Remaining four definitions/five parametrized cases are unchanged: public
+  random_state admission, predict_proba attribute availability, original180x5
+  k2/k3 scikit-learn comparison with same settings/tolerances/seed/repeated fit,
+  and save/load continuation. The sklearn reference remains external testing
+  tooling, not a runtime dependency or a native reimplementation of sklearn.
+  _svm_reference.py remains because tools/py_consolidated/svc_equal.py still
+  consumes all of its shuffle/Platt/sigmoid/coupling/OVR reference algorithms,
+  and _legacy_host_inference consumes its precomputed-column boundary helper.
+  No unused product mechanism identified; no product files changed.
+
+Root build/run handoff
+  New common checks/native_tests/svc_probability_cases.mojo; importable
+  svc_probability_cpu_suite.mojo / svc_probability_gpu_suite.mojo export
+  run_checks(); thin svc_probability_cpu.mojo / svc_probability_gpu.mojo entries.
+  Bundle imports under separate aliases using existing root runner.
+  Existing standalone tasks:
+    bash tools/compile_slot.sh pixi run check-native-svc-probability-cpu
+    bash tools/compile_slot.sh pixi run check-native-svc-probability-gpu
+  Existing compiler invocation if building standalone:
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/svc_probability_cpu.mojo -o "$HOME/mojolearn-evidence/svc-probability-cpu"
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/svc_probability_gpu.mojo -o "$HOME/mojolearn-evidence/svc-probability-gpu"
+  Product group svm, host and identical targets, supplies retained public tests.
+  No new loader/build scheme. Keep full compile/run logs and structured counts.
+
+Status
+  Source/API review, Python AST/TOML/JSON parsing and git diff --check only.
+  No lane compilation, product imports, tests, boxes, timing or identity.
+  COMPILE/RUN OWED to root. No product bit changes or A/B define.
