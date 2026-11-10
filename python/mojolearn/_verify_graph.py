@@ -205,7 +205,8 @@ def _refuses(call, text, error_type=Exception):
         call()
     except Exception as error:
         assert isinstance(error, error_type), (error_type.__name__, type(error).__name__)
-        assert text in str(error), (text, str(error))
+        texts = text if isinstance(text, tuple) else (text,)
+        assert any(one in str(error) for one in texts), (text, str(error))
         if _AUDITS and _AUDITS[-1]["exception"] is not None:
             _AUDITS[-1]["expected_refusal"] = True
         return
@@ -1048,10 +1049,14 @@ def integer_loop_state_refusal():
         for value in wrapped:
             body = s.capture(x, value)
             seed = np.ones(s.shape(value), np.float32)
+            # Lane x1 (04f01fe89e): int32-word state is carried when its state
+            # input is ids; an integer output for a float input is refused in
+            # either of the two places that check the kinds.
             for optimize in (False, True):
                 _refuses(lambda: _invoke(body.while_loop, a, condition=condition,
                                         max_iterations=1, optimize=optimize),
-                         "state outputs must hold floating-point values", ValueError)
+                         ("holds integer ids; its state input must be ids",
+                          "must hold the kind of its state input"), ValueError)
             _refuses(lambda: _invoke(body.vjp_while, a, condition=condition,
                                     max_iterations=1, seeds=seed),
                      "state outputs must hold floating-point values", ValueError)
