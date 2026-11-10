@@ -17,7 +17,7 @@ comptime CLASS_WEIGHT_SVC = 1
 comptime CLASS_WEIGHT_TREES = 2
 
 
-def class_weight_admit_dictionary(value: PythonObject, context: PythonObject) raises:
+def class_weight_admit_dictionary[Values: Bool = True](value: PythonObject, context: PythonObject) raises:
     # PyDict_Next reads an exact dictionary. Admit every key/value before any
     # class hashing or numeric conversion, retaining the original refusal order.
     var cursor = InlineArray[Int, 1](fill=0)
@@ -26,7 +26,9 @@ def class_weight_admit_dictionary(value: PythonObject, context: PythonObject) ra
     while api[].PyDict_Next(value._obj_ptr, Int(cursor.unsafe_ptr()),
                            Int(items.unsafe_ptr()), Int(items.unsafe_ptr() + 1)):
         _ = labels_admit_primitive(PythonObject(from_borrowed=items[0]), context)
-        _ = labels_admit_primitive(PythonObject(from_borrowed=items[1]), context)
+        @parameter
+        if Values:
+            _ = labels_admit_primitive(PythonObject(from_borrowed=items[1]), context)
     _ = cursor^
     _ = items^
     _ = value
@@ -39,6 +41,14 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
     # NumPy extended/weak comparisons and arbitrary-size integers. No private
     # Python container carries numerical weight state into RUN.
     var b = native_loaded_module("builtins")
+    @parameter
+    if Profile == CLASS_WEIGHT_TREES:
+        # Tree constructor admission also accepts exact pathlib objects for
+        # unrelated options. Those keys still have Python hash/equality hooks;
+        # only native label primitives may enter the key-set operation below.
+        if py_type(value) is not b.dict:
+            raise Error("TypeError: class_weight requires an exact native dictionary")
+        class_weight_admit_dictionary[False](value, context)
     var keys = value
     @parameter
     if Profile != CLASS_WEIGHT_TREES:
