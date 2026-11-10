@@ -10,6 +10,8 @@ from bindings.py_lists import py_list_i64
 from gbdt.trees_identical_switches import T30_ADABOOST
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from xtrees.label_weights_native import LABEL_WEIGHTS_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -1759,8 +1761,14 @@ def dart_rescale_binding(weights: PythonObject, coefs: PythonObject, flags: Pyth
     return res
 
 
+def label_weights_native_api_v1_binding() raises -> PythonObject:
+    var api = LABEL_WEIGHTS_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
+    m.def_function[label_weights_native_api_v1_binding]("label_weights_native_api_v1")
     m.def_function[tree_shap_cache_enabled_binding]("x_trees_tree_shap_cache_enabled")
     m.def_function[forest_auxiliary_binding]("x_trees_forest_auxiliary")
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
