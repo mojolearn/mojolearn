@@ -4,6 +4,8 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
+from core.logistic_native_api import QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_DECISION, QN_NATIVE_PROBA
+from bindings.logistic_descriptor_boundary import logistic_run_query, logistic_run_log
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_type_fields
 from bindings.sequential_admission import _one_of, _ordinary_torch
@@ -11,7 +13,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.host_archive_native import host_archive_typed, host_archive_class_values
 from bindings.host_tree_native import host_tree_input
-from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
+from bindings.host_kernel_inference_native import _kernel_buffer
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
 from core.host_inference_impl import host_inference_raw_finite
@@ -221,58 +223,36 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
     var out = PythonObject(None)
     var indices = List[Int]()
     if operation == "host_infer_predict" and targets == 1:
-        if py_get(context["host_inference_entries"], "qn_predict_binary") is None:
-            raise Error("RuntimeError: LogisticRegression requires qn_predict_binary; rebuild the estimators binding")
         var codes = host_archive_typed(Python.tuple(rows), "<i8", context["output_context"])
-        _ = py_call(_kernel_entry("qn_predict_binary", context), classical_address(x), classical_address(weights),
-            classical_address(codes), Python.list(rows, features, Int(intercept)))
+        logistic_run_query(context["host_inference_entries"], QN_NATIVE_BINARY,
+            QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(weights)),
+                Int(py=classical_address(codes)), 0, rows, features, 1, intercept, False))
         var values = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(codes)))
         for i in range(rows):  # driver-loop: native completed class-code publication
             indices.append(Int(values[i]))
         _ = codes^
-    elif (operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba") and py_get(
-            context["host_inference_entries"], "qn_proba") is not None:
+    elif operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba":
         # Decision and link in one native call (no Python scores array).
         var probabilities = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
-        _ = py_call(_kernel_entry("qn_proba", context), classical_address(x), classical_address(weights),
-            classical_address(probabilities), Python.list(rows, features, Int(intercept), targets))
+        logistic_run_query(context["host_inference_entries"], QN_NATIVE_PROBA,
+            QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(weights)),
+                Int(py=classical_address(probabilities)), 0, rows, features, targets, intercept, False))
         if operation == "host_infer_predict_log_proba":
-            var flags = 0
-            if py_get(context["host_inference_entries"], "py2mojo_linear_flags") is not None:
-                flags = Int(py=py_call(_kernel_entry("py2mojo_linear_flags", context)))
-            if (flags & 2) == 0:
-                raise Error("RuntimeError: this estimators binding predates py2mojo_rows; rebuild it")
             out = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
-            _ = py_call(_kernel_entry("py2mojo_rows", context), 1, classical_address(probabilities), classical_address(out), Python.list(rows * count, 1))
+            logistic_run_log(context["host_inference_entries"], Int(py=classical_address(probabilities)),
+                Int(py=classical_address(out)), rows * count)
         else:
             out = probabilities
         _ = probabilities^
     else:
         scores = host_archive_typed(Python.tuple(rows) if targets == 1 else Python.tuple(rows, targets), "<f4", context["output_context"])
-        _ = py_call(_kernel_entry("qn_decision_function", context), classical_address(x), classical_address(weights),
-            classical_address(scores), Python.list(rows, features, Int(intercept), targets))
+        logistic_run_query(context["host_inference_entries"], QN_NATIVE_DECISION,
+            QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(weights)),
+                Int(py=classical_address(scores)), 0, rows, features, targets, intercept, False))
         if operation == "host_infer_predict":
             indices = host_tree_argmax(Int(py=classical_address(scores)), rows, targets)
         elif operation == "host_infer_decision_function":
             out = scores
-        else:
-            var probabilities = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
-            _ = py_call(_kernel_entry("qn_sigmoid" if targets == 1 else "qn_softmax", context), classical_address(scores),
-                classical_address(probabilities), Python.list(rows) if targets == 1 else Python.list(rows, count))
-            if operation == "host_infer_predict_log_proba":
-                var flags = 0
-                if py_get(context["host_inference_entries"], "py2mojo_linear_flags") is not None:
-                    flags = Int(py=py_call(_kernel_entry("py2mojo_linear_flags", context)))
-                if (flags & 2) == 0:
-                    raise Error("RuntimeError: this estimators binding predates py2mojo_rows; rebuild it")
-                out = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
-                _ = py_call(_kernel_entry("py2mojo_rows", context), 1, classical_address(probabilities), classical_address(out), Python.list(rows * count, 1))
-            else:
-                out = probabilities
-            _ = probabilities^
-    _ = x^
-    _ = weights^
-    _ = scores^
     if operation == "host_infer_predict":
         out = _host_logistic_decode(labels, indices, py_type(fields["classes_"]) is py_get(context, "ndarray"), context)
     var b = native_loaded_module("builtins")
