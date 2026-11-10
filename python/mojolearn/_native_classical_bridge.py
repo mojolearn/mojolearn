@@ -145,26 +145,14 @@ def _classical_doors(binding):
 def _state_context():
     # glue: connect compiled entries and exact native buffer classes once
     from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType, MemberDescriptorType
-    import _codecs
-    import unicodedata
     import io
     import os
     import sys
-    import zlib
     from ._native_loaded_modules import PATH_TYPES, PATH_BASES
     from . import _backend
     from .tokenizer import _binding
     from .exceptions import NotFittedError
     from ._native_classical_warnings import connect_warnings
-
-    try:
-        import _bz2
-    except ImportError:
-        _bz2 = None
-    try:
-        import _lzma
-    except ImportError:
-        _lzma = None
 
     # Both import orders use the same native admission setup. Do not copy
     # Sequential's cached context or install a Python first-call callback.
@@ -180,58 +168,36 @@ def _state_context():
     context.update(connect_warnings())
     context.update(_classical_doors(_binding))
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+    archive_mmap = context["owner_mmap_class"]
+    if (type(archive_mmap) is not type or archive_mmap.__flags__ & 512
+            or archive_mmap.__module__ != "mmap" or archive_mmap.__name__ != "mmap"
+            or not isinstance(archive_mmap.__new__, BuiltinFunctionType)
+            or not isinstance(archive_mmap.__init__, WrapperDescriptorType)):
+        raise TypeError("classical archives require the native mmap owner")
     if not isinstance(io.open, BuiltinFunctionType):
         raise TypeError("classical archives require native binary file opening")
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
         methods = {}
-        for name in ("read", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
+        for name in ("read", "readinto", "readable", "fileno", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
             entry = getattr(cls, name)
             if not isinstance(entry, (MethodDescriptorType, WrapperDescriptorType)):
                 raise TypeError(f"classical archives require native {cls.__name__}.{name}")
             methods[name] = entry
+        if cls is io.BytesIO:
+            entry = cls.getbuffer
+            if not isinstance(entry, MethodDescriptorType):
+                raise TypeError("classical archives require native BytesIO.getbuffer")
+            methods["getbuffer"] = entry
         archive_methods.append(methods)
-    codec_entries = (zlib.crc32, zlib.decompress, unicodedata.lookup, _codecs.utf_32_le_encode, _codecs.utf_32_le_decode,
-                     _codecs.unicode_escape_decode)
-    if _lzma is not None:
-        codec_entries += (_lzma._decode_filter_properties,)
-    for entry in codec_entries:  # glue: validate format metadata C entries once
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError("classical archives require native CRC and Unicode metadata entries")
-    decompressor_types = (() if _bz2 is None else (_bz2.BZ2Decompressor,)) + (() if _lzma is None else (_lzma.LZMADecompressor,))
-    for cls in decompressor_types:  # glue: native archive codec admission at setup
-        if (type(cls) is not type or not isinstance(cls.decompress, MethodDescriptorType)
-                or not isinstance(cls.__new__, BuiltinFunctionType)
-                or not isinstance(cls.__init__, WrapperDescriptorType)):
-            raise TypeError("classical archives require native byte decompressor types")
-    try:
-        from compression import zstd
-    except ImportError:
-        zstd_class = None
-    else:
-        zstd_class = zstd.ZstdDecompressor
-        if (type(zstd_class) is not type or not isinstance(zstd_class.decompress, MethodDescriptorType)
-                or not isinstance(zstd_class.__new__, BuiltinFunctionType)
-                or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
-            raise TypeError("classical archives require a native Zstandard byte decompressor")
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
+                   archive_python_minor=sys.version_info.minor, archive_python_micro=sys.version_info.micro,
                    archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
                    archive_memoryview_type=memoryview, archive_attribute_error=AttributeError,
                    archive_path_types=PATH_TYPES,
                    archive_path_bases=PATH_BASES,
                    archive_path_member_type=MemberDescriptorType,
-                   archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
-                   archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
-                   archive_unicode_lookup=unicodedata.lookup, archive_unicode_key_error=KeyError,
-                   archive_unicode_decode_error=UnicodeDecodeError, archive_unicode_encode_error=UnicodeEncodeError,
-                   archive_inflate=zlib.decompress, archive_bzip=None if _bz2 is None else _bz2.BZ2Decompressor,
-                   archive_lzma=None if _lzma is None else _lzma.LZMADecompressor,
-                   archive_lzma_properties=None if _lzma is None else _lzma._decode_filter_properties,
-                   archive_lzma1=None if _lzma is None else _lzma.FILTER_LZMA1,
-                   archive_lzma_raw=None if _lzma is None else _lzma.FORMAT_RAW,
-                   archive_zstd=zstd_class,
-                   archive_cp437=tuple(bytes(range(256)).decode("cp437")),
-                   archive_npy_magic=b"\x93NUMPY", archive_zip_end=b"PK\x05\x06")
+                   archive_unicode_decode_error=UnicodeDecodeError, archive_unicode_encode_error=UnicodeEncodeError)
     return context
 
 
@@ -285,18 +251,11 @@ def connect(ridge_class, linear_class=None):
         try:
             metrics = _backend.binding("_mojolearn_x_metrics", mode)
             metric_entries = {}
-            metric_names = ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",
-                            "x_metrics_run_out", "x_metrics_run_ranges")
-            for name in metric_names:  # glue: cache raw metric program entries once at package connection
-                try:
-                    entry = getattr(metrics, name)
-                except (AttributeError, ImportError):
-                    if name in ("x_metrics_run_out", "x_metrics_run_ranges"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"classical score requires compiled {name}")
-                metric_entries[name] = entry
+            name = "metrics_program_native_api_v1"
+            entry = getattr(metrics, name)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"classical score requires compiled {name}")
+            metric_entries[name] = entry
             metric_bindings[mode] = metric_entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metric_bindings[mode] = type(error).__name__ + ": " + str(error)

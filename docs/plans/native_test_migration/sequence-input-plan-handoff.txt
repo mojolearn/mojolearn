@@ -1,0 +1,59 @@
+Mojolearn native sequence preparation checks, 2026-11-10
+
+86 independent fixtures, direct core.sequential_input_plan APIs
+  21 numeric PEP3118 formats: bool, signed/unsigned widths, half/single/double,
+  native/standard/little/big/network prefixes and their endian policies.
+  8 unsupported format/width refusals; 6 sample-buffer rank/layout cases;
+  6 output Array dtype spellings/refusals with the caller's error name.
+  10 shape/depth/refusal cases: empty/ragged containers and leaves, changing
+  scalar depth, container below a scalar, rank >8 and aggregate count overflow.
+  Huge overflow descriptors are metadata-only and never dereferenced.
+  12 compact scalar pairs: bool, signed/unsigned promotion, half promotion,
+  native int64/uint64 boundaries, signed zero and exact literal output bytes.
+  Two scalars must coalesce into one segment, without array descriptors.
+  14 forced-f32 conversions: tie parities, just-above ties, underflow, largest
+  finite/overflow/NaN, int64 midpoint double rounding and signed/uint64 limits.
+  Expected IEEE words are literal, not obtained from the product cast helpers.
+  One valid rank-eight nested scalar plan.
+  7 borrowed layouts: C/F, signed and zero strides, big-endian reversed int16,
+  indirect row pointers with suboffsets and a rank-zero scalar array.
+  Native metadata copies, immutable source owners, output guards, a live
+  pre-write source mutation and independent post-write output are checked.
+  One 98,307-cell mixed span: forward array + compact scalar run + reversed
+  array, with exact output order and edits to both borrowed owners before write.
+  The scalar run occupies one segment, with only two array descriptors total.
+
+Parallelism and lifetimes
+  All independent fixtures use host_parallelize; large fixture source
+  preparation and independent output/source checks also split into chunks.
+  The product final writer uses its existing host grain/core policy; the check
+  reports its resolved task count, not a measured busy-core count. A one-core
+  runner remains a one-core result, not proof of multi-worker execution.
+  Building one ordered scalar run is dependent mutation of one native plan;
+  no test controller replaces parallel data conversion with Python work.
+  All source Lists/pointer tables and output owners outlive the synchronous
+  worker join and every final unsafe read. No Python objects or callbacks.
+
+Dependencies and retained Python boundaries
+  Core promotion81b84b4bbc; producer3a2e196fca + owner-lifetime repair558bf005fc.
+  Boundary-only nonnumeric builtin refusal1b52c090a1 is also adopted locally.
+  Local producer/repair equivalents4677dda90e and b0adba1ff2.
+  No production source edits in this test commit.
+  No Python tests removed: real list/tuple/array/memoryview and callback
+  admission must still be exercised through public bindings. Retain
+  test_sequential_native_buffers.py, test_sequence_array_native_guards.py,
+  test_native_model_selection_inputs.py and the pilot's public linear input
+  tests. Those files are not claimed fully semantically inventoried here.
+  Production dependencies touch bindings/sequential_inputs.mojo and
+  bindings/classical_arrays.mojo. Use the pilot's affected development groups.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-sequence-plan
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/sequence_input_plan_check.mojo -o "$HOME/mojolearn-evidence/native-sequence-input-plan"
+  Then run that exact binary. Pure host input preparation; no GPU kernels.
+
+Status
+  Source/diff review and task-manifest parsing only. Compile/run owed to root.
+  No product/kernel/default changes, boxes, timing or identity. A/B: none.
+  Nothing removed: new native owner checks complement real boundary coverage.

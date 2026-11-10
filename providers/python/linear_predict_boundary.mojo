@@ -8,31 +8,45 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get
 from bindings.classical_arrays import classical_array, classical_address
-from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_x_snapshot, classical_estimator_name
 from bindings.admitted_input import admit_x
 from bindings.sequential_description import sequential_fields
-from core.linear_boundary_types import LINEAR_PREDICT_ABI, LinearPredictRequest
+from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from core.linear_boundary_run import linear_predict_run
+from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients, linear_state_predict_request
+from providers.python.linear_state_boundary import LinearStateOwner, linear_state_owner
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
 def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     entries: PythonObject, context: PythonObject, wide: Bool) raises -> PythonObject:
     var fields = sequential_fields(model)
-    if py_get(fields, "coef_") is None:
-        raise Error("ValueError: call fit before predict")
+    var owner = linear_state_owner(model)
+    var state = LinearModelState()
+    if owner is not None:
+        state = owner.downcast_value_ptr[LinearStateOwner]()[].state.copy()
+    var coefficient_source = py_get(fields, "coef_")
+    state.has_coef = coefficient_source is not None
+    linear_state_require_coef(state)
+    # Capture public state while holding the GIL, before data preparation
+    # releases it. A concurrent refit cannot mix old/new scalar owners.
+    var feature_source = fields["n_features_in_"]
+    var intercept_source = fields["intercept_"]
     var est = classical_estimator_name(model)
-    var x = classical_check_x(value, est, context, admitted=True)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    classical_check_width(cols, Int(py=fields["n_features_in_"]), est)
-    var coef = admit_x(fields["coef_"], 1, "coef_", context)
-    if Int(py=coef.size) != cols:
-        raise Error("coef_ length differs from fitted feature count")
+    var admitted_x = classical_check_x_snapshot(value, est, context, admitted=True)
+    var x = admitted_x.array
+    var rows = admitted_x.rows
+    var cols = admitted_x.cols
+    state.features = Int(py=feature_source)
+    linear_state_check_width(state, cols, est)
+    var coef = admit_x(coefficient_source, 1, "coef_", context)
+    state.coef_count = Int(py=coef.size)
+    linear_state_check_coefficients(state, cols)
+    state.coef = Int(py=classical_address(coef))
+    state.intercept = Float64(py=intercept_source)
     var dst = classical_array(rows, 0, context, wide)
-    var request = LinearPredictRequest(Int(py=classical_address(x)),
-        Int(py=classical_address(coef)), Int(py=classical_address(dst)), rows, cols,
-        Float64(py=fields["intercept_"]), wide)
+    var request = linear_state_predict_request(state, admitted_x.address,
+        Int(py=classical_address(dst)), rows, cols, wide, est)
     var provider = neural_descriptor_connect_factory_once(
         entries["linear_predict_native_api_v1"], String(LINEAR_PREDICT_ABI), 1)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
@@ -43,9 +57,11 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
         # Raw addresses and the copied native function pointer do not retain
         # the admitted arrays or the extension image that owns the endpoint.
         _ = x
+        _ = admitted_x
         _ = coef
         _ = dst
         _ = provider
+        _ = owner
     return dst
 
 

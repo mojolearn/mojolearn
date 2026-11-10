@@ -13,7 +13,7 @@ from bindings.py_balanced import py_call, py_type
 # sample_weight checks live in bindings/admitted_input.mojo; these names are
 # re-exported here for the doors that import them from this module.
 from bindings.admitted_input import (
-    admit_x, admit_x_unrecorded, admit_y, admit_weights, RESHAPE_HINT, classical_view,
+    AdmittedX, admit_x, admit_x_unrecorded, admit_y, admit_weights, RESHAPE_HINT, classical_view,
     classical_refuse_sparse, classical_weight_refusal, _cast_x,
 )
 
@@ -22,6 +22,12 @@ def classical_estimator_name(model: PythonObject) raises -> String:
     var b = native_loaded_module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
     return String(cls.__name__)
+
+
+def classical_check_x_snapshot(source: PythonObject, est: String, context: PythonObject,
+    admitted: Bool = False) raises -> AdmittedX:
+    """Boundary owner plus the single admitted native address/shape snapshot."""
+    return admit_x_unrecorded(source, est, context, admitted)
 
 
 def classical_check_x(source: PythonObject, est: String, context: PythonObject,

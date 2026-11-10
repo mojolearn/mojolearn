@@ -177,6 +177,7 @@ def test_generator_inputs_invalidate_only_owner(repo, tmp_path):
     path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
     write(repo, "tokenizer/impl/unicode_class.mojo", "from .unicode_table_generated import value\n")
     write(repo, "tokenizer/impl/unicode_table_generated.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
     write(repo, "tokenizer/tools/generate.py", "# first generator\n")
     before = plan(repo, tmp_path)
     write(repo, "tokenizer/tools/generate.py", "# repaired generator\n")
@@ -309,6 +310,7 @@ def test_unrelated_writes_during_compile_do_not_trip_the_input_guard(repo, tmp_p
     path = repo / f"bindings/{A}.mojo"
     path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
     write(repo, "tokenizer/impl/unicode_class.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
     write(repo, "tokenizer/tools/generate.py", "# generator\n")
     row = next(r for r in plan(repo, tmp_path)["groups"] if r["stem"] == "_mojolearn_dev_trees")
     evidence = tmp_path / "evidence"
@@ -1485,3 +1487,40 @@ def test_main_release_layout_compiles_once_into_the_one_mac_cache_and_the_releas
     # --layout development keeps the per-binding groups and their own cache.
     assert dev.main(["plan", "--layout", "development", "--sets", "identical", "--cache",
                      str(tmp_path / "cache")]) == 0
+
+
+def test_archive_table_and_generator_enter_only_reaching_development_closure(repo, tmp_path):
+    import generated_sources as gs
+    write(repo, gs.ARCHIVE_GENERATOR, '# generator revision one\n')
+    write(repo, gs.ARCHIVE_PIN, 'from core.archive_unicode_names_generated import TABLE\n')
+    write(repo, gs.ARCHIVE_TABLE, 'comptime TABLE = 1\n')
+    binding = repo / f'bindings/{A}.mojo'
+    binding.write_text('from core.native_archive_unicode_names import lookup\n' + binding.read_text())
+    first = plan(repo, tmp_path)
+    before = {row['stem']: row['key'] for row in first['groups']}
+    write(repo, gs.ARCHIVE_GENERATOR, '# generator revision two\n')
+    after = {row['stem']: row['key'] for row in plan(repo, tmp_path)['groups']}
+    changed = {name for name in before if before[name] != after[name]}
+    assert changed == {'_mojolearn_dev_trees'}
+    write(repo, gs.ARCHIVE_TABLE, 'comptime TABLE = 2\n')
+    changed_bytes = {row['stem']: row['key'] for row in plan(repo, tmp_path)['groups']}
+    assert changed_bytes['_mojolearn_dev_trees'] != after['_mojolearn_dev_trees']
+
+
+def test_main_prepares_sources_before_planning_and_stops_on_missing_output(repo, tmp_path, monkeypatch):
+    import generated_sources as gs
+    from test_generated_sources import archive_fixture, write_sources
+    configure_main(repo, monkeypatch)
+    _, inputs = archive_fixture()
+    write_sources(repo, inputs)
+    calls = []
+    monkeypatch.setattr(dev, 'run_logged', lambda command, *_: calls.append(command) or 0)
+    monkeypatch.setattr(dev, 'make_plan', lambda *_: pytest.fail('cannot plan a missing generated output'))
+    evidence = tmp_path / 'evidence'
+    assert dev.main(['build', '--sets', 'identical', '--cache', str(tmp_path / 'cache'),
+                     '--evidence', str(evidence)]) == 1
+    assert calls == [gs.COMMANDS[gs.ARCHIVE_TABLE]]
+    report = json.loads((evidence / 'result.json').read_text())
+    assert report['state'] == 'failed' and report['compile_attempts'] == 0
+    manifest = json.loads((evidence / 'generated-sources/generated-sources.json').read_text())
+    assert not manifest['sources'][gs.ARCHIVE_TABLE]['verified']

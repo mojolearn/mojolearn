@@ -2,17 +2,17 @@
   "schema": "mojolearn.native-test-migration-inventory.v1",
   "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
   "files": 616,
-  "test_definitions": 4127,
+  "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 589,
-    "retain-python-boundary": 9,
-    "retain-tooling": 2,
+    "needs-semantic-review": 582,
+    "retain-python-boundary": 15,
+    "split-partial": 1,
+    "split-migrated": 8,
     "review-module-gate": 1,
-    "split-migrated": 2,
-    "split-needed": 11,
-    "split-partial": 2
+    "retain-tooling": 2,
+    "split-needed": 7
   },
-  "reviewed_files": 27,
+  "reviewed_files": 34,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -48,6 +48,115 @@
       "native_raw_widen_words": 65536,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see bf16-conversion-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "native_fixtures_per_executor": 17,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-views-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "decision": "split-partial",
+      "additional_native_int8_fixtures_per_executor": 5,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see int8-linalg-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_oob_exact_sum.py",
+      "decision": "split-migrated",
+      "native_fixtures_per_executor": 10,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see oob-exact-sum-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "decision": "split-migrated",
+      "additional_native_bf16_gemm_fixtures_per_executor": 9,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see bf16-linalg-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "additional_native_math_fixtures_per_executor": 4,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-math-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "additional_native_graph_fixtures_per_executor": 2,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-graph-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-migrated",
+      "additional_native_conv_fixtures_per_executor": 2,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-conv-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_classical_pandas_native_owner.py",
+      "change": "Reviewed all five definitions; retain real pandas API/hook/admission/packing tests. Add 111 independent native plan/conversion/ownership fixtures without Python runtime or duplicate whole-operation test removal.",
+      "native_checks": [
+        "checks/native_tests/pandas_input_plan_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/pandas-input-plan-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "core/native_array_layout.mojo",
+      "change": "Add 45 independent native metadata, supported dtype, copy ownership and named overflow/refusal fixtures for the extracted layout owner. Python storage/API tests remain; no full classification of those files is claimed.",
+      "native_checks": [
+        "checks/native_tests/native_array_layout_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/native-array-layout-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_lowbit_weights.py",
+      "change": "Move four numerical conversion oracles to direct native host/device fixtures; remove unused Python special-row helper and activate its rows natively. Retain six public boundary definitions.",
+      "native_checks": [
+        "checks/native_tests/lowbit_weights_cpu.mojo",
+        "checks/native_tests/lowbit_weights_gpu.mojo"
+      ],
+      "native_fixtures_per_implementation": 3,
+      "handoff": "docs/plans/native_test_migration/lowbit-weights-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "core/sequential_input_plan.mojo",
+      "change": "Add 86 independent native shape, format, promotion, compact scalar run, borrowed buffer, ownership and parallel final-output fixtures for the extracted sequence plan. Preserve real Python admission/callback/API tests.",
+      "native_checks": [
+        "checks/native_tests/sequence_input_plan_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/sequence-input-plan-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "paths": [
+        "python/mojolearn/tests/test_classical_native_owner.py",
+        "python/mojolearn/tests/test_classical_ols_native_owner.py"
+      ],
+      "change": "Move Ridge/OLS numerical oracles to 23 direct native fit/predict/score fixtures per CPU/GPU descriptor family; retain ten real Python boundary definitions and all original public input parametrizations.",
+      "native_checks": [
+        "checks/native_tests/linear_owner_cpu.mojo",
+        "checks/native_tests/linear_owner_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/linear-owner-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "core/optimizer_state_impl.mojo",
+      "change": "Add 35 direct native checkpoint cast fixtures with literal words, strides/endian, int32 boundaries/refusals and owned scratch guards. Public error-class/finalizer/owner-pin assertions remain. OpsSession math migration is still in progress.",
+      "native_checks": [
+        "training/checks/optimizer_state_input_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/optimizer-state-input-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
@@ -55,6 +164,101 @@
     "test_ops_rankn.py",
     "test_sequence_dtype_alias_native.py",
     "test_sequence_scalar_cast_status.py",
-    "test_sequence_temporal_cast_contract.py"
+    "test_sequence_temporal_cast_contract.py",
+    {
+      "path": "python/mojolearn/tests/test_cpu_kernel_variants.py",
+      "decision": "retain-python-boundary",
+      "reason": "All four definitions exercise Python registry, package, saved model and degree transport/refusal contracts. No raw GPU kernel test hidden by the filename."
+    },
+    {
+      "path": "python/mojolearn/tests/test_neural_block_native.py",
+      "decision": "split-needed",
+      "reason": "Forward/step/ragged equivalence uses retained test drivers with independent kernel arguments across six loaded model families. Moving that oracle needs a typed block fixture; retain real checkpoint loading, Python weight dictionaries/options, public construction/state/buffers, poisoned callbacks and lengths admission. No backward check exists in this file."
+    },
+    {
+      "path": "python/mojolearn/tests/test_samba_state_native.py",
+      "decision": "split-needed",
+      "reason": "Five definitions are Python checkpoint schema/registry, alias ownership, public snapshot/restore, corrupted-field admission and RNG serialization contracts. The apply case contains an independent generic optimizer/schedule recipe suitable for future direct typed-state checks while preserving public dictionary immutability and poisoned callback assertions."
+    },
+    {
+      "path": "python/mojolearn/tests/test_transformer_state_refusals.py",
+      "decision": "retain-python-boundary",
+      "reason": "All four cases mutate public Python state fields, check named exception precedence and preservation of previously published KV bytes, restore fields and resume. Replacing these with typed-state-only fixtures would lose boundary admission/publication atomicity coverage."
+    }
+  ],
+  "integration_reported_results": [
+    {
+      "batch": "nonzero",
+      "native_pairs_passed": 60,
+      "source_status": "Root applied syntax fixes."
+    },
+    {
+      "batch": "byte-config",
+      "native_fixtures_passed": 25
+    },
+    {
+      "batch": "ops-session-gpu",
+      "native_fixtures_passed": 28,
+      "source_status": "Root applied borrowed-pointer origin fixes."
+    },
+    {
+      "batch": "bf16-conversion-gpu",
+      "narrow_roundtrip_words_passed": 264105,
+      "raw_widen_words_passed": 65536
+    },
+    {
+      "batch": "rankn-views",
+      "cpu_fixtures_passed": 17,
+      "gpu_fixtures_passed": 17,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "int8-linalg",
+      "cpu_shapes_passed": 5,
+      "gpu_shapes_passed": 5,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "bf16-linalg",
+      "cpu_fixtures_passed": 9,
+      "gpu_fixtures_passed": 9,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "oob-exact-sum",
+      "cpu_fixtures_passed": 10,
+      "gpu_fixtures_passed": 10,
+      "source_status": "Root explicitly typed conditional Int32 fill (e0157cb5eb). No product changes."
+    },
+    {
+      "reported_by": "root",
+      "checks": [
+        "rankn_math_cpu",
+        "rankn_math_gpu",
+        "rankn_graph_cpu",
+        "rankn_graph_gpu",
+        "rankn_conv_cpu",
+        "rankn_conv_gpu"
+      ],
+      "status": "compile and runtime passed unmodified",
+      "evidence": "~/mojolearn-evidence/integ-finish-20261110/rankn-{math,graph,conv}-{cpu,gpu}-{build,run}.log and result.json",
+      "note": "Reported by orchestrator; not executed by this lane; no timing or identity claim."
+    },
+    {
+      "reported_by": "root",
+      "checks": [
+        "native_array_layout",
+        "lowbit_weights_gpu",
+        "lowbit_weights_cpu",
+        "sequence_input_plan"
+      ],
+      "statuses": {
+        "native_array_layout": "45 fixtures compiled and passed",
+        "lowbit_weights_gpu": "3 fixtures compiled and passed",
+        "lowbit_weights_cpu": "3 quantizer row0 failures; root owns lifetime investigation/repair",
+        "sequence_input_plan": "producer self-aliasing String slice compile failure; root owns repair"
+      },
+      "note": "No lane rerun; preserved failures remain pending. Linear tests pin integer-address owners after final use."
+    }
   ]
 }

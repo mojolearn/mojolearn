@@ -62,7 +62,7 @@ def connect(tables, solver=None):
             module = _backend.binding("_mojolearn_x_metrics", mode)
             table = {}
             for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",  # glue: fixed native exports
-                         "x_metrics_run_out", "x_metrics_run_ranges"):
+                         "x_metrics_run_out", "x_metrics_run_ranges", "metrics_program_native_api_v1"):
                 entry = getattr(module, name, None)
                 if entry is None and name in ("x_metrics_run_out", "x_metrics_run_ranges"):
                     continue

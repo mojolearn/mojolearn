@@ -12,7 +12,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.classical_metadata import classical_is_fitted
+from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_validate import classical_estimator_name, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error

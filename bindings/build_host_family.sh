@@ -96,12 +96,8 @@ if [ -e "$host_destination" ] || [ -L "$host_destination" ]; then
     echo "$label: output already exists; choose a fresh output directory" >&2
     exit 2
 fi
-# The tokenizer's Unicode class table is generated, not tracked (2026-09-15):
-# tokenizer/impl/unicode_table_generated.mojo is written from Python's
-# unicodedata at the pinned version before the compile that imports it.
-if [ "$family" = tokenizer ]; then
-    sh tokenizer/tools/gen_unicode_table.sh
-fi
+# Shared native closures may import either pinned Unicode table.
+python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null
 host_tmpdir=$(mktemp -d "$host_outdir/.${family}-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
 pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
