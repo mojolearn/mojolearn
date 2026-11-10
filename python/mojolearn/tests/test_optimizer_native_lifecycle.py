@@ -1,76 +1,103 @@
-"""Native optimizer cleanup, independent release observations and refusal audits."""
-from types import SimpleNamespace
+"""Actual optimizer owner finalization, provider pins and refusal boundaries.
+
+Exact native handle release/failed-close retry expectations live in the direct
+optimizer_owner CPU/GPU suites. Python retains the actual wrapper, metadata
+hook, callback admission, exception and public buffer lifetime contracts.
+"""
+import gc
+import sys
 
 import numpy as np
 import pytest
 
 from mojolearn import _backend
-from mojolearn._training_impl import _Optimizer
+from mojolearn import _training_impl as T
 from mojolearn._verify_native_runtime import audit_native_call
 
 
 def test_partial_optimizer_finalization_uses_no_python_getter(monkeypatch):
-    owner = object.__new__(_Optimizer)
+    owner = object.__new__(T._Optimizer)
+
     def forbidden(*args, **kwargs):
-        raise AssertionError('Python optimizer metadata getter executed')
+        raise AssertionError("Python optimizer metadata getter executed")
+
     with monkeypatch.context() as patch:
-        patch.setattr(_Optimizer, '__getattribute__', forbidden)
-        # Obtain the public wrapper before the poison can intercept test work.
-        audit_native_call(_Optimizer.__del__, owner).assert_native()
+        patch.setattr(T._Optimizer, "__getattribute__", forbidden)
+        audit_native_call(T._Optimizer.__del__, owner).assert_native()
     assert vars(owner) == {}
 
 
-def test_native_close_entry_called_once_with_exact_handle(monkeypatch):
-    events = []
-    owner = object.__new__(_Optimizer)
-    fields = vars(owner)
-    fields['_res'] = 17
-    # A C builtin is an independent observer of the native dispatch. Actual
-    # resident GPU release is separately tested below.
-    fields['_res_binding'] = SimpleNamespace(optimizer_resident_close=events.append)
+@pytest.mark.parametrize("cls", [T.SGD, T.Adam, T.AdamW])
+def test_real_native_owner_finalization_is_idempotent_and_keeps_public_buffers(monkeypatch, cls):
+    owner = cls(np.array([1., -2., .5, .25], dtype="f4"), lr=.01,
+                numeric_mode="identical", resident=True)
+    audit_native_call(owner.step, np.array([.1, -.2, .3, .4], dtype="f4")).assert_native()
+    assert bool(owner.resident_) == (_backend.vendor() != "cpu")
+    parameter = owner.params[0]
+    parameter_bytes = np.asarray(parameter).tobytes()
+    native_owner = vars(owner)["_native_optimizer_owner"]
+
     def forbidden(*args, **kwargs):
-        raise AssertionError('Python optimizer metadata getter executed')
+        raise AssertionError("Python optimizer metadata getter executed")
+
     with monkeypatch.context() as patch:
-        patch.setattr(_Optimizer, '__getattribute__', forbidden)
-        audit_native_call(_Optimizer.__del__, owner).assert_native()
-        audit_native_call(_Optimizer.__del__, owner).assert_native()
-    assert events == [17]
-    assert fields['_res'] is None and fields['_res_binding'] is None
+        patch.setattr(T._Optimizer, "__getattribute__", forbidden)
+        audit_native_call(T._Optimizer.__del__, owner).assert_native()
+        audit_native_call(T._Optimizer.__del__, owner).assert_native()
+    assert not owner.resident_
+    assert vars(owner)["_native_optimizer_owner"] is native_owner
+    assert np.asarray(parameter).tobytes() == parameter_bytes
+    del owner, native_owner
+    gc.collect()
+    assert np.asarray(parameter).tobytes() == parameter_bytes
 
 
-def test_python_close_callback_is_refused_without_invocation():
-    called = []
-    owner = object.__new__(_Optimizer)
-    fields = vars(owner)
-    fields['_res'] = 17
-    fields['_res_binding'] = SimpleNamespace(optimizer_resident_close=lambda value: called.append(value))
-    try:
-        audit = audit_native_call(_Optimizer.__del__, owner)
-        assert audit.exception is not None and 'compiled close' in str(audit.exception)
-        for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
-            assert not audit.report()[key], audit.report()
-        assert called == [] and fields['_res'] == 17
-    finally:
-        fields['_res'] = None  # Test-only deliberately invalid resource record.
+@pytest.mark.parametrize("cls", [T.SGD, T.Adam, T.AdamW])
+def test_factory_callback_refusal_preserves_state_and_retained_owner_cleanup(monkeypatch, cls):
+    live = cls(np.ones(4, dtype="f4"), numeric_mode="identical", resident=True)
+    audit_native_call(live.step, np.ones(4, dtype="f4")).assert_native()
+    fresh = cls(np.ones(4, dtype="f4"), numeric_mode="identical", resident=True)
+    native_owner = vars(fresh)["_native_optimizer_owner"]
+    parameter_bytes = np.asarray(fresh.params[0]).tobytes()
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("Python optimizer descriptor callback executed")
+
+    with monkeypatch.context() as patch:
+        patch.setitem(T._OPT_CONTEXT["bindings"]["identical"], "optimizer_native_api_v1", forbidden)
+        result = audit_native_call(fresh.step, np.ones(4, dtype="f4"))
+        assert type(result.exception) is TypeError, result.report()
+        for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+            assert not result.report()[key], result.report()
+        assert fresh.t == 0
+        assert vars(fresh)["_native_optimizer_owner"] is native_owner
+        assert np.asarray(fresh.params[0]).tobytes() == parameter_bytes
+        # The live owner retained its real provider/driver before poisoning.
+        # Finalization must use that native owner without looking up a callback.
+        audit_native_call(T._Optimizer.__del__, live).assert_native()
+        audit_native_call(T._Optimizer.__del__, live).assert_native()
+        assert not calls
+    assert not live.resident_
+    # Refusal also releases the operation lease: the same actual owner retries.
+    audit_native_call(fresh.step, np.ones(4, dtype="f4")).assert_native()
+    assert fresh.t == 1
+    audit_native_call(T._Optimizer.__del__, fresh).assert_native()
 
 
-def test_real_resident_resource_is_released_by_native_finalizer():
-    if _backend.vendor() == 'cpu':
-        pytest.skip('CPU optimizer has no resident allocation to release')
-    binding = _backend.binding('_mojolearn_training', 'identical')
-    handle = binding.optimizer_resident_open(8)
-    owner = object.__new__(_Optimizer)
-    fields = vars(owner)
-    fields.update(_res=handle, _res_binding=binding)
-    try:
-        audit_native_call(_Optimizer.__del__, owner).assert_native()
-        assert fields['_res'] is None
-        m = np.empty(8, 'f4')
-        v = np.empty(8, 'f4')
-        with pytest.raises(Exception, match='handle|closed|not open|size'):
-            binding.optimizer_resident_download(handle, m.ctypes.data, v.ctypes.data, 8)
-        audit_native_call(_Optimizer.__del__, owner).assert_native()
-    finally:
-        if fields.get('_res') is not None:
-            binding.optimizer_resident_close(handle)
-            fields['_res'] = None
+@pytest.mark.parametrize("cls", [T.SGD, T.Adam, T.AdamW])
+def test_native_finalizer_preserves_pending_python_exception(cls):
+    owner = cls(np.ones(4, dtype="f4"), numeric_mode="identical", resident=True)
+    audit_native_call(owner.step, np.ones(4, dtype="f4")).assert_native()
+    pending = RuntimeError("caller exception must survive native owner cleanup")
+    with pytest.raises(RuntimeError) as caught:
+        try:
+            raise pending
+        finally:
+            assert sys.exception() is pending
+            audit_native_call(T._Optimizer.__del__, owner).assert_native()
+            assert sys.exception() is pending
+    assert caught.value is pending
+    assert not owner.resident_
+    audit_native_call(T._Optimizer.__del__, owner).assert_native()
