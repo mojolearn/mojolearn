@@ -1,15 +1,16 @@
 # Python at the boundary: two functions per public call, Mojo values everywhere else
 
-Design lane `b1-python-boundary-design`, 2026-11-09. Read-only on product code; this document is the only output.
-Read against `origin/integ/pre-0867-w3` at e68654a757. Nothing here was compiled or run. Every Mojo type below is a
-sketch to be settled by the pilot's compile, not a finished signature.
+Design baseline from lane `b1-python-boundary-design`, 2026-11-09, read against
+`origin/integ/pre-0867-w3` at e68654a757. The counts and example call paths below describe that snapshot.
+The Mojo types are design sketches; implementation handoffs and build records carry the current signatures,
+completed migrations and their evidence. This document does not establish compilation or runtime success.
 
 Andrew, 2026-11-09: "Why do we need to touch Python at all, why can't it be purely at the boundary, why can't we use
 Mojo objects? We need to get rid of Python objects."
 
 ## 0. One screen
 
-- **Today.** The compute kernels are clean: 0 of 1,959 kernel files touch Python. The binding layer is not a
+- **Baseline.** The compute kernels are clean: 0 of 1,959 kernel files touch Python. The binding layer is not a
   boundary, it is a layer: 825 of its 842 files handle Python objects (`~/mojolearn-evidence/py-audit-a-imports.md`
   section 1), with about 47,000 object-layer lines, about 813 calls from Mojo into Python code (141 in loops), 2,173
   loops over Python objects (607 data-sized) and 730 compiled entries that Mojo reaches through the CPython call
@@ -20,8 +21,10 @@ Mojo objects? We need to get rid of Python objects."
   boundary; the retired source-count guard is not evidence that this target has been reached.
 - **Not touched.** Hand-tuned kernels, fused paths and every kernel's arithmetic (AGENTS.md "A measured winner is
   never deleted on reasoning"). This design changes what calls the kernels, never the kernels. Bits do not move.
-- **Order.** Pilot on ONE small family, compiled, tested and measured, before a second family starts. Then family by
-  family, worst offenders first, each landing green.
+- **Order.** Reuse the pilot's native request and ownership patterns across independent families. Collect completed
+  changes into an integration branch, compile one fixed snapshot, repair compilation failures, then merge the
+  compiled work into main. Reuse unchanged compiled groups. Runtime correctness and performance evidence remain
+  separate, with the release measurement and identity requirements in `AGENTS.md`.
 - **Size.** About 840 binding files in 179 families. This is the largest program the repo has taken on. The pilot is
   small (section 6). The rollout is weeks (section 7).
 
