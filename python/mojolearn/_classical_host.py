@@ -1438,7 +1438,7 @@ try:
     _logistic_host = _backend.load_host_module(_HOST_BASENAME)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _logistic_host_error:
     _logistic_host = _logistic_host_error
-_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _native_classical, _CLASSICAL)
+_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _CLASSICAL)
 
 
 # Import-time connection of complete explicit CPU prediction owners.

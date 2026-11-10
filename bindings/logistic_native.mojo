@@ -17,7 +17,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.causal_exception import causal_set_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
+from bindings.host_logistic_query_boundary import host_logistic_score_predict
 from core.logistic_native_api import (
     QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY,
     QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
@@ -566,12 +566,11 @@ def logistic_score(model: PythonObject, state: LogisticQueryOwners, source: Pyth
     """`score`: the mean accuracy of predict(X) against y, the prediction
     handed straight to the native accuracy program (`_accuracy_host`)."""
     var prediction = PythonObject(None)
-    var host_predict = py_get(context, "lr_host_predict")
-    if host_predict is not None:
+    var host_context = py_get(context, "lr_host_score_context")
+    if host_context is not None:
         # The explicit host class predicts through its own native host
         # inference owner, as its `predict` does.
-        prediction = py_call_typed(host_predict[0], model, PythonObject("host_infer_predict"), Python.tuple(source),
-                                   host_predict[1])
+        prediction = host_logistic_score_predict(model, source, host_context)
     else:
         prediction = logistic_predict(model, state, source, context)
     var y = target
