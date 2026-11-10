@@ -22,7 +22,7 @@ ROOTS = ("transformer.session_abi", "transformer.native_session_call",
          "transformer.session_native_dispatch", "core.native_descriptor_abi",
          "core.native_descriptor_call", "training.native_primitive_dispatch",
          "mamba.native_state_dispatch", "transformer.native_lm_resident_dispatch",
-         "core.resident_generation_read")
+         "transformer.causal_lm_program")
 FORBIDDEN_IMPORTS = ("std.python", "providers", "bindings")
 CALLBACK_TOKENS = re.compile(r"\b(?:PythonObject|PyObjectPtr|Python|py_call|py_call_typed|GILReleased)\b")
 # Resolved from Modular's installed native packages, not this repository.
