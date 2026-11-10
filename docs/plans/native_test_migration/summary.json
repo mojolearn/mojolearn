@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 573,
+    "needs-semantic-review": 572,
     "retain-python-boundary": 22,
     "split-partial": 1,
-    "split-migrated": 10,
+    "split-migrated": 11,
     "review-module-gate": 1,
     "retain-tooling": 2,
     "split-needed": 7
   },
-  "reviewed_files": 43,
+  "reviewed_files": 44,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -217,6 +217,15 @@
         "checks/native_tests/optimizer_maximize_gpu.mojo"
       ],
       "handoff": "docs/plans/native_test_migration/optimizer-maximize-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_sched.py",
+      "change": "Move original40-step Float64 schedule equations/tolerances to25 native host metadata fixtures, including scalar/bulk/sliced/forced-exact requests, literal warmup/tail values, bounds and typed PublicStep rate resolution. Keep actual Python result/constructor/optimizer-assignment seams; precision-seam verifier unchanged.",
+      "native_checks": [
+        "checks/native_tests/lr_schedule_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/lr-schedule-handoff.txt",
       "source_review_only": true
     }
   ],
