@@ -117,6 +117,17 @@ label-owner closures. Root owes direct descriptor arity/span/error propagation
 fixtures plus balanced/dictionary/sample-weight public Logistic cases. Parent
 dependency `22d5da1c5f` is the lane cherry-pick of fixed-span batch `63f40d36ca`.
 
+The new GIL-released calls exposed the xtrees context's old unguarded lazy
+`Optional` initialization. `_ctx` now reuses `core.neural_context.process_ctx`
+with an explicit root-zero plan, preserving the same device and process-lifetime
+context. The shared owner provides locked first construction and atomic
+publication, so later calls do not take a lock. The private `_OpsContext` and
+its duplicate initializer are deleted; the slot names advance to V4 because
+the shared owner's layout replaces the old one. All transitive xtrees context
+consumers belong to this build closure. No device-plan reading, kernel change
+or additional per-operation data allocation was introduced. Concurrent first
+use of the actual descriptor remains required runtime coverage.
+
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct
 native requests plus public LogisticRegression/host/DeviceRows tests, and later

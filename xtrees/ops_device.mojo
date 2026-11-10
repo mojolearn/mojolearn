@@ -30,7 +30,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from checks.soft_f64 import SF64_SIGN, SF64_ZERO, sf64_add, sf64_from_int, sf64_gt, sf64_is_nan, sf64_lt, sf64_mul
 from xtrees.ops import WS_CHUNK, draw, stream_base
-from core.shared_slot import SharedSlot
+from core.device_plan import DevicePlan
+from core.neural_context import process_ctx
 
 comptime OPS_TPB = 256
 comptime OPS_MAX_BLOCKS = 65535
@@ -46,24 +47,17 @@ comptime APPLY_NO_REFUSAL = Int32(2147483647)
 comptime _TWO_M53 = UInt64(0x3CA0000000000000)
 
 
-struct _OpsContext(Defaultable, Movable):
-    """ONE process-lifetime DeviceContext (`xtrees/shap_device.mojo`'s
-    pattern: a context per call exhausts Metal's command queues)."""
-    var ctx: Optional[DeviceContext]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-
-
-comptime _CTX_NAME = "MojolearnXTreesOpsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesOpsContextFastV3"
-comptime X_TREES_OPS_CONTEXT = SharedSlot[_OpsContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXTreesOpsContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesOpsContextFastV4"
 
 
 def _ctx() raises -> DeviceContext:
-    var slot = X_TREES_OPS_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    # Typed descriptor callers release the GIL. Reuse the shared context
+    # owner's locked first construction and acquire/release publication;
+    # an Optional check alone raced on concurrent first use. The explicit
+    # root-zero plan preserves this family's existing device selection.
+    # No thread plan is newly read, and no per-call context is created.
+    var plan = DevicePlan("", 1, 0, List[Int](), False)
+    return process_ctx[_CTX_NAME](plan)
 
 
 def _blocks(units: Int) -> Int:
