@@ -143,6 +143,7 @@ from transformer.block_options import (
     BlockOptions,
 )
 from core.neural_entry_neural_host import publish_neural_block_neural_host
+from core.causal_entry_neural_host import publish_causal_neural_host
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -691,6 +692,9 @@ def build__mojolearn_neural_host() -> PythonObject:
         # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
         # entries remain for their other callers and the boundary tests.
         publish_neural_block_neural_host()
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_neural_host()
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         module.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")

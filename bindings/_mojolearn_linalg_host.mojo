@@ -116,6 +116,7 @@ from decomposition.linalg_host_impl import (
     quantize_int15_host_run,
     dequantize_int15_host_run,
 )
+from gemm.host.causal_entry_host import publish_causal_linalg_host
 
 
 #: Cells per output, so `m * n` and `m * k` stay far from any Int edge.
@@ -697,6 +698,9 @@ def build__mojolearn_linalg_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_linalg_host")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_linalg_host()
         module.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         module.def_function[linalg_host_numeric_mode_binding]("linalg_host_numeric_mode")
         module.def_function[linalg_host_vendor_binding]("linalg_host_vendor")

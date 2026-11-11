@@ -16,7 +16,7 @@ from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from providers.python.operation_lock_pyapi import operation_lock_create
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_array_snapshot, generation_address, py_ints
-from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard, causal_entry_key
 from bindings.causal_operation_owner import _causal_namespace, causal_snapshot_fields
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_checkpoint_names_snapshot, _model_layer_weights, model_plain, model_record_fields
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
@@ -28,6 +28,12 @@ from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
+from std.python._cpython import GILReleased
+from core.causal_lm_entry_table import (
+    CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_table_entry, CAUSAL_TABLE_LINALG,
+    CAUSAL_LIN_TO_BF16, CAUSAL_LIN_QUANTIZE_INT8, CAUSAL_LIN_FROM_BF16, CAUSAL_LIN_DEQUANTIZE_INT8,
+    CAUSAL_LIN_QUANTIZE_INT15,
+)
 
 
 def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
@@ -111,7 +117,22 @@ def _model_packed_fields(mut mods: NativeModules, value: PythonObject, context: 
     return result
 
 
-def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, linalg: PythonObject, context: PythonObject) raises -> PythonObject:
+def _model_linalg(mut mods: NativeModules, key: CausalEntryKey, operation: Int, addresses: List[Int], params: List[Int]) raises:
+    # One call of the linalg image's descriptor entry through the CausalLM
+    # entry table (core/causal_lm_entry_table.mojo), replacing the former
+    # CPython call of its Python entry (same `*_native` function, same words).
+    # The GIL is released around the numerical work as that entry released it;
+    # the module admission cache is reset after the release window.
+    var floats = List[Float64]()
+    try:
+        with GILReleased(Python()):
+            _ = causal_entry_call[CAUSAL_TABLE_LINALG](key, operation, addresses, params, floats)
+    finally:
+        mods.released()
+    _ = floats
+
+
+def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, key: CausalEntryKey, context: PythonObject) raises -> PythonObject:
     _causal_array_guard()
     var bi = mods.module("builtins")
     if format == "float32":
@@ -126,15 +147,13 @@ def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, li
     py_setitem(fields, "shape", value.shape)
     if format == "bfloat16":
         var bits = checkpoint_zeros(mods, rows * cols, value.shape, "H", context["array_class"])
-        _ = py_call(_native_function(mods, linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
-        mods.released()
+        _model_linalg(mods, key, CAUSAL_LIN_TO_BF16, [Int(py=bits._addr), Int(py=value._addr)], [rows * cols])
         _ = bits  # keep the Python object alive through the native call above
         py_setitem(fields, "bits", bits)
     else:
         var codes = generation_array([rows, cols], "b")
         var exponents = generation_array([rows], "i")
-        _ = py_call(_native_function(mods, linalg, "quantize_int8"), codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
-        mods.released()
+        _model_linalg(mods, key, CAUSAL_LIN_QUANTIZE_INT8, [Int(py=codes._addr), Int(py=exponents._addr), Int(py=value._addr)], [rows, cols])
         _ = exponents  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         py_setitem(fields, "codes", codes)
@@ -142,7 +161,7 @@ def _model_pack(mut mods: NativeModules, value: PythonObject, format: String, li
     return packed
 
 
-def _model_unpack(mut mods: NativeModules, value: PythonObject, linalg: PythonObject, context: PythonObject, name: String = "weight") raises -> PythonObject:
+def _model_unpack(mut mods: NativeModules, value: PythonObject, key: CausalEntryKey, context: PythonObject, name: String = "weight") raises -> PythonObject:
     var bi = mods.module("builtins")
     var bf16 = py_type(value) is context["bf16_class"]
     var int8 = py_type(value) is context["int8_class"]
@@ -155,8 +174,7 @@ def _model_unpack(mut mods: NativeModules, value: PythonObject, linalg: PythonOb
     if bf16:
         var bits = _model_native_buffer(mods, fields["bits"], "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
-        _ = py_call(_native_function(mods, linalg, "from_bf16"), out._addr, bits._addr, py_ints([rows * cols]))
-        mods.released()
+        _model_linalg(mods, key, CAUSAL_LIN_FROM_BF16, [Int(py=out._addr), Int(py=bits._addr)], [rows * cols])
         _ = bits  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
         _ = bits^  # read by address above
@@ -165,8 +183,7 @@ def _model_unpack(mut mods: NativeModules, value: PythonObject, linalg: PythonOb
         var exponents = _model_native_buffer(mods, fields["exponents"], "i", context)
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
-        _ = py_call(_native_function(mods, linalg, "dequantize_int8"), out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
-        mods.released()
+        _model_linalg(mods, key, CAUSAL_LIN_DEQUANTIZE_INT8, [Int(py=out._addr), Int(py=codes._addr), Int(py=exponents._addr)], [rows, cols])
         _ = exponents  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
@@ -175,21 +192,20 @@ def _model_unpack(mut mods: NativeModules, value: PythonObject, linalg: PythonOb
     return out
 
 
-def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObject, name: String = "weight") raises -> PythonObject:
+def _model_unpack(value: PythonObject, key: CausalEntryKey, context: PythonObject, name: String = "weight") raises -> PythonObject:
     # Classical and other callers keep their per-call module checks.
     var mods = NativeModules()
-    return _model_unpack(mods, value, linalg, context, name)
+    return _model_unpack(mods, value, key, context, name)
 
 
-def _model_quantize15(mut mods: NativeModules, value: PythonObject, linalg: PythonObject) raises -> PythonObject:
+def _model_quantize15(mut mods: NativeModules, value: PythonObject, key: CausalEntryKey) raises -> PythonObject:
     _causal_array_guard()
     var rows = Int(py=value.shape[0])
     var cols = Int(py=value.shape[1])
     var hi = generation_array([rows, cols], "b")
     var lo = generation_array([rows, cols], "b")
     var exponents = generation_array([rows], "i")
-    _ = py_call(_native_function(mods, linalg, "quantize_int15"), py_ints([Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)]), py_ints([rows, cols]))
-    mods.released()
+    _model_linalg(mods, key, CAUSAL_LIN_QUANTIZE_INT15, [Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)], [rows, cols])
     _ = exponents  # keep the Python object alive through the native call above
     _ = lo  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
@@ -292,12 +308,20 @@ def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, 
         raise Error("CausalLM: GPU route requires native GPU kernels")
     if mode_code != (1 if String(mode) == "identical" else 0):
         raise Error("CausalLM: binding numeric mode differs from requested mode")
+    # The CausalLM entry table key of this route (core/causal_lm_entry_table.mojo):
+    # every linalg, primitive, block and Mamba call of the model reads its
+    # image's entry by these two words.
+    var key = CausalEntryKey(mode_code, causal_entry_vendor(vendor))
+    py_setitem(entries, "entry_mode", PythonObject(key.mode))
+    py_setitem(entries, "entry_vendor", PythonObject(key.vendor))
     var arithmetic = entries["linalg"]
     if py_type(arithmetic) is not mods.module("builtins").str:
-        if String(_native_function(mods, arithmetic, "linalg_vendor")()) != vendor or Int(py=_native_function(mods, arithmetic, "linalg_numeric_mode")()) != mode_code:
-            mods.released()
-            raise Error("CausalLM: packed weight binding vendor or mode differs from model")
-        mods.released()
+        # A linalg publication under the model's (tier, vendor) key is the
+        # vendor/mode agreement the former two Python metadata calls checked.
+        try:
+            _ = causal_table_entry[CAUSAL_TABLE_LINALG](key)
+        except problem:
+            raise Error("CausalLM: packed weight binding vendor or mode differs from model (" + String(problem) + ")")
     return entries
 
 
@@ -475,7 +499,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             if format != "float32" and format != tag:
                 raise Error("CausalLM: mixed packed weight formats")
             format = tag
-        py_setitem(w, keys[i], _model_unpack(mods, v, bindings["linalg"], context, String(keys[i])))
+        py_setitem(w, keys[i], _model_unpack(mods, v, causal_entry_key(bindings), context, String(keys[i])))
     _causal_array_guard()
     py_setitem(fields, "weight_format", PythonObject(format))
     py_setitem(fields, "_native_kind", plan["kind"])
@@ -657,7 +681,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
     if String(profile) == "fixed15_v1":
         var planes = bi.list()
         for i in range(2, 9):  # driver-loop: over the seven transformer projections
-            _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], bindings["linalg"]))
+            _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], causal_entry_key(bindings)))
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
@@ -708,7 +732,7 @@ def model_recurrent_weights_check(mut mods: NativeModules, weights: PythonObject
         # Snapshot tensors are already admitted float32 C Arrays owned by this
         # operation; anything else takes the constructor's unpack admission.
         if py_type(v) is not context["array_class"]:
-            v = _model_unpack(mods, v, bindings["linalg"], context, String(keys[i]))
+            v = _model_unpack(mods, v, causal_entry_key(bindings), context, String(keys[i]))
         py_setitem(w, keys[i], v)
     # The one Array descriptor recheck after the grad_output finite scan
     # released the GIL; kept exactly once for that release window.
@@ -911,7 +935,7 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
     _model_construction_set(mods, live, captured, "_prims", primitive)
     _model_construction_set(mods, live, captured, "_head_int15", PythonObject(None))
     if String(profile) == "fixed15_v1":
-        _model_construction_set(mods, live, captured, "_head_int15", _model_quantize15(mods, captured["_head"], bindings["linalg"]))
+        _model_construction_set(mods, live, captured, "_head_int15", _model_quantize15(mods, captured["_head"], causal_entry_key(bindings)))
     # Admission may call sibling native entries. Give it the private record;
     # a replaced public model descriptor cannot run after those calls.
     py_setitem(captured, "_native_context", context)
@@ -996,7 +1020,7 @@ def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject
                     _ = sliced  # keep the Python object alive through the native call above
                 _ = whole^  # read by address above
                 value = sliced
-            py_setitem(weights, key, _model_pack(mods, value, String(format), bindings["linalg"], context) if packed else value)
+            py_setitem(weights, key, _model_pack(mods, value, String(format), causal_entry_key(bindings), context) if packed else value)
         _ = py_call(layers.append, weights)
     py_setitem(out, "layers", layers)
     var unused = bi.list()

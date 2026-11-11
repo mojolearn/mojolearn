@@ -138,6 +138,7 @@ from bindings.apple_fast_bf16_public import (
     public_fast_to_bf16_binding,
     public_fast_from_bf16_binding,
 )
+from gemm.causal_entry_device import publish_causal_linalg_device
 
 
 
@@ -680,6 +681,9 @@ def build__mojolearn_linalg() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_linalg_device()
         m.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         m.def_function[linalg_vendor_binding]("linalg_vendor")
         m.def_function[device_plan_enter_binding]("device_plan_enter")

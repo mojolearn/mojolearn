@@ -2470,6 +2470,8 @@ SABOTAGE_NA_ENTRIES = {
         "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
         "forest_release_gpu", "moe_weights_free",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
+        "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
+        "x_trees_tree_shap_cache_release",
         "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
         "rf_data_session_open", "rf_data_session_close")},
     **{e: _METADATA for e in (

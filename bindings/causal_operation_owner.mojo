@@ -162,7 +162,10 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
             # these values are retained, never called or traversed as Python.
             py_setitem(result, names[i], item)
         elif (name == "cpu" or name == "weight_names" or name == "resident_vendor"
-                or name == "mamba1_profile" or name == "native_enabled"):
+                or name == "mamba1_profile" or name == "native_enabled"
+                or name == "entry_mode" or name == "entry_vendor"):
+            # entry_mode/entry_vendor: the CausalLM entry table key words
+            # (core/causal_lm_entry_table.mojo), plain admitted integers.
             neural_plain_value(mods, item, 0, context)
             py_setitem(result, names[i], neural_metadata_snapshot(mods, item))
         else:

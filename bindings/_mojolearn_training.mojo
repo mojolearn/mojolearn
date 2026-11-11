@@ -150,6 +150,7 @@ from core.philox_neural import neural_rng_host
 # device path of SambaStack.forward / step and SambaDecodeSession
 # (training/samba_program.mojo).
 from training.samba_program import SambaStackProgram, SAMBA_PROGRAM_ON
+from training.causal_entry_device import publish_causal_training_device
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -1353,6 +1354,9 @@ def build__mojolearn_training() -> PythonObject:
     # promises quality, never bits.
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_training_device()
         m.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         m.def_function[sha256_hex_binding]("sha256_hex")
         m.def_function[training_vendor_binding]("training_vendor")

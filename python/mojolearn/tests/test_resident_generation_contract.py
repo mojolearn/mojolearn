@@ -38,10 +38,9 @@ def resident_model(path, *, uniform=False):
     assert entries["program_read"] is not None
     assert entries["native_block_operations"] is not None
     assert entries.get("parallel_call") is None
-    for name in ("causal_lm_session_forward", "causal_lm_session_run",
-                 "transformer_decode_session_load_state",
-                 "transformer_decode_session_export_state"):
-        assert name in entries, name
+    # The resident sessions are native registry handles reached through the
+    # CausalLM session table; admission records only that the table is there.
+    assert entries["resident"] is True
     # Loaded blocks carry their compiled arithmetic-profile tag. Keep that
     # metadata intact: successful public tests below must prove actual resident
     # selection through the retained cache, not bypass admission in the fixture.
