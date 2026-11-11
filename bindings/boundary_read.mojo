@@ -110,7 +110,8 @@ def read_int(obj: PythonObject, name: StaticString = "value") raises -> Int:
     var t = cpython_table()
     var value = t[].PyLong_AsLongLong(obj._obj_ptr)
     if value == -1 and t[].PyErr_Occurred():
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return Int(value)
 
 
@@ -122,11 +123,13 @@ def read_index(obj: PythonObject) raises -> Int:
     var t = cpython_table()
     var indexed = t[].PyNumber_Index(obj._obj_ptr)
     if not indexed:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     var owned = PythonObject(from_owned=indexed)
     var value = t[].PyLong_AsLongLong(owned._obj_ptr)
     if value == -1 and t[].PyErr_Occurred():
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return Int(value)
 
 
@@ -139,15 +142,18 @@ def read_int_like(obj: PythonObject) raises -> Int:
     if borrowed_type_word(obj._obj_ptr) == _scalar_types()[].int_word:
         var direct = t[].PyLong_AsLongLong(obj._obj_ptr)
         if direct == -1 and t[].PyErr_Occurred():
-            raise _pending_error()
+            var pending = _pending_error()
+            raise pending^
         return Int(direct)
     var converted = t[].PyNumber_Long(obj._obj_ptr)
     if not converted:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     var owned = PythonObject(from_owned=converted)
     var value = t[].PyLong_AsLongLong(owned._obj_ptr)
     if value == -1 and t[].PyErr_Occurred():
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return Int(value)
 
 
@@ -158,7 +164,8 @@ def read_float(obj: PythonObject) raises -> Float64:
     var t = cpython_table()
     var value = t[].PyFloat_AsDouble(obj._obj_ptr)
     if value == -1.0 and t[].PyErr_Occurred():
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return value
 
 
@@ -171,7 +178,8 @@ def read_float_like(obj: PythonObject) raises -> Float64:
         return t[].PyFloat_AsDouble(obj._obj_ptr)
     var converted = t[].PyNumber_Float(obj._obj_ptr)
     if not converted:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     var owned = PythonObject(from_owned=converted)
     return t[].PyFloat_AsDouble(owned._obj_ptr)
 
@@ -180,7 +188,8 @@ def read_bool(obj: PythonObject) raises -> Bool:
     """`bool(obj)` exactly (PyObject_IsTrue). One CPython call."""
     var answer = cpython_table()[].PyObject_IsTrue(obj._obj_ptr)
     if answer < 0:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return answer != 0
 
 
@@ -192,7 +201,8 @@ def read_str(obj: PythonObject, name: StaticString = "value") raises -> String:
     var size = 0
     var address = cpython_table()[].PyUnicode_AsUTF8AndSize(obj._obj_ptr, Int(MutPointer(to=size)))
     if address == 0:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     # CPython's UTF-8 cache is NUL-terminated and lives as long as `obj`.
     var text = unsafe_string_from_utf8_cstr(Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=address))
     _ = obj
@@ -209,7 +219,8 @@ def read_attr(obj: PythonObject, name: StaticString) raises -> PythonObject:
     ref cpy = Python().cpython()
     var raw = cpy.PyObject_GetAttrString(obj._obj_ptr, String(name))
     if not raw:
-        raise _pending_error()
+        var pending = _pending_error()
+        raise pending^
     return PythonObject(from_owned=raw)
 
 
@@ -284,7 +295,8 @@ struct BufferView(Movable):
         var words = List[Int](length=PY_BUFFER_WORDS, fill=0)
         var words_ptr = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
         if cpython_table()[].PyObject_GetBuffer(obj._obj_ptr, words_ptr, Int32(flags)) != 0:
-            raise _pending_error()
+            var pending = _pending_error()
+            raise pending^
         var layout: BufferLayout
         var format = String("B")
         var kind: Int
