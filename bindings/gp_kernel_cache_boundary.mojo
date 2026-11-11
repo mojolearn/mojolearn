@@ -6,7 +6,8 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.native_model_records import ContentRecord, content_object, content_same, model_generation, records_stampable
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.mode_metadata_native import _fields
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_type
+from bindings.gp_mapping_boundary import gp_mapping_snapshot
 from bindings.gp_common_native import gp_kernel_arrays
 from bindings.gp_kernel_public_native import gp_kernel_snapshot
 
@@ -69,11 +70,11 @@ def _gp_key_value(mut key: GPKernelKey, value: PythonObject, depth: Int) raises:
         for i in range(len(value)):  # driver-loop: admitted public kernel container identities
             _gp_key_value(key, value[i], depth + 1)
     elif cls is b.dict:
-        var items = py_call(b.list, py_call(value.items))
-        key.count(len(items))
-        for i in range(len(items)):  # driver-loop: public mapping identities in original insertion order
-            key.pin(items[i][0])
-            _gp_key_value(key, items[i][1], depth + 1)
+        var items = gp_mapping_snapshot(value)
+        key.count(len(items.keys))
+        for i in range(len(items.keys)):  # driver-loop: public mapping identities in original insertion order
+            key.pin(items.keys[i])
+            _gp_key_value(key, items.values[i], depth + 1)
     elif not (cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes):
         key.pin(cls)
 
@@ -82,10 +83,10 @@ def gp_key_fields(mut key: GPKernelKey, fields: PythonObject, skip: List[String]
     # Shared admitted field capture for packed kernels and fitted GP state.
     # Preserve insertion order, the depth-four value walk and skipped-name rule.
     var b = native_loaded_module("builtins")
-    var items = py_call(b.list, py_call(fields.items))
+    var items = gp_mapping_snapshot(fields)
     var count = 0
-    for i in range(len(items)):  # driver-loop: captured public field metadata
-        var name = items[i][0]
+    for i in range(len(items.keys)):  # driver-loop: captured public field metadata
+        var name = items.keys[i]
         if py_type(name) is b.str:
             var text = String(name)
             var skipped = False
@@ -96,7 +97,7 @@ def gp_key_fields(mut key: GPKernelKey, fields: PythonObject, skip: List[String]
             if skipped:
                 continue
         key.pin(name)
-        _gp_key_value(key, items[i][1], 0)
+        _gp_key_value(key, items.values[i], 0)
         count += 1
     key.count(count)
 
