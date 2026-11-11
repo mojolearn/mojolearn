@@ -259,19 +259,7 @@ from transformer.transformer_binding_impl import (
     _session_forward_run,
     _session_export_run,
     _session_load_run,
-    CausalLMSession,
-    _lm_refuse_nonfinite_device,
-    _LM_ARGMAX_TPB,
-    _LM_ARGMAX_NONE,
-    _lm_order_key,
-    _lm_last_argmax_kernel,
-    _lm_open_run,
-    _lm_open_run_int15,
-    _lm_layers_run,
-    _lm_run,
-    _lm_forward_run,
     _transformer_backward_run,
-    LM_RESIDENT_GENERATE,
 )
 from transformer.causal_entry_device import publish_causal_transformer_device
 
@@ -824,10 +812,6 @@ def transformer_decode_step_binding(
     return PythonObject(out_len)
 
 
-def transformer_decode_native_handle_binding(session: PythonObject) raises -> PythonObject:
-    return PythonObject(Int(session.downcast_value_ptr[TransformerDecodeSession]()))
-
-
 def transformer_decode_session_create_binding() raises -> PythonObject:
     """A closed session. Creation performs no GPU operation."""
     return PythonObject(alloc=TransformerDecodeSession())
@@ -1177,237 +1161,13 @@ def transformer_decode_session_close_binding(session: PythonObject) raises -> Py
 # Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
-def causal_lm_native_handle_binding(session: PythonObject) raises -> PythonObject:
-    return PythonObject(Int(session.downcast_value_ptr[CausalLMSession]()))
-
-
-def causal_lm_session_create_binding() raises -> PythonObject:
-    """A closed session. Creation performs no GPU operation."""
-    return PythonObject(alloc=CausalLMSession())
-
-
-def causal_lm_session_open_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`addrs` = [embed (V * D f32), norm (D f32; 0 for a model without a final
-    norm, admitted only under MOJOLEARN_IDN_LM_RESIDENT_GENERATE), head
-    (V * D f32, or 0 for a head tied to the embedding)]; `params` = [B, V, D,
-    eps (float)]. Every
-    tensor is COPIED to the device; later edits are not observed."""
-    var owner = session.downcast_value_ptr[CausalLMSession]()
-    if len(addrs) != 3 or len(params) != 4:
-        raise Error("causal_lm_session_open: expected 3 addresses and 4 scalars")
-    if owner[].busy:
-        raise Error("causal lm session: busy")
-    if owner[].is_open():
-        raise Error("causal lm session: already open; close it first")
-    var pe = Int(py=addrs[0])
-    var pn = Int(py=addrs[1])
-    var ph = Int(py=addrs[2])
-    if pe == 0 or (pn == 0 and not LM_RESIDENT_GENERATE):
-        raise Error("causal_lm_session_open: null buffer address")
-    var b = Int(py=params[0])
-    var v = Int(py=params[1])
-    var d = Int(py=params[2])
-    var eps = Float32(Float64(py=params[3]))
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _lm_open_run(owner[], pe, pn, ph, b, v, d, eps)
-    except error:
-        owner[].busy = False
-        owner[].release()
-        raise error
-    owner[].busy = False
-    owner[].usable = True
-    return PythonObject(0)
-
-
-def causal_lm_session_open_int15_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`causal_lm_session_open` under numeric_profile="fixed15_v1"
-    (lane/lowbit-default, 2026-09-29): `addrs` = [embed (V * D f32), norm
-    (D f32), head hi (V * D int8), head lo (V * D int8), head exponents (V
-    int32)], the head's planes whether or not it is tied; `params` = [B, V,
-    D, eps (float)]. Every tensor is COPIED to the device."""
-    var owner = session.downcast_value_ptr[CausalLMSession]()
-    if len(addrs) != 5 or len(params) != 4:
-        raise Error("causal_lm_session_open_int15: expected 5 addresses and 4 scalars")
-    if owner[].busy:
-        raise Error("causal lm session: busy")
-    if owner[].is_open():
-        raise Error("causal lm session: already open; close it first")
-    var pe = Int(py=addrs[0])
-    var pn = Int(py=addrs[1])
-    var planes: List[Int] = [Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4])]
-    if pe == 0 or (pn == 0 and not LM_RESIDENT_GENERATE) or planes[0] == 0 or planes[1] == 0 or planes[2] == 0:
-        raise Error("causal_lm_session_open_int15: null buffer address")
-    var b = Int(py=params[0])
-    var v = Int(py=params[1])
-    var d = Int(py=params[2])
-    var eps = Float32(Float64(py=params[3]))
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _lm_open_run_int15(owner[], pe, pn, planes, b, v, d, eps)
-    except error:
-        owner[].busy = False
-        owner[].release()
-        raise error
-    owner[].busy = False
-    owner[].usable = True
-    return PythonObject(0)
-
-
-def causal_lm_session_run_binding(
-    session: PythonObject, layers: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """One call for a prompt and a block of greedy tokens. `layers` is the
-    stack's open `TransformerDecodeSession`s in order, all at the same
-    cached length. `addrs` = [ids_in (B * L int32), ids_out (B * n_steps
-    int32, row-major), logits_out (B * V f32 of the LAST pass's last
-    position, or 0)]; `params` = [L, n_steps, cached_tokens]. The first
-    pass runs the L prompt tokens; each later pass feeds back the previous
-    pick. Returns the post-call cached_tokens. A failed call marks this
-    session and every layer session lost."""
-    var owner = session.downcast_value_ptr[CausalLMSession]()
-    if len(addrs) != 3 or len(params) != 3:
-        raise Error("causal_lm_session_run: expected 3 addresses and 3 scalars")
-    if owner[].busy:
-        raise Error("causal lm session: busy")
-    if not owner[].is_open():
-        raise Error("causal lm session: not open (causal_lm_session_open first)")
-    if not owner[].usable:
-        raise Error("causal lm session: lost after a failed call; close it and open a new one")
-    var p_ids = Int(py=addrs[0])
-    var p_out = Int(py=addrs[1])
-    var p_logits = Int(py=addrs[2])
-    if p_ids == 0 or p_out == 0:
-        raise Error("causal_lm_session_run: null buffer address")
-    var l = Int(py=params[0])
-    var n_steps = Int(py=params[1])
-    var claimed = Int(py=params[2])
-    if l < 1 or n_steps < 1:
-        raise Error("causal_lm_session_run: L and n_steps must be positive")
-    var ptrs = List[Int]()
-    var n_layers = Int(py=len(layers))
-    if n_layers < 1:
-        raise Error("causal_lm_session_run: no layers")
-    for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
-        var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
-        _require_session_open(sp[])
-        if sp[].b != owner[].b or sp[].dm != owner[].d:
-            raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
-                + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
-                + ", d_model = " + String(owner[].d))
-        if sp[].cached() != claimed:
-            raise Error(String("transformer decode session: the caller believes cached_tokens = ")
-                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].cached()))
-        if sp[].cached() + l + n_steps - 1 > sp[].smax:
-            raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
-                + String(sp[].smax) + "-token cache")
-        ptrs.append(Int(sp))
-    for i in range(n_layers):  # driver-loop: over decoder layers of the model
-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
-        sp[].busy = True
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _lm_run(owner[], ptrs, p_ids, p_out, p_logits, l, n_steps)
-    except error:
-        for i in range(n_layers):  # driver-loop: over decoder layers of the model
-            var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
-            sp[].busy = False
-            sp[].usable = False
-        owner[].busy = False
-        owner[].usable = False
-        raise error
-    var result = 0
-    for i in range(n_layers):  # driver-loop: over decoder layers of the model
-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
-        sp[].busy = False
-        result = sp[].cached()
-    owner[].busy = False
-    return PythonObject(result)
-
-
-def causal_lm_session_forward_binding(
-    session: PythonObject, layers: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`CausalLM.forward` on open sessions in one call: `layers` the stack's
-    open `TransformerDecodeSession`s (all at the same cached length);
-    `addrs` = [ids (B * L int32), logits_out (B * L * V f32)]; `params` =
-    [L]. The layers' caches advance by L. Returns the post-call
-    cached_tokens. A failed call marks this session and every layer session
-    lost."""
-    var owner = session.downcast_value_ptr[CausalLMSession]()
-    if len(addrs) != 2 or len(params) != 1:
-        raise Error("causal_lm_session_forward: expected 2 addresses and 1 scalar")
-    if owner[].busy:
-        raise Error("causal lm session: busy")
-    if not owner[].is_open():
-        raise Error("causal lm session: not open (causal_lm_session_open first)")
-    if not owner[].usable:
-        raise Error("causal lm session: lost after a failed call; close it and open a new one")
-    var p_ids = Int(py=addrs[0])
-    var p_logits = Int(py=addrs[1])
-    if p_ids == 0 or p_logits == 0:
-        raise Error("causal_lm_session_forward: null buffer address")
-    var l = Int(py=params[0])
-    if l < 1:
-        raise Error("causal_lm_session_forward: L must be positive")
-    var n_layers = Int(py=len(layers))
-    if n_layers < 1:
-        raise Error("causal_lm_session_forward: no layers")
-    var ptrs = List[Int]()
-    var held = -1
-    for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
-        var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
-        _require_session_open(sp[])
-        if sp[].b != owner[].b or sp[].dm != owner[].d:
-            raise Error("causal_lm_session_forward: layer " + String(i) + " holds B = " + String(sp[].b)
-                + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
-                + ", d_model = " + String(owner[].d))
-        if held < 0:
-            held = sp[].cached()
-        elif sp[].cached() != held:
-            raise Error("causal_lm_session_forward: the layers hold different cached lengths")
-        if sp[].cached() + l > sp[].smax:
-            raise Error("causal_lm_session_forward: " + String(l) + " more positions do not fit the "
-                + String(sp[].smax) + "-token cache")
-        ptrs.append(Int(sp))
-    for i in range(n_layers):  # driver-loop: over decoder layers of the model
-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
-        sp[].busy = True
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _lm_forward_run(owner[], ptrs, p_ids, p_logits, l)
-    except error:
-        for i in range(n_layers):  # driver-loop: over decoder layers of the model
-            var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
-            sp[].busy = False
-            sp[].usable = False
-        owner[].busy = False
-        owner[].usable = False
-        raise error
-    var result = 0
-    for i in range(n_layers):  # driver-loop: over decoder layers of the model
-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
-        sp[].busy = False
-        result = sp[].cached()
-    owner[].busy = False
-    return PythonObject(result)
-
-
-def causal_lm_session_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[CausalLMSession]()
-    if owner[].busy:
-        raise Error("causal lm session: busy")
-    owner[].usable = False
-    owner[].release()
-    return PythonObject(0)
+# Lane causal-lm-sessions-native (2026-11-11): the CausalLM model session's
+# Python entries (causal_lm_session_create/open/open_int15/run/forward/close,
+# causal_lm_native_handle_v1, transformer_decode_native_handle_v1) are deleted.
+# CausalLM's resident sessions are native registry handles reached through the
+# session table (transformer/causal_session_entry.mojo); their only caller was
+# bindings/causal_lm_public.mojo. The layer decode session entries stay for
+# the public decode session (providers/python/transformer_decode_pyapi.mojo).
 
 
 def transformer_backward_binding(
@@ -1551,7 +1311,6 @@ def build__mojolearn_transformer() -> PythonObject:
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
-        m.def_function[transformer_decode_native_handle_binding]("transformer_decode_native_handle_v1")
         m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
         m.def_function[transformer_decode_session_open_step_op_binding]("transformer_decode_session_open_step_op")
         # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
@@ -1565,14 +1324,6 @@ def build__mojolearn_transformer() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         m.def_function[transformer_decode_session_close_binding]("transformer_decode_session_close")
         # lane/py-lm: the resident CausalLM decode session.
-        _ = m.add_type[CausalLMSession]("_CausalLMSession")
-        m.def_function[causal_lm_session_create_binding]("causal_lm_session_create")
-        m.def_function[causal_lm_native_handle_binding]("causal_lm_native_handle_v1")
-        m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
-        m.def_function[causal_lm_session_open_int15_binding]("causal_lm_session_open_int15")
-        m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
-        m.def_function[causal_lm_session_forward_binding]("causal_lm_session_forward")
-        m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
         # The CausalLM handle owner (core/causal_session_handles.mojo): one Python
         # type per interpreter (the transformer and Mamba bindings both attach it).

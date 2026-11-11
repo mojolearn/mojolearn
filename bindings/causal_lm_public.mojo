@@ -23,7 +23,6 @@ from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_namespace_admitted, prepared_namespace_admit
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from bindings.py_typed_call import py_call_typed
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_reserved_execute
