@@ -75,26 +75,26 @@
       "family": "BisectingKMeans",
       "anchor": "bindings/cluster_native.mojo:342",
       "role": "prediction node array/boxed integer request list",
-      "status": "pending",
-      "after": "bindings/cluster_native.mojo:family_xc_bisect_predict"
+      "status": "migrated",
+      "after": "bindings/cluster_native.mojo:family_xc_bisect_predict; core/kmeans_variants_api.mojo:BisectPredictRequest"
     },
     {
       "family": "shared centers",
       "anchor": "bindings/cluster_native.mojo:162",
       "role": "resident query tuple/objects tuple and compiled Python dispatch",
-      "status": "pending",
-      "after": "bindings/cluster_resident_table.mojo; typed owning-lease extension next"
+      "status": "migrated",
+      "after": "bindings/cluster_resident_table.mojo:cres_variant_lookup/store; core/kmeans_variants_resident_state.mojo:VariantsResidentState"
     },
     {
       "family": "shared centers",
       "anchor": "bindings/cluster_native.mojo:97",
       "role": "query integer/float lists and nested result envelope",
-      "status": "pending",
-      "after": "bindings/cluster_native.mojo:shared centers queries"
+      "status": "migrated",
+      "after": "bindings/cluster_native.mojo:_variant_query; core/kmeans_variants_api.mojo:VariantsQueryRequest"
     }
   ],
   "role_count": 13,
-  "after_mapping": "7 of 13 bounded roles migrated; 3 retained observable boundary roles; 3 query roles pending. Not runtime object counts.",
+  "after_mapping": "10 of 13 bounded roles migrated; 3 observable boundary roles retained. Not runtime-instance counts.",
   "retained_public_output_fields": [
     "cluster_centers_",
     "counts_",
@@ -112,5 +112,6 @@
   ],
   "compiled": false,
   "executed": false,
-  "status": "fit/partial fit product authored; query migration pending"
+  "status": "fit/partial/query product authored; compilation and runtime pending",
+  "retained_explanation": "Existing scalar/tuple partial-state forms and tree Arrays remain observable boundary state for rebinding, identity and serialization. RUN uses native scalar state, spans, requests and owned results. They are not counted as eliminated objects."
 }
