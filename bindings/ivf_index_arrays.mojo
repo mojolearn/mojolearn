@@ -336,35 +336,32 @@ def ivf_write_resident_result(
 # ===========================================================================
 
 
-def ivf_merge_shards_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    var shards = Int(py=params[0])
-    var m = Int(py=params[1])
-    var k = Int(py=params[2])
+def ivf_merge_shards_host_run(aa: Int, pp: Int) raises -> Int:
+    """The host merge over the PI_MERGE_SHARDS layout of
+    core/parallel_entry_table.mojo (the addrs/params above as plain words;
+    spans checked by the caller): the status. The former Python door
+    `ivf_merge_shards` had no caller left once the distributed IVF owner read
+    the parallel IVF table (lane calltable-parallel-archive, 2026-11-11)."""
+    var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+    var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
+    var shards = p[0]
+    var m = p[1]
+    var k = p[2]
     if shards < 1 or m < 0 or k < 1:
         raise Error("ivf_merge_shards: need at least one shard and k >= 1")
-    if len(addrs) != 3 + 4 * shards or len(params) != 3 + shards:
-        raise Error("ivf_merge_shards: address or parameter count differs from the shard count")
-    var od = f32_ptr(Int(py=addrs[0]))
-    var oi = i32_ptr(Int(py=addrs[1]))
-    var oc = i32_ptr(Int(py=addrs[2]))
     var sd = List[Int]()
     var si = List[Int]()
     var sc = List[Int]()
     var sm = List[Int]()
     var sn = List[Int]()
     for s in range(shards):  # small-loop(shards: four address words and one row count per shard)
-        sd.append(Int(py=addrs[3 + 4 * s]))
-        si.append(Int(py=addrs[4 + 4 * s]))
-        sc.append(Int(py=addrs[5 + 4 * s]))
-        sm.append(Int(py=addrs[6 + 4 * s]))
-        sn.append(Int(py=params[3 + s]))
-    var merged = ivf_merge_shards_host(od, oi, oc, sd, si, sc, sm, sn, shards, m, k)
-    var status = merged[0]
-    var bad_row = merged[1]
-    var out = Python.list()
-    out.append(PythonObject(status))
-    out.append(PythonObject(bad_row))
-    return out
+        sd.append(a[3 + 4 * s])
+        si.append(a[4 + 4 * s])
+        sc.append(a[5 + 4 * s])
+        sm.append(a[6 + 4 * s])
+        sn.append(p[3 + s])
+    var merged = ivf_merge_shards_host(f32_ptr(a[0]), i32_ptr(a[1]), i32_ptr(a[2]), sd, si, sc, sm, sn, shards, m, k)
+    return merged[0]
 
 
 # ===========================================================================
@@ -385,15 +382,12 @@ def ivf_merge_shards_host_binding(addrs: PythonObject, params: PythonObject) rai
 # ===========================================================================
 
 
-def ivf_shard_plan_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    var n = Int(py=params[0])
-    var n_lists = Int(py=params[1])
-    var shards = Int(py=params[2])
-    if n < 0 or n_lists < 1 or shards < 1 or len(addrs) != 5:
+def ivf_shard_plan_host_run(ind_addr: Int, off_addr: Int, soff_addr: Int, loc_addr: Int, map_addr: Int,
+                            n: Int, n_lists: Int, shards: Int) raises -> Int:
+    """The host plan (contract above). The former Python door
+    `ivf_shard_plan` had no caller left once the distributed IVF owner read
+    the parallel IVF table (lane calltable-parallel-archive, 2026-11-11)."""
+    if n < 0 or n_lists < 1 or shards < 1:
         raise Error("ivf_shard_plan: needs 5 addresses, n >= 0, n_lists >= 1 and shards >= 1")
-    var ind = i32_ptr(Int(py=addrs[0]))
-    var off = i32_ptr(Int(py=addrs[1]))
-    var soff = i32_ptr(Int(py=addrs[2]))
-    var loc = i32_ptr(Int(py=addrs[3]))
-    var mp = i32_ptr(Int(py=addrs[4]))
-    return PythonObject(ivf_shard_plan_host(ind, off, soff, loc, mp, n, n_lists, shards))
+    return ivf_shard_plan_host(i32_ptr(ind_addr), i32_ptr(off_addr), i32_ptr(soff_addr), i32_ptr(loc_addr),
+                               i32_ptr(map_addr), n, n_lists, shards)
