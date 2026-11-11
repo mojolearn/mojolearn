@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Bounded fit/query plan fixtures using the real native CPU descriptor.
 
-Eight independent metric/split/shrink combinations run across host workers.
+Eight metric/split/shrink combinations and three empty-query contracts run
+independently across host workers.
 Closed-form symmetric-data oracles do not derive expected values from kernels.
 """
 from std.math import sqrt
 from core.host_parallel import host_parallelize
-from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, nc_binary_decision
+from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, nc_binary_decision, nc_scratch_address
 from x_neighbors.native_descriptor_host import xn_native_v1
 from checks.native_tests.nearest_centroid_plan_suite import require
 
@@ -70,18 +71,45 @@ def fixture(unit: Int) raises:
     _ = plan^
 
 
+def empty_case(unit: Int) raises:
+    var words = List[Float32](length=4, fill=1)
+    var codes = List[Int32](length=1, fill=-1)
+    var empty = List[Float32]()
+    require(nc_scratch_address(empty) == 0, "empty scratch must retain null Array address")
+    var address = Int(words.unsafe_ptr())
+    # Input addresses remain non-null, as an empty NumPy view may be; the
+    # private empty output scratch must retain the old descriptor refusal.
+    var request = NcQueryPlan(address, address, address, address, 0, 2, 2)
+    var driver = NcDriver(xn_native_v1)
+    var refused = False
+    try:
+        if unit == 0:
+            request.distance_labels(driver, Int(codes.unsafe_ptr()), True)
+        elif unit == 1:
+            request.score_labels(driver, Int(codes.unsafe_ptr()))
+        else:
+            request.probabilities(driver, address, 0)
+    except error:
+        refused = String(error) == "x_neighbors: null buffer address"
+    require(refused and codes[0] == -1, "empty query changed refusal or wrote output")
+    _ = words^
+
+
 def main() raises:
-    var failures = List[Int](length=8, fill=0)
+    var failures = List[Int](length=11, fill=0)
     var fp = failures.unsafe_ptr()
     def run(unit: Int) {imm fp}:
         try:
-            fixture(unit)
+            if unit < 8:
+                fixture(unit)
+            else:
+                empty_case(unit - 8)
         except error:
             fp[unit] = 1
             print("FAIL nearest_centroid_native_cpu fixture", unit, String(error))
-    host_parallelize(run, 8)
+    host_parallelize(run, 11)
     var total = 0
     for failed in failures:
         total += failed
     require(total == 0, "nearest_centroid_native_cpu failed " + String(total) + " fixtures")
-    print("PASS nearest_centroid_native_cpu: 8 native fit/query fixtures")
+    print("PASS nearest_centroid_native_cpu: 11 native fit/query/refusal fixtures")
