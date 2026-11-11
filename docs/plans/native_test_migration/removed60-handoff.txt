@@ -2,14 +2,16 @@ Mojolearn bounded removed-definition source map, 2026-11-11
 
 Scope: exactly60 old test_ names absent from caba5aa232 to b7dad887992d.
 This is the requested immutable NEXT snapshot, not a new whole-project census.
-43 numerical/boundary splits or renames;8 numerical replacements with existing
+43 numerical/boundary splits or renames;9 native replacements with existing
 boundaries retained;4 nonzero numerical replacements with a separate boundary
-test;4 boundary redesigns/renames;1 unresolved. No retired source-only definition
+test;4 boundary redesigns/renames;0 unresolved source mappings. No retired source-only definition
 identified within these60. Native runtime case counts are not Python deletions.
 
-Unresolved: test_byte_lm_runtime_shape.py:178 large shape(1,2048,768,12,12,
-64,2048,12,50257), tensorcount110,total162147840,final registry offset.
-No replacement located; do not call this migrated or silently waive it.
+Resolved large-shape case: deletion producer caa4df57ae identifies
+training/checks/byte_lm_config_check.mojo:83-92. It preserves the exact
+shape(1,2048,768,12,12,64,2048,12,50257), tensorcount110,total162147840
+and all prefix offsets. Prior scoped-search uncertainty remains in
+commit350118bb1433; it was outside checks/native_tests.
 
 Each row records baseline AST hash/line, native module and immutable source hash,
 new or retained Python name/line, rationale and explicit input-generator limits.
