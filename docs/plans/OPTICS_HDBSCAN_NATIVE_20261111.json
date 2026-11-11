@@ -1,6 +1,6 @@
 {
   "baseline": "eee8fa67b4",
-  "status": "OPTICS four transport roles migrated in source; HDBSCAN roles pending; no compilation/runtime",
+  "status": "OPTICS transport and HDBSCAN fit/preparation roles migrated in source; HDBSCAN query/cache and constructor staging remain pending",
   "roles": [
     {
       "id": 1,
@@ -35,49 +35,49 @@
       "family": "HDBSCAN fit",
       "role": "fit address list",
       "before": "bindings/cluster_fit_a_native.mojo:777",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanFitRequest"
     },
     {
       "id": 6,
       "family": "HDBSCAN fit",
       "role": "fit parameter list",
       "before": "bindings/cluster_fit_a_native.mojo:852",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanFitOptions"
     },
     {
       "id": 7,
       "family": "HDBSCAN fit",
       "role": "private fit info Array",
       "before": "bindings/cluster_fit_a_native.mojo:774",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanFitPlan.info"
     },
     {
       "id": 8,
       "family": "HDBSCAN fit",
       "role": "oversized condensed-tree scratch Arrays before public heads",
       "before": "bindings/cluster_fit_a_native.mojo:792",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanFitState tree buffers"
     },
     {
       "id": 9,
       "family": "HDBSCAN prediction preparation",
       "role": "prediction address list",
       "before": "bindings/cluster_fit_a_native.mojo:933",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanPredictionRequest"
     },
     {
       "id": 10,
       "family": "HDBSCAN prediction preparation",
       "role": "prediction parameter list",
       "before": "bindings/cluster_fit_a_native.mojo:937",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanPredictionRequest dimensions"
     },
     {
       "id": 11,
       "family": "HDBSCAN prediction preparation",
       "role": "private full-capacity exemplar scratch before public head",
       "before": "bindings/cluster_fit_a_native.mojo:911",
-      "after": "pending"
+      "after": "core/hdbscan_fit_api.mojo::HdbscanPredictionPlan.exemplars"
     },
     {
       "id": 12,
@@ -131,7 +131,7 @@
   ],
   "scope_counts": {
     "candidate_distinct_roles": 18,
-    "completed": 4,
+    "completed": 11,
     "new_runtime_instance_count": "not inferred"
   },
   "public_calls": {
@@ -196,5 +196,17 @@
     "original_workload": "180x3 random fixture remains; analytic 180x3 fixture is not represented as equivalent random-workload coverage",
     "compiled": false,
     "executed": false
-  }
+  },
+  "hdbscan_fit_preservation": [
+    "Dedicated GPU hdbscan_fit_door_run/prediction_data_door_run and CPU hdbscan_fit_host_run/prediction_data_host_run unchanged",
+    "Host source snapshot and six preparation snapshots still copy before GIL release and are freed before public output PACK, matching prior lifetime",
+    "Same labels/core/probability allocation and public publication order; same five oversized tree allocations and head copies; native info/tree/exemplar scratch replaces only private Arrays",
+    "Same observable _prediction_data key insertion order, public Arrays, raw-data copy-on-borrow and scalar/refusal stages",
+    "Legacy low-level provider exports remain for compatibility; public fit now calls the typed descriptor directly"
+  ],
+  "hdbscan_fit_affected_roots": [
+    "_mojolearn_runtime_family_host",
+    "_mojolearn_hdbscan",
+    "_mojolearn_hdbscan_host"
+  ]
 }

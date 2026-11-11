@@ -31,6 +31,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hdbscan.native_fit_host import HDBSCAN_FIT_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
@@ -82,6 +84,11 @@ def hdbscan_vendor_binding() raises -> PythonObject:
 
 def hdbscan_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def hdbscan_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = HDBSCAN_FIT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def hdbscan_fit_binding(
@@ -212,6 +219,7 @@ def build__mojolearn_hdbscan_host() -> PythonObject:
         module.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         module.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         module.def_function[hdbscan_fit_binding]("hdbscan_fit")
+        module.def_function[hdbscan_fit_native_api_v1_binding]("hdbscan_fit_native_api_v1")
         module.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
         module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
