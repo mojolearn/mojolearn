@@ -10,6 +10,9 @@ from x_neighbors.native_descriptor_host import XN_NATIVE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.shared_slot import SharedSlot
 from core.kpca_native_api import KPCAProviderAPI
+from core.ocsvm_resident_api import OcResidentAPI
+from x_neighbors.ocsvm_resident_native_host import OcHostResident as OcResidentBackend
+comptime OC_RESIDENT_DEVICE = False
 from core.kpca_native_info import KPCANeighborInfo
 comptime KPCA_NEIGHBOR_DEVICE = False
 comptime KPCA_NEIGHBOR_RESIDENT = False
@@ -1086,6 +1089,16 @@ def kpca_neighbors_native_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(table[].name, table[].entries)
 
 
+comptime _OC_RESIDENT_API_NAME = (("MojolearnOcResidentDevice" if OC_RESIDENT_DEVICE else "MojolearnOcResidentHost")
+    + ("IdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "FastV1"))
+comptime OC_RESIDENT_API = SharedSlot[OcResidentAPI[OcResidentBackend], _OC_RESIDENT_API_NAME]
+
+
+def ocsvm_resident_native_api_binding() raises -> PythonObject:
+    var table = OC_RESIDENT_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def x_neighbors_native_api_binding() raises -> PythonObject:
     var table = XN_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -1093,6 +1106,7 @@ def x_neighbors_native_api_binding() raises -> PythonObject:
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[x_neighbors_native_api_binding]("x_neighbors_native_api_v1")
+    m.def_function[ocsvm_resident_native_api_binding]("ocsvm_resident_native_api_v1")
     m.def_function[kpca_neighbors_native_api_binding]("kpca_neighbors_native_api_v1")
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[l1dist_binding]("xn_l1dist")
