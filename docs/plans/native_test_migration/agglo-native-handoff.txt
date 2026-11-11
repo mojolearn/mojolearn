@@ -50,3 +50,32 @@ Second chunk:28 typed request/wire contracts, dependency2121167e8471.
 RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_contract.mojo
   Importable agglo_contract_suite.run_checks(). Static source/JSON/TOML/
   whitespace checks only; no lane execution. No Python/product removals yet.
+
+Third chunk:9 actual CPU and9 ordered GPU graphs, dependency2121167e8471.
+  Original18x2 grid/k2, duplicate36x2/k2, original18x2/k17 singleton cut,
+  original200x4 seed0/k3 and Ward180x3 seed7/k3/distances. Additional original
+  grid through general-tree single linkage and small scalene6x2 complete/
+  average examples. Ninth graph executes actual signed-zero row admission.
+  CPU total140 (state103/wire28/actual9); GPU9. All uncompiled/unrun.
+
+  Single-linkage reference is NumPy Float64 minimax closure, independent of
+  any MST. Ward directly recomputes cluster centroids/SSE; complete/average
+  aggregate original point distances, without Lance-Williams updates.32 saved
+  artifacts hashed. Tree oracle checks parent ownership, all leaves exactly
+  once, independent pairwise cophenetic relations and exact requested cut
+  partitions; tied children orientation/order and label numbers may differ.
+  General-tree distances use rtol2e-4/atol2e-5 against independent Float64;
+  this is a new correctness bound, not a weakened failing expectation.
+
+  Typed actual fit requests preserve solver metric1/pairwise and general
+  Euclidean-1/full-tree/no-connectivity settings. Direct and GPU resident
+  queries use independent nearest candidates and lowest fitted-cluster-label
+  ties, including all18 original individual calls. Native scratch/result
+  counts, guarded outputs, unchanged input bytes and owned lease release.
+  Flat native Lists; all pointer owners pinned. GPU graphs ordered, numerical
+  kernels/oracle cells parallel; MAX concurrent-submit issue remains separate.
+RUN OWED: agglo_native_cpu.mojo and agglo_native_gpu.mojo, importable matching
+  *_suite.run_checks(); -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . and CPU column
+  define for CPU. No lane execution. Static AST/JSON/TOML/hash/source/whitespace
+  checks only. Python coverage and mixed-family controllers remain untouched
+  until accepted replacement evidence; no product/kernel/default changes.
