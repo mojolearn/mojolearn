@@ -1,6 +1,6 @@
 {
   "family": "KernelPCA",
-  "status": "authored; native compilation and execution owed",
+  "status": "Native CPU15 and Apple Metal GPU16 fixtures compiled and passed at9c885cff0279f3f2dc62f8ce080b0d6f7c0a7c89; installed Python boundary and other vendors untested.",
   "product_dependencies": [
     "c613f33133",
     "2c3a36c216",
@@ -95,19 +95,34 @@
   "migration": {
     "python_file": "python/mojolearn/tests/test_x_neighbors_sanity.py",
     "definition": "test_kernel_pca_options",
-    "numerical_assertions_removed": 0,
+    "numerical_assertions_removed": 1,
     "replacement": "raw and precomputed eigenvalues independently checked against the same mathematical oracle; public array shape remains in Python",
     "retained": "All four external sklearn eigen/fit/query checks, public feature names, array ownership, refusal and interop tests; no Python controller merely renamed.",
-    "numerical_assertions_pending_removal": 1,
-    "cleanup_condition": "Root compiles and runs actual replacement KPCA fixtures before deleting the existing Python numerical assertion.",
-    "pending_cleanup_patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/kpca-native-python-cleanup.patch"
+    "numerical_assertions_pending_removal": 0,
+    "cleanup_condition": "Satisfied: root compiled and ran CPU15/GPU16 replacement fixtures before removing one Python numerical assertion.",
+    "applied_cleanup_patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/kpca-native-python-cleanup.patch"
   },
   "product_changes": false,
   "algorithm_changes": false,
   "performance_evidence": false,
   "identity_campaign": false,
   "run_owed": [
-    "CPU 15 new fixtures",
-    "GPU 16 new fixtures"
-  ]
+    "Installed Python boundary checks remain unrun; this is internal native execution evidence only.",
+    "NVIDIA/AMD execution remains untested."
+  ],
+  "accepted_native_evidence": {
+    "source": "9c885cff0279f3f2dc62f8ce080b0d6f7c0a7c89",
+    "cpu": {
+      "fixtures": 15,
+      "compile_exit": 0,
+      "run_exit": 0
+    },
+    "apple_metal_gpu": {
+      "fixtures": 16,
+      "compile_exit": 0,
+      "run_exit": 0
+    },
+    "summary": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/kpca-native-actual-accepted-results.json",
+    "limits": "No performance or release identity verdict; failing concurrent shared-context stress stays separate."
+  }
 }
