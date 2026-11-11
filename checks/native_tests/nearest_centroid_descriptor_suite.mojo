@@ -24,6 +24,7 @@ def fixture[Entry: NativeDescriptorCall](unit: Int) raises:
     var deviations = List[Float32](length=4, fill=0)
     var driver = NcDriver(Entry)
     var plan = NcFitPlan(8, 2, 2, euclidean, split)
+    require(len(plan.centroids) == 0 and len(plan.dataset_centroid) == 0, "centroid scratch allocated before priors")
     plan.count(driver, Int(labels.unsafe_ptr()))
     require(plan.counts[0] == 4 and plan.counts[1] == 4, "class counts")
     require(plan.wide_counts[0] == 4 and plan.wide_counts[1] == 4, "wide class counts")

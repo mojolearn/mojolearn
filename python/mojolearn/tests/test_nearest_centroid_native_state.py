@@ -43,7 +43,8 @@ def test_centroid_native_plan_observes_live_fitted_buffers(field, mutation):
     assert np.asarray(model.predict(query)).tolist() == [1]
     assert np.asarray(model.decision_function(query))[0] > 0
     assert np.asarray(model.predict_proba(query))[0, 1] > 0.5
-    assert np.asarray(model.predict_log_proba(query))[0, 1] > np.asarray(model.predict_log_proba(query))[0, 0]
+    log_probability = np.asarray(model.predict_log_proba(query))
+    assert log_probability[0, 1] > log_probability[0, 0]
 
 
 @pytest.mark.parametrize("method", ["predict", "decision_function", "predict_proba", "predict_log_proba"])
@@ -64,6 +65,14 @@ def test_centroid_query_outputs_detach_from_inputs_and_temporary_prior_state():
     del model, query
     gc.collect()
     np.testing.assert_array_equal(np.asarray(output), expected)
+
+
+def test_centroid_variance_refusal_retains_prior_publication_stage():
+    model = NearestCentroid(priors=[2.0, 1.0])
+    with pytest.raises(ValueError, match="All features have zero variance"):
+        model.fit(np.ones((4, 2), dtype="f4"), [0, 0, 1, 1])
+    np.testing.assert_array_equal(np.asarray(model.class_prior_), [2.0 / 3.0, 1.0 / 3.0])
+    assert not hasattr(model, "centroids_")
 
 
 def test_centroid_runtime_ignores_replaced_legacy_numerical_entries(monkeypatch):
