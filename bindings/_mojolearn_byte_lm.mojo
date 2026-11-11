@@ -29,6 +29,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from training.byte_lm_glue_entry import publish_byte_lm_entries
 from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.memory import bitcast, unsafe_memcmp
@@ -1706,6 +1707,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_schedule_api_binding]("byte_lm_schedule_api_v1")
         module.def_function[byte_lm_schedule_create_binding]("byte_lm_schedule_create_v1")
         module.def_function[byte_lm_schedule_handle_binding]("byte_lm_schedule_handle_v1")
+        # The native trainer door's table (core/byte_lm_entry_table.mojo).
+        publish_byte_lm_entries()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))
