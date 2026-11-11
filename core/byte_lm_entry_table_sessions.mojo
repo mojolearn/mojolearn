@@ -31,9 +31,8 @@ Table names carry the tier and vendor as the trainer table's do. Extending
 the layout requires a new V suffix. Publication and lookup are small
 metadata operations with no independent numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 from core.state_registry import StateHandle
 from core.byte_lm_entry_table import ByteLmEntryKey
 
@@ -132,12 +131,23 @@ def byte_lm_sessions_published(key: ByteLmEntryKey) -> Bool:
 
 
 # ---------------------------------------------------------------- caller side
+# The caller resolves the sessions entry once (`byte_lm_sessions_ref`, at its
+# session owner's construction; lane entry-table-zero-alloc) and passes the
+# `EntryRef`: every step is one indirect call, no table read.
 
-def byte_lm_resident_open(key: ByteLmEntryKey) raises -> StateHandle:
-    """A new closed resident session of the image `key` names."""
+def byte_lm_sessions_ref(key: ByteLmEntryKey) raises -> EntryRef:
+    """The sessions entry of the image `key` names, resolved once; the table
+    refusals raise here."""
+    return EntryRef(byte_lm_sessions_entry(key), entry_ref_word(key.mode, key.vendor, BS_OP_COUNT))
+
+
+def byte_lm_resident_open(entry: EntryRef) raises -> StateHandle:
+    """A new closed resident session of the resolved image."""
     var out = List[Int](length=2, fill=0)
-    var a: List[Int] = [Int(out.unsafe_ptr())]
-    _ = native_descriptor_call(byte_lm_sessions_entry(key), BS_CREATE, a, List[Int](), List[Float64]())
+    var a: Array[Int, 1] = [Int(out.unsafe_ptr())]
+    var p: Array[Int, 0] = []
+    var f: Array[Float64, 0] = []
+    _ = entry_ref_call(entry, BS_CREATE, a, p, f)
     var index = out[0]
     var generation = out[1]
     _ = out^  # keep the handle output alive past the synchronous call
@@ -146,21 +156,26 @@ def byte_lm_resident_open(key: ByteLmEntryKey) raises -> StateHandle:
     return StateHandle(index, UInt64(generation))
 
 
-def byte_lm_resident_run(key: ByteLmEntryKey, handle: StateHandle, operation: Int, addresses: List[Int],
+def byte_lm_resident_run(entry: EntryRef, handle: StateHandle, operation: Int, addresses: List[Int],
                          ints: List[Int], floats: List[Float64]) raises -> Int:
     """One trainer operation (the `byte_lm_trainer_api_v1` numbering) on the
     resident session `handle`. `addresses` are the descriptors after the
     session word."""
-    var words: List[Int] = [handle.index, Int(handle.generation), operation]
+    var words = List[Int](capacity=3 + len(ints))
+    words.append(handle.index)
+    words.append(Int(handle.generation))
+    words.append(operation)
     for i in range(len(ints)):  # small-loop(the trainer plan words)
         words.append(ints[i])
-    return native_descriptor_call(byte_lm_sessions_entry(key), BS_RUN, addresses, words, floats)
+    return entry_ref_call(entry, BS_RUN, addresses, words, floats)
 
 
-def byte_lm_resident_close(key: ByteLmEntryKey, handle: StateHandle) raises:
+def byte_lm_resident_close(entry: EntryRef, handle: StateHandle) raises:
     """Release the handle; a stale handle refuses."""
-    var words: List[Int] = [handle.index, Int(handle.generation)]
-    _ = native_descriptor_call(byte_lm_sessions_entry(key), BS_CLOSE, List[Int](), words, List[Float64]())
+    var a: Array[Int, 0] = []
+    var p: Array[Int, 2] = [handle.index, Int(handle.generation)]
+    var f: Array[Float64, 0] = []
+    _ = entry_ref_call(entry, BS_CLOSE, a, p, f)
 
 
 # ---------------------------------------------------------------- publisher side

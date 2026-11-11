@@ -331,14 +331,14 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
     releases the GIL as the provider route did; callers that ran with it
     held keep `release_gil=False`."""
     var native = session.downcast_value_ptr[ByteLmSessionOwner]()
-    var key = native[].key()
+    var entry = native[].entry  # resolved once, at the owner's construction
     var handle = native[].handle()
     var result = 0
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_resident_run(key, handle, operation, addresses, ints, floats)
+            result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats)
     else:
-        result = byte_lm_resident_run(key, handle, operation, addresses, ints, floats)
+        result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats)
     _ = session  # the owner (and so the handle) is live through the synchronous native call
     return result
 
