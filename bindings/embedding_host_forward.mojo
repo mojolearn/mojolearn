@@ -44,38 +44,51 @@ def embedding_host_config(
     return EmbConfig(vocab, width, padding_idx, accumulate)
 
 
-def embedding_forward_binding(
-    addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
+def embedding_host_forward_words(a: List[Int], p: List[Int]) raises -> Int:
     """`Y[t, j] = W[ids[t], j]`, the device gather restated. Returns `T * d`.
 
     `addrs` = [weight (V * d f32, read), ids (T i32, read), y_out (T * d
     f32, WRITTEN)]; `params` = [V, d, T]. The GPU binding's order."""
-    if len(addrs) != 3:
+    if len(a) != 3:
         raise Error(
             "embedding_forward: addrs must contain 3 addresses (weight, ids,"
-            " y_out), got " + String(len(addrs))
+            " y_out), got " + String(len(a))
         )
-    if len(params) != 3:
+    if len(p) != 3:
         raise Error(
             "embedding_forward: params must contain 3 values (V, d, T), got "
-            + String(len(params))
+            + String(len(p))
         )
-    var vocab = Int(py=params[0])
-    var width = Int(py=params[1])
-    var n_positions = Int(py=params[2])
+    var vocab = p[0]
+    var width = p[1]
+    var n_positions = p[2]
     var cfg = embedding_host_config(vocab, width, EMB_NO_PADDING_IDX, False)
     emb_refuse_shape(cfg, n_positions)
     # Lane ne3-c-blocks-embedding (rows N160, N158): the table and the ids
     # are read through the caller's buffers, never copied; the refusals keep
     # their words, their order (ids, W, then the y address) and their first
     # index (`emb_refuse_ids_at`, `refuse_nonfinite_at`).
-    var wp = f32_ptr(Int(py=addrs[0]))
-    var idsp = i32_ptr(Int(py=addrs[1]))
-    var y_addr = Int(py=addrs[2])
+    var wp = f32_ptr(a[0])
+    var idsp = i32_ptr(a[1])
+    var y_addr = a[2]
     with GILReleased(Python()):
         emb_refuse_ids_at(idsp, n_positions, cfg)
         refuse_nonfinite_at(String("W"), wp, vocab * width)
         var yp = f32_ptr(y_addr)
         host_embedding_forward(wp, idsp, n_positions, cfg, yp)
-    return PythonObject(n_positions * width)
+    return n_positions * width
+
+
+def embedding_forward_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    return PythonObject(embedding_host_forward_words(embedding_host_words(addrs), embedding_host_words(params)))
+
+
+def embedding_host_words(value: PythonObject) raises -> List[Int]:
+    # UNPACK of a Python entry's argument words (the Python entries remain
+    # for their other callers and the boundary tests).
+    var out = List[Int]()
+    for i in range(len(value)):  # small-loop(a Python entry's argument words)
+        out.append(Int(py=value[i]))
+    return out^

@@ -347,6 +347,7 @@ def transformer_backward_binding(
 
 
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+from transformer.host.neural_entry_host import publish_neural_transformer_host
 
 
 def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
@@ -393,6 +394,9 @@ def build__mojolearn_transformer_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_transformer_host")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_transformer_host()
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")
         module.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         _ = module.add_type[HostTransformerSession]("_TransformerSession")

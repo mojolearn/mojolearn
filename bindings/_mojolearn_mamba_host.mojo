@@ -103,6 +103,7 @@ from mamba.host.mamba_host_shell_impl import (
     _m3_owned_export_run,
     _nn40_host_require,
 )
+from mamba.host.neural_entry_host import publish_neural_mamba_host
 
 
 
@@ -367,6 +368,9 @@ def build__mojolearn_mamba_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_mamba_host()
         native_identity_type(m)
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")

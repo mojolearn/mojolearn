@@ -80,6 +80,7 @@ from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_in
 from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from providers.python.sequence_pyapi import moe_backward_py
 from core.shared_slot import SharedSlot
+from sequence.small_mlp_entry_host import publish_neural_small_mlp_host
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -612,6 +613,9 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # sequence table (core/xseq_entry_table.mojo) for the sequence owner
         # (bindings/xseq_*_native.mojo); their former Python entries are gone.
         publish_x_sequence_host()
+        # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
+        # program; the Python entry remains for its other callers and the boundary tests.
+        publish_neural_small_mlp_host()
         m.def_function[host_numeric_mode_binding]("x_sequence_host_numeric_mode")
         m.def_function[host_vendor_binding]("x_sequence_host_vendor")
         m.def_function[host_column_binding]("x_sequence_host_column")
