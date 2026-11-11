@@ -16,9 +16,9 @@ Euclidean only, `n_cols <= FAST_RBC_MAX_D`.
 """
 
 from std.bit import count_trailing_zeros, pop_count
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
-from std.gpu.primitives.warp import sum as warp_sum
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+from max.gpu.primitives.warp import sum as warp_sum
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext

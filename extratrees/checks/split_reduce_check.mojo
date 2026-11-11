@@ -87,7 +87,7 @@ THE ARMS
 """
 
 from std.math import ceildiv
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys import has_accelerator
 from std.sys.info import (
     has_amd_gpu_accelerator,

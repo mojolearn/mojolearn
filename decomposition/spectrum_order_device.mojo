@@ -12,7 +12,7 @@ position is its rank: the number of values before it in that order. One
 thread per value forms its rank (comparisons only), then one thread per
 cell scatters: eigh's ascending position is n - 1 - rank (descending,
 walked backwards), svdvals' is the rank. No arithmetic: the same words."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

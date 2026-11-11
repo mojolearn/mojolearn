@@ -19,7 +19,7 @@ Lines:
   STALL_SLOW label=.. t_ms=.. lat_ms=..      (the first 40 slow iterations)
 "slow" = more than 20 ms above the median.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext

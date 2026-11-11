@@ -44,7 +44,7 @@ to within 2^-30 of the largest). The weights never visit the host:
 the high word, `kept` count in the low word) and one scatter; four words
 come back (first refused row and its bits, kept count, refused count).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.launch_clock import log_launch_ctx

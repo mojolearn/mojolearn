@@ -3,7 +3,7 @@
 """`DeviceExec`: the lane's operations on the GPU, one thread per element,
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

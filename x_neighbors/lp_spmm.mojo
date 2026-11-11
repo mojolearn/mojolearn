@@ -9,7 +9,7 @@ so acc is never -0.0: exact against the dense product while x is finite,
 which `lp_nonfinite_kernel` tests every iteration."""
 from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz, identical_mul_add

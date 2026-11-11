@@ -37,7 +37,7 @@ because it is symmetric -- and the full tile is `[nnz x batch]` with
 
 from experiments.classical_identical_ideas.linear_controls import C20_PAIR_LOAD
 from svm.impl.classical_kernel_device import classical_gather_rows_norms_kernel
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import ftz
 from max.gpu.host import DeviceBuffer, DeviceContext
 

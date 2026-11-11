@@ -32,7 +32,7 @@ The (class, feature) table and the class counts come back to the host
 dense fit within float32 (the atomic fold order is new).
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

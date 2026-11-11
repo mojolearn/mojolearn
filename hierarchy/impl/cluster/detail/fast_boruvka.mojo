@@ -19,7 +19,7 @@ Rounds at least halve the component count. The edges come back sorted by
 L2SqrtExpanded. FAST arithmetic: direct sums of squared differences.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace

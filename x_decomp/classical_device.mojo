@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Classical-only fused kernels. All candidates remain unqualified."""
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from x_decomp.cells import F32Ptr
 from x_decomp.classical_cells import contrast_pair
 

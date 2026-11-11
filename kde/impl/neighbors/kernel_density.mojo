@@ -109,7 +109,7 @@ from experiments.classical_identical_ideas.stats_controls import C52_PAIR, C52_R
 from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
 from core.classical_distance import direct_distance_step
 from kde.pair_lse import pair_parts, pair_row
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

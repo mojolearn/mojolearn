@@ -34,7 +34,7 @@ Every add is flushed (`checks.numerics.ftz`), so a subnormal is zero on
 every vendor; no multiply appears, so no fused multiply-add can change a bit.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace

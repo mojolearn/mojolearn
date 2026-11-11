@@ -108,8 +108,8 @@ THE SABOTAGE ARMS.
       in the flat kernel and the reference unit kernel (DEVIATION 2908).
 """
 
-from std.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined, llvm_intrinsic
 from std.sys._assembly import inlined_assembly

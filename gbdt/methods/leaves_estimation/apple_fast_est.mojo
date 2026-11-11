@@ -42,7 +42,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import fma
 from std.memory import memcpy, stack_allocation
 from std.sys.compile import is_defined
@@ -651,7 +651,7 @@ def apple_fast_estimate_and_apply(
         )
     stage_times.end(ctx, "est.stage_in")
 
-    @parameter
+    @__parameter
     def _reduce() raises:
         compute_partition_stats(
             ctx, n_leaves, 0, 2, n_rows,
@@ -660,7 +660,7 @@ def apple_fast_estimate_and_apply(
             sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
         )
 
-    @parameter
+    @__parameter
     def _walk(phase: Int, slot_in: Int, slot_out: Int) raises:
         ctx.enqueue_function[est_walk_kernel](
             s.d_part_stats.unsafe_ptr(), s.d_wsum_stats.unsafe_ptr(),
@@ -675,7 +675,7 @@ def apple_fast_estimate_and_apply(
             block_dim=(EST_WALK_BLOCK, 1, 1),
         )
 
-    @parameter
+    @__parameter
     def _try(t: Int) raises:
         # `MoveTo` + `ApproximateAt` fused (DEVIATION 2030's kernels): the
         # shift the previous walk launch wrote, applied by the thread that
@@ -691,7 +691,7 @@ def apple_fast_estimate_and_apply(
         _reduce()
         _walk(t, t % 2, (t + 1) % 2)
 
-    @parameter
+    @__parameter
     def _apply(slot: Int) raises:
         # `AppendModels`: the rescaled estimate onto the real cursor
         # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the

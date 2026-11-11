@@ -381,7 +381,7 @@ which already priced the width for the reduction this scratch feeds.
 from ensemble.tree_moments import moment_pair, moment_finish
 from checks.soft_f64 import sf64_from_f32
 from ensemble.tree_identical_ideas import T04, T05, T07, T08, T08_LAYOUT, T08_BITS, T14, T14_EXACT, C48
-from std.gpu import (
+from max.gpu import (
     WARP_SIZE,
     block_dim,
     block_idx,
@@ -421,8 +421,8 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     _quantize,
 )
 from std.atomic import Atomic, Ordering
-from std.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
-from std.gpu.primitives.warp import sum as _hist_warp_sum
+from max.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
+from max.gpu.primitives.warp import sum as _hist_warp_sum
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ObjectiveLike,

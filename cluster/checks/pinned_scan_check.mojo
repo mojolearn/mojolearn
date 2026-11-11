@@ -22,7 +22,7 @@ magnitudes and requires, bit for bit:
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx, WARP_SIZE
+from max.gpu import thread_idx, WARP_SIZE
 from std.memory import bitcast
 
 from core.pinned_reduce import pinned_block_prefix_sum, warp32_block_prefix_sum

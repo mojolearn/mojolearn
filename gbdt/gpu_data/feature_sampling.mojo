@@ -18,7 +18,7 @@ speed claim. Default fraction 1 bypasses this module's per-tree work entirely.
 """
 from std.math import fma
 from std.math import isfinite
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout, build_layout

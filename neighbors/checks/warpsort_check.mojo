@@ -41,7 +41,7 @@ visible.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from neighbors.impl.matrix.detail.select_radix import (
     SELECT_BLOCK,

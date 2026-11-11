@@ -10,7 +10,7 @@ gap26-mcdrepair-small-ready and ab/mcd-compat-review.md. Each candidate
 owns a block for the eigensolve, with concurrent rotations/cells; candidates
 also run in parallel. No host eigensolve or support selection.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from x_decomp.jacobi2 import dev_barrier

@@ -26,7 +26,7 @@ def class_weight_admit_dictionary[Values: Bool = True](value: PythonObject, cont
     while api[].PyDict_Next(value._obj_ptr, Int(cursor.unsafe_ptr()),
                            Int(items.unsafe_ptr()), Int(items.unsafe_ptr() + 1)):
         _ = labels_admit_primitive(PythonObject(from_borrowed=items[0]), context)
-        @parameter
+        @__parameter
         if Values:
             _ = labels_admit_primitive(PythonObject(from_borrowed=items[1]), context)
     _ = cursor^
@@ -41,7 +41,7 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
     # NumPy extended/weak comparisons and arbitrary-size integers. No private
     # Python container carries numerical weight state into RUN.
     var b = native_loaded_module("builtins")
-    @parameter
+    @__parameter
     if Profile == CLASS_WEIGHT_TREES:
         # Tree constructor admission also accepts exact pathlib objects for
         # unrelated options. Those keys still have Python hash/equality hooks;
@@ -53,10 +53,10 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
         # GetItemWithError keeps dict.get's no-default-factory semantics.
         class_weight_admit_dictionary[False](value, context)
     var keys = value
-    @parameter
+    @__parameter
     if Profile != CLASS_WEIGHT_TREES:
         keys = py_call(b.list, value)
-    @parameter
+    @__parameter
     if Profile == CLASS_WEIGHT_SVC:
         for i in range(len(keys)):  # exact dictionary key UNPACK, before hashing
             if labels_primitive_kind(py_type(keys[i]), context) == 0:
@@ -78,7 +78,7 @@ def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value:
             continue
         var item = PythonObject(from_borrowed=raw)
         var cls = py_type(item)
-        @parameter
+        @__parameter
         if Profile == CLASS_WEIGHT_CLASSICAL:
             class_weight_kind(labels_admit_primitive(item, context))
         elif Profile == CLASS_WEIGHT_TREES:

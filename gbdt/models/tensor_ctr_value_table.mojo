@@ -50,7 +50,7 @@ from gbdt.gpu_data.compressed_index_builder import (
     HostCompressedIndex,
     pack_quantized_columns_host,
 )
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcmp, memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill

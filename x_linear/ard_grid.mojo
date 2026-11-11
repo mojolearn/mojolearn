@@ -17,7 +17,7 @@ FAST on Apple keeps the Gram sse (`_t_sse_delta`) on the team kernel; the
 row kernels skip an iteration whose delta was trusted. A stop sets a state
 word every later launch reads first, so iterations queue in batches.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.os import getenv
 from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, fs, fd, fa, fmad, ld, st, ldi, sti, i2f, fill, copy

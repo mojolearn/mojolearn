@@ -61,7 +61,7 @@ the `cut` is float32 since Metal has no float64), so the covariance matches
 within float32, not bit for bit. X is uploaded once. d <= MF_DMAX; larger
 d or a p == 1 input keeps main's path.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined

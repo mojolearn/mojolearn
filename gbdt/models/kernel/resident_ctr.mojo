@@ -44,7 +44,7 @@ that is not one-hot is checked with the others rather than after them.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import isfinite
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

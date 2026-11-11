@@ -297,8 +297,8 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 
 from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
 from cholesky.checks.chol_fast_tall import CHOL_FAST_TALL, CTL_NB, chol_fast_tall_panel
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.primitives.block import prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation

@@ -32,8 +32,8 @@ COO stages). `-D MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF` keeps the host path.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx, WARP_SIZE
-from std.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
+from max.gpu import block_dim, block_idx, thread_idx, WARP_SIZE
+from max.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined

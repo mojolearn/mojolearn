@@ -16,7 +16,7 @@ products write `h[pair]`, `s[pair]`; `moe_combine_kernel` sums the picks in
 pick order), so the words do not. The products' grids are the upper bound
 (T k / TILE_P + E) x tiles; a block past its expert's pairs writes nothing.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

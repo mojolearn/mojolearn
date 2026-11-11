@@ -6,7 +6,7 @@ sequence/recurrent_scan.mojo, which keeps the forward scan, the route rules
 and the shared argument packing. Its own module so the device and host
 executors that route OP_CELL_BWD_SCAN import nothing more than they did."""
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from x_linear.team import team_barrier
 from sequence.ops import FP, Args, gates_of, op_cell_bwd_h, st
 from sequence.recurrent_scan import _scan_args

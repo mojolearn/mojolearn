@@ -6,7 +6,7 @@ defines. Scalars use existing portable math and Philox mapping, on host/device.
 The owner must preserve gradient contribution order and validate buffers before
 calling. No floating atomic update appears here.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

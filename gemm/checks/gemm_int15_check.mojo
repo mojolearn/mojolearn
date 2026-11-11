@@ -32,7 +32,7 @@ MAIN RUNS EVERY GATE AND REPORTS EVERY VERDICT before it raises, as
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import has_accelerator
 

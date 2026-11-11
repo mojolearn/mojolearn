@@ -58,7 +58,7 @@ verified against leaves nothing to verify against tomorrow.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.primitives.block import prefix_sum
 from max.gpu.primitives.block import sum as block_sum
 

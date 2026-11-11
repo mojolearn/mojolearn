@@ -34,7 +34,7 @@ THE SWITCHES (default OFF; docs/apple-fast/ab/bpe.md):
     MOJOLEARN_BPE_ALL            every switch above
 """
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

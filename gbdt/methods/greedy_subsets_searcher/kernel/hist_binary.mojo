@@ -27,8 +27,8 @@ the caller, which is why a binary feature costs one fold and not two.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -279,7 +279,7 @@ def binary_hist_kernel(
     # each carrying its own workaround.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
+    @__parameter
     if not uniform:
         # Deliberately unimplemented rather than silently wrong: the literal
         # CatBoost loop needs a lane-local sync, and reaching here means the
@@ -325,7 +325,7 @@ def binary_hist_kernel(
         # the entire reason `AlignMemoryAccess` exists, and it is what makes
         # a 4-wide load legal as well as fast. Only the uniform-iteration
         # guard remains, and that one is ours.
-        @parameter
+        @__parameter
         for k in range(UNROLL):
             if active:
                 # `Ldg((uint4*) bins, warpSize * k)` and
@@ -344,7 +344,7 @@ def binary_hist_kernel(
                     s_ptr + LANE_WIDTH * LOAD_SIZE * k
                 )
 
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = vb[e]
                     local_stats[k * LOAD_SIZE + e] = vs[e]
@@ -352,7 +352,7 @@ def binary_hist_kernel(
                 # No row: contribute zero. The slot it lands in is harmless
                 # because the stat is 0.0, and it keeps this lane inside
                 # every sync below.
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
@@ -373,13 +373,13 @@ def binary_hist_kernel(
         # its low three bits, so no two lanes of the tile can land on the
         # same slot however many `k` they run. That is exactly why the sync
         # belongs on `i`.
-        @parameter
+        @__parameter
         for batch in range(UNROLL):
 
-            @parameter
+            @__parameter
             for i in range(8):
 
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     var t = local_stats[batch * LOAD_SIZE + e]
                     var slot = slice_base + add_point_slot(
@@ -420,7 +420,7 @@ def binary_hist_kernel(
 
     var acc2 = Float32(0.0)
     if tid < 128:
-        @parameter
+        @__parameter
         for group in range(4):
             # row 10: reduce-stage intermediate, flushed (no-op under
             # FAST).
@@ -455,7 +455,7 @@ def binary_hist_kernel(
 
             var val = Float32(0.0)
 
-            @parameter
+            @__parameter
             for i in range(16):
                 if (i & f_mask) == 0:
                     val += smem[8 * i + group_id]
@@ -491,7 +491,7 @@ def binary_hist_kernel(
                     TARGET_COLUMN, PIN_DETERMINISM
                 ]()
 
-                @parameter
+                @__parameter
                 if det:
                     if active_block_count > 1:
                         # Replicated blocks hold PARTIAL histograms, and
@@ -726,7 +726,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
             var hrow = Int(ldg(indices + (p_offset + pe)))
             hb = ldg(cindex_p + hrow)
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902: the stat plane is stationary and the
                 # stat rides the SAME gathered row id as the bin
@@ -745,7 +745,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb = ldg(cindex_p + trow)
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
                 ts = ldg(stats_p + trow)
@@ -774,7 +774,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
     # each carrying its own workaround.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
+    @__parameter
     if not uniform:
         # Deliberately unimplemented rather than silently wrong: the literal
         # CatBoost loop needs a lane-local sync, and reaching here means the
@@ -823,7 +823,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
         #
         # NO per-element bounds test: the peel above leaves a whole number of
         # warp iterations, so an ACTIVE iteration is wholly in range.
-        @parameter
+        @__parameter
         for k in range(UNROLL):
             if active:
                 # `Ldg((int4*) indices, warpSize * k)` and
@@ -840,13 +840,13 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                 )
                 var vs = SIMD[DType.float32, LOAD_SIZE](0.0)
 
-                @parameter
+                @__parameter
                 if not ridx_stats:
                     vs = ldg[width=LOAD_SIZE, alignment=4](
                         s_ptr + LANE_WIDTH * LOAD_SIZE * k
                     )
 
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     # THE GATHER: position -> row -> bin.
                     # `localBins[k].x = Ldg(cindex, localIndices[k].x)` and
@@ -857,7 +857,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                         cindex_p + Int(vi[e])
                     )
 
-                    @parameter
+                    @__parameter
                     if ridx_stats:
                         # DEVIATION 1902: the stat joins the bins' scalar
                         # gather through the same loaded row id; the wide
@@ -868,7 +868,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                 # No row: contribute zero. The slot it lands in is harmless
                 # because the stat is 0.0, and it keeps this lane inside
                 # every sync below.
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
@@ -889,13 +889,13 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
         # its low three bits, so no two lanes of the tile can land on the
         # same slot however many `k` they run. That is exactly why the sync
         # belongs on `i`.
-        @parameter
+        @__parameter
         for batch in range(UNROLL):
 
-            @parameter
+            @__parameter
             for i in range(8):
 
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     var t = local_stats[batch * LOAD_SIZE + e]
                     var slot = slice_base + add_point_slot(
@@ -936,7 +936,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
 
     var acc2 = Float32(0.0)
     if tid < 128:
-        @parameter
+        @__parameter
         for group in range(4):
             # row 10: reduce-stage intermediate, flushed (no-op under
             # FAST).
@@ -971,7 +971,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
 
             var val = Float32(0.0)
 
-            @parameter
+            @__parameter
             for i in range(16):
                 if (i & f_mask) == 0:
                     val += smem[8 * i + group_id]
@@ -1007,7 +1007,7 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                     TARGET_COLUMN, PIN_DETERMINISM
                 ]()
 
-                @parameter
+                @__parameter
                 if det:
                     if active_block_count > 1:
                         # Replicated blocks hold PARTIAL histograms, and

@@ -13,7 +13,7 @@ walks stay the host bindings' columns (`bindings/host_helpers.mojo`,
 `bindings/hotpath_helpers.mojo`).
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 comptime _TPB = 256

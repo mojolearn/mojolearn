@@ -33,7 +33,7 @@ id against those bounds; on a mismatch the caller runs the team fit.
 FAST promises quality, not bits. `MOJOLEARN_X_LINEAR_ENETCV_FAST=0` is the
 A/B arm (the team fit in the same build).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

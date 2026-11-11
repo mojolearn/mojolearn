@@ -15,7 +15,7 @@ the bag rows and the sampled columns when the round has them -- by
 the member forest is bit for bit the one the staged fit built.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 

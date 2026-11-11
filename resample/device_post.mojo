@@ -18,7 +18,7 @@ ORDERS.
   * The COUNTS are integers: exact and order free.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

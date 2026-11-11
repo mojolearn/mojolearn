@@ -47,7 +47,7 @@ defines (docs/apple-fast/ab/fa.md):
   99.487). MOJOLEARN_FA_GRAM_QOLD keeps the float32 route; GRAM_ONCE alone
   (the Python loop) keeps it too. See FA_GRAM_DF below.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys import llvm_intrinsic

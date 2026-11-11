@@ -16,7 +16,7 @@ threadgroup memory (x_linear/cd_grid.mojo's staging, one prep):
 Each value is one thread's chain over the rows ascending, so the words are
 the team fit's. Outputs land at the caller's offsets of `fw`.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

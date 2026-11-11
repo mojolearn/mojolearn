@@ -35,7 +35,7 @@ totals are scanned by the same block kernel, recursively, until one tile of
 at most FOLD_SCAN_BLOCK totals remains (n <= FOLD_SCAN_BLOCK^3 rows)."""
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN

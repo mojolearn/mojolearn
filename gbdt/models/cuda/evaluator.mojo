@@ -98,8 +98,8 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     quantize_search_for,
 )
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -164,7 +164,7 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
 
     var f = InlineArray[Float32, EVAL_OBJECTS_PER_THREAD](fill=NEG_INFTY)
 
-    @parameter
+    @__parameter
     for j in range(EVAL_OBJECTS_PER_THREAD):
         var doc = first_doc + j * EVAL_WARP
         if doc < object_count:
@@ -172,7 +172,7 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
 
     var bins = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
 
-    @parameter
+    @__parameter
     if search_mode == QUANTIZE_SEARCH_TWO_LEVEL:
         # The Apple arm of `quantize_search_for`: a PIVOT pass over every
         # 8th border, then one 8-wide segment pass, both branchless
@@ -186,17 +186,17 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
         while p < border_count:
             var pivot = borders_local[p]
 
-            @parameter
+            @__parameter
             for j in range(EVAL_OBJECTS_PER_THREAD):
                 seg[j] += UInt32(Int(f[j] > pivot))
             p += 8
 
-        @parameter
+        @__parameter
         for j in range(EVAL_OBJECTS_PER_THREAD):
             var base = Int(seg[j]) * 8
             var count = UInt32(base)
 
-            @parameter
+            @__parameter
             for u in range(8):
                 if base + u < border_count:
                     count += UInt32(
@@ -215,18 +215,18 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
         var border_id = 0
         while border_id + 8 <= border_count:
 
-            @parameter
+            @__parameter
             for u in range(8):
                 var border = borders_local[border_id + u]
 
-                @parameter
+                @__parameter
                 for j in range(EVAL_OBJECTS_PER_THREAD):
                     bins[j] += UInt32(Int(f[j] > border))
             border_id += 8
         while border_id < border_count:
             var border = borders_local[border_id]
 
-            @parameter
+            @__parameter
             for j in range(EVAL_OBJECTS_PER_THREAD):
                 bins[j] += UInt32(Int(f[j] > border))
             border_id += 1
@@ -273,25 +273,25 @@ def _calc_tree_index[
     their own GPU arm does not carry it.
     """
 
-    @parameter
+    @__parameter
     for k in range(EVAL_OBJECTS_PER_THREAD):
         idx[k] = 0
 
-    @parameter
+    @__parameter
     if unroll_depth > 0:
 
-        @parameter
+        @__parameter
         for d in range(unroll_depth):
             var fi = Int(ldg(bin_feature_idx + (split_base + d)))
             var fv = ldg(bin_feature_val + (split_base + d))
             var buckets = ldg(quantized + (quant_base + fi))
             var xm = UInt32(0)
 
-            @parameter
+            @__parameter
             if need_xor_mask:
                 xm = ldg(bin_feature_xor + (split_base + d))
 
-            @parameter
+            @__parameter
             for k in range(EVAL_OBJECTS_PER_THREAD):
                 var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
                 if b >= fv:
@@ -303,11 +303,11 @@ def _calc_tree_index[
             var buckets = ldg(quantized + (quant_base + fi))
             var xm = UInt32(0)
 
-            @parameter
+            @__parameter
             if need_xor_mask:
                 xm = ldg(bin_feature_xor + (split_base + d))
 
-            @parameter
+            @__parameter
             for k in range(EVAL_OBJECTS_PER_THREAD):
                 var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
                 if b >= fv:
@@ -406,7 +406,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
                     split_base, quantized, quant_base, idx,
                 )
 
-            @parameter
+            @__parameter
             for k in range(EVAL_OBJECTS_PER_THREAD):
                 local_result[k] += ldg(
                     leaf_values + (leaf_base + Int(idx[k]))
@@ -423,7 +423,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
         address_space = AddressSpace.SHARED,
     ]()
 
-    @parameter
+    @__parameter
     for k in range(EVAL_OBJECTS_PER_THREAD):
         reduce_vals[
             inner_block_by32 * EVAL_WARP * EVAL_OBJECTS_PER_THREAD
@@ -435,7 +435,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
     var flat = tx + ty * EVAL_DOC_BLOCK_SIZE
     var lr = reduce_vals[flat]
 
-    @parameter
+    @__parameter
     for j in range(1, EVAL_OBJECTS_PER_THREAD):
         lr += reduce_vals[j * 256 + flat]
     reduce_vals[flat] = lr

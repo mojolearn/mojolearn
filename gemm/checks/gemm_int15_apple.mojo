@@ -88,7 +88,7 @@ THE SABOTAGE ARMS.
   `-D MOJOLEARN_LOWBIT_SABOTAGE=1` flips the value of every cell stored.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

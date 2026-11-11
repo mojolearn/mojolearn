@@ -27,7 +27,7 @@ Errors keep the host builder's first-error order: one Int32 key per
 failure, folded by `Atomic.min` (an order-free integer min), decoded once.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 

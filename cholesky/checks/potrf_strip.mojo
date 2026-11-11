@@ -40,7 +40,7 @@ subnormal, so the flush is the identity. Every other window runs the exact
 step `_tuned_step`.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int

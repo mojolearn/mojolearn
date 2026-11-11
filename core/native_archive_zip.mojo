@@ -213,7 +213,7 @@ def native_zip_directory(raw: ArchiveSpan) raises -> NativeZipDirectory:
         final_entry[name] = i
         positions.append(NativeZipPosition(result.entries[i].offset, name))
     var ordered = Span(unsafe_ptr=positions.unsafe_ptr(), length=len(positions))
-    @parameter
+    @__parameter
     def position_less(lhs: NativeZipPosition, rhs: NativeZipPosition) -> Bool:
         return lhs.offset < rhs.offset or (lhs.offset == rhs.offset and lhs.name < rhs.name)
     sort[cmp_fn=position_less](ordered)

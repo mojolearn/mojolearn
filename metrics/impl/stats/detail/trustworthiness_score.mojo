@@ -66,7 +66,7 @@ holds the k+1 neighbor distances).
 from core.hostptr import copy_f32
 from std.math import fma
 from std.atomic import Atomic
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import ceildiv
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext

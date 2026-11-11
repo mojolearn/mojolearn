@@ -9,7 +9,7 @@ the same task-indexed partials and merge each node's tasks in ascending
 order; no floating atomics, host data routing, or persistent global queue.
 Admission to a real forest caller still requires its exact integer bounds.
 """
-from std.gpu import block_idx,thread_idx,block_dim
+from max.gpu import block_idx,thread_idx,block_dim
 from std.atomic import Atomic
 from max.gpu.host import DeviceContext,DeviceBuffer
 from max.gpu.sync import barrier

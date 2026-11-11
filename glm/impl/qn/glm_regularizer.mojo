@@ -27,7 +27,7 @@ DEVIATION 547 replaces (`simple_mat/dense.mojo`); the arithmetic per
 weight is theirs.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 
 from core.column_stats import STATS_TPB
 from core.pinned_reduce import pinned_block_sum

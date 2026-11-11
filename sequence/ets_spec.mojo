@@ -28,7 +28,7 @@ coordinates: alpha, beta, phi, l0, b0); a seasonal model keeps op_ets
 (the ring is shared memory the candidates would race on). The dispatch
 (sequence/exec_device.mojo) decides on the model form (a.i6), never on a
 size."""
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu.primitives.warp import shuffle_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 

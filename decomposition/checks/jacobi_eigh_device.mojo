@@ -20,7 +20,7 @@ from checks.numerics import (
 from std.bit import log2_floor
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation

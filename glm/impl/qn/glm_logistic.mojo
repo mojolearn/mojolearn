@@ -38,7 +38,7 @@ this loss's convergence metric, and it is a SELECTION, so no fold pin is
 needed for it (row 30's reasoning).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import (
     ftz,

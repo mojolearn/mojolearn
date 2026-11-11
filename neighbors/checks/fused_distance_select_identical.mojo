@@ -52,7 +52,7 @@ flips bit 0 of the index half of the first admitted key of every batch, so
 the neighbor list and the recomputed distance move whenever the fused scan
 ran.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext

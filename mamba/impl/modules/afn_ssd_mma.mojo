@@ -28,7 +28,7 @@ Causal Y_diag skips the k windows that are structurally zero for its row
 tile (k0 >= i0 + 64), so a row tile r multiplies (r + 1) * 2 windows.
 """
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

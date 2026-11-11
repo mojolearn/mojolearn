@@ -92,7 +92,7 @@ def hist2_add_points_7[
     var qstat1 = InlineArray[Int32, n](fill=Int32(0))
     var qstat2 = InlineArray[Int32, n](fill=Int32(0))
 
-    @parameter
+    @__parameter
     for k in range(n):
         if flag == 1:
             stat1[k] = s2[k]
@@ -111,11 +111,11 @@ def hist2_add_points_7[
     var qval2 = InlineArray[Int32, n](fill=Int32(0))
     var offset = InlineArray[Int, n](fill=0)
 
-    @parameter
+    @__parameter
     for i in range(4):
         var f = (2 * i + tid) & 6
 
-        @parameter
+        @__parameter
         for k in range(n):
             var bin = Int((ci[k] >> UInt32(24 - (f << 2))) & UInt32(255))
             var keep = Float32(0.0)
@@ -143,21 +143,21 @@ def hist2_add_points_7[
         # ===================================================
         var write_time = (tid >> 3) & 3
 
-        @parameter
+        @__parameter
         if dt == DType.int32:
 
-            @parameter
+            @__parameter
             for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
         else:
 
-            @parameter
+            @__parameter
             for t in range(4):
                 if t > 0:
                     turn_sync()
                 if t == write_time:
 
-                    @parameter
+                    @__parameter
                     for k in range(n):
                         hist2_smem_add[dt](
                             smem, offset[k], val1[k], qval1[k]
@@ -168,24 +168,24 @@ def hist2_add_points_7[
         if flag == 1:
             shift = -1
 
-        @parameter
+        @__parameter
         for k in range(n):
             offset[k] += shift
 
-        @parameter
+        @__parameter
         if dt == DType.int32:
 
-            @parameter
+            @__parameter
             for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
         else:
             turn_sync()
 
-            @parameter
+            @__parameter
             for t in range(4):
                 if t == write_time:
 
-                    @parameter
+                    @__parameter
                     for k in range(n):
                         hist2_smem_add[dt](
                             smem, offset[k], val2[k], qval2[k]
@@ -221,7 +221,7 @@ def hist2_reduce_tail_7[
 
         var src = 2048 + 2 * f + is_second_stat
 
-        @parameter
+        @__parameter
         for k in range(4):
             var fold = fold0 + 32 * k
             smem[

@@ -32,8 +32,8 @@ same compare rule), so the words are the blocked route's.
 
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext

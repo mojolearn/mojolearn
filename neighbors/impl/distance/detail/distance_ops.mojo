@@ -172,7 +172,7 @@ exactly the fixtures a user would notice. `metric_check.mojo` plants a
 self-neighbour and records what comes out instead of hiding it.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.kernel_matrix import (

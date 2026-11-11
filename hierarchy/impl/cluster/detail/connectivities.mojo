@@ -48,7 +48,7 @@ residue to `+0.0` on every vendor (an IEEE compare, not a hardware
 therefore plants at `build_sorted_mst` (`linkage_check.mojo`).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.expand_distances import expand_distances_kernel

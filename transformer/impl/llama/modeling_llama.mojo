@@ -280,7 +280,7 @@ from transformer.experiments.attention_schedules import (
     kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
     NN21_SCALE_MASK, score_scale_mask_kernel,
 )
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy, stack_allocation
 from std.os import getenv
 from std.time import perf_counter_ns

@@ -9,7 +9,7 @@ protect the whole staging group. Increasing depth amortizes those barriers
 over more terms while charging its extra shared storage. It does not claim
 asynchronous load overlap or replace the production tiled-reuse dispatcher.
 """
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

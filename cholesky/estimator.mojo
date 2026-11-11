@@ -42,7 +42,7 @@ which is what the gates and the card use.
 from core.hostptr import copy_f32
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_pool import pool_give, pool_take

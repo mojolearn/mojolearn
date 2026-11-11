@@ -99,7 +99,7 @@ EVERYTHING HERE IS RUN OWED. No kernel below has compiled or run; the
 commands live in `mamba/checks/mamba3_check.mojo`'s header.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

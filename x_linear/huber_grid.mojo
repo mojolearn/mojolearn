@@ -13,7 +13,7 @@ x_linear/lbfgs_device.mojo; the result is assembled on the device and
 comes home once. The host column runs `huber_fit` (x_linear/huber.mojo):
 the same statements on the same values in the same order.
 """
-from std.gpu import block_idx, thread_idx, block_dim
+from max.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, fexp, fm, fd, i2f

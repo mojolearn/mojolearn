@@ -19,7 +19,7 @@ integer `Atomic.min`, read once before the assignment).
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

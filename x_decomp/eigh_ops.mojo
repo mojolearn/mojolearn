@@ -56,7 +56,7 @@ the same Jacobi). A family moving a host LAPACK/NumPy eigh of a Lanczos T
 onto `eigh_op_tridiag` changes bits on every column together.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz

@@ -58,7 +58,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.identity_trace import IdentityTrace
 

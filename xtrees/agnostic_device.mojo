@@ -8,7 +8,7 @@ between the two calls of each explainer (`*_synth`, then `*_solve` /
 same draws instead of keeping them, so nothing waits on the host between
 the calls but the model. The host column (xtrees/agnostic_host.mojo) runs
 the same units in the same stage order: the same words."""
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

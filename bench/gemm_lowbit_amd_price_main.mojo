@@ -76,7 +76,7 @@ name of `MOJOLEARN_LOWBIT_PRICE_ARMS` may be one of this file's.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.sys import has_accelerator
 from std.time import perf_counter_ns

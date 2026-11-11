@@ -43,8 +43,8 @@ tile into registers while the current one is multiplied took it to 0.22 s.
 """
 
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from std.bit import count_trailing_zeros
 from std.memory import stack_allocation

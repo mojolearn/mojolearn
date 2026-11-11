@@ -25,7 +25,7 @@ The device row gather of `sklearn.utils.resample` is NOT here: main carries
 it as `resample/gather_fast.mojo` (-D MOJOLEARN_RESAMPLE_FAST_GATHER).
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast, stack_allocation
 from std.sys.info import has_apple_gpu_accelerator

@@ -15,7 +15,7 @@ from providers.python.neural_descriptor_pyapi import (
 def label_weights_run[ModuleProvider: Bool = False](entries: PythonObject, operation: Int,
                       request: LabelWeightsRequest) raises -> Int:
     var provider: PythonObject
-    @parameter
+    @__parameter
     if ModuleProvider:
         provider = neural_descriptor_connect_once(entries, "label_weights_native_api_v1",
             String(LABEL_WEIGHTS_ABI), LABEL_WEIGHTS_COUNT)

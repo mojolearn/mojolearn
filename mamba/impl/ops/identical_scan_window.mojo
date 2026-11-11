@@ -14,7 +14,7 @@ Scratch holds at most 64 tokens, allocated once and reused in ordered launches.
 The unmodified host and backward checkpoint kernels are the S counterparts.
 No compilation, identity, quality or whole-operation timing has been run.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
 

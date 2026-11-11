@@ -12,7 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 from sequence.fold32 import FOLD_L, tree32
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
 
 #: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
 #: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D

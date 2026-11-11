@@ -13,7 +13,7 @@ from std.math import floor, fma
 from std.memory import bitcast
 from std.sys import has_accelerator
 from std.sys.compile import is_defined
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from checks.numerics import portable_exp64, portable_log64

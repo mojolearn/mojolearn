@@ -123,9 +123,9 @@ from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSIO
 
 
 from std.bit import count_trailing_zeros, pop_count
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
-from std.gpu.primitives.warp import sum as warp_sum
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+from max.gpu.primitives.warp import sum as warp_sum
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 from neighbors.checks.ball_cover_canonical_order import (
     rbc_canonicalize_row_order,
@@ -889,7 +889,7 @@ def rbc_eps_pass_fill(
     # entry points and both callers byte-for-byte unchanged;
     # `rbc_eps_pass_count` already performs exactly this read. Compiled out
     # entirely under FAST.
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         var h_nnz = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.enqueue_copy(
@@ -1511,7 +1511,7 @@ def rbc_eps_pass_max_k(
     # (`dbscan/impl/runner.mojo` returns False unconditionally), and
     # the check picks max_k from a prior count. The refusal exists so the hole
     # cannot open silently later.
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         if actual_max > max_k:
             raise Error(

@@ -23,7 +23,7 @@ words. A float32 output is flushed to its signed zero when subnormal and the
 pair's `p` likewise, the FTZ+DAZ host pool's result, spelled explicitly.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz

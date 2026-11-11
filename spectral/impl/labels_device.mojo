@@ -11,7 +11,7 @@ lands in the result's own memory. Integer work: no bit moves.
 does the master `-D MOJOLEARN_IDN_ALL_OFF=1`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 

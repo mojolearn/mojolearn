@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Analytic child Hessian bounds, candidate runner-up, and full GPU fits."""
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import bitcast
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import child_hessian_below
 from checks.min_split_gain_check import check as check_gain

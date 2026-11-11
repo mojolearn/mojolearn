@@ -31,7 +31,7 @@ order inside an expert varies run to run; no cell's chain reads another
 pair, so the words do not. The products' grids are the upper bound
 (T k / 64 + E) x tiles; a block past its expert's pairs returns at once.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace

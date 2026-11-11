@@ -3,7 +3,7 @@
 from std.os import getenv, setenv
 from std.sys.compile import is_defined
 from std.memory import bitcast
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext
 from checks.numerics import ftz
 from core.forest_inference import forest_add, reached_leaf

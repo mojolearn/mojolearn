@@ -5,7 +5,7 @@ cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.sys.compile import is_defined
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

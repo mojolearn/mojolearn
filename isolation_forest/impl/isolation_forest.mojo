@@ -63,7 +63,7 @@ from max.gpu.sync import barrier
 from std.sys import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace

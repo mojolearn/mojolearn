@@ -20,7 +20,7 @@ only, quality on the board's rel_fro / max_rel_diff column.
   (_KB32, 32-word slabs, was deleted 2026-10-09: see the TOMBSTONE below.)
   (_WIDE, the 64 x 64 hidden block, was deleted 2026-10-10: see the TOMBSTONE below.)
   (_PF, the next slab's register prefetch, was deleted 2026-10-10: see the TOMBSTONE below.)"""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.ffi import external_call
 from max.gpu.memory import AddressSpace

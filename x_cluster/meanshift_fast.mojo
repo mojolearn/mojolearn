@@ -29,7 +29,7 @@ synchronize per group); a done seed's blocks return at once. The addends
 are the team kernel's; the order of the sum is not (bits move under FAST;
 the paired quality check holds). IDENTICAL compiles none of this.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

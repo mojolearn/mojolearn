@@ -84,7 +84,7 @@ while, silently. `checks/partitions_reduce_check.mojo` runs a 40,000-row
 leaf through a one-block grid to keep it from becoming one again.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.primitives.block import sum as block_sum

@@ -4,7 +4,7 @@
 
 The coarse quantizer is the same Lloyd cells over whole rows."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation, memcpy
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

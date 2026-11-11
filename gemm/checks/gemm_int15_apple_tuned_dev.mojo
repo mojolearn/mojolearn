@@ -50,7 +50,7 @@ compiles.
 
 from std.ffi import external_call
 from max.gpu.memory import AddressSpace
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
 

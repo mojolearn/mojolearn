@@ -92,7 +92,7 @@ one-vs-all score is kept exactly; only the transcendental calls are routed.
 """
 
 from std.math import fma
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys import is_defined
@@ -235,7 +235,7 @@ def multilogit_val_and_first_der_kernel[
     var load_index = InlineArray[Int, elements_per_thread](fill=0)
 
     # their first `#pragma unroll` block (`:33-56`)
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         var in_range = idx < size
@@ -281,7 +281,7 @@ def multilogit_val_and_first_der_kernel[
         sum_exp[j] = se
 
     # their second block (`:59-64`)
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         if has_weights != Int32(0) and idx < size:
@@ -296,7 +296,7 @@ def multilogit_val_and_first_der_kernel[
     var mag_der = Float32(0.0)
     var mag_weight = Float32(0.0)
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         # `search` puts the class planes at 1.. and the weight at 0
@@ -413,7 +413,7 @@ def multilogit_second_der_row_kernel[
         fill=Float32(0.0)
     )
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         var in_range = idx < size
@@ -435,7 +435,7 @@ def multilogit_second_der_row_kernel[
         se += routed_exp(Float32(0.0) - mx)
         sum_exp[j] = se
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         if has_weights != Int32(0) and idx < size:
@@ -443,7 +443,7 @@ def multilogit_second_der_row_kernel[
         else:
             weight[j] = Float32(1.0)
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         if idx < size:
@@ -641,7 +641,7 @@ def multilogit_second_der_all_rows_kernel[
         + Int(thread_idx.x)
     )
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         if idx < size:
@@ -833,7 +833,7 @@ def one_vs_all_val_and_first_der_kernel[
     var mag_weight = Float32(0.0)
 
     # their first `#pragma unroll` block (`:628-635`)
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         var in_range = idx < size
@@ -866,7 +866,7 @@ def one_vs_all_val_and_first_der_kernel[
     )
     for clazz in range(num_classes):
 
-        @parameter
+        @__parameter
         for j in range(elements_per_thread):
             var idx = tid + j * MULTILOGIT_BLOCK_SIZE
             var in_range = idx < size
@@ -906,7 +906,7 @@ def one_vs_all_val_and_first_der_kernel[
                         / Float32(num_classes)
                     )
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         mag_der += max_abs[j]
 
@@ -965,7 +965,7 @@ def one_vs_all_second_der_kernel[
         fill=Float32(1.0)
     )
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         if has_weights != Int32(0) and idx < size:
@@ -975,7 +975,7 @@ def one_vs_all_second_der_kernel[
 
     for clazz in range(num_classes):
 
-        @parameter
+        @__parameter
         for j in range(elements_per_thread):
             var idx = tid + j * MULTILOGIT_BLOCK_SIZE
             if idx < size:
@@ -1156,7 +1156,7 @@ def multi_rmse_val_and_first_der_kernel[
     var mag_der = Float32(0.0)
     var mag_weight = Float32(0.0)
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         var in_range = idx < size
@@ -1182,7 +1182,7 @@ def multi_rmse_val_and_first_der_kernel[
     )
     for dim in range(target_count):
 
-        @parameter
+        @__parameter
         for j in range(elements_per_thread):
             var idx = tid + j * MULTILOGIT_BLOCK_SIZE
             # `if (idx >= size) continue;` (`:509-511`)
@@ -1203,7 +1203,7 @@ def multi_rmse_val_and_first_der_kernel[
                 if ad > max_abs[j]:
                     max_abs[j] = ad
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         mag_der += max_abs[j]
 
@@ -1259,7 +1259,7 @@ def multi_rmse_second_der_kernel[
         + Int(thread_idx.x)
     )
 
-    @parameter
+    @__parameter
     for j in range(elements_per_thread):
         var idx = tid + j * MULTILOGIT_BLOCK_SIZE
         if idx < size:

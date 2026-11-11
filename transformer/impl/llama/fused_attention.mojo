@@ -92,7 +92,7 @@ mechanism, brief sections 15 and 18), and never a DEVIATION 2598 kernel.
 come through the kernel matrix.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv

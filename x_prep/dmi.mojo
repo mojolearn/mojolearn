@@ -21,7 +21,7 @@ on the device:
      within the radius by binary search, `_cd_column`'s `point`, with the
      units' own distance functions; a flagged column runs `mi_cd_unit`.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

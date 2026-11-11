@@ -60,7 +60,7 @@ ORDER rather than a row count, `order[i]` being the original row at
 position `i` -- see `gbdt/data/permutation.mojo`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill

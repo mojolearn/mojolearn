@@ -15,7 +15,7 @@ the define rather than to the second device. Owed a two-device column
 """
 from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceContext, DeviceBuffer
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.host_parallel import host_parallelize
 from std.os import getenv
 from std.sys.compile import is_defined

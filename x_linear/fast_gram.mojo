@@ -30,7 +30,7 @@ quality, not bits: the chunked partials are pairwise sums, never less
 accurate than the serial chains. FAST only; IDENTICAL never compiles a
 call to this file.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

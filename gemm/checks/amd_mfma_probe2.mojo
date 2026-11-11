@@ -17,7 +17,7 @@ matrix-core IDENTICAL GEMM step needs answered on the device:
    under each mode?
 Lines: `MFMA2_MODE v=.. mfma_vs_fma=.. mul_vs_ftz=.. pkmul_vs_ftz=.. class_ok=..`.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.math import fma

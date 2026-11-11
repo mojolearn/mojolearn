@@ -65,8 +65,8 @@ correctly-rounded quotient. `CHOL_SAB_TRSM_RECIPROCAL` is that arm.
 with its own banner saying it is unreachable from any identity path here.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

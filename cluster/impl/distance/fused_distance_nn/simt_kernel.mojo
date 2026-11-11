@@ -161,8 +161,8 @@ are all bit-identical, and `AccRowsPerTh * AccColsPerTh` sqrts per thread
 per tile become `AccRowsPerTh` per row.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation

@@ -40,7 +40,7 @@ No dataset, real or otherwise, is used. Fixtures are analytic and hashed.
 No timing is taken; this lane does not measure time.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import ceildiv
 from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

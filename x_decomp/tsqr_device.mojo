@@ -36,7 +36,7 @@ hand DEVICE words between threads are `dev_barrier` (Apple's
 `air.wg.barrier(3, 1)`; `barrier()` there orders threadgroup memory only).
 """
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

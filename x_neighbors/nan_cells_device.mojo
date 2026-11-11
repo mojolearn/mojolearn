@@ -21,7 +21,7 @@ are integer adds of per-(row block, column) counts: exact in any order.
 A cell is missing when its exponent is all ones and its mantissa is not
 zero (a NaN), tested on the bits so no fast-math can fold `v != v`."""
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

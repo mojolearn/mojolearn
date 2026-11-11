@@ -18,7 +18,7 @@ rebuilt from inputs the launches do not write, so a cut Apple launch reruns.
 No bit moves: the check reads, it does not compute a fitted word.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

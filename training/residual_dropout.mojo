@@ -4,7 +4,7 @@
 Every upload, scratch allocation, refusal scan, output download and wait is
 inside this operation. No model behavior is redirected. Source only, unverified.
 """
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from core.device_scan import device_first_nonfinite
 from checks.numerics import ftz

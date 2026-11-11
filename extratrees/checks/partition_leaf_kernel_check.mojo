@@ -73,7 +73,7 @@ validity guard) and four for the leaf pass (the `IsLeaf` early return, the
 not turn an arm red is a defect in THIS FIXTURE and is reported as one.
 """
 
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.math import ceildiv
 from std.sys import has_accelerator
 from std.sys.info import (

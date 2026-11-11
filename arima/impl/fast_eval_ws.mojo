@@ -38,7 +38,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 # TOMBSTONE: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (never measured, deleted) deleted 2026-11-09 by eff59d1b88; code
 # recoverable at f59d913b0b (arima/impl/fast_eval_df.mojo, the compensated likelihood + finite-difference tail).
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isinf
 from std.sys.compile import is_defined
 

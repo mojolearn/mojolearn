@@ -11,7 +11,7 @@ from linalg.matmul import matmul
 # try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from gemm.afn_apple_fast import afn_gemm_fp32_ragged_k_ptr_into
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

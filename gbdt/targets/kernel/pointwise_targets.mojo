@@ -52,7 +52,7 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.block import sum as block_sum
 from core.pinned_reduce import two_phase_halving_sum
 
@@ -392,7 +392,7 @@ def target_score[objective: Int](
 ) -> Float32:
     """`TTarget::Score(target, prediction)`, per objective."""
 
-    @parameter
+    @__parameter
     if objective == OBJECTIVE_RMSE:
         # `TRmseTarget::Score` (`:180-182`)
         return (t - p) * (t - p)
@@ -470,7 +470,7 @@ def target_der[objective: Int](
     re-decided.
     """
 
-    @parameter
+    @__parameter
     if objective == OBJECTIVE_RMSE:
         # `:184-186`
         return t - p
@@ -534,7 +534,7 @@ def target_der2[objective: Int](
     Newton step on them divides by `lambda` alone.
     """
 
-    @parameter
+    @__parameter
     if objective == OBJECTIVE_RMSE:
         # `:188-190`
         return Float32(1.0)
@@ -783,14 +783,14 @@ def pointwise_target_kernel[
     # target.Der2(relev, val)` landing in `weightsView`.
     var plane0 = weight
 
-    @parameter
+    @__parameter
     if second_der_as_weights:
         # DEVIATION 256 / row 10, same flush-at-derivation policy.
         plane0 = ftz(weight * target_der2[objective](relev, val, alpha))
 
     if in_range:
 
-        @parameter
+        @__parameter
         if estimation:
             stats.unsafe_store(i, der)
             # DEVIATION 256 / row 10: the Newton Hessian plane, same
@@ -882,7 +882,7 @@ def deterministic_sum_lanes_kernel[
     var i = tid
     while i < count:
 
-        @parameter
+        @__parameter
         for lane in range(lanes):
             acc[lane] += partials.unsafe_load(i * lanes + lane)
         i += REDUCE_LANES_BLOCK
@@ -893,7 +893,7 @@ def deterministic_sum_lanes_kernel[
         address_space = AddressSpace.SHARED,
     ]()
 
-    @parameter
+    @__parameter
     for lane in range(lanes):
         red[lane * REDUCE_LANES_BLOCK + tid] = acc[lane]
     barrier()
@@ -901,7 +901,7 @@ def deterministic_sum_lanes_kernel[
     while step > 0:
         if tid < step:
 
-            @parameter
+            @__parameter
             for lane in range(lanes):
                 red[lane * REDUCE_LANES_BLOCK + tid] = (
                     red[lane * REDUCE_LANES_BLOCK + tid]
@@ -911,7 +911,7 @@ def deterministic_sum_lanes_kernel[
         step //= 2
     if tid == 0:
 
-        @parameter
+        @__parameter
         for lane in range(lanes):
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
 
@@ -1026,7 +1026,7 @@ def cross_entropy_kernel[
     # `const float c = HAS_BORDER ? targetClass > border : targetClass;`
     var c: Float32
 
-    @parameter
+    @__parameter
     if has_border:
         c = Float32(1.0) if target_class > border else Float32(0.0)
     else:
@@ -1055,13 +1055,13 @@ def cross_entropy_kernel[
     # scale[j]` (`:373-375`) landing in `weightsView`.
     var plane0 = weight
 
-    @parameter
+    @__parameter
     if second_der_as_weights:
         plane0 = ftz(weight * scale)
 
     if in_range:
 
-        @parameter
+        @__parameter
         if estimation:
             stats.unsafe_store(i, ftz(weight * direction))
             stats.unsafe_store(size + i, ftz(weight * scale))
@@ -1154,7 +1154,7 @@ def launch_pointwise_target_kernel[
     `Y_ABORT_UNLESS(false, "Unknown target")` becomes a raise.
     """
 
-    @parameter
+    @__parameter
     def _go[obj: Int]() raises:
         ctx.enqueue_function[
             pointwise_target_kernel[obj, estimation, second_der_as_weights]
@@ -1441,7 +1441,7 @@ def launch_approximate_move_eval[
         )
         return
 
-    @parameter
+    @__parameter
     def _go[obj: Int]() raises:
         ctx.enqueue_function[
             pointwise_target_move_eval_kernel[obj, estimation]

@@ -128,7 +128,7 @@ word, so the fused linear node's bias gradient rides in its dW launch.
 IDENTICAL, NVIDIA and AMD (Apple keeps its measured paths).
 -D MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
 one-thread launch."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

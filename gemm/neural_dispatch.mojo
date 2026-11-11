@@ -8,7 +8,7 @@ operation; no benchmark controller prepares hidden runtime work. Unverified.
 """
 from gemm.experiments.neural_profile_device import neural_profile_device
 from std.sys.compile import is_defined,get_defined_int
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceContext,DeviceBuffer
 from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
 from checks.numerics import ftz

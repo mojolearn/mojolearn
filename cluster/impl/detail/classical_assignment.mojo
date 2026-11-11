@@ -4,7 +4,7 @@
 A thread owns R adjacent samples and broadcasts each center feature to R
 ascending independent folds. Scratch is R accumulators, never n by k.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
 from experiments.classical_identical_ideas.graph_controls import KMEANS_ROW_ASSIGN_ROWS
 #: Rows per thread; 2 when the control is absent (the kernel is then not launched).

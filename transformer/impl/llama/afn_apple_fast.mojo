@@ -48,8 +48,8 @@ Candidates (docs/apple-fast/notes/neural-attn.md has the launch profile):
 """
 
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.math import exp, sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined

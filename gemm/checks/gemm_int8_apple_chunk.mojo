@@ -62,7 +62,7 @@ THE SABOTAGE ARMS.
       in the flat kernel and the integer-unit kernel (DEVIATION 2908).
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

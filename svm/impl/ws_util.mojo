@@ -13,7 +13,7 @@ compacts them (`gbdt/gpu_util/kernel/reorder_one_bit.mojo::
 block_scan_flags_kernel`) reads a byte array. Same values, 0 and 1.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from svm.impl.smo_sets import in_lower, in_upper
 

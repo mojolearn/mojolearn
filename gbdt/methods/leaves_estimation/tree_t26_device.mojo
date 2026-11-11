@@ -3,7 +3,7 @@
 NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 """
 from std.atomic import Atomic
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite
 from std.memory import memcpy
 from max.gpu.host import DeviceContext, DeviceBuffer

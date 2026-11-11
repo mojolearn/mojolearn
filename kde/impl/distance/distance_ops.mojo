@@ -76,7 +76,7 @@ IDENTITY (the rows this kernel answers to)
   stdlib's device sqrt, the codegen's contraction choice.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz, identical_sqrt

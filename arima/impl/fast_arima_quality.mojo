@@ -42,7 +42,7 @@ arm A FAST main, arm B the define; forecast_rmse must not go up (quality
 must not go down).
 """
 from std.math import inf, sqrt, floor
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

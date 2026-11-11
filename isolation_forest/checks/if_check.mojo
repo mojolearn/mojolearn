@@ -96,7 +96,7 @@ from std.math import ceil, log2
 from std.os import getenv, makedirs, path
 from std.memory import bitcast
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace, first_divergence, read_trace_lines

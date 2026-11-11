@@ -4,7 +4,7 @@
 lanes folding its three sums in shared memory, then every lane rotating its
 rows. The driver is `DevExec.svd` (x_decomp/device.mojo); the one-block
 form below is the executor op's (x_decomp/svd_ops.mojo)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

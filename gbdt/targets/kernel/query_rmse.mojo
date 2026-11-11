@@ -58,7 +58,7 @@ DEVIATIONS, both the pointwise family's and for the same reasons:
     row 10), a comptime no-op outside IDENTICAL.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz

@@ -3,7 +3,7 @@
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
 from ensemble.tree_identical_ideas import T02, T03, T04, T05, T05_ROW_VISITS, T07, T11, T11_LEVELS, T13, T13_BYTES, histogram_task_rows
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined, get_defined_int
 from std.math import ceildiv
 from std.memory import memcpy

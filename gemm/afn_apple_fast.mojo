@@ -68,7 +68,7 @@ arguments are fixed-width; pointers cross only `@always_inline` callees.
 
 from std.atomic import Atomic
 from std.ffi import external_call
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erf, exp
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined

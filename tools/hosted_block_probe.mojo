@@ -15,7 +15,7 @@ the claim "runs on any Apple silicon" needs qualifying rather than widening.
 
 from max.gpu.host import DeviceContext
 from max.gpu.primitives.block import sum as block_sum
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 comptime TPB = 256
 

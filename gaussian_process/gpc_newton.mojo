@@ -35,7 +35,7 @@ frozen inputs (the same words).
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from autograd.program_loop import LOOP_WORDS, LoopTimers

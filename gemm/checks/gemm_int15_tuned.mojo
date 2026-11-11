@@ -55,7 +55,7 @@ middle sum where the high one belongs. `-D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1`:
 the column exponent is read at the row index. Every one reaches both paths.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_AMD, TARGET_COLUMN, column_name, lib_int8_matrix_unit_for

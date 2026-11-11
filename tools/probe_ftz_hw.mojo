@@ -20,7 +20,7 @@ On a non-NVIDIA device it prints SKIP (both lanes are the integer spelling).
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.info import is_nvidia_gpu

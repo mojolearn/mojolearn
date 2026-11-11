@@ -16,8 +16,8 @@ saw a candidate. Distances are the direct sum of squared differences
 host after the order is fixed, as in the pinned path).
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
-from std.gpu.primitives.warp import shuffle_xor, shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
+from max.gpu.primitives.warp import shuffle_xor, shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -145,7 +145,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     od_type_from_name,
 )
 from std.memory import bitcast, memcpy
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined

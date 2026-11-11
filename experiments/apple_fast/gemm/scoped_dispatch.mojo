@@ -16,7 +16,7 @@ Fragment math copied from compiled catalog fa39073607e3b19c4fbfe063a5545a63318f1
 """
 from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
 from max.gpu.host import DeviceContext
-from std.gpu import block_idx, lane_id, warp_id
+from max.gpu import block_idx, lane_id, warp_id
 from std.atomic import Atomic
 from std.ffi import _Global
 

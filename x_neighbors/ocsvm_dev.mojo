@@ -28,7 +28,7 @@ State (int32 `st`): it, stop, go, the pending (i, j); float32 `sf` the
 pending (alpha_i, alpha_j). Each launch reads only the slots the launch
 before it wrote. The host reads `st` once per OCSVM_CHUNK iterations, the
 convergence check."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu

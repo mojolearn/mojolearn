@@ -24,7 +24,7 @@ This module lives in `core` (not `autograd`) so the classical packages can
 import it without the tape; `autograd/program_loop_device.mojo` asserts
 that its word indices are these.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 

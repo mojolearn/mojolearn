@@ -5,7 +5,7 @@ is <=Int32.max, so each class/bin count and parent sum fits UInt32 exactly.
 The same sampled-feature fingerprint is a mandatory caller admission.
 This enqueued operator leaves invalid cells untouched and emits one status
 byte per cell; the caller must validate statuses before split evaluation."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 

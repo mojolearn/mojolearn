@@ -94,7 +94,7 @@ thread. A racing check does not report no result -- it reports the wrong
 culprit.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

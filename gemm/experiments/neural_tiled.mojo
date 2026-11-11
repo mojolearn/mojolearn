@@ -7,7 +7,7 @@ depth, padded rows, XOR addresses and thread mapping are independent arms.
 Neural-only dispatch reaches these opt-in arms. No build or verification run.
 """
 from std.sys.compile import is_defined
-from std.gpu import block_idx,thread_idx
+from max.gpu import block_idx,thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -12,7 +12,7 @@ indices simply stop caching. All data work and routing execute on device.
 from std.atomic import Atomic, Ordering
 from std.sys.compile import is_defined
 from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import LOOP_H_CUR, LOOP_HDR_WORDS
-from std.gpu import block_idx, thread_idx, block_dim, grid_dim
+from max.gpu import block_idx, thread_idx, block_dim, grid_dim
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.launch_clock import log_launch_ctx
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, WorkloadInfo

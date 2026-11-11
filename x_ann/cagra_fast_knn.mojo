@@ -29,7 +29,7 @@ multiply-add per (pair, feature), 3.5e13 of them.
     than intermediate_graph_degree + 1 rows, the caller builds the exact
     graph instead (one int downloaded)."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from std.sys.compile import is_defined

@@ -3,7 +3,7 @@
 """Sparse conflict-free Jacobi GPU optimizer for UMAP's NUMERIC_FAST lane."""
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

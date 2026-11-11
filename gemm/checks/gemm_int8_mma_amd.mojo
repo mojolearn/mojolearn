@@ -106,7 +106,7 @@ THE SABOTAGE ARMS.
       (DEVIATION 2908), through the tuned file's epilogue.
 """
 
-from std.gpu import MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE, block_idx, lane_id, thread_idx
+from max.gpu import MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE, block_idx, lane_id, thread_idx
 from std.memory import bitcast
 from std.sys import is_defined
 from std.sys.info import is_amd_gpu

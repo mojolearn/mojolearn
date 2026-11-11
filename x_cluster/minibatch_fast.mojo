@@ -38,7 +38,7 @@ stop takes that step's centers and counts from the history. FAST promises
 quality, not bits: the summation order and the reassignment stream
 differ from the step loop's. IDENTICAL compiles none of this.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

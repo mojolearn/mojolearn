@@ -45,7 +45,7 @@ factor's A/B). The log-determinant is `enqueue_logdet`'s fold
 `CholHostFactor.logdet`.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from cholesky.checks.potrf import (
     CHOL_APPLE_LEFT,

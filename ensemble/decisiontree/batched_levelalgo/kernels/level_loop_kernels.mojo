@@ -80,7 +80,7 @@ two `dtype` values per node `[quesval, best_metric_val]` (written for split
 nodes only). QUEUE: four Int32 per item `[idx, depth, begin, count]`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceContext
 

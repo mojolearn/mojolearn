@@ -16,7 +16,7 @@ vendor's flush-to-zero or float64 support. One thread per row; no shared
 memory (no page to gate).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 comptime LRD_TPB = 256

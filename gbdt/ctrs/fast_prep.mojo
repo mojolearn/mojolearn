@@ -54,7 +54,7 @@ quality remain unverified.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import memcpy
 from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T28, T28_SORT, T28_PREFIX

@@ -277,9 +277,9 @@ from max.gpu.memory import AddressSpace
 # bin-typed. Same direction here; `bins.mojo` imports nothing from this
 # file, so there is no cycle -- exactly their arrangement.
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
-from std.gpu import WARP_SIZE, block_dim, thread_idx
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, thread_idx
+from max.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import shuffle_idx
 from max.gpu.sync import barrier
 
 
@@ -952,7 +952,7 @@ def init_split_kernel[
     vendor primitive being stood in for and nothing is unfused by writing
     it out.
     """
-    from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+    from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)

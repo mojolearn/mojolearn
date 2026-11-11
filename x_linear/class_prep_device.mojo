@@ -15,7 +15,7 @@ Only the k class weights (when 'balanced'), the n row weights (when asked)
 and the largest class count come back to the host.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, ld, st, ldi, sti
 from x_linear.tops import fold_blocks

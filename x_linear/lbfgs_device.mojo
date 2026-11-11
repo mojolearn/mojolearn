@@ -39,7 +39,7 @@ trial then halves on the host exactly as before. Same trials, same words,
 same iteration count; one wait per LBD_BATCH accepted iterations instead
 of one per trial.
 """
-from std.gpu import block_idx, thread_idx, block_dim
+from max.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

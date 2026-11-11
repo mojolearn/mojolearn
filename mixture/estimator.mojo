@@ -136,7 +136,7 @@ from core.step_gate import (
 from core.em_loop_chunk import em_loop_check_every
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 from checks.numerics import identical_div, identical_log
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 
 # ===========================================================================

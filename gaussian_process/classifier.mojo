@@ -30,7 +30,7 @@ refusal of classification itself, is closed by DEVIATION 2830.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL

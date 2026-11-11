@@ -21,7 +21,7 @@ from x_linear.ops import (
 )
 from experiments.classical_identical_ideas.linear_controls import C16_GLM_FUSED
 from std.sys.info import is_gpu
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from x_linear.team import Team
 from x_linear.tops import (

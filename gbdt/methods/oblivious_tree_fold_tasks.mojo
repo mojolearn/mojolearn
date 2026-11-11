@@ -69,7 +69,7 @@ streams only overlap the FILLS, never the layout.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 
 from gbdt.gpu_util.gpu_data.partitions import DataPartition

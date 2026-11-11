@@ -11,7 +11,7 @@
 # at a time and reads the register block once per chunk: one host sync per
 # chunk, none per iteration. Nothing here knows a family: the loop moves no
 # data, so the bits are the step ops' alone.
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from autograd.program_loop import (
     LOOP_DONE, LOOP_STOP_ITER, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_GATE, LOOP_WORDS, EXECUTOR_TIMERS, LoopTimers,

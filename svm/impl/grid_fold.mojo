@@ -21,7 +21,7 @@ sites were one-thread serial chains (`serial_sum_f32_kernel`,
     Padding carries +-inf with the largest key.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import inf
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext

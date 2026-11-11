@@ -10,7 +10,7 @@ Integer sums are exact, so the words' value equals the host column's.
 The Python entry points are in `providers/python/svm_impl_scale_gamma_device_pyapi.mojo`.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

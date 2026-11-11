@@ -2,7 +2,7 @@
 """Implemented output-gate and D-skip tail of Mamba-3 backward."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace

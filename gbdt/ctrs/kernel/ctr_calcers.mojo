@@ -62,7 +62,7 @@ non-temporal load or store, so they are plain accesses here -- the same
 deviation `fill.mojo` and `split_points.mojo` already record.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gbdt.apple_fast_classical import AFCL_T12

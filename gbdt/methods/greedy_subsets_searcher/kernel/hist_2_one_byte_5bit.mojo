@@ -106,7 +106,7 @@ def hist2_add_points_5[
     var qstat1 = InlineArray[Int32, n](fill=Int32(0))
     var qstat2 = InlineArray[Int32, n](fill=Int32(0))
 
-    @parameter
+    @__parameter
     for k in range(n):
         if flag == 1:
             stat1[k] = s2[k]
@@ -119,14 +119,14 @@ def hist2_add_points_5[
             qstat1[k] = q1[k]
             qstat2[k] = q2[k]
 
-    @parameter
+    @__parameter
     for i in range(4):
         var f = (2 * i + tid) & 6
 
         var offsets = InlineArray[Int, n](fill=0)
         var keep = InlineArray[Bool, n](fill=False)
 
-        @parameter
+        @__parameter
         for k in range(n):
             var bin = Int((ci[k] >> UInt32(24 - (f << 2))) & UInt32(255))
             offsets[k] = f + 32 * (bin & 31)
@@ -136,7 +136,7 @@ def hist2_add_points_5[
         # the DEVIATION note in the module docstring.
         turn_sync()
 
-        @parameter
+        @__parameter
         for k in range(n):
             var offset1 = slice_base + offsets[k] + flag
             var add1 = Float32(0.0)
@@ -148,7 +148,7 @@ def hist2_add_points_5[
 
         turn_sync()
 
-        @parameter
+        @__parameter
         for k in range(n):
             var offset2 = slice_base + offsets[k] + (1 - flag)
             var add2 = Float32(0.0)
@@ -189,7 +189,7 @@ def hist2_reduce_tail_5[
         if fold < max_fold_count:
             var src = 2048 + 32 * fold + 2 * f + is_second_stat
 
-            @parameter
+            @__parameter
             for in_warp_hist in range(4):
                 acc += smem[src + (in_warp_hist << 3)]
 

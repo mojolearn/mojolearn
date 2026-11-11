@@ -5,7 +5,7 @@ NI55/58/60 change ownership of independent cells, preserving each cell's exact
 operation sequence. NI59 uses one supported thread-block barrier to share the
 existing channel draw. The public mask stays dense and unchanged.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -4,7 +4,7 @@
 
 from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from gbdt.apple_fast_tree_experiments import AFT_N01, AFT_N02
 
