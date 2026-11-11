@@ -90,7 +90,7 @@ from bindings.native_identity_type import native_identity_type
 from bindings.neural_block_public import NativeBlockPlan
 from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
 from bindings.tokenizer_public_native import (
-    tokenizer_public_c, tokenizer_vocab_fingerprint,
+    tokenizer_public_c, tokenizer_vocab_fingerprint, _ids,
 )
 from providers.python.transformer_decode_pyapi import TransformerDecodeHandle
 from bindings.mamba_public_native import MambaDecodeHandle
@@ -643,26 +643,6 @@ def bpe_ranks_text_binding(handle: PythonObject) raises -> PythonObject:
     return PythonObject(ranks_text(owner[].tok.value().ranks))
 
 
-def _ids_from_seq(seq: PythonObject) raises -> List[Int]:
-    """The ids of a Python sequence, refused by type and position."""
-    var bi = native_loaded_module("builtins")
-    var operator_module = native_loaded_module("operator")
-    var n = Int(py=py_call(bi.len, seq))
-    var out = List[Int](capacity=n)
-    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        var v = seq[k]
-        var tn = String(py=v.__class__.__name__)
-        if tn == "bool":
-            raise Error("TypeError: ids must be int, not bool, at position " + String(k))
-        var iv = 0
-        try:
-            iv = Int(py=py_call(operator_module.index, v))
-        except:
-            raise Error("TypeError: ids must be int, got " + tn + " at position " + String(k))
-        out.append(iv)
-    return out^
-
-
 def bpe_decode_seq_binding(
     handle: PythonObject, seq: PythonObject, out_addr: PythonObject, out_cap: PythonObject
 ) raises -> PythonObject:
@@ -670,7 +650,10 @@ def bpe_decode_seq_binding(
     range checked by position, decoded, written at `out_addr`."""
     var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
-    var ids = _ids_from_seq(seq)
+    # One shared id reader (tokenizer_public_native `_ids`): exact list/tuple
+    # items through the C API (no Python-level `operator.index` call or
+    # class-name string per id), and one buffer read for an integer array.
+    var ids = _ids(seq)
     var nv = owner[].tok.value().n_vocab()
     bpe_check_ids(ids, nv)
     var cap = _index(out_cap)
