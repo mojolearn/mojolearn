@@ -1,0 +1,20 @@
+{
+  "status": "authored and source-reviewed; uncompiled/unrun",
+  "product_dependency": "c47be7762d",
+  "native_cpu_provider_cases": 14,
+  "native_gpu_provider_cases": 14,
+  "native_gpu_policy": "ordered numerical-only; shared DeviceContext concurrency remains parked",
+  "native_preference_plan_cases": 10,
+  "python_boundary_definitions": 5,
+  "python_boundary_parametrized_cases": 6,
+  "original_workload_tests": "test_x_cluster_twice.py and test_cluster_native_boundary.py remain unchanged; these new small independent arithmetic fixtures do not replace their broad workloads yet",
+  "oracles": [
+    "MeanShift exact duplicate-point clusters, explicit seed/noise labels, bin population refusal, zero estimated bandwidth refusal",
+    "AP equal similarity scalar/vector/median decisions and precomputed/euclidean output envelopes",
+    "AP one message update from A=R=0 on three distinct pairwise distances, scalar/vector/median preference and retained similarity matrix",
+    "Preference signed/unsigned promotion and double rounding, nonfinite/rank refusals, Float32 direct storage, Float64 strided cast, absent span",
+    "Public failure/publication ordering, precomputed refit stale centers semantics, exporter teardown/serialization lifetime, independent diagnostic storage"
+  ],
+  "pending": "AP iterable preference unpack still uses old Python staging in public path; core AffinityPreferencePlan is additive and not wired until supported iterable semantics can be preserved without callbacks",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native"
+}
