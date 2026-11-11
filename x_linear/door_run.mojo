@@ -12,6 +12,10 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import XL_OP_FIT, XL_OP_FIT_FOLD
 from core.admitted_refusals import admitted_finite_refuse
+from core.base_entry_table import BaseEntryKey
+from core.base_helpers_calls import (
+    base_assign_fold_i64, base_check_indices_i64, base_count_fold_hits_i64, base_mark_split_roles_f32,
+)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -166,3 +170,66 @@ def xl_sgd_class_floats(mut fp: List[Float64], class_weight: Int, n_classes: Int
             fp.append(Float64(cwp[c]))
         for c in range(n_classes):  # driver-loop: over the classes' negative weights (model structure)
             fp.append(1.0)
+
+
+# ------------------------------------------------------------ cv splits
+
+
+@fieldwise_init
+struct XlSplitWords(Movable):
+    """The int64 row indices of each cv split as addresses and counts (an
+    address is 0 when its side is empty). UNPACK reads them off the
+    split Arrays; the Arrays stay alive in the caller."""
+    var train: List[Int]
+    var train_sizes: List[Int]
+    var test: List[Int]
+    var test_sizes: List[Int]
+
+
+def xl_cv_fold_ids_run(key: BaseEntryKey, splits: XlSplitWords, n: Int, fold_ids: Int) raises -> Bool:
+    """`_cv_fold_ids(splits, n)` on the base helper table: write each row's
+    int32 fold into the n words at `fold_ids` (filled with -1 by the caller) and
+    return True when the test sides partition the rows and every train side
+    is the complement of its test side; False otherwise."""
+    var covered = 0
+    for k in range(len(splits.test)):  # driver-loop: over the cv splits
+        var size = splits.test_sizes[k]
+        if base_assign_fold_i64(key, splits.test[k] if size > 0 else 0, size, n, k, fold_ids) != 0:
+            return False
+        covered += size
+    if covered != n:
+        return False
+    for k in range(len(splits.train)):  # driver-loop: over the cv splits
+        var tr_size = splits.train_sizes[k]
+        if tr_size != n - splits.test_sizes[k]:
+            return False
+        if tr_size > 0:
+            if base_check_indices_i64(key, splits.train[k], tr_size, n) != 0:
+                return False
+            if base_count_fold_hits_i64(key, splits.train[k], tr_size, fold_ids, n, k) != 0:
+                return False
+    return True
+
+
+def xl_cv_roles_limit(n: Int, name: String) raises:
+    """Per-split roles are float32 row marks: n + 1 must stay exact."""
+    if n + 1 > 16777216:
+        raise Error("NotImplementedError: mojolearn " + name + ": cv splits that are not a partition are limited "
+                    + "to 16,777,215 rows")
+
+
+def xl_cv_roles_run(key: BaseEntryKey, splits: XlSplitWords, n: Int, roles: Int, name: String) raises:
+    """`_cv_roles_f32`: mark each split's train (1) and test (2) rows in its
+    n float32 words of `roles` (x_linear/cv_roles.mojo), refusing an index
+    outside the rows, a repeated row, or an empty side."""
+    for k in range(len(splits.test)):  # driver-loop: over the cv splits
+        for side in range(2):  # driver-loop: over the two sides of one split
+            var size = splits.train_sizes[k] if side == 0 else splits.test_sizes[k]
+            var rows = splits.train[k] if side == 0 else splits.test[k]
+            var status = base_mark_split_roles_f32(key, rows if size > 0 else 0, size, n, k, side + 1, roles)
+            if status == 1:
+                raise Error("mojolearn " + name + ": a cv split holds an index outside [0, n_samples)")
+            if status == 2:
+                raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
+        if splits.train_sizes[k] == 0 or splits.test_sizes[k] == 0:
+            raise Error("mojolearn " + name + ": every cv split needs training and test rows")

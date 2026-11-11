@@ -5,14 +5,16 @@ block, the joins, slices and part concatenation, the seed halves, the
 L-BFGS work size and the SGD class-weight parameters. Analytic answers over
 Mojo buffers; independent fixtures run through the shared host worker pool.
 The operations-entry calls (xl_run_call / xl_run_fit / xl_run_fit_fold) need
-a published x_linear table and are covered by checks/native_tests/x_linear_ops_*."""
+a published x_linear table and are covered by checks/native_tests/x_linear_ops_*;
+the cv split RUNs (xl_cv_fold_ids_run / xl_cv_roles_run) need the base helper
+table and are covered with the installed wheel's linear CV cases."""
 from core.host_parallel import host_parallelize
 from x_linear.door_run import (
     xl_run_fit_ints, xl_run_word, xl_run_copy, xl_run_join, xl_run_parts, xl_parts_total, xl_block_dims,
-    xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, xl_run_status_refuse,
+    xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, xl_run_status_refuse, xl_cv_roles_limit,
 )
 
-comptime XL_DOOR_FIXTURES = 10
+comptime XL_DOOR_FIXTURES = 11
 
 
 def require(ok: Bool, message: String) raises:
@@ -122,6 +124,17 @@ def status_fixture() raises:
     _ = word^
 
 
+def roles_limit_fixture() raises:
+    xl_cv_roles_limit(16777215, "RidgeCV")
+    var text = String("")
+    try:
+        xl_cv_roles_limit(16777216, "RidgeCV")
+    except error:
+        text = String(error)
+    require(text == "NotImplementedError: mojolearn RidgeCV: cv splits that are not a partition are limited "
+            + "to 16,777,215 rows", "roles limit text changed: " + text)
+
+
 def fixture(index: Int) raises:
     if index == 0:
         fit_ints_fixture()
@@ -141,8 +154,10 @@ def fixture(index: Int) raises:
         class_floats_fixture(2)
     elif index == 8:
         class_floats_fixture(3)
-    else:
+    elif index == 9:
         status_fixture()
+    else:
+        roles_limit_fixture()
 
 
 def run_checks() raises:

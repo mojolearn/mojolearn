@@ -35,6 +35,7 @@ from x_linear.door_run import (
     ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, LINK_SIGMOID,
     xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse, xl_run_word, xl_run_copy, xl_run_join,
     xl_run_parts, xl_parts_total, xl_block_dims, xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats,
+    XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
 )
 from providers.python.linear_entry_boundary import linear_entry_connection
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -1768,41 +1769,33 @@ def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> 
     return out
 
 
-def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
-    sides partition the rows and every train side is the complement of its
-    test side; None otherwise."""
-    var fold = _xl_full_i32(n, -1, context)
-    var assign = _xl_helper(context, "assign_fold_i64")
-    var covered = 0
-    for k in range(len(splits)):  # driver-loop: over the cv splits
-        var te = splits[k][1]
-        var size = Int(py=te.size)
-        if _int(py_call_typed(assign, PythonObject(labels_address(te) if size > 0 else 0), PythonObject(size), PythonObject(n),
-                              PythonObject(k), PythonObject(labels_address(fold)))) != 0:
-            return PythonObject(None)
-        _ = te  # keep the Python object alive through the native calls above
-        _ = fold  # keep the Python object alive through the native calls above
-        covered += size
-    if covered != n:
-        return PythonObject(None)
-    var check = _xl_helper(context, "check_indices_i64")
-    var hits = _xl_helper(context, "count_fold_hits_i64")
+def _xl_split_words(splits: PythonObject) raises -> XlSplitWords:
+    """UNPACK of the cv splits: each side's int64 index address (0 when
+    empty) and count. The caller keeps `splits` alive through RUN."""
+    var words = XlSplitWords(List[Int](), List[Int](), List[Int](), List[Int]())
     for k in range(len(splits)):  # driver-loop: over the cv splits
         var tr = splits[k][0]
         var te = splits[k][1]
         var tr_size = Int(py=tr.size)
-        if tr_size != n - Int(py=te.size):
-            return PythonObject(None)
-        if tr_size > 0:
-            if _int(py_call_typed(check, PythonObject(labels_address(tr)), PythonObject(tr_size), PythonObject(n))) != 0:
-                return PythonObject(None)
-            _ = tr  # keep the Python object alive through the native calls above
-            if _int(py_call_typed(hits, PythonObject(labels_address(tr)), PythonObject(tr_size),
-                                  PythonObject(labels_address(fold)), PythonObject(n), PythonObject(k))) != 0:
-                return PythonObject(None)
-            _ = tr  # keep the Python object alive through the native calls above
-            _ = fold  # keep the Python object alive through the native calls above
+        var te_size = Int(py=te.size)
+        words.train.append(labels_address(tr) if tr_size > 0 else 0)
+        words.train_sizes.append(tr_size)
+        words.test.append(labels_address(te) if te_size > 0 else 0)
+        words.test_sizes.append(te_size)
+    return words^
+
+
+def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """`_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
+    sides partition the rows and every train side is the complement of its
+    test side; None otherwise (RUN: x_linear/door_run.mojo, on the base
+    helper table)."""
+    var fold = _xl_full_i32(n, -1, context)
+    var key = base_helpers_key(context["xl_helpers"])
+    var partition = xl_cv_fold_ids_run(key, _xl_split_words(splits), n, labels_address(fold))
+    _ = splits  # keep the index Arrays alive through the native calls above
+    if not partition:
+        return PythonObject(None)
     return fold
 
 
@@ -1825,30 +1818,10 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
         _ = ids  # keep the Python object alive through the native call above
         return (out, PythonObject(None))
     # `_cv_roles_f32`: per-split roles (x_linear/cv_roles.mojo)
-    if n + 1 > 16777216:
-        raise Error("NotImplementedError: mojolearn " + name + ": cv splits that are not a partition are limited "
-                    + "to 16,777,215 rows")
-    var mark = _xl_helper(context, "mark_split_roles_f32")
+    xl_cv_roles_limit(n, name)
     var roles = admitted_vector(len(splits) * n, "<f4", context)
-    for k in range(len(splits)):  # driver-loop: over the cv splits
-        for side in range(2):  # driver-loop: over the two sides of one split
-            var rows = splits[k][side]
-            var size = Int(py=rows.size)
-            var status = _int(py_call_typed(mark, PythonObject(labels_address(rows) if size > 0 else 0), PythonObject(size),
-                                            PythonObject(n), PythonObject(k), PythonObject(side + 1),
-                                            PythonObject(labels_address(roles))))
-            _ = rows  # keep the Python object alive through the native call above
-            _ = roles  # keep the Python object alive through the native call above
-            if status == 1:
-                raise Error("mojolearn " + name + ": a cv split holds an index outside [0, n_samples)")
-            _ = rows  # keep the Python object alive through the native calls above
-            _ = roles  # keep the Python object alive through the native calls above
-            if status == 2:
-                raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
-            _ = rows  # keep the Python object alive through the native calls above
-            _ = roles  # keep the Python object alive through the native calls above
-        if Int(py=splits[k][0].size) == 0 or Int(py=splits[k][1].size) == 0:
-            raise Error("mojolearn " + name + ": every cv split needs training and test rows")
+    xl_cv_roles_run(base_helpers_key(context["xl_helpers"]), _xl_split_words(splits), n, labels_address(roles), name)
+    _ = splits  # keep the index Arrays alive through the native calls above
     return (labels_full_f32(n, -Float64(n + 1), context), roles)
 
 
