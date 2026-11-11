@@ -33,6 +33,8 @@ from x_decomp.descriptor_schema import (
     XD_DEV_CODE_ROWS, XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL, XD_DEV_SELECT_SMALLEST,
     xd_validate_call, xd_dim,
 )
+from x_decomp.descriptor_owner_ops import xd_is_owner_op
+from x_decomp.descriptor_owner_device import xd_owner_device_op
 from core.shared_slot import SharedSlot
 
 
@@ -181,6 +183,8 @@ def x_decomp_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             answer = XD_CAP_HOST | XD_CAP_RESIDENT
         elif xd_is_address_op(operation):
             answer = xd_address_op[DevExec](operation, a, p, ff)
+        elif xd_is_owner_op(operation):
+            answer = xd_owner_device_op(operation, a, p, ff)
         else:
             answer = xd_resident_op(operation, p, ff, a)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = answer

@@ -4,33 +4,27 @@ x_decomp cells through bindings/decomp_kit_native.mojo (the dictionary
 learning family, PLS, MinCovDet, ALS, the dense linear algebra functions):
 their compiled door and the numeric-mode x_decomp entries, retained once."""
 
-# The x_decomp entries the native kit calls. A binding without an optional
-# (resident) entry takes the host-address route, as `_Kit` does.
-_REQUIRED = ("ew", "gemm", "colsum", "rowsum", "move", "order_f", "svd", "absmax_sign", "rand",
-             "lasso_rows", "omp_rows", "lars_rows", "lu", "lu_solve", "dict_learning", "dict_minibatch")
-_OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "dev_gemm", "dev_colsum",
-             "dev_rowsum", "dev_move", "dev_reduce", "dev_order_f", "dev_absmax", "dev_rand", "dev_svd",
-             "dev_code_rows", "dev_lu", "pls_fit",
-             "eigh", "dev_eigh_to", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
-             "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
-             "als_fit", "topn_desc", "gather",
-             "s_flags", "qfix_flags", "idn_flags", "orth", "dev_orth",
-             "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "randomized_svd", "dev_lu_factor", "dev_lu_solve",
-             "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr",
-             "numeric_mode", "vendor")
+# The x_decomp entries the native kit (bindings/decomp_kit_native.mojo) still
+# reads from this dict: the image's tier and vendor (its table key), the
+# compiled route words, the optional resident entries it probes for, and the
+# pool entries its resident records name. Every operation itself runs through
+# the image's published table (core/decomp_entry_table.mojo); the solver
+# entries the kit used to call here (dict_learning, mcd, pls_fit, als_fit,
+# randomized_svd, ...) are table operations since lane pyout-decomp-linalg.
+_PROBED = ("x_decomp_numeric_mode", "x_decomp_vendor", "x_decomp_s_flags", "x_decomp_qfix_flags",
+           "x_decomp_idn_flags", "x_decomp_dev_ew", "x_decomp_dev_alloc", "x_decomp_dev_free",
+           "x_decomp_dev_upload", "x_decomp_dev_svd", "x_decomp_dev_code_rows", "x_decomp_dev_lu",
+           "x_decomp_dev_eigh_to")
 
 
 def _entries(binding):
-    # glue: retain checked compiled x_decomp symbols of one binding
+    # glue: retain the checked compiled x_decomp symbols the kit probes
     from types import BuiltinFunctionType
     entries = {}
-    for suffix in _REQUIRED + _OPTIONAL:  # glue: fixed native exports
-        name = "x_decomp_" + suffix
+    for name in _PROBED:  # glue: fixed native export names
         try:
             entry = getattr(binding, name)
         except (AttributeError, ImportError):
-            if suffix in _REQUIRED:
-                raise
             continue
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"the native decomposition owner requires compiled {name}")

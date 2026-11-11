@@ -325,10 +325,10 @@ def test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs(
         raise AssertionError("Python randomized PCA orchestration reached")
 
     from mojolearn import _expansion_decomp
+    # _randomized_decompose, _rsvd_core and the Python kit `_Kit` are all deleted
+    # (the kit by lane pyout-decomp-linalg): no Python orchestration is left to reach.
+    assert not hasattr(_expansion_decomp, "_Kit")
     with monkeypatch.context() as patch:
-        # _randomized_decompose and _rsvd_core are deleted (TOMBSTONES.md batch 3); the
-        # Python kit is the only orchestration left to forbid.
-        patch.setattr(_expansion_decomp, "_Kit", forbidden)
         actual = clean(audit_native_call(native_fit_transform, model, x))
         inverse = clean(audit_native_call(native_inverse, model, actual))
     assert_state_equal(model, expected)

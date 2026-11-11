@@ -7,7 +7,8 @@ refuses before publication, then the same publication
 `_mojolearn_x_decomp_host` makes at module init, then a schema mismatch, an
 arity mismatch and an unknown operation refuse. Then one case per operation
 lane calltable-prep-decomp added to the ABI (x_decomp/descriptor_schema.mojo
-XD_RAND .. XD_DEV_SELECT_SMALLEST), each through `decomp_table_call` and the
+XD_RAND .. XD_DEV_SELECT_SMALLEST) and lane pyout-decomp-linalg added
+(XD_ALS_FIT .. XD_RANDOMIZED_SVD: the owner doors that were Python entries), each through `decomp_table_call` and the
 published host pointer, with literal expected values; the device-only and
 GPU-only operations refuse on the host image with its text. No Python
 participates.
@@ -27,9 +28,11 @@ from x_decomp.descriptor_schema import (
     XD_OMP_ROWS, XD_LU_AUX, XD_ABSMAX_SIGN, XD_REDUCE, XD_SELECT_SMALLEST, XD_ARGMIN_ALL, XD_LU_RESID,
     XD_S_FLAGS, XD_QFIX_FLAGS, XD_DEV_RAND, XD_DEV_ABSMAX, XD_DEV_LU, XD_DEV_LU_AUX, XD_DEV_CODE_ROWS,
     XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL, XD_DEV_SELECT_SMALLEST, XD_GEMM,
+    XD_GATHER, XD_TOPN_DESC, XD_LU_GESV, XD_CHI2_QUANTILE, XD_CONSISTENCY_FACTOR, XD_RANDOMIZED_SVD,
+    XD_DEV_LU_FACTOR, XD_DEV_LU_SOLVE, XD_ALS_FIT,
 )
 
-comptime DECOMP_TABLE_CASES = 24
+comptime DECOMP_TABLE_CASES = 35
 
 
 def require(ok: Bool, message: String) raises:
@@ -236,6 +239,97 @@ def case(unit: Int) raises:
         require(c[0] == 11.0, "gemm")
         _ = a
         _ = b
+    elif unit == 24:
+        # dst[a] = src[idx[a]] (exact copies)
+        var src: List[Float32] = [10.0, 20.0, 30.0]
+        var idx: List[Int32] = [2, 0]
+        var dst: List[Float32] = [0.0, 0.0]
+        require(_call(XD_GATHER, [_f32(src), _i32(idx), _f32(dst)], [2], List[Float64]()) == 2, "gather count")
+        require(dst[0] == 30.0 and dst[1] == 10.0, "gather values")
+        _ = src
+        _ = idx
+    elif unit == 25 or unit == 26:
+        # the two best positions by (-x, index); unit 26 skips position 1 (a nonzero skip word)
+        var x: List[Float32] = [1.0, 3.0, 2.0]
+        var skip: List[Float32] = [0.0, 1.0, 0.0]
+        var dst: List[Int32] = [9, 9]
+        var skip_address = _f32(skip) if unit == 26 else 0
+        require(_call(XD_TOPN_DESC, [_f32(x), skip_address, _i32(dst)], [3, 2], List[Float64]()) == 2, "topn count")
+        if unit == 25:
+            require(dst[0] == 1 and dst[1] == 2, "topn positions")
+        else:
+            require(dst[0] == 2 and dst[1] == 0, "topn skipped positions")
+        _ = x
+        _ = skip
+    elif unit == 27:
+        # gesv: A = [[4, 3], [6, 3]], b = A [1, 1]^T, solved in place
+        var a: List[Float32] = [4.0, 3.0, 6.0, 3.0]
+        var b: List[Float32] = [7.0, 9.0]
+        var info: List[Float32] = [9.0]
+        require(_call(XD_LU_GESV, [_f32(a), _f32(b), _f32(info)], [2, 1], List[Float64]()) == 2, "gesv n")
+        require(info[0] == 0.0 and _near(b[0], 1.0) and _near(b[1], 1.0), "gesv solution")
+        _ = a
+    elif unit == 28:
+        # P(chi2_2 > m) = 0.025 at m = -2 ln 0.025 = 7.3778
+        var word: List[Float64] = [0.0]
+        _ = _call(XD_CHI2_QUANTILE, [Int(word.unsafe_ptr())], List[Int](), [2.0, 0.025])
+        require(abs(word[0] - 7.377759) < 1e-3, "chi2 quantile " + String(word[0]))
+    elif unit == 29:
+        # the Pison factor at alpha 0.975, p 1: alpha over a cdf just below 1
+        var word: List[Float64] = [0.0]
+        _ = _call(XD_CONSISTENCY_FACTOR, [Int(word.unsafe_ptr())], List[Int](), [1.0, 0.975, 1.0])
+        require(word[0] > 1.0 and word[0] < 1.5, "consistency factor " + String(word[0]))
+        try:
+            _ = _call(XD_CONSISTENCY_FACTOR, [Int(word.unsafe_ptr())], List[Int](), [1.0, 0.975, 0.0])
+            raise Error("a zero den did not refuse")
+        except problem:
+            _refuses(problem, "den must be > 0")
+        _ = word
+    elif unit == 30 or unit == 31:
+        # randomized_svd of diag(3, 1), one component: S = [3]; unit 31 asks the host image
+        # for a deferred finite test, which needs a resident binding
+        var m: List[Float32] = [3.0, 0.0, 0.0, 1.0]
+        var u: List[Float32] = [0.0, 0.0]
+        var sv: List[Float32] = [0.0]
+        var vt: List[Float32] = [0.0, 0.0]
+        var params: List[Int] = [2, 2, 1, 1, 2, 0, 0, 1, 7, 1 if unit == 31 else 0]
+        if unit == 30:
+            require(_call(XD_RANDOMIZED_SVD, [_f32(m), _f32(u), _f32(sv), _f32(vt)], params, List[Float64]()) == 1,
+                    "rsvd components")
+            require(_near(sv[0], 3.0, 1e-4) and _near(abs(u[0]), 1.0, 1e-4), "rsvd values")
+        else:
+            try:
+                _ = _call(XD_RANDOMIZED_SVD, [_f32(m), _f32(u), _f32(sv), _f32(vt)], params, List[Float64]())
+                raise Error("a host deferred finite test did not refuse")
+            except problem:
+                _refuses(problem, "needs a resident binding")
+        _ = m
+        _ = u
+        _ = vt
+    elif unit == 32:
+        _device_refuses(XD_DEV_LU_FACTOR, 4, 4, 0, HOST_ONLY)
+    elif unit == 33:
+        _device_refuses(XD_DEV_LU_SOLVE, 2, 6, 0, HOST_ONLY)
+    elif unit == 34:
+        # ALS on one user and one item, one factor: the call runs twice in one
+        # process (the old Python repeat test's purpose) and returns the same words
+        var first = List[Float32](length=2, fill=0.0)
+        for repeat in range(2):  # small-loop(two repeats of the same fit)
+            var c: List[Float32] = [1.0]
+            var x: List[Float32] = [0.5]
+            var y: List[Float32] = [0.5]
+            var losses: List[Float64] = [0.0]
+            var count = _call(XD_ALS_FIT, [_f32(c), _f32(x), _f32(y), Int(losses.unsafe_ptr())], [1, 1, 1, 1, 0, 1, 1],
+                              [0.01])
+            require(count >= 0 and count <= 1, "als loss count")
+            require(x[0] == x[0] and y[0] == y[0], "als factors finite")
+            if repeat == 0:
+                first[0] = x[0]
+                first[1] = y[0]
+            else:
+                require(first[0] == x[0] and first[1] == y[0], "als repeat bits")
+            _ = c
+            _ = losses
 
 
 def run_checks() raises:

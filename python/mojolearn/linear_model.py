@@ -281,50 +281,13 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     return check_sample_weight(sample_weight, n_rows)
 
 
-def _optional_export(b, name):
-    """`name` from binding `b`, or None when it does not export it. A host
-    binding's stand-in raises ImportError (by name) for a missing export
-    rather than AttributeError, so a plain getattr default never applies on a
-    CPU-only install, and LinearRegression.fit raised there."""
-    try:
-        return getattr(b, name, None)
-    except (ImportError, AttributeError):
-        return None
-
-
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
-def _ols_tsqr_centered(x, y, rows, cols, mode):
-    """`(coef_, column means, y mean)` of the unweighted fit with an
-    intercept in ONE binding entry (lane idn-dense-linalg,
-    `x_decomp_ols_tsqr_r`): X and y cross to the device once; the exact
-    column sums, the means, the centering and the blocked TSQR of
-    [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
-    on the small R. The same words as `_column_means` + `_center` +
-    `_ols_tsqr`, which crossed X four times. None when the binding does not
-    route here (an older binding or a FAST build): the caller keeps that
-    sequence. The IDENTICAL off arm (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF) was
-    deleted 2026-10-08 (grid ge123e6f9: 2.97x/1.74x istella, 6.17x/3.83x
-    taxi slower on NV/AMD); recoverable at main 42d1e42c6."""
-    from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
-    k = _Kit(_mode(mode))
-    flags = _optional_export(k._raw(), "x_decomp_idn_flags")
-    if flags is None or not int(flags()) & 1:
-        return None
-    n = cols + 1
-    Ra = _M.zeros(n, n)
-    mu = empty((cols,), "<f4")
-    ymean = empty((1,), "<f8")
-    # ORDER MATCHES x_decomp/api.mojo ols_tsqr_r_py: (a, b, r_out, mu, ymean), (m, d)
-    k.b.x_decomp_ols_tsqr_r(addr_ro(x, name="X"), addr_ro(y, name="y"), Ra.addr,
-                            addr(mu, name="column means"), addr(ymean, name="y mean"),
-                            [int(rows), int(cols)])
-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
-    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
-    return X.out((cols,)), mu, float(ymean.tolist()[0])
+# TOMBSTONE: `_ols_tsqr_centered` (the Python OLS one-entry TSQR solve on the decomp
+# kit) deleted 2026-11-11 by lane pyout-decomp-linalg: it had no caller (the native
+# linear owner, bindings/x_linear_native.mojo, runs the fit). Code recoverable at 6f82d0255d.
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):

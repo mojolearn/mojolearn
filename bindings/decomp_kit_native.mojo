@@ -1601,6 +1601,23 @@ def _decomp_dev(key: LinearEntryKey, op: Int, addresses: List[Int], ints: List[I
     return result
 
 
+def decomp_entries_call(entries: PythonObject, op: Int, addresses: List[Int], ints: List[Int],
+                        floats: List[Float64], release: Bool) raises -> Int:
+    """One x_decomp operation (an `XD_*` code) outside a kit, in the image the
+    connected entries dict names (its `x_decomp_native_key`); `release` as
+    the door the call replaces (lane pyout-decomp-linalg, 2026-11-11). The
+    caller keeps every addressed buffer alive until the call returns."""
+    var entry = decomp_table_entry(_decomp_key(entries))
+    var result = 0
+    if release:
+        var py = Python()
+        with GILReleased(py):
+            result = native_descriptor_call(entry, op, addresses, ints, floats)
+    else:
+        result = native_descriptor_call(entry, op, addresses, ints, floats)
+    return result
+
+
 def decomp_resident_binding(entries: PythonObject) raises -> Bool:
     """A GPU x_decomp binding's entries dict: the pool entries a resident
     operand is held through (`DecompKit.resident` reads the same marker)."""

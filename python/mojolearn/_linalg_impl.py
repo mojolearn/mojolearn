@@ -84,8 +84,6 @@ caller of this function:
 import array
 import importlib.machinery
 import importlib.util
-import os
-import sys
 
 from . import _backend
 from ._buffer import addr, addr_ro, as_f32_c, as_i8_c, as_i32_c, as_u16_c, empty
@@ -774,96 +772,16 @@ _SVD_NULL_RTOL = 2.0 ** -20
 _SVD_NULL_RTOL_MODULE = _SVD_NULL_RTOL
 
 
-def _svd_stage_timer():
-    """MOJOLEARN_LINALG_TIMING=1: each stage of `_svd_tall` and its wall on
-    stderr (the device waited for, since every stage's result is read)."""
-    if os.environ.get("MOJOLEARN_LINALG_TIMING") != "1":
-        return lambda name: None
-    import sys
-    import time
-    last = [time.perf_counter()]
-
-    def tick(name):
-        now = time.perf_counter()
-        print("svd stage %-28s %9.1f ms" % (name, (now - last[0]) * 1e3), file=sys.stderr)
-        last[0] = now
-    return tick
-
-
 # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: _SVD_QFIX_NULL_RTOL = 2^-40, the TSQR route's U_R null cut.
 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
 
 
-def _svd_tall(k, A, full):
-    """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
-    QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
-    U from the geqrf + orgqr of the columns A v_j / s_j with s_j > 2^-20 s_0
-    (the cells' gemm and division), each Q column signed by its R[j, j],
-    the null directions and the m - n more of full_matrices its trailing
-    columns."""
-    from ._expansion_decomp import _M
-    m, n = A.r, A.c
-    tick = _svd_stage_timer()
-    S, Vt = k.svd(A)
-    tick("svd (sliced QR + Jacobi of R)")
-    s0 = S.s[0] if n else 0.0
-    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE
-    # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
-    r = int(k.b.x_decomp_rank_above(S.s.buffer_info()[0], [n], float(_SVD_NULL_RTOL))) if n else 0
-    AV = k.mm(A, Vt, tb=True)                                   # m x n
-    tick("A V (gemm)")
-    Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
-    tick("A V / s")
-    width = m if full else n
-    if r == n and width == n:
-        # lane neural-pass17: with every direction kept and no trailing
-        # columns wanted, U is the orthonormalized A V / s: the kit's orth
-        # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),
-        # whose folds run over the row slices in parallel, where geqrf +
-        # orgqr ran 4 n serial one-thread chains over the m rows (at
-        # 1,000,000 x 220, 880 chains of a million dependent steps: most
-        # of the bench board's svd race on every GPU). Column j is signed
-        # by the product of the passes' R diagonals, which is Q_j . Ug_j:
-        # the same orientation geqrf's R[j, j] gave (Ug_j's). A guarded
-        # (zero) product means a dependent column the orth cannot build;
-        # the Householder route then stands.
-        Qo, d = k.orth_diag(Ug)
-        tick("U = orth(A V / s)")
-        # every product nonzero (a NaN counts as nonzero, as `!=` did), then
-        # each column signed by its product's sign, on the kit
-        if not k.total(k.ew("le", k.ew("abs", d), _M.zeros(1, 1))).s[0]:   # one count word down
-            out = k.ew("mul", Qo, k.neg_signs(d))
-            tick("U column signs")
-            return out, S, Vt
-    import array as _array
-    if not r:
-        # the m x width identity: a zero store and one strided C-level fill of its diagonal
-        eye = _array.array("f", bytes(4 * m * width))
-        nd = min(m, width)
-        eye[0:nd * (width + 1):width + 1] = _array.array("f", [1.0]) * nd
-        return _M(eye, m, width), S, Vt
-    # A v / s loses orthogonality as s_0 / s_j grows (its error is V's
-    # rounding times that ratio); the Householder QR of those columns
-    # restores it: Q's column j signed by R[j, j] (an exact negation) is
-    # A v_j / s_j to that same error, orthonormal to float32, and Q's
-    # trailing columns are the complement's basis.
-    h, tau = k.geqrf(Ug)
-    tick("geqrf(A V / s)")
-    Qc = k.orgqr(h, tau, width)
-    tick("orgqr")
-    # R[j, j]'s sign per kept column (+1 for the trailing complement), on the kit
-    sg = k.neg_signs(k.strided(h, r, r + 1, 0))
-    if width > r:
-        sg = k.hstack([sg, k.const(1.0, 1, width - r)])
-    # lane/neural-net-experiment (2026-09-30): the sign flip of Q's columns
-    # was a Python loop over every value of each flipped column (m Python
-    # negations per column: at 1,000,000 rows and 220 columns, most of the
-    # bench board's 95.8 s svd on an MI325X). The flip is the kit's
-    # elementwise multiply by -1.0 / +1.0 per column: an exact sign flip of
-    # values a device kernel already stored (so already flushed), the same
-    # bits the loop produced (the loop and its env switch are gone).
-    return k.ew("mul", Qc, sg), S, Vt
+# TOMBSTONE: `_svd_tall` (the Python tall SVD on the decomp kit, lstsq's and
+# LinearRegression's TSQR solve) and its `_svd_stage_timer` deleted 2026-11-11 by
+# lane pyout-decomp-linalg: no caller remained; the native twin is
+# bindings/decomp_kit_native.mojo `svd_tall` (lstsq) and bindings/linalg_ops_decomp.mojo.
+# Code recoverable at 6f82d0255d.
 
 
 # Householder QR + one-sided Jacobi SVD of R give S and V; U[:, j] = A v_j / s_j; null directions

@@ -23,6 +23,7 @@ from bindings.decomp_kit_native import (
     decomp_input, decomp_resident_drop, XD_SCALE, XD_SQ, XD_SQRT, XD_DIV,
 )
 from core.decomp_native_impl import decomp_f32_to_i32
+from x_decomp.descriptor_schema import XD_ALS_FIT, XD_TOPN_DESC, XD_GATHER
 from bindings.py_lists import py_list_f64
 
 
@@ -92,19 +93,12 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var slots = max(iterations, 1)
         var losses_store = classical_typed(Python.tuple(slots), "<f8", context["output_context"])
         var loss = Bool(py=fields["calculate_training_loss"])
-        var params = Python.list(n, m, f, iterations, Int(use_cg), decomp_int(fields["cg_steps"]), Int(loss))
-        var ac = kit.address(c)
-        _ = c  # keep the Python object alive through the native call above
-        var ax = kit.address(x)
-        _ = x  # keep the Python object alive through the native call above
-        var ay = kit.address(y)
-        _ = y  # keep the Python object alive through the native call above
-        var count = decomp_int(py_call(kit.entries["x_decomp_als_fit"], ac, ax, ay, classical_address(losses_store),
-                                       params, Python.list(decomp_float(fields["regularization"]))))
+        var params: List[Int] = [n, m, f, iterations, Int(use_cg), decomp_int(fields["cg_steps"]), Int(loss)]
+        var reg: List[Float64] = [decomp_float(fields["regularization"])]
+        var addresses: List[Int] = [kit.at(c), kit.at(x), kit.at(y), Int(py=classical_address(losses_store))]
+        # The x_decomp table's XD_ALS_FIT (was the binding's Python entry x_decomp_als_fit).
+        var count = kit.xd(XD_ALS_FIT, addresses, params, reg, True)
         _ = losses_store  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = c  # keep the Python object alive through the native call above
         kit.wrote_host(x)
         kit.wrote_host(y)
         if loss:
@@ -155,16 +149,17 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
     var order = py_call(context["output_context"]["array_type"], PythonObject("i"),
                         py_call(context["output_context"]["native_bytes_type"], 4 * max(n, 1)))
     var order_address = Int(py=py_call(order.buffer_info)[0])
-    var skip_address = PythonObject(0) if skip < 0 else kit.address(skip)
+    var skip_address = 0 if skip < 0 else kit.at(skip)
     var c = 0
     if n:
-        var sa = kit.address(s)
-        c = decomp_int(py_call(kit.entries["x_decomp_topn_desc"], sa, Python.list(m, n), skip_address, order_address))
+        # XD_TOPN_DESC (was the Python entry x_decomp_topn_desc)
+        var top: List[Int] = [kit.at(s), skip_address, order_address]
+        c = kit.xd(XD_TOPN_DESC, top, [m, n], List[Float64](), False)
     var values = kit.zeros(max(c, 1), 1)
     if c:
-        var sa = kit.address(s)
-        _ = py_call(kit.entries["x_decomp_gather"], sa, order_address, c, kit.address(values))
-        _ = values  # keep the Python object alive through the native call above
+        # XD_GATHER (was the Python entry x_decomp_gather)
+        var moved: List[Int] = [kit.at(s), order_address, kit.at(values)]
+        _ = kit.xd(XD_GATHER, moved, [c], List[Float64](), True)
     var labels = _typed(c, "<i4", "i", 4, context)
     var scores = _typed(c, "<f4", "f", 4, context)
     if c:
