@@ -16,6 +16,9 @@
 # dtype argument. The library itself executes no Python here.
 from bindings.array_from_buffer_native import array_from_buffer
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from bindings.labels_stat_boundary import labels_stat_pack
+from core.base_helpers_calls import base_reduce_stat, base_equal_elements
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
@@ -878,7 +881,8 @@ def _reduce(a: PythonObject, what: Int, name: String, context: PythonObject) rai
     var code = py_get(context["native_codes"], a.dtype)
     var stat = _helper("reduce_stat", size, context)
     if code is not None and stat is not None:
-        return _call(stat, a._addr, code, PythonObject(size), PythonObject(what))
+        return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+                                                 size, what))
     if size == 0:
         raise Error("ValueError: mojolearn: " + name + " of an empty Array")
     raise _rebuild("reduce_stat")
@@ -896,9 +900,11 @@ def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
     if stat is None or code is None:
         raise _rebuild("reduce_stat")
     if _is_float(dtype):
-        return _call(stat, a._addr, code, PythonObject(size), PythonObject(2))
+        return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+                                                 size, 2))
     # The exact integer sum: (hi << 64) + (mid << 32) + low of a 128-bit total.
-    var parts = _call(stat, a._addr, code, PythonObject(size), PythonObject(5))
+    var parts = labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+                                                  size, 5))
     var operator = context["operator"]
     var b = native_loaded_module("builtins")
     var hi = _call(b.int, parts[0])
@@ -983,7 +989,9 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
             var x = _as_c(a, context)
             var y = _as_c(other, context)
             var store = _zero_flags(size, context)
-            _ = _call(equal, x._addr, y._addr, code, PythonObject(size), _call(store.buffer_info)[0])
+            _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=x._addr), Int(py=y._addr),
+                                    Int(py=code), size, Int(py=_call(store.buffer_info)[0]))
+            _ = store  # keep the flag store alive through the native call above
             # The helper reads raw addresses: a C-order copy made by _as_c
             # must outlive the call (Mojo ends a local at its last named use).
             _ = x^
@@ -999,8 +1007,9 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
                 var x = _as_c(a, context)
                 var fill = _call(_attr(_call(context["array_type"], _code(dtype, context), Python.list(v)), "__mul__"),
                                  PythonObject(size))
-                _ = _call(equal, x._addr, _call(fill.buffer_info)[0], code, PythonObject(size),
-                          _call(store.buffer_info)[0])
+                _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=x._addr),
+                                        Int(py=_call(fill.buffer_info)[0]), Int(py=code), size,
+                                        Int(py=_call(store.buffer_info)[0]))
                 # Keep the copy and the repeated scalar alive through the call.
                 _ = x^
                 _ = fill^
@@ -1032,7 +1041,8 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
         if String(floats.dtype) != "<f8":
             fa = _as_c(_astype(floats, PythonObject("<f8"), context), context)
         var store = _zero_flags(size, context)
-        _ = _call(equal, ia._addr, fa._addr, context["eq_i64_f64"], PythonObject(size), _call(store.buffer_info)[0])
+        _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=ia._addr), Int(py=fa._addr),
+                                Int(py=context["eq_i64_f64"]), size, Int(py=_call(store.buffer_info)[0]))
         # The widened copies stay alive through the raw-address call.
         _ = ia^
         _ = fa^

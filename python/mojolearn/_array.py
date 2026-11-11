@@ -676,6 +676,14 @@ def connect_helpers(resolve):
              ("strided_copy_bytes", resolve("strided_copy_bytes")),
              ("equal_elements", resolve("equal_elements")))
     _ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None)  # glue: four fixed helper names
+    # glue: once, the base helper table key the native Array operations read
+    # (lane calltable-base-helpers); a binary without one leaves it absent and
+    # the operation that needs it refuses by name
+    from ._buffer import base_native_key
+    try:
+        _ARRAY_CONTEXT["helpers"]["base_native_key"] = base_native_key()
+    except Exception:  # noqa: BLE001 - absent key: the native operation refuses
+        pass
 
 
 # SmallMLP's native strided-Array admission consumes the same helper owner.
