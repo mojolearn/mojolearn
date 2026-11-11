@@ -105,3 +105,28 @@ native pin-list callers. The signed metrics encoder moved unchanged into
 `core.labels_score_encode`; the existing metrics caller imports its old local
 name as an alias. Both paths retain the same `host_unique_inverse_cast` call.
 These are source-only additive dependencies; no lane compilation or execution.
+
+GPC score now decodes into `GPDecodedScoreLabels`: numeric words use the
+existing base label gather, while the object route shares the public decode
+slot walk and retains original class identities in a native pin list. Public
+`predict` still packs its original Array/list output. Prediction decode occurs
+before truth shape checks; truth multilabel refusal, prediction admission,
+truth encoding and prediction encoding retain their former order. Unused
+object classes do not enter metric type admission. Numeric float class tables
+still decode as Float64 and are refused by classification metrics after truth.
+
+`GPScoreLabelCodes` keeps the existing signed host encoder for every Int64-fit
+input. Shared native text/arbitrary-integer key indexing replaces private
+Python class sets/dictionaries and sorted metadata. The existing metrics
+`mexp_gather_i32` remaps each vector onto the sorted union; the unchanged COUNT
+plan then uses the same input copies and full output ranges. The GP prediction
+resident/fold paths and all numerical kernel bodies are unchanged. Class pins,
+key-byte owners, raw integer conversion sources and program spans are explicitly
+retained past their last raw-pointer read. General truth flattening and scalar
+admission still use the shared boundary's Python metadata; this is remaining
+debt, not a whole-family Python-free claim.
+
+The new Python file contains only public class rebinding, unseen-label and
+error-order seams. Existing tests are retained. Native score fixtures are owned
+by the test lane and are pending; no compilation, runtime, timing or identity
+execution occurred in this producer lane.

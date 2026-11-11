@@ -35,7 +35,8 @@ from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
 from bindings.fitted_resident_door import fitted_resident_drop
 from bindings.gp_resident_boundary import gp_resident_lease
-from bindings.mcls_classify import mcls_accuracy_fraction
+from bindings.gp_score_labels_boundary import gpc_score_result
+from bindings.gp_labels_native import gp_decode_score_labels
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
 
@@ -662,14 +663,17 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
         var prediction = _gpc_prediction_codes(model, args[0], args[2], context)
-        var pred = gp_decode_labels(model, prediction.classes, prediction.codes, args[1], context)
+        var pred = gp_decode_score_labels(model, prediction.classes, prediction.codes, args[1], context)
         var shape = mc_shape_of(args[3], context)  # admits y once; the accuracy pair reuses it
         var n_truth = 0
         if Int(py=py_call(native_loaded_module("builtins").len, shape)) > 0:
             n_truth = Int(py=py_call(native_loaded_module("builtins").int, shape[0]))
-        var n_pred = Int(py=pred.shape[0]) if py_type(pred) is context["array_class"] else len(pred)
+        var n_pred = pred.rows
         if n_truth != n_pred:
             raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
                         + String(n_pred) + " rows")
-        return mcls_accuracy_fraction(args[3], pred, PythonObject(None), PythonObject(None), context, True)
+        var result = gpc_score_result(args[3], pred, context)
+        _ = prediction
+        _ = pred
+        return PythonObject(result)
     raise Error("RuntimeError: unknown gaussian process classifier operation " + operation)

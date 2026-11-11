@@ -35,6 +35,7 @@ from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, _label_same, _labels_recordable
 from bindings.gp_class_table_boundary import GPPreparedClassTable
+from bindings.gp_score_label_storage import GPDecodedScoreLabels
 from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
 from bindings.gp_label_input_boundary import gp_label_input
@@ -400,6 +401,13 @@ def _gp_decode_with(classes: PythonObject, table: GPLabelTable, codes: Int, n: I
         _ = dst
         _ = table
         return dst
+    var pins = List[PythonObject]()
+    return _gp_decode_objects[False](classes, codes, n, pins)
+
+
+def _gp_decode_objects[native: Bool](classes: PythonObject, codes: Int, n: Int,
+                                    mut pins: List[PythonObject]) raises -> PythonObject:
+    var k = len(classes)
     var rows = FAMILY_I64P(unsafe_from_address=codes)
     # One PyList_New(n) and direct slot stores of the class objects (lane
     # p3-svm-gp-kernel, row 79): the k class pointers are read once, every
@@ -408,22 +416,26 @@ def _gp_decode_with(classes: PythonObject, table: GPLabelTable, codes: Int, n: I
     for j in range(k):  # driver-loop: over the distinct classes (k pointers read once)
         class_items.append(classes[j])
     ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
-    if not raw:
-        raise cpy.unsafe_get_error()
-    # The NULL-filled list stays private until complete; its owner releases
-    # every stored slot on failure (CPython skips NULL slots).
-    var result = PythonObject(from_owned=raw)
+    var result = PythonObject(None)
+    comptime if not native:
+        var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(n)
+        if not raw:
+            raise cpy.unsafe_get_error()
+        # The private NULL-filled list owns initialized slots on failure.
+        result = PythonObject(from_owned=raw)
     var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
     for i in range(n):  # driver-loop: native code-to-label gather stores retained class objects
         var index = Int(rows[i])
         if index < 0 or index >= k:
             raise Error("IndexError: GP class code is outside its retained class table")
-        var item = class_items[index]._obj_ptr
-        cpy.Py_IncRef(item)
-        # SetItem steals the new reference on BOTH success and failure.
-        if set_item(result._obj_ptr, i, item) != 0:
-            raise cpy.unsafe_get_error()
+        comptime if native:
+            pins.append(class_items[index])
+        else:
+            var item = class_items[index]._obj_ptr
+            cpy.Py_IncRef(item)
+            # SetItem steals the new reference on BOTH success and failure.
+            if set_item(result._obj_ptr, i, item) != 0:
+                raise cpy.unsafe_get_error()
     _ = codes
     _ = class_items^
     return result
@@ -480,3 +492,26 @@ def gp_decode_labels(owner: PythonObject, classes: PythonObject, codes: List[Int
     var result = _gp_decode_prepared(owner, classes, Int(codes.unsafe_ptr()), len(codes), base, context)
     _ = codes
     return result
+
+
+def gp_decode_score_labels(owner: PythonObject, var classes: PythonObject, codes: List[Int64],
+                           base: PythonObject, context: PythonObject) raises -> GPDecodedScoreLabels:
+    # Match public decode admission and cached table selection before truth
+    # shape/refusal. Only predicted scalar identities enter the metric later.
+    classes = classifier_label_list(classes, context)
+    var packed = _gp_prepared_class_table(owner, classes, context)
+    var prepared = packed.downcast_value_ptr[GPPreparedClassTable]()
+    var numeric = prepared[].table.available and len(classes) > 0
+    var result = GPDecodedScoreLabels(len(codes), prepared[].table.kind if numeric else 0)
+    if numeric:
+        var connection = GPLabelsConnection(base)
+        gp_labels_gather(connection, prepared[].table.kind,
+            LabelsGatherRequest(prepared[].table.address(), Int(codes.unsafe_ptr()),
+                Int(result.words.unsafe_ptr()), len(classes), len(codes)))
+        _ = connection
+    else:
+        _ = _gp_decode_objects[True](classes, Int(codes.unsafe_ptr()), len(codes), result.pins)
+    _ = packed
+    _ = classes
+    _ = codes
+    return result^
