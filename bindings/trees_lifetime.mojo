@@ -5,6 +5,7 @@
 # snapshot's compiled release entry runs when the last reference to this
 # object goes (the estimator dropped, refitted, or its holder replaced).
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call
 
 
@@ -36,3 +37,19 @@ struct TreesResident(Movable, Writable):
 def trees_resident_new(release: PythonObject, handle: Int) raises -> PythonObject:
     """A new lifetime owner of `handle`, released through `release`."""
     return PythonObject(alloc=TreesResident(release, handle))
+
+
+def trees_resident_pins(value: Int, index: Int) abi("C") -> Int:
+    # Native registry inspection only; the caller retains the exact owner.
+    if value == 0 or index < -1 or index >= 1:
+        return -1
+    try:
+        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var native = owner.downcast_value_ptr[TreesResident]()
+        var result = 1
+        if index == 0:
+            result = Int(native[].release._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1

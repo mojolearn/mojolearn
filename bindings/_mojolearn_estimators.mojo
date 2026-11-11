@@ -4,6 +4,8 @@ Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
+from std.python.bindings import lookup_py_type_object
+from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
@@ -1692,6 +1694,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[inverse_transform_binding]("inverse_transform")
         # Device-resident TruncatedSVD components (lane ne1-a-decomp-resident).
         _ = m.add_type[TsvdResidentLease]("_TsvdResidentLease")
+        register_native_owner(lookup_py_type_object[TsvdResidentLease](), m.module, native_owner_no_pins)
         m.def_function[tsvd_resident_lease_binding]("tsvd_resident_lease")
         m.def_function[tsvd_resident_stats_binding]("tsvd_resident_stats")
         m.def_function[tsvd_transform_resident_binding]("tsvd_transform_resident")
@@ -1749,4 +1752,3 @@ def build__mojolearn_estimators() -> PythonObject:
 
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
-
