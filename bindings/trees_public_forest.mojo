@@ -959,6 +959,7 @@ def _F64(array: PythonObject, index: Int) raises -> Float64:
 def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
     """`Array.min()` / `max()` of a float32 vector: the core helper
     `reduce_stat` (0 min, 1 max), sequential in storage order."""
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
     return py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(addr), PythonObject(0),
                          PythonObject(count), PythonObject(what))
 

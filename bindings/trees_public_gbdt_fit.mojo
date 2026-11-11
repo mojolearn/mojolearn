@@ -366,6 +366,7 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
     var codes = admitted_vector(n, "<i4", context)
     var k = 0
     try:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(addr), PythonObject(0),
                                 PythonObject(n), PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
@@ -383,6 +384,7 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
     _ = classes  # keep the Python object alive through the native call above
     if lo < 0 or not isfinite(hi):
         return PythonObject(None)
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
     var integral = Int(py=py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(trees_address(classes)),
                                        PythonObject(1), PythonObject(k), PythonObject(4)))
     _ = classes  # keep the Python object alive through the native call above
@@ -759,6 +761,7 @@ def _has_nan(x: AdmittedX, context: PythonObject) raises -> Bool:
     var classes = admitted_vector(n, "<f8", context)
     var codes = admitted_vector(n, "<i4", context)
     try:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         _ = py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(x.address), PythonObject(0), PythonObject(n),
                           PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                           PythonObject(0), PythonObject(0), PythonObject(0))
@@ -958,6 +961,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         + "within the training class range")
     var eval_constant = False
     if n_eval_rows:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         var helper = trees_helper(context, "reduce_stat")
         var lo = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(0))
         var hi = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(1))
@@ -1591,6 +1595,7 @@ def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context
 def _codes_f32(labels: TreesLabels, context: PythonObject) raises -> PythonObject:
     """The class codes as float32 (`_label_map(...).astype('<f4')`)."""
     var out = admitted_vector(labels.n, "<f4", context)
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
     _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(labels.codes)), PythonObject(2),
                       PythonObject(trees_address(out)), PythonObject(0), PythonObject(labels.n))
     _ = out  # keep the Python object alive through the native call above
@@ -1687,12 +1692,14 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
             tp[i] = Int32(at)
             _ = table  # keep the Python object alive through the native call above
         var mapped = admitted_vector(eval_labels.n, "<i4", context)
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)),
                           PythonObject(len(eval_kind[1])), PythonObject(trees_address(eval_labels.codes)),
                           PythonObject(eval_labels.n), PythonObject(trees_address(mapped)))
         _ = table  # keep the Python object alive through the native call above
         _ = mapped  # keep the Python object alive through the native call above
         var eval_y = admitted_vector(eval_labels.n, "<f4", context)
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(mapped)), PythonObject(2),
                           PythonObject(trees_address(eval_y)), PythonObject(0), PythonObject(eval_labels.n))
         _ = mapped  # keep the Python object alive through the native call above
