@@ -116,7 +116,6 @@
     ]
   },
   "remaining": [
-    "Typed request-wire/envelope/error-propagation contracts",
     "Native production normalization via final scaler dependency; normalized Python assertions stay",
     "Public fixed-kernel/no-free-parameter optimizer bypass and kernel object publication remain Python until native plan coverage is available",
     "Final native public-boundary query/lease owner-state coverage when pilot freezes those types",
@@ -125,5 +124,6 @@
   "python_removed": 0,
   "product_or_kernel_changes": 0,
   "removals": "Removed three temporary test-local descriptor wrappers now that production gp_native_v1[K] is frozen. Original Python coverage remains unchanged until replacement native execution passes.",
-  "identity_or_performance_claim": "None; no lane compilation/test/identity/timing/box job."
+  "identity_or_performance_claim": "None; no lane compilation/test/identity/timing/box job.",
+  "transport_companion": "gp-native-contract.json:57 authored/unrun transport and provider-error fixtures"
 }

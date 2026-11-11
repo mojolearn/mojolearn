@@ -1,0 +1,25 @@
+{
+  "family": "Gaussian process typed request transport",
+  "status": "57 authored fixtures; no compilation or execution by lane",
+  "entry": "checks/native_tests/gp_contract.mojo",
+  "suite": "checks/native_tests/gp_contract_suite.mojo",
+  "dependencies": ["7f5f0bf795", "3a42d6d768"],
+  "coverage": {
+    "0-16": "Every GP operation: mode/vendor/capabilities, GPR fit/query/cov/sample/gradient/optimize, GPC binary/all fit/query/combine, theta, lease open/close",
+    "17": "Pointer-fit flag true (false in base)",
+    "18-28": "All12 combinations of GPR query route0/1/2, want_std and normalize; exact wide lease and fold IDs",
+    "29-30": "Normalized covariance/sample flags; binary64 standardization parameters and signed zero; exact high/low seed words",
+    "31-32": "Optimizer restart/seed metadata and coded-target GPC flag/target-output address",
+    "33-37": "All6 combinations of GPC probability request and output kind0/1/2",
+    "38-39": "All-member output kinds1/2 and valid zero versus above2^53 lease handle",
+    "40-56": "Every operation propagates the exact native provider refusal"
+  },
+  "independent_transport_expectation": "Prescribed distinct sentinel slots, fixed extents, bit-preserved binary64 values and result words above2^53. Test provider only reads envelope spans and writes the driver's owned two-word query status buffer/result word; fake tensor pointers are never dereferenced. This tests request transport, not GP numerical algorithms or dispatcher refusal coverage.",
+  "parallel_plan": "All57 independent fixture calls use host_parallelize. Short fixed metadata-span checks are separate from numerical kernels.",
+  "compile_flags": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+  "runtime_owed": "Root native bundle compilation and execution; this suite is unrun",
+  "python_removed": 0,
+  "product_or_kernel_changes": 0,
+  "removals": "Nothing removed in this additive transport tranche; Python numerical/interface coverage remains until replacements pass.",
+  "identity_or_performance_claim": "None"
+}
