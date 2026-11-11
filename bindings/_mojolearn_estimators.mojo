@@ -15,7 +15,8 @@ from core.logistic_native_api import (
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from core.dbscan_native_device import DBSCAN_DEVICE_API
+from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
+from core.dbscan_native_api import DBSCANFitRequest
 from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
 from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
 from core.pca_native_device import PCA_DEVICE_API
@@ -61,7 +62,6 @@ from bindings.labeled_reference_resident_binding import (
     labeled_reference_release_binding,
     labeled_reference_predict_resident_binding,
 )
-from dbscan.estimator import dbscan_fit
 from decomposition.estimator import (
     inverse_transform_host,
     pca_fit_host,
@@ -247,14 +247,11 @@ def _dbscan_fit_run(
     var max_iter = Int(py=params[5])
     var eps_nn_method = Int(py=params[6])
     var metric = Int(py=params[7])
+    var request = DBSCANFitRequest(Int(xp), Int(lp), wa, core_address, nr, nf, min_samples,
+                                   budget, max_iter, eps_nn_method, metric, eps)
     var passes = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        passes = dbscan_fit(
-            ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter,
-            eps_nn_method, metric, wa, core_address,
-        )
-        ctx.synchronize()
+        passes = DBSCANDeviceKernels.fit(request)
     return PythonObject(passes)
 
 

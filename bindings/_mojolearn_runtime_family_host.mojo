@@ -5,7 +5,7 @@
 # registered under the same names. bindings/_mojolearn_tokenizer_host.mojo keeps a native refusal under each
 # name, and import setup replaces it with this module's entry (python/mojolearn/host_surface.py
 # HOST_IMPORT_ALIASES). Existing shared Python types stay registered by their
-# prior owners; KMeans and KDE boundary owners are registered once in this family owner.
+# prior owners; KMeans and density boundary owners are registered once in this family owner.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -20,6 +20,7 @@ from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
 from bindings.kmeans_owner_boundary import KMeansResidentOwner
 from bindings.kde_native_boundary import KDEResidentOwner
+from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder
 from bindings.kde_admission_boundary import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -85,6 +86,30 @@ def register_KDEAdmissionOwner(mut module: PythonModuleBuilder) raises:
         return
     py_type_attach(module.module, "_KDEAdmissionOwner", existing)
 
+
+def register_DBSCANReferenceOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[DBSCANReferenceOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[DBSCANReferenceOwner].name())):
+            raise error
+        _ = module.add_type[DBSCANReferenceOwner]("_DBSCANReferenceOwner")
+        return
+    py_type_attach(module.module, "_DBSCANReferenceOwner", existing)
+
+
+def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[DBSCANHolder]()
+    except error:
+        if not py_type_absent(error, String(reflect[DBSCANHolder].name())):
+            raise error
+        _ = module.add_type[DBSCANHolder]("_DBSCANHolder")
+        return
+    py_type_attach(module.module, "_DBSCANHolder", existing)
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -92,6 +117,8 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_kmeans_resident_owner(module)
         register_KDEResidentOwner(module)
         register_KDEAdmissionOwner(module)
+        register_DBSCANReferenceOwner(module)
+        register_DBSCANHolder(module)
         module.def_py_c_function(classical_family_c, "family_native_call")
         module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")

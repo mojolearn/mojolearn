@@ -11,7 +11,7 @@ from bindings.cfb_spectral import cfb_spectral_operation
 def cluster_fit_b_operation(model: PythonObject, operation: String, args: PythonObject,
          context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    if operation.startswith("family_cfb_dbscan_"):
+    if operation.startswith("family_cfb_dbscan_") or operation == "family_xc_dbscan_predict":
         return cfb_dbscan_operation(model, operation, args, context)
     if operation.startswith("family_cfb_agglo_"):
         return cfb_agglo_operation(model, operation, args, context)
