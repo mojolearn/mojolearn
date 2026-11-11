@@ -33,6 +33,14 @@ struct GPRPredictionRoom(Movable):
         return Int(py=classical_address(self.mean))
 
 
+@fieldwise_init
+struct GPCPredictionCodes(Movable):
+    var codes: List[Int64]
+    # Observable class objects stay pinned until prediction PACK or scoring
+    # has applied their exact identity/type rules.
+    var classes: PythonObject
+
+
 def gpr_score_result(values: GPRScoreValues, target: PythonObject,
                      context: PythonObject) raises -> Float64:
     var target_address = Int(py=classical_address(target))
