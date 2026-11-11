@@ -49,6 +49,7 @@ def prior_case(unit: Int) raises:
         require(nc_uniform(Int(values.unsafe_ptr()), count), "uniform prior refused")
         values[count - 1] = 2.0
         require(not nc_uniform(Int(values.unsafe_ptr()), count), "changed prior was cached")
+        _ = values^  # raw-address checks must finish before ASAP destruction
         return
     if unit == 4:
         var values: List[Float64] = [2.0, 1.0, 1.0]
@@ -65,6 +66,7 @@ def prior_case(unit: Int) raises:
         require(bitcast[DType.uint32](words[0]) == UInt32(0x3e800000), "quarter bits")
         require(bitcast[DType.uint32](words[1]) == UInt32(0x80000000), "negative zero bits")
         require(words[2] == 0 and words[3] == 2, "query prior narrowing")
+        _ = values^  # keep the source through the native narrowing call
     else:
         var steps = nc_power_steps(257)
         require(steps[0] == 512 and steps[1] == 45, "median network metadata")
@@ -84,11 +86,14 @@ def refusal_case(unit: Int) raises:
         values[1] = 1e308
         expected = "OverflowError: math range error"
     var refused = False
+    var actual = String("<no refusal>")
     try:
         nc_normalize_priors(0 if unit == 3 else Int(values.unsafe_ptr()), 0 if unit == 3 else 2)
     except error:
-        refused = String(error) == expected
-    require(refused, "prior refusal order/message changed")
+        actual = String(error)
+        refused = actual == expected
+    _ = values^  # the call's integer address carries no owner origin
+    require(refused, "prior refusal order/message changed: expected " + expected + ", got " + actual)
 
 
 def run_checks() raises:
