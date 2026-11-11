@@ -726,6 +726,15 @@
       "source_review_only": true,
       "runtime_status": "Uncompiled/unrun; pca-native-execution.json; 10 CPU / 13 GPU native execution fixtures in shared suites.",
       "python_definitions_retained": 5
+    },
+    {
+      "path": "python/mojolearn/tests/test_estimators_host_borrowed_buffers.py",
+      "moved": "first TSVD 2x3 pure numerical assertion",
+      "retained": "Python-loaded binding, borrowed NumPy output shape/dtype, caller-owned component mutation and PCA borrowed-buffer assertion",
+      "definitions_removed": 0,
+      "decision": "split-migrated",
+      "source_review_only": true,
+      "runtime_status": "7 CPU / 8 GPU typed TSVD query fixtures; uncompiled/unrun; see tsvd-native-execution.json."
     }
   ],
   "reviewed_files": 51,
