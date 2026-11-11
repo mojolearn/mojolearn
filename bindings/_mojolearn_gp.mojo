@@ -82,6 +82,12 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+from std.python.bindings import lookup_py_type_object
+from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
+from core.gp_native_provider import GPProviderAPI
+from core.gp_native_device import GPDeviceKernels
+from core.shared_slot import SharedSlot
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
@@ -1462,10 +1468,19 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+comptime GP_DEVICE_NATIVE_API = SharedSlot[GPProviderAPI[GPDeviceKernels], ("MojolearnGPDeviceKernelsV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnGPDeviceKernelsV1Fast")]
+
+
+def gp_native_api_v1_binding() raises -> PythonObject:
+    var api = GP_DEVICE_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
 def build__mojolearn_gp() -> PythonObject:
     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
+        m.def_function[gp_native_api_v1_binding]("gp_native_api_v1")
         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
