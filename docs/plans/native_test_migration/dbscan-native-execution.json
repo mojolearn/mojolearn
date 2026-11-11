@@ -1,6 +1,6 @@
 {
   "family": "DBSCAN",
-  "execution": "authored; uncompiled and unrun",
+  "execution": "Partial: root compiled and passed CPU103 (wire45 +options41 +actual17) at bda409162a and Apple GPU20 (actual17 +ownership3) at4583aac78f. CPU state28 is still compilation-blocked after both original and explicit scoped-borrow attempts; it has not executed. Neither failed full CPU bundle is reported as passing.",
   "dependencies": [
     "6b3832cfc7",
     "a446091b7a",
@@ -353,7 +353,7 @@
   "ownership": "Three ordered real provider graphs: host refs/keys/labels poisoned after prepare; retained query uses original upload; two simultaneous native leases retain buffer contents after registry removal; missing lookup refused; separately minted replacement retains its own labels after old release. No overlapping GPU submission.",
   "parallel": "CPU17 fits across host cores; original20 one-row queries across CPU cores. GPU17 fits/query graphs and ownership3 ordered on one physical GPU/shared context; existing numerical kernels and oracle cells remain parallel. Separate MAX/Metal concurrent-submit failure remains unresolved.",
   "python_removed": 0,
-  "python_cleanup_status": "Pending root native execution; retain meaningful original coverage until replacements pass. Public admission/storage/interoperability/save-load/refusal/pack seams remain Python.",
+  "python_cleanup_status": "Pending patch only. Original Python numerical coverage retained while state28 compilation is unresolved.",
   "reviewed_python": [
     "test_transductive_predict.py::arm_dbscan",
     "test_cpu_training_e.py::test_host_fits_run_and_repeat_on_a_cpu_only_install (nested run DBSCAN512x5 portion)",
@@ -376,5 +376,14 @@
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "MOJOLEARN_COLUMN_CPU=1 for CPU only"
   ],
-  "evidence": "E/pca-native-tests/dbscan-native-static.json"
+  "evidence": "E/pca-native-tests/dbscan-native-static.json",
+  "accepted_runtime_evidence": "E/native-wave15-accepted-results.json",
+  "validation_limits": [
+    "Partial test evidence, not full DBSCAN suite pass",
+    "Local CPU and Apple Metal GPU only",
+    "Installed public Python boundary cases unrun",
+    "No performance or cross-vendor identity claim",
+    "Ordered GPU tests do not clear upstream concurrent shared-context submission failure",
+    "No product or tuned kernel changes in borrow-scope repair"
+  ]
 }
