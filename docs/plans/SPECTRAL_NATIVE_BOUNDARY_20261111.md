@@ -355,3 +355,29 @@ Ten authored public refusal cases cover seed/solver/tolerance errors with both
 NumPy printing hooks; they are not executed by this lane. This correctness
 repair removes a callback path, adds no private-role count, and changes no
 numerical requests, kernel source or allocation route.
+
+## Native standalone generated-affinity storage
+
+The standalone embedding's RBF and precomputed-kNN generated affinity now
+lives in `SpectralAffinityStorage` (a native square Float32 buffer and row
+count). `SpectralAffinityRoom` retains that native owner or the existing
+exporter-backed Array when an estimator publishes `affinity_matrix_`.
+Clustering, estimator embedding and the explicit public kNN-affinity helper
+continue to allocate/publish their existing Arrays; no public view/exporter
+is synthesized for private standalone storage.
+
+Both cases run the same existing RBF cell or kNN descriptor and the same
+embedding descriptor. The host COO route consumes the native span directly
+through the existing count/fill calls. No additional data copy, device
+allocation, transfer, numerical loop or alternate algorithm was introduced.
+The native owner remains named after the final dense solve or COO conversion;
+provider/input pins remain held through their GIL-free calls. The original
+public embedding Array remains the returned exporter-backed output.
+
+This removes one further private generated-affinity scratch role shared by
+the two standalone affinity constructors, not two counts for mutually
+exclusive routes. Public estimator affinity storage remains excluded.
+Only the runtime-family binding closure changes; metrics/base/x_decomp
+numerical implementations and provider ABIs remain unchanged. Compilation,
+native ownership/numerical fixtures and public boundary cases are root-owned
+and pending; source equivalence is not runtime or performance evidence.
