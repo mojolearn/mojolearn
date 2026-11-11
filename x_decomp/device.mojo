@@ -173,7 +173,7 @@ from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from core.device_plan import plan_for_single
+from core.device_plan import DevicePlan
 from core.neural_context import process_ctx
 
 
@@ -306,7 +306,8 @@ def xd_ctx() raises -> DeviceContext:
     plan. Keep that root explicitly; the native owner only changes publication.
     V4 names the shared native context layout instead of the former Optional.
     """
-    return process_ctx["MojolearnXDecompContextIdenticalV4"](plan_for_single())
+    var plan = DevicePlan("", 1, 0, List[Int](), False)
+    return process_ctx["MojolearnXDecompContextIdenticalV4"](plan)
 
 comptime TPB = 128
 #: rows of shortest paths per launch (the heap scratch is DIJKSTRA_ROWS x n ints)
