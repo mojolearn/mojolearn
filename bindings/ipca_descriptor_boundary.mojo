@@ -117,15 +117,15 @@ def ipca_run_query(connection: Int, request: IPCAQueryRequest) raises:
         _ = pin
 
 
-def ipca_provider(connection: Int) -> PythonObject:
+def ipca_provider(connection: Int) raises -> PythonObject:
     return IPCA_CONNECTIONS.get_or_create_ptr()[].records[connection].provider
 
 
-def ipca_driver(connection: Int) -> IPCANativeDriver:
+def ipca_driver(connection: Int) raises -> IPCANativeDriver:
     return IPCA_CONNECTIONS.get_or_create_ptr()[].records[connection].driver.copy()
 
 
-def ipca_resident(connection: Int) -> Bool:
+def ipca_resident(connection: Int) raises -> Bool:
     return (IPCA_CONNECTIONS.get_or_create_ptr()[].records[connection].capabilities & IPCA_CAP_RESIDENT) != 0
 
 

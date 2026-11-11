@@ -191,7 +191,7 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int
         admitted_finite_refuse(result.finite, "NMF")
     _ = w_scratch^
     _ = h_scratch^
-    return NMFPackedFit(w, h, nc, result)
+    return NMFPackedFit(w, h, nc, result^)
 
 
 def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: PythonObject, h_given: PythonObject,
