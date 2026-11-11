@@ -28,18 +28,14 @@ comptime BGMM_FIT_FLOATS = 6
 comptime BGMM_SCORE_INTS = 4
 
 
+@fieldwise_init
 struct BgmmFitRequest(Copyable, Movable):
-    """`x_cluster_call(ENTRY_BGMM, x, aux, ints, floats)` as typed words."""
+    """`x_cluster_call(ENTRY_BGMM, x, aux, ints, floats)` as typed words:
+    BGMM_FIT_INTS integers and BGMM_FIT_FLOATS floats."""
     var source: VariantsSpan
     var auxiliary: VariantsSpan
     var ints: List[Int]
     var floats: List[Float64]
-
-    def __init__(out self, source: VariantsSpan, auxiliary: VariantsSpan):
-        self.source = source
-        self.auxiliary = auxiliary
-        self.ints = List[Int](length=BGMM_FIT_INTS, fill=0)
-        self.floats = List[Float64](length=BGMM_FIT_FLOATS, fill=0.0)
 
 
 struct BgmmResultSlot(Movable):

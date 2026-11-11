@@ -17,6 +17,7 @@
 # inputs, same order: the bits do not move.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.admitted_family import admit_family, admit_family_refuse_empty
 from bindings.admitted_input import classical_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_fields, py_setitem
@@ -46,13 +47,16 @@ from bindings.cluster_side_records import (
     cluster_is_subclass, cluster_refuse_fit_callbacks, cluster_record_key, cluster_record_get,
     cluster_record_put, cluster_record_drop,
 )
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi import (
+    NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
+)
+from core.bgmm_native_api import (
+    BGMM_NATIVE_ABI, BGMM_NATIVE_COUNT, BgmmDriver, BgmmFitRequest, BgmmResultSlot,
+)
+from core.kmeans_variants_api import VariantsSpan
+from bindings.kmeans_variants_boundary import variants_span, variants_pack_f32, variants_pack_i32
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
-
-# x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-comptime _E_BGMM = 8
-comptime _E_BGMM_SCORE = 9
 
 comptime _GMM = "mojolearn GaussianMixture: "
 # The by-name refusals of the options `GmmParams` does not carry
@@ -98,12 +102,18 @@ def _float(value: PythonObject) raises -> PythonObject:
     return family_call(native_loaded_module("builtins").float, value)
 
 
-def _from_flat(flat: PythonObject, shape: PythonObject, typestr: String, code: String,
-               context: PythonObject) raises -> PythonObject:
-    """`Array._from_flat(flat, shape, typestr)`: a copy of the entry's
-    `array.array` result as an owned C-order Array."""
-    var store = py_call(context["array_type"], PythonObject(code), flat)
-    return classical_wrap_array(store, shape, typestr, "C", context)
+def _pack_f(values: List[Float32], shape: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A result block of the BGMM entry as an owned C-order float32 Array:
+    ONE allocation and one memcpy of the entry's words (the store is the
+    Array's own). Replaces `_from_flat` over the CPython `x_cluster_call`
+    result, which copied each block twice (the exporter's array.array, then
+    `array.array(code, flat)`)."""
+    return classical_wrap_array(variants_pack_f32(values), shape, "<f4", "C", context)
+
+
+def _pack_i(values: List[Int32], shape: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_pack_f` for an int32 result block."""
+    return classical_wrap_array(variants_pack_i32(values), shape, "<i4", "C", context)
 
 
 def _f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
@@ -209,43 +219,55 @@ def _any_f32_view(view: PythonObject, name: String, context: PythonObject) raise
     return result
 
 
-def _concat(parts: PythonObject, context: PythonObject) raises -> PythonObject:
+def _aux(parts: PythonObject) raises -> List[Float32]:
     """`_expansion_cluster._aux(*parts)`: the float32 parts (C order, from
-    `_any_f32`) end to end as one float32 Array, byte copies; None when the
-    parts hold no value."""
+    `_any_f32`) end to end, one byte copy each, now into a Mojo-owned
+    buffer the typed BGMM request names (no Python Array is allocated for
+    it). Empty when the parts hold no value (the former None)."""
     var total = 0
     for p in range(len(parts)):  # small-loop(parts: the few prior, warm-state and model blocks)
         total += Int(py=parts[p].size)
-    if total == 0:
-        return PythonObject(None)
-    var out = family_array(Python.tuple(total), "<f4", context)
-    var dst = Int(py=classical_address(out))
-    _ = out  # keep the Python object alive through the native call above
+    var out = List[Float32](length=total, fill=0)
     var offset = 0
     for p in range(len(parts)):  # small-loop(parts: the few prior, warm-state and model blocks)
         var size = Int(py=parts[p].size)
         if size:
-            unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=dst + 4 * offset),
+            unsafe_memcpy(dest=out.unsafe_ptr() + offset,
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parts[p]))), count=size)
-            _ = out  # keep the Python object alive through the native call above
         offset += size
-    return out
+    _ = parts  # the parts stay owned through the copies above
+    return out^
 
 
-def _state(blocks: PythonObject, zeros_at: Int, zeros: Int, context: PythonObject) raises -> PythonObject:
-    """The warm-start state: the entry's float blocks end to end (with
-    `zeros` zeros in place of block `zeros_at` when it is empty, or always
-    when `zeros_at` < 0 names an inserted block) as one float32 Array, the
-    bytes the former `list(...) + ...` concatenation cast to float32."""
-    var store = py_call(context["array_type"], PythonObject("f"))
-    var b = native_loaded_module("builtins")
-    for j in range(len(blocks)):  # small-loop(blocks: the eight fitted parameter blocks)
-        var block = blocks[j]
-        if block is None or (j == zeros_at and len(block) == 0):
-            _ = py_call(store.frombytes, py_call(b.bytes, PythonObject(4 * zeros)))
+def _state(blocks: List[List[Float32]], order: List[Int], zeros_at: Int, zeros: Int,
+           context: PythonObject) raises -> PythonObject:
+    """The warm-start state: the entry's float blocks `order` end to end
+    (with `zeros` zeros in place of block position `zeros_at` when that block
+    is empty, and for every -1 in `order`, an inserted block) as one float32
+    Array, the bytes the former `list(...) + ...` concatenation cast to
+    float32. ONE allocation of the final size, one memcpy per block (it was
+    an array.array grown block by block, then wrapped)."""
+    var total = 0
+    for j in range(len(order)):  # small-loop(blocks: the eight fitted parameter blocks)
+        if order[j] < 0 or (j == zeros_at and len(blocks[order[j]]) == 0):
+            total += zeros
         else:
-            _ = py_call(store.extend, block)
-    return classical_wrap_array(store, Python.tuple(len(store)), "<f4", "C", context)
+            total += len(blocks[order[j]])
+    var result = family_array(Python.tuple(total), "<f4", context)
+    var dst = Int(py=classical_address(result))
+    var offset = 0
+    for j in range(len(order)):  # small-loop(blocks: the eight fitted parameter blocks)
+        if order[j] < 0 or (j == zeros_at and len(blocks[order[j]]) == 0):
+            offset += zeros  # family_array is zero-filled
+        else:
+            var size = len(blocks[order[j]])
+            if size:
+                unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=dst + 4 * offset),
+                              src=blocks[order[j]].unsafe_ptr(), count=size)
+            offset += size
+    _ = result  # keep the Array alive through the copies above
+    _ = blocks
+    return result
 
 
 def _seed(random_state: PythonObject) raises -> PythonObject:
@@ -260,33 +282,67 @@ def _seed(random_state: PythonObject) raises -> PythonObject:
     return family_call(operator.and_, _int(random_state), PythonObject(0x7FFFFFFFFFFFFFFF))
 
 
-def _xc_call(binding: PythonObject, which: Int, x: PythonObject, aux: PythonObject, ints: PythonObject,
-             floats: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_XCluster._call(which, x, aux, ints, floats)`: (f, i, s)."""
-    var entry = neural_descriptor_entry(binding, "x_cluster_call")
-    var aux_address = PythonObject(0)
-    var aux_size = 0
-    if aux is not None:
-        aux_size = Int(py=aux.size)
-        if aux_size:
-            aux_address = classical_address(aux)
-    var result = family_call(entry, PythonObject(which), classical_address(x), PythonObject(Int(py=x.size)),
-                             aux_address, PythonObject(aux_size), ints, floats)
-    _ = aux  # keep the caller's aux alive through the call
-    return result
+@fieldwise_init
+struct _BgmmConnection(Movable):
+    var provider: PythonObject
+    var driver: BgmmDriver
 
 
-def _by_type(flat: PythonObject, k: Int, d: Int, ct: Int, context: PythonObject) raises -> PythonObject:
+def _bgmm_connection(binding: PythonObject) raises -> _BgmmConnection:
+    """The typed BGMM provider of the x_cluster `binding`
+    (`bgmm_native_api_v1`), connected once per process."""
+    var factory = neural_descriptor_entry(binding, "bgmm_native_api_v1")
+    var provider = neural_descriptor_connect_factory_once(factory, String(BGMM_NATIVE_ABI), BGMM_NATIVE_COUNT)
+    var driver = BgmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    return _BgmmConnection(provider, driver^)
+
+
+def _bgmm_fit_call(binding: PythonObject, x: PythonObject, aux: List[Float32], var ints: List[Int],
+                   var floats: List[Float64]) raises -> BgmmResultSlot:
+    """ENTRY_BGMM on the typed transport: the words the former
+    `_XCluster._call(ENTRY_BGMM, x, aux, ints, floats)` packed into Python
+    lists, as Mojo values; the GIL is released around the entry as
+    `x_cluster_call` released it."""
+    var connection = _bgmm_connection(binding)
+    var request = BgmmFitRequest(variants_span(x), VariantsSpan(Int(aux.unsafe_ptr()), len(aux)), ints^, floats^)
+    var result = BgmmResultSlot()
+    try:
+        with GILReleased(Python()):
+            connection.driver.fit(request, result)
+    finally:
+        _ = connection.provider
+        _ = x
+        _ = aux
+    return result^
+
+
+def _bgmm_score_call(binding: PythonObject, x: PythonObject, aux: List[Float32], n: Int, d: Int, k: Int,
+                     flags: Int) raises -> BgmmResultSlot:
+    """ENTRY_BGMM_SCORE on the typed transport (ints [n, d, k, flags])."""
+    var connection = _bgmm_connection(binding)
+    var source = variants_span(x)
+    var result = BgmmResultSlot()
+    try:
+        with GILReleased(Python()):
+            connection.driver.score(source, VariantsSpan(Int(aux.unsafe_ptr()), len(aux)), n, d, k, flags, result)
+    finally:
+        _ = connection.provider
+        _ = x
+        _ = aux
+    return result^
+
+
+def _by_type(flat: List[Float32], k: Int, d: Int, ct: Int, context: PythonObject) raises -> PythonObject:
     """`BayesianGaussianMixture._by_type`: the entry's by-type values (full
     k x d x d, tied d x d, diag k x d, spherical k) under the covariance
     type's shape."""
     if ct == 0:
-        return _from_flat(flat, Python.tuple(k, d, d), "<f4", "f", context)
+        return _pack_f(flat, Python.tuple(k, d, d), context)
     if ct == 1:
-        return _from_flat(flat, Python.tuple(d, d), "<f4", "f", context)
+        return _pack_f(flat, Python.tuple(d, d), context)
     if ct == 2:
-        return _from_flat(flat, Python.tuple(k, d), "<f4", "f", context)
-    return _from_flat(flat, Python.tuple(k), "<f4", "f", context)
+        return _pack_f(flat, Python.tuple(k, d), context)
+    return _pack_f(flat, Python.tuple(k), context)
 
 
 def _sorted_repr(table: PythonObject) raises -> String:
@@ -606,47 +662,53 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
         _ = pi  # keep the Python object alive through the native calls above
         _ = py_call(parts.append, pi)
         flag_p = ct + 1
-    var aux = _concat(parts, context)
-    var lower = PythonObject(0.0)
+    var aux = _aux(parts)
+    var lower = 0.0
     if warm:
-        lower = _float(_get_or(model, "lower_bound_", PythonObject(0.0)))
-    var floats = Python.list(PythonObject(-1.0), PythonObject(-1.0), PythonObject(-1.0),
-                             _float(_get(model, "reg_covar")), _float(_get(model, "tol")), lower)
-    var ints = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(0),
-                           _int(_get(model, "max_iter")), _int(_get(model, "n_init")), _int(inits[init_params]),
-                           _seed(_get(model, "random_state")), PythonObject(0), PythonObject(0), PythonObject(ct),
-                           PythonObject(1 if warm else 0), PythonObject(1), PythonObject(flag_w), PythonObject(flag_m),
-                           PythonObject(flag_p))
-    var result = _xc_call(xc_binding, _E_BGMM, x, aux, ints, floats, context)
+        lower = Float64(py=_float(_get_or(model, "lower_bound_", PythonObject(0.0))))
+    # ORDER MATCHES x_cluster/entries.mojo::bgmm_entry (the former Python
+    # lists, read in the same order): floats, then ints.
+    var floats: List[Float64] = [-1.0, -1.0, -1.0, Float64(py=_float(_get(model, "reg_covar"))),
+                                 Float64(py=_float(_get(model, "tol"))), lower]
+    var max_iter = Int(py=_int(_get(model, "max_iter")))
+    var n_init = Int(py=_int(_get(model, "n_init")))
+    var init_code = Int(py=_int(inits[init_params]))
+    var seed = Int(py=_seed(_get(model, "random_state")))
+    var ints: List[Int] = [n, d, k, 0, max_iter, n_init, init_code, seed, 0, 0, ct, 1 if warm else 0, 1,
+                           flag_w, flag_m, flag_p]
+    var result = _bgmm_fit_call(xc_binding, x, aux, ints^, floats^)
     _ = parts^
-    var f = result[0]
-    var s = result[2]
+    ref f = result.storage[0].f
+    ref s = result.storage[0].s
     py_setattr(model, "n_features_in_", PythonObject(d))
-    py_setattr(model, "weights_", _from_flat(f[0], Python.tuple(k), "<f4", "f", context))
-    py_setattr(model, "means_", _from_flat(f[1], Python.tuple(k, d), "<f4", "f", context))
+    py_setattr(model, "weights_", _pack_f(f[0], Python.tuple(k), context))
+    py_setattr(model, "means_", _pack_f(f[1], Python.tuple(k, d), context))
     py_setattr(model, "covariances_", _by_type(f[13], k, d, ct, context))
     py_setattr(model, "precisions_cholesky_", _by_type(f[14], k, d, ct, context))
-    py_setattr(model, "log_det_chol_", _from_flat(f[12], Python.tuple(k), "<f4", "f", context))   # x_cluster bgmm_entry
-    py_setattr(model, "n_iter_", _int(s[1]))
-    py_setattr(model, "converged_", PythonObject(_truthy(s[2])))
-    py_setattr(model, "lower_bound_", _float(s[0]))
+    py_setattr(model, "log_det_chol_", _pack_f(f[12], Python.tuple(k), context))   # x_cluster bgmm_entry
+    # int(), float() and bool() of the entry's float64 scalars, natively.
+    py_setattr(model, "n_iter_", PythonObject(Int(s[1])))
+    py_setattr(model, "converged_", PythonObject(s[2] != 0.0))
+    py_setattr(model, "lower_bound_", PythonObject(s[0]))
     # The fit's own state: the x_cluster binding it ran on (its scoring
     # entry), the full per-component Cholesky block and log constants, and
     # the state a warm_start refit resumes from.
     var ext = Python.dict()
     ext["key"] = key
     ext["binding"] = xc_binding
-    ext["pchol"] = _from_flat(f[3], Python.tuple(k, d, d), "<f4", "f", context)
-    ext["consts"] = _from_flat(f[8], Python.tuple(k), "<f4", "f", context)
-    ext["state"] = _state(Python.list(f[11], f[4], PythonObject(None), f[6], f[1], f[7], f[2], f[3]), -1, k, context)
+    ext["pchol"] = _pack_f(f[3], Python.tuple(k, d, d), context)
+    ext["consts"] = _pack_f(f[8], Python.tuple(k), context)
+    var order: List[Int] = [11, 4, -1, 6, 1, 7, 2, 3]
+    ext["state"] = _state(f, order, -1, k, context)
+    _ = result^
     py_setattr(model, "_ext", ext)
     return x
 
 
-def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) raises -> BgmmResultSlot:
     """`_expansion_cluster._gmm_ext_score` on a checked float32 X: (f, i, s)
     of ENTRY_BGMM_SCORE with flags 1 | 2 (predict_proba's exp and score's
-    fold in the binding)."""
+    fold in the binding), on the typed transport."""
     var ext = _get(model, "_ext")
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -655,11 +717,9 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
         raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(fitted))
     var means = _get(model, "means_")
     var k = Int(py=means.shape[0])
-    var aux = _concat(Python.list(_any_f32(means, "aux", context), _any_f32(ext["pchol"], "aux", context),
-                                  _any_f32(ext["consts"], "aux", context)), context)
-    return _xc_call(ext["binding"], _E_BGMM_SCORE, x, aux,
-                    Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(3)), Python.list(),
-                    context)
+    var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(ext["pchol"], "aux", context),
+                               _any_f32(ext["consts"], "aux", context)))
+    return _bgmm_score_call(ext["binding"], x, aux, n, d, k, 3)
 
 
 def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -677,7 +737,8 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
         var x = source if admitted else _x_finite(source, "X", context)
         var n = Int(py=x.shape[0])
         var got = _gmm_ext_score(model, x, context)
-        var score = Float64(py=got[2][0]) / Float64(n)
+        var score = got.storage[0].s[0] / Float64(n)
+        _ = got^
         var means = _get(model, "means_")
         var k = Int(py=means.shape[0])
         var d = Int(py=means.shape[1])
@@ -734,10 +795,10 @@ def _gmm_ext_labels(model: PythonObject, x: PythonObject, which: Int, context: P
     var got = _gmm_ext_score(model, x, context)
     var k = Int(py=_get(model, "means_").shape[0])
     if which == 0:
-        return _from_flat(got[0][1], Python.tuple(n), "<f4", "f", context)
+        return _pack_f(got.storage[0].f[1], Python.tuple(n), context)
     if which == 1:
-        return _from_flat(got[0][2], Python.tuple(n, k), "<f4", "f", context)
-    return _from_flat(got[1][0], Python.tuple(n), "<i4", "i", context)
+        return _pack_f(got.storage[0].f[2], Python.tuple(n, k), context)
+    return _pack_i(got.storage[0].i[0], Python.tuple(n), context)
 
 
 def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObject, which: Int,
@@ -839,94 +900,98 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         warm = Bool(py=family_call(operator.eq, prev[0], key))
     if warm:
         _ = py_call(parts.append, _any_f32(_get(model, "_warm")[1], "aux", context))
-    var aux = _concat(parts, context)
-    var floats = Python.list()
+    var aux = _aux(parts)
+    # ORDER MATCHES x_cluster/entries.mojo::bgmm_entry (the former Python
+    # lists, read in the same order): floats, then ints.
+    var floats = List[Float64]()
     var wcp = _get(model, "weight_concentration_prior")
-    _ = py_call(floats.append, PythonObject(-1.0) if wcp is None else _float(wcp))
+    floats.append(-1.0 if wcp is None else Float64(py=_float(wcp)))
     var mpp = _get(model, "mean_precision_prior")
-    _ = py_call(floats.append, PythonObject(-1.0) if mpp is None else _float(mpp))
+    floats.append(-1.0 if mpp is None else Float64(py=_float(mpp)))
     var dfp = _get(model, "degrees_of_freedom_prior")
-    _ = py_call(floats.append, PythonObject(-1.0) if dfp is None else _float(dfp))
-    _ = py_call(floats.append, _float(_get(model, "reg_covar")))
-    _ = py_call(floats.append, _float(_get(model, "tol")))
-    _ = py_call(floats.append, _float(_get_or(model, "lower_bound_", PythonObject(0.0))) if warm else PythonObject(0.0))
-    var ints = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(1 if process else 0),
-                           _int(_get(model, "max_iter")), _int(_get(model, "n_init")), _int(inits[init_params]),
-                           _seed(_get(model, "random_state")), PythonObject(1 if mean_prior is not None else 0),
-                           PythonObject(cov_mode), PythonObject(ct), PythonObject(1 if warm else 0))
-    var result = _xc_call(binding, _E_BGMM, x, aux, ints, floats, context)
+    floats.append(-1.0 if dfp is None else Float64(py=_float(dfp)))
+    floats.append(Float64(py=_float(_get(model, "reg_covar"))))
+    floats.append(Float64(py=_float(_get(model, "tol"))))
+    floats.append(Float64(py=_float(_get_or(model, "lower_bound_", PythonObject(0.0)))) if warm else 0.0)
+    var max_iter = Int(py=_int(_get(model, "max_iter")))
+    var n_init = Int(py=_int(_get(model, "n_init")))
+    var init_code = Int(py=_int(inits[init_params]))
+    var seed = Int(py=_seed(_get(model, "random_state")))
+    # The BGMM entry's twelve words; the typed request's last four (plain
+    # and the three init flags) are 0, which bgmm_entry reads as absent.
+    var ints: List[Int] = [n, d, k, 1 if process else 0, max_iter, n_init, init_code, seed,
+                           1 if mean_prior is not None else 0, cov_mode, ct, 1 if warm else 0, 0, 0, 0, 0]
+    var result = _bgmm_fit_call(binding, x, aux, ints^, floats^)
     _ = parts^
-    var f = result[0]
-    var i = result[1]
-    var s = result[2]
-    py_setattr(model, "weights_", _from_flat(f[0], Python.tuple(k), "<f4", "f", context))
-    py_setattr(model, "means_", _from_flat(f[1], Python.tuple(k, d), "<f4", "f", context))
-    py_setattr(model, "_full_pchol", _from_flat(f[3], Python.tuple(k, d, d), "<f4", "f", context))
+    ref f = result.storage[0].f
+    ref s = result.storage[0].s
+    py_setattr(model, "weights_", _pack_f(f[0], Python.tuple(k), context))
+    py_setattr(model, "means_", _pack_f(f[1], Python.tuple(k, d), context))
+    py_setattr(model, "_full_pchol", _pack_f(f[3], Python.tuple(k, d, d), context))
     # f[13], f[14], f[15]: the binding's by-type forms (bgmm_entry)
     py_setattr(model, "covariances_", _by_type(f[13], k, d, ct, context))
     py_setattr(model, "precisions_cholesky_", _by_type(f[14], k, d, ct, context))
     if process:
         py_setattr(model, "weight_concentration_",
-                   Python.tuple(_from_flat(f[4], Python.tuple(k), "<f4", "f", context),
-                                _from_flat(f[5], Python.tuple(k), "<f4", "f", context)))
+                   Python.tuple(_pack_f(f[4], Python.tuple(k), context), _pack_f(f[5], Python.tuple(k), context)))
     else:
-        py_setattr(model, "weight_concentration_", _from_flat(f[4], Python.tuple(k), "<f4", "f", context))
-    py_setattr(model, "mean_precision_", _from_flat(f[6], Python.tuple(k), "<f4", "f", context))
+        py_setattr(model, "weight_concentration_", _pack_f(f[4], Python.tuple(k), context))
+    py_setattr(model, "mean_precision_", _pack_f(f[6], Python.tuple(k), context))
     if ct == 1:
-        py_setattr(model, "degrees_of_freedom_", _float(f[7][0]))
+        py_setattr(model, "degrees_of_freedom_", PythonObject(Float64(f[7][0])))
     else:
-        py_setattr(model, "degrees_of_freedom_", _from_flat(f[7], Python.tuple(k), "<f4", "f", context))
-    py_setattr(model, "_log_consts", _from_flat(f[8], Python.tuple(k), "<f4", "f", context))
-    py_setattr(model, "mean_prior_", _from_flat(f[9], Python.tuple(d), "<f4", "f", context))
-    var cpf = f[15]
+        py_setattr(model, "degrees_of_freedom_", _pack_f(f[7], Python.tuple(k), context))
+    py_setattr(model, "_log_consts", _pack_f(f[8], Python.tuple(k), context))
+    py_setattr(model, "mean_prior_", _pack_f(f[9], Python.tuple(d), context))
     if ct == 2:
-        py_setattr(model, "covariance_prior_", _from_flat(cpf, Python.tuple(d), "<f4", "f", context))
+        py_setattr(model, "covariance_prior_", _pack_f(f[15], Python.tuple(d), context))
     elif ct == 3:
-        py_setattr(model, "covariance_prior_", _float(cpf[0]))
+        py_setattr(model, "covariance_prior_", PythonObject(Float64(f[15][0])))
     else:
-        py_setattr(model, "covariance_prior_", _from_flat(cpf, Python.tuple(d, d), "<f4", "f", context))
-    py_setattr(model, "lower_bound_", _float(s[0]))
-    py_setattr(model, "n_iter_", _int(s[1]))
-    py_setattr(model, "converged_", PythonObject(_truthy(s[2])))
+        py_setattr(model, "covariance_prior_", _pack_f(f[15], Python.tuple(d, d), context))
+    # int(), float() and bool() of the entry's float64 scalars, natively.
+    py_setattr(model, "lower_bound_", PythonObject(s[0]))
+    py_setattr(model, "n_iter_", PythonObject(Int(s[1])))
+    py_setattr(model, "converged_", PythonObject(s[2] != 0.0))
     # the state a warm_start refit resumes from (full per-component
     # matrices); an empty f[5] (Dirichlet distribution) is k zeros
-    py_setattr(model, "_warm", Python.tuple(key, _state(Python.list(f[11], f[4], f[5], f[6], f[1], f[7], f[2], f[3]),
-                                                        2, k, context)))
-    py_setattr(model, "weight_concentration_prior_", _float(s[3]))
-    py_setattr(model, "mean_precision_prior_", _float(s[4]))
-    py_setattr(model, "degrees_of_freedom_prior_", _float(s[5]))
+    var order: List[Int] = [11, 4, 5, 6, 1, 7, 2, 3]
+    py_setattr(model, "_warm", Python.tuple(key, _state(f, order, 2, k, context)))
+    py_setattr(model, "weight_concentration_prior_", PythonObject(s[3]))
+    py_setattr(model, "mean_precision_prior_", PythonObject(s[4]))
+    py_setattr(model, "degrees_of_freedom_prior_", PythonObject(s[5]))
     py_setattr(model, "n_features_in_", PythonObject(d))
-    return _from_flat(i[0], Python.tuple(n), "<i4", "i", context)
+    var labels = _pack_i(result.storage[0].i[0], Python.tuple(n), context)
+    _ = result^
+    return labels
 
 
 def _bgmm_score(model: PythonObject, binding: PythonObject, source: PythonObject, flags: Int,
-                context: PythonObject, admitted: Bool = False) raises -> PythonObject:
-    """`BayesianGaussianMixture._score`: (f, i, s) of ENTRY_BGMM_SCORE plus
-    the row count, as a tuple (result, n, k). `admitted`: `source` is the X
-    the public cluster door admitted (classical_check_x: 2-D, non-empty,
-    finite, float32 in C order), used as is."""
+                context: PythonObject, admitted: Bool, mut n: Int, mut k: Int) raises -> BgmmResultSlot:
+    """`BayesianGaussianMixture._score`: (f, i, s) of ENTRY_BGMM_SCORE on the
+    typed transport; `n` and `k` receive the row and component counts.
+    `admitted`: `source` is the X the public cluster door admitted
+    (classical_check_x: 2-D, non-empty, finite, float32 in C order), used
+    as is."""
     var means = _get_or(model, "means_", PythonObject(None))
     if means is None:
         raise Error("RuntimeError: this " + String(py_type(model).__name__) + " is not fitted yet")
     # Perf (lane pass2-cluster-nbr): the door already refused a non-finite X;
     # the second native scan of the same words is skipped for its X only.
     var x = source if admitted else _x_finite(source, "X", context)
-    var n = Int(py=x.shape[0])
+    n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var fitted = _get(model, "n_features_in_")
     if d != Int(py=fitted):
         raise Error("mojolearn: X has " + String(d) + " features, " + String(py_type(model).__name__)
                     + " was fitted with " + family_str(fitted))
-    var k = Int(py=means.shape[0])
-    var ints = Python.list(PythonObject(n), PythonObject(d), PythonObject(k))
-    if flags:
-        _ = py_call(ints.append, PythonObject(flags))
+    k = Int(py=means.shape[0])
     # the model block as byte copies (`_aux`)
-    var aux = _concat(Python.list(_any_f32(means, "aux", context), _any_f32(_get(model, "_full_pchol"), "aux", context),
-                                  _any_f32(_get(model, "_log_consts"), "aux", context)), context)
-    var result = _xc_call(binding, _E_BGMM_SCORE, x, aux, ints, Python.list(), context)
+    var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(_get(model, "_full_pchol"), "aux", context),
+                               _any_f32(_get(model, "_log_consts"), "aux", context)))
+    var result = _bgmm_score_call(binding, x, aux, n, d, k, flags)
     _ = x^
-    return Python.tuple(result, PythonObject(n), PythonObject(k))
+    return result^
 
 
 # ------------------------------------------------------------------- door
@@ -975,19 +1040,27 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
     if operation == "family_mix_bgmm_predict":
         # the labels come from the device score (`bodies.argmax_row`: the
         # first largest log responsibility, the lowest index on a tie)
-        var got = _bgmm_score(model, args[0], args[1], 0, context, admitted)
-        return _from_flat(got[0][1][0], Python.tuple(got[1]), "<i4", "i", context)
+        var n = 0
+        var k = 0
+        var got = _bgmm_score(model, args[0], args[1], 0, context, admitted, n, k)
+        return _pack_i(got.storage[0].i[0], Python.tuple(n), context)
     if operation == "family_mix_bgmm_predict_proba":
         # the exp of every log responsibility in the binding (bodies.exp_cell)
-        var got = _bgmm_score(model, args[0], args[1], 1, context, admitted)
-        return _from_flat(got[0][0][2], Python.tuple(got[1], got[2]), "<f4", "f", context)
+        var n = 0
+        var k = 0
+        var got = _bgmm_score(model, args[0], args[1], 1, context, admitted, n, k)
+        return _pack_f(got.storage[0].f[2], Python.tuple(n, k), context)
     if operation == "family_mix_bgmm_score_samples":
-        var got = _bgmm_score(model, args[0], args[1], 0, context, admitted)
-        return _from_flat(got[0][0][1], Python.tuple(got[1]), "<f4", "f", context)
+        var n = 0
+        var k = 0
+        var got = _bgmm_score(model, args[0], args[1], 0, context, admitted, n, k)
+        return _pack_f(got.storage[0].f[1], Python.tuple(n), context)
     if operation == "family_mix_bgmm_score":
         # the float-float fold of log_prob_norm in the binding
-        var got = _bgmm_score(model, args[0], args[1], 2, context, admitted)
-        return PythonObject(Float64(py=got[0][2][0]) / Float64(Int(py=got[1])))
+        var n = 0
+        var k = 0
+        var got = _bgmm_score(model, args[0], args[1], 2, context, admitted, n, k)
+        return PythonObject(got.storage[0].s[0] / Float64(n))
     raise Error("RuntimeError: unknown family operation " + operation)
 
 
