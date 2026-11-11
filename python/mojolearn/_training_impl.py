@@ -109,7 +109,6 @@ from fractions import Fraction
 import ctypes
 import operator
 import numbers
-import struct
 from ._arrays import _addr, _addr_ro
 
 from . import _backend
@@ -824,10 +823,6 @@ def _lr_status(st):
     if st:
         kind, msg = _LR_ERRORS[st]
         raise kind(msg)
-
-
-def _f32_bits(value):
-    return struct.unpack('<I', struct.pack('<f', _round_f32(value)))[0]
 
 
 # THE SCHEDULES' ONE NATIVE CALL (lane neural-optimizers, 2026-10-21). A
