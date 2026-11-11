@@ -1977,7 +1977,7 @@ FAMILIES = (
             "kmeans_native_api_v1",
             "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
-            "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
+            "cast_colmajor_f64_to_f32", "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "argmax_last_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers

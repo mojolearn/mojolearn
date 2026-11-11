@@ -22,20 +22,26 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_f
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array,
+    FAMILY_F32P, family_repr, family_str, family_call, family_array,
     family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries
 from core.spectral_assignment_api import SpectralAssignmentRequest
 from bindings.spectral_assignment_boundary import spectral_assignment_run, spectral_assignment_pack
 from bindings.spectral_affinity_boundary import spectral_rbf_run
+from core.spectral_preparation_api import (
+    SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest, SpectralAffinityStatus,
+)
+from bindings.spectral_preparation_boundary import (
+    SpectralPreparationConnection, spectral_coo_count_run, spectral_coo_fill_run, spectral_knn_run,
+)
 from bindings.cluster_resident_table import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
 from bindings.spectral_resident_boundary import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
 )
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.spectral_umap_routes import (
-    spectral_umap_route, spectral_umap_entry as family_entry,
+    spectral_umap_route,
 )
 from bindings.cfb_dbscan import cfb_borrow_copy
 from bindings.cfb_sparse_read import cfb_sparse_triples
@@ -185,19 +191,20 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
     var n = _int(shape[0])
     var size = Int(py=dense.size)
     var nnz = 0
+    var connection: Optional[SpectralPreparationConnection] = None
     if size:
-        nnz = Int(py=family_call(family_entry(base, "nonzero_f64_count", context), classical_address(dense),
-                                 PythonObject(size)))
+        connection = SpectralPreparationConnection(base, context)
+        nnz = spectral_coo_count_run(connection.value(), SpectralCOOCountRequest(Int(py=classical_address(dense)), size, True))
         _ = dense  # keep the Python object alive through the native call above
     var rows = family_array(Python.tuple(nnz), "<i4", context)
     var cols = family_array(Python.tuple(nnz), "<i4", context)
     var vals = family_array(Python.tuple(nnz), "<f4", context)
     if nnz == 0:
         return _Coo(rows, cols, vals, n)
-    var wrote = Int(py=family_call(family_entry(base, "nonzero_f64_fill", context), classical_address(dense),
-                                   PythonObject(n), PythonObject(n),
-                                   Python.list(classical_address(rows), classical_address(cols), classical_address(vals)),
-                                   PythonObject(nnz)))
+    var request = SpectralCOOFillRequest(Int(py=classical_address(dense)),
+        Int(py=classical_address(rows)), Int(py=classical_address(cols)), Int(py=classical_address(vals)),
+        n, n, nnz, True)
+    var wrote = spectral_coo_fill_run(connection.value(), request)
     _ = dense  # keep the Python object alive through the native call above
     _ = vals  # keep the Python object alive through the native call above
     _ = cols  # keep the Python object alive through the native call above
@@ -222,17 +229,19 @@ def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: Python
     var n_r = Int(py=m.shape[0])
     var n_c = Int(py=m.shape[1])
     var nnz = 0
+    var connection: Optional[SpectralPreparationConnection] = None
     if n_r * n_c:
-        nnz = Int(py=family_call(family_entry(base, "nonzero_f32_count", context), classical_address(m),
-                                 PythonObject(n_r * n_c)))
+        connection = SpectralPreparationConnection(base, context)
+        nnz = spectral_coo_count_run(connection.value(), SpectralCOOCountRequest(Int(py=classical_address(m)), n_r * n_c, False))
     var rows = family_array(Python.tuple(nnz), "<i4", context)
     var cols = family_array(Python.tuple(nnz), "<i4", context)
     var data = family_array(Python.tuple(nnz), "<f4", context)
     if nnz:
-        var wrote = Int(py=family_call(family_entry(base, "nonzero_f32_fill", context), classical_address(m),
-                                       PythonObject(n_r), PythonObject(n_c),
-                                       Python.list(classical_address(rows), classical_address(cols), classical_address(data)),
-                                       PythonObject(nnz)))
+        var request = SpectralCOOFillRequest(Int(py=classical_address(m)),
+            Int(py=classical_address(rows)), Int(py=classical_address(cols)), Int(py=classical_address(data)),
+            n_r, n_c, nnz, False)
+        var wrote = spectral_coo_fill_run(connection.value(), request)
+        _ = m
         _ = data  # keep the Python object alive through the native call above
         _ = cols  # keep the Python object alive through the native call above
         _ = rows  # keep the Python object alive through the native call above
@@ -312,31 +321,25 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     if n == 0:
         py_setitem(fields, "affinity_matrix_", a)
         return a
-    var status = family_array(Python.tuple(3), "<i4", context)
+    var status = SpectralAffinityStatus()
     var sp = dense is None
-    var zero = PythonObject(0)
-    _ = family_call(family_entry(base, "knn_affinity_f32", context),
-                    Python.list(zero if sp else classical_address(dense),
-                                classical_address(rows) if sp and nnz else zero,
-                                classical_address(cols) if sp and nnz else zero,
-                                classical_address(vals) if sp and nnz else zero,
-                                classical_address(a), classical_address(status)),
-                    Python.list(PythonObject(n), PythonObject(k), PythonObject(nnz), PythonObject(1 if sp else 0)))
+    var connection = SpectralPreparationConnection(base, context)
+    var request = SpectralKNNRequest(0 if sp else Int(py=classical_address(dense)),
+        Int(py=classical_address(rows)) if sp and nnz else 0,
+        Int(py=classical_address(cols)) if sp and nnz else 0,
+        Int(py=classical_address(vals)) if sp and nnz else 0,
+        Int(py=classical_address(a)), status.address(), n, k, nnz, sp)
+    spectral_knn_run(connection, request)
     _ = dense  # keep the Python object alive through the native call above
     _ = rows  # keep the Python object alive through the native call above
     _ = cols  # keep the Python object alive through the native call above
     _ = vals  # keep the Python object alive through the native call above
     _ = status  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
-    # Read all three status words while `status` is still named: Mojo
-    # releases a local at its last named use, and a read after that (the
-    # refusal's row and count, formerly read inside the raise) saw freed
-    # words (a garbage row on the CPU host and on CUDA).
-    var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(status)))
-    var code = Int(words[0])
-    var bad_row = Int(words[1])
-    var stored = Int(words[2])
-    _ = status  # keep the Python object alive through the reads above
+    var code = Int(status.words[0])
+    var bad_row = Int(status.words[1])
+    var stored = Int(status.words[2])
+    _ = status
     if code == 1:
         raise Error("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
     if code == 2:

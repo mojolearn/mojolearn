@@ -195,3 +195,25 @@ the device kNN uses the original core image's synchronized context slot and
 existing kernel. Existing F32 helpers are shared directly, unchanged. This is
 an additive API chunk; public callers switch in its following boundary chunk.
 No lane compile/test and no algorithm, defaults, work size or copy change.
+
+## Public COO and kNN descriptor switch
+
+Both base images export the new preparation factory. Spectral import-time
+capture now keeps that factory instead of five retired raw entries; raw
+exports remain for other compatibility consumers. COO count/fill use typed
+requests and one retained connection. The precomputed-kNN path uses native
+three-word status storage and typed addresses/options. The original two-pass
+scan, output allocation, finite/shape checks, return counts and refusal
+publication order remain. No numerical implementation changed.
+
+Four authored Python boundary cases (two definitions) replace factory entries
+with Python hooks and require refusal without invocation, through the actual
+metrics/preparation descriptor seam. They have not run. Source evidence is
+`E/spectral-native-owner/preparation-public-source-audit.json`. Build roots add
+`_mojolearn` and `_mojolearn_core_host`; the host manifest includes the factory.
+
+Remaining private work is explicit: dense-COO intermediate Arrays also serve
+its public tuple API, routed argument tuples, normalized scalar instance
+metadata, and shared admission/packing metadata. This tranche does not claim
+that all Spectral Python support is gone. Public buffer/class/provider pins
+remain necessary and are excluded from removal counts.
