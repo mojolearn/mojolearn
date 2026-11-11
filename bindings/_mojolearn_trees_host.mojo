@@ -615,8 +615,8 @@ def et_predict_binding(
         )
     var model: List[Int] = [_index(offsets_addr), _index(colid_addr), _index(quesval_addr),
                             _index(left_child_addr), _index(leaves_addr)]
-    return PythonObject(et_predict_native(model, _index(x_addr), _index(out_addr), params.i(0),
-                                          params.i(1), params.i(2), params.i(3)))
+    return PythonObject(et_predict_native(model, _index(x_addr), _index(out_addr), _index(params[0]),
+                                          _index(params[1]), _index(params[2]), _index(params[3])))
 
 
 def resident_prepare_binding(
