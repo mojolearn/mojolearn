@@ -99,3 +99,17 @@ RUN OWED: dbscan_native_cpu.mojo, dbscan_native_gpu.mojo,
   float64 admission, core array packing, empty branch, save/load, prefit and
   protocol/nonfinite/refusal tests remain meaningful Python seams. Exact
   post-pass numerical cleanup is pending, not silently treated as complete.
+
+CPU state borrow-scope correction (root wave15 compile1; no CPU runtime):
+  Unit4 captured a workspace.core pointer and then consumed the owner in the
+  same enclosing scope. The unchanged pointer capture and33 parallel writes
+  now finish inside fill_workspace(mut workspace); its borrow returns before
+  move_workspace(workspace^). Allocation identity, length33, post-move checks,
+  byte formula and all other fixture source remain unchanged. No casts,
+  serial path, reduced coverage or product changes. This is an explicit
+  ownership scope correction, not a compiler-bug workaround or an extension
+  of the separate IPCA authorization. Original source/log retained; inverse
+  mechanical transformation is exact in E/pca-native-tests/
+  dbscan-state-scoped-borrow-static.json. Corrected state28 uncompiled/unrun.
+  Root separately passed GPU20 at4583aac78f; those files are unchanged here.
+  CPU131 remains owed, and the pending Python numerical cleanup is held.

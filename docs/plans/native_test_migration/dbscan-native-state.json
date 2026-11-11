@@ -4,7 +4,7 @@
   "suite": "dbscan_state_suite.run_checks",
   "fixtures": 28,
   "dependency": "a446091b7a",
-  "execution": "authored; uncompiled and unrun",
+  "execution": "Original CPU bundle compile exited1 on unit4 captured workspace pointer then owner move; no CPU runtime. Scoped mutable-borrow test correction authored, uncompiled/unrun.",
   "coverage": {
     "0-5": "flat zeroed core-mask rooms for0/1/17/1025 rows, independent owners, complete parallel writes and moved allocation lifetime",
     "6-17": "all nine reference key fields including owner IDs separately from addresses, copied-key independence and empty reference metadata",
@@ -14,5 +14,13 @@
   "parallel": "independent fixtures and scratch-word work use host_parallelize",
   "lifetime": "flat native List owners pinned through pointer use; pure owner has no destructor callback; fake handles never query/release a device",
   "python_removed": 0,
-  "product_changes": false
+  "product_changes": false,
+  "borrow_scope_correction": {
+    "source": "fill_workspace(mut workspace) returns before move_workspace(workspace^)",
+    "preserved": "all33 parallel writes, identical byte formula, pointer capture, allocation identity assertion and complete post-move check; state28 unchanged",
+    "changes": "test lifetime scope only; no unsafe cast, serial route, removed coverage or product edit",
+    "evidence": "E/pca-native-tests/dbscan-state-scoped-borrow-static.json",
+    "prior_failure": "E/wave15-cpu-build.log",
+    "compiler_bug_claim": false
+  }
 }
