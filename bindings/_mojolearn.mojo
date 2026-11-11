@@ -2011,7 +2011,7 @@ struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
     var entries: List[NativeDescriptorCall]
 
     def __init__(out self):
-        self.name = String(ABI)
+        self.name = String(Self.ABI)
         self.entries = List[NativeDescriptorCall]()
         self.entries.append(labels_native_entry)
 
