@@ -39,6 +39,8 @@ from std.python import Python, PythonObject
 from bindings.native_model_records import model_identity_key, model_generation, records_dead_keys_since
 from core.shared_slot import SharedSlot
 from bindings.kmeans_variants_resident_boundary import VariantsResidentLease, variants_resident_retire
+from bindings.spectral_native_boundary import SpectralStatePins
+from bindings.spectral_resident_boundary import SpectralResidentLease, spectral_resident_retire
 
 comptime CRES_X_CLUSTER = 1
 """Family code: x_cluster `cluster_centers_` (MiniBatchKMeans, BisectingKMeans,
@@ -68,6 +70,7 @@ struct CresHeld(Copyable, Movable):
     var nbytes: Int
     var tick: Int
     var native_variant: Optional[VariantsResidentLease]
+    var native_spectral: Optional[SpectralResidentLease]
 
     def __init__(out self, generation: Int, objects: PythonObject, var dims: List[Int], binding: PythonObject,
                  release: PythonObject, query: PythonObject, handle: Int, nbytes: Int, tick: Int):
@@ -81,6 +84,7 @@ struct CresHeld(Copyable, Movable):
         self.nbytes = nbytes
         self.tick = tick
         self.native_variant = None
+        self.native_spectral = None
 
 
 struct CresTable(Defaultable, Movable):
@@ -97,7 +101,7 @@ struct CresTable(Defaultable, Movable):
         self.seen = 0
 
 
-comptime _CRES = SharedSlot[CresTable, "MojolearnClusterResidentHeldV5"]
+comptime _CRES = SharedSlot[CresTable, "MojolearnClusterResidentHeldV6"]
 
 
 def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:
@@ -111,6 +115,10 @@ def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:
 def _release_quiet(var held: CresHeld):
     """The minting binding's release entry on the handle; quiet for a
     binding that cannot be reached any more."""
+    if held.native_spectral:
+        spectral_resident_retire(held.native_spectral.take())
+        _ = held^
+        return
     if held.native_variant:
         # Dropping the table reference cannot retire an active query lease.
         # The entry was removed/accounted before this native destructor runs.
@@ -230,7 +238,7 @@ def cres_lookup(model: PythonObject, family: Int, binding: PythonObject, objects
     var query = PythonObject(None)
     var handle = 0
     ref held = t[].entries[slot]
-    var same = (not held.native_variant and held.generation == generation and held.binding is binding and _same_dims(held.dims, dims)
+    var same = (not held.native_variant and not held.native_spectral and held.generation == generation and held.binding is binding and _same_dims(held.dims, dims)
                 and _same_objects(held.objects, objects))
     if same:
         t[].tick += 1
@@ -310,6 +318,60 @@ def cres_variant_store(model: PythonObject, binding: PythonObject, var dims: Lis
     var held = CresHeld(model_generation(model), lease.centers, dims^, binding,
         PythonObject(None), PythonObject(None), lease.native[].handle, nbytes, t[].tick)
     held.native_variant = lease^
+    t[].entries[slot] = held^
+    if replaced:
+        _release_quiet(replaced.take())
+
+
+# Spectral shares only the bounded LRU/accounting mechanism. Its native Arc
+# retains the minting driver, and its boundary lease pins all five fitted
+# objects. No private Python object tuple or callable/handle envelope is made.
+def cres_spectral_lookup(model: PythonObject, binding: PythonObject, provider: PythonObject,
+                         state: SpectralStatePins, training: PythonObject,
+                         dims: List[Int]) raises -> Optional[SpectralResidentLease]:
+    var slot = model_identity_key(model) + CRES_SPECTRAL
+    var t = _table()
+    _drain_dead(t)
+    if slot not in t[].entries:
+        return None
+    var generation = model_generation(model)
+    var matched = False
+    var result = Optional[SpectralResidentLease]()
+    ref held = t[].entries[slot]
+    if held.native_spectral:
+        ref lease = held.native_spectral.value()
+        matched = (held.generation == generation and held.binding is binding
+            and _same_dims(held.dims, dims) and lease.provider is provider
+            and lease.training is training and lease.state.same(state))
+    if matched:
+        t[].tick += 1
+        held.tick = t[].tick
+        result = held.native_spectral.value().copy()
+    else:
+        _forget_slot(slot)
+    return result^
+
+
+def cres_spectral_store(model: PythonObject, binding: PythonObject, var dims: List[Int],
+                        var lease: SpectralResidentLease, nbytes: Int) raises:
+    var slot = model_identity_key(model) + CRES_SPECTRAL
+    var t = _table()
+    _drain_dead(t)
+    _forget_slot(slot)
+    while len(t[].entries) > 0 and (len(t[].entries) >= CRES_HELD_MAX or t[].bytes + nbytes > CRES_HELD_BYTES):  # driver-loop: unchanged bounded LRU eviction
+        if not _evict_one(t):
+            break
+    # Retirement above may release the GIL. Detach any late replacement,
+    # publish/account atomically under the GIL, then retire outside Dict work.
+    var replaced = Optional[CresHeld]()
+    if slot in t[].entries:
+        replaced = t[].entries.pop(slot)
+        t[].bytes -= replaced.value().nbytes
+    t[].tick += 1
+    t[].bytes += nbytes
+    var held = CresHeld(model_generation(model), PythonObject(None), dims^, binding,
+        PythonObject(None), PythonObject(None), lease.native[].handle, nbytes, t[].tick)
+    held.native_spectral = lease^
     t[].entries[slot] = held^
     if replaced:
         _release_quiet(replaced.take())

@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.spectral_native_api import (
     SPECTRAL_NATIVE_ABI, SPECTRAL_NATIVE_COUNT, SPECTRAL_CAPABILITIES,
-    SpectralDriver, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest,
+    SpectralDriver, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest, SpectralQueryRequest,
 )
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_array
@@ -30,7 +30,7 @@ struct SpectralConnection(Movable):
         self.provider = provider
 
 
-struct SpectralStatePins(Movable):
+struct SpectralStatePins(Copyable, Movable):
     # These are the observable fitted Arrays. Only their lifetime pins remain
     # Python; the four-address execution view is a native value.
     var eigenvalues: PythonObject
@@ -57,6 +57,10 @@ struct SpectralStatePins(Movable):
             Int(py=classical_address(self.eigenvectors)), Int(py=classical_address(self.diagonal)),
             Int(py=classical_address(self.centroids)))
 
+    def same(self, other: Self) -> Bool:
+        return (self.eigenvalues is other.eigenvalues and self.eigenvectors is other.eigenvectors
+            and self.diagonal is other.diagonal and self.centroids is other.centroids)
+
 
 def spectral_fit_run(connection: SpectralConnection, request: SpectralFitRequest) raises -> Int:
     var columns: Int
@@ -76,3 +80,11 @@ def spectral_embedding_run(connection: SpectralConnection, request: SpectralEmbe
     finally:
         _ = connection.provider
     return columns
+
+
+def spectral_query_run(connection: SpectralConnection, request: SpectralQueryRequest) raises:
+    try:
+        with GILReleased():
+            _ = connection.driver.query(request)
+    finally:
+        _ = connection.provider
