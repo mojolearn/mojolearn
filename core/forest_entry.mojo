@@ -161,11 +161,13 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) r
             return I.resident_labels(a[0], a[1], a[2], p[0], p[1], p[2])
         return I.strict_predict(a[0], a[1], a[2], p[0], p[1], p[2])
     if op == XF_RESIDENT_RELEASE or op == XF_STRICT_RELEASE:
-        _need(na, np, 1, 0, "forest snapshot release")
+        # ints [handle]: the shape bindings/trees_resident_table.mojo's
+        # native release calls with
+        _need(na, np, 0, 1, "forest snapshot release")
         if op == XF_RESIDENT_RELEASE:
-            I.resident_release(a[0])
+            I.resident_release(p[0])
         else:
-            I.strict_release(a[0])
+            I.strict_release(p[0])
         return 0
     if op == XF_STRICT_PREPARE:
         _need(na, np, 5, 3, "forest_strict_prepare")

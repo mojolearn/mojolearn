@@ -42,10 +42,10 @@ published in `core/forest_entry_table.mojo`; descriptor shape of
                       [features, trees, outputs, ordered (-1 default)].
   XF_RESIDENT_PREDICT addrs [handle, x, out]; ints [rows, cols, outputs].
   XF_RESIDENT_LABELS  as XF_RESIDENT_PREDICT, int32 class codes out.
-  XF_RESIDENT_RELEASE addrs [handle].
+  XF_RESIDENT_RELEASE ints [handle] (the resident table's native release).
   XF_STRICT_PREPARE   as XF_RESIDENT_PREPARE without `ordered` (host images).
   XF_STRICT_PREDICT   as XF_RESIDENT_PREDICT.
-  XF_STRICT_RELEASE   addrs [handle].
+  XF_STRICT_RELEASE   ints [handle].
 
 The caller owns every buffer until the synchronous call returns.
 """
