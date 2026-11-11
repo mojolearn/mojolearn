@@ -1,0 +1,22 @@
+Mojolearn TSVD native fixture lane (2026-11-10)
+
+Product dependency: frozen additive API/backends 7928f536d0, pilot-owned.
+Native contract chunk: 32 independent fixtures, tsvd_contract_suite.mojo.
+Distinct literal fields cover all fit/query address, shape, Boolean, route,
+fold, lease and result slots, 4 metadata operations, lease token/error,
+record copy independence and malformed envelopes. The wire oracle implements
+no decomposition algorithm. All independent units use host_parallelize.
+
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_contract.mojo
+No lane compilation/tests/boxes/identity/timing. Static TOML/JSON/whitespace
+review only. Importable run_checks and pixi task included for root bundle.
+No product/kernel/default changes or A/B define. Nothing removed by this
+additive contract chunk; direct numerical Python migration follows.
+
+Reviewed baseline: most TSVD Python coverage exercises public admission,
+NumPy conversion, subclassing or historical repeated-bit controllers. Keep
+those seams and do not execute/recreate historical identity comparisons.
+The concrete numerical migration candidate is the original 2x3 transform
+in test_estimators_host_borrowed_buffers.py; its in-place caller-storage
+mutation assertion remains a Python ownership seam.
+Evidence: ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/tsvd-python-review-index.json
