@@ -1,30 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-# PolynomialCountSketch `fit`, `transform` and `fit_transform`, one native
-# call each (python/mojolearn/_expansion_neighbors.py), and RadiusNeighbors
-# `fit` (python/mojolearn/neighbors.py: its refusals, shared with `load`, then
-# the stored index). The PCS owner selects the import-connected binding after
-# native admission; this owner reads the parameters with the
-# Python methods' refusals, draws the hash tables with the binding's
-# counter-based generator (`x_neighbors_kfeat_pcs_draw_idn`) and runs the
-# sketch (`xn_pcs_resident`, or `xn_pcs` under the MOJOLEARN_XN_OLD_ITEMS A/B
-# arm) with the argument lists x_neighbors documents. The same kernels on the
-# same inputs: the bits do not move.
+# Public neighbor-family dispatch. PolynomialCountSketch UNPACK/PACK passes
+# typed options, dimensions and requests to core.pcs_native_api; native PCS
+# draw/sketch/FFT kernels and the existing route defaults remain unchanged.
 from std.os import getenv
-from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
+from std.python import PythonObject
+from bindings.py_balanced import py_type, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
-from providers.python.estimator_binding_pyapi import estimator_arguments
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_pcs_draw_entry, xn_pcs_draw
 from core.cast_in import CAST_KIND_SIGNED
 from providers.python.pcs_rng_pyapi import pcs_seed
+from core.pcs_native_api import PCSFitPlan, pcs_options, pcs_feature_width
+from bindings.pcs_native_boundary import pcs_binding, PCSConnection, pcs_array, pcs_seed_unpack, pcs_run_draw, pcs_run_query
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from providers.python.pcs_public_lifecycle_pyapi import pcs_public_begin, pcs_feature_names
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.family_common import (
-    family_repr, family_call, family_call_kw, family_array, family_field,
-)
+from bindings.family_common import family_field
 from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release
 from bindings.neighbors_local_native import neighbors_local_operation
@@ -59,56 +50,52 @@ def _pcs_hash(source: PythonObject, degree: Int, name: String, context: PythonOb
     return result^
 
 
-def _pcs_fit(fields: PythonObject, settings: PythonObject, binding: PythonObject, x: ArrayMetadata,
-             degree: Int, components: Int, coef0: Float64, context: PythonObject) raises:
-    """Fit hash tables from the operation's single admitted input snapshot."""
-    var d = x.source.cols
-    var nf = d + (1 if coef0 != 0.0 else 0)
+def _pcs_fit(fields: PythonObject, settings: PythonObject, binding: PythonObject,
+             plan: PCSFitPlan, context: PythonObject) raises:
+    """Draw directly into public tables; no additional table copy or owner."""
     var seed = pcs_seed(family_field(settings, "random_state"), context)
-    if nf > 0:
-        var draw = xn_pcs_draw_entry(binding)
-        var ih = family_array(Python.tuple(degree, nf), "<i4", context)
-        var bh = family_array(Python.tuple(degree, nf), "<i4", context)
-        if py_type(seed) is not py_type(PythonObject(0)):
-            raise Error("TypeError: PolynomialCountSketch random_state must resolve to a native int")
-        ref cpy = Python().cpython()
-        # Preserve arbitrary-sized integer seeds without Python operator.and_.
-        var raw_seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(seed._obj_ptr)
-        var word = Int(raw_seed & 0xFFFFFFFF)
-        xn_pcs_draw(binding, draw, word, components, degree * nf,
-                    Int(py=classical_address(ih)), Int(py=classical_address(bh)))
-        py_setitem(fields, "indexHash_", ih)
-        py_setitem(fields, "bitHash_", bh)
+    if plan.augmented > 0:
+        var connection = PCSConnection(binding)
+        connection.driver.require_draw()
+        var indices = pcs_array(plan.hash_shape(), "<i4", context)
+        var signs = pcs_array(plan.hash_shape(), "<i4", context)
+        var word = pcs_seed_unpack(seed)
+        var request = plan.draw(word, Int(py=classical_address(indices)), Int(py=classical_address(signs)))
+        try:
+            pcs_run_draw(connection, request)
+            lifecycle_admit_fields(fields)
+            py_setitem(fields, "indexHash_", indices)
+            py_setitem(fields, "bitHash_", signs)
+        finally:
+            _ = indices
+            _ = signs
     else:
-        py_setitem(fields, "indexHash_", family_array(Python.tuple(degree, 0), "<i4", context))
-        py_setitem(fields, "bitHash_", family_array(Python.tuple(degree, 0), "<i4", context))
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+        lifecycle_admit_fields(fields)
+        py_setitem(fields, "indexHash_", pcs_array(plan.hash_shape(), "<i4", context))
+        py_setitem(fields, "bitHash_", pcs_array(plan.hash_shape(), "<i4", context))
+    py_setitem(fields, "n_features_in_", PythonObject(plan.features))
 
 
 def _pcs_transform(settings: PythonObject, binding: PythonObject, x: ArrayMetadata,
-                   degree: Int, components: Int, gamma: Float64, coef0: Float64,
+                   plan: PCSFitPlan, gamma: Float64, coef0: Float64,
                    context: PythonObject) raises -> PythonObject:
-    """Transform with captured input/hash metadata and the admitted provider."""
-    var n = x.source.rows
-    var d = x.source.cols
-    if d != _pcs_int(family_field(settings, "n_features_in_"), "n_features_in_"):
-        raise Error("Number of features of test samples does not match that of training samples.")
-    var index_hash = _pcs_hash(family_field(settings, "indexHash_"), degree, "indexHash_", context)
-    var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), degree, "bitHash_", context)
-    var nf = index_hash.source.cols
-    if bit_hash.source.cols != nf or nf != d + (1 if coef0 != 0.0 else 0):
-        raise Error("ValueError: PolynomialCountSketch hash tables do not match the fitted features")
-    var out = family_array(Python.tuple(n, components), "<f4", context)
-    var name = String("pcs") if getenv("MOJOLEARN_XN_OLD_ITEMS") == "1" else String("pcs_resident")
-    xn_execute(binding, name,
-               Python.list(x.source.addr, index_hash.source.addr, bit_hash.source.addr, classical_address(out)),
-               Python.list(n, d, nf, components, degree),
-               Python.list(Float64(Float32(gamma)), Float64(Float32(coef0))))
-    _ = out
-    _ = index_hash^
-    _ = bit_hash^
-    _ = x
-    return out
+    """Capture mutable public hashes anew; RUN sees only pinned addresses."""
+    pcs_feature_width(x.source.cols, _pcs_int(family_field(settings, "n_features_in_"), "n_features_in_"))
+    var index_hash = _pcs_hash(family_field(settings, "indexHash_"), plan.options.degree, "indexHash_", context)
+    var bit_hash = _pcs_hash(family_field(settings, "bitHash_"), plan.options.degree, "bitHash_", context)
+    plan.admit_hash_widths(index_hash.source.cols, bit_hash.source.cols)
+    var dst = pcs_array(plan.output_shape(x.source.rows), "<f4", context)
+    var old_items = getenv("MOJOLEARN_XN_OLD_ITEMS") == "1"
+    var request = plan.query(x.source.addr, index_hash.source.addr, bit_hash.source.addr,
+        Int(py=classical_address(dst)), x.source.rows, gamma, coef0, old_items)
+    try:
+        pcs_run_query(binding, request)
+    finally:
+        _ = dst
+        _ = index_hash
+        _ = bit_hash
+        _ = x
+    return dst
 
 
 def _pcs_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -116,16 +103,17 @@ def _pcs_operation(model: PythonObject, operation: String, args: PythonObject,
     var public = pcs_public_begin(model, operation, args, context)
     var result = PythonObject(None)
     try:
-        var admitted = xn_admit_arguments(estimator_arguments(model, "_mojolearn_x_neighbors", args, context), context)
+        var binding = pcs_binding(model, args, context)
         var settings = public.settings
         var fields = public.call.fields
         var degree = _pcs_int(settings["degree"], "degree")
         var components = _pcs_int(settings["n_components"], "n_components")
-        if degree < 1 or components < 1:
-            raise Error("degree and n_components must be >= 1")
+        var options = pcs_options(degree, components)
         var coef0 = _pcs_real(settings["coef0"], "coef0")
+        var plan = PCSFitPlan(options, public.x.source.cols, coef0)
         if public.call.fitting:
-            _pcs_fit(fields, settings, admitted[0], public.x, degree, components, coef0, context)
+            _pcs_fit(fields, settings, binding, plan, context)
+            lifecycle_admit_fields(fields)
             py_setitem(settings, "n_features_in_", fields["n_features_in_"])
             py_setitem(settings, "indexHash_", fields["indexHash_"])
             py_setitem(settings, "bitHash_", fields["bitHash_"])
@@ -133,7 +121,7 @@ def _pcs_operation(model: PythonObject, operation: String, args: PythonObject,
             result = model
         else:
             var gamma = _pcs_real(settings["gamma"], "gamma")
-            result = _pcs_transform(settings, admitted[0], public.x, degree, components, gamma, coef0, context)
+            result = _pcs_transform(settings, binding, public.x, plan, gamma, coef0, context)
     except error:
         var refused = neighbors_public_refusal(error, public.call, model)
         raise refused^
