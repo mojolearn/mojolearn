@@ -16,13 +16,14 @@ exercised by the GPU columns' base binding). The fold-store case is the only
 unit that touches the process store. Run in a fresh process (the first check
 needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.msel_convert import MSEL_F32, MSEL_F64
-from core.msel_entry_table import MselEntryKey, msel_table_entry, MH_OP_COUNT, MH_ARANGE_I64
+from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64
 from core.msel_helpers_host import publish_msel_helpers_host
 from core.msel_helpers_calls import (
-    msel_helper, msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8,
+    msel_helpers_ref, msel_helper, msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8,
     msel_leave_range_i64, msel_indices_overlap_i64, msel_fold_ids, msel_select_fold_i64, msel_select_folds_i64,
     msel_gather_i32, msel_gather_i64, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_store_alloc,
     msel_store_read, msel_store_free, msel_scatter_rows, msel_proba_column, msel_split_table_i32,
@@ -56,7 +57,7 @@ def _a32(values: List[Int32]) -> Int:
 def precondition_unpublished() raises:
     var out: List[Int64] = [0]
     try:
-        _ = msel_arange_i64(_key(), _a(out), 0, 1)
+        _ = msel_arange_i64(msel_helpers_ref(_key()), _a(out), 0, 1)
     except problem:
         _refuses(problem, "provider is not published")
         _ = out
@@ -64,10 +65,26 @@ def precondition_unpublished() raises:
     raise Error("an unpublished model-selection helper table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = msel_helpers_ref(_key())
+    var second = msel_helpers_ref(_key())
+    require(entry_ref_same(first, second), "model-selection helpers: a second resolution returned another entry")
+    try:
+        _ = msel_table_entry(_key(), 0, String(MSEL_HELPERS_ABI), MH_OP_COUNT + 1)
+        raise Error("model-selection helpers: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "model-selection helpers: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var out: List[Int64] = [0]
     try:
-        _ = msel_arange_i64(MselEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0), _a(out), 0, 1)
+        _ = msel_arange_i64(msel_helpers_ref(MselEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)), _a(out), 0, 1)
         raise Error("a mismatched tier key did not refuse")
     except problem:
         require("did not refuse" not in String(problem), String(problem))
@@ -77,15 +94,15 @@ def preconditions_published() raises:
     except problem:
         _refuses(problem, "ABI schema differs")
     try:
-        var addrs: List[Int] = [_a(out)]
-        var ints: List[Int] = [0]
-        _ = msel_helper(_key(), MH_ARANGE_I64, addrs, ints)
+        var addrs: Array[Int, 1] = [_a(out)]
+        var ints: Array[Int, 1] = [0]
+        _ = msel_helper(msel_helpers_ref(_key()), MH_ARANGE_I64, addrs, ints)
         raise Error("a short request did not refuse")
     except problem:
         _refuses(problem, "request spans do not match")
     try:
-        var none = List[Int]()
-        _ = msel_helper(_key(), MH_OP_COUNT, none, none)
+        var none: Array[Int, 0] = []
+        _ = msel_helper(msel_helpers_ref(_key()), MH_OP_COUNT, none, none)
         raise Error("an unknown operation did not refuse")
     except problem:
         _refuses(problem, "unknown operation")
@@ -93,7 +110,7 @@ def preconditions_published() raises:
 
 
 def case(unit: Int) raises:
-    var k = _key()
+    var k = msel_helpers_ref(_key())
     if unit == 0:
         var out: List[Int64] = [0, 0, 0]
         require(msel_arange_i64(k, _a(out), 5, 3) == 0, "arange status")
