@@ -704,6 +704,28 @@
       ],
       "source_review_only": true,
       "runtime_status": "Uncompiled/unrun; see linalg-numerical-handoff.txt and linalg-numerical.json."
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_exact_native_owner.py",
+      "moved": "20x5 randomized rank-deficient inverse reconstruction",
+      "removed": "second fit, state comparison and transformed-output repeat bits in this case",
+      "retained": "native-call audit, fitted/output array shapes/dtypes and consumed inverse return; all other public/NumPy checks",
+      "decision": "split-migrated",
+      "python_definitions_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Uncompiled/unrun; pca-native-execution.json; 10 CPU / 13 GPU native execution fixtures in shared suites.",
+      "python_definitions_retained": 11
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_full_surface.py",
+      "moved": "literal 8x3 inverse reconstruction",
+      "removed": "second fit and repeated fitted-state bit comparisons in this case",
+      "retained": "independent NumPy singular/variance oracle, public consumed-output shape/dtype and caller-input ownership; vendor gate unchanged",
+      "decision": "split-migrated",
+      "python_definitions_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Uncompiled/unrun; pca-native-execution.json; 10 CPU / 13 GPU native execution fixtures in shared suites.",
+      "python_definitions_retained": 5
     }
   ],
   "reviewed_files": 51,

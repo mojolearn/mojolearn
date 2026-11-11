@@ -33,23 +33,24 @@ def record(kind):
     else:
         rows, columns = {"qr-48x5": (48, 5), "qr-16x4": (16, 4), "rank-48x3": (48, 3)}[kind]
         value = matrix(rows, columns)
-    data = value.astype("<f4", copy=False).tobytes(order="C")
-    path = ROOT / (kind + ".f32")
-    path.write_bytes(data)
-    records = [{"file": path.name, "shape": list(value.shape), "sha256": hashlib.sha256(data).hexdigest()}]
+    outputs = [(kind + ".f32", value)]
     if kind == "constant-64x10":
         reference = np.linalg.svd(value.astype(np.float64), compute_uv=False)
-        data = reference.astype("<f8", copy=False).tobytes()
-        path = ROOT / (kind + "-singular.f64")
-        path.write_bytes(data)
-        records.append({"file": path.name, "shape": [10], "sha256": hashlib.sha256(data).hexdigest()})
-    return records
+        outputs.append((kind + "-singular.f64", reference))
+    return outputs
+
+
+def write(item):
+    filename, value = item
+    data = value.astype("<f4" if filename.endswith(".f32") else "<f8", copy=False).tobytes()
+    (ROOT / filename).write_bytes(data)
+    return {"file": filename, "shape": list(value.shape), "sha256": hashlib.sha256(data).hexdigest()}
 
 
 if __name__ == "__main__":
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
         groups = list(pool.map(record, ("qr-48x5", "qr-16x4", "rank-48x3", "constant-64x10")))
-    records = [record for group in groups for record in group]
+        records = list(pool.map(write, (item for group in groups for item in group)))
     metadata = {
         "source": "test_linalg_decompositions.py at e53128fe7f9206abe748dbe32052a81ed864ef3c",
         "numpy": np.__version__,
