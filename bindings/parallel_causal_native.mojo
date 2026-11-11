@@ -6,7 +6,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_copy, generation_array, generation_array_snapshot, generation_address, py_ints
 from bindings.causal_lm_construct import causal_model_read_weights_binding, _causal_model_prepare_snapshot, _model_construction_set, _model_options_snapshot, _model_weights_snapshot, _model_block, _model_bindings, _model_profile, _model_quantize15
-from bindings.causal_lm_public import causal_model_embedding, causal_model_head, causal_lm_parameters_binding, _native_function
+from bindings.causal_lm_public import causal_model_embedding, causal_model_head, causal_lm_parameters_binding, _native_function, causal_entry_key
 from bindings.neural_block_public import neural_block_owner, neural_block_allocate_binding, neural_block_forward_binding
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_record_fields, model_dict, model_plain, model_sequence, model_string
 from bindings.causal_operation_owner import causal_snapshot_fields, _causal_namespace, causal_model_capture, causal_model_publish
@@ -338,11 +338,12 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         py_setattr(top, "_head_int15", PythonObject(None))
         var bindings = _model_bindings(mods, route, String(plan.kind), context)
         var entries = bi.dict()
-        for key in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # driver-loop: over the three existing model primitive entries
-            py_setitem(entries, key, _native_function(mods, bindings["primitives"], key))
-        if String(top.numeric_profile) == "fixed15_v1":
-            py_setitem(entries, "quantize15", _native_function(mods, bindings["linalg"], "quantize_int15"))
-            py_setitem(entries, "gemm15", _native_function(mods, bindings["linalg"], "gemm_int15"))
+        # The worker's embedding and head reach the primitives and linalg
+        # images through the CausalLM entry table (core/causal_lm_entry_table.mojo)
+        # by the route's key; the five Python entry lookups that stood here
+        # (embedding/rms_norm/linear forward, quantize_int15, gemm_int15) are gone.
+        py_setitem(entries, "entry_mode", bindings["entry_mode"])
+        py_setitem(entries, "entry_vendor", bindings["entry_vendor"])
         py_setattr(top, "_native_entries", entries)
         py_setitem(world, "plan", plan)
         py_setitem(world, "top", top)
@@ -377,7 +378,7 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
                 raise Error("ParallelCausalLM: unknown top-level tensor")
             py_setitem(fields, "_" + name, args[keys[i]])
         if py_contains(args, "head") and String(top.numeric_profile) == "fixed15_v1":
-            py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, world["bindings"]["linalg"]))
+            py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, causal_entry_key(world["bindings"])))
         return top._head_int15
     if operation == "embedding":
         var windowed_result12 = causal_model_embedding(top, args)
