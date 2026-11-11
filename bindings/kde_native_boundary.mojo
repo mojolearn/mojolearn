@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """KDE admission/packing and lifetime pins around a Python-free native driver."""
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.classical_arrays import classical_wrap_layout
 from bindings.native_array_storage import native_array_zeros
@@ -107,3 +107,23 @@ def kde_array(shape: List[Int], context: PythonObject) raises -> PythonObject:
     var layout = NativeArrayLayout(shape.copy(), 4)
     var storage = native_array_zeros(native_array_code("<f4"), layout.count)
     return classical_wrap_layout(storage, layout, "<f4", context)
+
+
+def kde_resident_owner_pins(value: Int, index: Int) abi("C") -> Int:
+    # Native registry inspection only; the caller retains the exact owner.
+    if value == 0 or index < -1 or index >= 3:
+        return -1
+    try:
+        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var native = owner.downcast_value_ptr[KDEResidentOwner]()
+        var result = 3
+        if index == 0:
+            result = Int(native[].provider._obj_ptr)
+        elif index == 1:
+            result = Int(native[].train._obj_ptr)
+        elif index == 2:
+            result = Int(native[].weights._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1

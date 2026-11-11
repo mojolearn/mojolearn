@@ -82,6 +82,8 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+from std.python.bindings import lookup_py_type_object
+from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
@@ -1493,6 +1495,7 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
         # Device-resident fitted state (lane ne1-a-gp-svm).
         _ = m.add_type[GpResidentLease]("_GpResidentLease")
+        register_native_owner(lookup_py_type_object[GpResidentLease](), m.module, native_owner_no_pins)
         m.def_function[gp_resident_lease_binding]("gp_resident_lease")
         m.def_function[gp_resident_stats_binding]("gp_resident_stats")
         m.def_function[gpr_predict_resident_binding]("gpr_predict_resident")
