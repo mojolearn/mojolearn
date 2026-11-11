@@ -5,9 +5,17 @@
 # this owner makes the Python method's refusals (same wording, same order),
 # builds the 'pca' start with the call `PCA(n_components=k).fit_transform`
 # made (`pca_fit_owned`, the same arguments), runs `x_ann_tsne_fit` with the
-# argument lists it always took and stores the fitted attributes. The same
-# entries on the same operands: the bits do not move.
+# words it always took and stores the fitted attributes. The same bodies on
+# the same operands: the bits do not move. Both are native table calls (lane
+# calltable-cn-ann): the PCA owned-fit table (core/decomp_entry_table_pca.mojo)
+# and the ANN operations table (core/neighbors_entry_table_ann.mojo), each
+# image's key read once from its module attribute at UNPACK, the call made
+# with the GIL released and no CPython in between.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.native_ops_key_ann import ann_ops_key, decomp_pca_ops_key
+from core.neighbors_entry_table_ann import ann_ops_entry, ann_tsne_fit_call
+from core.decomp_entry_table_pca import pca_ops_entry, pca_fit_owned_call
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
@@ -18,9 +26,8 @@ from bindings.manifold_scalar_native import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
-from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
 from bindings.family_common import (
-    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
+    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_array,
     family_field, family_shape_repr, FAMILY_F32P,
 )
 
@@ -41,11 +48,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     refusal and its one `pca_fit_owned` call."""
     if k < 1 or k > d:
         raise Error("mojolearn n_components must be in [1, " + String(d) + "], got " + String(k))
-    var b = native_loaded_module("builtins")
-    var fit_owned = spectral_umap_optional_entry(estimators, "pca_fit_owned", context)
-    if fit_owned is None:
-        raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not "
-                    + "export pca_fit_owned; rebuild it with bindings/build_estimators.sh")
+    var entry = pca_ops_entry(decomp_pca_ops_key(estimators))
     var components = family_array(Python.tuple(k, d), "<f4", context)
     var mean = family_array(Python.tuple(d), "<f4", context)
     var variance = family_array(Python.tuple(k), "<f4", context)
@@ -54,21 +57,34 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     var z = family_array(Python.tuple(n, k), "<f4", context)
     # ORDER MATCHES PCA._fit: x, components, mean, variance, ratio,
     # singular, out; n, d, nc, dense 0, keep_mode 0, whiten 0, frac 0.0.
-    # Lane a8d: the trailing 1 asks pca_fit_owned for X's finite status word
-    # over its own upload (no host scan in the door); a flagged X is refused
-    # here, before the eigensolver's result is read.
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(0),
-                             PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)), PythonObject(1))
-    var fitted = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
-                    classical_address(variance), classical_address(ratio), classical_address(singular),
-                    classical_address(z), params)
+    # Lane a8d: the status word's address (the export's trailing finite flag
+    # 1) asks the fit for X's finite status word over its own upload (no
+    # host scan in the door); a flagged X is refused here, before the
+    # eigensolver's result is read.
+    var noise = List[Float64](length=1, fill=Float64(0.0))
+    var status = List[Int32](length=1, fill=Int32(0))
+    var components_address = Int(py=classical_address(components))
+    var mean_address = Int(py=classical_address(mean))
+    var variance_address = Int(py=classical_address(variance))
+    var ratio_address = Int(py=classical_address(ratio))
+    var singular_address = Int(py=classical_address(singular))
+    var z_address = Int(py=classical_address(z))
+    var noise_address = Int(noise.unsafe_ptr())
+    var status_address = Int(status.unsafe_ptr())
+    with GILReleased(Python()):
+        _ = pca_fit_owned_call(entry, x_address, components_address, mean_address, variance_address,
+                               ratio_address, singular_address, z_address, noise_address, status_address,
+                               n, d, k, False, 0, False, Float64(0.0))
     _ = mean  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = singular  # keep the Python object alive through the native call above
     _ = ratio  # keep the Python object alive through the native call above
     _ = variance  # keep the Python object alive through the native call above
     _ = z  # keep the Python object alive through the native call above
-    if Int(py=fitted[2]) != 0:
+    var x_status = Int(status[0])
+    _ = status^  # written through its address; keep it alive past the read
+    _ = noise^
+    if x_status != 0:
         raise Error("Input X contains NaN or infinity")
     _ = components^
     _ = mean^
@@ -176,18 +192,22 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         _ = view
     var embedding = family_array(Python.tuple(n, k), "<f4", context)
     var kl = family_array(Python.tuple(1), "<f4", context)
-    var fit = family_entry(binding, "x_ann_tsne_fit", context)
-    # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, perplexity,
-    # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor,
-    # init mode, random_state low, high, n_components
-    var tested = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
-                                     classical_address(kl)),
-                    Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
-                                PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
-                                PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k),
-                                PythonObject(0 if mode == 2 else 1)))
+    var fit = ann_ops_entry(ann_ops_key(binding))
+    var embedding_address = Int(py=classical_address(embedding))
+    var kl_address = Int(py=classical_address(kl))
+    var iteration_words = Int(py=max_iter)
+    var seed_low = Int(py=low)
+    var seed_high = Int(py=high)
+    var tested = 0
+    # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, init mode,
+    # random_state low, high, n_components, finite flag; perplexity,
+    # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor
+    with GILReleased(Python()):
+        tested = ann_tsne_fit_call(fit, x_address, y0_address, embedding_address, kl_address, n, d,
+                                   iteration_words, exploration, perplexity, exag, lr, post_factor, mode,
+                                   seed_low, seed_high, k, 0 if mode == 2 else 1)
     _ = embedding  # keep the Python object alive through the native call above
-    if mode != 2 and Int(py=tested[1]) != 0:
+    if mode != 2 and tested != 0:
         raise Error("Input X contains NaN or infinity")
     _ = x  # keep the Python object alive through the native call above
     _ = kl  # keep the Python object alive through the native call above
