@@ -2,8 +2,8 @@
 """Sparse connectivity storage admission; native plans own numerical oracles.
 
 Independent parametrized boundary cases are scheduled by the test controller.
-SciPy is used only to prepare input storage, before the public call is timed or
-exercised. Product conversion must not invoke its conversion methods.
+SciPy is used only to prepare input storage, before the public call under test.
+Product conversion must not invoke its conversion methods.
 """
 import numpy as np
 import pytest

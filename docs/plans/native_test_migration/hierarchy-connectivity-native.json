@@ -1,0 +1,36 @@
+{
+  "product_commits": [
+    "0fbd163ee3"
+  ],
+  "fixture_commits": [
+    "3ef25069d3"
+  ],
+  "native_suite": "checks/native_tests/hierarchy_connectivity_plan.mojo",
+  "native_fixtures": 21,
+  "native_scope": [
+    "CSR/CSC stored ordering, duplicate/zero/trailing storage retention",
+    "BSR block expansion",
+    "COO byte-swapped negative strides",
+    "DIA clipped/repeated/extreme diagonals",
+    "native record packing and signed zero",
+    "empty spans",
+    "compressed pointer/index refusal order",
+    "COO/DIA shape/count/bounds errors",
+    "detached and moved native output ownership",
+    "262147-entry skewed compressed row and repeated-diagonal prefix"
+  ],
+  "python_boundary_suite": "python/mojolearn/tests/test_hierarchy_sparse_boundary.py",
+  "python_definitions": 3,
+  "python_cases": 13,
+  "old_tests_removed": [],
+  "public_boundary_retained": [
+    "exact sparse container and ndarray admission",
+    "DOK/LIL ordered native scalar conversion/refusal",
+    "Python buffer/image lifetime pins"
+  ],
+  "compiled": false,
+  "executed": false,
+  "runtime_pass_claim": false,
+  "performance_claim": false,
+  "cross_device_identity_claim": false
+}
