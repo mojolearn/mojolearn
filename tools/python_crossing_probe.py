@@ -48,7 +48,16 @@ CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
          "LinearSVC_str", "SVC_precomputed", "SVR_precomputed",
          # Mixture and clustering doors (lane thin-unpack-mixture-cluster).
          "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans", "BisectingKMeans",
-         "SpectralClustering", "HDBSCAN", "OPTICS")
+         "SpectralClustering", "HDBSCAN", "OPTICS",
+         # Neural block forward with a ragged `lengths=` argument (lane
+         # loops-neural): --rows is the batch B, so the lengths UNPACK must
+         # count the same at both shapes. One case per lengths form: an
+         # ndarray (one buffer export) and a Python list (one borrowed C read
+         # per row, the irreducible form of a list).
+         "Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
+
+# Neural cases (lane loops-neural): one `forward` operation, no fit/query.
+NEURAL_CASES = ("Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
 
 # Cases that run a public class under another name (lane thin-unpack-svm):
 # LinearSVC with string labels and a full-size score (the score UNPACK is
@@ -159,6 +168,27 @@ def visibility_control():
             "qualification": "visibility control only; never an estimator pass"}
 
 
+def _neural_operations(name, rows, np, ml, result):
+    """The `forward` operation of a neural case: a Mamba-1 block (d_model 32,
+    d_inner 64) over x of shape (rows, 8, 32) with `lengths` of 5 per row."""
+    random = np.random.default_rng(0)
+    dm, di, r = 32, 64, 2
+    def w(*shape):
+        return (random.normal(size=shape) * 0.05).astype(np.float32)
+    weights = {"norm.weight": np.ones((dm,), np.float32), "in_proj.weight": w(2 * di, dm),
+               "conv1d.weight": w(di, 1, 4), "conv1d.bias": w(di), "x_proj.weight": w(r + 32, di),
+               "dt_proj.weight": w(di, r), "dt_proj.bias": w(di), "A_log": w(di, 16), "D": w(di),
+               "out_proj.weight": w(dm, di)}
+    x = random.uniform(-1.0, 1.0, size=(rows, 8, dm)).astype(np.float32)
+    lengths = np.full((rows,), 5, np.int32)
+    if name.endswith("_list"):
+        lengths = [5] * rows
+    result["input_sha256"] = hashlib.sha256(x.tobytes()).hexdigest()
+    result["parameters"] = {"numeric_mode": "identical", "lengths": name.rsplit("_", 1)[1]}
+    block = ml.Mamba1Block(weights, numeric_mode="identical")
+    return [("forward", lambda: block.forward(x, lengths=lengths), ())]
+
+
 def model_parameters(name):
     parameters = {
         "Ridge": {"alpha": 1.0}, "LinearRegression": {},
@@ -248,22 +278,25 @@ def run_case(case):
             y = (y > 0).astype(os.environ.get("MOJOLEARN_PROBE_LABEL_DTYPE", "int64"))
             result["label_dtype"] = str(y.dtype)
         result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
-        result["parameters"] = model_parameters(name)
-        model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**result["parameters"])
-        query = query_operation(name)
-        fit_x, query_x = x, x[:min(7, rows)]
-        if name.endswith("_precomputed"):
-            # Linear Gram matrices: train (rows, rows), query (7, rows).
-            fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
-        if name == "LinearSVC_str":
-            y = np.where(y > 0, "pos", "neg").astype(object)
-        operations = [("fit", model.fit, (x,) if name in ("PCA", "KMeans") else (fit_x, y)),
-                      (query, getattr(model, query), (query_x,))]
-        if name == "LinearSVC_str":
-            # The full-size score: its CPython count must not grow with rows.
-            operations.append(("score", model.score, (x, y)))
-        operations = [("fit", model.fit, (x,) if name in UNSUPERVISED else (x, y)),
-                      (query, getattr(model, query), (x[:min(7, rows)],))]
+        if name in NEURAL_CASES:
+            operations = _neural_operations(name, rows, np, ml, result)
+        else:
+            result["parameters"] = model_parameters(name)
+            model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**result["parameters"])
+            query = query_operation(name)
+            fit_x, query_x = x, x[:min(7, rows)]
+            if name.endswith("_precomputed"):
+                # Linear Gram matrices: train (rows, rows), query (7, rows).
+                fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
+            if name == "LinearSVC_str":
+                y = np.where(y > 0, "pos", "neg").astype(object)
+            operations = [("fit", model.fit, (x,) if name in ("PCA", "KMeans") else (fit_x, y)),
+                          (query, getattr(model, query), (query_x,))]
+            if name == "LinearSVC_str":
+                # The full-size score: its CPython count must not grow with rows.
+                operations.append(("score", model.score, (x, y)))
+            operations = [("fit", model.fit, (x,) if name in UNSUPERVISED else (x, y)),
+                          (query, getattr(model, query), (x[:min(7, rows)],))]
         for operation, function, arguments in operations:
             # These two dependent operations cannot run concurrently: query
             # consumes the fitted state produced by this exact fit.
@@ -284,7 +317,12 @@ def run_case(case):
                     record["cpython_counted"] = True
                 else:
                     value = function(*arguments)
-                if operation == "score":
+                if operation == "forward":
+                    output = np.asarray(value)
+                    if output.shape != (rows, 8, 32) or not np.isfinite(output).all():
+                        raise AssertionError("forward returned invalid shape or nonfinite output")
+                    record["output_shape"] = list(output.shape)
+                elif operation == "score":
                     if not math.isfinite(float(value)):
                         raise AssertionError("score returned a nonfinite value")
                 elif operation != "fit":
@@ -382,6 +420,8 @@ def query_operation(name):
 
 def case_operations(name):
     """Every operation counted for a case, in run order."""
+    if name in NEURAL_CASES:
+        return ("forward",)
     return ("fit", query_operation(name)) + (("score",) if name == "LinearSVC_str" else ())
 
 
