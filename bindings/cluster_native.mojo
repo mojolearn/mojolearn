@@ -238,40 +238,6 @@ def _labeled_reference(binding: PythonObject, refs: PythonObject, keys: PythonOb
     return out
 
 
-def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
-    """`DBSCAN.predict`: the nearest core sample's label within eps."""
-    var b = native_loaded_module("builtins")
-    # Package-internal reads of the model's own fields skip the public
-    # attribute hook (bindings/perf2_shared_fitted_field.mojo).
-    var mods = NativeModules()
-    var absent = py_call(b.object)
-    if native_fitted_get(mods, model, "labels_", absent) is absent:
-        raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-    var components = native_fitted_get(mods, model, "components_", PythonObject(None))
-    if not Bool(py=py_call(b.bool, native_fitted_get(mods, model, "prediction_data"))) or components is None:
-        raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
-                    + "DBSCAN(prediction_data=True), which keeps the core samples this "
-                    + "rule needs (DEVIATION 2740)")
-    var n_features = Int(py=native_fitted_get(mods, model, "n_features_in_"))
-    var q = _reference_queries(source, n_features, "DBSCAN.predict", context)
-    var nq = Int(py=q.shape[0])
-    var n_core = Int(py=components.shape[0])
-    if n_core == 0:
-        var labels = family_array(Python.tuple(nq), "<i4", context)
-        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
-        _ = labels  # keep the Python object alive through the native call above
-        return labels
-    var metric_name = py_call(py_call(b.str, native_fitted_get(mods, model, "metric")).lower)
-    var metric = Int(py=context["family_dbscan_metrics"][metric_name])
-    var eps = family_call(b.float, native_fitted_get(mods, model, "eps"))
-    var result = _labeled_reference(binding, components, native_fitted_get(mods, model, "core_sample_indices_"),
-                                    native_fitted_get(mods, model, "_core_labels"), q, n_core, n_features,
-                                    metric, eps, 1, context)
-    _ = q^
-    return result
-
-
 def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`AgglomerativeClustering.predict`: the nearest training row's cluster
@@ -327,8 +293,6 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     # One module handle for every fitted-field read of this call.
     var mods = NativeModules()
     var binding = args[0]
-    if operation == "family_xc_dbscan_predict":
-        return _dbscan_predict(model, binding, args[1], context)
     if operation == "family_xc_agglo_predict":
         return _agglo_predict(model, binding, args[1], context)
     if operation == "family_xc_predict":

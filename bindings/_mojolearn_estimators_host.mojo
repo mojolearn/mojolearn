@@ -61,6 +61,8 @@ from core.logistic_native_api import (
 )
 from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
+from core.dbscan_native_api import DBSCANFitRequest
 from core.kde_native_host import KDE_HOST_API, KDEHostKernels
 from core.kde_native_api import KDEQueryRequest
 from core.pca_native_host import PCA_HOST_API
@@ -148,7 +150,6 @@ from preprocessing.host.scaler_oracle import (
 from core.estimators_host_impl import (
     _positive,
     cd_predict_host_run,
-    dbscan_fit_host_run,
     host_pca_validate_first,
     kernel_ridge_predict_host_run,
     labeled_reference_predict_host_run,
@@ -936,18 +937,11 @@ def _dbscan_fit_run(
     var max_iter = _index(params[5])
     var eps_nn_method = _index(params[6])
     var metric = _index(params[7])
-    if budget != 0:
-        raise Error(
-            "mojolearn: no CPU implementation of DBSCAN.fit with"
-            " max_mbytes_per_batch yet; the host runs one batch of every row"
-            " and does not size a device it does not have"
-        )
+    var request = DBSCANFitRequest(x_address, Int(lp), wa, core_address, nr, nf, min_samples,
+                                   budget, max_iter, eps_nn_method, metric, eps)
     var passes = 0
     with GILReleased(Python()):
-        passes = dbscan_fit_host_run(
-            x_address, lp, wa, core_address, nr, nf, eps, min_samples,
-            max_iter, eps_nn_method, metric,
-        )
+        passes = DBSCANHostKernels.fit(request)
     return PythonObject(passes)
 
 
@@ -958,6 +952,11 @@ def _dbscan_fit_run(
 
 def tsvd_native_api_v1_binding() raises -> PythonObject:
     var api = TSVD_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def dbscan_native_api_v1_binding() raises -> PythonObject:
+    var api = DBSCAN_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -1612,6 +1611,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         module.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
         module.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
+        module.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
         module.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         module.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
