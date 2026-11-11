@@ -246,29 +246,6 @@ def _f32_strict(a, what, name):
     return arr
 
 
-def _take(weights, what, names):
-    """The weight dict's arrays, in a fixed order, refusing missing and
-    unknown names so a typo cannot become a silently-untrained weight."""
-    if not hasattr(weights, "keys"):
-        raise TypeError(
-            f"mojolearn {what}: weights must be a dict of float32 arrays "
-            "(numpy arrays or mojolearn Arrays) keyed by the upstream "
-            f"parameter names {names}"
-        )
-    missing = [n for n in names if n not in weights]  # glue: checks weight dict names
-    extra = [n for n in weights if n not in names]  # glue: checks weight dict names
-    if missing or extra:
-        raise ValueError(
-            f"mojolearn {what}: weight dict mismatch"
-            + (f"; missing {missing}" if missing else "")
-            + (f"; unknown {extra}" if extra else "")
-            + f". The exact key set is {list(names)} -- the upstream "
-            "parameter names (modeling_llama.py; the same names "
-            "llama_refuse_bad_inputs uses)"
-        )
-    return [weights[n] for n in names]  # glue: orders weight tensors by name
-
-
 # Contract section 7.2 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md): caller-owned
 # state (DEVIATION 792), packed at stride cached_tokens (DEVIATION 795(ii)); flat on
 # purpose, a 4-D capacity shape would put the used elements at the wrong indices
