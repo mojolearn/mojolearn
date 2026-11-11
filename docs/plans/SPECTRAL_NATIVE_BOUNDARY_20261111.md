@@ -305,3 +305,33 @@ Spectral roles across the two disjoint tranches, subject to the same bounded
 minimum and shared-schema exclusions. No kernel/RUN source changed, and no
 compile, runtime or performance result is claimed. Remaining temporary-model,
 archive scalar and shared metadata work is still explicit.
+
+
+## Standalone embedding configuration and temporary-model removal
+
+`core/spectral_embedding_config.mojo` carries affinity, component/neighbor
+counts, seed, gamma, tolerance and automatic-option flags as Mojo values.
+The estimator still publishes its existing normalized/archive fields in the
+same order; this call consumes its validated native configuration directly.
+The standalone function passes its admitted public argument pins directly to
+that validator and the shared execution shell. Its disposable estimator,
+instance dictionary and intermediate learned-field publication are removed.
+Public embedding allocation and all kernel requests, route defaults and
+input/output transfers remain the same. The single temporary model/dictionary
+is one additional private state role, not one count per field; the previously
+counted embedding-options role is not counted again.
+
+The four variable standalone scalars retain constructor-schema admission order;
+fixed Boolean arguments retain their earlier exact-type refusal. Gamma and
+tolerance are converted during their original validation stage and carried
+forward. The existing automatic tolerance remains `Float64(Float32(1e-5))`.
+Automatic gamma remains `1.0 / Float64(features)` and neighbors remain
+`max(rows // 10, 1)`. Observable fitted arrays and archive metadata remain at
+UNPACK/PACK, with publication suppressed only for the standalone operation
+that never exposes a model.
+
+Affected dispatcher roots: `_mojolearn_classical_host` and its host splits,
+plus `_mojolearn_dispatcher` where present. No factory or provider ABI changes.
+Standalone generated affinity arrays and shared admission/sparse metadata
+remain explicitly pending. No compile, test, timing or identity execution was
+run in this lane. Root owns the combined build and native configuration cases.
