@@ -19,8 +19,6 @@
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.memory import unsafe_memcpy
-from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family import admit_family
@@ -35,7 +33,7 @@ from bindings.label_admission_native import labels_primitive_kind
 from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_call, family_field,
+    FAMILY_F64P, family_repr, family_call, family_field,
     family_isinstance,
 )
 from bindings.classical_labels import (
@@ -45,7 +43,17 @@ from bindings.classical_labels import (
 from bindings.labels_descriptor_boundary import labels_class_ratio_f64
 from bindings.nearest_centroid_provider import NcConnection
 from bindings.lof_provider import LofConnection
-from core.lof_plan import LofPlan, LofLabelsPlan, lof_f32_address, lof_offset
+from core.lof_plan import LofLabelsPlan, lof_f32_address, lof_offset
+from neighbors.neighbors_local_run import (
+    LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS, LOF_AUTO_OFFSET,
+    local_check_n_neighbors, local_copy_f32, local_write_i32,
+    lof_refuse_metric, lof_refuse_metric_params, lof_check_contamination, lof_check_fit_rows,
+    lof_fit_neighbors, lof_plan, lof_refuse_fit_predict_novelty, lof_check_novelty,
+    nc_refuse_metric, nc_check_label_rows, nc_check_classes, nc_check_priors_ndim, nc_check_priors_size,
+    nc_split_ops, nc_check_variance, nc_refuse_decision_metric, nc_fused, nc_proba_mode,
+    imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_cells_length,
+    imp_colmiss_length, imp_read_count, imp_fit_columns, imp_check_features, imp_cells_operation, imp_keep_plan,
+)
 from core.nearest_centroid_plan import (
     NcLabelCodes,
     NcFitPlan, NcQueryPlan, nc_uniform, nc_normalize_priors, nc_narrow_priors, nc_binary_decision, nc_scratch_address,
@@ -203,14 +211,13 @@ def _i(v: Int) -> PythonObject:
 
 def _f32_scalar(value: PythonObject) raises -> Float64:
     """`_f32_scalar(v)`: `float(v)` rounded once to float32."""
-    return Float64(Float32(Float64(py=family_call(_b().float, value))))
+    return imp_round_f32(Float64(py=family_call(_b().float, value)))
 
 
 def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`X.copy()` of a C-order float32 array: a new Array of its shape."""
     var out = _out(py_call(_b().tuple, x.shape), "<f4", context)
-    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
-           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=_size(x))
+    local_copy_f32(Int(py=classical_address(out)), Int(py=classical_address(x)), _size(x))
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     return out
@@ -220,9 +227,7 @@ def _i32_from_ints(values: List[Int], context: PythonObject) raises -> PythonObj
     """`_i32(list)`: an int32 vector Array of a short int list (class
     offsets, kept columns, flags)."""
     var out = admitted_vector(len(values), "<i4", context)
-    var p = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out)))
-    for i in range(len(values)):  # driver-loop: over a class- or feature-sized int list of model structure
-        p[i] = Int32(values[i])
+    local_write_i32(values, Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the writes above
     return out
 
@@ -244,17 +249,13 @@ def _lof_check(fields: PythonObject, context: PythonObject) raises:
     var metric = family_field(fields, "metric")
     var p = family_field(fields, "p")
     if not (_eq(metric, PythonObject("euclidean")) or (_eq(metric, PythonObject("minkowski")) and _eq(p, PythonObject(2)))):
-        raise Error("NotImplementedError: LocalOutlierFactor: metric=" + _lof_error_scalar(metric, context) + " (p=" + _lof_error_scalar(p, context)
-                    + ") is not implemented; euclidean (or minkowski with p=2) only")
+        lof_refuse_metric(_lof_error_scalar(metric, context), _lof_error_scalar(p, context))
     if _truth(family_field(fields, "metric_params")):
-        raise Error("NotImplementedError: LocalOutlierFactor: metric_params is not implemented")
+        lof_refuse_metric_params()
     var contamination = family_field(fields, "contamination")
     if _ne(contamination, PythonObject("auto")):
-        var c = Float64(py=family_call(b.float, contamination))
-        if not (0.0 < c and c <= 0.5):
-            raise Error("contamination must be 'auto' or in (0, 0.5]")
-    if Int(py=family_call(b.int, family_field(fields, "n_neighbors"))) < 1:
-        raise Error("n_neighbors must be >= 1")
+        lof_check_contamination(Float64(py=family_call(b.float, contamination)))
+    local_check_n_neighbors(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))))
 
 
 def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LofConnection:
@@ -266,13 +267,11 @@ def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var x = _f32(args[1], context)
     var n = _rows(x)
     var d = _cols(x)
-    if n < 2:
-        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
-                    + ")) while a minimum of 2 is required.")
-    var k = min(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))), n - 1)
+    lof_check_fit_rows(n, d)
+    var k = lof_fit_neighbors(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))), n)
     var unfused = _flag(context, "unfused_knn")
     var old_items = _flag(context, "old_items") if not unfused else False
-    var plan = LofPlan(n, n, d, k, True, unfused, old_items)
+    var plan = lof_plan(n, n, d, k, True, unfused, old_items)
     var connection = LofConnection(binding)
     var x_address = Int(py=classical_address(x))
     var dist = PythonObject(None)
@@ -304,7 +303,7 @@ def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         py_setitem(fields, "negative_outlier_factor_", score)
         var contamination = family_field(fields, "contamination")
         if _eq(contamination, PythonObject("auto")):
-            py_setitem(fields, "offset_", PythonObject(-1.5))
+            py_setitem(fields, "offset_", PythonObject(LOF_AUTO_OFFSET))
         else:
             var c = Float64(py=family_call(b.float, contamination))
             var value = Float64(0)
@@ -326,7 +325,7 @@ def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
 def _lof_fit_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if _truth(family_field(fields, "novelty")):
-        raise Error("AttributeError: fit_predict is not available when novelty=True; use predict on new data")
+        lof_refuse_fit_predict_novelty()
     var connection = _lof_fit(model, args, context)
     var off = family_field(fields, "offset_")
     var score = family_field(fields, "negative_outlier_factor_")
@@ -352,15 +351,14 @@ def _lof_fit_predict(model: PythonObject, args: PythonObject, context: PythonObj
 
 
 def _lof_novelty(fields: PythonObject, what: String) raises:
-    if not _truth(family_field(fields, "novelty")):
-        raise Error("AttributeError: " + what + " is not available when novelty=False; use fit_predict")
+    lof_check_novelty(_truth(family_field(fields, "novelty")), what)
 
 
 def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject,
                context: PythonObject, name: String, result_kind: Int) raises -> PythonObject:
     """Unpack staged public state, run native query, pack its requested result.
 
-    result_kind is 0 (scores), 1 (decision), or 2 (labels). Private scores and
+    result_kind is LOF_RESULT_SCORES, LOF_RESULT_DECISION or LOF_RESULT_LABELS. Private scores and
     decisions never cross Python; fitted fields retain their old read stages.
     """
     var q = _f32(source, context)
@@ -372,7 +370,7 @@ def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject
     var reference_rows = _rows(fit_x)
     var unfused = _flag(context, "unfused_knn")
     var old_items = _flag(context, "old_items") if not unfused else False
-    var plan = LofPlan(nq, reference_rows, features, k, False, unfused, old_items)
+    var plan = lof_plan(nq, reference_rows, features, k, False, unfused, old_items)
     var connection = LofConnection(binding)
     var query_address = Int(py=classical_address(q))
     var fit_address = Int(py=classical_address(fit_x))
@@ -389,7 +387,7 @@ def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject
         var fit_dist_address = Int(py=classical_address(fit_dist))
         with GILReleased(Python()):
             plan.query_density(connection.driver, fit_dist_address, nf)
-        if result_kind == 0:
+        if result_kind == LOF_RESULT_SCORES:
             result = admitted_storage_native([nq], "<f4", context, as_array=True)
             var fit_lrd_address = Int(py=classical_address(fit_lrd))
             var result_address = Int(py=classical_address(result))
@@ -408,7 +406,7 @@ def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject
             # (including unsigned wrap/refusal) before Float64 conversion.
             var op = native_loaded_module("operator")
             shift = Float64(py=family_call(_b().float, family_call(op.neg, offset)))
-        if result_kind == 1:
+        if result_kind == LOF_RESULT_DECISION:
             result = admitted_storage_native([nq], "<f4", context, as_array=True)
             var result_address = Int(py=classical_address(result))
             with GILReleased(Python()):
@@ -439,14 +437,15 @@ def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject
 
 def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
                        context: PythonObject, name: String) raises -> PythonObject:
-    return _lof_query(binding, fields, source, context, name, 0)
+    return _lof_query(binding, fields, source, context, name, LOF_RESULT_SCORES)
 
 
 def _lof_decision(model: PythonObject, args: PythonObject, context: PythonObject,
                   predict: Bool = False) raises -> PythonObject:
     var fields = py_fields(model)
     _lof_novelty(fields, "decision_function")
-    return _lof_query(args[0], fields, args[1], context, String(py_type(model).__name__), 2 if predict else 1)
+    return _lof_query(args[0], fields, args[1], context, String(py_type(model).__name__),
+                      LOF_RESULT_LABELS if predict else LOF_RESULT_DECISION)
 
 
 def _lof_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -499,18 +498,16 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var fields = py_fields(model)
     var metric = family_field(fields, "metric")
     if not py_contains(Python.tuple(PythonObject("euclidean"), PythonObject("manhattan")), metric):
-        raise Error("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
+        nc_refuse_metric()
     var x = _f32(args[1], context)
     var n = _rows(x)
     var d = _cols(x)
     var encoded = classical_encode_labels(args[2], context)
     var classes = encoded.classes
     var lab = encoded.codes
-    if _size(lab) != n:
-        raise Error("X and y have different numbers of rows")
+    nc_check_label_rows(_size(lab), n)
     var C = len(classes)
-    if C < 2:
-        raise Error("The number of classes has to be greater than one; got " + String(C) + " class")
+    nc_check_classes(C)
     var connection = NcConnection(args[0])
     var plan = NcFitPlan(n, d, C)
     var label_address = Int(py=classical_address(lab))
@@ -527,10 +524,8 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             admitted_fill[DType.float64](FAMILY_F64P(unsafe_from_address=prior_address), C, 1.0 / Float64(C))
     else:
         var given = admit_c_view(priors, "priors", context)
-        if Int(py=given.ndim) != 1:
-            raise Error("mojolearn: priors must be 1-D, got " + String(Int(py=given.ndim)) + "-D")
-        if Int(py=given.size) != C:
-            raise Error("priors must have one entry per class")
+        nc_check_priors_ndim(Int(py=given.ndim))
+        nc_check_priors_size(Int(py=given.size), C)
         labels_cast(Int(py=classical_address(given)), admitted_dtype(given, context), prior_address, "<f8", C, context)
         with GILReleased(Python()):
             nc_normalize_priors(prior_address, C)
@@ -540,7 +535,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     py_setitem(fields, "class_prior_", prior)
     # Retain the original metadata-read stage after prior publication. The
     # existing switch selects the same measured fused/split kernels.
-    plan.split = getenv("MOJOLEARN_NC_SPLIT_OPS", "") == "1"
+    plan.split = nc_split_ops()
     plan.euclidean = _eq(metric, PythonObject("euclidean"))
     var stats = admitted_storage_native([d], "<f4", context, as_array=True)
     var new_cent = admitted_storage_native([C, d], "<f4", context, as_array=True)
@@ -563,8 +558,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var constant = False
         with GILReleased(Python()):
             constant = plan.constant(connection.driver, x_address)
-        if constant:
-            raise Error("All features have zero variance. Division by zero.")
+        nc_check_variance(constant)
     var threshold = family_field(fields, "shrink_threshold")
     var shrink = Float64(py=family_call(b.float, threshold)) if _truth(threshold) else 0.0
     with GILReleased(Python()):
@@ -612,7 +606,7 @@ struct _NcOperands(Movable):
 
 def _nc_decision_inputs(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> _NcOperands:
     if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
-        raise Error("AttributeError: decision_function is available for metric='euclidean' only")
+        nc_refuse_decision_metric()
     var q = _f32(source, context)
     var given = family_field(fields, "class_prior_")
     var count = _size(given)
@@ -636,7 +630,7 @@ def _nc_predict_values(model: PythonObject, binding: PythonObject, source: Pytho
     var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
     var connection = NcConnection(binding)
     var rows = _rows(q)
-    var fused = rows > 0 and connection.fused
+    var fused = nc_fused(connection.fused, rows)
     var codes = NcLabelCodes(rows)
     var code_address = codes.address()
     if _nc_uniform(fields, context):
@@ -709,13 +703,13 @@ def _nc_decision(model: PythonObject, args: PythonObject, context: PythonObject)
 def _nc_probabilities(model: PythonObject, args: PythonObject, context: PythonObject,
                       logarithmic: Bool) raises -> PythonObject:
     var connection = NcConnection(args[0])
-    var mode = 1 if logarithmic else (2 if connection.wide else 0)
+    var mode = nc_proba_mode(logarithmic, connection.wide)
     var inputs = _nc_decision_inputs(py_fields(model), args[1], context)
     var rows = inputs.request.rows
     var C = inputs.request.classes
     var output = admitted_storage_native([rows, C], "<f8" if mode == 2 else "<f4", context, as_array=True)
     var dst = Int(py=classical_address(output))
-    var fused = connection.fused and rows > 0
+    var fused = nc_fused(connection.fused, rows)
     var status = 0
     with GILReleased(Python()):
         if fused:
@@ -757,11 +751,11 @@ def _imp_check(fields: PythonObject, context: PythonObject) raises:
     # as before.
     if (mv is None or family_isinstance(mv, Python.tuple(b.str, b.bool))
             or labels_primitive_kind(py_type(mv), context) < 3):
-        raise Error("NotImplementedError: KNNImputer: missing_values must be a number or NaN (float input)")
+        imp_refuse_missing_values()
     if _ne(family_field(fields, "metric"), PythonObject("nan_euclidean")):
-        raise Error("NotImplementedError: KNNImputer: metric must be 'nan_euclidean'")
+        imp_refuse_metric()
     if not py_contains(Python.tuple(PythonObject("uniform"), PythonObject("distance")), family_field(fields, "weights")):
-        raise Error("NotImplementedError: KNNImputer: weights must be 'uniform' or 'distance'")
+        imp_refuse_weights()
 
 
 def _imp_masked(binding: PythonObject, fields: PythonObject, source: PythonObject,
@@ -790,14 +784,14 @@ def _imp_nan_cells(binding: PythonObject, x: PythonObject, colmiss_only: Int,
         var probe = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
         if probe is not None:
             lean = Int(py=family_call(b.int, family_call(probe))) != 0
-    var cells = _out(Python.tuple(1 if lean else max(n * d, 1)), "<i4", context)
-    var colmiss = _out(Python.tuple(max(d, 1)), "<i4", context)
+    var cells = _out(Python.tuple(imp_cells_length(n, d, lean)), "<i4", context)
+    var colmiss = _out(Python.tuple(imp_colmiss_length(d)), "<i4", context)
     var info = _out(Python.tuple(1), "<i4", context)
     _op(binding, "nan_cells", Python.list(classical_address(x), classical_address(cells), classical_address(colmiss),
                                           classical_address(info)),
         Python.list(_i(n), _i(d), _i(colmiss_only)), Python.list(), context)
     _ = x  # keep the Python object alive through the native call above
-    var count = Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(info)))[0])
+    var count = imp_read_count(Int(py=classical_address(info)))
     _ = info  # keep the Python object alive through the read above
     return (cells, colmiss, count)
 
@@ -812,15 +806,14 @@ def _imp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var d = _cols(x)
     var found = _imp_nan_cells(binding, x, 1, context)
     var colmiss = found[1]
-    var cm = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(colmiss)))
+    var columns = imp_fit_columns(Int(py=classical_address(colmiss)), d, n)
+    _ = colmiss  # keep the Python object alive through the native reads above
     var valid = Python.list()
     var miss = Python.list()
-    for f in range(d):  # driver-loop: over the d feature columns (the fit's column masks)
-        _ = py_call(valid.append, PythonObject(Int(cm[f]) < n))
-    for f in range(d):  # driver-loop: over the d feature columns (the fit's column masks)
-        if Int(cm[f]) > 0:
-            _ = py_call(miss.append, _i(f))
-    _ = colmiss  # keep the Python object alive through the reads above
+    for f in range(d):  # driver-loop: over the d feature columns (packing the fit's column masks)
+        _ = py_call(valid.append, PythonObject(columns.valid[f]))
+    for i in range(len(columns.missing)):  # driver-loop: over the columns missing at fit (packing)
+        _ = py_call(miss.append, _i(columns.missing[i]))
     py_setitem(fields, "_valid", valid)
     py_setitem(fields, "_miss_cols", miss)
     py_setitem(fields, "_fit_X", x)
@@ -835,14 +828,12 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var x = _imp_masked(binding, fields, args[1], context)
     var n = _rows(x)
     var d = _cols(x)
-    if d != Int(py=family_field(fields, "n_features_in_")):
-        raise Error("X has a different number of features than during fit")
+    imp_check_features(d, Int(py=family_field(fields, "n_features_in_")))
     var fit_x = family_field(fields, "_fit_X")
     var m = _rows(fit_x)
     var out = _out(Python.tuple(n, d), "<f4", context)
     var k = _int_word(family_field(fields, "n_neighbors"))
-    if k < 1:
-        raise Error("n_neighbors must be >= 1")
+    local_check_n_neighbors(k)
     var distance = 1 if _eq(family_field(fields, "weights"), PythonObject("distance")) else 0
     if _flag(context, "uncompact_impute"):
         _op(binding, "knn_impute", Python.list(classical_address(x), classical_address(fit_x), classical_address(out)),
@@ -854,31 +845,24 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
         var nc = found[2]
         out = _copy_f32(x, context)
         if nc != 0:
-            _op(binding, "knn_impute_cells" if _flag(context, "old_items") else "knn_impute_tiled",
+            _op(binding, imp_cells_operation(_flag(context, "old_items")),
                 Python.list(classical_address(cells), classical_address(x), classical_address(fit_x),
                             classical_address(out)),
                 Python.list(_i(n), _i(m), _i(d), _i(k), _i(distance), _i(nc)), Python.list(), context)
         _ = cells  # keep the Python object alive through the native call above
     _ = fit_x  # keep the Python object alive through the native calls above
     var valid = family_field(fields, "_valid")
-    var keep = List[Int]()
-    var flags = List[Int]()
-    var all_valid = True
+    var present = List[Bool]()
     var true_word = PythonObject(True)
     for f in range(d):  # driver-loop: over the d feature columns (the fit's column masks, read once)
         # Perf (perf2-neighbors): fit stores exact bools; read those by
         # identity instead of one Python `bool()` call per feature.
         var item = valid[f]
-        var present = (item is true_word) if py_type(item) is b.bool else _truth(item)
-        if present:
-            keep.append(f)
-            flags.append(0)
-        else:
-            all_valid = False
-            flags.append(1)
+        present.append((item is true_word) if py_type(item) is b.bool else _truth(item))
+    var columns = imp_keep_plan(present)
     if _truth(family_field(fields, "keep_empty_features")):
-        if n != 0 and not all_valid:
-            var flag_array = _i32_from_ints(flags, context)
+        if n != 0 and not columns.all_valid:
+            var flag_array = _i32_from_ints(columns.flags, context)
             var z = _out(Python.tuple(n, d), "<f4", context)
             _op(binding, "p2m_zero_cols", Python.list(classical_address(out), classical_address(flag_array),
                                                       classical_address(z)),
@@ -886,13 +870,13 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
             _ = out  # keep the Python object alive through the native call above
             _ = flag_array  # keep the Python object alive through the native call above
             out = z
-    elif len(keep) != d:
+    elif len(columns.keep) != d:
         # `_take_cols(out, keep)`
-        var cols = _i32_from_ints(keep, context)
+        var cols = _i32_from_ints(columns.keep, context)
         var rows = _rows(out)
-        var taken = _out(Python.tuple(rows, len(keep)), "<f4", context)
+        var taken = _out(Python.tuple(rows, len(columns.keep)), "<f4", context)
         _op(binding, "take_cols", Python.list(classical_address(out), classical_address(cols), classical_address(taken)),
-            Python.list(_i(rows), _i(_cols(out)), _i(len(keep))), Python.list(), context)
+            Python.list(_i(rows), _i(_cols(out)), _i(len(columns.keep))), Python.list(), context)
         _ = out  # keep the Python object alive through the native call above
         _ = cols  # keep the Python object alive through the native call above
         out = taken
