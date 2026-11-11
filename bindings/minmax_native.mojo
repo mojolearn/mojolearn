@@ -28,7 +28,7 @@ from bindings.minmax_archive_native import minmax_archive_load, minmax_archive_s
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _configuration_mode(var mode: PythonObject, context: PythonObject) raises -> PythonObject:

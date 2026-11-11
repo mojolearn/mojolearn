@@ -33,8 +33,8 @@ from bindings.scaler_native import scaler_fit, _input, _ptr, _copy_row, _bool
 from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import scaler_fill, scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices, scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
-alias I64P = MutPointer[Int64, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
 def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:

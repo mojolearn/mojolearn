@@ -23,7 +23,7 @@ from core.scaler_fit_impl import scaler_cast
 from core.prep_boundary_impl import prep_float_finite, prep_gather_rows, prep_mask_any, prep_mask_export
 from core.classical_pandas_impl import pd_scatter_numeric
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _shape_text(shape: List[Int]) -> String:

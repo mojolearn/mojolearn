@@ -11,7 +11,7 @@ from core.scaler_native_api import ScalerDriver, PrepProgramDriver, ScalerFitReq
 from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import scaler_all_finite, scaler_check_stats, scaler_check_missing, scaler_feature_indices, scaler_refuse_infinite_columns
 
-alias GPNormF32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime GPNormF32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 @fieldwise_init

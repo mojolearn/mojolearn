@@ -41,9 +41,9 @@ from bindings.admitted_input import admit_c_view, admitted_dtype, admit_f32, adm
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f64
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
-alias I32P = MutPointer[Int32, MutUntrackedOrigin]
-alias I64P = MutPointer[Int64, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
+comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 # x_prep stage codes (_expansion_prep._OPS).
 comptime OP_SORT_COLS = 0

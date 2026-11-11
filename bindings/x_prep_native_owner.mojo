@@ -19,7 +19,7 @@ from bindings.p3_array_arena_records import (
     P3_DICT_BINDING_IDS, P3_DICT_ENTRY_TUPLE_INTS, p3_dict_admitted, p3_dict_admit,
 )
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def xprep_r3(name: String) -> Bool:
