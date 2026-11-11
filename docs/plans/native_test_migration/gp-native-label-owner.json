@@ -1,0 +1,43 @@
+{
+  "family": "GP native encoded label owner",
+  "status": "12 authored native fixtures; uncompiled/unrun",
+  "dependency": "be2ab982b5",
+  "entry": "checks/native_tests/gp_label_owner.mojo",
+  "suite": "checks/native_tests/gp_label_owner_suite.mojo",
+  "coverage": {
+    "fixtures": 12,
+    "zero_initialized_extents": [
+      0,
+      1,
+      17,
+      257
+    ],
+    "adopt_without_copy": true,
+    "deep_copy_independence": true,
+    "move_preserves_allocation": true,
+    "copy_survives_original_destruction": true,
+    "signed_int32_extremes": true,
+    "negative_count_refusals": [
+      -1,
+      -9223372036854775807
+    ],
+    "empty_copy_move": true
+  },
+  "parallel_plan": "Each fixture owns its independent state; host_parallelize distributes fixtures across available cores. No borrowed struct-field pointer is captured.",
+  "limits": [
+    "Tests storage identity/lifetime, not public class-object identities or label ordering.",
+    "Public label tests remain; shared labels native correctness suites retained.",
+    "Pilot decode owner API still pending and is not claimed here."
+  ],
+  "files": {
+    "checks/native_tests/gp_label_owner.mojo": "6f661b653c5bef8031cee0410a9bf8671f8c4ce566d59e53921a465bc3e20ad0",
+    "checks/native_tests/gp_label_owner_suite.mojo": "1f73873cfe03d5c3f9e881fd21467832863655c012c760aaba6e9261a86b31a9"
+  },
+  "compile_flags": [
+    "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I ."
+  ],
+  "python_deleted": 0,
+  "product_or_kernel_changes": 0,
+  "identity_performance_or_runtime_claim": false
+}
