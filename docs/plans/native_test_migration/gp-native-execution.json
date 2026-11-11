@@ -1,0 +1,82 @@
+{
+  "family": "GaussianProcessRegressor native execution, first tranche",
+  "status": "Authored CPU7/GPU8; not compiled or executed by lane",
+  "dependencies": {
+    "typed_api_provider": "7f5f0bf795",
+    "independent_reference_inputs": "b469feccbe",
+    "shared_native_assertion_helper": "3a42d6d768"
+  },
+  "entries": {
+    "cpu": "checks/native_tests/gp_native_cpu.mojo",
+    "gpu": "checks/native_tests/gp_native_gpu.mojo"
+  },
+  "coverage": [
+    {
+      "unit": 0,
+      "source": "test_gp_surface.py::main POSTERIOR",
+      "workload": "16x2 original hashed source/targets, Constant1*ARD RBF[.25,.25]+White0, alpha2^-20",
+      "checks": "Actual fit/list mean+std/covariance/mean-only; original strict recovery <2^-14, finite outputs/LML, nonnegative std, covariance symmetry, native clamp flags/count"
+    },
+    {
+      "unit": 1,
+      "source": "test_gp_return_cov.py::test_cov_is_symmetric_and_its_diagonal_is_the_variance(False)",
+      "workload": "Original seed2/60x3/qfirst20+.25/y=sin(x0)+.1noise, Constant1*RBF1+White.1, alpha2^-20",
+      "checks": "Exact covariance symmetry; original sqrt(diagonal) versus std rtol1e-3/atol1e-4"
+    },
+    {
+      "unit": 2,
+      "source": "test_parallel_public_drivers.py::_gaussian_process",
+      "workload": "Original seed0/96x4, first64 train/last32query, y=x0-.5x2, Constant1*RBF1+White.1",
+      "checks": "Single native fit/query/covariance graph with independent NumPy posterior; public multi-device controller retained"
+    },
+    {
+      "unit": 3,
+      "source": "test_gp_sample_y.py::arm_shape",
+      "workload": "Original seed4/96x3/q24, y=50+12sin(x0)+3x1, 5draws/key1",
+      "checks": "Actual posterior and sample operation; finite5draws per query; public default1/rank/shape assertions retained"
+    },
+    {
+      "unit": 4,
+      "source": "test_gp_sample_y.py::arm_moments",
+      "workload": "Original seed6/96x3/q6, 4000draws/key3, no normalization",
+      "checks": "Original empirical mean <6SE+1e-4 and empirical std relative error<.08; independent Float64 pairwise reductions parallel at every level"
+    },
+    {
+      "unit": 5,
+      "source": "test_gp_surface.py::main FAILED-FIT",
+      "workload": "Original16x2 source with row1=row0, RBF1 and alpha0",
+      "checks": "Actual nonzero factorization status agrees with native fit scalar; guards preserved; failed public query/LML refusals stay Python"
+    },
+    {
+      "unit": "CPU6",
+      "source": "Existing inference-only host image capability boundary",
+      "workload": "Same original16x2 surface fit via full host, posterior via inference-only host",
+      "checks": "Capability mask0 and actual mean/std/mean-only inference over full-host model storage; no fit capability added"
+    },
+    {
+      "unit": "GPU6/GPU7",
+      "source": "Existing tuned pointer and resident query routes",
+      "workload": "Same original16x2 surface data, kernel, settings and recovery bound",
+      "checks": "Actual pointer fit/query and resident lease query respectively; ordinary covariance path retained; lease closes once before named model buffers die"
+    }
+  ],
+  "additional_independent_oracles": "All posterior graphs also compare NumPy Float64 mean (atol2e-3/rtol2e-4) and covariance (atol2e-3). These extend independent coverage to the original workloads; they are not weakened replacements for prior failures. The strict original surface/diagonal/sample bounds are retained separately. No saved product output or old-version bits are references.",
+  "storage_checks": "All raw result spans have prefix/suffix guards; borrowed training/target/query values are checked unchanged. Named owners survive every synchronous descriptor call and resident cleanup. Flat List captures only; DBSCAN blocked and original IPCA compiler reproductions are untouched.",
+  "parallel_plan": "CPU independent graphs use host_parallelize; independent oracle cells and every pairwise-reduction level use the same host policy. GPU graphs run one at a time on the physical GPU due the separately reproduced unsupported concurrent shared-context submission; kernels remain parallel. This does not clear that concurrency failure.",
+  "compile_flags": {
+    "both": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+    "cpu_additional": ["-D MOJOLEARN_COLUMN_CPU=1"]
+  },
+  "remaining": [
+    "Typed request-wire/envelope/error-propagation contracts",
+    "Native production normalization via final scaler dependency; normalized Python assertions stay",
+    "Original four40x3 gradient and central-difference workloads",
+    "Original48x3 optimizer and restart workloads",
+    "Binary/all-member classifier fit/query/combine and native owner-state coverage",
+    "Native source tests compile/run by root, followed by reviewed Python numerical-only cleanup"
+  ],
+  "python_removed": 0,
+  "product_or_kernel_changes": 0,
+  "removals": "Nothing removed yet: keep all original Python coverage until replacement native execution passes.",
+  "identity_or_performance_claim": "None; no lane compilation/test/identity/timing/box job."
+}
