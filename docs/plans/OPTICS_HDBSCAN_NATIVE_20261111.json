@@ -166,5 +166,35 @@
     "OPTICS metric Python tuple",
     "OPTICS integer/float option lists and nested result envelope"
   ],
-  "optics_retained_boundary": "Existing exact input/scalar admission and _optics_size parameter coercion stay at UNPACK; all numerical work uses unchanged OPTICS entry. Native options arithmetic cleanup is reviewed separately from this transport chunk."
+  "optics_retained_boundary": "Existing exact input/scalar admission and _optics_size parameter coercion stay at UNPACK; all numerical work uses unchanged OPTICS entry. Native options arithmetic cleanup is reviewed separately from this transport chunk.",
+  "optics_tests": {
+    "product": "0bd4609846",
+    "native_cpu": {
+      "suite": "checks/native_tests/optics_native_cpu_suite.mojo",
+      "cases": 9,
+      "numerical": 8,
+      "ABI_refusal": 1,
+      "policy": "parallel independent fixtures and input/assertion rows"
+    },
+    "native_gpu": {
+      "suite": "checks/native_tests/optics_native_gpu_suite.mojo",
+      "cases": 9,
+      "policy": "same numerical/ABI cases ordered; shared-context concurrency parked"
+    },
+    "python_boundary": {
+      "file": "python/mojolearn/tests/test_optics_native_boundary.py",
+      "definitions": 4,
+      "cases": 7
+    },
+    "oracles": [
+      "Analytic ordered 1-D/2-D disconnected chains: core distances, reachability, strict predecessor updates and DBSCAN labels",
+      "Euclidean, Manhattan, Chebyshev, Minkowski p=3 and precomputed matrix routes",
+      "Xi cluster interval endpoints for 6-row chains and 180x3 three duplicate groups",
+      "Zero max_eps produces all-noise with infinite core/reachability",
+      "Malformed native result slot refuses before numerical work"
+    ],
+    "original_workload": "180x3 random fixture remains; analytic 180x3 fixture is not represented as equivalent random-workload coverage",
+    "compiled": false,
+    "executed": false
+  }
 }
