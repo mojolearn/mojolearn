@@ -3,6 +3,7 @@
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
+from core.admitted_weights import admitted_fill
 
 comptime DBSCAN_NATIVE_ABI = "mojolearn.dbscan.native.v1"
 comptime DBSCAN_NATIVE_COUNT = 10
@@ -271,3 +272,8 @@ struct DBSCANNativeDriver(Copyable, Movable):
         var p: InlineArray[Int, 5] = [r.handle, r.queries, r.features, r.metric, Int(r.has_threshold)]
         var f: InlineArray[Float64, 1] = [r.eps]
         return native_descriptor_call_fixed(self.entry, DBSCAN_RESIDENT_QUERY, a, p, f)
+
+
+def dbscan_empty_labels(address: Int, queries: Int):
+    """The existing empty-core prediction fill, using its parallel native op."""
+    admitted_fill[DType.int32](MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address), queries, Int32(-1))
