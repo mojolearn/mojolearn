@@ -2,25 +2,16 @@
 """Independent actual GP host graphs execute across host cores."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_parallel import host_parallelize
-from core.native_descriptor_abi import NativeDescriptorError
-from core.gp_native_api import GPDriver, gp_native_dispatch
+from core.gp_native_api import GPDriver
+from core.gp_native_provider import gp_native_v1
 from core.gp_native_host import GPHostKernels
 from core.gp_native_host_infer import GPHostInferenceKernels
 from checks.native_tests.gp_native_cases import GP_NATIVE_CPU_FIXTURES, fixture
 from checks.native_tests.gp_native_learning_cases import GP_LEARNING_FIXTURES, learning_fixture
+from checks.native_tests.gp_native_classifier_cases import GP_CLASSIFIER_CPU_FIXTURES, classifier_fixture
 from checks.native_tests.gp_state_suite import require
 
-comptime GP_NATIVE_CPU_TOTAL = GP_NATIVE_CPU_FIXTURES + GP_LEARNING_FIXTURES
-
-
-def host_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
-               result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    return gp_native_dispatch[GPHostKernels](operation, aa, na, pp, np, ff, nf, result, context, sink)
-
-
-def inference_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
-                    result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    return gp_native_dispatch[GPHostInferenceKernels](operation, aa, na, pp, np, ff, nf, result, context, sink)
+comptime GP_NATIVE_CPU_TOTAL = GP_NATIVE_CPU_FIXTURES + GP_LEARNING_FIXTURES + GP_CLASSIFIER_CPU_FIXTURES
 
 
 def run_checks() raises:
@@ -30,10 +21,14 @@ def run_checks() raises:
     def task(unit: Int) {imm fp}:
         try:
             if unit < GP_NATIVE_CPU_FIXTURES:
-                var query = GPDriver(inference_entry) if unit == 6 else GPDriver(host_entry)
-                fixture(GPDriver(host_entry), query, unit, True)
+                var query = GPDriver(gp_native_v1[GPHostInferenceKernels]) if unit == 6 else GPDriver(gp_native_v1[GPHostKernels])
+                fixture(GPDriver(gp_native_v1[GPHostKernels]), query, unit, True)
+            elif unit < GP_NATIVE_CPU_FIXTURES + GP_LEARNING_FIXTURES:
+                learning_fixture(GPDriver(gp_native_v1[GPHostKernels]), unit - GP_NATIVE_CPU_FIXTURES, True)
             else:
-                learning_fixture(GPDriver(host_entry), unit - GP_NATIVE_CPU_FIXTURES, True)
+                var at = unit - GP_NATIVE_CPU_FIXTURES - GP_LEARNING_FIXTURES
+                var query = GPDriver(gp_native_v1[GPHostInferenceKernels]) if at >= 2 else GPDriver(gp_native_v1[GPHostKernels])
+                classifier_fixture(GPDriver(gp_native_v1[GPHostKernels]), query, at, True)
         except error:
             fp.unsafe_store(unit, 1)
             print("FAIL gp_native_cpu fixture", unit, String(error))
