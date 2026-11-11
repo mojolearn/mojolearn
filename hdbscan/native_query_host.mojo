@@ -30,17 +30,18 @@ struct HdbscanQueryHostBackend(HdbscanQueryBackend):
                 state.query, r.query_rows, d.neighbors, i32_ptr(b.output.address), f32_ptr(b.probabilities.address))
             return r.query_rows
         # These five snapshots were owned arguments of the original host
-        # door. Move them once; do not duplicate their tensor allocations.
-        var deaths = state.deaths^
-        state.deaths = List[Float32]()
-        var selected = state.selected^
-        state.selected = List[Int32]()
-        var index_into = state.index_into^
-        state.index_into = List[Int32]()
-        var exemplars = state.exemplars^
-        state.exemplars = List[Int32]()
-        var offsets = state.offsets^
-        state.offsets = List[Int32]()
+        # door. Swap each into an empty owner so state remains initialized;
+        # no tensor allocation or copy is added by the ownership transfer.
+        var deaths = List[Float32]()
+        swap(deaths, state.deaths)
+        var selected = List[Int32]()
+        swap(selected, state.selected)
+        var index_into = List[Int32]()
+        swap(index_into, state.index_into)
+        var exemplars = List[Int32]()
+        swap(exemplars, state.exemplars)
+        var offsets = List[Int32]()
+        swap(offsets, state.offsets)
         if state.operation == HDBSCAN_QUERY_ALL_POINTS:
             all_points_membership_host_run(f32_ptr(b.training.address), d.rows, d.features,
                 state.parents, state.lambdas, d.edges, d.condensed, deaths^, selected^,
