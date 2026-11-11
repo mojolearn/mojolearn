@@ -523,7 +523,7 @@ def transformer_session_forward_binding(
 
 
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
-from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
+from providers.python.causal_session_handles_pyapi import causal_session_handles_type
 
 
 
@@ -1574,8 +1574,12 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[causal_lm_session_forward_binding]("causal_lm_session_forward")
         m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
-        causal_program_owner_type(m)  # one Python type per interpreter (the mamba binding registers it too)
-        m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
+        # The CausalLM handle owner (core/causal_session_handles.mojo): one Python
+        # type per interpreter (the transformer and Mamba bindings both attach it).
+        # The decode program is reached through the CausalLM session table, so
+        # the former `causal_lm_program_read_v1` Python entry and its
+        # `_CausalProgramOwner` type are gone (lane causal-lm-sessions-native).
+        causal_session_handles_type(m)
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_transformer: ", e))

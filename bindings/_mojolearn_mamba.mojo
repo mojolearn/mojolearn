@@ -239,7 +239,7 @@ from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_oper
 from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
+from providers.python.causal_session_handles_pyapi import causal_session_handles_type
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -1684,8 +1684,12 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_session_load_state_binding]("mamba3_session_load_state")
         m.def_function[mamba3_session_close_binding]("mamba3_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
-        causal_program_owner_type(m)  # one Python type per interpreter (the mamba binding registers it too)
-        m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
+        # The CausalLM handle owner (core/causal_session_handles.mojo): one Python
+        # type per interpreter (the transformer and Mamba bindings both attach it).
+        # The decode program is reached through the CausalLM session table, so
+        # the former `causal_lm_program_read_v1` Python entry and its
+        # `_CausalProgramOwner` type are gone (lane causal-lm-sessions-native).
+        causal_session_handles_type(m)
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mamba: ", e))
