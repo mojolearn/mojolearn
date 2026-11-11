@@ -87,6 +87,8 @@ from core.shared_slot import SharedSlot
 from core.tsvd_native_decomp import TSVDDecompAPI
 from core.nmf_native_provider import NMFProviderAPI
 from core.ipca_native_provider import IPCAProviderAPI
+from core.kpca_native_api import KPCAProviderAPI
+from core.kpca_native_provider import KPCAEigenKernels
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompDeviceFastV1"
@@ -99,6 +101,15 @@ comptime NMF_API = SharedSlot[NMFProviderAPI[DevExec, DevRDev, True, DevDecomp],
 
 comptime _IPCA_API_NAME = "MojolearnIPCADeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnIPCADeviceFastV1"
 comptime IPCA_API = SharedSlot[IPCAProviderAPI[DevExec, DevRDev, True, DevIpcaDev], _IPCA_API_NAME]
+
+
+comptime _KPCA_DECOMP_API_NAME = "MojolearnKPCADecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnKPCADecompDeviceFastV1"
+comptime KPCA_DECOMP_API = SharedSlot[KPCAProviderAPI[KPCAEigenKernels[DevExec, DevRDev, True, DevDecomp]], _KPCA_DECOMP_API_NAME]
+
+
+def kpca_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = KPCA_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def ipca_native_api_v1_binding() raises -> PythonObject:
@@ -135,6 +146,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
         m.def_function[nmf_native_api_v1_binding]("nmf_native_api_v1")
         m.def_function[ipca_native_api_v1_binding]("ipca_native_api_v1")
+        m.def_function[kpca_decomp_native_api_v1_binding]("kpca_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
