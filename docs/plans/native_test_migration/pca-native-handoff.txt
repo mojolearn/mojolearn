@@ -3,7 +3,7 @@ Mojolearn PCA native test lane (2026-11-10)
 Dependencies
   Frozen integration e53128fe7f; product API e8958ae5e2. Local adoption
   7cd18e8103 is dependency history, not a root cherry-pick. Product/boundary
-  files remain pilot-owned. Query cache state b2b211b86c follows separately.
+  files remain pilot-owned. Query cache state dependency b2b211b86c is adopted separately.
 
 Contract chunk 811bdb304c: 32 pure native wire/state contracts
   pca_contract{,_suite}.mojo; breakdown in pca-native-contract.json.
@@ -50,3 +50,12 @@ no product runtime claim. Nineteen fixture files have recorded provenance.
 Linalg task flags/assertions and reference writer parallelism were corrected
 in this follow-up; all five linalg fixture data files remain unchanged.
 Complete evidence: ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/
+
+Query cache state follow-up: 24 native fixtures (pca-query-state.json)
+  Dependency b2b211b86c, product files unchanged. pca_query_state_suite covers
+  native settings, all copied fields, invalid/valid key pairs, absent slots,
+  ordering/duplicate keys, full-width identity words and native copy lifetime.
+  Every independent case uses host_parallelize. Python reference pins and
+  public admission/cache seams remain in the pilot-owned boundary tests.
+  RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_query_state.mojo
+  No compile or runtime execution; static source/TOML/JSON/whitespace only.

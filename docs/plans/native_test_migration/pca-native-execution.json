@@ -99,7 +99,7 @@
     "No native compile/runtime evidence",
     "No installed-wheel, timing or cross-vendor identity run",
     "No product/kernel/default changes",
-    "Existing 3 CPU and 3 GPU whitening fixtures not duplicated",
-    "Typed PCAQueryState/PCAQueryIdentity follow-up depends on pilot b2b211b86c"
-  ]
+    "Existing 3 CPU and 3 GPU whitening fixtures not duplicated"
+  ],
+  "query_state_followup": "pca-query-state.json: 24 native state/key cases, dependency b2b211b86c; uncompiled/unrun"
 }
