@@ -41,8 +41,7 @@ from bindings.family_common import (
 )
 from core.host_finite_scan import host_all_finite_f32
 from core.admitted_ids import admitted_ids_i64, admitted_narrow_i32
-from core.cast_in import CastIn, CAST_KIND_SIGNED
-from core.label_cast import host_unique_inverse_cast
+from core.labels_score_encode import score_encode_signed as mc_encode_signed
 from core.metrics_exp_impl import mexp_gather_i32
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_native import _reg_weights
@@ -406,20 +405,6 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
     if not admitted:
         return PythonObject(None)
     return Python.tuple(store, PythonObject(count))
-
-
-def mc_encode_signed(addr: Int, item: Int, count: Int, classes_addr: Int, codes_addr: Int) raises -> Int:
-    """The ORDER RULE over `count` signed little-endian integer labels of
-    `item` bytes (contiguous): the sorted distinct values written to
-    `classes_addr` (items of the same width) and one dense int32 code per
-    row; returns k. The host label encoder called natively: no Python call
-    into the base binding's `prepare_targets` entry, the same classes and
-    codes (exact integers)."""
-    var src = CastIn(addr, CAST_KIND_SIGNED, item, count, 1, item, item)
-    var k = host_unique_inverse_cast(src, 1, classes_addr, codes_addr)
-    if k < 0:
-        raise Error("RuntimeError: prepare_targets refused integer labels")
-    return k
 
 
 def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:

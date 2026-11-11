@@ -2,6 +2,7 @@
 """Exact primitive scalar UNPACK into native words; no Python array staging."""
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.cpython_table import cpython_table
@@ -16,13 +17,24 @@ def gp_label_input(value: PythonObject, kind: Int) raises -> Optional[GPLabelInp
     var tuple_input = cls is b.tuple
     if cls is not b.list and not tuple_input:
         return None
+    var pins = List[PythonObject]()
+    return _gp_label_input[False](value, pins, tuple_input, kind)
+
+
+def gp_label_input(value: List[PythonObject], kind: Int) raises -> Optional[GPLabelInput]:
+    return _gp_label_input[True](PythonObject(None), value, False, kind)
+
+
+def _gp_label_input[native: Bool](value: PythonObject, pins: List[PythonObject], tuple_input: Bool,
+                                 kind: Int) raises -> Optional[GPLabelInput]:
+    var b = native_loaded_module("builtins")
     if kind != LABELS_LIST_INT and kind != LABELS_LIST_FLOAT and kind != LABELS_LIST_BOOL:
         return None
     var expected_type = b.float if kind == LABELS_LIST_FLOAT else b.bool if kind == LABELS_LIST_BOOL else b.int
     var expected = Int(expected_type._obj_ptr)
     ref cpy = Python().cpython()
     var api = cpython_table()
-    var n = len(value)
+    var n = len(pins) if native else len(value)
     if n == 0:
         return None
     var captured = GPLabelInput(n, kind == LABELS_LIST_FLOAT, kind == LABELS_LIST_BOOL)
@@ -31,7 +43,11 @@ def gp_label_input(value: PythonObject, kind: Int) raises -> Optional[GPLabelInp
     # one scalar-slot conversion per admitted item. No arithmetic, sorting or
     # independent numerical kernel work occurs here; CPython reads need GIL.
     for i in range(n):  # driver-loop: UNPACK exact scalar storage through public C slots
-        var raw = p3_item(value, i, tuple_input)
+        var raw: PyObjectPtr
+        comptime if native:
+            raw = pins[i]._obj_ptr
+        else:
+            raw = p3_item(value, i, tuple_input)
         if p3_type_word(raw) != expected:
             return None
         if captured.wide:
@@ -50,4 +66,5 @@ def gp_label_input(value: PythonObject, kind: Int) raises -> Optional[GPLabelInp
     _ = overflow
     _ = expected_type
     _ = value
+    _ = pins
     return captured^
