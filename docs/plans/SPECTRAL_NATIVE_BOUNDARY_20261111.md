@@ -342,3 +342,16 @@ The frozen producer is `6a090a14b0`. Its separate before/after audit is
 23 disjoint Spectral roles total, zero missing anchors, and zero changed
 numerical files in the compared closure. The earlier18- and4-role audits
 remain immutable. These counts are not an exhaustive allocation inventory.
+
+## Scalar refusal diagnostics without NumPy printing
+
+The inherited scalar diagnostics called `repr` on exact numeric arrays already
+admitted as scalar state. NumPy array repr can enter its configured Python
+formatter or override. `_scalar_repr` now identifies those arrays as
+`<native scalar array>` before repr, retaining primitive scalar text and the
+original validation/refusal order. Spectral's existing size-one numeric array
+admission remains unchanged. Shape and fixed-name diagnostics are unaffected.
+Ten authored public refusal cases cover seed/solver/tolerance errors with both
+NumPy printing hooks; they are not executed by this lane. This correctness
+repair removes a callback path, adds no private-role count, and changes no
+numerical requests, kernel source or allocation route.

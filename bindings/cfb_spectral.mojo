@@ -382,7 +382,19 @@ def _resolved_neighbors(fields: PythonObject, n: Int, clustering: Bool) raises -
     return max(n // 10, 1)
 
 
-def _seed(random_state: PythonObject, who: String, clustering: Bool) raises -> Int:
+def _scalar_repr(value: PythonObject, context: PythonObject) raises -> String:
+    """Diagnostic for already-admitted scalar state, without NumPy printing.
+
+    Spectral admission also permits exact size-one numeric arrays at any rank.
+    Their repr enters NumPy's Python override/formatter hooks; identify that
+    native storage directly. Primitive scalar representations stay unchanged.
+    """
+    if py_type(value) is py_get(context, "ndarray"):
+        return "<native scalar array>"
+    return family_repr(value)
+
+
+def _seed(random_state: PythonObject, who: String, clustering: Bool, context: PythonObject) raises -> Int:
     """`random_state` None is seed 0 (DEVIATION 891); else 0 <= seed < 2**32."""
     if random_state is None:
         return 0
@@ -390,7 +402,7 @@ def _seed(random_state: PythonObject, who: String, clustering: Bool) raises -> I
     if seed < 0 or seed >= 4294967296:
         var tail = String(" (cuML's check_random_seed refuses the same range)") if clustering else String("")
         raise Error("mojolearn " + who + ": random_state must satisfy "
-                    + "0 <= random_state < 2**32, got " + family_repr(random_state) + tail)
+                    + "0 <= random_state < 2**32, got " + _scalar_repr(random_state, context) + tail)
     return seed
 
 
@@ -415,22 +427,22 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
     var prediction_data = family_field(fields, "prediction_data")
     var affinities = context["family_cfb_sc_affinities"]
     if not py_contains(affinities, affinity):
-        raise Error("mojolearn SpectralClustering: affinity=" + family_repr(affinity) + " is "
+        raise Error("mojolearn SpectralClustering: affinity=" + _scalar_repr(affinity, context) + " is "
                     + "refused; it must be one of " + family_repr(py_call(b.list, affinities)) + ". A "
                     + "callable or another kernel name builds the affinity outside "
                     + "every identity column.")
     var assigns = context["family_cfb_assign_labels"]
     if not py_contains(assigns, assign_labels):
         raise Error("mojolearn SpectralClustering: assign_labels="
-                    + family_repr(assign_labels) + " must be one of " + family_repr(py_call(b.list, assigns)))
+                    + _scalar_repr(assign_labels, context) + " must be one of " + family_repr(py_call(b.list, assigns)))
     var predicting = Bool(py=family_call(b.bool, prediction_data))
     var operator = native_loaded_module("operator")
     if predicting and Bool(py=family_call(b.bool, family_call(operator.ne, assign_labels, PythonObject("kmeans")))):
         raise Error("NotImplementedError: mojolearn SpectralClustering: prediction_data with "
-                    + "assign_labels=" + family_repr(assign_labels) + " is refused; the Nystrom "
+                    + "assign_labels=" + _scalar_repr(assign_labels, context) + " is refused; the Nystrom "
                     + "predict (DEVIATION 2860) assigns by the k-means centroids")
     if eigen_solver is not None:
-        raise Error("NotImplementedError: mojolearn SpectralClustering: eigen_solver=" + family_repr(eigen_solver) + " "
+        raise Error("NotImplementedError: mojolearn SpectralClustering: eigen_solver=" + _scalar_repr(eigen_solver, context) + " "
                     + "is refused; there is one solver here, RAFT's thick-restart "
                     + "Lanczos, and it is the one the identity profile pins")
     var rbf = Bool(py=family_call(b.bool, family_call(operator.eq, affinity, PythonObject("rbf"))))
@@ -439,7 +451,7 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
                     + "parameterizes the RBF affinity, and affinity is not 'rbf'")
     if predicting and py_contains(Python.tuple("rbf", "precomputed_nearest_neighbors"), affinity):
         raise Error("NotImplementedError: mojolearn SpectralClustering: prediction_data with affinity="
-                    + family_repr(affinity) + " "
+                    + _scalar_repr(affinity, context) + " "
                     + "is refused; the Nystrom predict (DEVIATION 2860) carries the "
                     + "'nearest_neighbors' and 'precomputed' affinities only")
     var names: List[String] = ["degree", "coef0", "kernel_params"]
@@ -459,7 +471,7 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
                     + "for the identity card instead")
     var default_tol = family_str(context["family_cfb_default_eigen_tol"])
     if family_is_str(eigen_tol):
-        raise Error("NotImplementedError: mojolearn SpectralClustering: eigen_tol=" + family_repr(eigen_tol) + " is "
+        raise Error("NotImplementedError: mojolearn SpectralClustering: eigen_tol=" + _scalar_repr(eigen_tol, context) + " is "
                     + "refused (DEVIATION 890). cuML 26.08's Python maps 'auto' to "
                     + "0.0, which is passed straight through as the eigensolver "
                     + "tolerance and disables the convergence test (the loop "
@@ -473,7 +485,7 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
     if not (t > 0.0) or t != t:
         raise Error("mojolearn SpectralClustering: eigen_tol must be positive, "
                     + "got " + family_repr(tol) + " (DEVIATION 890; see the 'auto' note)")
-    var seed = _seed(random_state, "SpectralClustering", True)
+    var seed = _seed(random_state, "SpectralClustering", True, context)
     var clusters = _int(n_clusters)
     if clusters < 1:
         raise Error("mojolearn SpectralClustering: n_clusters must be at least 1")
@@ -759,7 +771,7 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     var affinity = family_raw_get(model, "affinity")
     var affinities = context["family_cfb_predict_affinities"]
     if not py_contains(affinities, affinity):
-        raise Error("mojolearn SpectralClustering.predict: affinity=" + family_repr(affinity) + " "
+        raise Error("mojolearn SpectralClustering.predict: affinity=" + _scalar_repr(affinity, context) + " "
                     + "has no out-of-sample rule; it must be one of "
                     + family_repr(py_call(b.list, affinities)))
     var k = _int(family_raw_get(model, "n_components_"))
@@ -860,7 +872,7 @@ def _se_validate_options(options: _EmbeddingOptionPins, context: PythonObject) r
     var eigen_tol = options.tolerance
     var affinities = context["family_cfb_se_affinities"]
     if not py_contains(affinities, affinity):
-        raise Error("mojolearn SpectralEmbedding: affinity=" + family_repr(affinity) + " is "
+        raise Error("mojolearn SpectralEmbedding: affinity=" + _scalar_repr(affinity, context) + " is "
                     + "refused; it must be one of " + family_repr(py_call(b.list, affinities)) + ". "
                     + "A callable affinity is Python code that no identity column "
                     + "can run.")
@@ -874,7 +886,7 @@ def _se_validate_options(options: _EmbeddingOptionPins, context: PythonObject) r
         if not (gamma_value > 0):
             raise Error("mojolearn SpectralEmbedding: gamma must be positive")
     if eigen_solver is not None:
-        raise Error("NotImplementedError: mojolearn SpectralEmbedding: eigen_solver=" + family_repr(eigen_solver) + " "
+        raise Error("NotImplementedError: mojolearn SpectralEmbedding: eigen_solver=" + _scalar_repr(eigen_solver, context) + " "
                     + "is refused; there is one solver here, RAFT's thick-restart "
                     + "Lanczos. scikit-learn's 'arpack', 'lobpcg' and 'amg' are "
                     + "other algorithms, and running the Lanczos under their names "
@@ -882,14 +894,14 @@ def _se_validate_options(options: _EmbeddingOptionPins, context: PythonObject) r
     var tolerance = Float64(Float32(1e-5))
     if family_is_str(eigen_tol):
         if String(py=eigen_tol) != "auto":
-            raise Error("mojolearn SpectralEmbedding: eigen_tol=" + family_repr(eigen_tol) + " "
+            raise Error("mojolearn SpectralEmbedding: eigen_tol=" + _scalar_repr(eigen_tol, context) + " "
                         + "must be 'auto' or a positive float")
     elif eigen_tol is not None:
         var tol = Float64(py=_float(eigen_tol))
         tolerance = tol
         if not (tol > 0.0) or tol != tol or isinf(tol):
             raise Error("mojolearn SpectralEmbedding: eigen_tol must be a positive "
-                        + "finite float or 'auto', got " + family_repr(eigen_tol) + " (0 disables the "
+                        + "finite float or 'auto', got " + _scalar_repr(eigen_tol, context) + " (0 disables the "
                         + "Lanczos convergence test, DEVIATION 890)")
     var components = _int(n_components)
     if components < 1:
@@ -898,7 +910,7 @@ def _se_validate_options(options: _EmbeddingOptionPins, context: PythonObject) r
     if n_neighbors is not None and neighbors < 1:
         raise Error("mojolearn SpectralEmbedding: n_neighbors must be at least 1, "
                     + "or None for max(n_samples // 10, 1)")
-    var seed = _seed(random_state, "SpectralEmbedding", False)
+    var seed = _seed(random_state, "SpectralEmbedding", False, context)
     return SpectralEmbeddingConfig(String(py=affinity), components, neighbors, seed,
         gamma_value, tolerance, n_neighbors is None, gamma is None)
 

@@ -116,3 +116,28 @@ def test_standalone_flag_refusal_does_not_read_custom_metaclass_name(flag):
     with pytest.raises(TypeError, match="BadBool"):
         manifold.spectral_embedding(np.eye(4, dtype=np.float32), **{flag: BadBool()})
     assert calls == []
+
+
+@pytest.mark.parametrize("clustering,parameter", [
+    (False, "random_state"), (False, "eigen_solver"), (False, "eigen_tol"),
+    (True, "random_state"), (True, "eigen_solver"),
+])
+@pytest.mark.parametrize("printing", ["formatter", "override_repr"])
+def test_spectral_scalar_refusal_does_not_invoke_numpy_printing(clustering, parameter, printing):
+    calls = []
+
+    def forbidden(value):
+        calls.append("printing")
+        raise AssertionError("NumPy Python printing callback executed")
+
+    if printing == "override_repr" and printing not in np.get_printoptions():
+        pytest.skip("This NumPy version has no override_repr option; formatter coverage remains active")
+    options = {parameter: np.array(-1, dtype=np.int64)}
+    model = (SpectralClustering(n_clusters=2, n_components=2, n_neighbors=2, **options)
+             if clustering else SpectralEmbedding(n_components=2, n_neighbors=2, **options))
+    option = {"all": forbidden} if printing == "formatter" else forbidden
+    error = NotImplementedError if parameter == "eigen_solver" else ValueError
+    with np.printoptions(**{printing: option}):
+        with pytest.raises(error, match="<native scalar array>"):
+            model.fit(np.eye(4, dtype=np.float32))
+    assert calls == []
