@@ -45,16 +45,16 @@ import traceback
 CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
          "RandomForestClassifier", "GradientBoosting",
          "GaussianProcessRegressor", "GaussianProcessClassifier",
-         "LinearSVC_str", "SVC_precomputed", "SVR_precomputed")
+         "LinearSVC_str", "SVC_precomputed", "SVR_precomputed",
+         # Mixture and clustering doors (lane thin-unpack-mixture-cluster).
+         "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans", "BisectingKMeans",
+         "SpectralClustering", "HDBSCAN", "OPTICS")
 
 # Cases that run a public class under another name (lane thin-unpack-svm):
 # LinearSVC with string labels and a full-size score (the score UNPACK is
 # per used class, so its count must not grow with rows); SVC/SVR with
 # kernel='precomputed' (predict reads support_, which grows with rows).
 ESTIMATOR_CLASS = {"LinearSVC_str": "LinearSVC", "SVC_precomputed": "SVC", "SVR_precomputed": "SVR"}
-         # Mixture and clustering doors (lane thin-unpack-mixture-cluster).
-         "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans", "BisectingKMeans",
-         "SpectralClustering", "HDBSCAN", "OPTICS")
 
 # Cases whose fit takes X alone.
 UNSUPERVISED = ("PCA", "KMeans", "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans",
