@@ -169,7 +169,7 @@ struct NcFitPlan(Movable):
     var centroids: List[Float32]
     var dataset_centroid: List[Float32]
 
-    def __init__(out self, rows: Int, features: Int, classes: Int, euclidean: Bool, split: Bool):
+    def __init__(out self, rows: Int, features: Int, classes: Int, euclidean: Bool = True, split: Bool = False):
         self.rows = rows
         self.features = features
         self.classes = classes

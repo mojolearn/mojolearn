@@ -597,9 +597,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     if C < 2:
         raise Error("The number of classes has to be greater than one; got " + String(C) + " class")
     var connection = NcConnection(args[0])
-    # This existing switch selects the same measured fused/split kernels.
-    var plan = NcFitPlan(n, d, C, _eq(metric, PythonObject("euclidean")),
-                        getenv("MOJOLEARN_NC_SPLIT_OPS", "") == "1")
+    var plan = NcFitPlan(n, d, C)
     var label_address = Int(py=classical_address(lab))
     with GILReleased(Python()):
         plan.count(connection.driver, label_address)
@@ -625,6 +623,10 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     # Preserve publication before the variance/shrinkage checks, including
     # the established partial fitted-state behavior after a later refusal.
     py_setitem(fields, "class_prior_", prior)
+    # Retain the original metadata-read stage after prior publication. The
+    # existing switch selects the same measured fused/split kernels.
+    plan.split = getenv("MOJOLEARN_NC_SPLIT_OPS", "") == "1"
+    plan.euclidean = _eq(metric, PythonObject("euclidean"))
     var stats = admitted_storage_native([d], "<f4", context, as_array=True)
     var new_cent = admitted_storage_native([C, d], "<f4", context, as_array=True)
     var devs = admitted_storage_native([C, d], "<f4", context, as_array=True)
