@@ -35,3 +35,33 @@ Second chunk: 34 typed request/wire fixtures, dependency e97482b20b.
 RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_contract.mojo
   Entry ipca_contract_suite.run_checks(). Uncompiled/unrun; JSON/TOML/source/
   whitespace checks only. Nothing removed: these are new internal wire tests.
+
+Third chunk: 15 actual CPU +17 ordered GPU graphs, dependencies unchanged.
+  Original 6x3 data, count2, fit batch3; whitening both ways, full rank and
+  automatic count variants; first3/second3 and repeated6 partial updates;
+  exact pre-execution refusals; transform/inverse equations. GPU adds kept
+  fit and both kept partial generations, including queries of the old state
+  after the new update. Actual prepare/mixed resident state/free also covered.
+  All real ids >=0 (zero valid) released once, both partial generations drained
+  even if a cleanup errors. Six output fields and query destinations guarded.
+  Source/previous/current owners pinned through native calls and error paths.
+
+  Independent NumPy Float64 covariance/eigh reference preserves rank2 between
+  repeated updates; direct full-history mean/population variance. This does
+  not substitute full PCA for IncrementalPCA. Per-component sign-invariant
+  eigenspace, spectrum/noise/ratio, Float64 transform/inverse, full-rank data
+  reconstruction. Bounds documented in ipca-native-execution.json, matching
+  existing PCA/TSVD conventions. No failing expectation changed; all unrun.
+
+  CPU graphs parallel, GPU graphs ordered over shared DeviceContexts on one
+  physical GPU; kernels/oracle cells remain parallel. This cannot establish
+  concurrent shared-context safety. Root total: CPU75 (state26+wire34+actual15)
+  and GPU17. No product kernel/default/request changes or A/B define.
+RUN OWED:
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/ipca_native_cpu.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_native_gpu.mojo
+  Importable ipca_native_{cpu,gpu}_suite.run_checks(). Static AST/TOML/JSON/
+  artifact-hash/source/whitespace checks only. No lane build/test/box job.
+  Python deletion split: none. Existing IPCA files exercise real public
+  parameter, descriptor, storage mutation, publication and owner lifetimes;
+  those cannot be replaced by these internal numerical graphs.
