@@ -133,7 +133,7 @@ def _neural_table_reserved(entry: EntryRef, handle: Int, reserve: Int, release: 
     var no_floats: Array[Float64, 0] = []
     var words = List[Int](capacity=1 + len(ints))
     words.append(handle)
-    for i in range(len(ints)):  # small-loop(session operation scalar words)
+    for i in range(len(ints)):  # driver-loop: over argument words (fixed per operation, not data); small-loop(session operation scalar words)
         words.append(ints[i])
     _ = entry_ref_call(entry, reserve, none, slot, no_floats)
     var result = 0
@@ -593,7 +593,7 @@ def _neural_state_capture(mut mods: NativeModules, owner: NativeBlockExecution, 
     # p3-neural-blocks).
     if class_record(mods, _NEURAL_STATE_HOOKS_SLOT, cls) is None:
         var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
-        for i in range(len(ancestry)):  # small-loop(passive state access protocol)
+        for i in range(len(ancestry)):  # driver-loop: over the state class MRO (class structure, not data); small-loop(passive state access protocol)
             var row = _class_fields(mods, ancestry[i])
             if py_contains(row, "__getattr__"):
                 raise Error("TypeError: neural state attribute hooks are not supported")
@@ -765,7 +765,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                     for i in range(len(optional)):  # driver-loop: admit optional transformer weight slots once
                         addresses.append(_addr(optional[i], keep))
                     var options = fields["_opts_tail"]
-                    for i in range(len(options)):  # small-loop(block options integer span)
+                    for i in range(len(options)):  # driver-loop: over the fixed block-options tail (argument words, not data); small-loop(block options integer span)
                         params.append(Int(py=options[i]))
                 # The forward image's table entry (core/neural_entry_table.mojo):
                 # op 2 on the block's session, op 4 ephemeral. The former Python
@@ -1052,7 +1052,7 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
 def _neural_int_words(values: PythonObject) raises -> List[Int]:
     # Internal boundary vectors already contain admitted scalar/address words.
     var result = List[Int]()
-    for i in range(len(values)):  # small-loop(public operation descriptor words)
+    for i in range(len(values)):  # driver-loop: over address and parameter argument words (fixed per operation, not data); small-loop(public operation descriptor words)
         result.append(Int(py=values[i]))
     return result^
 
@@ -1156,7 +1156,7 @@ def _neural_snapshot_matches(mut mods: NativeModules, key: PythonObject, block: 
     var offset = 0
     if not native.matches_identity(py_type(block), offset) or not native.matches_identity(context, offset):
         return False
-    for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+    for name in _neural_snapshot_names():  # driver-loop: over the fixed snapshot field names (model structure, not data); small-loop(snapshot input field names)
         if not native.matches_identity(PythonObject(py_contains(live, name)), offset) or not native.matches(py_get(live, name), offset, 1):
             return False
     return native.complete(offset) and native.arrays_match(mods, context)
@@ -1183,7 +1183,7 @@ def neural_block_snapshot_prepared(mut mods: NativeModules, block: PythonObject,
         var native = NativeIdentityKey(mods)
         native.add_identity(py_type(block))
         native.add_identity(context)
-        for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+        for name in _neural_snapshot_names():  # driver-loop: over the fixed snapshot field names (model structure, not data); small-loop(snapshot input field names)
             native.add_identity(PythonObject(py_contains(live, name)))
             native.add(py_get(live, name), 1)
         native.watch_arrays(mods, context)
