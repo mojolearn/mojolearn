@@ -271,5 +271,5 @@ struct GPHostKernels(GPNativeKernels):
         var values = gp_native_f64(r.source, r.count)
         var result = gp_theta_params_list(values)
         if r.count > 0:
-            memcpy(f64_ptr(r.dst), result.unsafe_ptr(), r.count)
+            memcpy(dest=f64_ptr(r.dst), src=result.unsafe_ptr(), count=r.count)
         return r.count

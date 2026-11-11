@@ -21,7 +21,7 @@ comptime GP_CLASSIFIER_GPU_FIXTURES = 6
 def classifier_kernel(multiclass: Bool) -> GPKernelStorage:
     var kernel = GPKernelStorage()
     kernel.kinds = [0, Int32(3 if multiclass else 2), 5]
-    kernel.parameters = [2.0 if multiclass else 1.0, 1.5 if multiclass else 0.0, 0.0]
+    kernel.parameters = [Float32(2.0 if multiclass else 1.0), Float32(1.5 if multiclass else 0.0), 0.0]
     kernel.lengths = [0, 1, 0]
     kernel.scales = [1.0]
     kernel.finish()
