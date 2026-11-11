@@ -46,12 +46,21 @@ from xtrees.api_kernels import (
     class_priors, dart_rescale, dart_thresholds, host_folds, kshap_schedule, scatter_rows_check,
 )
 
-#: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
-#: and draws weighted samples on
-#: the device (`xtrees/ops_device.mojo`); the host binding (the CPU column,
-#: `-D MOJOLEARN_COLUMN_CPU`) keeps `xtrees/ops.mojo`'s serial loops. Fixed
-#: at build time, never a runtime route.
-comptime XTREES_DEVICE_OPS = TARGET_COLUMN != COLUMN_CPU
+# The device/host choice and the moved glue bodies (lane calltable-trees):
+# this file keeps only their Python unpack.
+from xtrees.glue_abi import XtOwned
+from xtrees.glue_runs import (
+    XTREES_DEVICE_OPS, accumulate_run, accumulate_cols_run, accumulate_onehot_run, accumulate_rows_run,
+    apply_run, argmax_rows_run, bag_rows_run, binary_proba_run, class_counts_run, class_priors_run,
+    complement_pairs_run, count_equal_run, count_rows_run, dart_rescale_run, dart_thresholds_run,
+    device_folds_run, exact_sum_run, fill_class_major_f64_run, gather_f32_run, gather_i32_run,
+    indicator_codes_run, iota_i32_run, isotonic_fit_run, isotonic_predict_strided_run, leaf_numbering_run,
+    log64_run, margin2_run, normalize_rows_run, onehot_leaves_run, oob_r2_run, platt_apply_strided_run,
+    platt_fit_run, positive_codes_run, put_f32_run, r2_step_run, remap_cols_run, rows_any_unset_run,
+    samme_step_run, sample_indices_run, scale_run, scale_to_f32_run, scatter_run, softmax_rows_run,
+    stack_w64_run, transpose_f32_run, transpose_f64_run, uniform_run, unseen_rows_run, weighted_median_run,
+    weighted_sample_run,
+)
 from xtrees.calibrated_apply import (
     CalPair, OvrColumn, calibrated_proba_device, calibrated_proba_host, ovr_assemble_device, ovr_assemble_host,
 )
@@ -85,6 +94,32 @@ def _count(v: Int, who: String) raises -> Int:
     if v < 0:
         raise Error(who + ": negative count")
     return v
+
+
+def _xt_owned(var addrs: List[Int], params: PythonObject) raises -> XtOwned:
+    """The positional Python parameter list of a glue entry as the native
+    glue ABI's two views (xtrees/glue_abi.mojo). A value with no integer (or
+    float) conversion is flagged, and refused only where the run reads that
+    view, as the former per-read `Int(py=)` / `Float64(py=)` did."""
+    var ints = List[Int]()
+    var floats = List[Float64]()
+    var bad = List[UInt8]()
+    for k in range(len(params)):  # small-loop(positional parameters of one glue call): Python unpack
+        var flag = UInt8(0)
+        try:
+            ints.append(Int(py=params[k]))
+        except:
+            ints.append(0)
+            flag |= 1
+        try:
+            floats.append(Float64(py=params[k]))
+        except:
+            floats.append(0.0)
+            flag |= 2
+        bad.append(flag)
+    var owned = XtOwned(addrs^, ints^, floats^)
+    owned.bad = bad^
+    return owned^
 
 
 # T44/C51 retained snapshot ABI, shared by GPU and host registrations.
@@ -178,86 +213,57 @@ def forest_auxiliary_binding(forest: PythonObject, x: PythonObject, leaf: Python
 
 
 def sample_indices_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n_pool, n_draw, replace, seed, stream]."""
-    _need(params, 5, "x_trees_sample_indices")
-    var n_draw = _count(_i(params, 1), "x_trees_sample_indices")
-    if n_draw > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.sample_indices_device(i32_ptr(Int(py=out_addr)), _i(params, 0), n_draw, _i(params, 2) != 0,
-                                           _i(params, 3), _i(params, 4))
-        else:
-            sample_indices(i32_ptr(Int(py=out_addr)), _i(params, 0), n_draw, _i(params, 2) != 0,
-                           _i(params, 3), _i(params, 4))
-    return PythonObject(n_draw)
+    # Unpack only; the body is xtrees/glue_runs.mojo::sample_indices_run, also reached
+    # natively through the trees entry table (XT_SAMPLE_INDICES).
+    var owned = _xt_owned([Int(py=out_addr)], params)
+    var result = sample_indices_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def weighted_sample_binding(w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, n_draw, seed, stream]."""
-    _need(params, 4, "x_trees_weighted_sample")
-    var n = _i(params, 0)
-    if n <= 0:
-        raise Error("x_trees_weighted_sample: n must be positive")
-    var n_draw = _count(_i(params, 1), "x_trees_weighted_sample")
-    comptime if XTREES_DEVICE_OPS:
-        weighted_sample_device(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
-    else:
-        weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
-    return PythonObject(n_draw)
+    # Unpack only; the body is xtrees/glue_runs.mojo::weighted_sample_run, also reached
+    # natively through the trees entry table (XT_WEIGHTED_SAMPLE).
+    var owned = _xt_owned([Int(py=w_addr), Int(py=out_addr)], params)
+    var result = weighted_sample_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def gather_f32_binding(
-    src: PythonObject, rows: PythonObject, cols: PythonObject, dst: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n_src_rows, n_src_cols, n_rows, n_cols]."""
-    _need(params, 4, "x_trees_gather_f32")
-    var n_rows = _count(_i(params, 2), "x_trees_gather_f32")
-    var n_cols = _count(_i(params, 3), "x_trees_gather_f32")
-    if n_rows * n_cols > 0:
-        comptime if XTREES_DEVICE_OPS:
-            gather_f32_device(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
-                              i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
-        else:
-            gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
-                       i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
-    return PythonObject(n_rows * n_cols)
+def gather_f32_binding(src: PythonObject, rows: PythonObject, cols: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::gather_f32_run, also reached
+    # natively through the trees entry table (XT_GATHER_F32).
+    var owned = _xt_owned([Int(py=src), Int(py=rows), Int(py=cols), Int(py=dst)], params)
+    var result = gather_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def gather_i32_binding(src: PythonObject, rows: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n_src, n_rows]."""
-    _need(params, 2, "x_trees_gather_i32")
-    var n_rows = _count(_i(params, 1), "x_trees_gather_i32")
-    if n_rows > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.gather_i32_device(i32_ptr(Int(py=src)), _i(params, 0), i32_ptr(Int(py=rows)), n_rows, i32_ptr(Int(py=dst)))
-        else:
-            gather_i32(i32_ptr(Int(py=src)), _i(params, 0), i32_ptr(Int(py=rows)), n_rows, i32_ptr(Int(py=dst)))
-    return PythonObject(n_rows)
+    # Unpack only; the body is xtrees/glue_runs.mojo::gather_i32_run, also reached
+    # natively through the trees entry table (XT_GATHER_I32).
+    var owned = _xt_owned([Int(py=src), Int(py=rows), Int(py=dst)], params)
+    var result = gather_i32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def accumulate_binding(acc: PythonObject, x: PythonObject, params: PythonObject) raises -> PythonObject:
-    """acc (float64) += weight * x (float32); params = [n, weight]."""
-    _need(params, 2, "x_trees_accumulate")
-    var n = _count(_i(params, 0), "x_trees_accumulate")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.accumulate_device(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), n, _f(params, 1))
-        else:
-            accumulate(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), n, _f(params, 1))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE).
+    var owned = _xt_owned([Int(py=acc), Int(py=x)], params)
+    var result = accumulate_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def accumulate_cols_binding(acc: PythonObject, x: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
-    """acc (float64, n*k) += weight * x (float32, n*ks) into columns cols; params = [n, k, ks, weight]."""
-    _need(params, 4, "x_trees_accumulate_cols")
-    var n = _count(_i(params, 0), "x_trees_accumulate_cols")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.accumulate_cols_device(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), i32_ptr(Int(py=cols)), n,
-                                            _i(params, 1), _i(params, 2), _f(params, 3))
-        else:
-            accumulate_cols(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), i32_ptr(Int(py=cols)), n, _i(params, 1),
-                            _i(params, 2), _f(params, 3))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_cols_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE_COLS).
+    var owned = _xt_owned([Int(py=acc), Int(py=x), Int(py=cols)], params)
+    var result = accumulate_cols_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def accumulate_cols_many_binding(acc: PythonObject, members: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -293,42 +299,30 @@ def accumulate_cols_many_binding(acc: PythonObject, members: PythonObject, param
 
 
 def accumulate_rows_binding(acc: PythonObject, x: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
-    """acc (n x k float64) += x (m x k float64) at rows; params = [n, k, m]."""
-    _need(params, 3, "x_trees_accumulate_rows")
-    var n = _count(_i(params, 0), "x_trees_accumulate_rows")
-    var k = _count(_i(params, 1), "x_trees_accumulate_rows")
-    var m = _count(_i(params, 2), "x_trees_accumulate_rows")
-    if m * k > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.accumulate_rows_device(f64_ptr(Int(py=acc)), n, k, f64_ptr(Int(py=x)), i32_ptr(Int(py=rows)), m)
-        else:
-            accumulate_rows(f64_ptr(Int(py=acc)), n, k, f64_ptr(Int(py=x)), i32_ptr(Int(py=rows)), m)
-    return PythonObject(m)
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_rows_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE_ROWS).
+    var owned = _xt_owned([Int(py=acc), Int(py=x), Int(py=rows)], params)
+    var result = accumulate_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def accumulate_onehot_binding(acc: PythonObject, codes: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, k, on, off]."""
-    _need(params, 4, "x_trees_accumulate_onehot")
-    var n = _count(_i(params, 0), "x_trees_accumulate_onehot")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.accumulate_onehot_device(f64_ptr(Int(py=acc)), i32_ptr(Int(py=codes)), n, _i(params, 1),
-                                              _f(params, 2), _f(params, 3))
-        else:
-            accumulate_onehot(f64_ptr(Int(py=acc)), i32_ptr(Int(py=codes)), n, _i(params, 1), _f(params, 2), _f(params, 3))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_onehot_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE_ONEHOT).
+    var owned = _xt_owned([Int(py=acc), Int(py=codes)], params)
+    var result = accumulate_onehot_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def argmax_rows_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """float64 x; params = [n, k]."""
-    _need(params, 2, "x_trees_argmax_rows")
-    var n = _count(_i(params, 0), "x_trees_argmax_rows")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.argmax_rows_device(f64_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
-        else:
-            argmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::argmax_rows_run, also reached
+    # natively through the trees entry table (XT_ARGMAX_ROWS).
+    var owned = _xt_owned([Int(py=x), Int(py=res)], params)
+    var result = argmax_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def argmax_rows_f32_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -343,27 +337,21 @@ def argmax_rows_f32_binding(x: PythonObject, res: PythonObject, params: PythonOb
 
 
 def scale_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
-    """x /= divisor; params = [n, divisor]."""
-    _need(params, 2, "x_trees_scale")
-    var n = _count(_i(params, 0), "x_trees_scale")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.scale_f64_device(f64_ptr(Int(py=x)), n, _f(params, 1))
-        else:
-            scale_f64(f64_ptr(Int(py=x)), n, _f(params, 1))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::scale_run, also reached
+    # natively through the trees entry table (XT_SCALE).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = scale_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def scale_to_f32_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """res (float32) = x (float64) * factor; params = [n, factor]."""
-    _need(params, 2, "x_trees_scale_to_f32")
-    var n = _count(_i(params, 0), "x_trees_scale_to_f32")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.scale_to_f32_device(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
-        else:
-            scale_to_f32(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::scale_to_f32_run, also reached
+    # natively through the trees entry table (XT_SCALE_TO_F32).
+    var owned = _xt_owned([Int(py=x), Int(py=res)], params)
+    var result = scale_to_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -384,143 +372,66 @@ def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> Pytho
 
 
 def margin2_binding(acc: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Two-class vote rows (n x 2, float64) to the SAMME margin
-    d = acc[2i+1] - acc[2i], one IEEE binary64 subtraction per row, the
-    value the Python `v[2*i+1] - v[2*i]` computed. params = [n, mode]:
-    mode 0 writes d (float64, n); mode 1 writes the int32 code
-    `1 if d > 0 else 0` (a NaN gives 0, as `>` did); mode 2 writes the
-    float64 pairs (-(d/2), d/2) (n x 2), the rows `predict_proba` softmaxes."""
-    _need(params, 2, "x_trees_margin2")
-    var n = _count(_i(params, 0), "x_trees_margin2")
-    var mode = _i(params, 1)
-    comptime if XTREES_DEVICE_OPS:
-        elem_dev.margin2_device(f64_ptr(Int(py=acc)), n, mode, f64_ptr(Int(py=dst)), i32_ptr(Int(py=dst)))
-    else:
-        margin2(f64_ptr(Int(py=acc)), n, mode, f64_ptr(Int(py=dst)), i32_ptr(Int(py=dst)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::margin2_run, also reached
+    # natively through the trees entry table (XT_MARGIN2).
+    var owned = _xt_owned([Int(py=acc), Int(py=dst)], params)
+    var result = margin2_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def put_f32_binding(dst: PythonObject, src: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst[offset:offset+n] = src; params = [offset, n]."""
-    _need(params, 2, "x_trees_put_f32")
-    var n = _count(_i(params, 1), "x_trees_put_f32")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.put_f32_device(f32_ptr(Int(py=dst)), _count(_i(params, 0), "x_trees_put_f32"), f32_ptr(Int(py=src)), n)
-        else:
-            put_f32(f32_ptr(Int(py=dst)), _count(_i(params, 0), "x_trees_put_f32"), f32_ptr(Int(py=src)), n)
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::put_f32_run, also reached
+    # natively through the trees entry table (XT_PUT_F32).
+    var owned = _xt_owned([Int(py=dst), Int(py=src)], params)
+    var result = put_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def softmax_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
-    _need(params, 2, "x_trees_softmax_rows")
-    var n = _count(_i(params, 0), "x_trees_softmax_rows")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.softmax_rows_device(f64_ptr(Int(py=x)), n, _i(params, 1))
-        else:
-            softmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::softmax_rows_run, also reached
+    # natively through the trees entry table (XT_SOFTMAX_ROWS).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = softmax_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def samme_step_binding(
-    w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, n_classes, learning_rate, last]; stats = 4 float64."""
-    if len(params) != 4 and len(params) != 5:
-        raise Error("x_trees_samme_step: expected 4 values plus optional tree-base metadata")
-    var n = _i(params, 0)
-    if n <= 0:
-        raise Error("x_trees_samme_step: n must be positive")
-    # T30 tree-base metadata only; custom non-tree estimators retain B.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var cache_tree = False
-    if len(params) > 4:
-        cache_tree = _i(params, 4) != 0
-    if T30_ADABOOST and cache_tree:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.samme_step_device[True](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-                                        _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-        else:
-            samme_step[True](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-                       _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-    else:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.samme_step_device[False](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-                                        _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-        else:
-            samme_step[False](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-                       _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-    return PythonObject(n)
+def samme_step_binding(w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::samme_step_run, also reached
+    # natively through the trees entry table (XT_SAMME_STEP).
+    var owned = _xt_owned([Int(py=w), Int(py=pred), Int(py=y), Int(py=stats)], params)
+    var result = samme_step_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def r2_step_binding(
-    w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, loss (0 linear, 1 square, 2 exponential), learning_rate, last]."""
-    if len(params) != 4 and len(params) != 5:
-        raise Error("x_trees_r2_step: expected 4 values plus optional tree-base metadata")
-    var n = _i(params, 0)
-    if n <= 0:
-        raise Error("x_trees_r2_step: n must be positive")
-    # T30 tree-base metadata only; custom non-tree estimators retain B.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var cache_tree = False
-    if len(params) > 4:
-        cache_tree = _i(params, 4) != 0
-    if T30_ADABOOST and cache_tree:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.r2_step_device[True](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-                                     _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-        else:
-            r2_step[True](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-    else:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.r2_step_device[False](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-                                     _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-        else:
-            r2_step[False](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
-    return PythonObject(n)
+def r2_step_binding(w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::r2_step_run, also reached
+    # natively through the trees entry table (XT_R2_STEP).
+    var owned = _xt_owned([Int(py=w), Int(py=pred), Int(py=y), Int(py=stats)], params)
+    var result = r2_step_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def weighted_median_binding(
-    preds: PythonObject, weights: PythonObject, res: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, m]; preds estimator-major float32."""
-    _need(params, 2, "x_trees_weighted_median")
-    var n = _count(_i(params, 0), "x_trees_weighted_median")
-    var m = _i(params, 1)
-    if m <= 0:
-        raise Error("x_trees_weighted_median: need at least one estimator")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.weighted_median_device(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
-        else:
-            weighted_median(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
-    return PythonObject(n)
+def weighted_median_binding(preds: PythonObject, weights: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::weighted_median_run, also reached
+    # natively through the trees entry table (XT_WEIGHTED_MEDIAN).
+    var owned = _xt_owned([Int(py=preds), Int(py=weights), Int(py=res)], params)
+    var result = weighted_median_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def apply_binding(
-    offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
-    x: PythonObject, res: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Leaf node per (row, tree) for trees [t0, t1); params = [n, d, t0, t1]; x row-major float32."""
-    _need(params, 4, "x_trees_apply")
-    var n = _count(_i(params, 0), "x_trees_apply")
-    var t0 = _count(_i(params, 2), "x_trees_apply")
-    var t1 = _i(params, 3)
-    if t1 <= t0:
-        raise Error("x_trees_apply: need t1 > t0")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            apply_trees_device(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
-                               i32_ptr(Int(py=left)), f32_ptr(Int(py=x)), n, _i(params, 1), t0, t1, i32_ptr(Int(py=res)))
-        else:
-            apply_trees(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
-                        i32_ptr(Int(py=left)), f32_ptr(Int(py=x)), n, _i(params, 1), t0, t1, i32_ptr(Int(py=res)))
-    return PythonObject(n)
+def apply_binding(offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject, x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::apply_run, also reached
+    # natively through the trees entry table (XT_APPLY).
+    var owned = _xt_owned([Int(py=offsets), Int(py=colid), Int(py=quesval), Int(py=left), Int(py=x), Int(py=res)], params)
+    var result = apply_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def gradients_binding(
@@ -614,86 +525,57 @@ def tree_score_add_binding(nodes: PythonObject, values: PythonObject, acc: Pytho
 
 
 def uniform_binding(res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, seed, stream]."""
-    _need(params, 3, "x_trees_uniform")
-    var n = _count(_i(params, 0), "x_trees_uniform")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.uniform_device(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
-        else:
-            uniform(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::uniform_run, also reached
+    # natively through the trees entry table (XT_UNIFORM).
+    var owned = _xt_owned([Int(py=res)], params)
+    var result = uniform_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def onehot_leaves_binding(
-    nodes: PythonObject, tree_base: PythonObject, node_col: PythonObject, res: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, n_trees, n_cols]; res float64 n*n_cols, zeroed."""
-    _need(params, 3, "x_trees_onehot_leaves")
-    var n = _count(_i(params, 0), "x_trees_onehot_leaves")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.onehot_leaves_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)),
-                                          n, _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
-        else:
-            onehot_leaves(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)), n,
-                          _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
-    return PythonObject(n)
+def onehot_leaves_binding(nodes: PythonObject, tree_base: PythonObject, node_col: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::onehot_leaves_run, also reached
+    # natively through the trees entry table (XT_ONEHOT_LEAVES).
+    var owned = _xt_owned([Int(py=nodes), Int(py=tree_base), Int(py=node_col), Int(py=res)], params)
+    var result = onehot_leaves_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def transpose_f32_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst (d x n) = src (n x d) transposed; params = [n, d]."""
-    _need(params, 2, "x_trees_transpose_f32")
-    var n = _count(_i(params, 0), "x_trees_transpose_f32")
-    var d = _count(_i(params, 1), "x_trees_transpose_f32")
-    if n * d > 0:
-        comptime if XTREES_DEVICE_OPS:
-            transpose_f32_device(f32_ptr(Int(py=src)), n, d, f32_ptr(Int(py=dst)))
-        else:
-            transpose_f32(f32_ptr(Int(py=src)), n, d, f32_ptr(Int(py=dst)))
-    return PythonObject(n * d)
+    # Unpack only; the body is xtrees/glue_runs.mojo::transpose_f32_run, also reached
+    # natively through the trees entry table (XT_TRANSPOSE_F32).
+    var owned = _xt_owned([Int(py=src), Int(py=dst)], params)
+    var result = transpose_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def transpose_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst (d x n) = src (n x d) transposed, float64 words; params = [n, d]."""
-    _need(params, 2, "x_trees_transpose_f64")
-    var n = _count(_i(params, 0), "x_trees_transpose_f64")
-    var d = _count(_i(params, 1), "x_trees_transpose_f64")
-    if n * d > 0:
-        comptime if XTREES_DEVICE_OPS:
-            transpose_f64_device(f64_ptr(Int(py=src)), n, d, f64_ptr(Int(py=dst)))
-        else:
-            transpose_f64(f64_ptr(Int(py=src)), n, d, f64_ptr(Int(py=dst)))
-    return PythonObject(n * d)
+    # Unpack only; the body is xtrees/glue_runs.mojo::transpose_f64_run, also reached
+    # natively through the trees entry table (XT_TRANSPOSE_F64).
+    var owned = _xt_owned([Int(py=src), Int(py=dst)], params)
+    var result = transpose_f64_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def bag_rows_binding(res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """res (int32, n) <- the rows whose draw is below frac, ascending (none:
-    the smallest draw's row); params = [n, seed, stream, frac]; returns the
-    count."""
-    _need(params, 4, "x_trees_bag_rows")
-    var n = _count(_i(params, 0), "x_trees_bag_rows")
-    if n == 0:
-        return PythonObject(0)
-    comptime if XTREES_DEVICE_OPS:
-        return PythonObject(bag_rows_device(i32_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2), _f(params, 3)))
-    else:
-        return PythonObject(bag_rows(i32_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2), _f(params, 3)))
+    # Unpack only; the body is xtrees/glue_runs.mojo::bag_rows_run, also reached
+    # natively through the trees entry table (XT_BAG_ROWS).
+    var owned = _xt_owned([Int(py=res)], params)
+    var result = bag_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def unseen_rows_binding(rows: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """res (int32, n) <- the rows of [0, n) absent from rows (int32, m),
-    ascending; params = [m, n]; returns the count."""
-    _need(params, 2, "x_trees_unseen_rows")
-    var m = _count(_i(params, 0), "x_trees_unseen_rows")
-    var n = _count(_i(params, 1), "x_trees_unseen_rows")
-    if n == 0:
-        return PythonObject(0)
-    var rp = i32_ptr(Int(py=rows)) if m > 0 else i32_ptr(Int(py=res))
-    comptime if XTREES_DEVICE_OPS:
-        return PythonObject(unseen_rows_device(rp, m, n, i32_ptr(Int(py=res))))
-    else:
-        return PythonObject(unseen_rows(rp, m, n, i32_ptr(Int(py=res))))
+    # Unpack only; the body is xtrees/glue_runs.mojo::unseen_rows_run, also reached
+    # natively through the trees entry table (XT_UNSEEN_ROWS).
+    var owned = _xt_owned([Int(py=rows), Int(py=res)], params)
+    var result = unseen_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def check_weights_f32_binding(w: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -721,8 +603,14 @@ def mul_f32_binding(a: PythonObject, b: PythonObject, dst: PythonObject, params:
 
 
 def log64_binding(x: PythonObject) raises -> PythonObject:
-    """The pinned binary64 log (checks/numerics.mojo identical_log64) of one value."""
-    return PythonObject(identical_log64(Float64(py=x)))
+    # Unpack only; the body is xtrees/glue_runs.mojo::log64_run (XT_LOG64).
+    var res: List[Float64] = [0.0]
+    var owned = XtOwned([Int(res.unsafe_ptr())], [0], [Float64(py=x)])
+    _ = log64_run(owned.view())
+    _ = owned
+    var value = res[0]
+    _ = res
+    return PythonObject(value)
 
 
 def logit_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -738,50 +626,30 @@ def logit_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
 
 
 def normalize_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, k]."""
-    _need(params, 2, "x_trees_normalize_rows")
-    var n = _count(_i(params, 0), "x_trees_normalize_rows")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.normalize_rows_device(f64_ptr(Int(py=x)), n, _i(params, 1))
-        else:
-            normalize_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::normalize_rows_run, also reached
+    # natively through the trees entry table (XT_NORMALIZE_ROWS).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = normalize_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def scatter_binding(dst: PythonObject, src: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst (float64, N x n_dst_cols)[rows[r], col0 + j] = src (float32, m x c)[r, j];
-    params = [n_dst_rows, n_dst_cols, m, c, col0]."""
-    _need(params, 5, "x_trees_scatter")
-    var n_dst = _i(params, 0)
-    var n_cols = _i(params, 1)
-    var m = _count(_i(params, 2), "x_trees_scatter")
-    var c = _count(_i(params, 3), "x_trees_scatter")
-    var col0 = _count(_i(params, 4), "x_trees_scatter")
-    if col0 + c > n_cols:
-        raise Error("x_trees_scatter: columns out of range")
-    var rp = i32_ptr(Int(py=rows)) if m > 0 else i32_ptr(1)
-    comptime if XTREES_DEVICE_OPS:
-        # the row refusal is the device's check kernel (lane cpu2-l5-trees)
-        elem_dev.scatter_device(f64_ptr(Int(py=dst)), n_dst, n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
-    else:
-        scatter_rows_check(rp, m, n_dst)
-        if m * c > 0:
-            scatter(f64_ptr(Int(py=dst)), n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
-    return PythonObject(m * c)
+    # Unpack only; the body is xtrees/glue_runs.mojo::scatter_run, also reached
+    # natively through the trees entry table (XT_SCATTER).
+    var owned = _xt_owned([Int(py=dst), Int(py=src), Int(py=rows)], params)
+    var result = scatter_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def platt_fit_binding(f: PythonObject, y: PythonObject, ab: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n]; y int32 0/1; ab float64[2]."""
-    _need(params, 1, "x_trees_platt_fit")
-    var n = _i(params, 0)
-    if n < 1:
-        raise Error("x_trees_platt_fit: no rows")
-    comptime if XTREES_DEVICE_OPS:
-        boost_dev.platt_fit_device(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
-    else:
-        platt_fit(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::platt_fit_run, also reached
+    # natively through the trees entry table (XT_PLATT_FIT).
+    var owned = _xt_owned([Int(py=f), Int(py=y), Int(py=ab)], params)
+    var result = platt_fit_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def platt_apply_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -797,19 +665,13 @@ def platt_apply_binding(f: PythonObject, res: PythonObject, params: PythonObject
     return PythonObject(n)
 
 
-def isotonic_fit_binding(
-    x: PythonObject, y: PythonObject, kx: PythonObject, ky: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n]; kx, ky float64[n] receive the knots; returns their count."""
-    _need(params, 1, "x_trees_isotonic_fit")
-    var n = _i(params, 0)
-    var m: Int
-    comptime if XTREES_DEVICE_OPS:
-        m = boost_dev.isotonic_fit_device(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)),
-                                          f64_ptr(Int(py=ky)))
-    else:
-        m = isotonic_fit(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)))
-    return PythonObject(m)
+def isotonic_fit_binding(x: PythonObject, y: PythonObject, kx: PythonObject, ky: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::isotonic_fit_run, also reached
+    # natively through the trees entry table (XT_ISOTONIC_FIT).
+    var owned = _xt_owned([Int(py=x), Int(py=y), Int(py=kx), Int(py=ky)], params)
+    var result = isotonic_fit_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def isotonic_predict_binding(
@@ -837,65 +699,34 @@ def isotonic_predict_binding(
 # `isotonic_predict`'s (they now call these with stride 1).
 
 
-def _strided(total: Int, stride: Int, off: Int, n: Int, who: String) raises:
-    if stride < 1 or off < 0 or (n > 0 and off + (n - 1) * stride >= total):
-        raise Error(who + ": stride or offset out of range")
+
 
 
 def platt_apply_strided_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, A, B, f_len, f_stride, f_off, res_len, res_stride, res_off]."""
-    _need(params, 9, "x_trees_platt_apply_strided")
-    var n = _count(_i(params, 0), "x_trees_platt_apply_strided")
-    var fs = _i(params, 4)
-    var fo = _i(params, 5)
-    var rs = _i(params, 7)
-    var ro = _i(params, 8)
-    _strided(_i(params, 3), fs, fo, n, "x_trees_platt_apply_strided")
-    _strided(_i(params, 6), rs, ro, n, "x_trees_platt_apply_strided")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.platt_apply_strided_device(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2),
-                                                 f64_ptr(Int(py=res)) + ro, rs)
-        else:
-            platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::platt_apply_strided_run, also reached
+    # natively through the trees entry table (XT_PLATT_APPLY_STRIDED).
+    var owned = _xt_owned([Int(py=f), Int(py=res)], params)
+    var result = platt_apply_strided_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
-def isotonic_predict_strided_binding(
-    kx: PythonObject, ky: PythonObject, t: PythonObject, res: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [m, n, t_len, t_stride, t_off, res_len, res_stride, res_off]."""
-    _need(params, 8, "x_trees_isotonic_predict_strided")
-    var m = _i(params, 0)
-    if m < 1:
-        raise Error("x_trees_isotonic_predict_strided: no knots")
-    var n = _count(_i(params, 1), "x_trees_isotonic_predict_strided")
-    var ts = _i(params, 3)
-    var to = _i(params, 4)
-    var rs = _i(params, 6)
-    var ro = _i(params, 7)
-    _strided(_i(params, 2), ts, to, n, "x_trees_isotonic_predict_strided")
-    _strided(_i(params, 5), rs, ro, n, "x_trees_isotonic_predict_strided")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            boost_dev.isotonic_predict_strided_device(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m,
-                                                      f64_ptr(Int(py=t)) + to, ts, n, f64_ptr(Int(py=res)) + ro, rs)
-        else:
-            isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
-                                     f64_ptr(Int(py=res)) + ro, rs)
-    return PythonObject(n)
+def isotonic_predict_strided_binding(kx: PythonObject, ky: PythonObject, t: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::isotonic_predict_strided_run, also reached
+    # natively through the trees entry table (XT_ISOTONIC_PREDICT_STRIDED).
+    var owned = _xt_owned([Int(py=kx), Int(py=ky), Int(py=t), Int(py=res)], params)
+    var result = isotonic_predict_strided_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def complement_pairs_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n]: x (float64, n x 2)[i, 0] = 1 - x[i, 1]."""
-    _need(params, 1, "x_trees_complement_pairs")
-    var n = _count(_i(params, 0), "x_trees_complement_pairs")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.complement_pairs_device(f64_ptr(Int(py=x)), n)
-        else:
-            complement_pairs(f64_ptr(Int(py=x)), n)
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::complement_pairs_run, also reached
+    # natively through the trees entry table (XT_COMPLEMENT_PAIRS).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = complement_pairs_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def calibrated_proba_binding(acc: PythonObject, pairs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -969,157 +800,91 @@ def ovr_assemble_binding(out_buf: PythonObject, columns: PythonObject, params: P
 
 
 def indicator_codes_binding(codes: PythonObject, out_i: PythonObject, out_f: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, cls]: out_i int32 0/1 per row (codes == cls); out_f (0: none) float64 1.0 / 0.0."""
-    _need(params, 2, "x_trees_indicator_codes")
-    var n = _count(_i(params, 0), "x_trees_indicator_codes")
-    var fa = Int(py=out_f)
-    if n > 0:
-        var pf = f64_ptr(fa) if fa != 0 else f64_ptr(Int(py=out_i))
-        comptime if XTREES_DEVICE_OPS:
-            indicator_codes_device(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=out_i)), pf, fa != 0)
-        else:
-            indicator_codes(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=out_i)), pf, fa != 0)
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::indicator_codes_run, also reached
+    # natively through the trees entry table (XT_INDICATOR_CODES).
+    var owned = _xt_owned([Int(py=codes), Int(py=out_i), Int(py=out_f)], params)
+    var result = indicator_codes_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """cols = m addresses of n 8-byte words each (int64 or float64); dst
-    (n x m, row-major, the same word type) gets column j from cols[j];
-    params = [n]. Words are moved, not computed (lane apple-fast-py2mojo-trees)."""
-    _need(params, 1, "x_trees_stack_w64")
-    var n = _count(_i(params, 0), "x_trees_stack_w64")
-    var addrs = List[Int]()
-    for j in range(len(cols)):  # small-loop(one address word per column)
-        var a = Int(py=cols[j])
-        if a == 0:
-            raise Error("x_trees_stack_w64: null column address")
-        addrs.append(a)
-    if n > 0 and len(addrs) > 0:
-        var d = f64_ptr(Int(py=dst)).bitcast[UInt64]()
-        comptime if XTREES_DEVICE_OPS:
-            stack_w64_device(addrs, n, d)
-        else:
-            stack_w64(addrs, n, d)
-    return PythonObject(n * len(addrs))
+    # Unpack only; the body is xtrees/glue_runs.mojo::stack_w64_run (XT_STACK_W64):
+    # addresses = [dst, column 0, column 1, ...].
+    var addrs: List[Int] = [Int(py=dst)]
+    for j in range(len(cols)):  # small-loop(one address word per column): Python unpack
+        addrs.append(Int(py=cols[j]))
+    var owned = _xt_owned(addrs^, params)
+    var result = stack_w64_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def rows_any_unset_binding(eq: PythonObject, out_i: PythonObject, params: PythonObject) raises -> PythonObject:
-    """eq: n * m uint8 equality flags (row-major, or column-major when
-    params[2] != 0); out_i int32 (n): 1 when any flag of the row is 0, else
-    0; params = [n, m, col_major] (lane ne2-b-members, N081:
-    MultiOutputClassifier.score). Compares only."""
-    _need(params, 3, "x_trees_rows_any_unset")
-    var n = _count(_i(params, 0), "x_trees_rows_any_unset")
-    var m = _count(_i(params, 1), "x_trees_rows_any_unset")
-    var col_major = _i(params, 2) != 0
-    if n > 0:
-        var e = Int(py=eq)
-        if m > 0 and e == 0:
-            raise Error("x_trees_rows_any_unset: null flag address")
-        var flags = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=e)
-        comptime if XTREES_DEVICE_OPS:
-            rows_any_unset_device(flags, n, m, col_major, i32_ptr(Int(py=out_i)))
-        else:
-            rows_any_unset(flags, n, m, col_major, i32_ptr(Int(py=out_i)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::rows_any_unset_run, also reached
+    # natively through the trees entry table (XT_ROWS_ANY_UNSET).
+    var owned = _xt_owned([Int(py=eq), Int(py=out_i)], params)
+    var result = rows_any_unset_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def binary_proba_binding(p: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """p float32 (n); res float64 (n x 2) = rows (1 - p, p), p widened
-    exactly; params = [n] (lane apple-fast-py2mojo-trees)."""
-    _need(params, 1, "x_trees_binary_proba")
-    var n = _count(_i(params, 0), "x_trees_binary_proba")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            binary_proba_device(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=res)))
-        else:
-            binary_proba(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=res)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::binary_proba_run, also reached
+    # natively through the trees entry table (XT_BINARY_PROBA).
+    var owned = _xt_owned([Int(py=p), Int(py=res)], params)
+    var result = binary_proba_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def exact_sum_binding(x: PythonObject, res: PythonObject, flags: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, want_div]: res[0] = the exactly rounded sum of the float32
-    x (`_portable_math.fsum`'s word), flags (int32, 8) = [NaN, +inf, -inf,
-    negative finite, positive, 0, 0, 0]; want_div != 0: res holds n + 1
-    float64 and res[1:] = x / sum when no entry is NaN, infinite or negative
-    and one is positive (AdaBoost's normalized sample weights). The device on
-    every GPU build, the host loop on the CPU column (xtrees/exact_sum.mojo;
-    lane apple-fast-py2mojo-trees)."""
-    _need(params, 2, "x_trees_exact_sum")
-    var n = _count(_i(params, 0), "x_trees_exact_sum")
-    if n > ES_MAX_ROWS:
-        raise Error("x_trees_exact_sum: more than 2^30 entries")
-    var want = _i(params, 1) != 0
-    var xa = Int(py=x)
-    var xp = f32_ptr(xa) if xa != 0 else f32_ptr(Int(py=res))
-    comptime if XTREES_DEVICE_OPS:
-        exact_sum_device(xp, n, f64_ptr(Int(py=res)), i32_ptr(Int(py=flags)), want)
-    else:
-        exact_sum_host(xp, n, f64_ptr(Int(py=res)), i32_ptr(Int(py=flags)), want)
-    return PythonObject(ES_FLAGS)
+    # Unpack only; the body is xtrees/glue_runs.mojo::exact_sum_run, also reached
+    # natively through the trees entry table (XT_EXACT_SUM).
+    var owned = _xt_owned([Int(py=x), Int(py=res), Int(py=flags)], params)
+    var result = exact_sum_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def count_rows_binding(counts: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, m]: counts (int32, n) += 1 at each of the m rows (int32)
-    (Bagging's out-of-bag member counts; xtrees/oob.mojo)."""
-    _need(params, 2, "x_trees_count_rows")
-    var n = _count(_i(params, 0), "x_trees_count_rows")
-    var m = _count(_i(params, 1), "x_trees_count_rows")
-    if n > 0 and m > 0:
-        comptime if XTREES_DEVICE_OPS:
-            count_rows_device(i32_ptr(Int(py=counts)), n, i32_ptr(Int(py=rows)), m)
-        else:
-            count_rows_host(i32_ptr(Int(py=counts)), n, i32_ptr(Int(py=rows)), m)
-    return PythonObject(m)
+    # Unpack only; the body is xtrees/glue_runs.mojo::count_rows_run, also reached
+    # natively through the trees entry table (XT_COUNT_ROWS).
+    var owned = _xt_owned([Int(py=counts), Int(py=rows)], params)
+    var result = count_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def count_equal_binding(a: PythonObject, b: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n]: #{r : a[r] == b[r]} of two int32 vectors (xtrees/oob.mojo)."""
-    _need(params, 1, "x_trees_count_equal")
-    var n = _count(_i(params, 0), "x_trees_count_equal")
-    if n == 0:
-        return PythonObject(0)
-    comptime if XTREES_DEVICE_OPS:
-        return PythonObject(count_equal_device(i32_ptr(Int(py=a)), i32_ptr(Int(py=b)), n))
-    else:
-        return PythonObject(count_equal_host(i32_ptr(Int(py=a)), i32_ptr(Int(py=b)), n))
+    # Unpack only; the body is xtrees/glue_runs.mojo::count_equal_run, also reached
+    # natively through the trees entry table (XT_COUNT_EQUAL).
+    var owned = _xt_owned([Int(py=a), Int(py=b)], params)
+    var result = count_equal_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def oob_r2_binding(bufs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """bufs = [acc f64 n, counts i32 n, y f32 n, pred f64 n (out), words f64 4
-    (out), flags i32 4 (out)], params = [n]: pred = acc / max(counts, 1),
-    words = [fsum(y), fsum((y - mean)^2), fsum((y - pred)^2), mean], flags
-    [non-finite term, overflow] (BaggingRegressor's oob R^2; xtrees/oob.mojo)."""
-    _need(params, 1, "x_trees_oob_r2")
+    # Unpack only; the body is xtrees/glue_runs.mojo::oob_r2_run (XT_OOB_R2).
     if len(bufs) != 6:
         raise Error("x_trees_oob_r2: bufs must hold 6 addresses")
-    var n = _count(_i(params, 0), "x_trees_oob_r2")
-    if n < 1 or n > E64_MAX_ROWS:
-        raise Error("x_trees_oob_r2: needs 1 <= n <= 2^30")
-    comptime if XTREES_DEVICE_OPS:
-        oob_r2_device(f64_ptr(Int(py=bufs[0])), i32_ptr(Int(py=bufs[1])), f32_ptr(Int(py=bufs[2])), n,
-                      f64_ptr(Int(py=bufs[3])), f64_ptr(Int(py=bufs[4])), i32_ptr(Int(py=bufs[5])))
-    else:
-        oob_r2_host(f64_ptr(Int(py=bufs[0])), i32_ptr(Int(py=bufs[1])), f32_ptr(Int(py=bufs[2])), n,
-                    f64_ptr(Int(py=bufs[3])), f64_ptr(Int(py=bufs[4])), i32_ptr(Int(py=bufs[5])))
-    return PythonObject(n)
+    var addrs = List[Int]()
+    for j in range(6):  # small-loop(the six buffer address words): Python unpack
+        addrs.append(Int(py=bufs[j]))
+    var owned = _xt_owned(addrs^, params)
+    var result = oob_r2_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def class_counts_binding(y: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, k]: counts (int32, k) = the rows of each float32 class
-    code (DART's multiclass init; lane apple-fast-py2mojo-trees)."""
-    _need(params, 2, "x_trees_class_counts")
-    var n = _count(_i(params, 0), "x_trees_class_counts")
-    var k = _i(params, 1)
-    if k < 1:
-        raise Error("x_trees_class_counts: needs k >= 1")
-    var ya = Int(py=y)
-    var yp = f32_ptr(ya) if ya != 0 else f32_ptr(Int(py=counts))
-    comptime if XTREES_DEVICE_OPS:
-        class_counts_device(yp, n, k, i32_ptr(Int(py=counts)))
-    else:
-        class_counts(yp, n, k, i32_ptr(Int(py=counts)))
-    return PythonObject(k)
+    # Unpack only; the body is xtrees/glue_runs.mojo::class_counts_run, also reached
+    # natively through the trees entry table (XT_CLASS_COUNTS).
+    var owned = _xt_owned([Int(py=y), Int(py=counts)], params)
+    var result = class_counts_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def code_counts_binding(codes: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1157,31 +922,21 @@ def class_rows_binding(codes: PythonObject, values: PythonObject, dst: PythonObj
 
 
 def remap_cols_binding(colid: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n_nodes, m]: in place colid[g] = cols[colid[g]] for a split
-    node (a column-sampled DART tree back to X's columns)."""
-    _need(params, 2, "x_trees_remap_cols")
-    var nn = _count(_i(params, 0), "x_trees_remap_cols")
-    var m = _count(_i(params, 1), "x_trees_remap_cols")
-    if nn > 0:
-        var ca = Int(py=cols)
-        var cp = i32_ptr(ca) if ca != 0 else i32_ptr(Int(py=colid))
-        comptime if XTREES_DEVICE_OPS:
-            remap_cols_device(i32_ptr(Int(py=colid)), nn, cp, m)
-        else:
-            remap_cols(i32_ptr(Int(py=colid)), nn, cp, m)
-    return PythonObject(nn)
+    # Unpack only; the body is xtrees/glue_runs.mojo::remap_cols_run, also reached
+    # natively through the trees entry table (XT_REMAP_COLS).
+    var owned = _xt_owned([Int(py=colid), Int(py=cols)], params)
+    var result = remap_cols_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def positive_codes_binding(x: PythonObject, codes: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n]: codes (int32) = 1 where the float64 x > 0, else 0."""
-    _need(params, 1, "x_trees_positive_codes")
-    var n = _count(_i(params, 0), "x_trees_positive_codes")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            positive_codes_device(f64_ptr(Int(py=x)), n, i32_ptr(Int(py=codes)))
-        else:
-            positive_codes(f64_ptr(Int(py=x)), n, i32_ptr(Int(py=codes)))
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::positive_codes_run, also reached
+    # natively through the trees entry table (XT_POSITIVE_CODES).
+    var owned = _xt_owned([Int(py=x), Int(py=codes)], params)
+    var result = positive_codes_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def spread_leaves_binding(vals: PythonObject, offs: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1203,13 +958,12 @@ def spread_leaves_binding(vals: PythonObject, offs: PythonObject, dst: PythonObj
 
 
 def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n_nodes]: node_col (int32) = each leaf's output column in node
-    order, -1 for a split node; returns the leaf count (RandomTreesEmbedding)."""
-    _need(params, 1, "x_trees_leaf_numbering")
-    var nn = _count(_i(params, 0), "x_trees_leaf_numbering")
-    if nn == 0:
-        return PythonObject(0)
-    return PythonObject(leaf_numbering(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=node_col))))
+    # Unpack only; the body is xtrees/glue_runs.mojo::leaf_numbering_run, also reached
+    # natively through the trees entry table (XT_LEAF_NUMBERING).
+    var owned = _xt_owned([Int(py=left), Int(py=node_col)], params)
+    var result = leaf_numbering_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 #: lane fam2-forests (2026-10-04): `get_depth` / `get_n_leaves` walk the tree's
@@ -1315,29 +1069,12 @@ def fast_switches_binding() raises -> PythonObject:
 
 
 def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, n_splits, n_classes]: the cv folds on the device
-    (xtrees/folds_device.mojo: the device on every GPU build, `ops.folds_serial`
-    on the host column). n_classes > 0: StratifiedKFold over `codes` (int32, n, in
-    [0, n_classes)); 0: KFold, codes unread. counts (int32, n_splits + 1) =
-    the fold sizes then the status word; rows (int32, n_splits * n): per fold
-    i the rows outside it, ascending, then the rows inside it, ascending.
-    Returns the status: 0, 1 (the Python refusal: n_splits above every class
-    count) or 2 (a code outside [0, n_classes))."""
-    _need(params, 3, "x_trees_device_folds")
-    var n = _count(_i(params, 0), "x_trees_device_folds")
-    var n_splits = _i(params, 1)
-    var k = _count(_i(params, 2), "x_trees_device_folds")
-    if n_splits < 2:
-        raise Error("x_trees_device_folds: n_splits must be >= 2")
-    var status = 0
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
-                                  i32_ptr(Int(py=counts)))
-        else:
-            status = host_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
-                                i32_ptr(Int(py=counts)))
-    return PythonObject(status)
+    # Unpack only; the body is xtrees/glue_runs.mojo::device_folds_run, also reached
+    # natively through the trees entry table (XT_DEVICE_FOLDS).
+    var owned = _xt_owned([Int(py=codes), Int(py=rows), Int(py=counts)], params)
+    var result = device_folds_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
@@ -1392,29 +1129,21 @@ def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: Pytho
 
 
 def iota_i32_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """out (int32, n)[i] = i; params = [n]; returns n (lane cpu2-l5-trees)."""
-    _need(params, 1, "x_trees_iota_i32")
-    var n = _count(_i(params, 0), "x_trees_iota_i32")
-    if n > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.iota_i32_device(i32_ptr(Int(py=out_addr)), n)
-        else:
-            iota_i32(i32_ptr(Int(py=out_addr)), n)
-    return PythonObject(n)
+    # Unpack only; the body is xtrees/glue_runs.mojo::iota_i32_run, also reached
+    # natively through the trees entry table (XT_IOTA_I32).
+    var owned = _xt_owned([Int(py=out_addr)], params)
+    var result = iota_i32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def fill_class_major_f64_binding(inits_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """out (float64, K x n)[c * n + i] = inits (float64, K)[c], a word copy;
-    params = [n, K]; returns K * n (lane cpu2-l5-trees)."""
-    _need(params, 2, "x_trees_fill_class_major_f64")
-    var n = _count(_i(params, 0), "x_trees_fill_class_major_f64")
-    var k = _count(_i(params, 1), "x_trees_fill_class_major_f64")
-    if n * k > 0:
-        comptime if XTREES_DEVICE_OPS:
-            elem_dev.fill_class_major_f64_device(f64_ptr(Int(py=inits_addr)), n, k, f64_ptr(Int(py=out_addr)))
-        else:
-            fill_class_major_f64(f64_ptr(Int(py=inits_addr)), n, k, f64_ptr(Int(py=out_addr)))
-    return PythonObject(n * k)
+    # Unpack only; the body is xtrees/glue_runs.mojo::fill_class_major_f64_run, also reached
+    # natively through the trees entry table (XT_FILL_CLASS_MAJOR_F64).
+    var owned = _xt_owned([Int(py=inits_addr), Int(py=out_addr)], params)
+    var result = fill_class_major_f64_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1685,80 +1414,54 @@ def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject,
 # operations in the same order as the Python they replace, so the same bits
 # on every column (the device round reads the thresholds and float32
 # coefficients these write).
-def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int64 buffer address")
-    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
+
 
 
 def class_priors_binding(counts: PythonObject, priors: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, k]: priors (float64, k) = log(max(1e-15, counts[c] / n)),
-    the pinned binary64 log (`identical_log64`) of each class's share (DART's
-    multiclass start; it was a Python list over the k counts)."""
-    _need(params, 2, "x_trees_class_priors")
-    var n = _count(_i(params, 0), "x_trees_class_priors")
-    var k = _i(params, 1)
-    if k < 1 or n < 1:
-        raise Error("x_trees_class_priors: needs n >= 1 and k >= 1")
-    var cp = i32_ptr(Int(py=counts))
-    var op = f64_ptr(Int(py=priors))
-    class_priors(cp, op, n, k)
-    return PythonObject(k)
+    # Unpack only; the body is xtrees/glue_runs.mojo::class_priors_run, also reached
+    # natively through the trees entry table (XT_CLASS_PRIORS).
+    var owned = _xt_owned([Int(py=counts), Int(py=priors)], params)
+    var result = class_priors_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def dart_thresholds_binding(weights: PythonObject, coefs: PythonObject, coef32: PythonObject, thr: PythonObject,
                             state: PythonObject, params: PythonObject, rate: PythonObject) raises -> PythonObject:
-    """One DART round's drop thresholds and float32 coefficients from the
-    t tree weights (float64), the t * k coefficients (float64) and state[0] =
-    the weight sum. params = [t, k, uniform_drop, max_drop]; rate = drop_rate.
-    thr (int64, t) = ceil(p_i * 2^53), p_i = rate * w_i * (t / sum_w) (rate
-    capped by max_drop * inv_avg / sum_w), or the capped uniform rate;
-    coef32 (float32, t * k) = the coefficients rounded once. Returns t."""
-    _need(params, 4, "x_trees_dart_thresholds")
-    var t = _count(_i(params, 0), "x_trees_dart_thresholds")
-    var k = _i(params, 1)
-    var uniform = _i(params, 2) != 0
-    var max_drop = _i(params, 3)
-    if t == 0:
-        return PythonObject(0)
-    var wp = f64_ptr(Int(py=weights))
-    var cp = f64_ptr(Int(py=coefs))
-    var c32 = f32_ptr(Int(py=coef32))
-    var tp = _i64_ptr(Int(py=thr))
-    var sum_w = f64_ptr(Int(py=state))[0]
-    var r = Float64(py=rate)
-    dart_thresholds(wp, cp, c32, tp, sum_w, t, k, uniform, max_drop, r)
-    return PythonObject(t)
+    # Unpack only; the body is xtrees/glue_runs.mojo::dart_thresholds_run
+    # (XT_DART_THRESHOLDS): the rate is the fifth positional parameter.
+    var owned = _xt_owned([Int(py=weights), Int(py=coefs), Int(py=coef32), Int(py=thr), Int(py=state)], params)
+    if len(owned.ints) != 4:
+        raise Error("x_trees_dart_thresholds: params must hold 4 values, got " + String(len(owned.ints)))
+    owned.ints.append(0)
+    owned.floats.append(Float64(py=rate))
+    owned.bad.append(UInt8(1))
+    var result = dart_thresholds_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def dart_rescale_binding(weights: PythonObject, coefs: PythonObject, flags: PythonObject, state: PythonObject,
                          params: PythonObject, lr: PythonObject) raises -> PythonObject:
-    """The round's drop count k_d from the step's flags (int32, t), then the
-    shrink, the dropped trees' coefficient and weight rescale (ascending
-    tree order, the weight sum state[0] updated per dropped tree) and the
-    new round's weight w[t] = shrink, coefficients t * k .. t * k + k - 1 =
-    shrink and sum_w += shrink. params = [t, k, uniform_drop,
-    xgboost_dart_mode]; lr = learning_rate. Returns [k_d, shrink, factor]."""
-    _need(params, 4, "x_trees_dart_rescale")
-    var t = _count(_i(params, 0), "x_trees_dart_rescale")
-    var k = _i(params, 1)
-    if k < 1:
-        raise Error("x_trees_dart_rescale: needs k >= 1")
-    var uniform = _i(params, 2) != 0
-    var xgb = _i(params, 3) != 0
-    var l = Float64(py=lr)
-    var wp = f64_ptr(Int(py=weights))
-    var cp = f64_ptr(Int(py=coefs))
-    var sp = f64_ptr(Int(py=state))
-    var r3 = dart_rescale(wp, cp, sp, Int(py=flags) if t > 0 else 0, t, k, uniform, xgb, l)
-    var nd = r3[0]
-    var shrink = r3[1]
-    var factor = r3[2]
-    var res = Python.list()
-    res.append(PythonObject(nd))
-    res.append(PythonObject(shrink))
-    res.append(PythonObject(factor))
-    return res
+    # Unpack only; the body is xtrees/glue_runs.mojo::dart_rescale_run
+    # (XT_DART_RESCALE): lr is the fifth positional parameter; the fifth
+    # address receives [k_d, shrink, factor] as float64 words.
+    var res: List[Float64] = [0.0, 0.0, 0.0]
+    var owned = _xt_owned([Int(py=weights), Int(py=coefs), Int(py=flags), Int(py=state), Int(res.unsafe_ptr())],
+                          params)
+    if len(owned.ints) != 4:
+        raise Error("x_trees_dart_rescale: params must hold 4 values, got " + String(len(owned.ints)))
+    owned.ints.append(0)
+    owned.floats.append(Float64(py=lr))
+    owned.bad.append(UInt8(1))
+    var nd = dart_rescale_run(owned.view())
+    _ = owned
+    var out = Python.list()
+    out.append(PythonObject(nd))
+    out.append(PythonObject(res[1]))
+    out.append(PythonObject(res[2]))
+    _ = res
+    return out
 
 
 def label_weights_native_api_v1_binding() raises -> PythonObject:
