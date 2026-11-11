@@ -26,8 +26,9 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
+from core.entry_table import EntryRef, entry_ref_call
 from core.neural_entry_table import (
-    NeuralEntryKey, neural_entry_vendor, neural_entry_call, NEURAL_TABLE_EMBEDDING, NEURAL_TABLE_EMBEDDING_INFER,
+    NeuralEntryKey, neural_entry_vendor, neural_ref, NEURAL_TABLE_EMBEDDING, NEURAL_TABLE_EMBEDDING_INFER,
     EMB_OP_FORWARD, EMB_OP_BACKWARD, EMB_OP_TABLE_RELEASE, EMB_OP_FORWARD_DEV, EMB_OP_BACKWARD_DEV,
     EMB_OP_TENSOR_ALLOC, EMB_OP_TENSOR_FREE, EMB_OP_TENSOR_UPLOAD, EMB_OP_TENSOR_COPY,
 )
@@ -104,16 +105,27 @@ def _want_mode(fields: PythonObject, context: PythonObject) raises -> PythonObje
     return lowered
 
 
-def _emb_call(entries: PythonObject, operation: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
-    """One call of the connected binding's Embedding descriptor entry through
-    the neural entry table (core/neural_entry_table.mojo), keyed by the
-    tier and vendor words the binding answered at import (UNPACK of the
-    connected mapping). Plain words, no CPython call; the entry releases the
-    GIL inside its numerical work exactly as the former Python entry did."""
+def _emb_ref(entries: PythonObject) raises -> EntryRef:
+    """The connected binding's Embedding descriptor entry through the neural
+    entry table (core/neural_entry_table.mojo), keyed by the tier and vendor
+    words the binding answered at import (UNPACK of the connected mapping)
+    and resolved once per operation (lane entry-table-zero-alloc); the table
+    refusals raise here."""
     var key = NeuralEntryKey(Int(py=entries["entry_mode"]), neural_entry_vendor(String(py=entries["entry_vendor"])))
     if py_contains(entries, "entry_infer"):
-        return neural_entry_call[NEURAL_TABLE_EMBEDDING_INFER](key, operation, addresses, ints, List[Float64]())
-    return neural_entry_call[NEURAL_TABLE_EMBEDDING](key, operation, addresses, ints, List[Float64]())
+        return neural_ref[NEURAL_TABLE_EMBEDDING_INFER](key)
+    return neural_ref[NEURAL_TABLE_EMBEDDING](key)
+
+
+def _emb_call(emb: EntryRef, operation: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
+    """One call through the resolved Embedding entry: plain words, no CPython
+    call; the entry releases the GIL inside its numerical work exactly as the
+    former Python entry did."""
+    var result = entry_ref_call(emb, operation, Int(addresses.unsafe_ptr()), len(addresses),
+                                Int(ints.unsafe_ptr()), len(ints), 0, 0)
+    _ = addresses
+    _ = ints
+    return result
 
 
 def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -194,7 +206,8 @@ def _drop_table(fields: PythonObject, context: PythonObject):
             if entries is None:
                 raise Error("TypeError: resident Embedding table requires its original native binding")
         if py_contains(entries, "embedding_table_release"):
-            _ = _emb_call(entries, EMB_OP_TABLE_RELEASE, List[Int](), [_integer(tok, "resident table token")])
+            var emb = _emb_ref(entries)
+            _ = _emb_call(emb, EMB_OP_TABLE_RELEASE, List[Int](), [_integer(tok, "resident table token")])
         _ = py_call(fields.pop, "_table_tok", PythonObject(None))
         _ = py_call(fields.pop, "_table_owner", PythonObject(None))
     except:
@@ -276,6 +289,7 @@ def _forward(model: PythonObject, ids: PythonObject, device: PythonObject, conte
     if base_format(weight_pin.format) != "f" or weight_layout.itemsize != 4 or not weight_layout.contiguous() or not same_shape(weight_layout.shape, [v, d]):
         raise Error("TypeError: Embedding weight must be its contiguous float32 (V, D) table")
     var entries = _entries(fields, context, model)
+    var emb = _emb_ref(entries)
     if Bool(py=device):
         for name in [String("seq_tensor_alloc"), String("embedding_forward_dev"), String("embedding_backward_dev")]:  # small-loop(the device I/O entry names)
             if not py_contains(entries, name):
@@ -286,10 +300,10 @@ def _forward(model: PythonObject, ids: PythonObject, device: PythonObject, conte
             # (it needs NumPy); nothing is imported from here
             raise Error("RuntimeError: mojolearn Embedding: device=True returns a SequenceDeviceTensor; "
                         + "import mojolearn._x_sequence_device (or call to_device) first")
-        var handle = _emb_call(entries, EMB_OP_TENSOR_ALLOC, List[Int](), [max(1, shape_count(dims)), 0])
+        var handle = _emb_call(emb, EMB_OP_TENSOR_ALLOC, List[Int](), [max(1, shape_count(dims)), 0])
         var y = seq_device_make(entries["module"], dims, PythonObject(handle), PythonObject(None), context)
         var tok = _token(fields, entries, context)
-        _ = _emb_call(entries, EMB_OP_FORWARD_DEV, [weight_layout.address, flat_addr], [handle, v, d, t, tok])
+        _ = _emb_call(emb, EMB_OP_FORWARD_DEV, [weight_layout.address, flat_addr], [handle, v, d, t, tok])
         _ = weight  # keep the Python object alive through the native call above
         _ = admitted^
         _ = weight_pin^
@@ -300,7 +314,7 @@ def _forward(model: PythonObject, ids: PythonObject, device: PythonObject, conte
     var params: List[Int] = [v, d, t]
     if py_contains(entries, "embedding_table_release"):
         params.append(tok)
-    _ = _emb_call(entries, EMB_OP_FORWARD, [weight_layout.address, flat_addr, Int(py=y._addr)], params)
+    _ = _emb_call(emb, EMB_OP_FORWARD, [weight_layout.address, flat_addr, Int(py=y._addr)], params)
     _ = y  # keep the Python object alive through the native call above
     _ = admitted^
     _ = weight_pin^
@@ -687,12 +701,13 @@ def _to_device(model: PythonObject, source: PythonObject, context: PythonObject)
     var value = _float_owned(source, "a", context)
     var shape = _dimensions(value, context)
     var count = shape_count(shape)
-    var handle = _emb_call(entries, EMB_OP_TENSOR_ALLOC, List[Int](), [max(count, 1), 0])
+    var emb = _emb_ref(entries)
+    var handle = _emb_call(emb, EMB_OP_TENSOR_ALLOC, List[Int](), [max(count, 1), 0])
     try:
         if count:
-            _ = _emb_call(entries, EMB_OP_TENSOR_UPLOAD, [Int(py=value._addr)], [handle, count])
+            _ = _emb_call(emb, EMB_OP_TENSOR_UPLOAD, [Int(py=value._addr)], [handle, count])
     except error:
-        _ = _emb_call(entries, EMB_OP_TENSOR_FREE, List[Int](), [handle])
+        _ = _emb_call(emb, EMB_OP_TENSOR_FREE, List[Int](), [handle])
         raise error^
     _ = value^
     return seq_device_make(entries["module"], shape, PythonObject(handle), PythonObject(None), context)
@@ -721,26 +736,27 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
     var accumulate = 0 if grad is None else 1
     if _is_device(dy, context):
         entries = _device_entries(fields, model, context)
+        var emb = _emb_ref(entries)
         var source = _device_snapshot(dy, context)
         if source[0] is not entries["module"] or not same_shape(device_shape(source[1], context), expected):
             raise Error("ValueError: Embedding dy must have ids.shape + (D,) on this layer's binding")
-        var handle = _emb_call(entries, EMB_OP_TENSOR_ALLOC, List[Int](), [max(v * d, 1), 0])
+        var handle = _emb_call(emb, EMB_OP_TENSOR_ALLOC, List[Int](), [max(v * d, 1), 0])
         try:
             if grad is not None:
                 if _is_device(grad, context):
                     var previous = _device_snapshot(grad, context)
                     if previous[0] is not entries["module"] or not same_shape(device_shape(previous[1], context), [v, d]):
                         raise Error("ValueError: Embedding grad must have (V, D) on this layer's binding")
-                    _ = _emb_call(entries, EMB_OP_TENSOR_COPY, List[Int](), [handle, Int(py=previous[2]), v * d])
+                    _ = _emb_call(emb, EMB_OP_TENSOR_COPY, List[Int](), [handle, Int(py=previous[2]), v * d])
                 else:
                     var previous = _float_owned(grad, "grad", context)
                     _require_shape(previous, [v, d], "grad", context)
-                    _ = _emb_call(entries, EMB_OP_TENSOR_UPLOAD, [Int(py=previous._addr)], [handle, v * d])
+                    _ = _emb_call(emb, EMB_OP_TENSOR_UPLOAD, [Int(py=previous._addr)], [handle, v * d])
                     _ = previous^
-            _ = _emb_call(entries, EMB_OP_BACKWARD_DEV, [Int(py=admitted[1])],
+            _ = _emb_call(emb, EMB_OP_BACKWARD_DEV, [Int(py=admitted[1])],
                           [Int(py=source[2]), handle, v, d, t, pad, accumulate, plan])
         except error:
-            _ = _emb_call(entries, EMB_OP_TENSOR_FREE, List[Int](), [handle])
+            _ = _emb_call(emb, EMB_OP_TENSOR_FREE, List[Int](), [handle])
             raise error^
         _ = admitted^
         _ = dy
@@ -770,7 +786,8 @@ def _backward(model: PythonObject, ids: PythonObject, dy: PythonObject, grad: Py
         plan = 0
     if not py_contains(entries, "embedding_backward"):
         raise Error("RuntimeError: this Embedding install has no training entry")
-    _ = _emb_call(entries, EMB_OP_BACKWARD, [dy_address, Int(py=admitted[1]), Int(py=out._addr)], [v, d, t, pad, accumulate, plan])
+    var emb = _emb_ref(entries)
+    _ = _emb_call(emb, EMB_OP_BACKWARD, [dy_address, Int(py=admitted[1]), Int(py=out._addr)], [v, d, t, pad, accumulate, plan])
     _ = admitted^
     _ = gradient^
     _ = dy_pin^
