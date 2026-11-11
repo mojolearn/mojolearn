@@ -120,12 +120,6 @@ def _seed_words(seed):
     return [seed & 0xFFFFFFFF, seed >> 32]
 
 
-def _reduction(reduction):
-    if reduction not in _REDUCTION:
-        raise ValueError("reduction must be 'mean' or 'sum'")
-    return _REDUCTION[reduction]
-
-
 def _axes(axis, name="axis"):
     """[] for None, else the listed axes as integers (Mojo normalizes them)."""
     if axis is None:
@@ -135,15 +129,6 @@ def _axes(axis, name="axis"):
             raise ValueError(f"{name} lists more than {_MAX_RANK} axes")
         return [_int(a, name) for a in axis]  # glue: at most eight axis arguments
     return [_int(axis, name)]
-
-
-def _dims(shape, name="shape", low=None):
-    if isinstance(shape, (int, np.integer)) and not isinstance(shape, bool):
-        shape = (shape,)
-    shape = tuple(shape)
-    if not shape or len(shape) > _MAX_RANK:
-        raise ValueError(f"{name} must have 1 to {_MAX_RANK} dimensions")
-    return [_int(d, name, low) for d in shape]  # glue: at most eight dimension arguments
 
 
 class Session:
