@@ -307,7 +307,8 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var n_rows = Int(py=x.shape[0])
     var encoded = gp_encode_labels(args[3], args[1], context)
     var classes = encoded.classes
-    var codes = encoded.codes^
+    var codes = NativeLabelCodes(0)
+    swap(codes, encoded.codes)
     var n_codes = codes.count()
     if n_codes != n_rows:
         raise Error(String(_NAME) + ": y has " + String(n_codes) + " entries, X has " + String(n_rows) + " rows")
@@ -545,7 +546,9 @@ def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, conte
     var fits = fields["estimators_"]
     for i in range(len(fits)):  # driver-loop: preserve the existing non-fused OVR route
         var latent = _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays, 0)
-        cols.append(latent.scratch.probability^)
+        var probability = List[Float64]()
+        swap(probability, latent.scratch.probability)
+        cols.append(probability^)
     return cols^
 
 
@@ -581,16 +584,17 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var codes = List[Int64]()
     if all_entry:
         var result = _gpc_predict_all(model, ext, fields, gq, 1, context, arrays)
-        codes = result.codes^
+        swap(codes, result.codes)
     elif Int(py=fields["n_classes_"]) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
         var result = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays, 0, True)
-        codes = result.codes^
+        swap(codes, result.codes)
     else:
         var n_star = Int(py=q.shape[0])
         var cols = _gpc_columns(ext, fields, q, context, arrays)
         var combined = _gpc_ovr_combine(ext, cols, n_star, context, False)
-        var codes32 = combined.codes^
+        var codes32 = NativeLabelCodes(0)
+        swap(codes32, combined.codes)
         # `codes32.astype("<i8")`: the exact widening
         codes = List[Int64](length=n_star, fill=0)
         _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)

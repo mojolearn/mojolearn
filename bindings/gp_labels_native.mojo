@@ -12,6 +12,7 @@
 # base binding (`_backend.binding("_mojolearn", "identical")`, `_buffer._native`'s).
 from std.ffi import c_int
 from std.python import Python, PythonObject
+from core.native_label_codes import NativeLabelCodes
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
@@ -281,7 +282,9 @@ def _gp_flat_list_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObjec
 
 def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> NativeTextLabels:
     var result = gp_encode_labels_into[_NativeTextCodes](y, base, context)
-    return NativeTextLabels(result.classes, result.codes.values^)
+    var codes = NativeLabelCodes(0)
+    swap(codes, result.codes.values)
+    return NativeTextLabels(result.classes, codes^)
 
 
 def gp_encode_labels_transport(y: PythonObject, base: PythonObject, context: PythonObject) raises -> ClassicalLabels:
