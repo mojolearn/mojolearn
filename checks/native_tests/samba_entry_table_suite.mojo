@@ -70,8 +70,8 @@ def ref_resolution() raises:
     and a mismatched key refuses at resolution, never at a call."""
     require(entry_ref_same(samba_ref[SAMBA_TABLE_TRAINING](_key()), samba_ref[SAMBA_TABLE_TRAINING](_key())),
             "samba training: a second resolution returned another entry")
-    require(entry_ref_same(samba_ref[SAMBA_TABLE_NEURAL_HOST](SambaEntryKey(1, 0)),
-                           samba_ref[SAMBA_TABLE_NEURAL_HOST](SambaEntryKey(1, 0))),
+    require(entry_ref_same(samba_ref[SAMBA_TABLE_NEURAL_HOST](_key()),
+                           samba_ref[SAMBA_TABLE_NEURAL_HOST](_key())),
             "samba neural host: a second resolution returned another entry")
     try:
         _ = samba_ref[SAMBA_TABLE_TRAINING](SambaEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0))
