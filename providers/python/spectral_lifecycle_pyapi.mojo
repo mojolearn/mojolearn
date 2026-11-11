@@ -32,18 +32,20 @@ def spectral_admit(model: PythonObject, clustering: Bool, replacing: Bool,
         else:
             host_inference_scalar(value, context, True)
     host_inference_scalar(family_raw_get_or(model, "numeric_mode", PythonObject(None)), context, True)
-    var scalars = Python.tuple("_n_clusters", "_n_neighbors", "_n_init", "_eigen_tol", "_gamma", "_seed", "_n_components", "n_features_in_", "input_copied_", "n_components_", "n_iter_assign_", "gamma_", "n_neighbors_", "_mojolearn_fitted", "_mojolearn_fitting")
-    var arrays = Python.tuple("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X", "affinity_matrix_", "embedding_", "labels_", "feature_names_in_")
+    var scalars: List[String] = ["_n_clusters", "_n_neighbors", "_n_init", "_eigen_tol", "_gamma", "_seed", "_n_components", "n_features_in_", "input_copied_", "n_components_", "n_iter_assign_", "gamma_", "n_neighbors_", "_mojolearn_fitted", "_mojolearn_fitting"]
+    var arrays: List[String] = ["_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X", "affinity_matrix_", "embedding_", "labels_", "feature_names_in_"]
     for i in range(len(scalars)):  # driver-loop: consumed learned scalar state
-        if py_contains(fields, scalars[i]):
-            host_inference_scalar(fields[scalars[i]], context, True)
+        var key = PythonObject(scalars[i])
+        if py_contains(fields, key):
+            host_inference_scalar(fields[key], context, True)
             if replacing:
-                native_release_admit(fields[scalars[i]], context)
+                native_release_admit(fields[key], context)
     for i in range(len(arrays)):  # driver-loop: retained fitted buffers, admitted before removal or replacement
-        if py_contains(fields, arrays[i]):
-            classical_admit_value(fields[arrays[i]], context)
+        var key = PythonObject(arrays[i])
+        if py_contains(fields, key):
+            classical_admit_value(fields[key], context)
             if replacing:
-                native_release_admit(fields[arrays[i]], context)
+                native_release_admit(fields[key], context)
     if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
         raise Error("TypeError: spectral fitting depth requires an exact integer")
     var fitted = py_get(fields, "_mojolearn_fitted", PythonObject(False))

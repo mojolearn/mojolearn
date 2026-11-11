@@ -438,7 +438,7 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
                     + "is refused; the Nystrom predict (DEVIATION 2860) carries the "
                     + "'nearest_neighbors' and 'precomputed' affinities only")
     var names: List[String] = ["degree", "coef0", "kernel_params"]
-    var values = Python.list(degree, coef0, kernel_params)
+    var values: List[PythonObject] = [degree, coef0, kernel_params]
     for i in range(3):  # small-loop(parameters: degree, coef0, kernel_params): 3
         if values[i] is not None:
             raise Error("NotImplementedError: mojolearn SpectralClustering: " + names[i] + " is refused; it "
@@ -539,9 +539,9 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         raise Error("TypeError: mojolearn SpectralClustering: prediction_data must be a bool, "
                     + "got " + String(py_type(prediction_data).__name__))
     var predicting = Bool(py=prediction_data)
-    var dropped = Python.tuple("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X")
+    var dropped: List[String] = ["_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X"]
     for i in range(5):  # small-loop(prediction data: the five cached attribute names): 5
-        _ = py_call(fields.pop, dropped[i], PythonObject(None))
+        _ = py_call(fields.pop, PythonObject(dropped[i]), PythonObject(None))
     var clusters = Int(py=family_field(fields, "_n_clusters"))
     var n_components = family_field(fields, "n_components")
     var k = clusters if n_components is None else _int(n_components)
