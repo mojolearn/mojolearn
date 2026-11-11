@@ -78,3 +78,10 @@ findings. `source/` preserves the frozen reviewed sources; `boundary.diff`,
 comparison evidence. Compilation and runtime coverage remain the orchestrator's
 work. No A/B define or bits change was introduced. Nothing was removed by this
 review because product files were read-only.
+
+Subsequent work: the original PCA-R2 finding is addressed by the source repair
+recorded in `docs/plans/DECOMP_RESIDENT_POOL_REPAIR_20261110.md`. PCA-R1 and
+PCA-R3 were assigned to the PCA/TSVD owner; the separate shared exact-size
+scratch-pool defect found during follow-up was assigned to root. These repair
+assignments and source changes do not retroactively turn this frozen source
+review into compilation or runtime evidence.
