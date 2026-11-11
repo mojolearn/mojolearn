@@ -22,6 +22,10 @@ from bindings.family_common import (
     family_call, family_is_str, family_array, FAMILY_F64P, FAMILY_I64P,
 )
 from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer_address
+from bindings.boundary_read import admitted_buffer_view
+from core.boundary_layout import BufferLayout, gather_i64, BOUNDARY_KIND_INT, BOUNDARY_KIND_UINT
+from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
+from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import (
@@ -159,6 +163,74 @@ def _gp_float_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonO
     return result^
 
 
+def _gp_integer_typestr(typestr: String) -> Bool:
+    """Integer storage whose every value is an int64 word: every signed
+    width and the unsigned widths below 64 bits (a uint64 label past int64
+    takes the walk's arbitrary-size-int route, so it keeps the walk)."""
+    return (typestr == "|i1" or typestr == "<i1" or typestr == "<i2" or typestr == "<i4" or typestr == "<i8"
+            or typestr == "|u1" or typestr == "<u1" or typestr == "<u2" or typestr == "<u4")
+
+
+def _gp_integer_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
+    """An integer ndarray or Array that `_gp_buffer_labels` declined (another
+    width, strides, or a matrix shape): read ONCE from its buffer in C order
+    into int64 words (core/boundary_layout.mojo `gather_i64`) and encoded by
+    the same `prepare_targets` call the per-label walk below ends in. That
+    walk boxed every label as an exact Python int (`gp_label_pins` /
+    `_flatten_label_pins`, C order, depth first), admitted it, and read it
+    back into int64 words (`_gp_list_labels`: code 3, as_bool False), one
+    CPython object and three C-API calls per label; this reads the same words
+    with a bounded number of CPython calls (lane thin-unpack-kit, 2026-11-11).
+    Classes, codes and refusals are unchanged. Bool storage (the walk's
+    sorted route), uint64, empty and 0-D targets return None and keep the walk."""
+    var ndarray = py_get(context, "ndarray")
+    var layout: BufferLayout
+    var kind: Int
+    if ndarray is not None and py_type(y) is ndarray:
+        if not _gp_integer_typestr(String(y.dtype.str)):
+            return None
+        # An exact ndarray is a native exporter: one PyObject_GetBuffer.
+        var view = admitted_buffer_view(y)
+        if view.ndim == 0 or view.count() == 0:
+            return None
+        layout = view.layout.copy()
+        kind = view.kind
+        var store = List[Int64](length=layout.count, fill=0)
+        gather_i64(layout, kind, Int(store.unsafe_ptr()))
+        view.release()
+        var result = _gp_prepare[S](Int(store.unsafe_ptr()), 3, layout.count, False, base, context)
+        _ = store^
+        return result^
+    if not classical_is_array(y, context) or not _gp_integer_typestr(String(y.dtype)):
+        return None
+    # A native Array exports through a Python-level __buffer__ property, so
+    # its storage is read from the one metadata snapshot the walk took
+    # (same refusals, same order: `gp_label_pins`).
+    var shape = array_shape_once(y, context)
+    var rank = len(shape)
+    if rank == 0 or rank > 2:
+        return None
+    var snapshot = array_metadata_once(y, shape^, "GP labels", context)
+    var source = snapshot.source
+    var dims = List[Int](length=1, fill=source.rows)
+    var steps = List[Int](length=1, fill=source.s0)
+    if rank == 2:
+        dims.append(source.cols)
+        steps.append(source.s1)
+    var count = source.rows * (source.cols if rank == 2 else 1)
+    if count == 0 or (source.kind != CAST_KIND_SIGNED and source.kind != CAST_KIND_UNSIGNED):
+        return None
+    kind = BOUNDARY_KIND_INT if source.kind == CAST_KIND_SIGNED else BOUNDARY_KIND_UINT
+    layout = BufferLayout(source.addr, count * source.itemsize, source.itemsize, rank, dims^, steps^, True, count)
+    var store = List[Int64](length=count, fill=0)
+    gather_i64(layout, kind, Int(store.unsafe_ptr()))
+    _ = snapshot.keep  # the snapshot's owners hold the storage read above
+    _ = snapshot.owner
+    var result = _gp_prepare[S](Int(store.unsafe_ptr()), 3, count, False, base, context)
+    _ = store^
+    return result^
+
+
 def _gp_list_labels[S: _TextCodeStorage](flat: List[PythonObject], base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     if len(flat) == 0:
         return None
@@ -228,6 +300,11 @@ def gp_encode_labels_into[S: _TextCodeStorage](y: PythonObject, base: PythonObje
     # A strided or matrix-shaped float target: one native buffer read in
     # place of the per-label snapshot and list walk below.
     fast = _gp_float_storage_labels[S](y, base, context)
+    if fast:
+        return fast.take()
+    # An integer target of another width, strides or rank: one buffer read
+    # in place of the per-label snapshot, admission and list walk below.
+    fast = _gp_integer_storage_labels[S](y, base, context)
     if fast:
         return fast.take()
     # perf3-label-doors (2026-11-06): the inputs below skip the snapshot,

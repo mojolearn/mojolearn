@@ -156,6 +156,19 @@ def fixture(unit: Int) raises:
         except:
             refused = True
         require(refused, "boundary_layout refuses float -> int64")
+        # The GP integer label read: an F-order 2x2 int16 matrix -> C-order int64
+        # (the walk's depth-first flatten order), negatives sign-extended.
+        var small: List[Int16] = [-3, 7, 5, -1]
+        var dims: List[Int] = [2, 2]
+        var steps: List[Int] = [2, 4]
+        var matrix = buffer_layout_from_words(_words(Int(small.unsafe_ptr()), 8, 2, 2, Int(dims.unsafe_ptr()),
+                                                     Int(steps.unsafe_ptr())))
+        var flat = List[Int64](length=4, fill=0)
+        gather_i64(matrix, BOUNDARY_KIND_INT, Int(flat.unsafe_ptr()))
+        require(flat[0] == -3 and flat[1] == 5 and flat[2] == 7 and flat[3] == -1, "boundary_layout F-order int16 -> C int64")
+        _ = small^
+        _ = dims^
+        _ = steps^
         _ = data^
         _ = shape^
         _ = strides^

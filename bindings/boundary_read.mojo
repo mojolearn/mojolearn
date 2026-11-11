@@ -11,8 +11,10 @@ UNPACK of a public operation uses these and nothing per element:
     view. A dtype or layout the RUN cannot take is converted ONCE, in Mojo
     (`as_f32_c` / `as_f64_c` / `as_i64_c`); a matching C-order buffer is
     never copied.
-  * `read_int` / `read_index` / `read_float` / `read_float_like` /
-    `read_bool` / `read_str`: one typed C-API read per scalar parameter.
+  * `read_int` / `read_index` / `read_int_like` / `read_float` /
+    `read_float_like` / `read_bool` / `read_str`: one typed C-API read per
+    scalar parameter (`*_like`: the exact `int(x)` / `float(x)` semantics a
+    door that called the builtin had).
   * `read_attr_*` (one `PyObject_GetAttrString` + one read) and
     `read_item_*` (the native exact-dict lookup of
     bindings/native_instance_item.mojo + one read) for an object or a
@@ -38,6 +40,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word
 from bindings.native_instance_item import native_instance_item
+from bindings.optimizer_public_words import stash_python_error
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
 from bindings.classical_arrays import classical_wrap_layout
@@ -90,9 +93,11 @@ def _scalar_types() raises -> UnsafePointer[_ScalarTypeWords, MutUntrackedOrigin
     return words
 
 
-def _pending_error() -> Error:
-    ref cpy = Python().cpython()
-    return cpy.unsafe_get_error()
+def _pending_error() raises -> Error:
+    # The exception the failed C-API call set, stashed and restored
+    # unchanged at the door (the `family_call` convention), so a read keeps
+    # the class and message the builtin call it replaces raised.
+    return stash_python_error()
 
 
 # ------------------------------------------------------------ scalar reads
@@ -119,6 +124,27 @@ def read_index(obj: PythonObject) raises -> Int:
     if not indexed:
         raise _pending_error()
     var owned = PythonObject(from_owned=indexed)
+    var value = t[].PyLong_AsLongLong(owned._obj_ptr)
+    if value == -1 and t[].PyErr_Occurred():
+        raise _pending_error()
+    return Int(value)
+
+
+def read_int_like(obj: PythonObject) raises -> Int:
+    """`int(obj)` exactly (floats truncated, strings parsed, `__int__` /
+    `__index__` / `__trunc__` honored), for a door that called the builtin
+    `int` on a parameter. An exact int is one PyLong_AsLongLong; anything
+    else one PyNumber_Long + one read."""
+    var t = cpython_table()
+    if borrowed_type_word(obj._obj_ptr) == _scalar_types()[].int_word:
+        var direct = t[].PyLong_AsLongLong(obj._obj_ptr)
+        if direct == -1 and t[].PyErr_Occurred():
+            raise _pending_error()
+        return Int(direct)
+    var converted = t[].PyNumber_Long(obj._obj_ptr)
+    if not converted:
+        raise _pending_error()
+    var owned = PythonObject(from_owned=converted)
     var value = t[].PyLong_AsLongLong(owned._obj_ptr)
     if value == -1 and t[].PyErr_Occurred():
         raise _pending_error()
