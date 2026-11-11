@@ -88,10 +88,13 @@ _NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
 
 #: The images whose native callers read a (tier, vendor) key, with the two
 #: probes each exports: x_trees (lane calltable-trees; its glue and DART
-#: tables) and gbdt (lane calltable-gbdt-forest-dart; core/gbdt_entry_table.mojo).
+#: tables), gbdt (lane calltable-gbdt-forest-dart; core/gbdt_entry_table.mojo)
+#: and the two forest images (lane calltable-forest; core/forest_entry_table.mojo).
 _NATIVE_KEYED = {
     "_mojolearn_x_trees": ("x_trees_numeric_mode", "x_trees_vendor", "x_trees_native_key"),
     "_mojolearn_gbdt": ("gbdt_numeric_mode", "gbdt_vendor", "gbdt_native_key"),
+    "_mojolearn_rf": ("rf_numeric_mode", "rf_vendor", "rf_native_key"),
+    "_mojolearn_trees": ("trees_numeric_mode", "trees_vendor", "trees_native_key"),
 }
 
 
