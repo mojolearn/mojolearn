@@ -273,6 +273,7 @@ from transformer.transformer_binding_impl import (
     _transformer_backward_run,
     LM_RESIDENT_GENERATE,
 )
+from transformer.causal_entry_device import publish_causal_transformer_device
 
 
 # ===========================================================================
@@ -1509,6 +1510,9 @@ def build__mojolearn_transformer() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_transformer")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_transformer_device()
         m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
         m.def_function[transformer_vendor_binding]("transformer_vendor")

@@ -141,6 +141,7 @@ from transformer.block_options import (
     BLOCK_OPTION_PARAMS,
     BlockOptions,
 )
+from core.causal_entry_neural_host import publish_causal_neural_host
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -686,6 +687,9 @@ def build__mojolearn_neural_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_neural_host()
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         module.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")

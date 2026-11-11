@@ -295,6 +295,7 @@ from mamba.impl.mamba_shell_impl import (
     _mamba2_backward_run,
     _mamba3_backward_run,
 )
+from mamba.causal_entry_device import publish_causal_mamba_device
 
 
 
@@ -1609,6 +1610,9 @@ def build__mojolearn_mamba() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_mamba_device()
         m.def_function[mamba_vendor_binding]("mamba_vendor")
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
         m.def_function[mamba1_profile_binding]("mamba1_profile")
