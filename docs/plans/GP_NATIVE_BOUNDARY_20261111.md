@@ -180,3 +180,19 @@ Two prepared-only types are registered once in runtime_family_host; neither
 is a model field owner. Cache UNPACK still uses exact builtin dictionary/item
 views transiently and the shared archive-compatible postfix capture; these
 are not passed to RUN. No numerical source changes or lane executions.
+
+GPC fit encoding now returns a typed envelope with the observable class-list
+pin and `NativeLabelCodes` Int32 storage. Numeric preparation calls the v2
+label descriptor on the originally supplied base image; core host now exposes
+the same v2 table over its existing LabelsHostKernels. Numeric class scratch
+and strided floating staging are native lists. Text encoding shares its
+existing hash/stable-sort implementation with a storage parameter: ordinary
+GP calls own native codes, while legacy/shared callers and worker transport
+write directly into exporter-backed Arrays. This introduces no transport
+staging copy. The old fast text code-copy loop becomes a bulk copy for the
+legacy Array output; native output takes the existing code list directly.
+The general class-order path reuses the existing native dictionary code
+writer, removing Python map/list code reconstruction. Class comparison,
+first-label retention, admitted inputs and sorting routes remain unchanged.
+Decode table/state cleanup is the next bounded follow-up; no full-family
+completion or runtime result is claimed by this encoding chunk.

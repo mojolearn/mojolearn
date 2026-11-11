@@ -26,8 +26,8 @@ from bindings.archive_schema_native import _schema_label_store
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import (
     _flatten_labels,
-    _text_buffer_labels as classical_text_buffer_labels,
-    _text_list_labels as classical_text_list_labels,
+    ClassicalLabels, NativeTextLabels, _TextCodeStorage, _TextLabels, _PythonTextCodes, _NativeTextCodes,
+    _text_buffer_labels_into, _text_list_labels_into,
 )
 from bindings.label_input_sources import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
 from bindings.perf3_label_doors_text import labels_all_exact_str
@@ -35,6 +35,9 @@ from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
+from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
+from bindings.p3_labels_metrics_native import p3_dict_codes
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 
@@ -56,47 +59,36 @@ def _gp_native_code(typestr: String) -> Int:
     return -1
 
 
-def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObject,
-                context: PythonObject) raises -> PythonObject:
-    """`_labels.prepare_targets(labels, None, n)` plus `classes.tolist()`:
-    (the k sorted classes as a Python list, the n int32 codes)."""
+def _gp_prepare[S: _TextCodeStorage](address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObject,
+                context: PythonObject) raises -> _TextLabels[S]:
     var wide = code == 0 or code == 1
-    var classes = family_array(Python.tuple(n), String("<f8") if wide else String("<i8"), context)
-    var codes = family_array(Python.tuple(n), "<i4", context)
-    var entry = neural_descriptor_entry(base, "prepare_targets")
+    var classes = List[UInt64](length=n, fill=0)
+    var codes = S(n, context)
+    var connection = GPLabelsConnection(base)
+    var request = LabelsPrepareRequest(address, Int(classes.unsafe_ptr()), codes.address(), 0, code, n, 0, 0)
     var k: Int
     try:
-        k = Int(py=py_call(entry, PythonObject(address), PythonObject(code), PythonObject(n),
-                           classical_address(classes), classical_address(codes), PythonObject(0),
-                           PythonObject(0), PythonObject(0)))
-        _ = codes  # keep the Python object alive through the native call above
-        _ = classes  # keep the Python object alive through the native call above
+        k = gp_labels_prepare(connection, request)
+        _ = codes
+        _ = classes
     except error:
         if String(error).find("NaN label") != -1:
             raise Error(String(_NAN_LABEL))
         raise Error(String(error))
     var values = Python.list()
     if wide:
-        var fp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(classes)))
-        _ = classes  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the distinct classes
+        var fp = FAMILY_F64P(unsafe_from_address=Int(classes.unsafe_ptr()))
+        for i in range(k):  # driver-loop: PACK only the distinct observable class objects
             _ = py_call(values.append, PythonObject(fp[i]))
-            _ = classes  # keep the Python object alive through the native call above
     else:
-        var ip = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(classes)))
-        _ = classes  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the distinct classes
-            if as_bool:
-                _ = py_call(values.append, PythonObject(Bool(ip[i] != 0)))
-                _ = classes  # keep the Python object alive through the native call above
-            else:
-                _ = py_call(values.append, PythonObject(Int(ip[i])))
-                _ = classes  # keep the Python object alive through the native call above
-    _ = classes^
-    return Python.tuple(values, codes)
+        var ip = FAMILY_I64P(unsafe_from_address=Int(classes.unsafe_ptr()))
+        for i in range(k):  # driver-loop: PACK distinct classes in the original native sort order
+            _ = py_call(values.append, PythonObject(Bool(ip[i] != 0)) if as_bool else PythonObject(Int(ip[i])))
+    _ = classes
+    return _TextLabels[S](values, codes^, n)
 
 
-def _gp_buffer_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gp_buffer_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """`_encode_labels_native(y)`: a C-ordered numeric vector Array or ndarray
     through `prepare_targets`, or None for what the label input step reads
     (a list, a strided or non-native buffer, a matrix, an empty vector: every
@@ -105,24 +97,24 @@ def _gp_buffer_labels(y: PythonObject, base: PythonObject, context: PythonObject
     var ndarray = py_get(context, "ndarray")
     var is_array = classical_is_array(y, context)
     if not is_array and (ndarray is None or not (ty is ndarray)):
-        return PythonObject(None)
+        return None
     var typestr = String(y.dtype) if is_array else String(y.dtype.str)
     var code = _gp_native_code(typestr)
     var size = Int(py=y.size)
     if code < 0 or size == 0:
-        return PythonObject(None)
+        return None
     var contiguous = (String(y.order) == "C" or Int(py=y.ndim) < 2) if is_array else Bool(py=y.flags.c_contiguous)
     if not contiguous:
-        return PythonObject(None)
+        return None
     var longest = 0
     for k in range(len(y.shape)):  # driver-loop: over array rank metadata
         longest = max(longest, Int(py=y.shape[k]))
     if size != longest:
-        return PythonObject(None)
-    return _gp_prepare(Int(py=classical_address(y)), code, size, typestr == "|b1", base, context)
+        return None
+    return _gp_prepare[S](Int(py=classical_address(y)), code, size, typestr == "|b1", base, context)
 
 
-def _gp_float_storage_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gp_float_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """A float32/float64 ndarray or Array of any rank and strides whose every
     label is finite (`labels_float_storage`, one native pass): the labels read
     straight from the buffer in C order into one float64 vector and encoded by
@@ -133,7 +125,7 @@ def _gp_float_storage_labels(y: PythonObject, base: PythonObject, context: Pytho
     NaN or infinity, another dtype or class), which keeps the label input
     step and its refusals."""
     if labels_float_storage(y, context, integral=False) != 0:
-        return PythonObject(None)
+        return None
     var ndarray = py_get(context, "ndarray")
     var wide: Bool
     var address: Int
@@ -154,44 +146,44 @@ def _gp_float_storage_labels(y: PythonObject, base: PythonObject, context: Pytho
         strides.append(Int(py=pystrides[k]))
         total *= shape[k]
     if total == 0:
-        return PythonObject(None)
-    var store = family_array(Python.tuple(total), "<f8", context)
+        return None
+    var store = List[Float64](length=total, fill=0.0)
     # The caller's target owns the buffer read here; `store` is new storage.
-    label_float_gather_f64(address, wide, shape, strides, Int(py=classical_address(store)))
+    label_float_gather_f64(address, wide, shape, strides, Int(store.unsafe_ptr()))
     _ = y  # the caller's target owns the buffer read above
-    var result = _gp_prepare(Int(py=classical_address(store)), 1, total, False, base, context)
+    var result = _gp_prepare[S](Int(store.unsafe_ptr()), 1, total, False, base, context)
     _ = store^
-    return result
+    return result^
 
 
-def _gp_list_labels(flat: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """`_encode_label_list_native`: a flat list of exact ints (within int64)
     or exact floats through `prepare_targets`, else None."""
     var b = native_loaded_module("builtins")
     if len(flat) == 0:
-        return PythonObject(None)
+        return None
     var kinds = py_call(b.set, py_call(b.map, b.type, flat))
     if len(kinds) != 1:
-        return PythonObject(None)
+        return None
     var code = String("")
     if py_contains(kinds, b.int):
         code = "q"
     elif py_contains(kinds, b.float):
         code = "d"
     else:
-        return PythonObject(None)
+        return None
     var store = PythonObject(None)
     try:
         store = py_call(context["array_type"], PythonObject(code), flat)
     except:
-        return PythonObject(None)  # an int outside int64: a class only Python can hold
+        return None  # an int outside int64: a class only Python can hold
     var address = Int(py=py_call(store.buffer_info)[0])
-    var result = _gp_prepare(address, 3 if code == "q" else 1, len(flat), False, base, context)
+    var result = _gp_prepare[S](address, 3 if code == "q" else 1, len(flat), False, base, context)
     _ = store^
-    return result
+    return result^
 
 
-def _gp_sorted_classes(labels: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: PythonObject) raises -> _TextLabels[S]:
     """`sorted_classes(labels)` with codes as an int32 Array: the first of
     equal labels kept, the classes sorted by Python's own comparison."""
     var b = native_loaded_module("builtins")
@@ -216,21 +208,25 @@ def _gp_sorted_classes(labels: PythonObject, context: PythonObject) raises -> Py
         raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
     var classes = family_call(b.sorted, py_call(b.dict.fromkeys, labels))
     var table = py_call(b.dict, py_call(b.zip, classes, py_call(b.range, PythonObject(len(classes)))))
-    var codes = family_call(b.list, py_call(b.map, py_attr(table, "__getitem__"), labels))
-    return Python.tuple(classes, _schema_label_store(codes, "i", "<i4", context))
+    if len(classes) > 2147483648:
+        raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
+    var codes = S(len(labels), context)
+    p3_dict_codes(table, labels, codes.address(), -1)
+    _ = labels
+    return _TextLabels[S](classes, codes^, len(labels))
 
 
-def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+def gp_encode_labels_into[S: _TextCodeStorage](y: PythonObject, base: PythonObject, context: PythonObject) raises -> _TextLabels[S]:
     """`_labels.encode_labels(y)`: (classes list, int32 codes Array)."""
     classical_admit_value(y, context)
-    var fast = _gp_buffer_labels(y, base, context)
-    if fast is not None:
-        return fast
+    var fast = _gp_buffer_labels[S](y, base, context)
+    if fast:
+        return fast.take()
     # A strided or matrix-shaped float target: one native buffer read in
     # place of the per-label snapshot and list walk below.
-    fast = _gp_float_storage_labels(y, base, context)
-    if fast is not None:
-        return fast
+    fast = _gp_float_storage_labels[S](y, base, context)
+    if fast:
+        return fast.take()
     # perf3-label-doors (2026-11-06): the inputs below skip the snapshot,
     # flatten and per-label admission, each with the classes, codes and
     # refusals the walk gives it, so no bits change.
@@ -241,36 +237,34 @@ def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject)
     if stored is not None and stored is not y and py_type(stored) is py_get(context, "ndarray"):
         var kind = String(stored.dtype.kind)
         if kind == "i" or kind == "u" or kind == "b" or kind == "f":
-            return gp_encode_labels(stored, base, context)
+            return gp_encode_labels_into[S](stored, base, context)
     # An exact flat list / tuple of exact ints, floats or bools.
-    fast = _gp_flat_list_labels(y, base, context)
-    if fast is not None:
-        return fast
+    fast = _gp_flat_list_labels[S](y, base, context)
+    if fast:
+        return fast.take()
     # An exact '<U' ndarray: UCS4 read from its buffer, native stable sort
     # by code point (Python's str order), the first of equal labels kept.
-    var text = classical_text_buffer_labels(y, context)
+    var text = _text_buffer_labels_into[S](y, context)
     if text:
         # a local copy first, as trees_public_score.mojo:352 (pass 2, C7)
-        var found = text.value().copy()
-        return Python.tuple(found.classes, found.codes)
+        return text.take()
     var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y
     var flat = _flatten_labels(source, context)
     classical_admit_value(flat, context)
-    fast = _gp_list_labels(flat, base, context)
-    if fast is not None:
-        return fast
+    fast = _gp_list_labels[S](flat, base, context)
+    if fast:
+        return fast.take()
     # A flat list of exact str labels (subclasses and NumPy str_ keep the
     # ORDER RULE below): the native str reader's code-point order and
     # first-of-run classes are the ORDER RULE's.
     if labels_all_exact_str(flat):
-        var named = classical_text_list_labels(flat, context)
+        var named = _text_list_labels_into[S](flat, context)
         if named:
-            var found = named.value().copy()
-            return Python.tuple(found.classes, found.codes)
-    return _gp_sorted_classes(flat, context)
+            return named.take()
+    return _gp_sorted_classes[S](flat, context)
 
 
-def _gp_flat_list_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gp_flat_list_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """An exact flat list or tuple of exact ints, exact floats or exact bools
     (`labels_list_scalar_kind`, one class-pointer read per label through the
     container's C storage) through one `prepare_targets` call, else None.
@@ -281,17 +275,29 @@ def _gp_flat_list_labels(y: PythonObject, base: PythonObject, context: PythonObj
     walk then encodes or refuses it as before)."""
     var kind = labels_list_scalar_kind(y)
     if kind == LABELS_LIST_OTHER:
-        return PythonObject(None)
+        return None
     var code = String("d") if kind == LABELS_LIST_FLOAT else String("q")
     var store = PythonObject(None)
     try:
         store = py_call(context["array_type"], PythonObject(code), y)
     except:
-        return PythonObject(None)
+        return None
     var address = Int(py=py_call(store.buffer_info)[0])
-    var result = _gp_prepare(address, 1 if kind == LABELS_LIST_FLOAT else 3, len(y), kind == LABELS_LIST_BOOL, base, context)
+    var result = _gp_prepare[S](address, 1 if kind == LABELS_LIST_FLOAT else 3, len(y), kind == LABELS_LIST_BOOL, base, context)
     _ = store^
-    return result
+    return result^
+
+
+def gp_encode_labels(y: PythonObject, base: PythonObject, context: PythonObject) raises -> NativeTextLabels:
+    var result = gp_encode_labels_into[_NativeTextCodes](y, base, context)
+    return NativeTextLabels(result.classes, result.codes.values^)
+
+
+def gp_encode_labels_transport(y: PythonObject, base: PythonObject, context: PythonObject) raises -> ClassicalLabels:
+    # Worker transport needs an owning exporter; write directly into it with
+    # the same encoder, without a native-to-Array staging copy.
+    var result = gp_encode_labels_into[_PythonTextCodes](y, base, context)
+    return ClassicalLabels(result.classes, result.codes.values, result.count)
 
 
 def _gp_number_kind(value: PythonObject, context: PythonObject) raises -> Int:

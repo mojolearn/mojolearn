@@ -58,7 +58,7 @@ from bindings.gp_classifier_native import (
     gpc_validate, _gpc_fit_binary, _gpc_binary, _gpc_set_fitted, _gpc_latent, _gpc_ovr_combine,
 )
 from bindings.gp_common_native import gp_kernel_arrays_transport
-from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
+from bindings.gp_labels_native import gp_encode_labels_transport, gp_decode_labels
 from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
@@ -359,9 +359,9 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var source = admit_family(args[1], 2, "X", context).array
     var copied = not (source is args[1])
     var x = source
-    var encoded = gp_encode_labels(args[2], _worker_binding("_mojolearn"), context)
-    var classes = encoded[0]
-    var codes = encoded[1]
+    var encoded = gp_encode_labels_transport(args[2], _worker_binding("_mojolearn"), context)
+    var classes = encoded.classes
+    var codes = encoded.codes
     if Int(py=codes.size) != Int(py=x.shape[0]):
         raise Error("ValueError: y length differs from X rows")
     if len(classes) < 2:

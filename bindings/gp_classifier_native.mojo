@@ -11,6 +11,7 @@
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
 from core.gp_native_api import GPCFitRequest, GPCFitAllRequest, GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest
+from core.native_label_codes import NativeLabelCodes
 from core.gp_native_storage import GPCQueryScratch
 from core.gp_native_storage import GPCMemberTables, GPCQueryTables
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run
@@ -168,7 +169,7 @@ struct GPCCombinedResult(Movable):
     var codes: PythonObject
 
 
-def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
+def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes, arrays: PythonObject,
                  max_iter: Int, columns: List[Int], context: PythonObject) raises -> PythonObject:
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
@@ -188,7 +189,7 @@ def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays
         pins.append(GPCMemberPins(y01, factor, pi, wsr))
     var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
-    var request = GPCFitAllRequest(Int(py=classical_address(x)), Int(py=classical_address(codes)),
+    var request = GPCFitAllRequest(Int(py=classical_address(x)), codes.address(),
         Int(tables.columns.unsafe_ptr()), Int(tables.targets.unsafe_ptr()), Int(tables.factors.unsafe_ptr()),
         Int(tables.pis.unsafe_ptr()), Int(tables.wsrs.unsafe_ptr()), Int(tables.scalars.unsafe_ptr()),
         n_rows, n_cols, kernel^, max_iter, len(columns))
@@ -204,7 +205,22 @@ def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays
     return fits
 
 
+def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes, arrays: PythonObject,
+                    max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    var answer = _gpc_fit_binary_address(ext, x, codes.address(), arrays, max_iter, k, context)
+    _ = codes
+    return answer
+
+
 def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
+                    max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    # UNPACK of the existing worker transport Array.
+    var answer = _gpc_fit_binary_address(ext, x, Int(py=classical_address(codes)), arrays, max_iter, k, context)
+    _ = codes
+    return answer
+
+
+def _gpc_fit_binary_address(ext: PythonObject, x: PythonObject, codes: Int, arrays: PythonObject,
                     max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
     # The worker transport enters here too; unpack its exact public storage.
     var n_rows = Int(py=x.shape[0])
@@ -216,7 +232,7 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
     var scalars = List[Float64](length=3, fill=0.0)
     var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
-    var request = GPCFitRequest(Int(py=classical_address(x)), Int(py=classical_address(codes)),
+    var request = GPCFitRequest(Int(py=classical_address(x)), codes,
         Int(py=classical_address(factor)), Int(py=classical_address(pi)), Int(py=classical_address(wsr)),
         Int(scalars.unsafe_ptr()), n_rows, n_cols, kernel^, max_iter, True, k,
         Int(py=classical_address(y01)))
@@ -283,9 +299,9 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = source^
     var n_rows = Int(py=x.shape[0])
     var encoded = gp_encode_labels(args[3], args[1], context)
-    var classes = encoded[0]
-    var codes = encoded[1]
-    var n_codes = Int(py=codes.size)
+    var classes = encoded.classes
+    var codes = encoded.codes^
+    var n_codes = codes.count()
     if n_codes != n_rows:
         raise Error(String(_NAME) + ": y has " + String(n_codes) + " entries, X has " + String(n_rows) + " rows")
     var n_classes = len(classes)
