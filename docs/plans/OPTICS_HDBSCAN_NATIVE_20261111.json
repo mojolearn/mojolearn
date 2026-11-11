@@ -1,0 +1,164 @@
+{
+  "baseline": "eee8fa67b4",
+  "status": "before-source inventory; all roles pending implementation",
+  "roles": [
+    {
+      "id": 1,
+      "family": "OPTICS",
+      "role": "metric code/pair tuple",
+      "before": "bindings/cluster_fit_a_native.mojo:499",
+      "after": "pending"
+    },
+    {
+      "id": 2,
+      "family": "OPTICS",
+      "role": "fit integer option list",
+      "before": "bindings/cluster_fit_a_native.mojo:581",
+      "after": "pending"
+    },
+    {
+      "id": 3,
+      "family": "OPTICS",
+      "role": "fit floating option list",
+      "before": "bindings/cluster_fit_a_native.mojo:584",
+      "after": "pending"
+    },
+    {
+      "id": 4,
+      "family": "OPTICS",
+      "role": "nested fit result envelope",
+      "before": "bindings/cluster_fit_a_native.mojo:585",
+      "after": "pending"
+    },
+    {
+      "id": 5,
+      "family": "HDBSCAN fit",
+      "role": "fit address list",
+      "before": "bindings/cluster_fit_a_native.mojo:777",
+      "after": "pending"
+    },
+    {
+      "id": 6,
+      "family": "HDBSCAN fit",
+      "role": "fit parameter list",
+      "before": "bindings/cluster_fit_a_native.mojo:852",
+      "after": "pending"
+    },
+    {
+      "id": 7,
+      "family": "HDBSCAN fit",
+      "role": "private fit info Array",
+      "before": "bindings/cluster_fit_a_native.mojo:774",
+      "after": "pending"
+    },
+    {
+      "id": 8,
+      "family": "HDBSCAN fit",
+      "role": "oversized condensed-tree scratch Arrays before public heads",
+      "before": "bindings/cluster_fit_a_native.mojo:792",
+      "after": "pending"
+    },
+    {
+      "id": 9,
+      "family": "HDBSCAN prediction preparation",
+      "role": "prediction address list",
+      "before": "bindings/cluster_fit_a_native.mojo:933",
+      "after": "pending"
+    },
+    {
+      "id": 10,
+      "family": "HDBSCAN prediction preparation",
+      "role": "prediction parameter list",
+      "before": "bindings/cluster_fit_a_native.mojo:937",
+      "after": "pending"
+    },
+    {
+      "id": 11,
+      "family": "HDBSCAN prediction preparation",
+      "role": "private full-capacity exemplar scratch before public head",
+      "before": "bindings/cluster_fit_a_native.mojo:911",
+      "after": "pending"
+    },
+    {
+      "id": 12,
+      "family": "HDBSCAN query",
+      "role": "cached query payload list/tuple",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:335",
+      "after": "pending"
+    },
+    {
+      "id": 13,
+      "family": "HDBSCAN query",
+      "role": "approximate-predict address list",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:259",
+      "after": "pending"
+    },
+    {
+      "id": 14,
+      "family": "HDBSCAN query",
+      "role": "approximate-predict parameter list",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:262",
+      "after": "pending"
+    },
+    {
+      "id": 15,
+      "family": "HDBSCAN query",
+      "role": "soft-membership tree address list",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:280",
+      "after": "pending"
+    },
+    {
+      "id": 16,
+      "family": "HDBSCAN query",
+      "role": "soft-membership full address list",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:288",
+      "after": "pending"
+    },
+    {
+      "id": 17,
+      "family": "HDBSCAN query",
+      "role": "soft-membership parameter list",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:300",
+      "after": "pending"
+    },
+    {
+      "id": 18,
+      "family": "HDBSCAN constructor boundary",
+      "role": "replacement-value staging list",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:45",
+      "after": "pending"
+    }
+  ],
+  "scope_counts": {
+    "candidate_distinct_roles": 18,
+    "completed": 0,
+    "new_runtime_instance_count": "not inferred"
+  },
+  "public_calls": {
+    "OPTICS.fit/fit_predict": "Python surface -> cluster_fit_a_operation -> _optics_fit -> x_cluster ENTRY_OPTICS -> optics_graph + optics_xi_ops or optics_dbscan_ops",
+    "OPTICS query": "No learned out-of-sample query; public fitted attributes and existing fit_predict are retained",
+    "HDBSCAN.fit/fit_predict": "Python single _NATIVE call -> hdbscan_public_operation lifecycle -> cluster_fit_a_operation -> _hdbscan_fit -> separate _mojolearn_hdbscan or _mojolearn_hdbscan_host fit provider; optional generate_prediction_data",
+    "HDBSCAN approximate_predict/membership_vector/all_points_membership_vectors": "Python single _NATIVE call -> hdbscan_public_operation/_inference -> matching separate GPU/host/infer_host provider"
+  },
+  "preserve": [
+    "Exact tuned x_cluster OPTICS algorithms and separate HDBSCAN hdbscan/impl algorithms; no relocation or substitution",
+    "Current HDBSCAN host input snapshot copies and prediction-input copies before GIL release",
+    "All published outputs plus observable _prediction_data dictionary and Array fields, _raw_data copy-on-borrow, mutation/serialization and query key invalidation",
+    "Exact provider routes, validation order, zero-cluster/empty-query switches, batching and mode checks",
+    "Existing numerical Python workload coverage until native replacement is accepted"
+  ],
+  "retained_boundary_owners": [
+    "HDBSCAN labels_, core_distances_, probabilities_",
+    "HDBSCAN _prediction_data dictionary and its published Array values",
+    "HDBSCAN _raw_data immutable-copy policy",
+    "OPTICS core_distances_, reachability_, ordering_, predecessor_, labels_, optional cluster_hierarchy_"
+  ],
+  "deduplication": "No previously counted MeanShift/AP/variants shared nearest-query or resident roles counted here. HDBSCAN-specific transport must be independently mapped before completion. Boundary constructor staging is separated from numerical state.",
+  "original_workloads": [
+    "python/mojolearn/tests/test_x_cluster_twice.py (OPTICS original workload retained)",
+    "python/mojolearn/tests/test_hdbscan_surface.py (fit, prediction, membership, edge/refusal oracles retained)",
+    "python/mojolearn/tests/test_hdbscan_host_lifetime.py (large host ownership workload retained; no development identity run)"
+  ],
+  "compiled": false,
+  "executed": false
+}
