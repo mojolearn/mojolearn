@@ -137,7 +137,7 @@ def case_qn_fit(entry: NativeDescriptorCall) raises:
     var y: List[Float32] = [2.0, 4.0, 2.0, 4.0]
     var w = List[Float32](length=2, fill=-7.0)
     var info = List[Float32](length=2, fill=-7.0)
-    var status = List[Int32](length=1, fill=7)
+    var status = List[Int32](length=1, fill=0)
     var request = QnFitRequest(_addr(x), _addr(y), _addr(w), _addr(info), 0, Int(status.unsafe_ptr()),
         4, 2, 1, 200, 50, 5, False, True, _QN_LOSS_SQUARED, 0.0, 0.0, 1e-7, 1e-9, 0.0)
     var iterations = QnNativeDriver(entry).fit(request)
