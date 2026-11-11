@@ -140,6 +140,7 @@ check-native-linalg-numerical-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 check-native-pca-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_contract.mojo"
 check-native-pca-query-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_query_state.mojo"
 check-native-tsvd-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_contract.mojo"
+check-native-device-concurrency = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/native_device_concurrency.mojo"
 check-native-tsvd-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_native_cpu.mojo"
 check-native-tsvd-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_native_gpu.mojo"
 check-native-pca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/pca_native_cpu.mojo"
