@@ -463,6 +463,11 @@ them for you.
   keyword length/fill, or explicit appends. Positional `List[T](a, b, ...)` is not supported.
   A one-element native shape uses `List[Int](length=1, fill=n)`; `List[Int](n)` is not a
   one-element list. Never pass the compiler-internal `__list_literal__` keyword directly.
+- `PyObjectPtr` is an opaque CPython wrapper, not a `Pointer`; it has no
+  `unsafe_from_address` initializer. Native owner inspectors use
+  `borrowed_native_owner` in `bindings/native_owner_registry.mojo`, which uses
+  the supported `upcast_from=Optional(pointer)` constructor and retains the
+  borrowed Python reference. Keep the original owner pinned through inspection.
 
 ## Logs and context
 

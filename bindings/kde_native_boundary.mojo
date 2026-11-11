@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """KDE admission/packing and lifetime pins around a Python-free native driver."""
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased, PyObjectPtr
+from bindings.native_owner_registry import borrowed_native_owner
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.classical_arrays import classical_wrap_layout
 from bindings.native_array_storage import native_array_zeros
@@ -114,7 +115,7 @@ def kde_resident_owner_pins(value: Int, index: Int) abi("C") -> Int:
     if value == 0 or index < -1 or index >= 3:
         return -1
     try:
-        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var owner = borrowed_native_owner(value)
         var native = owner.downcast_value_ptr[KDEResidentOwner]()
         var result = 3
         if index == 0:
