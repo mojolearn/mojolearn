@@ -9,11 +9,11 @@
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
 from bindings.base_helpers_released import base_reduce_stat_int
-from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_get, py_fields, py_contains
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import (
-    trees_builtins, trees_table, trees_entry, trees_helper,
+    trees_builtins, trees_table, trees_entry,
     trees_address, trees_cast, trees_decode_labels,
 )
 from bindings.admitted_input import admit_f32, admitted_vector
@@ -21,10 +21,9 @@ from core.host_finite_scan import host_all_finite_f32
 # TOMBSTONE: trees_f32 / trees_all_finite / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_score import (
-    trees_accuracy, trees_r2, trees_shape_of, trees_sample_weight_f32, ScoreLabels, _classification_encoded,
-    _metrics_mode, trees_accuracy_labels,
+    trees_r2, trees_shape_of, trees_sample_weight_f32, _metrics_mode, trees_class_codes,
 )
-from bindings.classical_labels import classical_score_from_codes
+from bindings.classical_labels import classical_score_from_codes, _classification_encoded as labels_classification_encoded
 from bindings.trees_public_gbdt import _adapter_fitted, adapter_codes, adapter_decision_function
 from bindings.trees_public_boost import boost_operation, boost_kind, boost_predict_codes
 
@@ -103,38 +102,10 @@ def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> Pyt
     return out
 
 
-def _vocabulary_codes(target: ScoreLabels, var classes: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_label_map(target, vocabulary.get(label, -1))`: each label's index in
-    the fitted `classes_`, -1 for a label outside them; one lookup per class
-    and the base binding's gather for encoded labels."""
-    var b = trees_builtins()
-    classes = classifier_label_list(classes, context)
-    var vocabulary = Python.dict()
-    for i in range(len(classes)):  # driver-loop: over the fitted classes (the binary vocabulary)
-        py_setitem(vocabulary, classes[i], PythonObject(i))
-    if target.encoded:
-        var k = len(target.classes)
-        var table = admitted_vector(k, "<i4", context)
-        var p = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
-        _ = table  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the distinct target classes
-            p[i] = Int32(Int(py=py_call(vocabulary.get, target.classes[i], PythonObject(-1))))
-            _ = table  # keep the Python object alive through the native call above
-        var out = admitted_vector(target.n, "<i4", context)
-        _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
-                          PythonObject(trees_address(target.codes)), PythonObject(target.n),
-                          PythonObject(trees_address(out)))
-        _ = table  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        return out
-    var n = len(target.values)
-    var out = admitted_vector(n, "<i4", context)
-    var q = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: Python object labels mapped per row, the explicit label input step
-        q[i] = Int32(Int(py=py_call(vocabulary.get, target.values[i], PythonObject(-1))))
-        _ = out  # keep the Python object alive through the native call above
-    return out
+# Lane loops-trees-ab (2026-11-11): `_vocabulary_codes` (a dict lookup per row
+# for unencoded labels, through the trees score's private label copy) is
+# `trees_class_codes` (bindings/trees_public_score.mojo): one lookup per
+# distinct label, the per-row codes native. Code recoverable at bf33328698.
 
 
 def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -148,10 +119,11 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
     var fields = py_fields(model)
     var mode = fields["numeric_mode_"]
     if py_contains(fields, "classes_"):
-        var target = _classification_encoded(y, "y", context)
+        var target = labels_classification_encoded(y, "y", context)
         if not Bool(py=PythonObject(target.kind) == fields["_label_kind_"]):
             raise Error("TypeError: score labels must have the training label type")
-        var encoded = _vocabulary_codes(target, fields["classes_"], context)
+        var encoded = trees_class_codes(target, classifier_label_list(fields["classes_"], context), context)
+        _ = target^
         var predicted = adapter_codes(model, X, context)
         var n = Int(py=encoded.size)
         var m = Int(py=predicted.size)
