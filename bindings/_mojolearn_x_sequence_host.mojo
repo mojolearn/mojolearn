@@ -32,6 +32,7 @@ from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from sequence.opt_entry_host import publish_seq_opt_host_entries
 from sequence.exec import HostExec
 from providers.python.sequence_opt_public_host_pyapi import (
     seq_optimizer_init_host_py,
@@ -804,6 +805,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")
         m.def_py_c_function(graph_record_c, "ops_graph_record")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_host_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))

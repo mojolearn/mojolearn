@@ -27,6 +27,7 @@ from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, 
 from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from sequence.opt_entry_device import publish_seq_opt_entries
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
 from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
@@ -976,6 +977,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
             m.def_function[moe_forward_dev_alloc_binding]("moe_forward_dev_alloc")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))
