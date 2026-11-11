@@ -1,331 +1,245 @@
 # SPDX-License-Identifier: Apache-2.0
-# KernelPCA's native operations (dispatched by bindings/decomp_native.mojo):
-# fit's refusals, X converted once, the kernel matrix and its centering on
-# the x_neighbors entries the shell called (xn_kernel, xn_colsum,
-# xn_scale_div, xn_kpca_center; the same arguments in the same order), then
-# one compiled decomp driver for the eigenpairs (x_decomp/kpca_owner.mojo:
-# x_decomp_kpca_eig, with the FAST Apple resident kernel route the binding
-# reports); transform's fused (or itemized) x_neighbors chain. Same bits.
+"""KernelPCA UNPACK/PACK around typed fit, eigen and query plans."""
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from core.neighbors_native_driver import XnDriver
-from core.kpca_native_plan import KPCANeighborDriver, kpca_fit_global_mean
-from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
-from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address
-from bindings.admitted_input import admit_x
-from bindings.decomp_inputs import decomp_input
-from bindings.entries_verified import entries_verified, entries_mark_verified
-from bindings.decomp_owner_common import (
-    F32P, decomp_attr, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_repr,
+from bindings.classical_arrays import classical_address, classical_typed_native
+from bindings.admitted_input import AdmittedX, admit_f32
+from bindings.decomp_inputs import decomp_admit
+from bindings.decomp_owner_common import F32P, decomp_attr
+from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
+from bindings.decomp_scalar_compare import decomp_name_admitted
+from bindings.decomp_truth_boundary import decomp_truth
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from core.kpca_native_api import KPCAEigenRequest
+from core.kpca_native_plan import (
+    KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCAScratch, KPCADenseFit,
+    KPCAFitPrepareRequest, KPCAAlphaRequest, KPCAQueryRequest, KPCA_PRECOMPUTED, kpca_shape,
+)
+from bindings.kpca_descriptor_boundary import (
+    kpca_near_connection, kpca_decomp_connection, kpca_resident,
+    kpca_run_prepare, kpca_run_eigen, kpca_run_alpha, kpca_run_fused, kpca_run_centered, kpca_run_finish,
 )
 
 
+def _field(fields: PythonObject, name: String) raises -> PythonObject:
+    lifecycle_admit_fields(fields)
+    return fields[PythonObject(name)]
+
+
+def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
+    lifecycle_admit_fields(fields)
+    return decomp_attr(model, fields, name)
+
+
+def _int(value: PythonObject, context: PythonObject) raises -> Int:
+    decomp_scalar_admit(value, context)
+    return Int(py=py_call(native_loaded_module("builtins").int, value))
+
+
+def _float(value: PythonObject, context: PythonObject) raises -> Float64:
+    decomp_scalar_admit(value, context)
+    return Float64(py=py_call(native_loaded_module("builtins").float, value))
+
+
+def _name(value: PythonObject, name: String, context: PythonObject) raises -> Bool:
+    decomp_scalar_admit(value, context)
+    return decomp_name_admitted(value, name)
+
+
 def _f32_scalar(value: Float64) -> Float64:
-    """`_f32_scalar`: a double rounded once to float32."""
     return Float64(Float32(value))
 
 
-def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    # NumericModeMixin's `numeric_mode` as `_backend.binding` resolves it.
-    var b = native_loaded_module("builtins")
+def _f32(rows: Int, cols: Int, context: PythonObject, vector: Bool = False) raises -> PythonObject:
+    return classical_typed_native(kpca_shape(rows, cols, vector), "<f4", context["output_context"])
+
+
+def _address(value: PythonObject) raises -> Int:
+    return Int(py=classical_address(value))
+
+
+def _mode(fields: PythonObject, context: PythonObject) raises -> String:
+    lifecycle_admit_fields(fields)
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
+    if py_type(mode) is not py_type(PythonObject("")):
         raise Error("numeric_mode must be fast, identical or None")
-    # The exact spellings answer natively (two Python calls per use before;
-    # p3 rank 413); any other text is normalized as before.
-    var text = String(py=mode)
-    if text == "identical" or text == "fast":
-        return mode
-    var name = py_call(py_call(mode.strip).lower)
-    if String(name) != "identical" and String(name) != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
-    return name
+    var name = String(mode)
+    if name != "identical" and name != "fast":
+        name = String(py_call(py_call(mode.strip).lower))
+        if name != "identical" and name != "fast":
+            raise Error("numeric_mode must be fast, identical or None")
+    return name^
 
 
-def _near(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The x_neighbors entries of `mode`, checked against the selected vendor
-    and mode."""
-    var entries = context["decomp_neighbors"][mode]
-    if py_type(entries) is native_loaded_module("builtins").str:
-        raise Error(String(entries))
-    # Checked once per connected table and selected vendor (N313,
-    # bindings/entries_verified.mojo): the binding's words cannot change.
-    if entries_verified(context, "kpca_near_verified", mode, entries):
-        return entries
-    if String(entries["x_neighbors_vendor"]()) != String(context["vendor"]):
-        raise Error("RuntimeError: KernelPCA native vendor differs from selected execution")
-    if Int(py=entries["x_neighbors_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
-        raise Error("RuntimeError: KernelPCA native mode differs from selected execution")
-    entries_mark_verified(context, "kpca_near_verified", mode, entries)
-    return entries
-
-
-def _decomp(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var entries = context["decomp_entries"][mode]
-    if py_type(entries) is native_loaded_module("builtins").str:
-        raise Error(String(entries))
-    if py_get(entries, "x_decomp_kpca_eig") is None:
-        raise Error("NotImplementedError: mojolearn KernelPCA: this build of _mojolearn_x_decomp does not export "
-                    + "x_decomp_kpca_eig; rebuild it with bindings/build_x_decomp.sh")
-    return entries
-
-
-def _op(near: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject) raises:
-    """`_XNeighbors._op(name, ...)`: one x_neighbors entry."""
-    _ = py_call_typed(near["xn_" + name], addrs, ints, floats)
-
-
-def _fit_global_mean(near: PythonObject, decomp: PythonObject, columns: PythonObject, total: PythonObject, rows: Int) raises:
-    # Shared with the typed fit plan; pin the original neighbor image and
-    # public output buffers throughout the two existing native operations.
-    var provider = neural_descriptor_connect_factory_once(near["x_neighbors_native_api_v1"],
-        String(XN_ABI_NAME), XN_OPERATION_COUNT)
-    var driver = KPCANeighborDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
-    var decomp_provider = neural_descriptor_connect_factory_once(decomp["x_decomp_native_api_v1"],
-        String(XD_ABI_NAME), XD_OPERATION_COUNT)
-    var decomp_entry = decomp_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
-    var source = Int(py=classical_address(columns))
-    var dst = Int(py=classical_address(total))
-    try:
-        with GILReleased(Python()):
-            kpca_fit_global_mean(driver, decomp_entry, source, dst, rows)
-    finally:
-        _ = provider
-        _ = decomp_provider
-        _ = columns
-        _ = total
+def _kernels(context: PythonObject) raises -> PythonObject:
+    var table = context["kpca_kernels"]
+    lifecycle_admit_fields(table)
+    return table
 
 
 def _kind(kernel: PythonObject, context: PythonObject) raises -> Int:
-    return Int(py=context["kpca_kernels"][kernel])
+    # The import-connected name table belongs to UNPACK. Keys and the input
+    # scalar are admitted before hashing, and RUN receives only a native code.
+    var value = _kernels(context)[kernel]
+    if py_type(value) is not py_type(PythonObject(0)):
+        raise Error("TypeError: KernelPCA kernel codes require exact native integers")
+    return Int(py=value)
 
 
 def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`KernelPCA.fit`."""
-    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var kernel = fields["kernel"]
-    var precomputed = decomp_eq(kernel, PythonObject("precomputed"))
-    if Bool(py=py_call(b.callable, kernel)) or (
-            not Bool(py=py_call(native_loaded_module("operator").contains, context["kpca_kernels"], kernel))
-            and not precomputed):
-        raise Error("NotImplementedError: KernelPCA: kernel=" + decomp_repr(kernel) + " is not implemented")
-    if Bool(py=fields["fit_inverse_transform"]):
+    var kernel = _field(fields, "kernel")
+    if Bool(py=py_call(native_loaded_module("builtins").callable, kernel)):
+        raise Error("NotImplementedError: KernelPCA: callable kernels require a native kernel name")
+    var precomputed = _name(kernel, "precomputed", context)
+    if not py_contains(_kernels(context), kernel) and not precomputed:
+        raise Error("NotImplementedError: KernelPCA: kernel=" + decomp_scalar_repr(kernel, context) + " is not implemented")
+    if decomp_truth(_field(fields, "fit_inverse_transform"), context):
         raise Error("NotImplementedError: KernelPCA: fit_inverse_transform is not implemented")
-    if Bool(py=fields["kernel_params"]):
+    if decomp_truth(_field(fields, "kernel_params"), context):
         raise Error("NotImplementedError: KernelPCA: kernel_params is not implemented")
-    var x = decomp_input(source, "KernelPCA", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    if precomputed and n != d:
+    var x = decomp_admit(source, "KernelPCA", context)
+    if precomputed and x.rows != x.cols:
         raise Error("Precomputed matrix must be a square matrix.")
-    var gamma_value = fields["gamma"]
-    var gamma = _f32_scalar(1.0 / Float64(d) if gamma_value is None else decomp_float(gamma_value))
+    var gamma_value = _field(fields, "gamma")
+    var gamma = _f32_scalar(1.0 / Float64(x.cols) if gamma_value is None else _float(gamma_value, context))
     py_setitem(fields, "_gamma", PythonObject(gamma))
     var mode = _mode(fields, context)
-    var near = _near(mode, context)
-    var decomp = _decomp(mode, context)
-    var requested_value = fields["n_components"]
-    var requested = -1 if requested_value is None else decomp_int(requested_value)
-    var auto = decomp_eq(fields["eigen_solver"], PythonObject("auto"))
-    var flag = py_get(near, "x_neighbors_kpca_resident")
-    var resident = (decomp_eq(kernel, PythonObject("rbf")) and auto and n > 200 and requested > 0 and requested < 10
-                    and flag is not None and Int(py=py_call(flag)) != 0)
-    var cols = decomp_f32(Python.tuple(n), context)
-    var all_ = decomp_f32(Python.tuple(1), context)
-    var kc = PythonObject(None)
-    if not resident:
-        var k = x
-        if not precomputed:
-            k = decomp_f32(Python.tuple(n, n), context)
-            _op(near, "kernel", Python.list(classical_address(x), classical_address(x), classical_address(k)),
-                Python.list(n, n, d, _kind(kernel, context), decomp_int(fields["degree"])),
-                Python.list(_f32_scalar(gamma), _f32_scalar(decomp_float(fields["coef0"]))))
-            _ = k  # keep the Python object alive through the native call above
-            _ = x  # keep the Python object alive through the native call above
-        var colsum = decomp_f32(Python.tuple(n), context)
-        _op(near, "colsum", Python.list(classical_address(k), classical_address(colsum)), Python.list(n, n), Python.list())
-        _ = colsum  # keep the Python object alive through the native call above
-        _ = k  # keep the Python object alive through the native call above
-        _op(near, "scale_div", Python.list(classical_address(colsum), classical_address(cols)), Python.list(n),
-            Python.list(Float64(n)))
-        _ = colsum  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        # One global mean of the column means, into the one-word all_.
-        _fit_global_mean(near, decomp, cols, all_, n)
-        kc = decomp_f32(Python.tuple(n, n), context)
-        _op(near, "kpca_center", Python.list(classical_address(k), classical_address(cols), classical_address(cols),
-                                            classical_address(all_), classical_address(kc)), Python.list(n, n),
-            Python.list())
-        _ = k  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        _ = kc  # keep the Python object alive through the native call above
-        _ = all_  # keep the Python object alive through the native call above
-        _ = k^
-    var c = 0 if requested < 0 else requested
-    var lanczos = auto and n > 200 and c > 0 and c < 10
-    var room = n if requested < 0 else min(n, requested)
-    var values = List[Float32](length=max(n, 1), fill=Float32(0))
-    var vectors = List[Float32](length=max(n * room, 1), fill=Float32(0))
-    var spare = classical_address(cols)
-    _ = cols  # keep the Python object alive through the native call above
-    var kept = Int(py=py_call_typed(decomp["x_decomp_kpca_eig"], Python.list(
-        classical_address(kc) if kc is not None else spare, classical_address(x), 1 if resident else 0, n, d,
-        requested, 1 if lanczos else 0, 1 if Bool(py=fields["remove_zero_eig"]) else 0,
-        Int(values.unsafe_ptr()), Int(vectors.unsafe_ptr()), classical_address(cols), classical_address(all_)),
-        Python.list(gamma)))
-    _ = kc  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = all_  # keep the Python object alive through the native call above
-    _ = cols  # keep the Python object alive through the native call above
-    var eigenvalues = decomp_f32(Python.tuple(kept), context)
-    _ = kc  # keep the Python object alive through the native call above
-    _ = all_  # keep the Python object alive through the native call above
-    _ = cols  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var eigenvectors = decomp_f32(Python.tuple(n, kept), context)
-    _ = kc  # keep the Python object alive through the native call above
-    _ = all_  # keep the Python object alive through the native call above
-    _ = cols  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    if kept:
-        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(eigenvalues))),
-               src=F32P(unsafe_from_address=Int(values.unsafe_ptr())), count=kept)
-        _ = eigenvalues  # keep the Python object alive through the native call above
-        _ = kc  # keep the Python object alive through the native call above
-        _ = all_  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(eigenvectors))),
-               src=F32P(unsafe_from_address=Int(vectors.unsafe_ptr())), count=n * kept)
-        _ = eigenvectors  # keep the Python object alive through the native call above
-        _ = kc  # keep the Python object alive through the native call above
-        _ = all_  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    _ = kc  # keep the Python object alive through the native calls above
-    _ = all_  # keep the Python object alive through the native calls above
-    _ = cols  # keep the Python object alive through the native calls above
-    _ = x  # keep the Python object alive through the native calls above
-    _ = values^
-    _ = vectors^
-    _ = kc^
-    py_setitem(fields, "eigenvalues_", eigenvalues)
-    py_setitem(fields, "eigenvectors_", eigenvectors)
-    py_setitem(fields, "_fit_X", x)
-    py_setitem(fields, "_fit_cols", cols)
-    py_setitem(fields, "_fit_all", all_)
-    py_setitem(fields, "n_features_in_", PythonObject(d))
+    var near = kpca_near_connection(mode, context)
+    var decomp = kpca_decomp_connection(mode, context)
+    var requested_value = _field(fields, "n_components")
+    var requested = -1 if requested_value is None else _int(requested_value, context)
+    var auto = _name(_field(fields, "eigen_solver"), "auto", context)
+    var kind = KPCA_PRECOMPUTED if precomputed else _kind(kernel, context)
+    var route = KPCAFitRoute(x.rows, requested, kind, auto, kpca_resident(near))
+    var columns = _f32(x.rows, 0, context, True)
+    var total = _f32(1, 0, context, True)
+    var prepared: Optional[KPCADenseFit] = None
+    var centered = _address(columns)  # same unread resident-route dummy
+    if not route.resident:
+        # Precomputed fit never converts its ignored degree/coef0 fields.
+        var degree = 0 if precomputed else _int(_field(fields, "degree"), context)
+        var coef0 = 0.0 if precomputed else _f32_scalar(_float(_field(fields, "coef0"), context))
+        var options = KPCAKernelOptions(kind, degree, gamma, coef0)
+        var prepare = KPCAFitPrepareRequest(x.address, _address(columns), _address(total), x.rows, x.cols, options^)
+        prepared = Optional[KPCADenseFit](kpca_run_prepare(near, decomp, prepare))
+        centered = prepared.value().address()
+    var room = KPCAEigenRoom(x.rows, route.room)
+    var remove_zero = decomp_truth(_field(fields, "remove_zero_eig"), context)
+    var request = KPCAEigenRequest(centered, x.address, room.values_address(), room.vectors_address(),
+        _address(columns), _address(total), route.resident, x.rows, x.cols, requested,
+        route.lanczos, remove_zero, gamma)
+    try:
+        var kept = kpca_run_eigen(decomp, request)
+        lifecycle_admit_fields(fields)
+        var eigenvalues = _f32(kept, 0, context, True)
+        var eigenvectors = _f32(x.rows, kept, context)
+        if kept:
+            memcpy(dest=F32P(unsafe_from_address=_address(eigenvalues)),
+                src=F32P(unsafe_from_address=room.values_address()), count=kept)
+            memcpy(dest=F32P(unsafe_from_address=_address(eigenvectors)),
+                src=F32P(unsafe_from_address=room.vectors_address()), count=x.rows * kept)
+        lifecycle_admit_fields(fields)
+        py_setitem(fields, "eigenvalues_", eigenvalues)
+        py_setitem(fields, "eigenvectors_", eigenvectors)
+        py_setitem(fields, "_fit_X", x.array)
+        py_setitem(fields, "_fit_cols", columns)
+        py_setitem(fields, "_fit_all", total)
+        py_setitem(fields, "n_features_in_", PythonObject(x.cols))
+    finally:
+        _ = prepared
+        _ = room
+        _ = x
+        _ = columns
+        _ = total
     return model
 
 
-def _alpha_scale(model: PythonObject, fields: PythonObject, near: PythonObject, divide: Int,
-                 context: PythonObject) raises -> PythonObject:
-    """`_alpha_scale(divide)`: the eigenvectors scaled by sqrt(eigenvalue)
-    (0) or divided by it (1), on `xn_kpca_alpha_scale`."""
-    var v = admit_x(decomp_attr(model, fields, "eigenvectors_"), 2, "eigenvectors_", context)
-    var w = admit_x(decomp_attr(model, fields, "eigenvalues_"), 1, "eigenvalues_", context)
-    var rows = Int(py=v.shape[0])
-    var cols = Int(py=v.shape[1])
-    var out = decomp_f32(Python.tuple(rows, cols), context)
-    _op(near, "kpca_alpha_scale", Python.list(classical_address(v), classical_address(w), classical_address(out)),
-        Python.list(rows, cols, divide), Python.list())
-    _ = out  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    _ = v  # keep the Python object alive through the native call above
-    _ = v^
-    _ = w^
-    return out
+@fieldwise_init
+struct KPCAAlphaInputs(Movable):
+    var vectors: AdmittedX
+    var values: AdmittedX
+
+
+def _alpha_inputs(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> KPCAAlphaInputs:
+    var vectors = admit_f32(_attr(model, fields, "eigenvectors_"), 2, "eigenvectors_", context)
+    var values = admit_f32(_attr(model, fields, "eigenvalues_"), 1, "eigenvalues_", context)
+    if values.rows < vectors.cols:
+        raise Error("KernelPCA: eigenvalues_ is shorter than the eigenvector count")
+    return KPCAAlphaInputs(vectors^, values^)
 
 
 def kpca_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`KernelPCA.fit_transform`: fit, then the scaled eigenvectors."""
     _ = kpca_fit(model, source, context)
     var fields = py_fields(model)
-    return _alpha_scale(model, fields, _near(_mode(fields, context), context), 0, context)
+    var near = kpca_near_connection(_mode(fields, context), context)
+    var alpha = _alpha_inputs(model, fields, context)
+    var dst = _f32(alpha.vectors.rows, alpha.vectors.cols, context)
+    var request = KPCAAlphaRequest(alpha.vectors.address, alpha.values.address, _address(dst),
+        alpha.vectors.rows, alpha.vectors.cols, False)
+    try:
+        kpca_run_alpha(near, request)
+    finally:
+        _ = alpha
+    return dst
 
 
 def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`KernelPCA.transform`: the fused kernel, centering and product chain
-    (`xn_kpca_transform`), or its itemized ops under MOJOLEARN_XN_OLD_ITEMS."""
     var fields = py_fields(model)
-    var q = decomp_input(source, "KernelPCA", context)
-    var nq = Int(py=q.shape[0])
-    var width = Int(py=q.shape[1])
-    var fit_x = admit_x(decomp_attr(model, fields, "_fit_X"), 2, "_fit_X", context)
-    var nf = Int(py=fit_x.shape[0])
-    var near = _near(_mode(fields, context), context)
-    var alphas = _alpha_scale(model, fields, near, 1, context)
-    var c = Int(py=alphas.shape[1])
-    var kernel = fields["kernel"]
-    var pre = decomp_eq(kernel, PythonObject("precomputed"))
-    if pre and width != nf:
-        raise Error("KernelPCA: a precomputed kernel needs " + String(nf) + " columns (the fitted rows), got "
-                    + String(width))
-    var fit_cols = admit_x(decomp_attr(model, fields, "_fit_cols"), 1, "_fit_cols", context)
-    var fit_all = admit_x(decomp_attr(model, fields, "_fit_all"), 1, "_fit_all", context)
-    var gamma = decomp_float(decomp_attr(model, fields, "_gamma"))
-    var coef0 = decomp_float(fields["coef0"])
-    var degree = decomp_int(fields["degree"])
-    var out: PythonObject
-    if nq != 0 and c != 0 and not Bool(py=context["kpca_old_items"]):
-        out = decomp_f32(Python.tuple(nq, c), context)
-        _op(near, "kpca_transform", Python.list(
-            classical_address(q), classical_address(q) if pre else classical_address(fit_x),
-            classical_address(fit_cols), classical_address(fit_all), classical_address(alphas),
-            classical_address(out)),
-            Python.list(nq, nf, width, c, Int(py=context["kpca_precomputed_kind"]) if pre else _kind(kernel, context),
-                        degree),
-            Python.list(0.0 if pre else _f32_scalar(gamma), 0.0 if pre else _f32_scalar(coef0), Float64(nf)))
-        _ = fit_x  # keep the Python object alive through the native call above
-        _ = q  # keep the Python object alive through the native call above
-        _ = fit_all  # keep the Python object alive through the native call above
-        _ = fit_cols  # keep the Python object alive through the native call above
-        _ = alphas  # keep the Python object alive through the native call above
-    else:
-        var k = q
-        if not pre:
-            k = decomp_f32(Python.tuple(nq, nf), context)
-            _op(near, "kernel", Python.list(classical_address(q), classical_address(fit_x), classical_address(k)),
-                Python.list(nq, nf, width, _kind(kernel, context), degree),
-                Python.list(_f32_scalar(gamma), _f32_scalar(coef0)))
-            _ = k  # keep the Python object alive through the native call above
-            _ = fit_x  # keep the Python object alive through the native call above
-            _ = q  # keep the Python object alive through the native call above
-        var rows = decomp_f32(Python.tuple(nq), context)
-        _op(near, "rowsum", Python.list(classical_address(k), classical_address(rows)), Python.list(nq, nf), Python.list())
-        _ = rows  # keep the Python object alive through the native call above
-        _ = k  # keep the Python object alive through the native call above
-        var pred = decomp_f32(Python.tuple(nq), context)
-        _op(near, "scale_div", Python.list(classical_address(rows), classical_address(pred)), Python.list(nq),
-            Python.list(Float64(nf)))
-        _ = pred  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
-        var kc = decomp_f32(Python.tuple(nq, nf), context)
-        _op(near, "kpca_center", Python.list(classical_address(k), classical_address(fit_cols),
-                                            classical_address(pred), classical_address(fit_all), classical_address(kc)),
-            Python.list(nq, nf), Python.list())
-        _ = k  # keep the Python object alive through the native call above
-        _ = fit_cols  # keep the Python object alive through the native call above
-        _ = kc  # keep the Python object alive through the native call above
-        _ = pred  # keep the Python object alive through the native call above
-        _ = fit_all  # keep the Python object alive through the native call above
-        out = decomp_f32(Python.tuple(nq, c), context)
-        _op(near, "matmul", Python.list(classical_address(kc), classical_address(alphas), classical_address(out)),
-            Python.list(nq, nf, c), Python.list())
-        _ = kc  # keep the Python object alive through the native call above
-        _ = alphas  # keep the Python object alive through the native call above
-        _ = k^
-    _ = q^
-    _ = fit_x^
-    _ = fit_cols^
-    _ = fit_all^
-    return out
+    var q = decomp_admit(source, "KernelPCA", context)
+    var fitted = admit_f32(_attr(model, fields, "_fit_X"), 2, "_fit_X", context)
+    var near = kpca_near_connection(_mode(fields, context), context)
+    var alpha = _alpha_inputs(model, fields, context)
+    var alphas = KPCAScratch(alpha.vectors.rows, alpha.vectors.cols)
+    var count = alpha.vectors.cols
+    var scaling = KPCAAlphaRequest(alpha.vectors.address, alpha.values.address, alphas.address(),
+        alpha.vectors.rows, count, True)
+    try:
+        kpca_run_alpha(near, scaling)
+    finally:
+        _ = alpha
+    var kernel = _field(fields, "kernel")
+    var precomputed = _name(kernel, "precomputed", context)
+    if precomputed and q.cols != fitted.rows:
+        raise Error("KernelPCA: a precomputed kernel needs " + String(fitted.rows)
+            + " columns (the fitted rows), got " + String(q.cols))
+    var columns = admit_f32(_attr(model, fields, "_fit_cols"), 1, "_fit_cols", context)
+    var total = admit_f32(_attr(model, fields, "_fit_all"), 1, "_fit_all", context)
+    var gamma = _float(_attr(model, fields, "_gamma"), context)
+    var coef0 = _float(_field(fields, "coef0"), context)
+    var degree = _int(_field(fields, "degree"), context)
+    var dst = PythonObject(None)
+    try:
+        # Rebound public storage must contain every word the existing
+        # kernels read. Longer vectors retain their prior prefix behavior.
+        if alphas.rows != fitted.rows or columns.rows < fitted.rows or total.rows < 1:
+            raise Error("KernelPCA: fitted query buffers do not cover the fitted row count")
+        if not precomputed and fitted.cols != q.cols:
+            raise Error("KernelPCA: query and fitted input feature counts differ")
+        if q.rows != 0 and count != 0 and not decomp_truth(context["kpca_old_items"], context):
+            dst = _f32(q.rows, count, context)
+            var kind = KPCA_PRECOMPUTED if precomputed else _kind(kernel, context)
+            var options = KPCAKernelOptions(kind, degree, gamma, coef0)
+            var request = KPCAQueryRequest(q.address, fitted.address, columns.address, total.address,
+                alphas.address(), _address(dst), q.rows, fitted.rows, q.cols, count, options^)
+            kpca_run_fused(near, request)
+        else:
+            var kind = KPCA_PRECOMPUTED if precomputed else _kind(kernel, context)
+            var options = KPCAKernelOptions(kind, degree, gamma, coef0)
+            var request = KPCAQueryRequest(q.address, fitted.address, columns.address, total.address,
+                alphas.address(), 0, q.rows, fitted.rows, q.cols, count, options^)
+            var centered = kpca_run_centered(near, request)
+            dst = _f32(q.rows, count, context)
+            kpca_run_finish(near, centered, alphas.address(), _address(dst), count)
+            _ = centered
+    finally:
+        _ = q
+        _ = fitted
+        _ = columns
+        _ = total
+        _ = alphas
+    return dst
