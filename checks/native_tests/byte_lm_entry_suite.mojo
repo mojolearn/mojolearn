@@ -15,6 +15,7 @@ session. No Python participates.
 The cases are independent units and run across the native host worker pool.
 Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_entry, byte_lm_table_published, BYTE_LM_TABLE_TRAINER
@@ -23,13 +24,14 @@ from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_ABSENT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX,
     BG_CONFIG_PROFILE, BG_ATTENTION_ARM, BG_MEMORY_PROFILE, BG_STEP_GLUE_ARM, BG_SESSION_NEW, BG_SESSION_FREE,
     byte_lm_glue_call, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
-    byte_lm_trainer_call,
+    byte_lm_trainer_call, byte_lm_trainer_ref, byte_lm_glue_ref,
 )
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from core.native_descriptor_call import native_descriptor_call
 from core.state_registry import StateHandle
+from core.entry_table import EntryRef
 from core.byte_lm_entry_table_sessions import (
-    BS_CREATE, BS_RUN, BS_CLOSE, byte_lm_sessions_entry, byte_lm_sessions_published,
+    BS_CREATE, BS_RUN, BS_CLOSE, byte_lm_sessions_entry, byte_lm_sessions_ref, byte_lm_sessions_published,
     byte_lm_resident_open, byte_lm_resident_run, byte_lm_resident_close,
 )
 
@@ -58,15 +60,15 @@ def _shape() -> List[Int]:
     return [2, 16, 32, 4, 4, 8, 64, 2, 256, 0]
 
 
-def _text(key: ByteLmEntryKey, op: Int, var words: List[Int]) raises -> String:
-    var text = byte_lm_glue_read_text(key, op, words^)
+def _text(gl: EntryRef, op: Int, var words: List[Int]) raises -> String:
+    var text = byte_lm_glue_read_text(gl, op, words^)
     require(Bool(text), "a text answer was absent")
     return text.value().copy()
 
 
 def precondition_unpublished() raises:
     try:
-        _ = byte_lm_glue_read_int(_key(), BG_NUMERIC_MODE, List[Int]())
+        _ = byte_lm_glue_read_int(byte_lm_glue_ref(_key()), BG_NUMERIC_MODE, List[Int]())
     except problem:
         _refuses(problem, "provider is not published")
         require(not byte_lm_table_published[BYTE_LM_TABLE_TRAINER](_key(), 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT),
@@ -76,11 +78,29 @@ def precondition_unpublished() raises:
     raise Error("an unpublished byte LM table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = byte_lm_glue_ref(_key())
+    var second = byte_lm_glue_ref(_key())
+    require(entry_ref_same(first, second), "byte LM glue: a second resolution returned another entry")
+    require(entry_ref_same(byte_lm_sessions_ref(_key()), byte_lm_sessions_ref(_key())),
+            "byte LM sessions: a second resolution returned another entry")
+    try:
+        _ = byte_lm_table_entry[BYTE_LM_TABLE_TRAINER](_key(), 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT + 1)
+        raise Error("byte LM glue: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "byte LM glue: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     require(byte_lm_table_published[BYTE_LM_TABLE_TRAINER](_key(), 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT),
             "the published table did not probe as published")
     try:
-        _ = byte_lm_glue_read_int(ByteLmEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0), BG_NUMERIC_MODE, List[Int]())
+        _ = byte_lm_glue_read_int(byte_lm_glue_ref(ByteLmEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)), BG_NUMERIC_MODE, List[Int]())
         raise Error("a mismatched tier key did not refuse")
     except problem:
         require("did not refuse" not in String(problem), String(problem))
@@ -90,7 +110,7 @@ def preconditions_published() raises:
     except problem:
         _refuses(problem, "ABI schema differs")
     try:
-        _ = byte_lm_glue_call(_key(), BG_OP_COUNT, List[Int](), List[Int]())
+        _ = byte_lm_glue_call(byte_lm_glue_ref(_key()), BG_OP_COUNT, List[Int](), List[Int]())
         raise Error("an unknown operation did not refuse")
     except problem:
         _refuses(problem, "unknown operation")
@@ -99,7 +119,7 @@ def preconditions_published() raises:
             "a mismatched tier key probed a session entry as published")
 
 
-def _session_status(k: ByteLmEntryKey, handle: StateHandle) raises -> List[Int]:
+def _session_status(k: EntryRef, handle: StateHandle) raises -> List[Int]:
     """Trainer operation 5 (status) on a resident session through BS_RUN."""
     var info = List[Int](length=4, fill=7)
     var a: List[Int] = [Int(info.unsafe_ptr())]
@@ -107,7 +127,7 @@ def _session_status(k: ByteLmEntryKey, handle: StateHandle) raises -> List[Int]:
     return info^  # the status output outlives the synchronous call
 
 
-def _stale_refuses(k: ByteLmEntryKey, handle: StateHandle) raises:
+def _stale_refuses(k: EntryRef, handle: StateHandle) raises:
     try:
         _ = _session_status(k, handle)
         raise Error("a released handle ran")
@@ -116,7 +136,7 @@ def _stale_refuses(k: ByteLmEntryKey, handle: StateHandle) raises:
 
 
 def session_case(op: Int) raises:
-    var k = _key()
+    var k = byte_lm_sessions_ref(_key())
     if op == BS_CREATE:
         # A new resident session is a live, closed handle; two creations
         # give two distinct handles.
@@ -129,7 +149,7 @@ def session_case(op: Int) raises:
         byte_lm_resident_close(k, second)
         try:
             # create takes exactly one handle output
-            _ = native_descriptor_call(byte_lm_sessions_entry(k), BS_CREATE, List[Int](), List[Int](), List[Float64]())
+            _ = native_descriptor_call(k.call, BS_CREATE, List[Int](), List[Int](), List[Float64]())
             raise Error("a create without an output did not refuse")
         except problem:
             _refuses(problem, "create takes one handle output")
@@ -143,7 +163,7 @@ def session_case(op: Int) raises:
             require(_session_status(k, handle)[3] == 0, "status after a trainer close")
             try:
                 var short: List[Int] = [handle.index, Int(handle.generation)]
-                _ = native_descriptor_call(byte_lm_sessions_entry(k), BS_RUN, List[Int](), short, List[Float64]())
+                _ = native_descriptor_call(k.call, BS_RUN, List[Int](), short, List[Float64]())
                 raise Error("a run without a trainer operation did not refuse")
             except problem:
                 _refuses(problem, "invalid run request")
@@ -167,7 +187,8 @@ def session_case(op: Int) raises:
 
 
 def case(unit: Int) raises:
-    var k = _key()
+    var k = byte_lm_glue_ref(_key())
+    var trainer = byte_lm_trainer_ref(_key())
     if unit == BG_NUMERIC_MODE:  # host_compat_mode
         require(byte_lm_glue_read_int(k, BG_NUMERIC_MODE, List[Int]()) == 1, "numeric mode")
     elif unit == BG_VENDOR:  # host_compat_vendor
@@ -202,7 +223,7 @@ def case(unit: Int) raises:
         try:
             var info = List[Int](length=4, fill=7)
             var a: List[Int] = [session, Int(info.unsafe_ptr())]
-            require(byte_lm_trainer_call(k, 5, a, List[Int](), List[Float64]()) == 4, "session status count")
+            require(byte_lm_trainer_call(trainer, 5, a, List[Int](), List[Float64]()) == 4, "session status count")
             require(info[3] == 0 and info[0] == -1, "a new session is not open")
             _ = info^
         finally:
@@ -214,7 +235,7 @@ def case(unit: Int) raises:
             _refuses(problem, "free takes one native session")
     elif unit == 10:
         # Trainer dispatch operation 0: the image's compiled tier answer.
-        require(byte_lm_trainer_call(k, 0, List[Int](), List[Int](), List[Float64]()) == 1, "trainer metadata")
+        require(byte_lm_trainer_call(trainer, 0, List[Int](), List[Int](), List[Float64]()) == 1, "trainer metadata")
     elif unit >= BYTE_LM_SESSION_CASE_FIRST and unit < BYTE_LM_ENTRY_CASES:
         session_case(unit - BYTE_LM_SESSION_CASE_FIRST)
     else:
