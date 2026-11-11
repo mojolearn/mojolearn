@@ -66,7 +66,10 @@ comptime XT_UNIFORM = 46
 comptime XT_UNSEEN_ROWS = 47
 comptime XT_WEIGHTED_MEDIAN = 48
 comptime XT_WEIGHTED_SAMPLE = 49
-comptime XT_OP_COUNT = 50
+comptime XT_ACCUMULATE_COLS_MANY = 50
+comptime XT_OVR_ASSEMBLE = 51
+comptime XT_CALIBRATED_PROBA = 52
+comptime XT_OP_COUNT = 53
 
 
 struct XtCall(Copyable, Movable):

@@ -58,8 +58,8 @@ from xtrees.glue_runs import (
     log64_run, margin2_run, normalize_rows_run, onehot_leaves_run, oob_r2_run, platt_apply_strided_run,
     platt_fit_run, positive_codes_run, put_f32_run, r2_step_run, remap_cols_run, rows_any_unset_run,
     samme_step_run, sample_indices_run, scale_run, scale_to_f32_run, scatter_run, softmax_rows_run,
-    stack_w64_run, transpose_f32_run, transpose_f64_run, uniform_run, unseen_rows_run, weighted_median_run,
-    weighted_sample_run,
+    stack_w64_run, accumulate_cols_many_run, ovr_assemble_run, calibrated_proba_run, transpose_f32_run,
+    transpose_f64_run, uniform_run, unseen_rows_run, weighted_median_run, weighted_sample_run,
 )
 from xtrees.calibrated_apply import (
     CalPair, OvrColumn, calibrated_proba_device, calibrated_proba_host, ovr_assemble_device, ovr_assemble_host,
@@ -267,35 +267,26 @@ def accumulate_cols_binding(acc: PythonObject, x: PythonObject, cols: PythonObje
 
 
 def accumulate_cols_many_binding(acc: PythonObject, members: PythonObject, params: PythonObject) raises -> PythonObject:
-    """acc (float64, n*k) += weight_j * x_j (float32, n*ks_j) into columns
-    cols_j for every member j in order; members = [(x_j, cols_j, ks_j,
-    weight_j), ...]; params = [n, k] (lane ne2-b-members, N083: a soft
-    vote's members in one call instead of one `x_trees_accumulate_cols` per
-    member). The same per-member adds in the same order: the same bits."""
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_cols_many_run
+    # (XT_ACCUMULATE_COLS_MANY): members = [(x_j, cols_j, ks_j, weight_j), ...].
     _need(params, 2, "x_trees_accumulate_cols_many")
-    var n = _count(_i(params, 0), "x_trees_accumulate_cols_many")
-    var k = _count(_i(params, 1), "x_trees_accumulate_cols_many")
-    var xs = List[Int]()
-    var cols = List[Int]()
-    var widths = List[Int]()
-    var weights = List[Float64]()
-    for j in range(len(members)):  # small-loop(one descriptor per ensemble member)
+    var owned = _xt_owned([Int(py=acc)], params)
+    for j in range(len(members)):  # small-loop(one descriptor per ensemble member): Python unpack
         var entry = members[j]
         if len(entry) != 4:
             raise Error("x_trees_accumulate_cols_many: each member needs (x, cols, ks, weight)")
-        xs.append(Int(py=entry[0]))
-        cols.append(Int(py=entry[1]))
-        widths.append(_count(Int(py=entry[2]), "x_trees_accumulate_cols_many"))
-        weights.append(Float64(py=entry[3]))
-    if n <= 0:
-        return PythonObject(n)
-    comptime if XTREES_DEVICE_OPS:
-        elem_dev.accumulate_cols_many_device(f64_ptr(Int(py=acc)), xs, cols, widths, weights, n, k)
-    else:
-        if n > 0:
-            for j in range(len(xs)):  # small-loop(one host accumulate per ensemble member)
-                accumulate_cols(f64_ptr(Int(py=acc)), f32_ptr(xs[j]), i32_ptr(cols[j]), n, k, widths[j], weights[j])
-    return PythonObject(n)
+        owned.addrs.append(Int(py=entry[0]))
+        owned.addrs.append(Int(py=entry[1]))
+        var ks = Int(py=entry[2])
+        owned.ints.append(ks)
+        owned.floats.append(Float64(ks))
+        owned.bad.append(UInt8(0))
+        owned.ints.append(0)
+        owned.floats.append(Float64(py=entry[3]))
+        owned.bad.append(UInt8(1))
+    var result = accumulate_cols_many_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def accumulate_rows_binding(acc: PythonObject, x: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -730,73 +721,66 @@ def complement_pairs_binding(x: PythonObject, params: PythonObject) raises -> Py
 
 
 def calibrated_proba_binding(acc: PythonObject, pairs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """CalibratedClassifierCV's whole prediction epilogue in one program
-    (`xtrees/calibrated_apply.mojo`): acc (float64, n x k) = the mean of the
-    pairs' calibrated probabilities. params = [n, k]; `pairs` lists
-    (blk, bc, at, cols, ks, calibrators), `blk` the member's float32 n x bc
-    scores, `cols` its int32[ks] class codes (k > 2), `at` its code-1 column
-    (k == 2, bc > 1); `calibrators` lists (kind, a, b, kx, ky, m): kind 0
-    sigmoid (a, b), 1 isotonic (float64 knots kx, ky, m of them)."""
+    # Unpack only; the body is xtrees/glue_runs.mojo::calibrated_proba_run
+    # (XT_CALIBRATED_PROBA): pairs = (blk, bc, at, cols, ks, calibrators),
+    # calibrators = (kind, a, b, kx, ky, m).
     _need(params, 2, "x_trees_calibrated_proba")
-    var n = _count(_i(params, 0), "x_trees_calibrated_proba")
-    var k = _i(params, 1)
-    if k < 2:
-        raise Error("x_trees_calibrated_proba: k must be at least 2")
-    var parsed = List[CalPair]()
-    for p in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+    var owned = _xt_owned([Int(py=acc)], params)
+    owned.ints.append(len(pairs))
+    owned.floats.append(Float64(len(pairs)))
+    owned.bad.append(UInt8(0))
+    for p in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs: Python unpack
         var row = pairs[p]
         var cals = row[5]
-        var kinds = List[Int]()
-        var a = List[Float64]()
-        var b = List[Float64]()
-        var kx = List[Int]()
-        var ky = List[Int]()
-        var m = List[Int]()
-        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
+        owned.addrs.append(Int(py=row[0]))
+        owned.addrs.append(Int(py=row[3]))
+        var words: List[Int] = [Int(py=row[1]), Int(py=row[2]), Int(py=row[4]), len(cals)]
+        for w in range(4):  # small-loop(the four integer words of a pair)
+            owned.ints.append(words[w])
+            owned.floats.append(Float64(words[w]))
+            owned.bad.append(UInt8(0))
+        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each): Python unpack
             var cal = cals[j]
-            kinds.append(Int(py=cal[0]))
-            a.append(Float64(py=cal[1]))
-            b.append(Float64(py=cal[2]))
-            kx.append(Int(py=cal[3]))
-            ky.append(Int(py=cal[4]))
-            m.append(Int(py=cal[5]))
-        if len(kinds) != (1 if k == 2 else k):
-            raise Error("x_trees_calibrated_proba: one calibrator per class column")
-        parsed.append(CalPair(Int(py=row[0]), Int(py=row[1]), Int(py=row[2]), Int(py=row[3]), Int(py=row[4]),
-                              kinds^, a^, b^, kx^, ky^, m^))
-    comptime if XTREES_DEVICE_OPS:
-        calibrated_proba_device(parsed, n, k, f64_ptr(Int(py=acc)))
-    else:
-        calibrated_proba_host(parsed, n, k, f64_ptr(Int(py=acc)))
-    return PythonObject(n)
+            owned.addrs.append(Int(py=cal[3]))
+            owned.addrs.append(Int(py=cal[4]))
+            var kind = Int(py=cal[0])
+            owned.ints.append(kind)
+            owned.floats.append(Float64(kind))
+            owned.bad.append(UInt8(0))
+            owned.ints.append(0)
+            owned.floats.append(Float64(py=cal[1]))
+            owned.bad.append(UInt8(1))
+            owned.ints.append(0)
+            owned.floats.append(Float64(py=cal[2]))
+            owned.bad.append(UInt8(1))
+            var m = Int(py=cal[5])
+            owned.ints.append(m)
+            owned.floats.append(Float64(m))
+            owned.bad.append(UInt8(0))
+    var result = calibrated_proba_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def ovr_assemble_binding(out_buf: PythonObject, columns: PythonObject, params: PythonObject) raises -> PythonObject:
-    """OneVsRest's k > 2 prediction epilogue in one program
-    (`xtrees/calibrated_apply.mojo`). params = [n, k, finish]: finish 0 the
-    float64 n x k scores into out, 1 those scores row-normalized, 2 their
-    int32 row argmax into out. `columns` lists one (blk, bc, at) per class:
-    the member's float32 n x bc block and its positive column (-1: zeros)."""
+    # Unpack only; the body is xtrees/glue_runs.mojo::ovr_assemble_run
+    # (XT_OVR_ASSEMBLE): columns = one (blk, bc, at) per class.
     _need(params, 3, "x_trees_ovr_assemble")
-    var n = _count(_i(params, 0), "x_trees_ovr_assemble")
-    var k = _i(params, 1)
-    var finish = _i(params, 2)
-    if finish < 0 or finish > 2:
-        raise Error("x_trees_ovr_assemble: unknown finish")
-    var parsed = List[OvrColumn]()
-    for j in range(len(columns)):  # driver-loop: over the members (one column each)
+    var owned = _xt_owned([Int(py=out_buf)], params)
+    for j in range(len(columns)):  # driver-loop: over the members (one column each): Python unpack
         var col = columns[j]
+        owned.addrs.append(Int(py=col[0]))
         var bc = Int(py=col[1])
         var at = Int(py=col[2])
-        if at >= bc:
-            raise Error("x_trees_ovr_assemble: column out of range")
-        parsed.append(OvrColumn(Int(py=col[0]), bc, at))
-    var address = Int(py=out_buf)
-    comptime if XTREES_DEVICE_OPS:
-        ovr_assemble_device(parsed, n, k, finish, f64_ptr(address), i32_ptr(address))
-    else:
-        ovr_assemble_host(parsed, n, k, finish, f64_ptr(address), i32_ptr(address))
-    return PythonObject(n)
+        owned.ints.append(bc)
+        owned.floats.append(Float64(bc))
+        owned.bad.append(UInt8(0))
+        owned.ints.append(at)
+        owned.floats.append(Float64(at))
+        owned.bad.append(UInt8(0))
+    var result = ovr_assemble_run(owned.view())
+    _ = owned
+    return PythonObject(result)
 
 
 def indicator_codes_binding(codes: PythonObject, out_i: PythonObject, out_f: PythonObject, params: PythonObject) raises -> PythonObject:

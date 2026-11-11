@@ -14,7 +14,7 @@ text its former Python entry raised.
 from core.native_descriptor_call import native_descriptor_call
 from core.trees_entry_table import TreesEntryKey, trees_table_entry, TREES_TABLE_X_TREES
 from xtrees.glue_abi import (
-    XT_GLUE_ABI, XT_OP_COUNT,
+    XT_GLUE_ABI, XT_OP_COUNT, XT_ACCUMULATE_COLS_MANY, XT_OVR_ASSEMBLE, XT_CALIBRATED_PROBA,
     XT_STACK_W64, XT_ACCUMULATE, XT_ACCUMULATE_COLS, XT_ACCUMULATE_ONEHOT, XT_ACCUMULATE_ROWS, XT_APPLY,
     XT_ARGMAX_ROWS, XT_BAG_ROWS, XT_BINARY_PROBA, XT_CLASS_COUNTS, XT_CLASS_PRIORS, XT_COMPLEMENT_PAIRS,
     XT_COUNT_EQUAL, XT_COUNT_ROWS, XT_DART_THRESHOLDS, XT_DART_RESCALE, XT_DEVICE_FOLDS, XT_EXACT_SUM,
@@ -379,3 +379,20 @@ def xt_stack_w64(key: TreesEntryKey, addrs: List[Int], n: Int) raises -> Int:
     var ints: List[Int] = [n]
     var floats: List[Float64] = [Float64(n)]
     return xt_glue(key, XT_STACK_W64, addrs, ints, floats)
+
+
+def xt_accumulate_cols_many(key: TreesEntryKey, addrs: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
+    """addrs = [acc, x_0, cols_0, ...]; params = [n, k, ks_0, weight_0, ...]
+    as int/float views (see accumulate_cols_many_run)."""
+    return xt_glue(key, XT_ACCUMULATE_COLS_MANY, addrs, ints, floats)
+
+
+def xt_ovr_assemble(key: TreesEntryKey, addrs: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
+    """addrs = [out, blk_0, ...]; params = [n, k, finish, bc_0, at_0, ...]
+    (see ovr_assemble_run)."""
+    return xt_glue(key, XT_OVR_ASSEMBLE, addrs, ints, floats)
+
+
+def xt_calibrated_proba(key: TreesEntryKey, addrs: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
+    """The flattened pairs and calibrators of calibrated_proba_run."""
+    return xt_glue(key, XT_CALIBRATED_PROBA, addrs, ints, floats)

@@ -29,10 +29,10 @@ from xtrees.glue_calls import (
     xt_platt_apply_strided, xt_platt_fit, xt_positive_codes, xt_put_f32, xt_r2_step, xt_remap_cols,
     xt_rows_any_unset, xt_samme_step, xt_sample_indices, xt_scale, xt_scale_to_f32, xt_scatter, xt_softmax_rows,
     xt_stack_w64, xt_transpose_f32, xt_transpose_f64, xt_uniform, xt_unseen_rows, xt_weighted_median,
-    xt_weighted_sample,
+    xt_weighted_sample, xt_accumulate_cols_many, xt_ovr_assemble, xt_calibrated_proba,
 )
 
-comptime TREES_GLUE_CASES = 50
+comptime TREES_GLUE_CASES = 53
 
 
 def require(ok: Bool, message: String) raises:
@@ -460,6 +460,36 @@ def case(unit: Int) raises:
         _ = coef32
         _ = thr
         _ = state
+    elif unit == 50:
+        var acc: List[Float64] = [0.0, 0.0, 0.0]
+        var x: List[Float32] = [2.0, 3.0]
+        var cols: List[Int32] = [2, 0]
+        var ints: List[Int] = [1, 3, 2, 0]
+        var floats: List[Float64] = [1.0, 3.0, 2.0, 1.0]
+        _ = xt_accumulate_cols_many(k, [_f64(acc), _f32(x), _i32(cols)], ints, floats)
+        require(acc[0] == 3.0 and acc[1] == 0.0 and acc[2] == 2.0, "accumulate_cols_many")
+        _ = x
+        _ = cols
+    elif unit == 51:
+        var out: List[Float64] = [9.0, 9.0]
+        var b0: List[Float32] = [0.5]
+        var b1: List[Float32] = [0.25]
+        var ints: List[Int] = [1, 2, 0, 1, 0, 1, 0]
+        var floats: List[Float64] = [1.0, 2.0, 0.0, 1.0, 0.0, 1.0, 0.0]
+        _ = xt_ovr_assemble(k, [_f64(out), _f32(b0), _f32(b1)], ints, floats)
+        require(out[0] == 0.5 and out[1] == 0.25, "ovr_assemble")
+        _ = b0
+        _ = b1
+    elif unit == 52:
+        var acc: List[Float64] = [0.0]
+        var ints: List[Int] = [1, 1, 0]
+        var floats: List[Float64] = [1.0, 1.0, 0.0]
+        try:
+            _ = xt_calibrated_proba(k, [_f64(acc)], ints, floats)
+            raise Error("calibrated_proba did not refuse k = 1")
+        except problem:
+            _refuses(problem, "x_trees_calibrated_proba: k must be at least 2")
+        _ = acc
     else:
         var weights: List[Float64] = [0.0]
         var coefs: List[Float64] = [0.0]

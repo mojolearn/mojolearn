@@ -24,7 +24,18 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.trees_entry_table import TreesEntryKey, trees_table_publish, TREES_TABLE_X_TREES
-from xtrees.glue_abi import XtCall, XT_GLUE_ABI, XT_OP_COUNT, XT_ACCUMULATE, XT_ACCUMULATE_COLS, XT_ACCUMULATE_ONEHOT, XT_ACCUMULATE_ROWS, XT_APPLY, XT_ARGMAX_ROWS, XT_BAG_ROWS, XT_BINARY_PROBA, XT_CLASS_COUNTS, XT_CLASS_PRIORS, XT_COMPLEMENT_PAIRS, XT_COUNT_EQUAL, XT_COUNT_ROWS, XT_DART_RESCALE, XT_DART_THRESHOLDS, XT_DEVICE_FOLDS, XT_EXACT_SUM, XT_FILL_CLASS_MAJOR_F64, XT_GATHER_F32, XT_GATHER_I32, XT_INDICATOR_CODES, XT_IOTA_I32, XT_ISOTONIC_FIT, XT_ISOTONIC_PREDICT_STRIDED, XT_LEAF_NUMBERING, XT_LOG64, XT_MARGIN2, XT_NORMALIZE_ROWS, XT_ONEHOT_LEAVES, XT_OOB_R2, XT_PLATT_APPLY_STRIDED, XT_PLATT_FIT, XT_POSITIVE_CODES, XT_PUT_F32, XT_R2_STEP, XT_REMAP_COLS, XT_ROWS_ANY_UNSET, XT_SAMME_STEP, XT_SAMPLE_INDICES, XT_SCALE, XT_SCALE_TO_F32, XT_SCATTER, XT_SOFTMAX_ROWS, XT_STACK_W64, XT_TRANSPOSE_F32, XT_TRANSPOSE_F64, XT_UNIFORM, XT_UNSEEN_ROWS, XT_WEIGHTED_MEDIAN, XT_WEIGHTED_SAMPLE
+from xtrees.glue_abi import (
+    XtCall, XT_GLUE_ABI, XT_OP_COUNT, XT_ACCUMULATE_COLS_MANY, XT_OVR_ASSEMBLE, XT_CALIBRATED_PROBA,
+    XT_ACCUMULATE, XT_ACCUMULATE_COLS, XT_ACCUMULATE_ONEHOT, XT_ACCUMULATE_ROWS, XT_APPLY, XT_ARGMAX_ROWS,
+    XT_BAG_ROWS, XT_BINARY_PROBA, XT_CLASS_COUNTS, XT_CLASS_PRIORS, XT_COMPLEMENT_PAIRS, XT_COUNT_EQUAL,
+    XT_COUNT_ROWS, XT_DART_RESCALE, XT_DART_THRESHOLDS, XT_DEVICE_FOLDS, XT_EXACT_SUM, XT_FILL_CLASS_MAJOR_F64,
+    XT_GATHER_F32, XT_GATHER_I32, XT_INDICATOR_CODES, XT_IOTA_I32, XT_ISOTONIC_FIT, XT_ISOTONIC_PREDICT_STRIDED,
+    XT_LEAF_NUMBERING, XT_LOG64, XT_MARGIN2, XT_NORMALIZE_ROWS, XT_ONEHOT_LEAVES, XT_OOB_R2,
+    XT_PLATT_APPLY_STRIDED, XT_PLATT_FIT, XT_POSITIVE_CODES, XT_PUT_F32, XT_R2_STEP, XT_REMAP_COLS,
+    XT_ROWS_ANY_UNSET, XT_SAMME_STEP, XT_SAMPLE_INDICES, XT_SCALE, XT_SCALE_TO_F32, XT_SCATTER, XT_SOFTMAX_ROWS,
+    XT_STACK_W64, XT_TRANSPOSE_F32, XT_TRANSPOSE_F64, XT_UNIFORM, XT_UNSEEN_ROWS, XT_WEIGHTED_MEDIAN,
+    XT_WEIGHTED_SAMPLE,
+)
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
@@ -41,6 +52,9 @@ from xtrees.ops_device import (
 from xtrees import ops_device_elem as elem_dev
 from xtrees import ops_device_boost as boost_dev
 from xtrees.api_kernels import class_priors, dart_rescale, dart_thresholds, host_folds, scatter_rows_check
+from xtrees.calibrated_apply import (
+    CalPair, OvrColumn, calibrated_proba_device, calibrated_proba_host, ovr_assemble_device, ovr_assemble_host,
+)
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -1058,6 +1072,129 @@ def class_priors_run(c: XtCall) raises -> Int:
     return k
 
 
+def accumulate_cols_many_run(c: XtCall) raises -> Int:
+    """acc (float64, n*k) += weight_j * x_j (float32, n*ks_j) into columns
+    cols_j for every member j in order (lane ne2-b-members, N083: a soft
+    vote's members in one call). addresses = [acc, x_0, cols_0, x_1, cols_1,
+    ...]; params = [n, k, ks_0, weight_0, ks_1, weight_1, ...]. The same
+    per-member adds in the same order: the same bits."""
+    if c.n_params < 2 or (c.n_params - 2) % 2 != 0:
+        raise Error("x_trees_accumulate_cols_many: params must hold n, k, then (ks, weight) per member")
+    var members = (c.n_params - 2) // 2
+    _addrs(c, 1 + 2 * members, "x_trees_accumulate_cols_many")
+    var n = _count(_i(c, 0), "x_trees_accumulate_cols_many")
+    var k = _count(_i(c, 1), "x_trees_accumulate_cols_many")
+    var xs = List[Int]()
+    var cols = List[Int]()
+    var widths = List[Int]()
+    var weights = List[Float64]()
+    for j in range(members):  # small-loop(one descriptor per ensemble member)
+        xs.append(_a(c, 1 + 2 * j))
+        cols.append(_a(c, 2 + 2 * j))
+        widths.append(_count(_i(c, 2 + 2 * j), "x_trees_accumulate_cols_many"))
+        weights.append(_f(c, 3 + 2 * j))
+    if n <= 0:
+        return n
+    var acc = _a(c, 0)
+    comptime if XTREES_DEVICE_OPS:
+        elem_dev.accumulate_cols_many_device(f64_ptr(acc), xs, cols, widths, weights, n, k)
+    else:
+        for j in range(len(xs)):  # small-loop(one host accumulate per ensemble member)
+            accumulate_cols(f64_ptr(acc), f32_ptr(xs[j]), i32_ptr(cols[j]), n, k, widths[j], weights[j])
+    return n
+
+
+def ovr_assemble_run(c: XtCall) raises -> Int:
+    """OneVsRest's k > 2 prediction epilogue in one program
+    (`xtrees/calibrated_apply.mojo`). addresses = [out, blk_0, blk_1, ...];
+    params = [n, k, finish, bc_0, at_0, bc_1, at_1, ...]: finish 0 the
+    float64 n x k scores into out, 1 those scores row-normalized, 2 their
+    int32 row argmax into out; blk_j the member's float32 n x bc_j block and
+    at_j its positive column (-1: zeros)."""
+    if c.n_params < 3 or (c.n_params - 3) % 2 != 0:
+        raise Error("x_trees_ovr_assemble: params must hold n, k, finish, then (bc, at) per member")
+    var members = (c.n_params - 3) // 2
+    _addrs(c, 1 + members, "x_trees_ovr_assemble")
+    var n = _count(_i(c, 0), "x_trees_ovr_assemble")
+    var k = _i(c, 1)
+    var finish = _i(c, 2)
+    if finish < 0 or finish > 2:
+        raise Error("x_trees_ovr_assemble: unknown finish")
+    var parsed = List[OvrColumn]()
+    for j in range(members):  # driver-loop: over the members (one column each)
+        var bc = _i(c, 3 + 2 * j)
+        var at = _i(c, 4 + 2 * j)
+        if at >= bc:
+            raise Error("x_trees_ovr_assemble: column out of range")
+        parsed.append(OvrColumn(_a(c, 1 + j), bc, at))
+    var address = _a(c, 0)
+    comptime if XTREES_DEVICE_OPS:
+        ovr_assemble_device(parsed, n, k, finish, f64_ptr(address), i32_ptr(address))
+    else:
+        ovr_assemble_host(parsed, n, k, finish, f64_ptr(address), i32_ptr(address))
+    return n
+
+
+def calibrated_proba_run(c: XtCall) raises -> Int:
+    """CalibratedClassifierCV's whole prediction epilogue in one program
+    (`xtrees/calibrated_apply.mojo`): acc (float64, n x k) = the mean of the
+    pairs' calibrated probabilities. addresses = [acc, then per pair: blk,
+    cols, then per calibrator: kx, ky]; params = [n, k, pairs, then per pair:
+    bc, at, ks, calibrators, then per calibrator: kind, a, b, m]. blk is the
+    member's float32 n x bc scores, cols its int32[ks] class codes (k > 2),
+    at its code-1 column (k == 2, bc > 1); kind 0 is sigmoid (a, b), 1
+    isotonic (float64 knots kx, ky, m of them)."""
+    if c.n_params < 3 or c.n_addrs < 1:
+        raise Error("x_trees_calibrated_proba: params must hold n, k and the pair count")
+    var n = _count(_i(c, 0), "x_trees_calibrated_proba")
+    var k = _i(c, 1)
+    if k < 2:
+        raise Error("x_trees_calibrated_proba: k must be at least 2")
+    var pairs = _count(_i(c, 2), "x_trees_calibrated_proba")
+    var pi = 3
+    var ai = 1
+    var parsed = List[CalPair]()
+    for p in range(pairs):  # driver-loop: over the (member, calibrators) pairs
+        if pi + 4 > c.n_params or ai + 2 > c.n_addrs:
+            raise Error("x_trees_calibrated_proba: truncated pair " + String(p))
+        var blk = _a(c, ai)
+        var cols = _a(c, ai + 1)
+        ai += 2
+        var bc = _i(c, pi)
+        var at = _i(c, pi + 1)
+        var ks = _i(c, pi + 2)
+        var count = _count(_i(c, pi + 3), "x_trees_calibrated_proba")
+        pi += 4
+        var kinds = List[Int]()
+        var a = List[Float64]()
+        var b = List[Float64]()
+        var kx = List[Int]()
+        var ky = List[Int]()
+        var m = List[Int]()
+        for j in range(count):  # driver-loop: over the class columns (one calibrator each)
+            if pi + 4 > c.n_params or ai + 2 > c.n_addrs:
+                raise Error("x_trees_calibrated_proba: truncated calibrator " + String(j))
+            kinds.append(_i(c, pi))
+            a.append(_f(c, pi + 1))
+            b.append(_f(c, pi + 2))
+            m.append(_i(c, pi + 3))
+            kx.append(_a(c, ai))
+            ky.append(_a(c, ai + 1))
+            pi += 4
+            ai += 2
+        if len(kinds) != (1 if k == 2 else k):
+            raise Error("x_trees_calibrated_proba: one calibrator per class column")
+        parsed.append(CalPair(blk, bc, at, cols, ks, kinds^, a^, b^, kx^, ky^, m^))
+    if pi != c.n_params or ai != c.n_addrs:
+        raise Error("x_trees_calibrated_proba: trailing request words")
+    var acc = _a(c, 0)
+    comptime if XTREES_DEVICE_OPS:
+        calibrated_proba_device(parsed, n, k, f64_ptr(acc))
+    else:
+        calibrated_proba_host(parsed, n, k, f64_ptr(acc))
+    return n
+
+
 def x_trees_glue_dispatch(op: Int, c: XtCall) raises -> Int:
     """One glue operation by its `XT_*` code (xtrees/glue_abi.mojo)."""
     if op == XT_ACCUMULATE:
@@ -1160,6 +1297,12 @@ def x_trees_glue_dispatch(op: Int, c: XtCall) raises -> Int:
         return weighted_median_run(c)
     if op == XT_WEIGHTED_SAMPLE:
         return weighted_sample_run(c)
+    if op == XT_ACCUMULATE_COLS_MANY:
+        return accumulate_cols_many_run(c)
+    if op == XT_OVR_ASSEMBLE:
+        return ovr_assemble_run(c)
+    if op == XT_CALIBRATED_PROBA:
+        return calibrated_proba_run(c)
     raise Error("x_trees glue: unknown operation " + String(op))
 
 
