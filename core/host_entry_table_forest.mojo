@@ -20,15 +20,16 @@ the operation code, no data work.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_groves import HostGroveForest, HostGroveRegistry
-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from core.host_entry_table import (
     HostEntryKey, host_table_publish, HOST_TABLE_FOREST_HOST, FOREST_HOST_ABI, FH_OP_COUNT,
     FH_RF_PREDICT_PROBA, FH_RF_PREDICT_REG, FH_ET_PREDICT, FH_GROVES_PREPARE, FH_GROVES_PREDICT,
-    FH_GBDT_EXPAND_CTR,
+    FH_GBDT_EXPAND_CTR, FH_GBDT_SIGMOID_PAIR,
 )
 from core.mojolearn_forest_host_impl import (
     forest_host_gbdt_expand_ctr_into,
     forest_host_gbdt_raw_into,
+    forest_host_gbdt_sigmoid_pair_into,
     forest_host_vote_into,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -299,6 +300,19 @@ def forest_host_gbdt_expand_ctr_run(addresses: List[Int], params: List[Int]) rai
     return n_cols
 
 
+def forest_host_gbdt_sigmoid_pair_run(raw_addr: Int, out_addr: Int, count: Int) raises -> Int:
+    """DEVIATION 2902: the two float64 probability columns of a Logloss or
+    CrossEntropy `predict_proba`, `out[2 * i] = 1 - p`, `out[2 * i + 1] = p`
+    with `p = 1 / (1 + exp(-raw[i]))` through `identical_exp64`, `count` rows
+    (swapped under the gate's sabotage build). Returns count."""
+    var rp = f64_ptr(raw_addr)
+    var op = f64_ptr(out_addr)
+    if count < 0:
+        raise Error("forest_host_gbdt_sigmoid_pair: n must be non-negative")
+    forest_host_gbdt_sigmoid_pair_into(rp, op, count)
+    return count
+
+
 def forest_host_dispatch(operation: Int, addresses: List[Int], words: List[Int], bias: Float64) raises -> Int:
     """One host table operation over unpacked words (layouts in
     core/host_entry_table.mojo)."""
@@ -320,6 +334,10 @@ def forest_host_dispatch(operation: Int, addresses: List[Int], words: List[Int],
         return forest_host_groves_predict_run(words[0], addresses[0], addresses[1], params, words[4])
     if operation == FH_GBDT_EXPAND_CTR:
         return forest_host_gbdt_expand_ctr_run(addresses, words)
+    if operation == FH_GBDT_SIGMOID_PAIR:
+        if len(addresses) != 2 or len(words) != 1:
+            raise Error("forest_host_gbdt_sigmoid_pair: expected 2 addresses and 1 param")
+        return forest_host_gbdt_sigmoid_pair_run(addresses[0], addresses[1], words[0])
     return forest_host_gbdt_predict_run(addresses, words, bias)
 
 

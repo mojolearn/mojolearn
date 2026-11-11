@@ -24,6 +24,7 @@ after its arguments were unpacked: the same checks, kernels and refusals.
   FH_GROVES_PREDICT     a [x, out] p [handle, n_rows, n_cols, num_outputs, family] -> rows
   FH_GBDT_EXPAND_CTR    a [10 addresses] p [11 words]                    -> columns
   FH_GBDT_PREDICT       a [15 addresses] p [8 or 9 words], f[0] the bias -> rows
+  FH_GBDT_SIGMOID_PAIR  a [raw f64, out f64] p [n]                      -> n
 The caller owns every buffer until the synchronous call returns. The grove
 operations run with the GIL held by their caller (a handle is never released
 under a running prediction); the others may run with it released.
@@ -46,7 +47,8 @@ comptime FH_GROVES_PREPARE = 3
 comptime FH_GROVES_PREDICT = 4
 comptime FH_GBDT_EXPAND_CTR = 5
 comptime FH_GBDT_PREDICT = 6
-comptime FH_OP_COUNT = 7
+comptime FH_GBDT_SIGMOID_PAIR = 7
+comptime FH_OP_COUNT = 8
 
 
 @fieldwise_init

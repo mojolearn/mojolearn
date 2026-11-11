@@ -88,16 +88,20 @@ def connect(context, formats, cleanup_entries, forest_metadata):
             raise TypeError("forest grove cleanup requires a compiled native entry")
         archive["host_archive_lifetime_layouts"][forest_cls] = (release, forest_cls.__dict__["__dict__"], "groves")
         forest_cls.__del__ = descriptor
-    entries = {}
-    for name in ("forest_host_rf_predict_proba", "forest_host_rf_predict_reg", "forest_host_et_predict",  # glue: fixed CPU inference entry points
-                 "forest_host_groves_prepare", "forest_host_groves_predict", "forest_host_groves_release",
-                 "forest_host_gbdt_expand_ctr", "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid_pair"):
-        entry = getattr(forest_metadata["host_archive_forest_binding"], name, None)
-        if entry is not None and not isinstance(entry, BuiltinFunctionType):
-            raise TypeError("CPU tree inference requires compiled native entry points")
-        entries[name] = entry
     prediction = dict(archive)
-    prediction.update(host_tree_entries=entries, host_tree_entry_type=BuiltinFunctionType, output_context=archive)
+    prediction.update(host_tree_entry_type=BuiltinFunctionType, output_context=archive)
+    # glue: once at import, the connected forest host image's (tier, vendor)
+    # key of the native host entry table (core/host_entry_table.mojo); the
+    # saved-model owner calls that image's published entry, not its Python
+    # exports. An image without the probe leaves the key absent and the
+    # owner refuses at the first call.
+    forest_binding = forest_metadata["host_archive_forest_binding"]
+    try:
+        mode = int(forest_binding.forest_host_numeric_mode())  # import-time: the image's compiled tier
+    except Exception:  # noqa: BLE001 - absent binding or probe leaves the key absent
+        mode = -1
+    if mode in (0, 1):
+        prediction["host_tree_native_key"] = (mode, 0)
     context["host_tree_context"] = prediction
     context["host_archive_context"] = archive
 

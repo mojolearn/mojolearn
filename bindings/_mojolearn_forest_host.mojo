@@ -78,7 +78,6 @@ from bindings.host_helpers import (
     gather_f64_binding,
     gather_i64_binding,
 )
-from core.hostptr import f64_ptr
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -95,11 +94,11 @@ from core.forest_host_predict import (
 )
 from core.gbdt_host_ctr import GBDT_CTR_HOST_SABOTAGE, gbdt_host_expand_ctr
 from core.gbdt_host_predict import gbdt_host_predict
-from core.mojolearn_forest_host_impl import forest_host_gbdt_sigmoid_pair_into
 from core.host_entry_table_forest import (
     forest_host_et_predict_run,
     forest_host_gbdt_expand_ctr_run,
     forest_host_gbdt_predict_run,
+    forest_host_gbdt_sigmoid_pair_run,
     forest_host_groves_predict_run,
     forest_host_groves_prepare_run,
     forest_host_groves_release_run,
@@ -323,13 +322,9 @@ def forest_host_gbdt_sigmoid_pair_binding(
     no association, so the column's bits are the Python column's. Under
     the gate's sabotage build the two columns are written swapped, so a
     column that could not tell would read IDENTICAL and be caught."""
-    var rp = f64_ptr(_index(raw_addr))
-    var op = f64_ptr(_index(out_addr))
-    var count = _index(n)
-    if count < 0:
-        raise Error("forest_host_gbdt_sigmoid_pair: n must be non-negative")
-    forest_host_gbdt_sigmoid_pair_into(rp, op, count)
-    return PythonObject(count)
+    var raw = _index(raw_addr)
+    var dst = _index(out_addr)
+    return PythonObject(forest_host_gbdt_sigmoid_pair_run(raw, dst, _index(n)))
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_forest_host.mojo

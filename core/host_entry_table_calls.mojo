@@ -15,7 +15,7 @@ from core.native_descriptor_call import native_descriptor_call
 from core.host_entry_table import (
     HostEntryKey, host_table_entry, HOST_TABLE_FOREST_HOST, FOREST_HOST_ABI, FH_OP_COUNT,
     FH_RF_PREDICT_PROBA, FH_RF_PREDICT_REG, FH_ET_PREDICT, FH_GROVES_PREPARE, FH_GROVES_PREDICT,
-    FH_GBDT_EXPAND_CTR, FH_GBDT_PREDICT,
+    FH_GBDT_EXPAND_CTR, FH_GBDT_PREDICT, FH_GBDT_SIGMOID_PAIR,
 )
 
 
@@ -68,3 +68,11 @@ def fh_gbdt_predict(key: HostEntryKey, addrs: List[Int], params: List[Int], bias
     else:
         floats[0] = bias
     return fh_call(key, FH_GBDT_PREDICT, addrs, params, floats)
+
+
+def fh_gbdt_sigmoid_pair(key: HostEntryKey, raw: Int, dst: Int, n: Int) raises -> Int:
+    """The two float64 Logloss probability columns of n raw approxes. Returns n."""
+    var addrs: List[Int] = [raw, dst]
+    var ints: List[Int] = [n]
+    var floats: List[Float64] = [0.0]
+    return fh_call(key, FH_GBDT_SIGMOID_PAIR, addrs, ints, floats)
