@@ -37,7 +37,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_setitem
+from bindings.py_balanced import py_call, py_type, py_setitem, py_get
+from bindings.boundary_read import admitted_buffer_view
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 from bindings.user_object_flatten import user_object_flatten
@@ -124,7 +125,7 @@ def _index_at(address: Int, k: Int, width: Int) -> Int:
 def _take(env: _Env, values: PythonObject, address: Int, count: Int, width: Int) raises -> PythonObject:
     var n = len(values)
     var out = Python.list()
-    for k in range(count):  # cpu-route: Python list of label objects read once by user_objects_c (take)
+    for k in range(count):  # list-input: Python list of label objects read once by user_objects_c (take); a Python list of objects has no buffer form
         var i = _index_at(address, k, width)
         var j = i + n if i < 0 else i
         if j < 0 or j >= n:
@@ -142,7 +143,7 @@ def _first_seen(env: _Env, values: PythonObject) raises -> PythonObject:
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
     _ = codes  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: Python list of label objects read once by user_objects_c (first_seen)
+    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (first_seen); a Python list of objects has no buffer form
         var v = values[i]
         var k = len(classes)
         var got = py_call(index.setdefault, v, PythonObject(k))
@@ -159,7 +160,7 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     # class keeps its last index, as the comprehension does), and the distinct
     # unseen values in first-seen order
     var index = Python.dict()
-    for i in range(len(classes)):  # cpu-route: Python list of class objects read once by user_objects_c (lookup)
+    for i in range(len(classes)):  # list-input: Python list of class objects read once by user_objects_c (lookup); a Python list of objects has no buffer form
         py_setitem(index, classes[i], PythonObject(i))
     var n = len(values)
     var codes = env.store("i", n, 4)
@@ -168,7 +169,7 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     var unseen = Python.dict()
     var missing = Python.list()
     var none = PythonObject(None)
-    for i in range(n):  # cpu-route: Python list of label objects read once by user_objects_c (lookup)
+    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (lookup); a Python list of objects has no buffer form
         var v = values[i]
         var got = py_call(index.get, v, none)
         if got is none:
@@ -201,7 +202,7 @@ def _is_intval(env: _Env, v: PythonObject) raises -> Bool:
 def _kinds(env: _Env, values: PythonObject) raises -> PythonObject:
     var counts = List[Int](length=N_KINDS, fill=0)
     var n = len(values)
-    for i in range(n):  # cpu-route: Python list of label objects read once by user_objects_c (kinds)
+    for i in range(n):  # list-input: Python list of label objects read once by user_objects_c (kinds); a Python list of objects has no buffer form
         var v = values[i]
         var is_b = env.is_bool(v)
         var integral = env.isinstance(v, env.integral)
@@ -239,7 +240,38 @@ def _as_list(env: _Env, values: PythonObject) raises -> PythonObject:
     return py_call(env.b.list, values)
 
 
+def _ndarray_vector(values: PythonObject, integers_only: Bool) raises -> Bool:
+    """True for an exact, little-endian or native, one-dimensional NumPy
+    array of integer or bool storage (and float storage unless
+    `integers_only`; uint64 only then), whose `int(v)` / `float(v)` per
+    entry is exactly the native widening of its words."""
+    var numpy = py_get(native_loaded_module("sys").modules, "numpy")
+    if numpy is None or not (py_type(values) is numpy.ndarray):
+        return False
+    var dtype = values.dtype
+    if Int(py=values.ndim) != 1 or String(py=dtype.byteorder) == ">":
+        return False
+    var kind = String(py=dtype.kind)
+    if kind == "i" or kind == "b":
+        return True
+    if kind == "u":
+        return not integers_only or Int(py=dtype.itemsize) < 8
+    return kind == "f" and not integers_only
+
+
 def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
+    if _ndarray_vector(values, True):
+        # ONE buffer read (bindings/boundary_read.mojo), the int64 words
+        # copied natively; list(values) made one NumPy scalar per entry.
+        var view = admitted_buffer_view(values)
+        var count = view.count()
+        var source = view.as_i64_c()
+        var packed = env.store("q", count, 8)
+        if count > 0:
+            unsafe_memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(packed)),
+                src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source), count=count)
+        view.release()
+        return packed
     var vals = _as_list(env, values)
     var n = len(vals)
     var words = env.store("q", n, 8)
@@ -247,7 +279,7 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
     _ = words  # keep the Python object alive through the native call above
     var lo = PythonObject(-9223372036854775807 - 1)
     var hi = PythonObject(9223372036854775807)
-    for i in range(n):  # cpu-route: Python int objects read once by user_objects_c (ints)
+    for i in range(n):  # list-input: Python int objects read once by user_objects_c (ints); a Python list of objects has no buffer form
         var x = py_call(env.b.int, vals[i])
         if env.lt(x, lo) or env.lt(hi, x):
             raise _refusal("OverflowError", "Python int too large to convert to C long")
@@ -257,12 +289,23 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
 
 
 def _floats(env: _Env, values: PythonObject) raises -> PythonObject:
+    if _ndarray_vector(values, False):
+        # ONE buffer read, the float64 words widened natively.
+        var view = admitted_buffer_view(values)
+        var count = view.count()
+        var source = view.as_f64_c()
+        var packed = env.store("d", count, 8)
+        if count > 0:
+            unsafe_memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_address(packed)),
+                src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=source), count=count)
+        view.release()
+        return packed
     var vals = _as_list(env, values)
     var n = len(vals)
     var words = env.store("d", n, 8)
     var out = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: Python number objects read once by user_objects_c (floats)
+    for i in range(n):  # list-input: Python number objects read once by user_objects_c (floats); a Python list of objects has no buffer form
         out[i] = Float64(py=py_call(env.b.float, vals[i]))
         _ = words  # keep the Python object alive through the native call above
     return words
@@ -270,14 +313,14 @@ def _floats(env: _Env, values: PythonObject) raises -> PythonObject:
 
 def _strs(env: _Env, values: PythonObject) raises -> PythonObject:
     var out = Python.list()
-    for i in range(len(values)):  # cpu-route: Python str objects read once by user_objects_c (strs)
+    for i in range(len(values)):  # list-input: Python str objects read once by user_objects_c (strs); a Python list of objects has no buffer form
         _ = py_call(out.append, py_call(env.b.str, values[i]))
     return out
 
 
 def _column(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
     var out = Python.list()
-    for i in range(len(rows)):  # cpu-route: Python label rows read once by user_objects_c (column)
+    for i in range(len(rows)):  # list-input: Python label rows read once by user_objects_c (column); a Python list of objects has no buffer form
         _ = py_call(out.append, rows[i][j])
     return out
 
@@ -287,7 +330,7 @@ def _column_f32(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: Python probability rows read once by user_objects_c (column_f32)
+    for i in range(n):  # list-input: Python probability rows read once by user_objects_c (column_f32); a Python list of objects has no buffer form
         out[i] = Float32(Float64(py=py_call(env.b.float, rows[i][j])))
         _ = words  # keep the Python object alive through the native call above
     return words
@@ -301,7 +344,7 @@ def _transpose(env: _Env, cols: PythonObject) raises -> PythonObject:
     var n = len(cols[0])
     for c in range(1, m):  # driver-loop: over the output columns
         n = min(n, len(cols[c]))
-    for i in range(n):  # cpu-route: Python label columns read once by user_objects_c (transpose)
+    for i in range(n):  # list-input: Python label columns read once by user_objects_c (transpose); a Python list of objects has no buffer form
         var row = Python.list()
         for c in range(m):  # driver-loop: over the output columns
             _ = py_call(row.append, cols[c][i])
@@ -311,7 +354,7 @@ def _transpose(env: _Env, cols: PythonObject) raises -> PythonObject:
 
 def _scatter(env: _Env, rows: PythonObject, address: Int, count: Int, vals: PythonObject) raises -> PythonObject:
     var n = min(count, len(vals))
-    for k in range(n):  # cpu-route: Python prediction objects read once by user_objects_c (scatter)
+    for k in range(n):  # list-input: Python prediction objects read once by user_objects_c (scatter); a Python list of objects has no buffer form
         py_setitem(rows, PythonObject(_index_at(address, k, 8)), vals[k])
     return PythonObject(None)
 
@@ -330,7 +373,7 @@ def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out_buf
     if n == 0:
         return Python.tuple(PythonObject(0))
     var first = _nested_into(env, seq[0], array_type, out_buf)
-    for i in range(1, n):  # cpu-route: ragged user Python list read once by user_objects_c (nested)
+    for i in range(1, n):  # list-input: ragged user Python list read once by user_objects_c (nested); a Python list of objects has no buffer form
         var shape = _nested_into(env, seq[i], array_type, out_buf)
         if not env.eq(shape, first):
             raise _refusal("ValueError", "mojolearn: nested sequence is not rectangular (" + env.text(shape)
@@ -360,7 +403,7 @@ def _group_runs(env: _Env, ids: PythonObject) raises -> PythonObject:
     var keys = List[UInt8]()
     var starts = List[Int](capacity=n)
     var lengths = List[Int](capacity=n)
-    for i in range(n):  # cpu-route: group_id objects (int/str/bytes) read once by user_objects_c (group_runs)
+    for i in range(n):  # list-input: group_id objects (int/str/bytes) read once by user_objects_c (group_runs); a Python list of objects has no buffer form
         var v = ids[i]
         var raw: PythonObject
         if env.isinstance(v, env.b.bytes):
@@ -396,7 +439,7 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
     var flat = env.store("q", 2 * n, 8)
     var fw = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(flat))
     _ = flat  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: user pairs (Python index pairs) read once by user_objects_c (pairs)
+    for i in range(n):  # list-input: user pairs (Python index pairs) read once by user_objects_c (pairs); a Python list of objects has no buffer form
         var pair = rows[i]
         if len(pair) != 2:
             raise _refusal("ValueError", "mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
@@ -428,7 +471,7 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
     if len(weights) != n:
         raise _refusal("ValueError", "mojolearn: len(pairs_weight) = " + String(len(weights))
                        + " is not equal to len(pairs) = " + String(n) + " ")
-    for i in range(n):  # cpu-route: user pairs_weight objects read once by user_objects_c (pairs)
+    for i in range(n):  # list-input: user pairs_weight objects read once by user_objects_c (pairs); a Python list of objects has no buffer form
         var w = weights[i]
         var ok = env.isinstance(w, env.real)
         var x = 0.0
@@ -450,7 +493,7 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
     var seen = Python.dict()
     var keys = Python.list()
     var none = PythonObject(None)
-    for i in range(n):  # cpu-route: categorical y label objects read once by user_objects_c (sorted_codes)
+    for i in range(n):  # list-input: categorical y label objects read once by user_objects_c (sorted_codes); a Python list of objects has no buffer form
         var v = values[i]
         if not env.eq(v, unknown):
             var before = len(seen)
@@ -498,7 +541,7 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
     _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: categorical y label objects read once by user_objects_c (sorted_codes)
+    for i in range(n):  # list-input: categorical y label objects read once by user_objects_c (sorted_codes); a Python list of objects has no buffer form
         var v = values[i]
         if env.eq(v, unknown):
             out[i] = Float32(-1.0)
@@ -514,7 +557,7 @@ def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
     var n = len(codes)
     var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
     var counts = List[Int](length=k, fill=0)
-    for i in range(n):  # cpu-route: int32 group codes read once by user_objects_c (group_rows)
+    for i in range(n):  # list-input: int32 group codes read once by user_objects_c (group_rows); a Python list of objects has no buffer form
         counts[Int(cp[i])] += 1
     var stores = Python.list()
     var at = List[Int](length=k, fill=0)
@@ -524,7 +567,7 @@ def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
         ptrs.append(_address(st) if counts[c] > 0 else 0)
         _ = st  # keep the Python object alive through the native call above
         _ = py_call(stores.append, st)
-    for i in range(n):  # cpu-route: int32 group codes read once by user_objects_c (group_rows)
+    for i in range(n):  # list-input: int32 group codes read once by user_objects_c (group_rows); a Python list of objects has no buffer form
         var c = Int(cp[i])
         MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ptrs[c])[at[c]] = Int64(i)
         at[c] += 1
@@ -545,7 +588,7 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
         _ = r  # keep the Python object alive through the native call above
         var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
         _ = p  # keep the Python object alive through the native call above
-        for a in range(m):  # cpu-route: Python label objects read once by user_objects_c (group_permute)
+        for a in range(m):  # list-input: Python label objects read once by user_objects_c (group_permute); a Python list of objects has no buffer form
             py_setitem(out, PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
             _ = p  # keep the Python object alive through the native call above
             _ = r  # keep the Python object alive through the native call above
@@ -557,7 +600,7 @@ def _f32_exact(env: _Env, values: PythonObject) raises -> PythonObject:
     # bool) that float32 holds exactly and none is NaN, else None
     var n = len(values)
     var out = Python.list()
-    for i in range(n):  # cpu-route: Python label objects read once by user_objects_c (f32_exact)
+    for i in range(n):  # list-input: Python label objects read once by user_objects_c (f32_exact); a Python list of objects has no buffer form
         var v = values[i]
         if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
             return PythonObject(None)
@@ -574,7 +617,7 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
     # value is not an integral real or more than two distinct values occur
     var n = len(rows)
     var w = len(rows[0])
-    for i in range(n):  # cpu-route: Python list-of-lists y read once by user_objects_c (indicator)
+    for i in range(n):  # list-input: Python list-of-lists y read once by user_objects_c (indicator); a Python list of objects has no buffer form
         if len(rows[i]) != w:
             return Python.tuple(PythonObject(1), PythonObject(None), PythonObject(0))
     var words = env.store("f", n * w, 4)
@@ -583,7 +626,7 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
     var d0 = 0.0
     var d1 = 0.0
     var nd = 0
-    for i in range(n):  # cpu-route: Python list-of-lists y read once by user_objects_c (indicator)
+    for i in range(n):  # list-input: Python list-of-lists y read once by user_objects_c (indicator); a Python list of objects has no buffer form
         var r = rows[i]
         for j in range(w):  # driver-loop: over one row's columns
             var v = r[j]
