@@ -3,12 +3,12 @@
 # (python/mojolearn/_expansion_neighbors.py).
 # Each `family_xn_loc_*` operation validates, prepares, runs the family's compiled
 # kernels and returns, with the former Python method's refusals, operations
-# and order, so the bits do not move.
+# and arithmetic order.
 #
 # The shell hands over the binding `_bind()` resolved (the x_neighbors
-# binding of the estimator's numeric mode) first in `args`. Every `xn_*`
-# primitive is called as `_XNeighbors._op` called it: one list of buffer
-# addresses, one list of ints, one list of floats. The A/B arms the module
+# binding of the estimator's numeric mode) first in `args`. LOF and NC use
+# native plans and fixed request envelopes. KNNImputer still uses the shared
+# `_op` boundary helper below. The A/B arms the module
 # read at import (MOJOLEARN_XN_UNFUSED_KNN, MOJOLEARN_XN_UNCOMPACT_IMPUTE,
 # MOJOLEARN_XN_OLD_ITEMS) are the import-time values in the context
 # (`family_xn_loc_flags`); MOJOLEARN_NC_SPLIT_OPS is read at each fit, as the
@@ -17,10 +17,8 @@
 # Scalars derived on the host (the contamination percentile, the prior
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
-from providers.python.x_neighbors_admission_pyapi import xn_capabilities
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.math import floor
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -36,9 +34,8 @@ from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.label_admission_native import labels_primitive_kind
 from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_call, family_entry, family_field,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_call, family_field,
     family_isinstance,
 )
 from bindings.classical_labels import (
@@ -47,17 +44,15 @@ from bindings.classical_labels import (
 )
 from bindings.labels_descriptor_boundary import labels_class_ratio_f64
 from bindings.nearest_centroid_provider import NcConnection
+from bindings.lof_provider import LofConnection
+from core.lof_plan import LofPlan, LofLabelsPlan, lof_f32_address, lof_offset
 from core.nearest_centroid_plan import (
     NcFitPlan, NcQueryPlan, nc_uniform, nc_normalize_priors, nc_narrow_priors, nc_binary_decision, nc_scratch_address,
 )
 from core.admitted_weights import admitted_fill
 from bindings.admitted_input import admitted_array, admitted_vector, admitted_storage_native, admit_c_view, admitted_dtype
 from bindings.admitted_input import admitted_finite_refuse
-from checks.numerics import pinned_mul_f64
 
-# x_neighbors/items.mojo's unary codes (`_U_SQRT`, `_U_IDENTITY`).
-comptime _U_SQRT = 2
-comptime _U_IDENTITY = 6
 
 
 # ------------------------------------------------------------------ glue
@@ -205,31 +200,9 @@ def _i(v: Int) -> PythonObject:
     return PythonObject(v)
 
 
-def _pow2_steps(count: Int) -> Tuple[Int, Int]:
-    """`(p, lg * (lg + 1) // 2)`: the power-of-two pad of `count` (p = 1,
-    doubled while p < count) and the bitonic network's step count, with
-    lg = p.bit_length() - 1."""
-    var p = 1
-    var lg = 0
-    while p < count:  # small-loop(bits: doublings to the next power of two of one count): at most 63
-        p *= 2
-        lg += 1
-    return (p, lg * (lg + 1) // 2)
-
-
 def _f32_scalar(value: PythonObject) raises -> Float64:
     """`_f32_scalar(v)`: `float(v)` rounded once to float32."""
     return Float64(Float32(Float64(py=family_call(_b().float, value))))
-
-
-def _astype_i64(lab: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`lab.astype("<i8")` of an int32 vector Array."""
-    var n = _size(lab)
-    var out = admitted_vector(n, "<i8", context)
-    labels_cast(Int(py=classical_address(lab)), "<i4", Int(py=classical_address(out)), "<i8", n, context)
-    _ = lab  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
 
 
 def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -240,98 +213,6 @@ def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     return out
-
-
-def _sqdist(binding: PythonObject, a: PythonObject, b: PythonObject, context: PythonObject,
-            status: Int = 0) raises -> PythonObject:
-    """`_XNeighbors._sqdist(A, B)`; `status`: A's finite status word (its
-    status slot; 0 not asked)."""
-    var n = _rows(a)
-    var d = _cols(a)
-    var m = _rows(b)
-    var out = _out(Python.tuple(n, m), "<f4", context)
-    var ints = Python.list(_i(n), _i(m), _i(d))
-    if status != 0:
-        _ = py_call(ints.append, _i(status))
-    _op(binding, "sqdist", Python.list(classical_address(a), classical_address(b), classical_address(out)),
-        ints, Python.list(), context)
-    _ = a  # keep the Python object alive through the native call above
-    _ = b  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _l1dist(binding: PythonObject, a: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_XNeighbors._l1dist(A, B)`."""
-    var n = _rows(a)
-    var d = _cols(a)
-    var m = _rows(b)
-    var out = _out(Python.tuple(n, m), "<f4", context)
-    _op(binding, "l1dist", Python.list(classical_address(a), classical_address(b), classical_address(out)),
-        Python.list(_i(n), _i(m), _i(d)), Python.list(), context)
-    _ = a  # keep the Python object alive through the native call above
-    _ = b  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _knn_select(binding: PythonObject, dmat: PythonObject, k: Int, exclude_self: Bool,
-                context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
-    """`_XNeighbors._knn_select(D, k, exclude_self)`: (dist, idx)."""
-    var n = _rows(dmat)
-    var m = _cols(dmat)
-    var dist = _out(Python.tuple(n, k), "<f4", context)
-    var idx = _out(Python.tuple(n, k), "<i4", context)
-    _op(binding, "knn_select", Python.list(classical_address(dmat), classical_address(dist), classical_address(idx)),
-        Python.list(_i(n), _i(m), _i(k), _i(1 if exclude_self else 0)), Python.list(), context)
-    _ = dmat  # keep the Python object alive through the native call above
-    _ = dist  # keep the Python object alive through the native call above
-    _ = idx  # keep the Python object alive through the native call above
-    return (dist, idx)
-
-
-def _unary(binding: PythonObject, x: PythonObject, code: Int, a: Float64, bias: Float64,
-           context: PythonObject) raises -> PythonObject:
-    """`_XNeighbors._unary(X, op, a, b)`."""
-    var out = _out(py_call(_b().tuple, x.shape), "<f4", context)
-    _op(binding, "unary", Python.list(classical_address(x), classical_address(out)),
-        Python.list(_i(_size(x)), _i(code)), Python.list(PythonObject(a), PythonObject(bias)), context)
-    _ = x  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _knn(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int, exclude_self: Bool,
-         context: PythonObject, status: Int = 0) raises -> Tuple[PythonObject, PythonObject]:
-    """`_XNeighbors._knn(Q, R, k, exclude_self)`: `_knn_sq` (the fused
-    `knn_sq_tiled`, `knn_sq` under MOJOLEARN_XN_OLD_ITEMS, sqdist +
-    knn_select under MOJOLEARN_XN_UNFUSED_KNN), then the square root.
-    `status` (lane a8b-device-x-neighbors-rest; 0: not asked): the host
-    address of the int32 word that receives Q's finite status, from the
-    first op that uploads Q (its status slot)."""
-    var sq: PythonObject
-    var idx: PythonObject
-    if _flag(context, "unfused_knn"):
-        var pair = _knn_select(binding, _sqdist(binding, q, r, context, status), k, exclude_self, context)
-        sq = pair[0]
-        idx = pair[1]
-    else:
-        var n = _rows(q)
-        var d = _cols(q)
-        var m = _rows(r)
-        sq = _out(Python.tuple(n, k), "<f4", context)
-        idx = _out(Python.tuple(n, k), "<i4", context)
-        var ints = Python.list(_i(n), _i(m), _i(d), _i(k), _i(1 if exclude_self else 0))
-        if status != 0:
-            _ = py_call(ints.append, _i(status))
-        _op(binding, "knn_sq" if _flag(context, "old_items") else "knn_sq_tiled",
-            Python.list(classical_address(q), classical_address(r), classical_address(sq), classical_address(idx)),
-            ints, Python.list(), context)
-        _ = q  # keep the Python object alive through the native call above
-        _ = r  # keep the Python object alive through the native call above
-    var root = _unary(binding, sq, _U_SQRT, 1.0, 0.0, context)
-    _ = sq  # keep the Python object alive through the native call above
-    return (root, idx)
 
 
 def _i32_from_ints(values: List[Int], context: PythonObject) raises -> PythonObject:
@@ -348,13 +229,21 @@ def _i32_from_ints(values: List[Int], context: PythonObject) raises -> PythonObj
 # ------------------------------------------------------------------ LOF
 
 
-def _lof_check(fields: PythonObject) raises:
+def _lof_error_scalar(value: PythonObject, context: PythonObject) raises -> String:
+    # These owners have passed scalar admission. Array repr enters NumPy's
+    # Python printing/formatter hooks even for an exact native zero-D buffer.
+    if py_type(value) is py_get(context, "ndarray"):
+        return "<native scalar array>"
+    return family_repr(value)
+
+
+def _lof_check(fields: PythonObject, context: PythonObject) raises:
     """`LocalOutlierFactor._check_params`."""
     var b = _b()
     var metric = family_field(fields, "metric")
     var p = family_field(fields, "p")
     if not (_eq(metric, PythonObject("euclidean")) or (_eq(metric, PythonObject("minkowski")) and _eq(p, PythonObject(2)))):
-        raise Error("NotImplementedError: LocalOutlierFactor: metric=" + family_repr(metric) + " (p=" + family_repr(p)
+        raise Error("NotImplementedError: LocalOutlierFactor: metric=" + _lof_error_scalar(metric, context) + " (p=" + _lof_error_scalar(p, context)
                     + ") is not implemented; euclidean (or minkowski with p=2) only")
     if _truth(family_field(fields, "metric_params")):
         raise Error("NotImplementedError: LocalOutlierFactor: metric_params is not implemented")
@@ -367,177 +256,202 @@ def _lof_check(fields: PythonObject) raises:
         raise Error("n_neighbors must be >= 1")
 
 
-def _lof_percentile(binding: PythonObject, score: PythonObject, q: Float64, context: PythonObject) raises -> Float64:
-    """`LocalOutlierFactor._sorted_percentile(score, q)`: numpy.percentile
-    (method 'linear') with the sort on the device (`_p2m_sort_rows` over one
-    row: `xn_p2m_row_sort`, ascending by value, ties by position); only the
-    two order statistics it reads come back."""
-    var n = _rows(score)
-    var indptr = _i32_from_ints([0, n], context)
-    var cols = _out(Python.tuple(n), "<i4", context)
-    var nnz = _rows(score)
-    var steps = _pow2_steps(nnz)
-    var oc = _out(Python.tuple(nnz), "<i4", context)
-    var od = _out(Python.tuple(nnz), "<f4", context)
-    xn_execute(binding, "p2m_row_sort", Python.list(classical_address(indptr), classical_address(cols), classical_address(score),
-                                       classical_address(oc), classical_address(od)),
-                    Python.list(_i(_rows(indptr) - 1), _i(nnz), _i(steps[0]), _i(steps[1])), Python.list())
-    _ = indptr  # keep the Python object alive through the native call above
-    _ = cols  # keep the Python object alive through the native call above
-    _ = score  # keep the Python object alive through the native call above
-    _ = oc  # keep the Python object alive through the native call above
-    var pos = pinned_mul_f64(q / 100.0, Float64(n - 1))
-    var lo = Int(floor(pos))
-    var hi = min(lo + 1, n - 1)
-    var t = pos - Float64(lo)
-    var srt = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(od)))
-    var a = Float64(srt[lo])
-    var bv = Float64(srt[hi])
-    _ = od  # keep the Python object alive through the reads above
-    var diff = bv - a
-    if t >= 0.5:
-        return bv - pinned_mul_f64(diff, 1.0 - t)
-    return a + pinned_mul_f64(diff, t)
-
-
-def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`LocalOutlierFactor.fit(X)`."""
+def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LofConnection:
+    """Public admission/publication around the staged native fit plan."""
     var b = _b()
     var fields = py_fields(model)
-    _lof_check(fields)
+    _lof_check(fields, context)
     var binding = args[0]
     var x = _f32(args[1], context)
     var n = _rows(x)
     var d = _cols(x)
     if n < 2:
-        # scikit-learn's check_array wording (ensure_min_samples=2)
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
                     + ")) while a minimum of 2 is required.")
     var k = min(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))), n - 1)
-    # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
-    # k-NN op's upload (the public admission deferred it; a cast X was
-    # refused by its cast).
-    var status = List[Int32](length=1, fill=Int32(0))
-    var pair = _knn(binding, x, x, k, True, context, Int(status.unsafe_ptr()))
-    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-    _ = status^
-    var dist = pair[0]
-    var idx = pair[1]
-    var lrd = _out(Python.tuple(n), "<f4", context)
-    _op(binding, "lof_lrd", Python.list(classical_address(dist), classical_address(idx), classical_address(dist),
-                                        classical_address(lrd)),
-        Python.list(_i(k), _i(n), _i(n)), Python.list(), context)
-    var score = _out(Python.tuple(n), "<f4", context)
-    _op(binding, "lof_score", Python.list(classical_address(idx), classical_address(lrd), classical_address(lrd),
-                                          classical_address(score)),
-        Python.list(_i(k), _i(n), _i(n)), Python.list(), context)
-    _ = idx  # keep the Python object alive through the native calls above
-    _ = dist  # keep the Python object alive through the native calls above
-    _ = lrd  # keep the Python object alive through the native calls above
-    _ = score  # keep the Python object alive through the native calls above
-    py_setitem(fields, "_fit_X", x)
-    py_setitem(fields, "_fit_dist", dist)
-    py_setitem(fields, "_lrd", lrd)
-    py_setitem(fields, "n_neighbors_", _i(k))
-    py_setitem(fields, "n_features_in_", _i(d))
-    py_setitem(fields, "n_samples_fit_", _i(n))
-    py_setitem(fields, "negative_outlier_factor_", score)
-    var contamination = family_field(fields, "contamination")
-    if _eq(contamination, PythonObject("auto")):
-        py_setitem(fields, "offset_", PythonObject(-1.5))
-    else:
-        var q = pinned_mul_f64(100.0, Float64(py=family_call(b.float, contamination)))
-        var value = _lof_percentile(binding, score, q, context)
-        py_setitem(fields, "offset_", PythonObject(Float64(Float32(value))))
+    var unfused = _flag(context, "unfused_knn")
+    var old_items = _flag(context, "old_items") if not unfused else False
+    var plan = LofPlan(n, n, d, k, True, unfused, old_items)
+    var connection = LofConnection(binding)
+    var x_address = Int(py=classical_address(x))
+    var dist = PythonObject(None)
+    var lrd = PythonObject(None)
+    var score = PythonObject(None)
+    try:
+        var status = 0
+        with GILReleased(Python()):
+            status = plan.select(connection.driver, x_address, x_address)
+        dist = admitted_storage_native([n, k], "<f4", context, as_array=True)
+        var dist_address = Int(py=classical_address(dist))
+        with GILReleased(Python()):
+            plan.roots(connection.driver, dist_address)
+        admitted_finite_refuse(status, String(py_type(model).__name__))
+        lrd = admitted_storage_native([n], "<f4", context, as_array=True)
+        var lrd_address = Int(py=classical_address(lrd))
+        with GILReleased(Python()):
+            plan.density(connection.driver, dist_address, dist_address, lrd_address, n)
+        score = admitted_storage_native([n], "<f4", context, as_array=True)
+        var score_address = Int(py=classical_address(score))
+        with GILReleased(Python()):
+            plan.score(connection.driver, lrd_address, lrd_address, score_address, n)
+        py_setitem(fields, "_fit_X", x)
+        py_setitem(fields, "_fit_dist", dist)
+        py_setitem(fields, "_lrd", lrd)
+        py_setitem(fields, "n_neighbors_", _i(k))
+        py_setitem(fields, "n_features_in_", _i(d))
+        py_setitem(fields, "n_samples_fit_", _i(n))
+        py_setitem(fields, "negative_outlier_factor_", score)
+        var contamination = family_field(fields, "contamination")
+        if _eq(contamination, PythonObject("auto")):
+            py_setitem(fields, "offset_", PythonObject(-1.5))
+        else:
+            var c = Float64(py=family_call(b.float, contamination))
+            var value = Float64(0)
+            with GILReleased(Python()):
+                value = lof_offset(connection.driver, score_address, n, c)
+            py_setitem(fields, "offset_", PythonObject(value))
+    finally:
+        # Native integer addresses do not retain the owners or compiled image.
+        # Pins cover success, native refusal, and exception unwinding.
+        _ = plan
+        _ = connection
+        _ = x
+        _ = dist
+        _ = lrd
+        _ = score
+    return connection^
 
 
 def _lof_fit_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`LocalOutlierFactor.fit_predict(X)`."""
     var fields = py_fields(model)
     if _truth(family_field(fields, "novelty")):
         raise Error("AttributeError: fit_predict is not available when novelty=True; use predict on new data")
-    _lof_fit(model, args, context)
+    var connection = _lof_fit(model, args, context)
     var off = family_field(fields, "offset_")
     var score = family_field(fields, "negative_outlier_factor_")
     var size = _size(score)
-    var lab = _out(Python.tuple(size), "<i4", context)
-    if size != 0:
-        _op(args[0], "p2m_sign_label", Python.list(classical_address(score), classical_address(lab)),
-            Python.list(_i(size), _i(0)), Python.list(family_call(_b().float, off)), context)
-        _ = score  # keep the Python object alive through the native call above
-    return _astype_i64(lab, context)
+    var labels = LofLabelsPlan(size)
+    var result = PythonObject(None)
+    try:
+        if size != 0:
+            var score_address = Int(py=classical_address(score))
+            var threshold = Float64(py=family_call(_b().float, off))
+            with GILReleased(Python()):
+                labels.classify(connection.driver, score_address, 0, threshold)
+        result = admitted_storage_native([size], "<i8", context, as_array=True)
+        var result_address = Int(py=classical_address(result))
+        with GILReleased(Python()):
+            labels.write_i64(result_address)
+        return result
+    finally:
+        _ = labels
+        _ = connection
+        _ = score
+        _ = result
 
 
 def _lof_novelty(fields: PythonObject, what: String) raises:
-    """`LocalOutlierFactor._novelty(what)`."""
     if not _truth(family_field(fields, "novelty")):
         raise Error("AttributeError: " + what + " is not available when novelty=False; use fit_predict")
 
 
-def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
-                       context: PythonObject, name: String) raises -> PythonObject:
-    """`LocalOutlierFactor.score_samples(X)` after its novelty check. The
-    queries' finite test rides behind the k-NN op's upload; `name` words
-    its refusal."""
+def _lof_query(binding: PythonObject, fields: PythonObject, source: PythonObject,
+               context: PythonObject, name: String, result_kind: Int) raises -> PythonObject:
+    """Unpack staged public state, run native query, pack its requested result.
+
+    result_kind is 0 (scores), 1 (decision), or 2 (labels). Private scores and
+    decisions never cross Python; fitted fields retain their old read stages.
+    """
     var q = _f32(source, context)
     var k = _int_word(family_field(fields, "n_neighbors_"))
     var nf = _int_word(family_field(fields, "n_samples_fit_"))
     var fit_x = family_field(fields, "_fit_X")
-    var status = List[Int32](length=1, fill=Int32(0))
-    var pair = _knn(binding, q, fit_x, k, False, context, Int(status.unsafe_ptr()))
-    admitted_finite_refuse(Int(status[0]), name)
-    _ = status^
-    var dist = pair[0]
-    var idx = pair[1]
     var nq = _rows(q)
-    var fit_dist = family_field(fields, "_fit_dist")
-    var fit_lrd = family_field(fields, "_lrd")
-    var lrd = _out(Python.tuple(nq), "<f4", context)
-    _op(binding, "lof_lrd", Python.list(classical_address(dist), classical_address(idx), classical_address(fit_dist),
-                                        classical_address(lrd)),
-        Python.list(_i(k), _i(nq), _i(nf)), Python.list(), context)
-    var score = _out(Python.tuple(nq), "<f4", context)
-    _op(binding, "lof_score", Python.list(classical_address(idx), classical_address(fit_lrd), classical_address(lrd),
-                                          classical_address(score)),
-        Python.list(_i(k), _i(nq), _i(nf)), Python.list(), context)
-    _ = dist  # keep the Python object alive through the native calls above
-    _ = idx  # keep the Python object alive through the native calls above
-    _ = fit_dist  # keep the Python object alive through the native calls above
-    _ = fit_lrd  # keep the Python object alive through the native calls above
-    _ = lrd  # keep the Python object alive through the native calls above
-    _ = score  # keep the Python object alive through the native calls above
-    return score
+    var features = _cols(q)
+    var reference_rows = _rows(fit_x)
+    var unfused = _flag(context, "unfused_knn")
+    var old_items = _flag(context, "old_items") if not unfused else False
+    var plan = LofPlan(nq, reference_rows, features, k, False, unfused, old_items)
+    var connection = LofConnection(binding)
+    var query_address = Int(py=classical_address(q))
+    var fit_address = Int(py=classical_address(fit_x))
+    var fit_dist = PythonObject(None)
+    var fit_lrd = PythonObject(None)
+    var result = PythonObject(None)
+    try:
+        var status = 0
+        with GILReleased(Python()):
+            status = plan.query_neighbors(connection.driver, query_address, fit_address)
+        admitted_finite_refuse(status, name)
+        fit_dist = family_field(fields, "_fit_dist")
+        fit_lrd = family_field(fields, "_lrd")
+        var fit_dist_address = Int(py=classical_address(fit_dist))
+        with GILReleased(Python()):
+            plan.query_density(connection.driver, fit_dist_address, nf)
+        if result_kind == 0:
+            result = admitted_storage_native([nq], "<f4", context, as_array=True)
+            var fit_lrd_address = Int(py=classical_address(fit_lrd))
+            var result_address = Int(py=classical_address(result))
+            with GILReleased(Python()):
+                plan.score(connection.driver, fit_lrd_address, lof_f32_address(plan.densities), result_address, nf)
+            return result
+        var fit_lrd_address = Int(py=classical_address(fit_lrd))
+        with GILReleased(Python()):
+            plan.query_score(connection.driver, fit_lrd_address, nf)
+        var offset = family_field(fields, "offset_")
+        var shift: Float64
+        if py_type(offset) is _b().float:
+            shift = -Float64(py=offset)
+        else:
+            # Scalar unpack preserves native integer/NumPy negation semantics
+            # (including unsigned wrap/refusal) before Float64 conversion.
+            var op = native_loaded_module("operator")
+            shift = Float64(py=family_call(_b().float, family_call(op.neg, offset)))
+        if result_kind == 1:
+            result = admitted_storage_native([nq], "<f4", context, as_array=True)
+            var result_address = Int(py=classical_address(result))
+            with GILReleased(Python()):
+                plan.decision(connection.driver, result_address, shift)
+            return result
+        with GILReleased(Python()):
+            plan.query_decision(connection.driver, shift)
+        var labels = LofLabelsPlan(nq)
+        try:
+            with GILReleased(Python()):
+                labels.classify(connection.driver, lof_f32_address(plan.decisions), 1, 0.0)
+            result = admitted_storage_native([nq], "<i8", context, as_array=True)
+            var result_address = Int(py=classical_address(result))
+            with GILReleased(Python()):
+                labels.write_i64(result_address)
+            return result
+        finally:
+            _ = labels
+    finally:
+        _ = connection
+        _ = plan
+        _ = q
+        _ = fit_x
+        _ = fit_dist
+        _ = fit_lrd
+        _ = result
 
 
-def _lof_decision(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`LocalOutlierFactor.decision_function(X)`: `score_samples(X) - offset_`
-    through the identity unary."""
+def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
+                       context: PythonObject, name: String) raises -> PythonObject:
+    return _lof_query(binding, fields, source, context, name, 0)
+
+
+def _lof_decision(model: PythonObject, args: PythonObject, context: PythonObject,
+                  predict: Bool = False) raises -> PythonObject:
     var fields = py_fields(model)
     _lof_novelty(fields, "decision_function")
-    var score = _lof_score_samples(args[0], fields, args[1], context, String(py_type(model).__name__))
-    var offset = family_field(fields, "offset_")
-    var shift: Float64
-    if py_type(offset) is _b().float:
-        # Exact float: float(-x) is -x exactly (perf2-neighbors).
-        shift = -Float64(py=offset)
-    else:
-        var op = native_loaded_module("operator")
-        shift = Float64(py=family_call(_b().float, family_call(op.neg, offset)))
-    return _unary(args[0], score, _U_IDENTITY, 1.0, shift, context)
+    return _lof_query(args[0], fields, args[1], context, String(py_type(model).__name__), 2 if predict else 1)
 
 
 def _lof_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`LocalOutlierFactor.predict(X)`."""
     var fields = py_fields(model)
     _lof_novelty(fields, "predict")
-    var dec = _lof_decision(model, args, context)
-    var size = _size(dec)
-    var lab = _out(Python.tuple(size), "<i4", context)
-    if size != 0:
-        _op(args[0], "p2m_sign_label", Python.list(classical_address(dec), classical_address(lab)),
-            Python.list(_i(size), _i(1)), Python.list(PythonObject(0.0)), context)
-        _ = dec  # keep the Python object alive through the native call above
-    return _astype_i64(lab, context)
+    return _lof_decision(model, args, context, True)
 
 
 # ------------------------------------------------------------ NearestCentroid
@@ -1011,7 +925,7 @@ def _neighbors_local_operation(model: PythonObject, operation: String, var args:
             classical_admit_value(args[i], context)
     args = xn_admit_arguments(args, context)
     if operation == "family_xn_loc_lof_fit":
-        _lof_fit(model, args, context)
+        _ = _lof_fit(model, args, context)
         return model
     if operation == "family_xn_loc_lof_fit_predict":
         return _lof_fit_predict(model, args, context)

@@ -57,6 +57,9 @@ struct KMeansResidentOwner(Movable, Writable):
     def write_to(self, mut writer: Some[Writer]):
         writer.write("KMeansResidentOwner(", self.state.clusters, ", ", self.state.features, ")")
 
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
 
 def kmeans_owner_matching(value: PythonObject, model: PythonObject,
     centers: PythonObject, binding: PythonObject, connection: Int,
