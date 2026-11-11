@@ -100,7 +100,7 @@ one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -225,7 +225,7 @@ from neighbors.impl.ball_cover.registers import (
 #: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
 comptime IDN_DBSCAN_KEEP_COUNTS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
+    and not TARGET_HAS_APPLE_GPU
     and not (
         is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -235,7 +235,7 @@ comptime DBSCAN_RBC_KEEP_COUNTS = (
     (
         (
             (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
+            and TARGET_HAS_APPLE_GPU
         )
         or IDN_DBSCAN_KEEP_COUNTS
     )

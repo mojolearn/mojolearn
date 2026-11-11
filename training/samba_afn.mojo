@@ -66,7 +66,7 @@ from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -128,7 +128,7 @@ from transformer.impl.llama.modeling_llama import llama_rms_norm
 # ===========================================================================
 
 comptime AFN_SAMBA_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_SAMBA_ALL = AFN_SAMBA_APPLE_FAST and is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()
 comptime AFN_SAMBA_FUSE = AFN_SAMBA_ALL or (

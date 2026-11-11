@@ -48,7 +48,7 @@ vendor, and the host column takes the same formula
 from std.math import inf, isfinite
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.neural_context import process_ctx
 from arima.estimator import _DEVCTX_SLOT, _upload_f32, _write_list_f32, _write_list_i32

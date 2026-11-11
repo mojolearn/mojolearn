@@ -103,7 +103,7 @@ is not this lane's.
 
 from std.math import log, pi, sqrt
 from std.memory import bitcast
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from experiments.classical_identical_ideas.stats_controls import C52_PAIR, C52_ROWS
 from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
@@ -112,7 +112,7 @@ from kde.pair_lse import pair_parts, pair_row
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+
 from max.gpu.host import DeviceBuffer, DeviceContext
 from kde.impl.chunk_workspace import KdeChunkWorkspace
 from max.gpu.memory import AddressSpace
@@ -2727,7 +2727,7 @@ def kde_score_samples_fused_identical(
 #
 # The sibling defines compose on top of it (each also turns it on):
 comptime _KDE2_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 # TOMBSTONE: MOJOLEARN_KDE2_ALL (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: every kde2 define at once; istella no gain over DIMTILE alone (-0.6%), includes SAMPLE_FUSED (taxi +354%).
@@ -4382,7 +4382,7 @@ comptime KDE_SLICE_MAX = 256
 
 def kde_fast_slices_on() -> Bool:
     comptime if not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_KDE_FAST_SLICES_OFF"]()
     ):
         return False

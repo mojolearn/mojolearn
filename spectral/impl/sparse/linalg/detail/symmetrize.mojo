@@ -36,7 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -70,7 +70,7 @@ comptime SYMMETRIZE_FAST = (
     (
         (
             (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
+            and TARGET_HAS_APPLE_GPU
         )
         or IDN_SYMMETRIZE_SORTED
     )

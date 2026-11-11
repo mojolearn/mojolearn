@@ -14,7 +14,7 @@ cells and at most UNITS_MAX (row, tree) units, so no single launch walks an
 unbounded grid (Apple aborts long command buffers). The chunking moves no
 bit: every unit's chain is independent of it (xtrees/shap.mojo)."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -38,7 +38,7 @@ comptime TPB = 64 if AFT_P08 else 128
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T11 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T11"]()
 )
 comptime QUERY_TPB = 64 if AFCL_T11 else TPB
@@ -51,7 +51,7 @@ comptime UNITS_MAX = 1 << 20
 # restores the per-row units in IDENTICAL.
 comptime SHAP_TABLE = (
     (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
         or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
     )
     and not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"]()
@@ -95,7 +95,7 @@ comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_
 # repeat1.0757/1.4591/1.6713. All quality equal, paired reach2 each; one warmup
 # plus one score. Regression. ab-20261006/repairs-shap-3e19f734e/F13/shap.
 # Original wrong-binding failure retained; affected artifacts built fe1864e2c.
-comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
+comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
 # P07 is a distinct quartet tile; the existing pair arm and audit stay separate.
 comptime SHAP_ROW_TILE = 4 if AFT_P07 else (2 if SHAP_FAST_ROW_PAIR else 1)
 struct ShapPairAudit(Defaultable, Movable):
@@ -117,7 +117,7 @@ comptime TABLE_ACC = 64
 #: KiB per block); A/B it on NVIDIA and AMD (tree-shap taxi and istella plus
 #: a non-board forest) before it becomes a default. Off on Apple: Metal's
 #: threadgroup limit is 32 KiB, the whole tile.
-comptime SHAP_ACC_SHARED = is_defined["MOJOLEARN_TREESHAP_ACC_SHARED"]() and not has_apple_gpu_accelerator()
+comptime SHAP_ACC_SHARED = is_defined["MOJOLEARN_TREESHAP_ACC_SHARED"]() and not TARGET_HAS_APPLE_GPU
 
 
 struct _ShapContext(Defaultable, Movable):

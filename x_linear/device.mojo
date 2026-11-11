@@ -20,7 +20,7 @@ from max.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_META
 from std.utils import StaticTuple
 from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
@@ -138,7 +138,7 @@ def linear_ctx() raises -> DeviceContext:
 #: arm. IDENTICAL and the other vendors never compile the branch.
 comptime BAYES_GRID_GUARD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_BAYES_GRID_GUARD_OFF"]()
 )
 
@@ -703,7 +703,7 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 #: RIDGE_FAST_GRAM does the same for RidgeClassifier / RidgeCV's means, centered
 #: Gram and X'Y, and for k-fold RidgeCV's fold Grams instead of `kf_cells_kernel`
 #: (one thread per cell walking the fold's rows). Unweighted fits only.
-comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                               and not is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF"]())
 
 
@@ -747,7 +747,7 @@ def _ridge_fast_gram() -> Bool:
 # many schedulable blocks as the 256-thread baseline. Training examples,
 # minibatches, seeded order, gradient folds and update/stopping policy do
 # not change. Witness capacities/offsets use the same row-grid helper.
-comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L14"]())
 comptime SGD_ROW_TPB = 128 if AFCL_L14 else XG_TPB
 
@@ -943,7 +943,7 @@ comptime SGD_CHUNK_DEFAULT = 64
 # columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
 # `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
 comptime SGD_IDN_CHUNK_WIDE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
     and not (is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
@@ -1064,7 +1064,7 @@ def sgd_mb_steprows_kernel(
 # Update order: the same batches in the same order, the same helpers, the
 # same sub-block fold (sub = XG_TPB); FAST carries no bits requirement.
 comptime SGD_FAST_EPOCH_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"]()
 )
 
@@ -1155,7 +1155,7 @@ def sgd_mb_fast_batch_kernel(
 comptime SGD_IDN_DEV_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-    and not (has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
+    and not (TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
 )
 comptime SGD_FIN_RUN = 64
 
@@ -2729,7 +2729,7 @@ def _sgd_ps_kernel_body(
 # main's own seed spread). Still main's serial per-sample chain, 300x
 # shorter: a parallel SGD one-class algorithm remains owed.
 comptime SGDOC_FAST_TAIL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"]()
 )
 comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
@@ -2748,7 +2748,7 @@ def sgdoc_tail_k(d: Int) -> Int:
 
 
 comptime SGD_FAST_PS_SIMD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SGD_FAST_PS_SIMD_OFF"]()
 )
 comptime SPS_W = 32
@@ -2970,7 +2970,7 @@ def _sgd_ps_simd_body(
 # updates its own block's weights. The same chains folded in the same order
 # as the block form and the host's `sgd_one`: no bit moves.
 comptime SGD_IDN_PS_WARP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
     and not (is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
@@ -3669,14 +3669,14 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
 comptime GLM_APPLE_SLICE_MACS = 1 << 29
 
 def _glm_rows_slice(n: Int, slots: Int) -> Int:
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
     return n
 
 
 def _glm_blocks_slice(nb: Int, slots: Int) -> Int:
     """The row blocks a parts launch takes: all of them off Apple."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return max(1, min(nb, GLM_APPLE_SLICE_MACS // (max(slots, 1) * FOLD_BLOCK)))
     return nb
 
@@ -4396,7 +4396,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     # (136 threads at taxi's 16 features). Its launches are not witnessed
     # (it waits for them itself); the unit's solve that follows is.
     var fold_fast_gram = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         fold_fast_gram = _ridge_fast_gram() and d > 0
     for f in range(k):
         var s = Int32(kf_start(n, k, f))
@@ -5609,7 +5609,7 @@ def fit_device(
         _sgd_ps_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     var ctx = linear_ctx()
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         # LassoCV / ElasticNetCV with every row pass on the grid
         # (x_linear/enetcv_fast.mojo, lane/apple-fast-classical); `=0` is the A/B arm
         # (the weighted fit, ip[7] = 1, takes the grid's weighted arm)
@@ -5673,7 +5673,7 @@ def fit_device(
             hip.append(Int32(0))
         hip[6] = Int32(n)
     var fast_gram = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
         # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
         if bayes_like:
@@ -5703,7 +5703,7 @@ def fit_device(
     # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI were dropped (lane/apple-fast-kernel
     # @ 9e851777c).
     var kstats = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         if bayes_like:
             # STATS: BayesianRidge (unweighted) on main's grid driver only;
             # ARD keeps main's moments grid (its X'y pass is the team's)
@@ -5741,7 +5741,7 @@ def fit_device(
     # prep work in place, so a cut launch reruns the unit from its zeros.
     var cells = d * (d + 1) // 2
     var rows_slice = n
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         rows_slice = max(64, min(n, (XL_APPLE_SLICE_MACS // max(cells, 1)) // 64 * 64))
     var nslices = (n + rows_slice - 1) // rows_slice if n > 0 else 1
     var dgs = ctx.enqueue_create_buffer[DType.float32](max(d + d * d, 1) if grid_gram and nslices > 1 else 1)
@@ -5780,7 +5780,7 @@ def fit_device(
         dtw.enqueue_fill(Float32(0))
         deig.enqueue_fill(Int32(0))
         var good = True
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
             if fast_gram:
                 # lane/apple-fast-gram: the shared grid Gram (row chunks x 32 x
                 # 32 tiles, x_linear/fast_gram.mojo) fills the words the moments
@@ -6011,7 +6011,7 @@ def fit_device(
         var max_iter = Int(hip[0])
         var sw = Int(hip[2]) if len(hip) > 2 else 0
         var gram_sse = False
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
             gram_sse = sw == 0 and len(hip) > 5 and Int(hip[5]) != 0
         # FAST on Apple, the default (lane/apple-fast-bayes; `_GUARD_OFF` turns it off):
         # the Gram sse guarded by a reference row pass (`bayes_step_guard_kernel`)
@@ -6130,7 +6130,7 @@ def fit_device(
                     fresh = hst[6] == Float32(0)
                 max_iter = 0  # the loop below ran here
         var bayes_read = BAYES_IDN_READ
-        comptime if has_apple_gpu_accelerator():
+        comptime if TARGET_HAS_APPLE_GPU:
             bayes_read = 1
         for it in range(max_iter):
             iters = it + 1

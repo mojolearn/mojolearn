@@ -42,7 +42,7 @@ The bundle's four pieces, all on together when `ord_all_on`:
 
 from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T22
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
@@ -57,7 +57,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 # these public caller cases do not claim full-dataset/opponent admission.
 comptime ORD_ALL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ORD_ALL_OFF"]()
 )
 #: LEGACY, default OFF: the old width gate admitted only data with more than
@@ -84,7 +84,7 @@ def ord_all_on(n_features: Int) -> Bool:
 # while retaining coalesced fold-position compressed storage. Existing ORD_ALL
 # promotion is unchanged; IDENTICAL/non-Apple builds cannot admit this candidate.
 comptime ORD_DOC_ID_STORAGE = T22 or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     # MEASURED M3 FAST; broader workload evidence remains separate.
 # F12/ordered-docids M3 2026-10-06: 4 scored caller times; B/A
 # 0.8957..1.0334 (mixed/regressing); FAST candidate remains OFF.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The existing linear solver switches, shared by native and address doors."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST as _OLS_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 
 #: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
@@ -15,7 +15,7 @@ from std.sys.compile import is_defined
 #: through `ols_normal_eq_default`.
 comptime OLS_FAST_NORMAL_EQ = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
 )
 
@@ -29,6 +29,6 @@ comptime OLS_FAST_NORMAL_EQ = (
 #: old -D MOJOLEARN_RIDGE_RESIDENT define is now harmless.
 comptime RIDGE_FAST_RESIDENT = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )

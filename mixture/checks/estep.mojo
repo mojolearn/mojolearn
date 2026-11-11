@@ -80,7 +80,7 @@ from max.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from mixture.meanll_order import GMM_MEANLL_CHUNK, gmm_meanll_levels_floats
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import exp as fast_exp, log as fast_log
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -140,7 +140,7 @@ comptime GMM_ELEM_TPB = 256
 # Each row retains its complete component/feature fold and stable logsumexp;
 # more independent blocks trade staged-parameter reuse for occupancy.
 comptime AFCL_G08 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G08"]()
 )
 
@@ -515,7 +515,7 @@ def log_resp_kernel(
 
 comptime GMM_FAST_ESTEP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GMM_FAST_FUSED_ESTEP_OFF"]()
 )
 """FAST on Apple: the E-step's per-component `X . P_k` GEMMs, `mu_k . P_k`,
@@ -1028,7 +1028,7 @@ comptime IDN_GMM_ESTEP_STACK = (
 )
 comptime GMM_ESTEP_STACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and (has_apple_gpu_accelerator() or IDN_GMM_ESTEP_STACK)
+    and (TARGET_HAS_APPLE_GPU or IDN_GMM_ESTEP_STACK)
     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
 comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28

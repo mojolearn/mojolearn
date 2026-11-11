@@ -19,11 +19,11 @@ only path there and its bits never move. No switch is an environment read
 `-D MOJOLEARN_<NAME>=1` opt-in defines are harmless no-ops now.
 (The file keeps its first name, fast_env, so imports still resolve.)"""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: the compile gate of every switch here: FAST on Apple
-comptime ANN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime ANN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 #: The exact k-NN graph (CAGRA build, t-SNE affinities) for rows wider than
 #: 64 features: candidate rows staged in threadgroup memory a feature chunk

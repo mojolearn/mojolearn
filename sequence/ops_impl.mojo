@@ -33,14 +33,14 @@ from sequence.ops import OP_PROPHET_LB_YMAX, OP_PROPHET_LB_INIT, OP_PROPHET_LB_Y
 from sequence.adafactor import AF_NORM_BLOCK
 from std.os import getenv as _getenv_seq
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
 #: FAST + Apple only. Skipped fills, no bit moves:
 #:  MOJOLEARN_AF_FAST_NOFILL: Adafactor's P, G and variance buffers are bound
 #:    by their upload (`Exec.bind`), not zero filled first.
 #:  MOJOLEARN_LN_FAST_NOFILL: LayerNorm's x and dy likewise.
-comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: AF_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afnofill): adafactor 393.2 -> 380.1 ms, digest identical
 #: A == B. KEEP: the FAST + Apple default since then; rollback

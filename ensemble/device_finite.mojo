@@ -16,13 +16,13 @@ reads X."""
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime FOREST_DEVICE_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_FOREST_DEVICE_FINITE_OFF"]()
 )
 

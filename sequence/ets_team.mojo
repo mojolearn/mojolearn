@@ -36,7 +36,7 @@ host column by `ets_team_replay`).
 
 The multiplicative-error and the seasonal models keep `op_ets`."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.ets import SEAS_N, _log, ets_init_state
@@ -51,7 +51,7 @@ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 #: harmless. IDENTICAL and every other vendor compile op_ets unchanged.
 comptime ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ETS_TEAM_OFF"]()
 )
 

@@ -22,7 +22,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-G09: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
@@ -31,7 +31,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 # The accepted feature cap stays fixed: this changes scheduling only, with
 # the same probed lists, filters, candidates and total-order top-k merge.
 comptime AFCL_G09 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G09"]()
 )
 comptime FIVF_QPB = 2 if AFCL_G09 else 4

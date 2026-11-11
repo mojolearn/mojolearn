@@ -30,7 +30,7 @@ infinity in X raises main's transform message after that wait (the outputs
 are then never handed out).
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
@@ -67,7 +67,7 @@ from core.shared_slot import SharedSlot
 # main's two-call fit + transform.
 comptime KM_FAST_RBF_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
     and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
 )

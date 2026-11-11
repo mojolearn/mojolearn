@@ -29,7 +29,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.vendor import COMPILED_VENDOR
 from resample.checks.statistics import MC_DIMS, MC_F_CONST, MC_F_PRODUCT, MC_F_SUM
 from resample.estimator import (
@@ -416,7 +416,7 @@ def permutation_samples_binding(
 #: Every tier writes the drawn indices into the caller's buffer, except the
 #: FAST + Apple build compiled with MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF
 #: (RESAMPLE_IDX_DIRECT's measured B arm keeps its List route).
-comptime _IDX_INTO = RESAMPLE_IDX_DIRECT or not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+comptime _IDX_INTO = RESAMPLE_IDX_DIRECT or not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
 
 
 def resample_indices_binding(

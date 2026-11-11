@@ -122,7 +122,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
 comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import unsafe_memcpy
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
@@ -133,7 +133,7 @@ from x_ann.kpp_seed_device import kpp_seed_device
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
 )
 """FAST on Apple: the coarse quantizer trains on at most
@@ -147,7 +147,7 @@ comptime IVF_FAST_ROWS_PER_LIST = 256
 comptime IVF_FAST_SEED = (
     ANN3_COARSE_SEED
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
 )
 """FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
 the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
@@ -170,7 +170,7 @@ core. FAST bits may move (Float32 blocked sums); recall check paired."""
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_FAST_RANDOM_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
@@ -194,7 +194,7 @@ bits (another start): paired recall check."""
 
 comptime IVF_FAST_DEVICE_VALIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE_OFF"]()
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,

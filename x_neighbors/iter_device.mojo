@@ -48,7 +48,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul_add
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from std.sys.compile import is_defined
 from x_neighbors.nan_cells_device import (
@@ -1992,7 +1992,7 @@ def op_ocsvm_labels(
 #: SVGP-FAST-PAIR PASS (r2/rmse/elbo gates; A r2 taxi -0.19498, istella
 #: -0.10602). MOJOLEARN_SVGP_FAST_RBFTILE_OFF restores the per-cell kernel.
 comptime SVGP_FAST_RBFTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
 )
 #: X6 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
@@ -2170,7 +2170,7 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
 #: default on every vendor (two_prod commutes bit for bit and every entry
 #: keeps its p-ascending fold; the four solves are the column item's own);
 #: -D MOJOLEARN_IDN_GATES_OFF (or either _OFF) restores the old IDENTICAL form.
-comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or (
+comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
@@ -2314,7 +2314,7 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 #: the row A[i,c] - L[i,k] L[c,k], k ascending from 0, then sqrt / divide.
 #: The words only move with FAST's free contraction.
 comptime SVGP_FAST_BLKCHOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
 )
 #: X5 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
@@ -2472,7 +2472,7 @@ def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) rai
 #: r2 equal. KEEP: the FAST + Apple default (with SYMTILE); rollback
 #: -D MOJOLEARN_SVGP_FAST_BSPLIT_OFF. See docs/apple-fast/EXPERIMENTS.md.
 comptime SVGP_FAST_BSPLIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and SVGP_FAST_SYMTILE
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and SVGP_FAST_SYMTILE
     and not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"]()
 )
 comptime SVGP_BSPLIT_R = 4
@@ -3014,7 +3014,7 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, nc_: 
 #: arithmetic in the `comptime if XN_NC_IDN_CHUNKED` arms below; the host
 #: column folds the same chunks.
 from x_neighbors.items import XN_NC_IDN_CHUNKED, XN_NC_CHUNK_ROWS
-comptime XN_NC_CHUNKED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or XN_NC_IDN_CHUNKED
+comptime XN_NC_CHUNKED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or XN_NC_IDN_CHUNKED
 comptime NCC_ROWS = XN_NC_CHUNK_ROWS
 
 

@@ -11,7 +11,7 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys import has_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
@@ -57,7 +57,7 @@ from core.device_pool import pool_take, pool_give
 #: label-binarizer taxi 563 -> 345 ms, multilabel-binarizer taxi 287 -> 193 ms,
 #: target-encoder taxi 281 -> 272 ms. -D MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF:
 #: the raw host-pointer copies.
-comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                               and not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"]())
 comptime _XP_STAGE_POOL = "MojolearnXPrepDownloadStagesFastV1"
 
@@ -99,7 +99,7 @@ comptime _XP_STAGE_POOL = "MojolearnXPrepDownloadStagesFastV1"
 #: fresh allocation (and the store's free-at-once slots).
 comptime X_PREP_POOL_ARENA_IDN = (GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
                                  and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]())
-comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                              and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
 comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV2" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV2"
 #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
@@ -171,11 +171,11 @@ comptime OP_QDA_DEC = 42
 #: accuracy / logloss unchanged (lda .9131 / .2357, qda .8805 / 3.608 -> 3.609).
 #: `-D MOJOLEARN_LDAQDA_<NAME>_OFF` restores main's path for that stage; the old
 #: `-D MOJOLEARN_LDAQDA_<NAME>` stays harmless. The three are independent.
-comptime PAR_STAGES = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime PAR_STAGES = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                        and not is_defined["MOJOLEARN_LDAQDA_PAR_STAGES_OFF"]())
-comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                      and not is_defined["MOJOLEARN_LDAQDA_DEC_TILE_OFF"]())
-comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and not is_defined["MOJOLEARN_LDAQDA_RR_EIGH_OFF"]())
 #: eigh q[5] != 0 keeps that stage on `eigh_unit`'s cyclic path under RR_EIGH.
 #: IterativeImputer sets it (python/mojolearn/_expansion_prep.py, one small
@@ -192,7 +192,7 @@ comptime EIGH_CYCLIC_Q = 5
 #: one thread per (column, sorted rank) (implies SORTCOUNT); CLF_RANKMAJOR: op 69's point kernel
 #: one thread per (column, sorted rank). Every launch is inside these guards; IDENTICAL and
 #: the other vendors compile main's code unchanged.
-comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_MI_ALL (DROP-quality: M3 miv-reg-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81, but
 # it includes FAST_FOLDS, which fails the selected-set gate) deleted 2026-10-09 on lane/owed-deletions-D2: the
 # bundle alias only, each member keeps its own define; code recoverable at b639a2bd2.
@@ -469,7 +469,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # OP_MATMUL above), sized over the program; 1 word when unused
     var cov_grid = False
     var cov_words = 1
-    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                  and not is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF"]()):
         cov_grid = True
         if cov_grid:

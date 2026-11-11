@@ -14,7 +14,7 @@ layout; FAST arithmetic (a different summation order).
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -31,7 +31,7 @@ comptime FX_MAX_C = 64
 # Halve rows per partial and double the partial limit: more independent
 # groups, with at most twice the existing partial workspace and fold work.
 # Both workspace sizing and launch planning use this one schedule.
-comptime AFCL_L05 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L05 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L05"]())
 comptime FX_CHUNK_ROWS = 1024 if AFCL_L05 else 2048
 comptime FX_BLOCK_LIMIT = 512 if AFCL_L05 else 256

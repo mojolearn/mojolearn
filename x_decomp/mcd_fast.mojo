@@ -65,7 +65,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -107,7 +107,7 @@ from x_decomp.jacobi2 import dev_barrier
 # fitted-state / .99 support gates (small: covariance rel 4.4e-8, masks exact).
 # MOJOLEARN_MCD_BATCH_MMA_OFF restores main's per-candidate path.
 comptime MCD_BATCH_MMA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and DECOMP_FAST_GEMM_MMA and not is_defined["MOJOLEARN_MCD_BATCH_MMA_OFF"]()
 )
 
@@ -219,7 +219,7 @@ comptime MF_ERR = 4
 # passes, integer counts and ascending-index tie selection remain intact.
 # This schedules the accepted existing C-step route; it does not revive a
 # rejected covariance/eigensolve arm or reduce trials/C steps.
-comptime AFCL_L13 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L13 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L13"]())
 comptime MF_SELECT_TPB = 128 if AFCL_L13 else MF_TPB
 comptime MF_SH_INT = MF_SELECT_TPB * 16 + 32 + MF_SELECT_TPB

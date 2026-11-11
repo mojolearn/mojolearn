@@ -25,7 +25,7 @@ coalesced words.
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from embedding.checks.embedding_identical import EMB_TPB, _grid_for, emb_gather_kernel
@@ -34,7 +34,7 @@ from embedding.checks.embedding_oracle import EmbConfig
 
 comptime EMB_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 # E06: not tested in this campaign; preserve this existing opt-in mechanism.
 comptime EMB_ATOMIC_BWD = EMB_FAST_APPLE and is_defined["MOJOLEARN_AFN_EMB_ATOMIC_BWD"]()

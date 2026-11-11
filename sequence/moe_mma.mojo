@@ -26,7 +26,7 @@ from std.ffi import external_call
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.apple_air import simdgroup_load_legacy_air
 from checks.numerics import ftz, identical_silu
@@ -49,7 +49,7 @@ from sequence.moe_reg import MOE_DEVGROUP
 # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
 # Apple simdgroup intrinsics only: an NVIDIA/AMD target cannot link them
 # (gfx942 lld: undefined air.simdgroup_matrix_*; box-run-2 compile fix).
-comptime MOE_MMA = has_apple_gpu_accelerator() and MOE_DEVGROUP and (
+comptime MOE_MMA = TARGET_HAS_APPLE_GPU and MOE_DEVGROUP and (
     not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()
 )
 

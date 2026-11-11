@@ -7,7 +7,7 @@ from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
@@ -342,7 +342,7 @@ def standard_transform_direct(
 # ~1-2 ms per 64 MB, so a 10^9-byte X saves tens of ms against a ~1 ms
 # kernel). Same kernels on the same words as fit + transform: no bit moves.
 comptime PREP_FAST_FIT_TRANSFORM_FUSED = (
-    _DEVCTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    _DEVCTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"]()
 )
 

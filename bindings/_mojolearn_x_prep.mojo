@@ -18,7 +18,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
 from x_prep.folds import I32P
 from x_prep.fastnb_csr import NB_TEXT_CSR, IDN_NB_CSR
@@ -193,7 +193,7 @@ def vendor_binding() raises -> PythonObject:
 #: `-D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF` restores main's path. The old env
 #: name stays harmless.
 comptime X_PREP_FAST_UNIQUE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_X_PREP_FAST_UNIQUE_OFF"]()
 )
 
@@ -208,7 +208,7 @@ comptime X_PREP_FAST_UNIQUE = (
 #: min / max rows from the blocked units; fit_transform runs ONE program (X up
 #: once, stats, knots, apply). Same knots, same output words.
 comptime SPLINE_FAST_FUSED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"]()
 )
 
@@ -383,7 +383,7 @@ def build__mojolearn_x_prep() -> PythonObject:
         # Recorded scan/cleanup/backup windows do not overlap these jobs.
         # Default/OFF builds are owed before main merge. _OFF restores counts/downloads; old opt-in is
         # harmless. See docs/apple-fast/ab/target-scratch.md.
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_TARGET_SCRATCH_OFF"]():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_TARGET_SCRATCH_OFF"]():
             m.def_function[target_scratch_binding]("x_prep_target_scratch")
         comptime if LABEL_PRESENT:
             m.def_function[label_present_binding]("x_prep_label_present")

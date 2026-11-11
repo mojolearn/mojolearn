@@ -71,7 +71,7 @@ from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 comptime WEAK_CC_TPB = 256
@@ -81,7 +81,7 @@ comptime WEAK_CC_FAST_BATCH = 4
 
 def weak_cc_fast_batch_on() -> Bool:
     comptime if not (
-        GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+        GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU
         and is_defined["MOJOLEARN_DBSCAN_FAST_CC_BATCH"]()
     ):
         return False

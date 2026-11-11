@@ -41,7 +41,7 @@ of one per trial.
 """
 from max.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, fm, fmad
@@ -53,7 +53,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 comptime LBD_TPB = 256
 #: first-trial units queued between host reads (see the module docstring)
 comptime LBD_BATCH = 8
-comptime LBD_BATCH_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
+comptime LBD_BATCH_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
 
 
 @always_inline

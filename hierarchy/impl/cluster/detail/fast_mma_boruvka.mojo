@@ -39,7 +39,7 @@ from max.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_fold import device_column_means32
 from max.gpu.memory import AddressSpace
@@ -51,7 +51,7 @@ from neighbors.impl.detail.fast_mma_knn import _sg_load_t, _sg_mma
 
 comptime FAST_MMA_BORUVKA_ENABLED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_BORUVKA_FAST_MMA_OFF"]()
 )
 
@@ -64,7 +64,7 @@ comptime MB_TPB = MB_SG * 32
 # recomputation, lower-bound filter and value/index tie ordering are fixed.
 # Applies to agglomerative and HDBSCAN callers of this same MST search.
 comptime AFCL_G14 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G14"]()
 )
 comptime MB_T = 64 if AFCL_G14 else 128

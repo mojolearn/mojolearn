@@ -49,7 +49,7 @@ from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -61,7 +61,7 @@ from x_prep.target import te_value
 from x_prep.dradix import RUP, radix_word, radix_load_kernel
 
 #: FAST on Apple only
-comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: (FAST + Apple, default ON since 2026-10-04) IterativeImputer's eigh stage (one cyclic
 #: Jacobi per matrix, `eigh_unit` on ONE thread, run once per feature per
 #: round by BayesianRidge) on a 32-thread threadgroup per matrix

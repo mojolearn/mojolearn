@@ -53,7 +53,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, upload_f32
 from spectral.impl.spectral_predict_common import SpectralPredictionState
@@ -93,7 +93,7 @@ from spectral.impl.sparse.solver.lanczos_types import (
 #: residual test. `-D MOJOLEARN_SPECTRAL_NCV_FAST_OFF` keeps the reference.
 comptime SPECTRAL_NCV_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SPECTRAL_NCV_FAST_OFF"]()
 )
 comptime FAST_NCV = 48

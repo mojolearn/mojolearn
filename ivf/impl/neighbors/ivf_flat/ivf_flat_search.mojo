@@ -119,7 +119,7 @@ from x_ann.io import download_i32
 from max.gpu import WARP_SIZE
 from max.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
 from checks.numerics import ftz as _ivf_ftz, identical_sqrt as _ivf_identical_sqrt
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.switches import ANN3_PREPARE
 from ivf.checks.list_layout import (
     ListLayout,
@@ -304,7 +304,7 @@ def _ivf_scan_staged() -> Bool:
     (M4, 200,000 x 220, 256 lists, 2,000 queries: 3.4 -> 12.2 s). The same
     bits either way; MOJOLEARN_IVF_SCAN_STAGED=0/1 forces either."""
     var v = String(getenv("MOJOLEARN_IVF_SCAN_STAGED"))
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return v == "1"
     return v != "0"
 

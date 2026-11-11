@@ -16,7 +16,7 @@ kernels, one thread per row. predict is one kernel, one thread per row,
 every target's dot product and intercept, written row-major (n x m).
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -40,7 +40,7 @@ from glm.impl.matrix.math import (
 #: .604240); -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off, the old
 #: -D MOJOLEARN_MULTIOUT_RIDGE is harmless
 comptime MULTIOUT_RIDGE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"]()
 )
 comptime _ROW_TPB = 256

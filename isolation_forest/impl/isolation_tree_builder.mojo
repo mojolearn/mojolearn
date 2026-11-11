@@ -122,7 +122,7 @@ from max.gpu.memory import AddressSpace
 
 from std.sys import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.sync import barrier
@@ -165,7 +165,7 @@ comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and i
 comptime IF_WORK_PLANES = 3 if IF_C48_FUSED_PARTITION else 2
 comptime IF_FAST_ROWMAJOR = IF_T40_ROWMAJOR or (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_IF_ROWMAJOR_OFF"]()
 )
 
@@ -200,7 +200,7 @@ comptime IF_BUILD_TPB_SWEEP = get_defined_int["MOJOLEARN_TREES_IF_BUILD_TPB", 12
 
 comptime IF_BUILD_TPB = 64 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F10"]()
 ) else IF_BUILD_TPB_SWEEP
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
@@ -234,7 +234,7 @@ stands at 25. A new output here REUSES A SLICE."""
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T10 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T10"]()
 )
 comptime IF_PATH_TPB = 128 if AFCL_T10 else 256
@@ -999,7 +999,7 @@ def build_tree_iterative_global(
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_IF_GATHER_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and IF_FAST_ROWMAJOR
     and is_defined["MOJOLEARN_AFT_F12"]()
 )
@@ -1277,7 +1277,7 @@ def traverse_global_tree(
 # evidence; uncompiled/unverified/unmeasured.
 comptime AFT_IF_PATH_ROWS = 2 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F11"]()
 ) else 1
 

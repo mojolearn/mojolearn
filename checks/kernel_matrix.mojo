@@ -3,12 +3,8 @@
 """One table: every kernel, every tunable it takes, per GPU vendor."""
 
 from std.sys.compile import is_defined
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_amd_rdna_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from std.sys.info import has_amd_rdna_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 from checks.numerics import (
     NumericMode,
@@ -714,18 +710,18 @@ comptime TARGET_COLUMN = (
     COLUMN_INTEL if is_defined["MOJOLEARN_COLUMN_INTEL"]() else
     COLUMN_SPEC_BASELINE if is_defined["MOJOLEARN_COLUMN_SPEC_BASELINE"]() else
     COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
-    COLUMN_AMD if has_amd_gpu_accelerator() else
-    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
-    COLUMN_APPLE if has_apple_gpu_accelerator() else
+    COLUMN_AMD if TARGET_HAS_AMD_GPU else
+    COLUMN_NVIDIA if TARGET_HAS_NVIDIA_GPU else
+    COLUMN_APPLE if TARGET_HAS_APPLE_GPU else
     COLUMN_CPU
 )
 
 
 comptime DETECTED_COLUMN = (
     COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
-    COLUMN_AMD if has_amd_gpu_accelerator() else
-    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
-    COLUMN_APPLE if has_apple_gpu_accelerator() else
+    COLUMN_AMD if TARGET_HAS_AMD_GPU else
+    COLUMN_NVIDIA if TARGET_HAS_NVIDIA_GPU else
+    COLUMN_APPLE if TARGET_HAS_APPLE_GPU else
     COLUMN_CPU
 )
 

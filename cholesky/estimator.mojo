@@ -41,7 +41,7 @@ which is what the gates and the card use.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -233,7 +233,7 @@ def cholesky_factor_host(
 #: the host-List route in IDENTICAL.
 comptime CHOL_FAST_DEVIO = (
     (
-        (_CTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        (_CTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
         or (_CTX_MODE == _CTX_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
     )
     and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()

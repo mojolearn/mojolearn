@@ -20,19 +20,19 @@ from x_prep.prims import add, sub, mul, div
 from x_prep.transform import PT_STATE, pt_finish, log1pf
 from x_prep.prims import logf
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P01: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Two independent sums shorten each lane's dependency chain; the same rows,
 # NaN policy and centered second pass remain. Extra registers may cost occupancy.
-comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P01"]()
+comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P01"]()
 
 # AFCL-P13: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Independent class-filtered sums shorten arithmetic dependencies while the
 # same label mask/counts and centered-variance pass remain. More registers can
 # cost occupancy; class imbalance does not alter the dispatch.
-comptime AFCL_P13 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P13"]()
+comptime AFCL_P13 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P13"]()
 
 comptime TGR = 256
 

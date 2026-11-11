@@ -36,7 +36,7 @@ A/B arm (the team fit in the same build).
 from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -49,7 +49,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES, WITNESS_ABORT
 # AFCL-L03: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
 # Evaluate two held-out rows together to reuse the path coefficient load;
 # each row retains its full ascending feature chain and all folds/alphas.
-comptime AFCL_L03 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L03 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L03"]())
 comptime EF_TPB = 256
 comptime EF_CH = 8192

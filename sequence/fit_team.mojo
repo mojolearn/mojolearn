@@ -38,7 +38,8 @@ Slicing: the optimizers stop at an iteration boundary (`nm_steps`,
 row, so a resumed fit runs the same iterations as one call."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_linear.team import team_barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log, identical_sqrt
@@ -136,7 +137,7 @@ comptime GT_DONE = 6
 #: recursion there. FAST off Apple is unchanged.
 comptime GARCH_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GARCH_COOP_OFF"]()
 ) or GARCH_COOP_IDN
 

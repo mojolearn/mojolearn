@@ -28,7 +28,7 @@ The host executor runs the scan ops as the per-step launches they replace
 """
 from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import team_barrier
@@ -100,7 +100,7 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # the scan for that check and its A/B. has_apple_gpu_accelerator is a
 # property of the build host: an Apple build's host column takes the chain too,
 # with the same bits.
-comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not has_apple_gpu_accelerator() or is_defined["MOJOLEARN_SEQ_RNN_SCAN_APPLE"]()
+comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not TARGET_HAS_APPLE_GPU or is_defined["MOJOLEARN_SEQ_RNN_SCAN_APPLE"]()
 # THE ROUTE (orchestrator decision 2026-10-19, nv-04/NV_PASS5 + AMD pass 5):
 # a cost rule on the cell's gate count G, the same for HandStep and
 # AutogradRnnStep (both call scan_routes). The scan saves T + 1 launches and 2

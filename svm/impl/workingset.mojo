@@ -50,7 +50,7 @@ from svm.impl.fast_ws_select import (
     fws_pick_kernel,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from svm.checks.device_select import (
     SEL_TPB,
@@ -95,7 +95,7 @@ comptime FAST_WS_SORT = (
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
 comptime SVM_WS_MAX = 2048 if (
     FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the grid solve carries it

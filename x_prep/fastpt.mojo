@@ -36,7 +36,7 @@ call to this file (x_prep/device.mojo gates every launch).
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -51,9 +51,9 @@ from x_prep.pt_center import PT_SCORE_STABLE
 # Separate even/odd Welford chains hide their division dependencies; Chan
 # combines their centered moments. All observations and NaN handling remain.
 # This covers the current SI_ONEPASS path as well as fused-transform callers.
-comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P01"]()
+comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P01"]()
 
-comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
 # stress worst per-column regressions: lambda .01330737 (gate 1e-5),
 # NLL/sample 4.083e-7 (1e-7), transform RMS 9.606e-5 (1e-5);

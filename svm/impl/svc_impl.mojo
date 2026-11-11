@@ -29,7 +29,7 @@ layout, not an arithmetic, and.
 """
 
 from std.builtin.sort import sort
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -635,7 +635,7 @@ def svc_predict_dev(
     # the kernel evaluation; no tile, no batch loop. Apple only, like the
     # other FAST SVM paths: the width-unrolled kernels never finished
     # compiling for NVPTX or AMDGPU (0.8.19); elsewhere the tiled path runs.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         if not card.enabled and n_cols <= SVC_FUSED_KREG and (
             kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_LINEAR
         ):

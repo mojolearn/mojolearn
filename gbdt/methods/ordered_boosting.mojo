@@ -124,7 +124,7 @@ from gbdt.methods.leaves_estimation.device_walker import enqueue_scale_in_place
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.device_zero import enqueue_fill
 from core.device_plan import DevicePlan, plan_for_single
@@ -1914,7 +1914,7 @@ def _ordered_device_leaves(
 #: IDENTICAL and non-Apple FAST keep the code above (the flag is False).
 comptime ORDERED_BATCH_EST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
 )
 #: BATCH_EST keeps a learn permutation's fold cursors in one buffer

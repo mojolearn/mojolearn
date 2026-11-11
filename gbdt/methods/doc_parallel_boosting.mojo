@@ -17,7 +17,7 @@ from gbdt.methods.leaves_estimation.bin_keyed_stats import (
     enqueue_bk_copy_f32,
 )
 from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from gbdt.methods.kernel_add_model_value import (
     add_model_value_gated_kernel,
     add_model_value_kernel,
@@ -289,7 +289,7 @@ comptime IDN_CTR_PERM_BATCH = (
 )
 comptime CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
 ) or IDN_CTR_PERM_BATCH
 # TOMBSTONE: MOJOLEARN_IDN_CTR_PERM_GRID (noise) deleted 2026-10-11 by d092b6e2d; code recoverable at d092b6e2d^.

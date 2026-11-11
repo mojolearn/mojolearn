@@ -123,7 +123,8 @@ from std.math import log, sqrt
 from std.sys.compile import is_defined
 from std.os import getenv
 from std.time import perf_counter_ns
-from std.sys.info import has_apple_gpu_accelerator, is_apple_gpu
+from std.sys.info import is_apple_gpu
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys import llvm_intrinsic
 from checks.numerics import pinned_mul_f32
 from mixture.ff_fast import GF, gf_add, gf_add_f, gf_div, gf_f32, gf_mul, gf_of, gf_rn_add, gf_sqrt, gf_sub, gf_two_prod, gf_two_sum
@@ -265,7 +266,7 @@ comptime GMM_NK_AHEAD = 1 if is_defined["MOJOLEARN_GMM_NK_AHEAD_OFF"]() else 32
 #: reverts.
 comptime GMM_NK_T = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GMM_NK_T_OFF"]()
 )
 
@@ -776,7 +777,7 @@ def fast_resp_colsums_finish_kernel(
 
 comptime GMM_FUSED_COV = (
     GMM_FAST_GRAM
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GMM_FAST_FUSED_COV_OFF"]()
 )
 """FAST on Apple: every component's covariance in ONE pass over X
@@ -948,7 +949,7 @@ def fused_cov_finish_kernel(
 
 comptime GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GMM_FAST_FUSED_CHOL_OFF"]()
 )
 """FAST on Apple: every component's Cholesky, inverse factor and log

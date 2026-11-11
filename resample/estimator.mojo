@@ -45,7 +45,7 @@ from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -2198,7 +2198,7 @@ def mc_closed_form_for[
 # Default since the M3 A/B gmp-rs-idx-* (resample taxi 71.7 -> 62.8 ms,
 # istella -1.8%, max_mean_shift the same); -D
 # MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF restores the List route.
-comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                                 and not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"]())
 
 
@@ -2330,7 +2330,7 @@ def resample_indices_host(
 # docs/apple-fast/ab/resample-gpu-recovery.md.
 # C11 is an independent default-off IDENTICAL arm; Apple FAST retains main's default.
 comptime RESAMPLE_GPU_GATHER = C11_DRAW_GATHER or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
@@ -2351,7 +2351,7 @@ comptime RESAMPLE_GPU_GATHER = C11_DRAW_GATHER or (GLOBAL_NUMERIC_MODE == NUMERI
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
 # resample-full-summary.json; model is stateless, output/index hashes saved.
 comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
@@ -2370,7 +2370,7 @@ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # Evidence beside the F04 summary: resample-combined-summary.json and boards.
 # Decision: resample-promotion.json in the same evidence directory.
 comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"]())
 
 
@@ -2404,7 +2404,7 @@ def resample_gather_grouped(
 # F19 M3 permutation complete calls B/A2.0031/2.1569/1.0847 at509x3/521x129/997x67;
 # resample control1.6429/0.6770/0.4746. Quality equal, one warmup+score; keep OFF.
 # Evidence ab-20261006/repairs-54c1f35a5/F19; no unmeasured combination promotion.
-comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
+comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
 
 def resample_permutation_gather_gpu(
     n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
@@ -2541,7 +2541,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
 #: is `resample_indices_replace_into`'s launch: the same integers, the same
 #: rows, bit-identical outputs.
 comptime RESAMPLE_FAST_GATHER_NARROW = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW"]())
 comptime GATHER_NARROW_MAX_BYTES = get_defined_int["MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES", 128]()
 

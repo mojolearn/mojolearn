@@ -49,7 +49,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from gbdt.apple_fast_tree_experiments import AFT_N02
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
@@ -72,7 +72,7 @@ comptime QUANTIZED_HIST_LIVE = greedy_quantized_hist_for[
 comptime QH_MODE_SKIP = (
     QUANTIZED_HIST_LIVE
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP_OFF"]()
 )
 

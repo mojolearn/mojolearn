@@ -50,7 +50,7 @@ the first transform's single call (section at the end of this file).
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
@@ -63,7 +63,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from core.shared_slot import SharedSlot
 
 
-comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # ACHI2_DEVSCAN: DEFAULT (rollback _OFF), size-gated at XN_ACHI2_DEVSCAN_MIN;
 # istella 11.2 -> 4.4 ms, w2-w3kf-xn-q PASS (M3, ea6b2035e).
 comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF"]()

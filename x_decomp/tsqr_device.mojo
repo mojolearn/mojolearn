@@ -39,7 +39,7 @@ from std.atomic import Atomic
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -110,7 +110,7 @@ comptime TS_SMEM_TREE_BYTES = 4 * (TS_MAX_N + TS_TPB)
 # reflector. The same fmas in the same order: no bit moves.
 # IDENTICAL builds only: a FAST build keeps its launches as they were.
 comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/grid M3 2026-10-06: 6 retained public-caller timings;

@@ -6,11 +6,11 @@ promotion. See experiments/apple_fast_trees/G.json for A/B prerequisites.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime AFT_G_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 
 # G01: one uniform-barrier block per feature scans 128-bin tiles.

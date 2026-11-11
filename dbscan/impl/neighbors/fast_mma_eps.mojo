@@ -45,7 +45,7 @@ from max.gpu import block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_fold import device_column_means32
 from max.gpu.memory import AddressSpace
@@ -56,7 +56,7 @@ from neighbors.impl.detail.fast_mma_knn import _sg_load_t, _sg_mma
 
 comptime FAST_MMA_EPS_ENABLED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_DBSCAN_FAST_MMA_OFF"]()
 )
 
@@ -65,7 +65,7 @@ comptime FAST_MMA_EPS_ENABLED = (
 # trading cross-query operand reuse for occupancy without pruning an edge
 # or changing the exact epsilon-boundary fallback. No size-specific rule.
 comptime AFCL_G03 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G03"]()
 )
 comptime ME_SG = 4 if AFCL_G03 else 8

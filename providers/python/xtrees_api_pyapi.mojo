@@ -16,7 +16,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.python import Python
 from std.memory import bitcast
 from std.math import ceil
@@ -1271,7 +1271,7 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
 #: MOJOLEARN_TE_<NAME>` is harmless. The AdaBoost data session itself is no
 #: longer a switch (lane m1-followups-misc: every build opens it; bits 2 and
 #: 128 are always 0), only SHARE is.
-comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"]()
 # TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF (escape from the AdaBoost data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch

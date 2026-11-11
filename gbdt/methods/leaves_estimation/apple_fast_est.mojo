@@ -46,7 +46,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import fma
 from std.memory import unsafe_memcpy, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
 from gbdt.apple_fast_classical import AFCL_T06
@@ -100,7 +100,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 
 
 comptime _APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed

@@ -129,7 +129,7 @@ from checks.numerics import (
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: metric='cosine'
@@ -168,7 +168,7 @@ comptime IDN_DBSCAN_DIRECT_OUT = (
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/dbscan-outputs.
 # Compilation/identity reused. No combined-toggle/full-board claim.
-) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
+) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
 
 comptime COSINE_TPB = 256
 comptime COSINE_NO_BAD_ROW = Int32(2147483647)

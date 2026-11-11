@@ -20,10 +20,10 @@ measured neutral and was deleted 2026-10-09). The mechanism of each is docs/appl
 they answer is docs/apple-fast/notes/vsearch.md; the record is
 docs/apple-fast/EXPERIMENTS.md."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime VSEARCH_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime VSEARCH_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: no-op alias since 2026-10-04 (the switches it bundled are defaults); kept so
 #: `-D MOJOLEARN_VSEARCH_ALL` build lines still parse to the default build
 comptime VSEARCH_ALL = is_defined["MOJOLEARN_VSEARCH_ALL"]()

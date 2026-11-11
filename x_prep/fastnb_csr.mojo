@@ -35,7 +35,7 @@ from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -47,7 +47,7 @@ from x_prep.device import x_prep_ctx
 #: The switch: FAST and Apple, unless -D MOJOLEARN_NB_TEXT_CSR_OFF (default ON
 #: since the M3 A/B, multinomial-nb text 186.9 -> 35.4 ms, same accuracy / logloss).
 comptime NB_TEXT_CSR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"]()
 )
 #: lane idn-int-prep (2026-10-04): the CSR text path in IDENTICAL on every
 #: vendor, ON by default (-D MOJOLEARN_IDN_NB_CSR_OFF: no export, the dense
@@ -78,7 +78,7 @@ comptime CSR_FLAG_NEG = 2
 # AFCL-P04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Half the metadata and row-search span per block; every nonzero remains in
 # exactly one row group. More groups can offset skew, but increase scheduling.
-comptime AFCL_P04 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P04"]()
+comptime AFCL_P04 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P04"]()
 comptime CSR_ROWS = 32 if AFCL_P04 else 64
 comptime CSR_TPB = 256
 

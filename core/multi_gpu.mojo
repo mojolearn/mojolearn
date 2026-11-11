@@ -8,7 +8,7 @@ from core.device_plan import DevicePlan, device_plan_device
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
-from std.sys.info import has_amd_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU
 
 
 def gbdt_shard_device_id(rank: Int) raises -> Int:
@@ -67,7 +67,7 @@ def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceConte
     """
     if len(source) < cells or len(target) < cells:
         raise Error("transfer_bytes: a buffer is shorter than the copy")
-    comptime if has_amd_gpu_accelerator():
+    comptime if TARGET_HAS_AMD_GPU:
         if cross_device:
             var host = source_ctx.enqueue_create_host_buffer[dt](cells)
             # A whole buffer is copied as itself, so a caller's sub-buffer is

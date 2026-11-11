@@ -20,7 +20,7 @@ from max.gpu import block_idx, thread_idx
 from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
 from max.gpu.primitives.warp import sum as warp_sum
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
@@ -35,7 +35,7 @@ from neighbors.impl.ball_cover.common import RBC_FLT_MAX
 
 comptime FAST_RBC_EPS = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RBC_FAST_EPS_OFF"]()
 )
 comptime FAST_RBC_MAX_D = 32

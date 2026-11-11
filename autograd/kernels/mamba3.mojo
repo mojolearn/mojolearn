@@ -9,7 +9,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.os import getenv
 from std.time import perf_counter_ns
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
@@ -1495,7 +1495,7 @@ def mamba3_backward_angle_into(
 # vendors compile the kernels above unchanged.
 # ===========================================================================
 comptime AFN_M3_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_M3_BWD_CHUNK = AFN_M3_APPLE_FAST and (
     is_defined["MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"]()

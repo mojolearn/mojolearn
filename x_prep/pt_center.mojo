@@ -6,7 +6,7 @@ is identical in exact arithmetic to standardizing g; the likelihood score
 uses log(t(x)/t(anchor)), so its Jacobian correction cancels the scale.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log1p, ftz
 from x_prep.prims import expf, logf
 
@@ -19,7 +19,7 @@ from x_prep.prims import expf, logf
 # PASS vs the f64 centered-MLE reference, tolerances unchanged.
 # See docs/apple-fast/PT_SCORE_STABLE.md.
 comptime PT_SCORE_STABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_PT_SCORE_STABLE_OFF"]())
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_PT_SCORE_STABLE_OFF"]())
 
 
 @always_inline

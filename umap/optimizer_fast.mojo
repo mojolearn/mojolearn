@@ -6,7 +6,7 @@ from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from umap.optimizer_identical_device import umap_dense_graph_to_device
 
@@ -17,7 +17,7 @@ from umap.optimizer_identical_device import umap_dense_graph_to_device
 # sequence and counter-derived negatives against the same epoch snapshot.
 # Epoch count, sample count, seed and convergence settings are untouched.
 comptime AFCL_G10 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G10"]()
 )
 comptime FAST_OPT_TPB = 64 if AFCL_G10 else 128
@@ -211,7 +211,7 @@ def optimize_layout_fast(
 #: `-D MOJOLEARN_UMAP_FUSED_EPOCH_OFF` keeps the per-component kernel.
 comptime UMAP_FUSED_EPOCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_UMAP_FUSED_EPOCH_OFF"]()
 )
 

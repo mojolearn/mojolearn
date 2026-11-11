@@ -31,7 +31,7 @@ same compare rule), so the words are the blocked route's.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
@@ -51,7 +51,7 @@ from x_decomp.cells import F32Ptr, I32Ptr, div0
 #: step in IDENTICAL.
 comptime LU_FAST_STEP1 = (
     (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
         or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
     )
     and not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"]()

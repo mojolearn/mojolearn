@@ -10,13 +10,13 @@ answers; docs/apple-fast/ab/hdbscan2.md the mechanism and the risk.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
 comptime HDB_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 """The FAST tier on the Apple GPU: the only place any switch below is true."""
 

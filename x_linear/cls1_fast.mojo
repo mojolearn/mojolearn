@@ -35,7 +35,7 @@ FAST promises quality, not bits: the block trees are pairwise sums.
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -43,7 +43,7 @@ from x_linear.ops import FP, IP, ld, st, ldi, i2f
 from x_linear.tops import fold_parts, fold_blocks, FOLD_BLOCK
 from x_linear.witness import witness_end
 
-comptime C1_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime C1_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 comptime BAYES_CLS1_STATS = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FAST_CLS1_STATS_OFF"]()
 comptime BAYES_CLS1_PARTS = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF"]()

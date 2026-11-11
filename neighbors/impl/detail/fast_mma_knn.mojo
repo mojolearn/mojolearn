@@ -49,7 +49,7 @@ from std.math import sqrt
 from std.bit import count_trailing_zeros
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.apple_air import simdgroup_load_legacy_air
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -64,7 +64,7 @@ from std.time import perf_counter_ns
 # exposing more independent blocks while retaining each group's matrix and
 # top-k work. This occupancy tradeoff applies to every eligible shape.
 comptime AFCL_G01 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G01"]()
 )
 comptime MQ_SG = 4 if AFCL_G01 else 8
@@ -90,7 +90,7 @@ comptime MQ_PAD = Float32(3.3e38)
 
 comptime FAST_MMA_KNN_ENABLED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_KNN_FAST_MMA_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_SLICES2 (DROPPED-slower) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
@@ -130,7 +130,7 @@ def _k64_on() -> Bool:
     turns it off; the old -D MOJOLEARN_KNN_FAST_MMA_K64 name is accepted and
     changes nothing."""
     comptime if not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"]()
     ):
         return False

@@ -40,7 +40,7 @@ from max.gpu import block_idx, thread_idx
 from std.math import isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -57,7 +57,7 @@ from tsa.impl.timeSeries.stationarity import kpss_lags, kpss_pvalue, kpss_s2B_co
 #: -D MOJOLEARN_TSA_FAST_KPSS_PACK_OFF turns it off; the old
 #: -D MOJOLEARN_TSA_FAST_KPSS_PACK is harmless.
 comptime TSA_KPSS_PACK = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK_OFF"]()
 )
 #: lane/apple-fast-gap-tsa: `select_d` as one launch (every round of a
@@ -67,7 +67,7 @@ comptime TSA_KPSS_PACK = (
 #: synthetic 8.0 -> 2.2 ms); -D MOJOLEARN_TSA_FAST_SELD_FUSED_OFF turns it
 #: off; the old -D MOJOLEARN_TSA_FAST_SELD_FUSED is harmless.
 comptime TSA_SELD_FUSED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED_OFF"]()
 )
 #: words per series in the packed output: stat, flag, first bad index

@@ -21,7 +21,7 @@ same refit (`omp_row`'s spellings, x_decomp/cells.mojo), no device scratch.
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -46,7 +46,7 @@ from x_decomp.cells import F32Ptr, div0, mul, sqrt0, sub
 #: (the threadgroup Cholesky's side); otherwise the old kernel runs.
 comptime DECOMP_FAST_OMP_BLOCK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"]()
 )
 comptime OMP_TPB = 128

@@ -389,11 +389,7 @@ from max.gpu import (
     lane_id,
     thread_idx,
 )
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -490,7 +486,7 @@ comptime HIST_SPLIT_CANDIDATES_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL or (
     and (
         is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
         or (
-            has_apple_gpu_accelerator()
+            TARGET_HAS_APPLE_GPU
             and not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"]()
         )
     )
@@ -540,7 +536,7 @@ comptime SMALL_NODE_ROWS = 256 if is_defined[
 
 comptime IDN_RF_HIST_ZERO = (
     BUILD_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
+    and not TARGET_HAS_APPLE_GPU
     and not (
         is_defined["MOJOLEARN_IDN_RF_HIST_ZERO_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -555,7 +551,7 @@ per-round zero launch on NVIDIA and AMD."""
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
     (
         BUILD_MODE == NUMERIC_FAST
-        or (BUILD_MODE == NUMERIC_IDENTICAL and has_apple_gpu_accelerator())
+        or (BUILD_MODE == NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU)
         or IDN_RF_HIST_ZERO
     )
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
@@ -1564,7 +1560,7 @@ def node_split_copy_back_sampled_kernel[
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_RF_SCAN_WIDTH_SCALE = 2 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F04"]()
 ) else 1
 
@@ -2021,7 +2017,7 @@ def launch_node_split_kernel[
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_RF_GATHER_ROWS = 4 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F05"]()
 ) else 1
 
@@ -2718,7 +2714,7 @@ def build_histograms_kernel[
 
 comptime IDN_RF_HIST_SIMD_AGG = (
     BUILD_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
+    and not TARGET_HAS_APPLE_GPU
     and not (
         is_defined["MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -2733,7 +2729,7 @@ are integers: the same per-bin totals in another order, so no bit moves.
 `-D MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF` restores one atomic per lane."""
 
 comptime HIST_SIMD_AGG_DEFAULT = (
-    has_apple_gpu_accelerator()
+    TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
     # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
     and not (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
@@ -3003,8 +2999,8 @@ def launch_build_histograms_kernel[
             comptime DEFAULT4 = (
                 not is_defined["MOJOLEARN_RF_HIST_COLUMNS4_OFF"]()
                 and (
-                    has_nvidia_gpu_accelerator()
-                    or has_apple_gpu_accelerator()
+                    TARGET_HAS_NVIDIA_GPU
+                    or TARGET_HAS_APPLE_GPU
                     # fam-forests (2026-10-04), IDENTICAL on AMD: the
                     # four-column tile there too (integer / fixed-point
                     # bins added by atomics, so the same histogram cells
@@ -3012,7 +3008,7 @@ def launch_build_histograms_kernel[
                     # MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF` restores the
                     # one-column route on AMD.
                     or (
-                        has_amd_gpu_accelerator()
+                        TARGET_HAS_AMD_GPU
                         and BUILD_MODE == NUMERIC_IDENTICAL
                         and not (
                             is_defined[
@@ -3035,7 +3031,7 @@ def launch_build_histograms_kernel[
                     # Istella 14.38 -> 14.24 s, same hashes as 4-column tiles)
                     or (
                         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-                        and has_apple_gpu_accelerator()
+                        and TARGET_HAS_APPLE_GPU
                         and not is_defined["MOJOLEARN_RF_HIST_COLUMNS8_OFF"]()
                     )
                 ) else (
@@ -3615,7 +3611,7 @@ def small_node_split_kernel[
 
 comptime FBS_WARP_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RF_FBS_WARP_OFF"]()
 )
 """FAST on Apple: `find_best_splits` gives each (node, column) ONE SIMD
@@ -3634,7 +3630,7 @@ of which paid a 128-thread block and a barrier-bound scan."""
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime FBS_WARP_CELLS = 2 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F03"]()
 ) else 4
 

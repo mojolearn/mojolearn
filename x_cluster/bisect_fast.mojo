@@ -31,7 +31,7 @@ folds float64), so the centered words, and the inertia's order, differ.
 """
 from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div
@@ -44,7 +44,7 @@ from x_cluster.out import ClusterOut
 from x_cluster.post_bodies import FM_VAL
 
 comptime BISECT_FAST_ZEROCOPY = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF"]()
 )  # FAST + Apple default since the M3 A/B clus3-bisect-zc-istella (n=1):
 # bisecting-kmeans istella 2033 -> 848 ms (-58.3%), silhouette .1183 identical;

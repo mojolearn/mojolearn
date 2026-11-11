@@ -64,7 +64,7 @@ from checks.soft_f64 import (
 from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T17_BATCH, T18, T19_DEFER, T21, C45_GBDT, LG_LEVEL_ROUNDS
 
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.builtin.sort import sort
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     choose_scale_kernel,
@@ -173,7 +173,7 @@ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime DEFER_HIST_COPY_1903 = T19_DEFER or not SPLIT_COST_IDENTICAL or (
     (
-        has_apple_gpu_accelerator()
+        TARGET_HAS_APPLE_GPU
         or (
             is_defined["MOJOLEARN_GBDT_ID_DEFER_COPY"]()
             and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -277,7 +277,7 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
 # -> quality loss, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
 comptime DW_FUSED_CHAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
 # F12/depthwise M3 2026-10-06: 4 scored caller times; B/A
 # 0.8646..1.1062 (mixed/regressing); existing default retained.
 # Scored FAST quality 2/2 within existing bands; PASS.
@@ -349,7 +349,7 @@ comptime IDN_NS_SCALE_DEVICE = (
 
 comptime DW2_SCAN_SMEM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"]()
 )
 # TOMBSTONE: MOJOLEARN_GBDT_DW2_COPY_ZERO (DROPPED-slower) deleted 2026-10-03 by 4037c6b9a; code recoverable at 4037c6b9a^.
@@ -1131,7 +1131,7 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
 #: time taxi 23 -> 10.5 s, Istella ~50 -> 17 s on the M4).
 comptime _LG_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_GBDT_LG_BATCH"]()
     and not is_defined["MOJOLEARN_GBDT_LG_BATCH_OFF"]()
 )
@@ -1231,7 +1231,7 @@ comptime LG_EXACT_ID = (
 comptime LG_EXACT_ID_MAX_CELLS = 2147483647
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
 # F12/lossguide M3 2026-10-06: 4 scored caller times; B/A
 # 0.4561..1.0883 (mixed/regressing); existing default retained.
 # Scored FAST quality 2/2 within existing bands; PASS.
@@ -1251,7 +1251,7 @@ comptime LG_EXACT_BATCH = (
 comptime _LG_EXACT_BATCH128 = (
     is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]()
     or (
-        has_apple_gpu_accelerator()
+        TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
     )
 ) and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"]()
@@ -1330,7 +1330,7 @@ comptime NS_INHERIT_ID = (
 )
 comptime NS_INHERIT_PARTITION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF"]()
 ) or NS_INHERIT_ID
 #: the T1+T2 guard: IDENTICAL never inherits a tree with a folded-back leaf

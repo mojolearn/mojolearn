@@ -42,7 +42,7 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 from experiments.classical_identical_ideas.linear_controls import C22_TRIANGLE
 from svm.impl.classical_kernel_device import classical_triangle_kernel
 from max.gpu import block_dim, block_idx, thread_idx
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -109,7 +109,7 @@ def row_norm_l2sq_kernel(
 #: `-D MOJOLEARN_SVM_RBF_EPILOGUE_1D` keeps the flat grid.
 comptime RBF_EPILOGUE_2D = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"]()
 )
 
@@ -559,7 +559,7 @@ def kernel_op(
     # kernel_op -> _kernel_rows -> kernel_op cycle reaching MAX matmul (now gated
     # in svm/multi_gpu.mojo::kernel_matrix_dispatch, which names _kernel_rows
     # under IDENTICAL only).
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
             if rbf_fused_tile(ctx, output, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
                 return

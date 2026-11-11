@@ -31,7 +31,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.switches import ANN3_SCAN_SELECT
 from x_ann.vsearch_fast import IDN_PQ_LUT_TILED, PQ_LUT_TILED, PQ_SCAN_FUSED
 from x_ann.ivf_pq_core import (
@@ -648,7 +648,7 @@ def select_merge_kernel(
 #: the widest k of the one-launch top-k (16 KB of threadgroup memory)
 comptime SEL_KM = 16
 comptime SCAN_SELECT_GROUP = (
-    ANN3_SCAN_SELECT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    ANN3_SCAN_SELECT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 
 

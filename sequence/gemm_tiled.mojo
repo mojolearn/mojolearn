@@ -133,7 +133,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sigmoid, identical_tanh
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, OP_GEMM_SPLITK, add, fma3, ld, st
@@ -161,7 +161,7 @@ comptime GT_MIN_EDGE = 8
 
 comptime SEQ_GEMM_TILED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
+    and not TARGET_HAS_APPLE_GPU
     and not (is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 

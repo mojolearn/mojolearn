@@ -15,7 +15,7 @@ float32 loop ends at the fc == fd exit or the cap)."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-seq (2026-10-02). `op_croston` compacts the positive
 #: demands and the intervals into the thread's device scratch (2 n floats
@@ -34,7 +34,7 @@ from std.sys.info import has_apple_gpu_accelerator
 #: restores the stored code; the old -D MOJOLEARN_SEQ_CROSTON_REG=1 is harmless.
 comptime CROSTON_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEQ_CROSTON_REG_OFF"]()
 )
 

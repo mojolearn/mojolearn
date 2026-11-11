@@ -31,7 +31,7 @@ from x_neighbors.device_ops import xn_ctx, _down_i
 from core.device_fold import device_sum_i32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 
 
@@ -213,7 +213,7 @@ def nan_colmiss_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
 # count kernel alone and stores their sum as the total (integer adds, the
 # same count). FAST + Apple default since the M3 A/B gmp-imp-taxi (with
 # TIE_MEAN); -D MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF restores the full pass.
-comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                             and not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"]())
 
 

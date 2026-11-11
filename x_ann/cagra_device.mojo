@@ -24,7 +24,7 @@ from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue
 from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node, cg_search_budget
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.switches import ANN3_CAGRA_TEAM
 
 comptime TPB = 64
@@ -54,7 +54,7 @@ def cg_search_kernel(
 comptime CG_T = 32
 comptime CG_LMAX = 128
 comptime CG_CMAX = 128
-comptime CAGRA_TEAM = ANN3_CAGRA_TEAM and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime CAGRA_TEAM = ANN3_CAGRA_TEAM and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 def cg_search_team_kernel(

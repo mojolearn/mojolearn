@@ -23,7 +23,7 @@ every round is the primitive's, so the chosen orders are the same words.
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.hostptr import copy_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
@@ -40,7 +40,7 @@ from tsa.impl.timeSeries.stationarity import (
 #: 7.8 -> 3.9 ms, -50%, digest identical); -D MOJOLEARN_SELECT_D_OFF turns it off
 #: (-D MOJOLEARN_SELECT_D is now harmless).
 comptime SELECT_D_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SELECT_D_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_SELECT_D_OFF"]()
 )
 
 #: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: `select_d`

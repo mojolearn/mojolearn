@@ -42,7 +42,7 @@ from gemm.checks.gemm_identical import (
     _amma_stage,
 )
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.device_plan import DevicePlan
 from core.gram_multi_gpu import gram_plan_current, pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 from core.strided_walk import NV_AMD_IDENTICAL_STEPS
@@ -126,7 +126,7 @@ Only which thread owns a chain and where its operands are read from move."""
 #: IDENTICAL never reads it (its branch returns before this point).
 comptime APPLE_FAST_GEMM_TN_V1 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"]()
 )
 
@@ -765,7 +765,7 @@ def gemv_n(
     # kernel beats the vendor gemv on narrow matrices.
     # `-D MOJOLEARN_GEMV_FAST_VENDOR` keeps the vendor gemv.
     comptime if (
-        has_apple_gpu_accelerator()
+        TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_GEMV_FAST_VENDOR"]()
     ):
         if k <= GEMV_FAST_PINNED_MAX_K:

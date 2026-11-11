@@ -31,7 +31,7 @@ phase of every estimator that sorts.
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, canon
@@ -42,7 +42,7 @@ comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_XPREP_RADIX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
-comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()) or IDN_XPREP_RADIX
+comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU) or IDN_XPREP_RADIX
 # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS = 4|6|8, default 8):
 # histogram storage scales with 2**digit bits; smaller digits trade extra
 # passes for smaller clear/scan work. The sorted words are the same for every

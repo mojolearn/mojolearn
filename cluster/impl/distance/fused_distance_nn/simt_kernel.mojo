@@ -167,7 +167,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -194,7 +194,7 @@ comptime FUSED_CLAMP_PRECISION = Float32(1.0e-6)
 # fixed. Smaller X pages and fewer threads trade operand reuse for occupancy
 # across neighboring shapes; no input size or dataset chooses this arm.
 comptime AFCL_G05 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G05"]()
 )
 comptime FUSED_NORMAL_KBLK = 32

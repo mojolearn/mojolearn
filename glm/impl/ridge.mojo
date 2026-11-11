@@ -66,7 +66,7 @@ reads `alpha[0]` only: `ridge.cuh:67`).
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -111,7 +111,7 @@ comptime RIDGE_SMALL_THRESH = Float32(1.0e-10)
 #: is now harmless.
 comptime RIDGE_NO_U = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"]()
     and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )

@@ -136,7 +136,7 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 from checks.soft_f64 import sf64_sqrt, sf64_to_f32
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale, enqueue_es_unscale_diag
@@ -172,7 +172,7 @@ from x_decomp.jacobi_par import (
 #: more (gemm 93 ms + epilogue 92 ms of the transform at 1M x 500, M4 Pro).
 comptime RBF_FUSED = (
     _CTX_MODE == _NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_RBF_FUSED"]()
 )
 
@@ -284,7 +284,7 @@ comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
 )
 comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (
     _CTX_MODE == _NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_KM_FAST_PTR_IN_OFF"]()
 )
 
@@ -1324,7 +1324,7 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
 #: board's q = 256: 32,640 serial rotations a sweep, up to 15 sweeps) while
 #: the rest of the GPU idles. A solve that does not converge in
 #: NYS_RR_SWEEPS sweeps leaves `dk` untouched and the cyclic kernel runs.
-comptime NYS_RR_EIGH = (_CTX_MODE != _CTX_IDENTICAL and has_apple_gpu_accelerator()
+comptime NYS_RR_EIGH = (_CTX_MODE != _CTX_IDENTICAL and TARGET_HAS_APPLE_GPU
                         and not is_defined["MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF"]())
 comptime NYS_RR_SWEEPS = 30
 
@@ -1538,7 +1538,7 @@ def _nystroem_rr_eigh_idn(
                 dk.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
                 grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
             )
-            comptime if has_apple_gpu_accelerator():
+            comptime if TARGET_HAS_APPLE_GPU:
                 if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
                     ctx.synchronize()
     # J^T A J keeps ||A||_F: a solve that moved it is not an answer
@@ -1750,7 +1750,7 @@ def _nystroem_rr_eigh_idn_devstop(
                 Int32(n), Int32(even_q), Int32(rd),
                 grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
             )
-            comptime if has_apple_gpu_accelerator():
+            comptime if TARGET_HAS_APPLE_GPU:
                 if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
                     ctx.synchronize()
     var fro_in = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_IN)

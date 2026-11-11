@@ -147,7 +147,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV3"
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
@@ -505,7 +505,7 @@ def _et_device_batch() -> Int:
     # 0.953. `_16384=1` restores the previous width for an A/B.
     # IDENTICAL on Apple too since 2026-09-28: the width is bit-inert by the
     # argument above (keyed draws, integer cells, per-node reduction).
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return 32768
     return 16384
 

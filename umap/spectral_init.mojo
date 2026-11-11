@@ -19,11 +19,11 @@ from spectral.impl.preprocessing.detail.spectral_embedding import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 comptime UMAP_INIT_TOL_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_UMAP_INIT_TOL"]()
     and not is_defined["MOJOLEARN_UMAP_INIT_TOL_OFF"]()
 )

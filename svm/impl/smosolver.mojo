@@ -76,7 +76,7 @@ from core.identity_trace import IdentityTrace, fnv1a64_bytes, FNV_OFFSET
 from ensemble.instruments import StageTimes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from std.memory import stack_allocation
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from svm.checks.device_select import (
@@ -142,7 +142,7 @@ comptime SMO_MAX_INNER_ITER = 10000
 #: every mode (cpu-gpu-cleanup c-svm, 2026-10-02: the host sort and upload of
 #: the fold order and its `MOJOLEARN_SVM_*SYNCS_OFF` switches are gone).
 
-comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined[
+comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it

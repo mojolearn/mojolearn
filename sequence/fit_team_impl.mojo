@@ -19,7 +19,7 @@ then the fit raises. NVIDIA and AMD run the fit in one launch with no check
 `-D MOJOLEARN_WITNESS_SABOTAGE=1` makes every Apple GARCH / Prophet fit
 raise (the test that the check is wired)."""
 from experiments.classical_identical_ideas.stats_controls import C58_TEAM_MIB
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec_device import DeviceExec
@@ -61,7 +61,7 @@ comptime SEQ_TEAM_APPLE_STEPS = 1 << 27
 def _team_budget(g: Int, steps_per_iter: Int) -> Int:
     """Optimizer iterations per launch: unbounded (< 0) on NVIDIA and AMD; on
     Apple at most SEQ_TEAM_APPLE_STEPS lead steps over the group."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return max(1, SEQ_TEAM_APPLE_STEPS // max(1, g * steps_per_iter))
     else:
         return -1
@@ -109,7 +109,7 @@ def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP, mut wit: 
 def _saves(mut ex: DeviceExec, nsh: Int, npv: Int, sh: FP, pv: FP) raises -> Tuple[FP, FP]:
     """The slice-start copies of a group's shared and private rows: Apple
     only (elsewhere the fit is one launch and the rows stand in)."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return (ex._alloc(nsh, False), ex._alloc(npv, False))
     else:
         return (sh, pv)
@@ -125,7 +125,7 @@ def _zero(mut ex: DeviceExec, p: FP, n: Int) raises:
 def _group(B: Int, shared: Int, priv: Int) -> Int:
     """Series per group: as many as SEQ_TEAM_BYTES holds, at least one."""
     var per = (shared + SEQ_TEAM_TPB * priv) * 4
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         per *= 2  # the slice-start copies (_saves)
     return min(B, max(1, SEQ_TEAM_BYTES // per))
 

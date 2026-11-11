@@ -8,11 +8,11 @@ Define presence enables an arm; omit the define for A (do not pass '=0').
 No switch changes bins, sampled features, row membership or solver settings.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime AFCL_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 
 # AFCL-T01: halve rows per quantized-histogram replica to shorten each

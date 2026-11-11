@@ -11,7 +11,7 @@ that path, so IDENTICAL runs main's code. The chi2 samplers' device ops
 lane/apple-fast-kapprox @ 10d5a7970.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
@@ -26,7 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 #: See docs/apple-fast/EXPERIMENTS.md (KPCA_RESIDENT).
 comptime XN_KPCA_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_KPCA_RESIDENT_OFF"]()
 )
 

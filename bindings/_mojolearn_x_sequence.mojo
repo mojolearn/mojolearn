@@ -90,7 +90,7 @@ from providers.python.sequence_seq_tensor_pyapi import (
 from providers.python.sequence_layernorm_dev_pyapi import layer_norm_dev_py, layer_norm_dev_alloc_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 # TOMBSTONE: sched_exp_block (MOJOLEARN_SCHED_FAST_TABLE) (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/sched_exp_block.patch
