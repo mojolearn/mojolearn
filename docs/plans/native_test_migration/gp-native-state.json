@@ -1,6 +1,6 @@
 {
   "family": "Gaussian process native storage",
-  "status": "32 authored standalone fixtures; no compilation or execution by lane",
+  "status": "Root accepted native CPU32/AppleGPU0; no lane execution",
   "entry": "checks/native_tests/gp_state.mojo",
   "suite": "checks/native_tests/gp_state_suite.mojo",
   "producer_dependency": "7f5f0bf795",
@@ -17,11 +17,52 @@
     "30-31": "Fit scratch and OVR member moves preserve allocation/interior-address identity and values"
   },
   "parallel_plan": "All32 independent fixtures use host_parallelize with host policy. Small OVR member metadata traversal is explicitly marked as metadata driver work. No GPU operations or unsafe origin-erasing closure captures.",
-  "compile_flags": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
-  "runtime_owed": "Root compiles and executes this suite in a coherent native bundle. Actual GP host/device/inference-provider and normalization coverage is separate and remains pending.",
+  "compile_flags": [
+    "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "-I ."
+  ],
+  "runtime_owed": "None for the native cases in this manifest. Installed Python boundary qualification and untested vendor columns remain separate.",
   "python_removed": 0,
   "product_changes": 0,
   "kernel_changes": 0,
   "identity_or_performance_claim": "None; no development identity/timing run",
-  "removals": "Nothing identified in this additive storage tranche; original numerical Python coverage stays until actual native replacements pass."
+  "removals": "Nothing identified in this additive storage tranche; original numerical Python coverage stays until actual native replacements pass.",
+  "accepted_native_execution": {
+    "state": "native_suites_passed_composed",
+    "source": "86b16e09919a3132d0991facb59b332cd8fcdab6",
+    "receipt": "E/native-wave17-accepted-results.json",
+    "receipt_sha256": "37f5c19a9fdce757b7f03c872cf239462ff4bdd6653d3b0daa025ff1de88e12c",
+    "composed_batch": {
+      "cpu": 216,
+      "apple_gpu": 56
+    },
+    "gp_subset": {
+      "cpu": 179,
+      "apple_gpu": 46
+    },
+    "composition": {
+      "unchanged_passing_suites": "native-wave17r2-accepted-partial.json",
+      "r2_cpu": 185,
+      "r2_gpu": 26,
+      "repaired_and_new_suites": "native-wave17r3-results.json",
+      "r3_cpu": 31,
+      "r3_gpu": 30
+    },
+    "original_failures": [
+      "native-wave17-compile-repair.json",
+      "native-wave17r2-results.json",
+      "wave17r2-cpu-run.log",
+      "wave17r2-gpu-run.log"
+    ],
+    "limits": [
+      "Native standalone suite execution only; installed Python boundary/API tests were not run by this lane.",
+      "No NVIDIA/AMD runtime or cross-vendor identity/performance claim.",
+      "Theta policy CPU2/GPU2 belongs to next batch and is excluded.",
+      "Acceptance covers the authored bounded fixtures, not every possible GP workload."
+    ],
+    "this_manifest": {
+      "cpu": 32,
+      "apple_gpu": 0
+    }
+  }
 }

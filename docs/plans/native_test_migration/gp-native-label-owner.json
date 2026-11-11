@@ -1,6 +1,6 @@
 {
   "family": "GP native encoded label owner",
-  "status": "28 authored native fixtures; uncompiled/unrun",
+  "status": "Root accepted native CPU28/AppleGPU0; no lane execution",
   "dependency": "be2ab982b5",
   "entry": "checks/native_tests/gp_label_owner.mojo",
   "suite": "checks/native_tests/gp_label_owner_suite.mojo",
@@ -35,7 +35,7 @@
   "limits": [
     "Storage/lifetime and actual native gather contracts do not replace public class-object identity/interoperability/admission tests.",
     "Other label ordering/class union numerical suites remain unchanged.",
-    "No compiler/runtime result from this lane."
+    "Root accepted28CPU cases; installed public-label boundary tests were not run by this lane."
   ],
   "files": {
     "checks/native_tests/gp_label_owner.mojo": "6f661b653c5bef8031cee0410a9bf8671f8c4ce566d59e53921a465bc3e20ad0",
@@ -47,10 +47,48 @@
   ],
   "python_deleted": 0,
   "product_or_kernel_changes": 0,
-  "identity_performance_or_runtime_claim": false,
   "dependencies": {
     "codes": "be2ab982b5",
     "table": "de371e5d37",
     "actual_host_label_descriptor": "be2ab982b5"
-  }
+  },
+  "accepted_native_execution": {
+    "state": "native_suites_passed_composed",
+    "source": "86b16e09919a3132d0991facb59b332cd8fcdab6",
+    "receipt": "E/native-wave17-accepted-results.json",
+    "receipt_sha256": "37f5c19a9fdce757b7f03c872cf239462ff4bdd6653d3b0daa025ff1de88e12c",
+    "composed_batch": {
+      "cpu": 216,
+      "apple_gpu": 56
+    },
+    "gp_subset": {
+      "cpu": 179,
+      "apple_gpu": 46
+    },
+    "composition": {
+      "unchanged_passing_suites": "native-wave17r2-accepted-partial.json",
+      "r2_cpu": 185,
+      "r2_gpu": 26,
+      "repaired_and_new_suites": "native-wave17r3-results.json",
+      "r3_cpu": 31,
+      "r3_gpu": 30
+    },
+    "original_failures": [
+      "native-wave17-compile-repair.json",
+      "native-wave17r2-results.json",
+      "wave17r2-cpu-run.log",
+      "wave17r2-gpu-run.log"
+    ],
+    "limits": [
+      "Native standalone suite execution only; installed Python boundary/API tests were not run by this lane.",
+      "No NVIDIA/AMD runtime or cross-vendor identity/performance claim.",
+      "Theta policy CPU2/GPU2 belongs to next batch and is excluded.",
+      "Acceptance covers the authored bounded fixtures, not every possible GP workload."
+    ],
+    "this_manifest": {
+      "cpu": 28,
+      "apple_gpu": 0
+    }
+  },
+  "identity_or_performance_claim": false
 }

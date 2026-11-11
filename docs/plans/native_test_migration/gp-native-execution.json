@@ -1,6 +1,6 @@
 {
   "family": "GaussianProcessRegressor/GaussianProcessClassifier native execution",
-  "status": "Authored CPU17/GPU20; not compiled or executed by lane",
+  "status": "Root accepted native CPU17/AppleGPU20; no lane execution",
   "dependencies": {
     "typed_api_provider": "7f5f0bf795",
     "independent_reference_inputs": "b469feccbe",
@@ -116,25 +116,60 @@
     ]
   },
   "remaining": [
-    "Normalization, GPLeaseState and GPCQueryScratch fixtures authored in gp-native-final.json; all remain uncompiled/unrun",
-    "Public fixed-kernel/no-free-parameter optimizer bypass and kernel object publication remain Python until native plan coverage is available",
-    "Native source tests compile/run by root, followed by reviewed Python numerical-only cleanup"
+    "Python boundary/interoperability/refusal/serialization and external sklearn tests remain; installed runtime qualification is separate.",
+    "Three raw consumer groups remain live: theta policy numerical packaging test, historical prediction benchmark, resident upload/lifecycle telemetry.",
+    "New standalone theta policy2CPU/2GPU is authored but not included in this acceptance.",
+    "Public fixed-kernel/no-free optimizer bypass remains a genuine public boundary case."
   ],
-  "python_removed": 0,
+  "python_removed": {
+    "numerical_controller_functions": 1,
+    "pytest_definitions_net": 0,
+    "assertion_sites_net": 14,
+    "lines_net": 48,
+    "files": 6
+  },
   "product_or_kernel_changes": 0,
   "removals": "Removed three temporary test-local descriptor wrappers now that production gp_native_v1[K] is frozen. Original Python coverage remains unchanged until replacement native execution passes.",
   "identity_or_performance_claim": "None; no lane compilation/test/identity/timing/box job.",
   "transport_companion": "gp-native-contract.json:57 authored/unrun transport and provider-error fixtures",
-  "python_cleanup_pending": {
-    "patch": "E/pca-native-tests/gp-native-python-cleanup.patch",
-    "report": "E/pca-native-tests/gp-native-python-cleanup.json",
-    "status": "Prepared/AST checked and git apply --check only; not applied",
-    "files": 5,
-    "definitions_removed": 1,
-    "net_assert_or_Report_check_sites_removed": 11,
-    "net_lines_removed": 42,
-    "condition": "Apply only after root accepts the relevant actual native CPU/GPU replacements. Recheck the original file hashes and patch against the integration base.",
-    "preserved": "External sklearn oracles; normalize_y=True covariance numerics and all normalization tests pending native preparation; public Array shapes/dtypes/state/refusals/seed behavior/save-load/partition; existing repeatability controllers. Unchanged top-level AST outside named reviewed functions."
+  "final_coverage_companion": "gp-native-final.json",
+  "accepted_native_execution": {
+    "state": "native_suites_passed_composed",
+    "source": "86b16e09919a3132d0991facb59b332cd8fcdab6",
+    "receipt": "E/native-wave17-accepted-results.json",
+    "receipt_sha256": "37f5c19a9fdce757b7f03c872cf239462ff4bdd6653d3b0daa025ff1de88e12c",
+    "composed_batch": {
+      "cpu": 216,
+      "apple_gpu": 56
+    },
+    "gp_subset": {
+      "cpu": 179,
+      "apple_gpu": 46
+    },
+    "composition": {
+      "unchanged_passing_suites": "native-wave17r2-accepted-partial.json",
+      "r2_cpu": 185,
+      "r2_gpu": 26,
+      "repaired_and_new_suites": "native-wave17r3-results.json",
+      "r3_cpu": 31,
+      "r3_gpu": 30
+    },
+    "original_failures": [
+      "native-wave17-compile-repair.json",
+      "native-wave17r2-results.json",
+      "wave17r2-cpu-run.log",
+      "wave17r2-gpu-run.log"
+    ],
+    "limits": [
+      "Native standalone suite execution only; installed Python boundary/API tests were not run by this lane.",
+      "No NVIDIA/AMD runtime or cross-vendor identity/performance claim.",
+      "Theta policy CPU2/GPU2 belongs to next batch and is excluded.",
+      "Acceptance covers the authored bounded fixtures, not every possible GP workload."
+    ],
+    "this_manifest": {
+      "cpu": 17,
+      "apple_gpu": 20
+    }
   },
-  "final_coverage_companion": "gp-native-final.json"
+  "python_cleanup_applied": "gp-native-cleanup-accepted.json"
 }

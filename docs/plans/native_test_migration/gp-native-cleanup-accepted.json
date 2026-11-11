@@ -1,0 +1,128 @@
+{
+  "status": "Applied after root accepted native replacements; Python boundary runtime not run by lane",
+  "files": [
+    {
+      "file": "python/mojolearn/tests/test_gp_sample_y.py",
+      "original_sha256": "2568c1c3346b1fe05134db034eb469676096d6cc78ab043733316c327bc77c73",
+      "prepared_sha256": "f1d3ccdc235984642a108c83c2a901c5ee17b349144ae8556e44aed6d08695a8",
+      "changed_functions": [
+        "arm_moments",
+        "arm_shape",
+        "main"
+      ],
+      "definitions_before": 9,
+      "definitions_after": 8,
+      "checks_before": 14,
+      "checks_after": 11,
+      "lines_before": 142,
+      "lines_after": 128,
+      "pytest_defs_before": 0,
+      "pytest_defs_after": 0
+    },
+    {
+      "file": "python/mojolearn/tests/test_gp_optimizer.py",
+      "original_sha256": "a9bfa7e23bf927a2a3fa1c0b34d4d6094ed880b1f10781f597cdeefb5c25fbe5",
+      "prepared_sha256": "2e6ec9b482ce22566decd47d876ecf20f7ef2251c6b32d3962a4fc16c73452c6",
+      "changed_functions": [
+        "arm_gradient",
+        "arm_optimize"
+      ],
+      "definitions_before": 11,
+      "definitions_after": 11,
+      "checks_before": 25,
+      "checks_after": 21,
+      "lines_before": 214,
+      "lines_after": 198,
+      "pytest_defs_before": 0,
+      "pytest_defs_after": 0
+    },
+    {
+      "file": "python/mojolearn/tests/test_gp_return_cov.py",
+      "original_sha256": "b9607cd9443ecf461e3fda3a083e995c7b1cc1fce0bd0d790669e6b4e19d2a10",
+      "prepared_sha256": "2f229292a4870ac53bdaf244336c74c90410b40438b7aa7e61f9e3a8114d49c6",
+      "changed_functions": [
+        "test_cov_is_symmetric_and_its_diagonal_is_the_variance",
+        "test_covariance_public_arrays_and_mean_interface"
+      ],
+      "definitions_before": 4,
+      "definitions_after": 4,
+      "checks_before": 6,
+      "checks_after": 4,
+      "lines_before": 54,
+      "lines_after": 52,
+      "pytest_defs_before": 3,
+      "pytest_defs_after": 3
+    },
+    {
+      "file": "python/mojolearn/tests/test_gp_normalize_y.py",
+      "original_sha256": "a19a1c18c86441c92a3149c560a621817010ead63b37a23862c7639aa79f47e2",
+      "prepared_sha256": "aa94db998984a1c1fbdc9755a470177bd2591aeb1029092dc6f656abac3f146f",
+      "changed_functions": [
+        "test_constant_target_publishes_scalar_metadata_and_array",
+        "test_constant_target_scales_by_one",
+        "test_normalized_prediction_repeats_bitwise_and_tracks_sklearn"
+      ],
+      "definitions_before": 8,
+      "definitions_after": 8,
+      "checks_before": 16,
+      "checks_after": 15,
+      "lines_before": 135,
+      "lines_after": 134,
+      "pytest_defs_before": 6,
+      "pytest_defs_after": 6
+    },
+    {
+      "file": "python/mojolearn/tests/test_gp_surface.py",
+      "original_sha256": "e71d802428c91dddee7f626ad01fafba84e4d1b8a8e49313b881d64d5f3b4a14",
+      "prepared_sha256": "492dd954dc7b9c11ca961e6c72feb9e9bb9447a0b457b63c52e42d3989be6f59",
+      "changed_functions": [
+        "main"
+      ],
+      "definitions_before": 3,
+      "definitions_after": 3,
+      "checks_before": 16,
+      "checks_after": 14,
+      "lines_before": 300,
+      "lines_after": 288,
+      "pytest_defs_before": 0,
+      "pytest_defs_after": 0
+    },
+    {
+      "file": "python/mojolearn/tests/test_gpc_surface.py",
+      "original_sha256": "a789932837cb7f4e5691ad91213605b0b2d18f2f92f735e3bd3bc3af144494e3",
+      "prepared_sha256": "51e9c2a317564357e5483a8ab4b9706ecfef12a0f411a6322054fa327cfbef74",
+      "changed_functions": [
+        "test_binary_and_multiclass_fit_predict"
+      ],
+      "definitions_before": 13,
+      "definitions_after": 13,
+      "checks_before": 35,
+      "checks_after": 33,
+      "lines_before": 238,
+      "lines_after": 235,
+      "pytest_defs_before": 6,
+      "pytest_defs_after": 6
+    }
+  ],
+  "definitions_removed": 1,
+  "assertion_sites_removed_net": 14,
+  "lines_removed_net": 48,
+  "retained": "All independent sklearn oracles, normalization public scalar/Array interfaces, public shape/dtype/packing/refusals/kernel identity/save-load/partition seams, existing repeatability controllers, and optimizer run publication/seed behavior",
+  "unchanged_ast": "All top-level functions/classes outside the listed changed set match exactly",
+  "pytest_definitions_net_removed": 0,
+  "numerical_controller_functions_removed": [
+    "test_gp_sample_y.py::arm_moments"
+  ],
+  "accepted_source": "86b16e09919a3132d0991facb59b332cd8fcdab6",
+  "acceptance_receipt": "E/native-wave17-accepted-results.json",
+  "assertion_count_definition": "AST Assert nodes, Report.check calls and NumPy assert_* calls; source sites, not parametrized/native runtime cases",
+  "source_match_evidence": "E/pca-native-tests/gp-accepted-cleanup-source-check.json",
+  "native_source_match_evidence": "E/pca-native-tests/gp-accepted-native-source-check.json",
+  "raw_consumers_unchanged": [
+    "packaging/portable_math/test_host_math.py::test_gp_theta_float32_policy",
+    "tools/wp67_gp_predict_bench.py::main",
+    "tools/test_gp_svm_resident_state.py::_ResidentLifecycle.stats"
+  ],
+  "theta_next_batch": "6f4ead351cf1 CPU2/GPU2 authored/unrun; original Python theta checks untouched",
+  "product_kernel_benchmark_changes": 0
+}
