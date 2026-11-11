@@ -4,9 +4,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_type
 from bindings.classical_arrays import classical_address
+from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
 from core.gp_native_api import (
-    GP_NATIVE_ABI, GP_NATIVE_COUNT, GP_CAPABILITIES, GPDriver, GPKernelView,
+    GP_NATIVE_ABI, GP_NATIVE_COUNT, GP_MODE, GP_CAPABILITIES, GPDriver, GPKernelView,
     GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest,
     GPRGradientRequest, GPROptimizeRequest, GPCFitRequest, GPCFitAllRequest,
     GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest, GPThetaRequest,
@@ -14,15 +15,59 @@ from core.gp_native_api import (
 )
 
 
+@fieldwise_init
+struct GPDescriptorMetadata(Movable):
+    # The Python reference pins the exact admitted provider image. Mode and
+    # capability values themselves are native; no boxed cache payload exists.
+    var provider: PythonObject
+    var mode: Int
+    var capabilities: Int
+
+
+struct GPDescriptorMetadataTable(Defaultable, Movable):
+    var rows: List[GPDescriptorMetadata]
+
+    def __init__(out self):
+        self.rows = List[GPDescriptorMetadata]()
+
+
+comptime GP_DESCRIPTOR_METADATA = SharedSlot[GPDescriptorMetadataTable, "MojolearnGpDescriptorMetadataV1"]
+
+
+def _gp_metadata(provider: PythonObject, driver: GPDriver) raises -> Tuple[Int, Int]:
+    # UNPACK owns the GIL, as does the existing descriptor connection cache.
+    # Holding the provider pins makes identity comparison safe from address
+    # reuse. A replacement factory has a new admitted provider and new row.
+    var table = GP_DESCRIPTOR_METADATA.get_or_create_ptr()
+    for i in range(len(table[].rows)):  # driver-loop: the handful of connected GP provider images
+        if table[].rows[i].provider is provider:
+            return (table[].rows[i].mode, table[].rows[i].capabilities)
+    var mode = driver.metadata(GP_MODE)
+    var capabilities = driver.metadata(GP_CAPABILITIES)
+    # Match the bounded retention policy of neural_descriptor_connect_once.
+    if len(table[].rows) >= 64:
+        table[].rows.clear()
+    table[].rows.append(GPDescriptorMetadata(provider, mode, capabilities))
+    return (mode, capabilities)
+
+
 struct GPConnection(Movable):
     var provider: PythonObject
     var driver: GPDriver
+    var mode: Int
     var capabilities: Int
 
     def __init__(out self, binding: PythonObject) raises:
         self.provider = neural_descriptor_connect_once(binding, "gp_native_api_v1", String(GP_NATIVE_ABI), GP_NATIVE_COUNT)
         self.driver = GPDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        self.capabilities = self.driver.metadata(GP_CAPABILITIES)
+        var metadata = _gp_metadata(self.provider, self.driver)
+        self.mode = metadata[0]
+        self.capabilities = metadata[1]
+
+
+def gp_require(connection: GPConnection, capability: Int, entry: String) raises:
+    if (connection.capabilities & capability) == 0:
+        raise Error("ImportError: the connected GP provider does not support " + entry)
 
 
 def gp_kernel_view(arrays: PythonObject) raises -> GPKernelView:

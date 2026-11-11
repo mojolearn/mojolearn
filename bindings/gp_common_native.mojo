@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The shared pieces of the Gaussian process owners (bindings/gp_regressor_native.mojo,
 # bindings/gp_classifier_native.mojo): the binding's compile-time mode cross-check
-# (`_extension`), its capability word (`gp_idn_caps`), `numeric_mode_used`, and the
+# (`_extension`), its typed descriptor capability word, `numeric_mode_used`, and the
 # kernel objects read natively from their instance fields: the postfix spec
 # `_kernel_arrays` packed (bindings/archive_schema_native.mojo reads the same node
 # layouts for `save`), the free hyperparameters `_hyper` listed, and the copy
@@ -11,17 +11,14 @@ from core.gp_native_storage import GPFreeParameters
 from bindings.admitted_family import admit_family, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.gp_native_boundary import GPConnection
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from std.memory import memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
 from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
-from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 
 
-comptime _GP_MODE_CODE_SLOT = "p3_gp_binding_mode_code_v1"
-comptime _GP_CAPS_SLOT = "p3_gp_binding_caps_v1"
 
 
 def gp_mode_wanted(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -48,18 +45,8 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     estimator's message head, `rebuild` the sentence after the mode code."""
     var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
-    # The binary's compile-time mode code never changes for one binding
-    # object: read once and kept in a record weak-keyed by the binding (lane
-    # p3-svm-gp-kernel, row 752); -1 records a binding without the entry.
-    var got = -1
-    var held = gpsvm_side_get(_GP_MODE_CODE_SLOT, binding)
-    if held is not None:
-        got = Int(py=held)
-    else:
-        var getter = neural_descriptor_entry(binding, "gp_numeric_mode", False)
-        if getter is not None:
-            got = Int(py=family_call(b.int, family_call(getter)))
-        _ = gpsvm_side_put(_GP_MODE_CODE_SLOT, binding, PythonObject(got))
+    var connection = GPConnection(binding)
+    var got = connection.mode
     if got >= 0:
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
@@ -70,44 +57,17 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
 
 
 def gp_caps(binding: PythonObject) raises -> Int:
-    """`int(ext.gp_idn_caps())`, 0 when the binding has no such entry (the host
-    binding and the `_OFF` builds): bit 1 is gpc_fit_all / gpc_predict_all,
-    bit 2 gpr_fit_ptr / gpr_predict_ptr."""
-    var held = gpsvm_side_get(_GP_CAPS_SLOT, binding)
-    if held is not None:
-        return Int(py=held)
-    var b = native_loaded_module("builtins")
-    var fn_obj = neural_descriptor_entry(binding, "gp_idn_caps", False)
-    var caps = 0 if fn_obj is None else Int(py=family_call(b.int, family_call(fn_obj)))
-    # The capability word is the binary's own: one read per binding object.
-    _ = gpsvm_side_put(_GP_CAPS_SLOT, binding, PythonObject(caps))
-    return caps
-
-
-def gp_entry(binding: PythonObject, name: String) raises -> PythonObject:
-    """`ext.<name>`: an attribute lookup on the binding, refused as it was."""
-    return neural_descriptor_entry(binding, name)
+    var connection = GPConnection(binding)
+    return connection.capabilities
 
 
 def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`NumericModeMixin.numeric_mode_used` on the resolved binding."""
-    var b = native_loaded_module("builtins")
-    var full = String(py_fields(binding)["__name__"])
-    var dotted = full.split(".")
-    var name = String(dotted[len(dotted) - 1])
-    var stem = String("mojolearn")
-    if name != "_mojolearn":
-        stem = String(name.removeprefix("_mojolearn_"))
-    var getter = neural_descriptor_entry(binding, stem + "_numeric_mode", False)
-    if getter is not None:
-        var code = family_call(getter)
-        var table = context["backend_fields"]["_CODE_MODE"]
-        if not py_contains(table, code):
-            raise Error("RuntimeError: mojolearn: " + name + " returned unknown numeric mode " + family_repr(code))
-        return table[code]
-    if len(dotted) < 2:
-        raise Error("IndexError: list index out of range")
-    return PythonObject(String(dotted[len(dotted) - 2]))
+    var connection = GPConnection(binding)
+    var code = PythonObject(connection.mode)
+    var table = context["backend_fields"]["_CODE_MODE"]
+    if not py_contains(table, code):
+        raise Error("RuntimeError: Mojolearn: GP provider returned unknown numeric mode " + String(connection.mode))
+    return table[code]
 
 
 def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
