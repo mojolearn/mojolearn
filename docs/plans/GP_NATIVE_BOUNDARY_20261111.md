@@ -294,3 +294,15 @@ review and `git diff --check` only; compilation, runtime seams and performance
 are pending with the integrator. The frozen 51-role audit is unchanged; the
 following-tranche role audit records additions separately. General primitive
 label ordering/index metadata and broader fitted-state admission remain open.
+
+The following tranche also reuses the existing parallel `ScoreKeyIndex` for
+admitted exact builtin int/bool labels, including arbitrary-size integers.
+Class PACK selects the first original object; normalized integer keys do not
+replace observable bool/int identities. Exact NumPy string labels reuse the
+existing native text plan, including its surrogate path. The original full
+admission, NaN and mixed-type refusals precede either plan. Numeric buffer/list
+fast routes are unchanged. Exact NumPy numeric and mixed real labels retain
+their current scalar comparison path: no new Float64 comparison approximation
+is introduced. This is a partial removal of general ordering metadata, not a
+claim that all GP label containers or all Python imports are gone. No new
+numerical kernel or replacement sort/hash algorithm was added.
