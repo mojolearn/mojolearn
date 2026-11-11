@@ -49,3 +49,36 @@ errors preserve exact messages. Mock performs no numerical operation.
 Error/total/name storage stays owned; independent cases parallel.
 RUN OWED: kde_contract_suite.run_checks()(32). Combined pure state+wire62.
 No lane build/test/runtime/identity/timing; no Python deletion.
+
+Third chunk: actualCPU48/GPU48 plus GPUownership3. Include reference
+artifacts with this chunk; total newCPU110 including prior pure62, GPU51.
+Core product dependencies f052c4918c +78be03c73b +8a624987ef; public boundary
+frozen55425fb83f. The original48profiles run score_samples and score twice.
+GPU additionally checks the existing direct query path, then prepares one
+resident fit with the public already-finite flag and repeats native queries.
+Samples and total use independent mathematical references; status/output
+guards and source/weights immutability remain checked. Released query IDs
+are refused. Nothing compares previous-version output bits.
+
+GPU ownership3 uses original131x7/salt29 weighted/salt41 fixture, queries9/3
+with salts46/40, Gaussian/Euclidean/bandwidth.25. Retains original default
+pool allocation4/reuse1 expectation when enabled, and retained-byte bound.
+Two leases claim at most one cached workspace. After registry release, both
+native leases still download original train/weights despite poisoned host
+inputs; new lookup refuses. Clean return retains the same pool/counters;
+unclean return discards its pool while another lease retains valid buffers.
+GPU commands remain ordered; this does not test/fix concurrent submission.
+All real handles/leases are returned on success/error; no fake device owner.
+
+RUN OWED: kde_native_cpu_suite.run_checks()(48),
+          kde_native_gpu_suite.run_checks()(48),
+          kde_ownership_gpu_suite.run_checks()(3), plus pure state30/wire32.
+Use identical=1 on all; CPU column additionally. No lane compile/runtime.
+Static AST/JSON/TOML/artifact-hash/whitespace checks only.
+
+Exact pending Python cleanup: E/pca-native-tests/kde-native-python-cleanup.patch.
+After root native execution passes, replace only the48-case legacy numerical
+controller with public dtype/shape/scalar PACK checks. Existing source remains
+unchanged now; original boundary/layout/ownership/refusal tests and legacy
+helpers needed by them remain. No product/kernel/default/A-B define changed.
+No shared-context concurrency success or performance/identity claim.
