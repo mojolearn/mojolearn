@@ -394,11 +394,11 @@ def _kernel_bounds_input(value: PythonObject, count: Int, context: PythonObject)
     return result
 
 
-def _kernel_release(value: PythonObject, context: PythonObject, active: PythonObject) raises:
-    var classes = py_call(native_loaded_module("builtins").list, context["family_gp_kernel_nodes"].keys())
+def _kernel_release(value: PythonObject, context: PythonObject, mut active: List[PythonObject]) raises:
+    var classes = gp_mapping_snapshot[False](context["family_gp_kernel_nodes"])
     var connected = False
-    for i in range(len(classes)):  # driver-loop: exact kernel owners need recursive lifecycle admission
-        connected = connected or py_type(value) is classes[i]
+    for i in range(len(classes.keys)):  # driver-loop: exact kernel owners need recursive lifecycle admission
+        connected = connected or py_type(value) is classes.keys[i]
     if not connected:
         native_release_admit(value, context)
         return
@@ -410,24 +410,25 @@ def _kernel_release(value: PythonObject, context: PythonObject, active: PythonOb
     for i in range(len(ancestry)):  # driver-loop: destruction cannot invoke a Python finalizer
         if py_contains(_class_fields(ancestry[i]), "__del__"):
             raise Error("TypeError: native kernel replacement cannot release Python finalizers")
-    _ = py_call(active.append, value)
+    active.append(value)
     var fields = _fields(value)
-    var children = py_call(native_loaded_module("builtins").list, fields.values())
-    for i in range(len(children)):  # driver-loop: every retained field can own a finalizer, not only kernel configuration
-        _kernel_release(children[i], context, active)
-    _ = py_call(active.pop)
+    var children = gp_mapping_snapshot[True, False](fields)
+    for i in range(len(children.values)):  # driver-loop: every retained field can own a finalizer, not only kernel configuration
+        _kernel_release(children.values[i], context, active)
+    _ = active.pop()
 
 
 def _kernel_publish(kernel: PythonObject, updates: PythonObject, context: PythonObject) raises:
     _ = _kernel_class(kernel, context)
     var fields = _fields(kernel)
-    var names = py_call(native_loaded_module("builtins").list, updates.keys())
-    for i in range(len(names)):  # driver-loop: validate all replacement owners before mutating any field
-        var previous = _kernel_read(kernel, fields, names[i], True)
-        if previous is not None and previous is not updates[names[i]]:
-            _kernel_release(previous, context, Python.list())
-    for i in range(len(names)):  # driver-loop: publish already-admitted state through the native dictionary
-        py_setitem(fields, names[i], updates[names[i]])
+    var names = gp_mapping_snapshot[False](updates)
+    var active = List[PythonObject]()
+    for i in range(len(names.keys)):  # driver-loop: validate all replacement owners before mutating any field
+        var previous = _kernel_read(kernel, fields, names.keys[i], True)
+        if previous is not None and previous is not updates[names.keys[i]]:
+            _kernel_release(previous, context, active)
+    for i in range(len(names.keys)):  # driver-loop: publish already-admitted state through the native dictionary
+        py_setitem(fields, names.keys[i], updates[names.keys[i]])
 
 
 def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObject,

@@ -344,3 +344,12 @@ native RUN sources with no Python imports; the complete `gaussian_process/`,
 These are source facts, with compilation/runtime/performance pending for this
 tranche. Complete rows and remaining groups:
 `~/mojolearn-evidence/python-mojo-migration-20261110/python-object-typed-gp-next-tranche.json`.
+
+A subsequent bounded kernel release/publication follow-up uses the same native
+mapping capture for connected-class keys, retained child values and publication
+field names, plus a native active-owner stack. All existing weak-reference,
+finalizer and cycle refusals run before any field is published, in the same
+order. Snapshot mode captures only the requested keys or values, avoiding an
+unused reference vector. Constructor update dictionaries and saved public node
+storage are separate from this change; the latter remain observable boundary
+storage. This follow-up is source-reviewed only and follows the 13-role audit.
