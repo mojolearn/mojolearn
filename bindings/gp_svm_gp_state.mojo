@@ -64,6 +64,19 @@ def _gp_kernel_nodes(kernel: PythonObject, context: PythonObject, nodes: PythonO
     return True
 
 
+def _gp_kernel_key(mut mods: NativeModules, key: PythonObject, nodes: PythonObject) raises:
+    """Every recorded kernel node, its class and its instance fields. A node
+    replaced anywhere in the tree changes its parent's fields, so the
+    recorded node list stays complete while the key matches."""
+    var none = List[String]()
+    records_key_append(key, PythonObject(len(nodes)))
+    for i in range(len(nodes)):  # driver-loop: over the recorded kernel nodes (identity only)
+        var node = nodes[i]
+        records_key_append(key, node)
+        records_key_append(key, py_type(node))
+        gpsvm_key_fields(mods, key, _fields(mods, node), none)
+
+
 def _gp_kernel_classes_admitted(mut mods: NativeModules, classes: PythonObject) raises -> Bool:
     for i in range(len(classes)):  # driver-loop: over the recorded kernel classes
         if class_record(mods, _KERNEL_CLASS_SLOT, classes[i]) is None:
