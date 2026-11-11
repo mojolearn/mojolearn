@@ -77,7 +77,6 @@ from . import _backend, _native_archive_bridge, _native_family_bridge
 #: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
 _OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
-from .linear_model import _flatten, _shape_of
 from .preprocessing import StandardScaler, _STANDARD_CONTEXT
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -95,23 +94,6 @@ _K_RBF = 2
 _K_MATERN = 3
 _K_SUM = 4
 _K_PROD = 5
-
-
-def _as_length_scale(length_scale, what):
-    """A list of floats from a scalar or a sequence. CONVERSION ONLY, no
-    judgement: positivity, finiteness and the isotropic-or-ARD length rule
-    are `gp_kernel_rbf` / `gp_kernel_matern` / `gp_validate_kernel`'s
-    refusals (kernels.mojo), and a copy of them here would make the named
-    Mojo refusal unreachable from Python and therefore untestable."""
-    if not _shape_of(length_scale):
-        return [float(length_scale)]
-    ls = [float(v) for v in _flatten(length_scale)]  # glue: converts the length-scale argument
-    if len(ls) == 0:
-        raise ValueError(
-            f"mojolearn {what}: length_scale is an empty sequence; pass a "
-            "scalar (isotropic) or n_features values (ARD)"
-        )
-    return ls
 
 
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
@@ -165,12 +147,6 @@ class Kernel:
 
     def _free_values(self):
         return [v for h in self._hyper() if h is not None for v in h[0]]  # glue: collects free kernel hyperparameters (n_dims entries)
-
-    def _with_free_values(self, values, theta=None):
-        out = self._replace(list(values))
-        if theta is not None:
-            out._theta_fit = [float(t) for t in theta]  # glue: copies the fitted theta, kernel hyperparameters (n_dims entries)
-        return out
 
     @property
     def n_dims(self):
