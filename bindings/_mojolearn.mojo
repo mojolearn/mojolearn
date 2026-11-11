@@ -208,6 +208,7 @@ from core.labels_admission import labels_argmax_shape, labels_gather_shape, labe
 from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_prepare, labels_legacy_address
 
 from checks.vendor import COMPILED_VENDOR
+from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -2201,7 +2202,11 @@ def build__mojolearn() -> PythonObject:
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn module: ", e))
 

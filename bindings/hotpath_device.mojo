@@ -70,10 +70,7 @@ from bindings.array_helpers import (
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
     arange_i64_binding as host_arange_i64_binding,
-    bincount_i64_binding as host_bincount_i64_binding,
-    check_indices_i64_binding as host_check_indices_i64_binding,
     count_mask_u8_binding as host_count_mask_u8_binding,
-    equal_elements_binding as host_equal_elements_binding,
     first_seen_i32_binding as host_first_seen_i32_binding,
     fold_ids_binding as host_fold_ids_binding,
     fold_pair_f32_binding as host_fold_pair_f32_binding,
@@ -98,13 +95,9 @@ from core.hotpath_device import (
     HPD_U32,
     HPD_U8,
     device_arange_skip_i64,
-    device_bincount_i64,
-    device_bincount2_i32,
     device_cast_f64_to_f32,
-    device_check_indices_i64,
     device_count_mask_u8,
     device_encode_labels,
-    device_equal_elements,
     device_first_seen_i32,
     device_fold_pair_f32,
     device_gather_u64,
@@ -137,11 +130,16 @@ from core.label_device_steps import (
     labels_device_threshold, labels_device_threshold_eligible,
 )
 from bindings.labels_stat_boundary import labels_stat_pack
+from core.base_helpers_device import (
+    IDN_HPDEV_FOLDS, check_indices_i64_device_run, equal_elements_device_run, bincount_i64_device_run,
+    bincount2_i32_device_run,
+)
 from core.hotpath_impl import HpStat
 
 
 comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_LABELS_OFF"]()
-comptime IDN_HPDEV_FOLDS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
+# IDN_HPDEV_FOLDS lives in core/base_helpers_device.mojo (imported above),
+# beside the typed runs the base helper table publishes.
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
 #: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
 #: lane fix-s1-shared: cast_elements between two dtypes on the device.
@@ -167,19 +165,18 @@ def equal_elements_binding(
     a_addr: PythonObject, b_addr: PythonObject, code: PythonObject,
     n: PythonObject, dst_addr: PythonObject,
 ) raises -> PythonObject:
-    """`equal_elements` (see `bindings/hotpath_helpers.mojo`), on the device."""
-    comptime if IDN_HPDEV_ELEM:
-        var count = Int(py=n)
-        var c = Int(py=code)
-        var a = Int(py=a_addr)
-        var b = Int(py=b_addr)
-        var d = Int(py=dst_addr)
-        if count >= 1 and count <= HPD_MAX_N and c >= HPD_F32 and c <= HPD_U8 and a != 0 and b != 0 and d != 0:
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            with GILReleased(Python()):
-                device_equal_elements(ctx, a, b, c, count, d)
-            return PythonObject(0)
-    return host_equal_elements_binding(a_addr, b_addr, code, n, dst_addr)
+    """`equal_elements` (see `bindings/hotpath_helpers.mojo`), on the device:
+    `core/base_helpers_device.mojo::equal_elements_device_run`, the body the
+    base helper table publishes."""
+    var count = Int(py=n)
+    var c = Int(py=code)
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    var d = Int(py=dst_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = equal_elements_device_run(a, b, c, count, d)
+    return PythonObject(status)
 
 
 def gather_i32_binding(table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
@@ -241,25 +238,18 @@ def bincount_i64_binding(
     counts_addr: PythonObject, accumulate: PythonObject,
 ) raises -> PythonObject:
     """`bincount_i64`, on the device; a value out of range reruns the host
-    helper, which raises."""
-    comptime if IDN_HPDEV_ELEM:
-        var count = Int(py=n)
-        var kk = Int(py=k)
-        var c = Int(py=code)
-        var s = Int(py=src_addr)
-        var ca = Int(py=counts_addr)
-        if (
-            count >= 1 and count <= HPD_MAX_N and kk >= 1 and kk <= HPD_MAX_N
-            and (c == HPD_I32 or c == HPD_I64) and s != 0 and ca != 0
-        ):
-            var acc = Int(py=accumulate) != 0
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var ok = False
-            with GILReleased(Python()):
-                ok = device_bincount_i64(ctx, s, c, count, kk, ca, acc)
-            if ok:
-                return PythonObject(0)
-    return host_bincount_i64_binding(src_addr, code, n, k, counts_addr, accumulate)
+    helper, which raises (`core/base_helpers_device.mojo::bincount_i64_device_run`,
+    the body the base helper table publishes)."""
+    var count = Int(py=n)
+    var kk = Int(py=k)
+    var c = Int(py=code)
+    var s = Int(py=src_addr)
+    var ca = Int(py=counts_addr)
+    var acc = Int(py=accumulate) != 0
+    var status = 0
+    with GILReleased(Python()):
+        status = bincount_i64_device_run(s, c, count, kk, ca, acc)
+    return PythonObject(status)
 
 
 def bincount2_i32_binding(
@@ -274,27 +264,13 @@ def bincount2_i32_binding(
     var count = Int(py=dims[0])
     var ka = Int(py=dims[1])
     var kb = Int(py=dims[2])
-    if count < 0 or ka < 1 or kb < 1 or ka > HPD_MAX_N // kb or count > HPD_MAX_N:
-        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and ka * kb within the device bound")
     var ca = Int(py=counts_addr)
-    if ca == 0:
-        raise Error("bincount2_i32: null counts address")
-    if count == 0:
-        var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ca)
-        for j in range(ka * kb):  # small-loop(ka * kb: zero rows, the table is groups x classes): zeroes the empty table, no row data
-            cp.unsafe_store(j, Int64(0))
-        return PythonObject(0)
     var a = Int(py=a_addr)
     var b = Int(py=b_addr)
-    if a == 0 or b == 0:
-        raise Error("bincount2_i32: null code address")
-    var ctx = process_ctx[_HPDEV_SLOT]()
-    var ok = False
+    var status = 0
     with GILReleased(Python()):
-        ok = device_bincount2_i32(ctx, a, b, count, ka, kb, ca)
-    if not ok:
-        raise Error("bincount2_i32: a code is out of range")
-    return PythonObject(0)
+        status = bincount2_i32_device_run(a, b, count, ka, kb, ca)
+    return PythonObject(status)
 
 
 def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> PythonObject:
@@ -550,18 +526,16 @@ def leave_range_i64_binding(
 def check_indices_i64_binding(
     addr: PythonObject, n: PythonObject, bound: PythonObject,
 ) raises -> PythonObject:
-    """`check_indices_i64`, on the device."""
-    comptime if IDN_HPDEV_FOLDS:
-        var count = Int(py=n)
-        var limit = Int(py=bound)
-        var a = Int(py=addr)
-        if count >= 1 and count <= HPD_MAX_N and limit >= 0 and limit <= HPD_MAX_N and a != 0:
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var status = 0
-            with GILReleased(Python()):
-                status = device_check_indices_i64(ctx, a, count, limit)
-            return PythonObject(status)
-    return host_check_indices_i64_binding(addr, n, bound)
+    """`check_indices_i64`, on the device
+    (`core/base_helpers_device.mojo::check_indices_i64_device_run`, the body
+    the base helper table publishes)."""
+    var count = Int(py=n)
+    var limit = Int(py=bound)
+    var a = Int(py=addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = check_indices_i64_device_run(a, count, limit)
+    return PythonObject(status)
 
 
 def indices_overlap_i64_binding(

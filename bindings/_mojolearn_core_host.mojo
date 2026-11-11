@@ -188,6 +188,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
 from core.core_host_impl import (
@@ -1266,6 +1267,10 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
-        return module.finalize()
+        var published_module = module.finalize()
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_host()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))
