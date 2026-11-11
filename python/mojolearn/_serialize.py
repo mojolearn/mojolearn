@@ -288,10 +288,6 @@ def _nest_text(items, shape):
     return [_nest_text(items[i * step:(i + 1) * step], shape[1:]) for i in range(shape[0])]  # glue: list structure of a text metadata block
 
 
-def read_npy(fp):
-    return decode_npy(fp.read())
-
-
 # --------------------------------------------------------------------- npz
 
 
