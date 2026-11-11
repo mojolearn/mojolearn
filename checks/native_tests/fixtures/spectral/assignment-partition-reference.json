@@ -1,0 +1,55 @@
+{
+  "status": "independent input-graph certificate only; no native execution",
+  "source_sha256": "3a7998bce85738790c530971d515251c1cbc85410c7d28c8f5c1ab169ac75868",
+  "shape": [
+    180,
+    3
+  ],
+  "original": "test_x_cluster_twice.py embedded child: default_rng(7), three60-row normal blobs at0/4/8, sigma0.4",
+  "partition": "three connected components, row//60; component labels may be permuted",
+  "neighbors_note": "Both ten including self and ten excluding self stay inside and connect the same components.",
+  "workers": 10,
+  "numpy": "2.5.2",
+  "results": [
+    {
+      "group": 0,
+      "neighbors_including_self": 10,
+      "connected_rows": 60,
+      "minimum_cross_edge_squared_distance_margin": 27.253364917888838
+    },
+    {
+      "group": 0,
+      "neighbors_including_self": 11,
+      "connected_rows": 60,
+      "minimum_cross_edge_squared_distance_margin": 27.246081777915986
+    },
+    {
+      "group": 1,
+      "neighbors_including_self": 10,
+      "connected_rows": 60,
+      "minimum_cross_edge_squared_distance_margin": 25.93391733534745
+    },
+    {
+      "group": 1,
+      "neighbors_including_self": 11,
+      "connected_rows": 60,
+      "minimum_cross_edge_squared_distance_margin": 25.85080743321564
+    },
+    {
+      "group": 2,
+      "neighbors_including_self": 10,
+      "connected_rows": 60,
+      "minimum_cross_edge_squared_distance_margin": 27.114718983484636
+    },
+    {
+      "group": 2,
+      "neighbors_including_self": 11,
+      "connected_rows": 60,
+      "minimum_cross_edge_squared_distance_margin": 27.082419691891346
+    }
+  ],
+  "limits": [
+    "No fitted eigenbasis, labels or release hashes generated.",
+    "Existing child-process repeatability test remains Python."
+  ]
+}

@@ -46,8 +46,7 @@ def unwind(handle: Int) raises:
         _ = query^
 
 
-def fixture(unit: Int) raises:
-    var counter = List[Int](length=2,fill=0)
+def owner_case(mut counter: List[Int], unit: Int) raises:
     var handle = Int(counter.unsafe_ptr())
     if unit == 5:
         counter[1] = 1
@@ -87,7 +86,16 @@ def fixture(unit: Int) raises:
             counter[1] = 1
             _ = cache^
     require(counter[0] == 1,"Last Spectral Arc releases exactly once")
-    _ = counter^
+
+
+def fixture(unit: Int) raises:
+    var counter = List[Int](length=2,fill=0)
+    try:
+        owner_case(counter,unit)
+    finally:
+        # Also pin callback storage if an intermediate ownership assertion
+        # raises while a copied Arc is still unwinding.
+        _ = counter^
 
 
 def run_checks() raises:
