@@ -332,7 +332,7 @@ def _handles(handles: PythonObject, want: Int, name: String) raises -> List[Int]
     if len(handles) != want:
         raise Error(name + ": handles must contain " + String(want) + " entries, got " + String(len(handles)))
     var out = List[Int]()
-    for i in range(want):  # small-loop(want: device array handles of one op call): reads handle list, not data
+    for i in range(want):  # driver-loop: over argument words (fixed count, not data); small-loop(want: device array handles of one op call): reads handle list, not data
         out.append(Int(py=handles[i]))
     return out^
 
@@ -556,7 +556,7 @@ def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]
             + String(len(addresses))
         )
     var out = List[Int]()
-    for i in range(want):  # small-loop(want: buffer addresses of one op call): reads pointer list, not data
+    for i in range(want):  # driver-loop: over argument words (fixed count, not data); small-loop(want: buffer addresses of one op call): reads pointer list, not data
         var a = Int(py=addresses[i])
         if a == 0:
             raise Error(name + ": null buffer address at slot " + String(i))
@@ -657,7 +657,7 @@ def mlp_sessions_rows_binding(shapes: PythonObject, width: PythonObject) raises 
     if n == 0:
         raise Error("MLP sessions require at least one (rows, width) input")
     var total = 0
-    for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+    for i in range(n):  # driver-loop: over sessions; small-loop(n: session shape tuples): reads caller metadata, not data
         var shape = shapes[i]
         if len(shape) != 2 or Int(py=shape[1]) != w or Int(py=shape[0]) < 0:
             raise Error("MLP sessions require at least one (rows, width) input")
@@ -677,7 +677,7 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
         raise Error("neural MLP sessions: metadata length mismatch")
     var inputs = List[Int]()
     var rows = List[Int]()
-    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
+    for i in range(n_sessions):  # driver-loop: over sessions; small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
         inputs.append(Int(py=input_addresses[i]))
         rows.append(Int(py=shapes[i][0]))
     var in_width = Int(py=dims[0])
@@ -789,7 +789,7 @@ def samba_resident_open_binding(
     else:
         _params(params, 9, "samba_resident_open")
         var kinds = List[Int]()
-        for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
+        for i in range(len(layers)):  # driver-loop: over layers; small-loop(layers: one kind code per layer): reads codes, not data
             kinds.append(Int(py=layers[i]))
         var vocab = Int(py=params[0])
         var dm = Int(py=params[1])
@@ -947,7 +947,7 @@ def samba_resident_accumulated_step_binding(
 
 def _int_words(values: PythonObject, name: String) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(values)):  # small-loop(values: state addresses or cursor words of one program call): argument words, not data
+    for i in range(len(values)):  # driver-loop: over argument words (fixed count, not data); small-loop(values: state addresses or cursor words of one program call): argument words, not data
         out.append(Int(py=values[i]))
     return out^
 
@@ -962,7 +962,7 @@ def _nonnull_words(values: PythonObject, name: String) raises -> List[Int]:
 
 def _py_words(words: List[Int]) raises -> PythonObject:
     var out = Python.list()
-    for i in range(len(words)):  # small-loop(words: two cursor words per layer): result words, not data
+    for i in range(len(words)):  # driver-loop: over layers (two cursor words each); small-loop(words: two cursor words per layer): result words, not data
         _ = out.append(PythonObject(words[i]))
     return out
 
@@ -976,7 +976,7 @@ def _samba_program_new(layers: PythonObject, params: PythonObject, param_addr: P
                        name: String) raises -> SambaStackProgram:
     _params(params, 11, name)
     var kinds = List[Int]()
-    for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
+    for i in range(len(layers)):  # driver-loop: over layers; small-loop(layers: one kind code per layer): reads codes, not data
         kinds.append(Int(py=layers[i]))
     var pa = Int(py=param_addr)
     if pa == 0:
