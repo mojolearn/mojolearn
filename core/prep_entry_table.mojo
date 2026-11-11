@@ -15,9 +15,8 @@ Extending a table's layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT
 
 comptime PREP_TABLE_X_PREP = 0
@@ -104,8 +103,19 @@ def prep_table_entry[family: Int](key: PrepEntryKey, index: Int,
     raise Error("native prep entries: unsupported execution key")
 
 
-def xp_transport_call(key: PrepEntryKey, operation: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
-    """One x_prep transport operation in the image `key` names. The caller
-    keeps every addressed buffer alive until the call returns."""
-    var entry = prep_table_entry[PREP_TABLE_X_PREP](key, 0, String(XP_TRANSPORT_ABI), XP_OP_COUNT)
-    return native_descriptor_call(entry, operation, addresses, ints, List[Float64]())
+def xp_transport_ref(key: PrepEntryKey) raises -> EntryRef:
+    """The x_prep transport entry of the image `key` names, resolved once
+    (lane entry-table-zero-alloc); the table refusals raise here."""
+    return EntryRef(prep_table_entry[PREP_TABLE_X_PREP](key, 0, String(XP_TRANSPORT_ABI), XP_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, XP_OP_COUNT))
+
+
+def xp_transport_call(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
+    """One x_prep transport operation through the resolved entry: one
+    indirect call. The caller keeps every addressed buffer alive until the
+    call returns."""
+    var result = entry_ref_call(entry, operation, Int(addresses.unsafe_ptr()), len(addresses),
+                                Int(ints.unsafe_ptr()), len(ints), 0, 0)
+    _ = addresses
+    _ = ints
+    return result
