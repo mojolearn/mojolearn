@@ -172,7 +172,7 @@ struct HdbscanFitDriver(Copyable, Movable):
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: HdbscanFitRequest, mut plan: HdbscanFitPlan) raises -> Int:
-        var o = r.options
+        var o = r.options.copy()
         var a: InlineArray[Int, 5] = [r.source.address, r.labels.address,
             r.core_distances.address, r.probabilities.address, plan.address()]
         var p: InlineArray[Int, 10] = [r.source.count, o.rows, o.features, o.min_samples,

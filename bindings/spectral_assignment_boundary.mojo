@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Alternative label assignment UNPACK/PACK; execution is one native call."""
 from std.memory import memcpy
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.spectral_assignment_api import (
     SPECTRAL_ASSIGN_ABI, SPECTRAL_ASSIGN_COUNT, SpectralAssignmentDriver,
@@ -24,7 +24,7 @@ def spectral_assignment_run(binding: PythonObject, request: SpectralAssignmentRe
     var driver = SpectralAssignmentDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
     var output = SpectralAssignmentOutput()
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             driver.assign(request, output)
     finally:
         _ = provider

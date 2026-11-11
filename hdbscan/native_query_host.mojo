@@ -20,9 +20,9 @@ struct HdbscanQueryHostBackend(HdbscanQueryBackend):
 
     @staticmethod
     def run(mut state: HdbscanQueryState) raises -> Int:
-        var r = state.request
-        var d = r.dimensions
-        var b = r.buffers
+        var r = state.request.copy()
+        var d = r.dimensions.copy()
+        var b = r.buffers.copy()
         if state.operation == HDBSCAN_QUERY_APPROXIMATE:
             approximate_predict_host_run(state.training, d.rows, d.features,
                 f32_ptr(b.core_distances.address), i32_ptr(b.labels.address), f32_ptr(b.lambdas.address),

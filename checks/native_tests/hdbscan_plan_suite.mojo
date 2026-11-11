@@ -77,13 +77,13 @@ def fixture(unit: Int) raises:
         var plan = HdbscanFitPlan(False)
         var options = HdbscanFitOptions(3, 2, 1, 2, 0, False, 0, 0, False, 1, 0)
         var request = HdbscanFitRequest(r.buffers.training, r.buffers.labels,
-            r.buffers.core_distances, r.buffers.probabilities, options)
+            r.buffers.core_distances, r.buffers.probabilities, options.copy())
         plan.capture_host_source(request)
         inputs.floats[0] = 99
         require(len(plan.storage[0].host_source) == 6 and plan.storage[0].host_source[0] == 2,
             "host fit owns its original UNPACK snapshot")
     elif unit == 2 or unit == 3:
-        var b = r.buffers
+        var b = r.buffers.copy()
         var request = HdbscanPredictionRequest(b.labels, b.parents, b.labels, b.lambdas,
             b.labels, b.selected, b.deaths, b.selected, b.offsets, b.index_into, 3, 3, 2, 1)
         var plan = HdbscanPredictionPlan(3)

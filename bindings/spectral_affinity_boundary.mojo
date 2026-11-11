@@ -47,7 +47,7 @@ def spectral_rbf_run(binding: PythonObject, source: PythonObject, destination: S
         destination.address(), rows, features, gamma,
         (capabilities & XD_CAP_RESIDENT) != 0)
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             spectral_rbf_affinity(entry, request)
     finally:
         _ = provider

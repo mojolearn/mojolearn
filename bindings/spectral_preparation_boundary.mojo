@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Spectral preparation boundary image pins around typed native requests."""
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.spectral_preparation_api import (
     SPECTRAL_PREPARATION_ABI, SPECTRAL_PREPARATION_COUNT, SpectralPreparationDriver,
@@ -25,7 +25,7 @@ struct SpectralPreparationConnection(Movable):
 def spectral_coo_count_run(connection: SpectralPreparationConnection, request: SpectralCOOCountRequest) raises -> Int:
     var count: Int
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             count = connection.driver.count(request)
     finally:
         _ = connection.provider
@@ -35,7 +35,7 @@ def spectral_coo_count_run(connection: SpectralPreparationConnection, request: S
 def spectral_coo_fill_run(connection: SpectralPreparationConnection, request: SpectralCOOFillRequest) raises -> Int:
     var count: Int
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             count = connection.driver.fill(request)
     finally:
         _ = connection.provider
@@ -44,7 +44,7 @@ def spectral_coo_fill_run(connection: SpectralPreparationConnection, request: Sp
 
 def spectral_knn_run(connection: SpectralPreparationConnection, request: SpectralKNNRequest) raises:
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             connection.driver.knn(request)
     finally:
         _ = connection.provider
