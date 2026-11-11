@@ -1,0 +1,92 @@
+{
+  "base": "27583e21df",
+  "status": "source authored; compilation and runtime pending",
+  "roles": [
+    {
+      "role": "LinearSVR regularization pair",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 208,
+        "text": "var strengths = _linear_strengths(fields)"
+      },
+      "after": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 197,
+        "text": "var strengths = _linear_strengths_values(fields)"
+      },
+      "aggregate_overlap": "LinearSVC regularization pair schema reused"
+    },
+    {
+      "role": "LinearSVR single-target option list",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 161,
+        "text": "var params = Python.list(PythonObject(rows), PythonObject(cols), PythonObject(n_classes),"
+      },
+      "after": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 160,
+        "text": "var request = QnFitRequest(Int(py=classical_address(x)), Int(py=classical_address(target)),"
+      },
+      "aggregate_overlap": null
+    },
+    {
+      "role": "LinearSVR single-target solver metadata Array",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 159,
+        "text": "var info = family_array(Python.tuple(PythonObject(2)), \"<f4\", context)"
+      },
+      "after": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 153,
+        "text": "var plan = QnSingleFitPlan()"
+      },
+      "aggregate_overlap": null
+    },
+    {
+      "role": "LinearSVR single-target result tuple",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 179,
+        "text": "var _keep_ret_info_r209 = Python.tuple(w, PythonObject(svc_int(n_iter)), PythonObject(fx), PythonObject(rc))"
+      },
+      "after": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 170,
+        "text": "return LinearSvrFitResult(weights, plan^)"
+      },
+      "aggregate_overlap": "shared QN result envelope previously counted for LinearSVC CPU caller"
+    }
+  ],
+  "native_fixtures": {
+    "cpu": 6,
+    "ordered_gpu": 6,
+    "execution": "unrun"
+  },
+  "boundary_cases": 4,
+  "retained": [
+    "public _w/coef_/n_iter_ Arrays and scalar objective_/retcode_/intercept_",
+    "input and weight storage pins",
+    "existing common parameter admission",
+    "LinearSVR score composition remains pending"
+  ],
+  "removed": [
+    "sole remaining _qn_fit_one_target Python params/info/result mechanism",
+    "sole remaining _linear_strengths Python tuple wrapper"
+  ],
+  "numeric_sources_unchanged": [
+    "glm/estimator.mojo",
+    "glm/host/qn_oracle.mojo",
+    "glm/logistic_native_device.mojo",
+    "glm/host/logistic_native_host.mojo"
+  ],
+  "build_roots": [
+    "identical/core",
+    "host/core",
+    "host/runtime_family"
+  ],
+  "abi": "no changes; existing linear_svc v1 / QN op0",
+  "copies": "public coefficient copy and initialized fitted _w unchanged; private 2-float info is native; no new copies",
+  "jobs": "none; root owns execution"
+}

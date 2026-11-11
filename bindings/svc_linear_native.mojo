@@ -18,7 +18,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
-    family_entry, family_array,
+    family_array,
 )
 from bindings.svm_mixture_native import _qn_scores, _qn_scores_native
 from core.admitted_weights import admitted_fill
@@ -28,9 +28,10 @@ from bindings.label_weights_boundary import label_weights_run
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY, LABEL_WEIGHTS_ROWS
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.classical_labels import labels_type_name, classical_encode_labels
-from bindings.linear_svc_boundary import LinearSvcWeights, LinearSvcConnection, linear_svc_connection, linear_svc_run_fit, linear_svc_run_query
+from bindings.linear_svc_boundary import LinearSvcWeights, LinearSvcConnection, linear_svc_connection, linear_svc_run_fit, linear_svc_run_query, LinearSvrFitResult, linear_svr_run_fit
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcFitPlan, LinearSvcWeightsState, linear_svc_pack
-from core.logistic_native_api import QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_MULTICLASS_AVAILABLE
+from core.qn_single_fit import QnSingleFitPlan
+from core.logistic_native_api import QnFitRequest, QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_MULTICLASS_AVAILABLE
 from core.labels_native_api import LabelsThresholdRequest
 from bindings.labels_descriptor_boundary import labels_threshold, labels_argmax_rows
 from bindings.svc_common import (
@@ -84,12 +85,6 @@ def _linear_strengths_values(fields: PythonObject) raises -> InlineArray[Float64
         return values^
     var values: InlineArray[Float64, 2] = [0.0, inv_c]
     return values^
-
-
-def _linear_strengths(fields: PythonObject) raises -> PythonObject:
-    # The still-live LinearSVR fit boundary keeps its established envelope.
-    var values = _linear_strengths_values(fields)
-    return Python.tuple(PythonObject(values[0]), PythonObject(values[1]))
 
 
 def _class_weight_message(model: PythonObject, class_weight: PythonObject) raises -> String:
@@ -147,38 +142,32 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
     return result^
 
 
-def _qn_fit_one_target(fields: PythonObject, binding: PythonObject, x: PythonObject, y_enc: PythonObject,
-                       n_classes: Int, loss: Int, l1: PythonObject, l2: PythonObject, grad_tol: Float64,
-                       change_tol: Float64, svr_eps: Float64, sw: PythonObject, penalty_normalized: Bool,
-                       context: PythonObject) raises -> PythonObject:
-    """`linear_model._qn_fit_one_target`: (w, n_iter, objective, retcode)."""
+def _linear_svr_fit_target(fields: PythonObject, binding: PythonObject, x: PythonObject,
+    target: PythonObject, loss: Int, l1: Float64, l2: Float64, grad_tol: Float64,
+    change_tol: Float64, svr_eps: Float64, sw: PythonObject, penalty_normalized: Bool,
+    context: PythonObject) raises -> LinearSvrFitResult:
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    var fi = 1 if svc_truthy(svc_field(fields, "fit_intercept")) else 0
-    var w = family_array(Python.tuple(PythonObject(cols + fi)), "<f4", context)
-    var info = family_array(Python.tuple(PythonObject(2)), "<f4", context)
-    var has_sw = 0 if sw is None else 1
-    var params = Python.list(PythonObject(rows), PythonObject(cols), PythonObject(n_classes),
-                             family_call(svc_builtins().float, l1), family_call(svc_builtins().float, l2),
-                             PythonObject(grad_tol), PythonObject(change_tol),
-                             PythonObject(svc_int(svc_field(fields, "max_iter"))),
-                             PythonObject(svc_int(svc_field(fields, "linesearch_max_iter"))),
-                             PythonObject(svc_int(svc_field(fields, "lbfgs_memory"))),
-                             PythonObject(fi), PythonObject(1 if penalty_normalized else 0), PythonObject(has_sw),
-                             PythonObject(loss), PythonObject(svr_eps))
-    if has_sw == 1:
-        _ = py_call(params.append, classical_address(sw))
-    var n_iter = family_call(family_entry(binding, "qn_fit", context), classical_address(x), classical_address(y_enc),
-                             classical_address(w), classical_address(info), params)
-    _ = info  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    var fx = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[0])
-    _ = info  # keep the Python object alive through the native call above
-    var rc = Int(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[1])
-    _ = info  # keep the Python object alive through the native call above
-    var _keep_ret_info_r209 = Python.tuple(w, PythonObject(svc_int(n_iter)), PythonObject(fx), PythonObject(rc))
-    _ = info  # keep the Python object alive through the native call above
-    return _keep_ret_info_r209^
+    var intercept = svc_truthy(svc_field(fields, "fit_intercept"))
+    var weights = family_array(Python.tuple(PythonObject(cols + Int(intercept))), "<f4", context)
+    var plan = QnSingleFitPlan()
+    # Preserve parameter conversion, optional weight address, then X/y/w
+    # address admission in the original single-target fit order.
+    var max_iter = svc_int(svc_field(fields, "max_iter"))
+    var linesearch = svc_int(svc_field(fields, "linesearch_max_iter"))
+    var memory = svc_int(svc_field(fields, "lbfgs_memory"))
+    var sw_address = 0 if sw is None else Int(py=classical_address(sw))
+    var request = QnFitRequest(Int(py=classical_address(x)), Int(py=classical_address(target)),
+        Int(py=classical_address(weights)), 0, sw_address, 0, rows, cols, 1,
+        max_iter, linesearch, memory, intercept, penalty_normalized, loss,
+        l1, l2, grad_tol, change_tol, svr_eps)
+    var connection = linear_svc_connection(binding)
+    linear_svr_run_fit(connection, request, plan)
+    _ = x
+    _ = target
+    _ = sw
+    _ = weights
+    return LinearSvrFitResult(weights, plan^)
 
 
 # ---------------------------------------------------------------- LinearSVR
@@ -205,17 +194,17 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var t = admit_family(args[2], 1, "y", context, False).array
     if Int(py=t.shape[0]) != rows:
         raise Error("mojolearn LinearSVR X and y lengths differ")
-    var strengths = _linear_strengths(fields)
+    var strengths = _linear_strengths_values(fields)
     var sw = PythonObject(None)
     if args[3] is not None:
         sw = admit_family_weights(args[3], rows, False, context).keep
     var tol = svc_float(svc_field(fields, "tol"))
     var loss = Int(py=svc_attr(model, "_LOSSES")[svc_field(fields, "loss")])
-    var result = _qn_fit_one_target(fields, binding, x, t, 1, loss, strengths[0], strengths[1], tol, 0.1 * tol,
+    var result = _linear_svr_fit_target(fields, binding, x, t, loss, strengths[0], strengths[1], tol, 0.1 * tol,
                                     svc_float(epsilon), sw, svc_truthy(svc_attr(model, "penalty_normalized")), context)
-    var w = result[0]
-    py_setitem(fields, PythonObject("objective_"), result[2])
-    py_setitem(fields, PythonObject("retcode_"), result[3])
+    var w = result.weights
+    py_setitem(fields, PythonObject("objective_"), PythonObject(result.state.objective()))
+    py_setitem(fields, PythonObject("retcode_"), PythonObject(result.state.retcode()))
     py_setitem(fields, PythonObject("_w"), w)
     var coef = family_array(Python.tuple(PythonObject(cols)), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coef))),
@@ -230,7 +219,7 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     else:
         py_setitem(fields, PythonObject("intercept_"), PythonObject(0.0))
     var n_iter = family_array(Python.tuple(PythonObject(1)), "<i8", context)
-    FAMILY_I64P(unsafe_from_address=Int(py=classical_address(n_iter)))[0] = Int64(Int(py=result[1]))
+    FAMILY_I64P(unsafe_from_address=Int(py=classical_address(n_iter)))[0] = Int64(result.state.iterations)
     _ = n_iter  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("n_iter_"), n_iter)
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(cols))
