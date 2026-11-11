@@ -6,6 +6,7 @@ transient error text before return; no Python bridge or mock entry is involved.
 Independent CPU fixtures are parallel. Only one fixture opens optimizer state;
 other math calls explicitly use caller-owned moments.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_call_spans
 from core.native_call_output import NativeCallOutput
@@ -97,7 +98,7 @@ def malformed(entry: NativeDescriptorCall, fixture_id: Int) raises:
     require(probes[0].calls == 1, "error sink was not called exactly once")
     require(len(probes[0].bytes) == len(expected.as_bytes()), "error text was truncated or duplicated")
     probes[0].bytes.append(0)
-    var copied = String(unsafe_from_utf8_ptr=probes[0].bytes.unsafe_ptr())
+    var copied = unsafe_string_from_utf8_cstr(probes[0].bytes.unsafe_ptr())
     require(copied == expected, "error sink did not preserve complete refusal text: " + copied)
     _ = probes
     _ = addresses

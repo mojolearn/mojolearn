@@ -5,6 +5,7 @@ Distinct field values and every Boolean combination identify slot confusion.
 Test-only handles never reach a real resident pool. ABI output spans and error
 owners use stable heap storage held through success and refusal paths.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.native_call_output import NativeCallOutput
@@ -130,7 +131,7 @@ def missing_result(mut output: NativeCallOutput) raises:
     var status = ipca_wire_entry(IPCA_MODE, 0, 0, 0, 0, 0, 0, 0,
         Int(MutPointer(to=output.error)), native_descriptor_error)
     output.error.append(0)
-    require(status != 0 and String(unsafe_from_utf8_ptr=output.error.unsafe_ptr())
+    require(status != 0 and unsafe_string_from_utf8_cstr(output.error.unsafe_ptr())
         == "IncrementalPCA native ABI: missing result span", "IPCA missing-result refusal")
     _ = output
 

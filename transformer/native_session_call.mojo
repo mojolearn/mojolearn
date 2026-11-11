@@ -3,6 +3,7 @@
 # helper, or framework import belongs here; tools/test_generation_native_abi.py
 # checks this module's local import closure. Providers retain external owners
 # and synchronize producers before handing over these borrowed native vectors.
+from core.native_string import unsafe_string_from_utf8_cstr
 from transformer.session_abi import GenerationSessionForward
 from core.native_call_output import NativeCallOutput
 
@@ -29,5 +30,5 @@ def generation_session_forward(
         Int(params.unsafe_ptr()), len(params), Int(MutPointer(to=output[0].result)), error_context, _generation_native_error)
     if status != 0:
         output[0].error.append(0)
-        raise Error(String(unsafe_from_utf8_ptr=output[0].error.unsafe_ptr()))
+        raise Error(unsafe_string_from_utf8_cstr(output[0].error.unsafe_ptr()))
     return output[0].result

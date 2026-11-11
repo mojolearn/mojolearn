@@ -9,6 +9,7 @@
 # 761a927d6 and the commits after it on lane/adapters-whole-model-20261024; code recoverable at 761a927d6^ (= b022e2ea5).
 # Restore: no patch (removed API, not an experiment define); check the files out of b022e2ea5 (docs/TOMBSTONES.md,
 # "Framework adapter per-operation surfaces").
+from core.native_string import unsafe_string_from_utf8_cstr
 import extensibility
 from extensibility import InputTensor, OutputTensor
 from max.gpu.host import DeviceContext
@@ -90,7 +91,7 @@ def execute_training[
     _ = ints
     _ = floats
     if status != 0:
-        raise Error(String(unsafe_from_utf8_ptr=error.unsafe_ptr()))
+        raise Error(unsafe_string_from_utf8_cstr(error.unsafe_ptr()))
 
 
 @extensibility.register("mojolearn_train")

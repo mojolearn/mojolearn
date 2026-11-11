@@ -4,6 +4,7 @@
 # this is not permission to invoke arbitrary Python __buffer__ protocols.
 # Py_buffer is the public stable CPython structure, represented by ten native
 # words on supported 64-bit little-endian targets (same as optimizer tensor_view).
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from core.borrowed_buffer import BorrowedBufferLayout
@@ -139,7 +140,7 @@ struct AdmittedBorrowedBuffer(Movable):
             if writable and readonly:
                 raise Error("TypeError: native buffer requires writable storage")
             if self.exported[5] != 0:
-                self.format = String(unsafe_from_utf8_ptr=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.exported[5]))
+                self.format = unsafe_string_from_utf8_cstr(Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.exported[5]))
             var shape = List[Int]()
             var strides = List[Int]()
             var suboffsets = List[Int]()

@@ -42,6 +42,7 @@ code of the caller's objects except one attribute lookup of `__init__` on a
 class that passed its full admission (`type_version_tag_assign`), which
 CPython resolves in C for functions and slot wrappers.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
@@ -90,7 +91,7 @@ def native_python_version() raises -> String:
     """`Py_GetVersion()`: the running interpreter's version text."""
     ref cpy = Python().cpython()
     var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
-    return String(unsafe_from_utf8_ptr=version_ptr)
+    return unsafe_string_from_utf8_cstr(version_ptr)
 
 
 def dict_version_tags() raises -> Bool:
