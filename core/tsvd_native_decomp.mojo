@@ -34,21 +34,21 @@ struct TSVDDecompKernels[E: Exec, D: RDev, RES: Bool](TSVDNativeKernels):
 
     @staticmethod
     def vendor() -> Int:
-        return pca_vendor_code(String(COMPILED_VENDOR)) if RES else 1
+        return pca_vendor_code(String(COMPILED_VENDOR)) if Self.RES else 1
 
     @staticmethod
     def capabilities() -> Int:
-        return TSVD_CAP_RANDOMIZED | (TSVD_CAP_TSQR if RES else TSVD_CAP_HOST)
+        return TSVD_CAP_RANDOMIZED | (TSVD_CAP_TSQR if Self.RES else TSVD_CAP_HOST)
 
     @staticmethod
     def qfix() -> Int:
-        return 2 if RES and TSVD_QFIX_ENABLED else 0
+        return 2 if Self.RES and TSVD_QFIX_ENABLED else 0
 
     @staticmethod
     def fit(r: TSVDFitRequest) raises -> TSVDFitResult:
         if r.route != TSVD_RANDOMIZED and r.route != TSVD_TSQR:
             raise Error("TruncatedSVD decomposition provider does not provide this fit route")
-        if r.route == TSVD_TSQR and not RES:
+        if r.route == TSVD_TSQR and not Self.RES:
             raise Error("TruncatedSVD host decomposition provider does not provide TSQR components")
         _decomp_dimension(r.rows)
         _decomp_dimension(r.features)
@@ -60,12 +60,12 @@ struct TSVDDecompKernels[E: Exec, D: RDev, RES: Bool](TSVDNativeKernels):
             var vp = _decomp_pointer(r.variance)
             var rp = _decomp_pointer(r.ratio)
             var word = List[Int32](length=1, fill=0)
-            tsvd_randomized_fit_run[E, D, RES](xp, cp, sp, vp, rp,
+            tsvd_randomized_fit_run[Self.E, Self.D, Self.RES](xp, cp, sp, vp, rp,
                 r.rows, r.features, r.count, r.oversamples, r.iterations, r.auto_iterations, r.seed,
                 Int(word.unsafe_ptr()) if r.test_finite else 0)
             return TSVDFitResult(Int(word[0]), 0)
         var word = List[Int32](length=1, fill=0)
-        tsvd_tsqr_components_run[E, D, RES](xp, cp, sp, r.rows, r.features, r.count,
+        tsvd_tsqr_components_run[Self.E, Self.D, Self.RES](xp, cp, sp, r.rows, r.features, r.count,
             Int(word.unsafe_ptr()) if r.test_finite else 0)
         return TSVDFitResult(Int(word[0]), 0)
 
@@ -94,4 +94,4 @@ struct TSVDDecompAPI[E: Exec, D: RDev, RES: Bool](Defaultable, Movable):
     def __init__(out self):
         self.name = String(TSVD_NATIVE_ABI)
         self.entries = List[NativeDescriptorCall]()
-        self.entries.append(tsvd_decomp_native_v1[E, D, RES])
+        self.entries.append(tsvd_decomp_native_v1[Self.E, Self.D, Self.RES])
