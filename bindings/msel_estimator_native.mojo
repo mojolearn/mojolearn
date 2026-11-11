@@ -68,14 +68,16 @@ def _msel_check_class_rows(cls: PythonObject, plan: PythonObject, b: PythonObjec
     # name (lane perf-meta-estimators, 2026-11-05: every ensemble member call
     # and every native clone runs this check). The same identities are tested.
     var class_dict = b.type.__dict__["__dict__"].__get__
-    var base = PythonObject(None)
-    var base_fields = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546).
+    var base = Optional[PythonObject]()
+    var base_fields = Optional[PythonObject]()
     for k in range(len(hooks)):  # driver-loop: connected estimator method and storage identities
         var hook = hooks[k]
-        if k == 0 or hook[0] is not base:
-            base = hook[0]
-            base_fields = py_call(class_dict, base)
-        if py_get(base_fields, hook[1]) is not hook[2]:
+        var owner = hook[0]
+        if not base or owner is not base.value():
+            base_fields = py_call(class_dict, owner)
+            base = owner
+        if py_get(base_fields.value(), hook[1]) is not hook[2]:
             raise Error("TypeError: native estimator methods or storage hooks changed")
 
 

@@ -406,10 +406,10 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
     # and refusals are the ones `_resident` / `_cached_slot` ran per input.
     # Inside one run only this owner touches the thread's scope and inserts
     # native (address, size) keys.
-    var scope_read = False
-    var scope = PythonObject(None)
-    var cache = PythonObject(None)
-    var cache_state = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546). The
+    # scope's presence is the read-once flag (its value may itself be None).
+    var scope = Optional[PythonObject]()
+    var cache_state = Optional[PythonObject]()
     var inout_values = List[PythonObject]()
     var direct_on = String(getenv("MOJOLEARN_XPREP_DIRECT","1").strip()) != "0"
     var dev_put_on = py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None
@@ -428,15 +428,14 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             if is_inout:
                 inout_values.append(value)
             if ranges and not is_inout:
-                if not scope_read:
+                if not scope:
                     scope = _resident_scope(entries,context)
-                    scope_read = True
-                var resident = scope is not None and (rows or Int(py=value.size) >= Int(py=scope[0]))
+                var resident = scope.value() is not None and (rows or Int(py=value.size) >= Int(py=scope.value()[0]))
                 if resident:
-                    if cache_state is None:
-                        cache = _resident_cache(entries,scope[1],context)
+                    if not cache_state:
+                        var cache = _resident_cache(entries,scope.value()[1],context)
                         cache_state = _cache_state(cache,entries,context)
-                    source = _cached_slot_in(cache_state,value,entries)
+                    source = _cached_slot_in(cache_state.value(),value,entries)
                 elif dev_put_on and (rows or (words >= 1048576 and direct_on)):
                     source = Int(py=py_call_typed(entries["x_prep_dev_put"],classical_address(value),value.size))
                     owned.append(source)

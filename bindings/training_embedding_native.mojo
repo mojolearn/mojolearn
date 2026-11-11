@@ -233,8 +233,8 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
     var floating = False
     # The native float64 scalar class is read once per call, not once per
     # leaf (it was a dtype construction inside the leaf loop).
-    var f8_type = PythonObject(None)
-    var have_f8 = False
+    # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546). Its presence is the read-once flag.
+    var f8_type = Optional[PythonObject]()
     for i in range(len(leaves)):  # driver-loop: validate every input scalar before any native conversion slot
         var value = leaves[i]
         var cls = py_type(value)
@@ -253,10 +253,9 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
         # The previous list door inferred f64 only from Python float or its
         # native float64 subtype. Object buffers with any NumPy real scalar
         # used f64; retain that distinct promotion before the int32 cast.
-        if numpy and not object_array and not floating and not have_f8:
+        if numpy and not object_array and not floating and not f8_type:
             f8_type = sequence_dtype_create(PythonObject("f8"), context).type
-            have_f8 = True
-        floating = floating or cls is b.float or (numpy and (object_array or cls is f8_type))
+        floating = floating or cls is b.float or (numpy and (object_array or (Bool(f8_type) and cls is f8_type.value())))
     if not floating:
         for i in range(len(leaves)):  # driver-loop: preserve the list door's integer-leaf admission
             var cls = py_type(leaves[i])
