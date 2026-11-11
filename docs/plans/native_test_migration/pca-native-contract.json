@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "dependency": "e8958ae5e2",
+  "fixture_count": 32,
+  "suite": "checks/native_tests/pca_contract_suite.mojo",
+  "wrapper": "checks/native_tests/pca_contract.mojo",
+  "coverage": {
+    "metadata_vendor_names": 1,
+    "fit_boolean_and_optional_field_combinations": 8,
+    "query_boolean_and_fold_combinations": 8,
+    "malformed_wire_envelopes": 6,
+    "missing_result_span": 1,
+    "whitening_dimension_pointer_refusals": 6,
+    "fold_activation_and_valid_shape": 1,
+    "request_copy_independence": 1
+  },
+  "execution": "uncompiled/unrun; source review only",
+  "scope": "Wire/state contracts, not numerical kernel execution or identity",
+  "product_changes": false
+}

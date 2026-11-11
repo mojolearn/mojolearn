@@ -1,0 +1,31 @@
+Mojolearn PCA native test lane (2026-11-10)
+
+Dependencies
+  Base frozen integration e53128fe7f. Product API dependency e8958ae5e2 from
+  the PCA pilot; local adoption7cd18e8103 is not a root cherry-pick.
+  Product/boundary files remain pilot-owned.
+
+First chunk:32 pure native wire/state contracts
+  checks/native_tests/pca_contract{,_suite}.mojo. Fixture count breakdown in
+  pca-native-contract.json. Fixed distinct field values independently check
+  every request slot, all Boolean combinations, optional projection/fold
+  fields, returned signed-zero noise/status words, metadata/vendor names,
+  malformed envelopes/missing output spans, whitening dimensions/pointer
+  span refusals and independent request-record copies.
+  Test-only wire oracle implements no PCA algorithm and uses no Python.
+  All32 independent cases run through the existing host_parallelize policy.
+  Stable heap-owned error output follows the existing NativeCallOutput ABI
+  pattern; all borrowed envelopes/owners survive their synchronous calls.
+
+Root queue / RUN OWED
+  mojo run -I . checks/native_tests/pca_contract.mojo
+  Importable pca_contract_suite.run_checks() and pixi task included.
+  Compile with the forthcoming actual PCA CPU/GPU numerical fixtures in one
+  bundle. No installed-wheel or repeated identity gate is introduced.
+
+This chunk was not compiled or executed. Static JSON/TOML/whitespace checks
+only. Numerical request execution, fitted-buffer state and kernel correctness
+coverage follow in the next chunk. Existing PCA whitening suites are retained
+and will not be reimplemented. No numerical kernel, tuning/default or A/B
+switch changes; no source guard. Complete source/data-generation evidence is
+under ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/.
