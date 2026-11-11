@@ -1509,10 +1509,26 @@ def metrics_vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_metrics.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+from core.shared_slot import SharedSlot
+from core.spectral_native_provider import SpectralProviderAPI
+from core.spectral_native_device import SpectralDeviceKernels
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
+
+comptime _SPECTRAL_API_SLOT = "MojolearnSpectralDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralDeviceFastV1"
+comptime SPECTRAL_API = SharedSlot[SpectralProviderAPI[SpectralDeviceKernels], _SPECTRAL_API_SLOT]
+
+
+def spectral_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_metrics() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
+        m.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")

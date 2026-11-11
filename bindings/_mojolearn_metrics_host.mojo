@@ -1341,10 +1341,26 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_metrics_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+from core.shared_slot import SharedSlot
+from core.spectral_native_provider import SpectralProviderAPI
+from core.spectral_native_host import SpectralHostKernels
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
+
+comptime _SPECTRAL_API_SLOT = "MojolearnSpectralHostIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralHostFastV1"
+comptime SPECTRAL_API = SharedSlot[SpectralProviderAPI[SpectralHostKernels], _SPECTRAL_API_SLOT]
+
+
+def spectral_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_metrics_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_metrics_host")
+        module.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         module.def_function[metrics_host_numeric_mode_binding]("metrics_host_numeric_mode")
         module.def_function[metrics_host_vendor_binding]("metrics_host_vendor")
         module.def_function[metrics_host_column_binding]("metrics_host_column")

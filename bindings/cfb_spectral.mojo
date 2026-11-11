@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
-# SpectralClustering `fit`, `fit_predict` and `predict`, SpectralEmbedding
-# `fit` and `fit_transform`, and `spectral_embedding`, one native call each
-# (python/mojolearn/_spectral_impl.py). This owner selects exact compiled
-# entries retained at package connection: metrics and x_decomp in the live
-# default mode, base COO/kNN helpers in identical, and x_cluster in the model's
-# mode. Runtime operations never enter a Python binding proxy. This owner makes
-# `_validate_params`' and the fits' refusals in their order and wording and
-# calls those entries with the argument lists, in the order, the Python
-# made (the RBF affinity takes the `_Kit` route the Python took: the
-# resident cells where the binding has them, else the host cells). Same
-# entries, same inputs: the bits do not move.
+# Spectral public UNPACK/PACK and staged lifecycle metadata. Fit/embedding
+# execute typed native requests through an image-pinned provider. Public
+# Arrays remain the output and fitted-state owners. Affinity preparation,
+# alternative label assignment and query/cache plumbing are still staged
+# below and migrate independently without changing their numerical routes.
 from std.math import isinf
+from core.spectral_native_api import (
+    SPECTRAL_CAP_DENSE, SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
+    SpectralInput, SpectralFitOptions, SpectralFitRequest,
+    SpectralEmbeddingOptions, SpectralEmbeddingRequest,
+)
+from bindings.spectral_native_boundary import (
+    SpectralConnection, SpectralStatePins, spectral_fit_run, spectral_embedding_run,
+)
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_input
@@ -587,22 +589,6 @@ def _sc_refusal(n_out: Int, who: String) raises:
                     + "negative degree is a NaN)")
 
 
-def _state_arrays(n: Int, k: Int, clusters: Int, context: PythonObject) raises -> PythonObject:
-    """`_state_arrays`: eigenvalues (k,), eigenvectors (n, k), diag (n,),
-    centroids (n_clusters, k), float32."""
-    return Python.tuple(family_array(Python.tuple(k), "<f4", context), family_array(Python.tuple(n, k), "<f4", context),
-                        family_array(Python.tuple(n), "<f4", context),
-                        family_array(Python.tuple(clusters, k), "<f4", context))
-
-
-def _addresses(head: PythonObject, state: PythonObject) raises -> PythonObject:
-    """`head + [addr(a) for a in state]` (the prediction-state buffers)."""
-    var out = py_call(_builtins().list, head)
-    for i in range(len(state)):  # small-loop(state: the four prediction-state buffers): 4
-        _ = py_call(out.append, classical_address(state[i]))
-    return out
-
-
 def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`SpectralClustering.fit(X)`. args: (metrics, x_decomp, base,
     x_cluster, X)."""
@@ -625,9 +611,11 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     _ = py_call(fields.pop, PythonObject("affinity_matrix_"), PythonObject(None))
     var affinity = String(py=family_field(fields, "affinity"))
     var graph_affinity = affinity == "precomputed" or affinity == "rbf" or affinity == "precomputed_nearest_neighbors"
-    var dense_fn = PythonObject(None)
+    var connection: Optional[SpectralConnection] = None
+    var use_dense = False
     if graph_affinity:
-        dense_fn = cfb_optional_entry(metrics, "spectral_fit_predict_dense", context)
+        connection = SpectralConnection(metrics, context)
+        use_dense = (connection.value().capabilities & SPECTRAL_CAP_DENSE) != 0
     # `dense` is the matrix the dense entry reads (an Array); `coo_source`
     # the input of the COO route.
     var dense = PythonObject(None)
@@ -635,7 +623,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var coo_source = source
     if affinity == "precomputed":
         py_setitem(fields, "affinity_matrix_", source)
-        if dense_fn is not None and not _is_sparse(source):
+        if use_dense and not _is_sparse(source):
             var shape = _shape_of(source)
             if not _square(shape):
                 raise Error("mojolearn SpectralClustering: with affinity='precomputed', X "
@@ -654,36 +642,28 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         from_matrix = True
     var labels = PythonObject(None)
     var embedding = PythonObject(None)
-    var state = PythonObject(None)
+    var state = SpectralStatePins()
     var n_out: Int
     var n: Int
-    var params_tail = Python.list(PythonObject(clusters), PythonObject(k), family_field(fields, "_n_init"),
-                                  family_field(fields, "_n_neighbors"), family_field(fields, "_eigen_tol"),
-                                  family_field(fields, "_seed"))
-    if dense_fn is not None and dense is not None:
+    var options = SpectralFitOptions(clusters, k, Int(py=family_field(fields, "_n_init")),
+        Int(py=family_field(fields, "_n_neighbors")), Float64(py=family_field(fields, "_eigen_tol")),
+        Int(py=family_field(fields, "_seed")), predicting)
+    if use_dense and dense is not None:
         # the dense matrix straight to the device entry
         n = Int(py=dense.shape[0])
         _sc_check_shape(fields, n, k)
         labels = family_array(Python.tuple(n), "<i4", context)
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_fit_predict_dense_binding.
-        var params = Python.list(PythonObject(n))
-        _ = py_call(params.extend, params_tail)
-        var addrs = Python.list(classical_address(dense), classical_address(labels), classical_address(embedding))
-        _ = embedding  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = dense  # keep the Python object alive through the native call above
         if predicting:
-            state = _state_arrays(n, k, clusters, context)
-            addrs = _addresses(addrs, state)
-            _ = addrs  # keep the Python object alive through the native call above
-            _ = embedding  # keep the Python object alive through the native call above
-            _ = labels  # keep the Python object alive through the native call above
-            _ = dense  # keep the Python object alive through the native call above
-        n_out = Int(py=family_call(dense_fn, addrs, params))
-        _ = embedding  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = dense  # keep the Python object alive through the native call above
+            state.allocate(n, k, clusters, context)
+        var request = SpectralFitRequest(
+            SpectralInput(Int(py=classical_address(dense)), 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
+            Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(), options)
+        n_out = spectral_fit_run(connection.value(), request)
+        _ = state
+        _ = embedding
+        _ = labels
+        _ = dense
         _sc_refusal(n_out, "SpectralClustering")
     elif graph_affinity:
         # the COO route: a sparse precomputed input, or a binding without
@@ -711,31 +691,19 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         _sc_check_shape(fields, n, k)
         labels = family_array(Python.tuple(n), "<i4", context)
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_fit_predict_graph_binding:
-        # n_samples, nnz, n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed.
-        var params = Python.list(PythonObject(n), PythonObject(nnz))
-        _ = py_call(params.extend, params_tail)
         if predicting:
-            state = _state_arrays(n, k, clusters, context)
-            n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_graph_state", context),
-                                       _addresses(Python.list(classical_address(coo.rows), classical_address(coo.cols),
-                                                              classical_address(coo.vals), classical_address(labels),
-                                                              classical_address(embedding)), state), params))
-            _ = labels  # keep the Python object alive through the native call above
-            _ = embedding  # keep the Python object alive through the native call above
-            _ = coo.rows  # coo owns the COO Arrays read by the native call above
-            _ = coo.cols
-            _ = coo.vals
-        else:
-            n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_graph", context),
-                                       classical_address(coo.rows), classical_address(coo.cols),
-                                       classical_address(coo.vals), classical_address(labels),
-                                       classical_address(embedding), params))
-            _ = labels  # keep the Python object alive through the native call above
-            _ = embedding  # keep the Python object alive through the native call above
-            _ = coo.rows  # coo owns the COO Arrays read by the native call above
-            _ = coo.cols
-            _ = coo.vals
+            state.allocate(n, k, clusters, context)
+        var request = SpectralFitRequest(
+            SpectralInput(0, Int(py=classical_address(coo.rows)), Int(py=classical_address(coo.cols)),
+                Int(py=classical_address(coo.vals)), SPECTRAL_GRAPH, n, 0, nnz),
+            Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(), options)
+        n_out = spectral_fit_run(connection.value(), request)
+        _ = state
+        _ = labels
+        _ = embedding
+        _ = coo.rows
+        _ = coo.cols
+        _ = coo.vals
     else:
         # Lane a8d: the admission's finite test (see `_x_decomp_input`).
         var x = admit_family(source, 2, "X", context, finite=True,
@@ -752,28 +720,20 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                         + String(neighbors) + " exceeds n_samples=" + String(n))
         labels = family_array(Python.tuple(n), "<i4", context)
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_fit_predict_dataset_binding:
-        # n_samples, n_features, n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed.
-        var params = Python.list(PythonObject(n), PythonObject(d))
-        _ = py_call(params.extend, params_tail)
         if predicting:
-            state = _state_arrays(n, k, clusters, context)
-            n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_dataset_state", context),
-                                       _addresses(Python.list(classical_address(x), classical_address(labels),
-                                                              classical_address(embedding)), state), params))
-            _ = x  # keep the Python object alive through the native call above
-            _ = labels  # keep the Python object alive through the native call above
-            _ = embedding  # keep the Python object alive through the native call above
-            # A borrowed input is copied so a caller's later write cannot
-            # move what predict reads.
+            state.allocate(n, k, clusters, context)
+        connection = SpectralConnection(metrics, context)
+        var request = SpectralFitRequest(
+            SpectralInput(Int(py=classical_address(x)), 0, 0, 0, SPECTRAL_DATASET, n, d, 0),
+            Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(), options)
+        n_out = spectral_fit_run(connection.value(), request)
+        _ = state
+        _ = x
+        _ = labels
+        _ = embedding
+        if predicting:
+            # Preserve the fitted copy of a borrowed input for later queries.
             py_setitem(fields, "_fit_X", cfb_borrow_copy(x, source, context))
-        else:
-            n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_dataset", context),
-                                       classical_address(x), classical_address(labels), classical_address(embedding),
-                                       params))
-            _ = x  # keep the Python object alive through the native call above
-            _ = embedding  # keep the Python object alive through the native call above
-            _ = labels  # keep the Python object alive through the native call above
         py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
     if n_out != k:
@@ -800,11 +760,11 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     # A fit releases the last fit's resident prediction state at once (N326).
     cres_forget(model, CRES_SPECTRAL)
     py_setitem(fields, "labels_", labels)
-    if state is not None:
-        py_setitem(fields, "_pd_eigenvalues", state[0])
-        py_setitem(fields, "_pd_eigenvectors", state[1])
-        py_setitem(fields, "_pd_diag", state[2])
-        py_setitem(fields, "_pd_centroids", state[3])
+    if predicting:
+        py_setitem(fields, "_pd_eigenvalues", state.eigenvalues)
+        py_setitem(fields, "_pd_eigenvectors", state.eigenvectors)
+        py_setitem(fields, "_pd_diag", state.diagonal)
+        py_setitem(fields, "_pd_centroids", state.centroids)
 
 
 def _sc_resident(model: PythonObject, binding: PythonObject, eigenvalues: PythonObject, diag: PythonObject,
@@ -1007,15 +967,17 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
     var n_lanczos = k + 1 if drop_first else k
     var affinity = String(py=family_field(fields, "affinity"))
     var graph_affinity = affinity == "precomputed" or affinity == "rbf" or affinity == "precomputed_nearest_neighbors"
-    var dense_fn = PythonObject(None)
+    var connection: Optional[SpectralConnection] = None
+    var use_dense = False
     if graph_affinity:
-        dense_fn = cfb_optional_entry(metrics, "spectral_embedding_dense", context)
+        connection = SpectralConnection(metrics, context)
+        use_dense = (connection.value().capabilities & SPECTRAL_CAP_DENSE) != 0
     var dense = PythonObject(None)
     var from_matrix = False
     if affinity == "precomputed_nearest_neighbors":
         dense = _knn_affinity(fields, source, False, args[2], context)
         from_matrix = True
-    if affinity == "precomputed" and dense_fn is not None and not _is_sparse(source):
+    if affinity == "precomputed" and use_dense and not _is_sparse(source):
         var shape = _shape_of(source)
         if not _square(shape):
             raise Error("mojolearn SpectralEmbedding: with affinity='precomputed', X "
@@ -1033,25 +995,25 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         py_setitem(fields, "n_features_in_", PythonObject(d))
         dense = aff
         from_matrix = True
-    var tol_tail = Python.list()
+    var tolerance = Float64(Float32(1e-5))
     var eigen_tol = family_field(fields, "eigen_tol")
     if eigen_tol is not None and not family_is_str(eigen_tol):
-        _ = py_call(tol_tail.append, _float(eigen_tol))
-    var seed = family_field(fields, "_seed")
+        tolerance = Float64(py=_float(eigen_tol))
+    var seed = Int(py=family_field(fields, "_seed"))
     var embedding = PythonObject(None)
     var n_out: Int
-    if dense_fn is not None and dense is not None:
+    if use_dense and dense is not None:
         var n = Int(py=dense.shape[0])
         _se_check_shape(fields, n, n_lanczos)
         py_setitem(fields, "n_neighbors_", PythonObject(_resolved_neighbors(fields, n, False)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_embedding_dense_binding.
-        var params = Python.list(PythonObject(n), PythonObject(n_lanczos), PythonObject(k), PythonObject(Int(norm_laplacian)),
-                                 PythonObject(Int(drop_first)), seed)
-        _ = py_call(params.extend, tol_tail)
-        n_out = Int(py=family_call(dense_fn, classical_address(dense), classical_address(embedding), params))
-        _ = embedding  # keep the Python object alive through the native call above
-        _ = dense  # keep the Python object alive through the native call above
+        var request = SpectralEmbeddingRequest(
+            SpectralInput(Int(py=classical_address(dense)), 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
+            Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, 0,
+                norm_laplacian, drop_first, seed, tolerance))
+        n_out = spectral_embedding_run(connection.value(), request)
+        _ = embedding
+        _ = dense
         _sc_refusal(n_out, "SpectralEmbedding")
     elif graph_affinity:
         var coo: _Coo
@@ -1077,17 +1039,13 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         _se_check_shape(fields, n, n_lanczos)
         py_setitem(fields, "n_neighbors_", PythonObject(_resolved_neighbors(fields, n, False)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_embedding_graph_binding.
-        var params = Python.list(PythonObject(n), PythonObject(nnz), PythonObject(n_lanczos), PythonObject(k),
-                                 PythonObject(Int(norm_laplacian)), PythonObject(Int(drop_first)), seed)
-        _ = py_call(params.extend, tol_tail)
-        n_out = Int(py=family_call(family_entry(metrics, "spectral_embedding_graph", context),
-                                   classical_address(coo.rows), classical_address(coo.cols), classical_address(coo.vals),
-                                   classical_address(embedding), params))
-        _ = embedding  # keep the Python object alive through the native call above
-        # coo owns the three COO Arrays whose addresses the call reads; its
-        # last named use was the argument list, so without these Mojo freed
-        # them before the native read (garbage rows/cols, "negative" values).
+        var request = SpectralEmbeddingRequest(
+            SpectralInput(0, Int(py=classical_address(coo.rows)), Int(py=classical_address(coo.cols)),
+                Int(py=classical_address(coo.vals)), SPECTRAL_GRAPH, n, 0, nnz),
+            Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, 0,
+                norm_laplacian, drop_first, seed, tolerance))
+        n_out = spectral_embedding_run(connection.value(), request)
+        _ = embedding
         _ = coo.rows
         _ = coo.cols
         _ = coo.vals
@@ -1105,15 +1063,14 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
                         + "exceeds n_samples=" + String(n))
         py_setitem(fields, "n_neighbors_", PythonObject(neighbors))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_embedding_dataset_binding.
-        var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(n_lanczos), PythonObject(k),
-                                 PythonObject(neighbors), PythonObject(Int(norm_laplacian)), PythonObject(Int(drop_first)),
-                                 seed)
-        _ = py_call(params.extend, tol_tail)
-        n_out = Int(py=family_call(family_entry(metrics, "spectral_embedding_dataset", context),
-                                   classical_address(x), classical_address(embedding), params))
-        _ = x  # keep the Python object alive through the native call above
-        _ = embedding  # keep the Python object alive through the native call above
+        connection = SpectralConnection(metrics, context)
+        var request = SpectralEmbeddingRequest(
+            SpectralInput(Int(py=classical_address(x)), 0, 0, 0, SPECTRAL_DATASET, n, d, 0),
+            Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, neighbors,
+                norm_laplacian, drop_first, seed, tolerance))
+        n_out = spectral_embedding_run(connection.value(), request)
+        _ = x
+        _ = embedding
         py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
     if n_out != k:

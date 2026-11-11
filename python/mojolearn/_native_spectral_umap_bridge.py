@@ -5,7 +5,7 @@ from types import BuiltinFunctionType, ModuleType
 _CONNECTED = None
 _SYMBOLS = {
     "metrics": ("_mojolearn_metrics", (
-        "metrics_numeric_mode", "umap_numeric_mode", "umap_fit_transform", "umap_fit_transform_ex", "umap_transform",
+        "spectral_native_api_v1", "metrics_numeric_mode", "umap_numeric_mode", "umap_fit_transform", "umap_fit_transform_ex", "umap_transform",
         "spectral_fit_predict_dense", "spectral_fit_predict_graph", "spectral_fit_predict_graph_state",
         "spectral_fit_predict_dataset", "spectral_fit_predict_dataset_state", "spectral_predict",
         "spectral_embedding_dense", "spectral_embedding_graph", "spectral_embedding_dataset",

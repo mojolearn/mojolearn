@@ -60,3 +60,33 @@ API consumers can use `spectral_native_v1[SpectralHostKernels]` or the device
 counterpart with `SpectralDriver` for native fixtures. Original graph/dataset/
 state workloads and tolerances remain the test lane's oracle input. Compile,
 execution, public boundary replacement and final role accounting remain owed.
+
+## Public fit and embedding descriptor switch
+
+`bindings/cfb_spectral.mojo::_sc_fit` and `_se_fit` now pass typed options,
+input/state views and output addresses to the production descriptor. The
+former private parameter tails, per-route Python parameter/address lists,
+state-address builder and private four-Array tuple are removed. Four explicit
+boundary pins retain the same observable prediction-state Arrays. Dense
+availability comes from the provider capability, so the retired raw entry's
+presence no longer controls this route. Provider/image pins survive GIL-free
+execution; the host provider continues its dataset/COO route.
+
+The output Array allocations, fitted borrowed-input copy, four-state copy
+sequence, dense refusal decoding, shape/finite/neighbor validation and final
+publication order remain. The numerical provider retains the existing
+Float32 default embedding tolerance. Import-time capture and the host manifest
+now include `spectral_native_api_v1` from the real metrics image.
+
+Affected roots: `_mojolearn_metrics`, `_mojolearn_metrics_host`, and the family
+runtime/dispatcher roots importing `cfb_spectral`; compile the existing metrics
+and family runtime groups with their normal dependency closure. No new build
+scheme. No lane compilation or execution; public seam/native correctness,
+performance and cross-vendor identity are not claimed by this source audit.
+
+Still staged: RBF/COO/kNN preparation, alternative assignment, query and resident
+cache transport, validated private scalar fields, routed argument tuples and
+shared admission/lifecycle metadata. Raw boxed exports still have direct
+compatibility/test consumers and remain; their public fit callers have moved.
+The family is not yet fully migrated. Shared resident transport already counted
+for KMeans variants will not be counted again when Spectral reuses it.
