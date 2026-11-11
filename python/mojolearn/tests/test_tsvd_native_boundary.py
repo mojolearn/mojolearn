@@ -241,3 +241,78 @@ def test_explicit_host_fit_does_not_call_python_bind(monkeypatch):
     assert model.fit(_data()) is model
     assert np.asarray(model.components_).shape == (2, 3)
     assert calls == []
+
+
+@pytest.mark.parametrize("dtype", ["U4", "S4", ">U4"])
+@pytest.mark.parametrize("field,text", [("tol", "0"), ("n_components", "2"),
+                                        ("n_iter", "2"), ("n_oversamples", "3")])
+def test_zero_dimensional_native_text_fit_scalars(dtype, field, text):
+    # Conversion admission only; numerical solver oracles live in Mojo.
+    model = _model(algorithm="randomized" if field in ("n_iter", "n_oversamples") else "covariance_eigh")
+    value = np.array(text, dtype=dtype)
+    vars(model)[field] = value
+    assert model.fit(_data()) is model
+    assert model.n_components_ == 2
+    assert np.asarray(model.components_).shape == (2, 3)
+    assert vars(model)[field] is value
+
+
+@pytest.mark.parametrize("dtype", ["U4", "S4"])
+@pytest.mark.parametrize("field,text", [("n_features_in_", "3"), ("n_components_", "2")])
+def test_zero_dimensional_native_text_query_dimensions(dtype, field, text):
+    model = _model().fit(_data())
+    value = np.array(text, dtype=dtype)
+    vars(model)[field] = value
+    assert model.transform(_data()).shape == (6, 2)
+    assert vars(model)[field] is value
+
+
+@pytest.mark.parametrize("dtype", ["U32", "S32"])
+@pytest.mark.parametrize("field,convert", [("tol", float), ("n_components", int)])
+def test_native_text_parse_refusal_keeps_builtin_error_and_publication(dtype, field, convert):
+    value = np.array("not-a-number", dtype=dtype)
+    # The old boundary used these builtin conversions on the admitted value.
+    with pytest.raises(ValueError) as expected:
+        convert(value)
+    model = _model()
+    vars(model)[field] = value
+    with pytest.raises(ValueError) as actual:
+        model.fit(_data())
+    assert str(actual.value) == str(expected.value)
+    assert ("input_copied_" in vars(model)) is (field == "n_components")
+    assert "components_" not in vars(model)
+
+
+@pytest.mark.parametrize("dtype", ["U4", "S4"])
+@pytest.mark.parametrize("field", ["tol", "n_components"])
+def test_native_text_array_subclass_cannot_run_conversion_hooks(dtype, field):
+    calls = []
+
+    class TextArray(np.ndarray):
+        def __int__(self):
+            calls.append("int")
+            return 2
+
+        def __float__(self):
+            calls.append("float")
+            return 0.0
+
+        def __repr__(self):
+            calls.append("repr")
+            return "text-array-hook"
+
+    model = _model()
+    vars(model)[field] = np.array("0" if field == "tol" else "2", dtype=dtype).view(TextArray)
+    with pytest.raises(TypeError, match="native values"):
+        model.fit(_data())
+    assert calls == []
+
+
+@pytest.mark.parametrize("dtype", ["U8", "S8"])
+def test_native_text_array_invalid_algorithm_keeps_native_repr(dtype):
+    value = np.array("arpack", dtype=dtype)
+    model = _model(algorithm=value)
+    with pytest.raises(NotImplementedError) as actual:
+        model.fit(_data())
+    assert "algorithm=" + repr(value) + " is not implemented" in str(actual.value)
+    assert "input_copied_" not in vars(model)

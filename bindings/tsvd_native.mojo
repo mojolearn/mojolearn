@@ -28,8 +28,7 @@ from bindings.admitted_input import admit_x, AdmittedX, admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse
 from bindings.decomp_inputs import decomp_admit, decomp_input_copied
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
-from bindings.host_inference_scalars import host_inference_scalar
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.decomp_scalar_admission import decomp_scalar_admit
 from core.pca_native_api import PCAFoldStore
 from core.tsvd_native_api import (
     TSVDFitRequest, TSVDQueryRequest, TSVD_GRAM, TSVD_FUSED, TSVD_EXPLAINED,
@@ -47,24 +46,8 @@ comptime _TS_MAX_N = 512
 comptime _QFIX_TSVD = 2
 
 
-def _scalar(value: PythonObject, context: PythonObject) raises:
-    # Preserve admitted native NumPy scalar conversion forms without allowing
-    # user __int__, __float__, __class__ or object-array element protocols.
-    try:
-        host_inference_scalar(value, context)
-    except failure:
-        if py_get(context, "ndarray") is not None:
-            var cls = py_type(value)
-            var constructor = native_numpy_dtype(context)
-            var aliases = Python.tuple("U", "S", "q", "Q", "g")
-            for i in range(len(aliases)):  # driver-loop: exact native scalar ABI aliases
-                if cls is py_call(constructor, aliases[i]).type:
-                    return
-        raise failure^
-
-
 def _repr(value: PythonObject, context: PythonObject) raises -> String:
-    _scalar(value, context)
+    decomp_scalar_admit(value, context)
     return String(py_call(native_loaded_module("builtins").repr, value))
 
 
@@ -118,7 +101,7 @@ def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> Pyt
 
 
 def _int(value: PythonObject, context: PythonObject) raises -> Int:
-    _scalar(value, context)
+    decomp_scalar_admit(value, context)
     return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
@@ -334,7 +317,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
     # New components replace the old: their device copy goes now (N351).
     tsvd_owner_drop(model)
     var tolerance = _attr(model, fields, "tol")
-    _scalar(tolerance, context)
+    decomp_scalar_admit(tolerance, context)
     if Float64(py=py_call(b.float, tolerance)) != 0.0:
         raise Error("NotImplementedError: mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
                     + "and algorithm='arpack' is not implemented; leave tol=0.0")
