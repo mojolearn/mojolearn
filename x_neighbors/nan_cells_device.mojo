@@ -278,8 +278,8 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
     var total = n * d
     comptime if NC_FIT_LEAN:
         if colmiss_only == 1:
-            var bx = pool_take["MojolearnXNeighborsNanFitXV1"](ctx, total)
-            var bc = pool_take["MojolearnXNeighborsNanFitCmTotalV1"](ctx, d + 1)
+            var bx = pool_take["MojolearnXNeighborsNanFitXV2"](ctx, total)
+            var bc = pool_take["MojolearnXNeighborsNanFitCmTotalV2"](ctx, d + 1)
             if total > 0:
                 ctx.enqueue_copy(dst_buf=bx, src_ptr=FP(unsafe_from_address=x))
             ctx.enqueue_memset(bc, Float32(0.0))   # the int32 zero's bits
@@ -295,8 +295,8 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
             ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=info),
                              src_buf=bc.create_sub_buffer[DType.int32](d, 1))
             ctx.synchronize()
-            pool_give["MojolearnXNeighborsNanFitXV1"](bx^)
-            pool_give["MojolearnXNeighborsNanFitCmTotalV1"](bc^)
+            pool_give["MojolearnXNeighborsNanFitXV2"](bx^)
+            pool_give["MojolearnXNeighborsNanFitCmTotalV2"](bc^)
             return
     comptime if NC_COLMISS_ONLY:
         if colmiss_only == 1:

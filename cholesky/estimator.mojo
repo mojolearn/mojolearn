@@ -278,7 +278,7 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
 #: identical, digest same. KEEP: the FAST + Apple default; rollback
 #: -D MOJOLEARN_CHOL_FAST_POOLIO_OFF.
 comptime CHOL_FAST_POOLIO = CHOL_FAST_DEVIO and not is_defined["MOJOLEARN_CHOL_FAST_POOLIO_OFF"]()
-comptime _CHOL_POOL = "MojolearnCholFastPoolIOV1"
+comptime _CHOL_POOL = "MojolearnCholFastPoolIOV2"
 
 
 struct _CholStage(Defaultable, Movable):
