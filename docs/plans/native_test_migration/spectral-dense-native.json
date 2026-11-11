@@ -1,0 +1,53 @@
+{
+  "family": "Spectral dense preparation",
+  "status": "CPU14/GPU8 authored, uncompiled and unrun",
+  "dependency": "Existing core/dense_coo, core/dense_coo_host and core/dense_coo_device; no new typed Spectral API required",
+  "entries": {
+    "cpu": "checks/native_tests/spectral_dense_cpu.mojo",
+    "gpu": "checks/native_tests/spectral_dense_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.spectral_dense_cpu_suite.run_checks",
+    "gpu": "checks.native_tests.spectral_dense_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "cpu": 14,
+    "gpu": 8,
+    "coo": "Six original matrices: n=17..22, random.Random seeds0..5; exact original row/column/Float32 bytes including NaN, infinity, signed zeros and subnormals. Shared host scan counted once on CPU.",
+    "affinity": "Six original dense matrices: n=23..28, random.Random seeds100..105, k=3..8, planted ties for even seeds; exact original sorted (distance,column) independent oracle, symmetrized 0.5*(C+C.T).",
+    "refusals": "Two original6x6/k2 cases: negative or NaN at[2,4]; native status[1,2,6], zero output and unchanged borrowed inputs.",
+    "storage": "Output and status canaries; all borrowed source raw words unchanged; owner lifetimes extend through final native uses."
+  },
+  "originals": [
+    "python/mojolearn/tests/test_native_dense_coo.py:69::test_dense_coo_matches_the_python_scan",
+    "python/mojolearn/tests/test_native_dense_coo.py:80::test_dense_knn_affinity_matches_the_python_loops",
+    "python/mojolearn/tests/test_native_dense_coo.py:96::test_refusals"
+  ],
+  "reference_manifest": "checks/native_tests/fixtures/spectral/references.json",
+  "reference_preparation": {
+    "status": "independent test input/oracle preparation completed; no product imports or native execution",
+    "artifacts": 49,
+    "bytes": 334316,
+    "independent_jobs": 17,
+    "workers": 10,
+    "source_extracted_byte_checks": 48,
+    "all_artifact_hash_checks": 49,
+    "remaining_reference_limit": "Host120 input recipe source-reviewed; assignment180 uses identical source-reviewed resident helper recipe. Saved fit/query inputs are for forthcoming typed API tests, not fitted-output oracles."
+  },
+  "parallel_plan": "14 independent CPU cases use host_parallelize. GPU executes8 graphs in order on the one physical GPU; product GPU kernels stay parallel. The reproduced shared-DeviceContext concurrent-submission failure remains separate and open.",
+  "compile_flags": {
+    "all": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+    "cpu": ["-D MOJOLEARN_COLUMN_CPU=1"]
+  },
+  "cleanup": "All original Python tests remain until root accepts native execution. Keep sparse public refusal, public packing and fit-time validation seams when numerical duplicates are removed.",
+  "evidence": [
+    "E/pca-native-tests/spectral-reference-preparation.log",
+    "E/pca-native-tests/spectral-reference-source-check.json",
+    "E/pca-native-tests/spectral-reference-source-check-r3.log",
+    "E/pca-native-tests/spectral-dense-static.json"
+  ],
+  "preserved_preparation_failures": "First static byte-check command used missing python (exit127), second system python3 lacked NumPy (exit1); successful third command used existing project Python. Both original logs retained; no native attempt occurred.",
+  "product_or_kernel_changes": 0,
+  "python_deletions": 0,
+  "runtime_identity_performance_claim": false
+}

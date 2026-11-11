@@ -161,6 +161,8 @@ check-native-agglo-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . check
 check-native-agglo-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_contract.mojo"
 check-native-gp-theta-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/gp_theta_cpu.mojo"
 check-native-gp-theta-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gp_theta_gpu.mojo"
+check-native-spectral-dense-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/spectral_dense_cpu.mojo"
+check-native-spectral-dense-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/spectral_dense_gpu.mojo"
 check-native-gp-label-owner = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gp_label_owner.mojo"
 check-native-gp-owner = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/gp_owner.mojo"
 check-native-gp-normalization-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/gp_normalization_cpu.mojo"
