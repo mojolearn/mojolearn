@@ -2,18 +2,9 @@
 # The tree ensembles' `score` in one native call: predict and score without
 # returning to Python between the two.
 #
-# `trees_accuracy` is `_expansion_metrics.accuracy_fraction` (scikit-learn's
-# ClassifierMixin.score): the `_pair` label checks and wording
-# (`_refuse_multilabel`, `_metrics_impl._classification_encoded`, the length
-# and kind refusals, `_sample_weight_f32`), the sorted label union, the
-# per-row codes (`_codes`: the base binding's `gather_i32` for encoded
-# integer labels), and the x_metrics COUNT program of `_cm_count` (`_Sums`:
-# pair_key, the three group_sort/group_sum groupings, the weighted total
-# grouping, off_diff counts; `_cm_stage` with `_wsum_sf64` when weighted)
-# with the same stage words in the same order, run by the shared native
-# program runner (bindings/arena_prog_native.mojo `_metrics_run`). The
-# fraction is the binary64 the device epilogue wrote; a zero weight total
-# raises ZeroDivisionError as the division did.
+# Accuracy is the one shared `labels_accuracy` / `classical_score_from_codes`
+# (bindings/classical_labels.mojo); `trees_class_codes` maps labels to a
+# fitted class table for the adapter and meta scores.
 #
 # `trees_r2` is `_metrics_impl.r2_score`'s default 1-D path: `_pair_1d` over
 # `_as_f32_1d` (shape, float64 and finiteness refusals), `_sample_weight_f32`,
@@ -28,35 +19,23 @@ from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
 from bindings.labels_stat_boundary import labels_stat_pack
 from bindings.base_helpers_released import base_reduce_stat
-from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_wrap_array
-from bindings.arena_prog_native import _metrics_run
-from bindings.trees_public_inputs import (
-    trees_builtins, trees_helper, trees_table, trees_entry,
-    trees_address, trees_cast, _pandas_values, _encode_code,
-)
-from bindings.classical_labels import _flatten_labels, _native_labels
-from bindings.admitted_input import AdmittedX, admit_f32, admitted_vector, admit_c_view, admitted_dtype
-from bindings.classical_arrays import classical_address
+from bindings.trees_public_inputs import trees_builtins, trees_table, trees_entry, trees_address
+from bindings.classical_labels import ScoreLabels, LABELS_GATHER_I32
+from bindings.labels_descriptor_boundary import labels_gather
+from bindings.labels_score_boundary import score_keys_index
+from core.labels_score_keys import score_key_codes
+from std.python._cpython import GILReleased
+from bindings.admitted_input import AdmittedX, admit_f32, admitted_vector
 # TOMBSTONE: trees_f32 / trees_all_finite / TreesView / TreesMatrix / trees_vector / _view_of_array / _view_of_buffer uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32
-from bindings.metrics_native_support import metric_is_integral
 from bindings.trees_public_forest import (
     forest_predict, forest_predict_codes, forest_public_predict, forest_effective_mode, forest_kind,
 )
-from bindings.trees_public_inputs import trees_decode_labels
-from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.classical_labels import _text_buffer_labels as score_text_buffer_labels, _text_list_labels as score_text_list_labels
-from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
 from bindings.classical_labels import classical_score_from_codes
-from xtrees.trees_score_run import (
-    AccuracyPlan, SCORE_STAGE_WORDS, score_shape_text, score_accuracy_check, score_accuracy_plan, score_accuracy_answer,
-)
-
-comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
+from xtrees.trees_score_run import score_shape_text
 
 # ------------------------------------------------------------ shapes
 
@@ -253,295 +232,66 @@ def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyth
     return Float64(py=py_call(trees_builtins().float, result))
 
 
-# ------------------------------------------------------------ accuracy
+# ------------------------------------------------------------ class codes
+# Lane loops-trees-ab (2026-11-11): the private accuracy copy that lived here
+# (ScoreLabels, _native_classification, _classification_labels,
+# _classification_encoded, _label_set, _codes, _refuse_multilabel, _run,
+# _arena_address, trees_accuracy, trees_accuracy_labels, _accuracy_encoded,
+# _owned_f32 and the xtrees/trees_score_run.mojo COUNT program words) is
+# deleted: its callers use the one shared accuracy and label encoder in
+# bindings/classical_labels.mojo (`labels_accuracy`, `_classification_encoded`),
+# which already reads labels by class pointer and runs the same COUNT program
+# with the same stage words (no bit change: the hit count and the weight sums
+# do not depend on label numbering). The per-row CPython loops of the copy
+# (a type walk, a `str()`/`int()` and a list append per label, a dict lookup
+# per row) are gone with it. Code recoverable at bf33328698 (the lane base).
 
 
-struct ScoreLabels(Copyable, Movable):
-    """`_classification_encoded`'s answer: encoded integer labels (sorted
-    distinct Python ints and one int32 code per row) or a list of Python
-    str or int labels; `kind` 'integer' or 'string'."""
-    var encoded: Bool
-    var classes: PythonObject
-    var codes: PythonObject
-    var values: PythonObject
-    var n: Int
-    var kind: String
-
-    def __init__(out self, encoded: Bool, classes: PythonObject, codes: PythonObject, values: PythonObject,
-                 n: Int, kind: String):
-        self.encoded = encoded
-        self.classes = classes
-        self.codes = codes
-        self.values = values
-        self.n = n
-        self.kind = kind
-
-
-def _native_classification(values: PythonObject, context: PythonObject) raises -> Optional[ScoreLabels]:
-    """`_metrics_impl._native_classification_labels`: an integer or bool
-    buffer (or a flat list of exact ints) through the native encoder."""
-    var b = trees_builtins()
-    var cls = py_type(values)
-    if cls is b.str or cls is b.bytes:
-        return None
-    var view = PythonObject(None)
-    if cls is b.list or cls is b.tuple:
-        var n = len(values)
-        if n == 0:
-            return None
-        # One C-level pass over the item classes (perf3-nbr-msel-trees):
-        # exact ints only, as the per-item walk it replaces.
-        if labels_list_scalar_kind(values) != LABELS_LIST_INT:
-            return None
-        var store = PythonObject(None)
-        try:
-            store = py_call(context["array_type"], "q", values)
-        except:
-            return None
-        view = classical_wrap_array(store, Python.tuple(n), "<i8", "C", context)
-    else:
-        if native_pandas_exact(values):
-            return None
-        if len(trees_shape_of(values, context)) != 1:
-            return None
-        try:
-            view = admit_c_view(values, "input", context)
-            _ = admitted_dtype(view, context)
-        except:
-            return None
-    if Int(py=view.ndim) != 1 or Int(py=view.size) < 1:
-        return None
-    var typestr = admitted_dtype(view, context)
-    if typestr == "<u2" or typestr == "<i1":
-        # exact; the encoder has no 8- or 16-bit arm (`astype('<i4')`)
-        var count = Int(py=view.size)
-        var wide = admitted_vector(count, "<i4", context)
-        trees_cast(Int(py=classical_address(view)), typestr, trees_address(wide), "<i4", count, context)
-        view = wide
-        typestr = "<i4"
-    if typestr != "<i4" and typestr != "<i8" and typestr != "<u4" and typestr != "<u1":
-        return None
-    # A bool buffer's classes are read as the ints 0 and 1 (`int(c)`).
-    var labels = _native_labels(view, False, context)
-    return ScoreLabels(True, labels.classes, labels.codes, PythonObject(None), labels.n, "integer")
-
-
-def _classification_labels(values: PythonObject, name: String, context: PythonObject) raises -> ScoreLabels:
-    """`_metrics_impl._classification_labels`: one-dimensional single-label
-    data of str or integer labels (bools read as ints)."""
-    var b = trees_builtins()
-    var shape = trees_shape_of(values, context)
-    if len(shape) != 1:
-        raise Error(name + " must be one-dimensional single-label data")
-    # perf3-nbr-msel-trees: str labels are encoded natively (classes and one
-    # int32 code per row) instead of a per-label type walk, a str() per label
-    # and a dict lookup per row in `_codes`. A '<U' ndarray is read from its
-    # buffer; a flat list of str labels after the flatten by the native str
-    # reader. Both give the sorted distinct strs and their dense codes, so
-    # `_label_set` and `_codes` see the same classes as the walk's values.
-    var text = score_text_buffer_labels(values, context)
-    if text:
-        var found = text.value().copy()
-        return ScoreLabels(True, found.classes, found.codes, PythonObject(None), found.n, "string")
-    var labels = _flatten_labels(values, context)
-    var n = len(labels)
-    if n == 0:
-        raise Error(name + " must contain at least one label")
-    var listed = score_text_list_labels(labels, context)
-    if listed:
-        var found = listed.value().copy()
-        return ScoreLabels(True, found.classes, found.codes, PythonObject(None), found.n, "string")
-    var all_str = True
-    var all_int = True
-    # Builtins, bound methods and exact types read once, not per label; an
-    # exact str (int) is its own str() (int()) in CPython, so those calls are
-    # skipped for exact types only (lane perf-sweep-trees, 2026-11-05).
-    var isinstance_ = b.isinstance
-    var str_t = b.str
-    var int_t = b.int
-    for i in range(n):  # cpu-route: the label types of user labels, the explicit label input step
-        var v = labels[i]
-        if all_str:
-            all_str = py_type(v) is str_t or Bool(py=py_call(isinstance_, v, str_t))
-        all_int = all_int and metric_is_integral(v, context)
-    var out = Python.list()
-    var append = out.append
-    if all_str:
-        for i in range(n):  # cpu-route: str labels, the explicit label input step
-            var v = labels[i]
-            _ = py_call(append, v if py_type(v) is str_t else py_call(str_t, v))
-        return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "string")
-    if all_int:
-        for i in range(n):  # cpu-route: Python int labels, the explicit label input step
-            var v = labels[i]
-            _ = py_call(append, v if py_type(v) is int_t else py_call(int_t, v))
-        return ScoreLabels(False, PythonObject(None), PythonObject(None), out, n, "integer")
-    raise Error("TypeError: " + name + " must contain only strings or only integers; "
-                + "floating labels, missing labels and mixed types are unsupported")
-
-
-def _classification_encoded(values: PythonObject, name: String, context: PythonObject) raises -> ScoreLabels:
-    var fast = _native_classification(values, context)
-    if fast:
-        return fast.value().copy()
-    return _classification_labels(values, name, context)
-
-
-def _label_set(labels: ScoreLabels) raises -> PythonObject:
-    var b = trees_builtins()
-    return py_call(b.set, labels.classes if labels.encoded else labels.values)
-
-
-def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_expansion_metrics._codes`: each label's index in `order` (-1 when
-    absent) as an int32 Array; encoded labels map their class table once and
-    gather per row (`gather_i32`)."""
-    var index = Python.dict()
-    for i in range(len(order)):  # driver-loop: over the distinct class labels
-        py_setitem(index, order[i], PythonObject(i))
-    var out = admitted_vector(labels.n, "<i4", context)
-    if labels.encoded:
-        var k = len(labels.classes)
-        var table = admitted_vector(k, "<i4", context)
-        var t = _I32P(unsafe_from_address=trees_address(table))
-        _ = table  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the distinct class labels
-            t[i] = Int32(Int(py=py_get(index, labels.classes[i], PythonObject(-1))))
-            _ = table  # keep the Python object alive through the native call above
-        _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
-                          PythonObject(trees_address(labels.codes)), PythonObject(labels.n),
-                          PythonObject(trees_address(out)))
-        _ = table  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        return out
-    var p = _I32P(unsafe_from_address=trees_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    var lookup = index.get  # read once, not per row
+def trees_class_codes(target: ScoreLabels, var classes: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_label_map(target, vocabulary.get(label, -1))`: each label's index in
+    `classes` (the last of duplicate classes winning, -1 for a label outside
+    them) as an int32 Array. Python equality runs once per DISTINCT label (one
+    dict lookup each, the semantics the per-row lookup had: `True == 1`,
+    `"a"` never equal to `1`); every row's code comes from the native key
+    index and the base gather, with no CPython call per row."""
+    var vocabulary = Python.dict()
+    for i in range(len(classes)):  # driver-loop: over the fitted classes (the vocabulary)
+        py_setitem(vocabulary, classes[i], PythonObject(i))
+    var lookup = vocabulary.get  # read once, not per label
     var missing = PythonObject(-1)
-    for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step
-        p[i] = Int32(Int(py=py_call(lookup, labels.values[i], missing)))
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
-    var shape = trees_shape_of(y, context)
-    if len(shape) == 2 and shape[1] != 1:
-        raise Error("NotImplementedError: mojolearn " + caller + ": " + name + " is 2-D; multilabel-indicator targets are NOT "
-                    + "IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
-
-
-def _run(plan: AccuracyPlan, arrays: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_run(prog, numeric_mode)`: PACK of the typed program
-    (xtrees/trees_score_run.mojo) into the program object the shared native
-    program runner reads (its input records pair each `put` offset with
-    its Array from `arrays`, in order), then the runner. Returns the arena
-    store."""
-    var sys = native_loaded_module("sys")
-    var module = py_get(sys.modules, "mojolearn._expansion_metrics")
-    if module is None:
-        raise Error("ImportError: mojolearn: the metrics programs are not connected")
-    var prog_context = py_get(py_fields(module), "_PROG_CONTEXT")
-    if prog_context is None:
-        raise Error("ImportError: mojolearn: the metrics programs are not connected")
-    var inputs = Python.list()
-    for i in range(len(plan.program.input_offsets)):  # small-loop(inputs: the two or three program inputs): PACK
-        _ = py_call(inputs.append, Python.tuple(PythonObject(plan.program.input_offsets[i]), arrays[i]))
-    var stages = Python.list()
-    for r in range(plan.program.stage_count()):  # small-loop(stages: the program's few stage records): PACK
-        var record = Python.list()
-        var append = record.append  # read once, not once per word
-        for w in range(SCORE_STAGE_WORDS):  # small-loop(words): the sixteen words of one stage record
-            _ = py_call(append, PythonObject(plan.program.stages[r * SCORE_STAGE_WORDS + w]))
-        _ = py_call(stages.append, record)
-    var skip = Python.list()
-    for r in range(len(plan.program.skip) // 2):  # small-loop(skip: one range per input and scratch block): PACK
-        _ = py_call(skip.append, Python.tuple(PythonObject(plan.program.skip[2 * r]),
-                                              PythonObject(plan.program.skip[2 * r + 1])))
-    var prog = py_call(context["trees_namespace"])
-    var fields = py_fields(prog)
-    py_setitem(fields, "size", PythonObject(plan.program.size))
-    py_setitem(fields, "_inputs", inputs)
-    py_setitem(fields, "_stages", stages)
-    py_setitem(fields, "_skip", skip)
-    py_setitem(fields, "_outs", PythonObject(None))
-    py_setitem(fields, "arena", PythonObject(None))
-    _ = _metrics_run(prog, mode, prog_context)
-    return fields["arena"]
-
-
-def _arena_address(arena: PythonObject) raises -> Int:
-    return Int(py=py_call(arena.buffer_info)[0])
-
-
-def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
-                   context: PythonObject) raises -> Float64:
-    """`_expansion_metrics.accuracy_fraction(y_true, prediction,
-    sample_weight, mode)`: the (weighted) matched fraction from the device
-    COUNT tail."""
-    var caller = String("accuracy_score")
-    _refuse_multilabel(y_true, "y_true", caller, context)
-    _refuse_multilabel(prediction, "y_pred", caller, context)
-    var true = _classification_encoded(y_true, "y_true", context)
-    var pred = _classification_encoded(prediction, "y_pred", context)
-    return _accuracy_encoded(true, pred, sample_weight, mode, context)
-
-
-def trees_accuracy_labels(y_true: PythonObject, pred: ScoreLabels, sample_weight: PythonObject, mode: PythonObject,
-                          context: PythonObject) raises -> Float64:
-    """`trees_accuracy` with the prediction already encoded (a classifier's
-    own class codes): y_true is checked and encoded as before."""
-    var caller = String("accuracy_score")
-    _refuse_multilabel(y_true, "y_true", caller, context)
-    var true = _classification_encoded(y_true, "y_true", context)
-    return _accuracy_encoded(true, pred, sample_weight, mode, context)
-
-
-def _accuracy_encoded(true: ScoreLabels, pred: ScoreLabels, sample_weight: PythonObject, mode: PythonObject,
-                      context: PythonObject) raises -> Float64:
-    """UNPACK (codes and weights as Arrays), RUN (the COUNT program and the
-    answer read, xtrees/trees_score_run.mojo), PACK (`_run`)."""
-    var b = trees_builtins()
-    var caller = String("accuracy_score")
-    score_accuracy_check(caller, true.n, pred.n, true.kind, pred.kind)
-    var n = true.n
-    var weighted = sample_weight is not None
-    var w: Optional[AdmittedX] = None
-    if weighted:
-        w = trees_sample_weight_f32(sample_weight, n, caller, context)
-    var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
-    var L = len(present)
-    var yt = _codes(true, present, context)
-    var yp = _codes(pred, present, context)
-    var arrays = Python.list(yt, yp)
-    var w_array = PythonObject(None)
-    if weighted:
-        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
-        _ = py_call(arrays.append, w_array)
-    var plan = score_accuracy_plan(n, L, weighted)
-    var arena = _run(plan, arrays, mode, context)
-    var base = _arena_address(arena)
-    _ = arena  # keep the Python object alive through the native call above
-    _ = yt^
-    _ = yp^
-    _ = w^
-    _ = w_array^
-    _ = arrays^
-    var fraction = score_accuracy_answer(base, plan.out, plan.weighted)
-    _ = arena  # keep the Python object alive through the native calls above
-    _ = arena^
-    return fraction
-
-
-def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
-    """A float32 Array copy of weights that borrow a foreign buffer (the
-    program runner copies Arrays into its arena; `put` took `as_f32_c`'s
-    Array). The bytes are copied in C (`array.array.frombytes`)."""
-    # copied from the matrix's own address (its owner need not be a
-    # bytes-like object: frombytes refused a viewed NumPy weight vector)
-    var count = w.rows * w.cols
-    var out = admitted_vector(count, "<f4", context)
-    trees_cast(w.address, "<f4", trees_address(out), "<f4", count, context)
+    var n = target.n
+    var out = admitted_vector(n, "<i4", context)
+    var k: Int
+    var table: List[Int32]
+    var row_codes = List[Int32]()
+    var rows_address: Int
+    if target.encoded:
+        # Integer labels the native encoder wrote: k distinct class words and
+        # one int32 code per row (`target.codes`).
+        k = len(target.owner.keys)
+        table = List[Int32](length=max(k, 1), fill=-1)
+        for d in range(k):  # driver-loop: over the distinct target classes
+            var word = PythonObject(Int(target.owner.keys[d].number))
+            table[d] = Int32(Int(py=py_call(lookup, word, missing)))
+        rows_address = trees_address(target.codes)
+    else:
+        # Admitted str or int labels (one native key per row): the distinct
+        # keys in sorted order, then each row's position among them.
+        var index = score_keys_index(target.owner.keys)
+        k = len(index.sorted_rows)
+        table = List[Int32](length=max(k, 1), fill=-1)
+        for d in range(k):  # driver-loop: over the distinct target labels
+            table[d] = Int32(Int(py=py_call(lookup, target.owner.values[index.sorted_rows[d]], missing)))
+        row_codes = List[Int32](length=max(n, 1), fill=0)
+        var row_address = Int(row_codes.unsafe_ptr())
+        with GILReleased(Python()):
+            score_key_codes(index, target.owner.keys, row_address, True)
+        _ = index^
+        rows_address = row_address
+    labels_gather(context, LABELS_GATHER_I32, Int(table.unsafe_ptr()), k, rows_address, n, trees_address(out))
+    _ = table^
+    _ = row_codes^
+    _ = target  # keep the label owners (and their pins) alive through the reads above
     _ = out  # keep the Python object alive through the native call above
     return out
 
