@@ -181,7 +181,7 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int
     var args = NmfArgs(options.beta, update_h, max_iter, tol, regs.l1w, regs.l1h, regs.l2w, regs.l2h, shuffle, seed)
     var request = NMFFitRequest(admitted.address, w_address if w_address >= 0 else h_output,
         h_address if h_address >= 0 else h_output, w_output, h_output,
-        n, d, nc, init, options.solver, args, not admitted.finite)
+        n, d, nc, init, options.solver, args^, not admitted.finite)
     var result = nmf_run_fit(connection, request)
     if not admitted.finite:
         admitted_finite_refuse(result.finite, "NMF")

@@ -111,7 +111,7 @@ def nmf_native_dispatch[K: NMFNativeKernels](operation: Int,
                 raise Error("NMF native ABI: missing fit output spans")
             var args = NmfArgs(f[0], p[5] != 0, p[6], f[1], f[2], f[3], f[4], f[5], p[7] != 0, p[8])
             var answer = K.fit(NMFFitRequest(a[0], a[1], a[2], a[3], a[4],
-                p[0], p[1], p[2], p[3], p[4], args, p[9] != 0))
+                p[0], p[1], p[2], p[3], p[4], args^, p[9] != 0))
             var words = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[5])
             words[0] = answer.iterations
             words[1] = answer.finite
