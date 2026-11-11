@@ -13,6 +13,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import PrepProgramAPI
+from x_prep.transport_device import publish_x_prep_transport_device
 from core.prep_program_native_device import PrepProgramDeviceKernels
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
@@ -397,6 +398,10 @@ def build__mojolearn_x_prep() -> PythonObject:
             m.def_function[proba64_binding]("x_prep_proba64")
         comptime if PTIMPUTE_FLAGS != 0:
             m.def_function[ptimpute_flags_binding]("x_prep_ptimpute_flags")
-        return m.finalize()
+        var published_module = m.finalize()
+        # The native program transport (core/prep_entry_table.mojo) for the
+        # native owners (bindings/x_prep_native_owner.mojo xprep_run).
+        publish_x_prep_transport_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))
