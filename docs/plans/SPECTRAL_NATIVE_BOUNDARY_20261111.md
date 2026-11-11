@@ -35,3 +35,28 @@ workloads; the test lane owns `spectral_contract_*`, `spectral_state_*`,
 `spectral_native_*` and `spectral_dense_*` fixtures. Full pre-edit source and
 route inventory are retained under
 `~/mojolearn-evidence/python-mojo-migration-20261110/spectral-native-owner/`.
+
+The additive backend chunk connects `SpectralHostKernels` and
+`SpectralDeviceKernels` through shared native marshalling/result owners in
+`spectral_native_execution.mojo`. It calls the existing dataset/COO/dense
+spectral functions, and the existing Nyström/resident functions. The ordinary
+non-keep fit wrappers already delegate to the same `_keep` functions with
+`False`; the adapter passes that same flag and does not replace their body.
+Native result owners permit retained legacy wrappers to share execution while
+keeping their UNPACK/PACK stages. Public exports and callers are not switched
+by this chunk.
+
+The source mapping retains all input copies, Float32 tolerance rounding,
+output guards and output/state copies. It also retains the existing provider
+differences: CPU has no dense/resident capability, GPU clamps negative dataset
+copy counts before the existing numerical refusal, and the device query keeps
+its output-count guard. Host and device graph/query counts retain their prior
+clamping. These are compatibility plumbing facts, not performance claims.
+Dense negative refusal codes still return before any output write. The native
+resident prepare/query/release entries retain the original metrics context and
+locked owning registry. No `spectral/` numerical source was edited.
+
+API consumers can use `spectral_native_v1[SpectralHostKernels]` or the device
+counterpart with `SpectralDriver` for native fixtures. Original graph/dataset/
+state workloads and tolerances remain the test lane's oracle input. Compile,
+execution, public boundary replacement and final role accounting remain owed.
