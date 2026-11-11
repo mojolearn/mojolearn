@@ -25,7 +25,7 @@
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.memory import memcpy
-from std.python import Python, PythonObject
+from std.python import PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
 from bindings.kde_admission_boundary import kde_admission_hit, kde_admission_remember, kde_admission_drop
@@ -147,7 +147,6 @@ def _kde_dense(source: PythonObject, context: PythonObject) raises -> KDEDense:
 
 def _kde_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`value.copy()` of a C-order float32 array: a new mojolearn Array."""
-    var b = native_loaded_module("builtins")
     var shape = List[Int]()
     for axis in range(len(value.shape)):  # driver-loop: admitted array rank
         shape.append(Int(py=value.shape[axis]))
@@ -165,7 +164,6 @@ def _kde_copy_finite(value: PythonObject, context: PythonObject) raises -> Pytho
     one parallel row-task copy (core/admitted_input.mojo admitted_cast_f32,
     float32 to float32: the same bits) whose verdict refuses a NaN or an
     infinity in `admitted_finite_refuse`'s wording."""
-    var b = native_loaded_module("builtins")
     var shape = List[Int]()
     for axis in range(len(value.shape)):  # driver-loop: admitted array rank
         shape.append(Int(py=value.shape[axis]))
