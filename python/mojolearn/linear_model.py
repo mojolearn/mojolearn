@@ -155,21 +155,9 @@ def _accuracy_host(pred, y):
     return accuracy_fraction(y, pred)
 
 
-def _r2_sums(pred, y):
-    """`(SS_res, SS_tot)` for scikit-learn's R^2 from float32 predictions
-    and the target cast once to float32: the x_metrics binding's grouped
-    sums (`_expansion_metrics`'s `reg_term` and pinned-sum stages, on the
-    device on a GPU install, the same words on the host column), the
-    target mean first, then both sums of squares, binary64 out. Lane
-    pyglue-sweep (Oct 3): these were sequential Python float64 loops over
-    the rows (DEVIATION 2365); the bits of `score()` move. Callers apply
-    their own convention for `SS_tot == 0`."""
-    from ._expansion_metrics import _Reg, _r2_sums_of
-    t, _ = as_f32_c(y, ndim=1, name="y")
-    p, _ = as_f32_c(pred, ndim=1, name="predictions")
-    r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
-    # lane cpu2-l7-metrics: one program, the y mean rounded on the device
-    return _r2_sums_of(r, None)
+# TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners
+# are core/linear_score_program.mojo and bindings/svc_common.mojo `svc_r2_sums`) deleted 2026-11-11 by lane
+# pyout-metrics-cnn; code recoverable at 6f82d0255d.
 
 
 # The centering of LinearRegression and Ridge (lane hr-small-passes,

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native owner of the shared arena program runner: `_Prog.run` of the x_prep
-# family (_expansion_prep) and of the x_metrics family (_expansion_metrics).
+# family (_expansion_prep) and the x_metrics programs the native metrics owners build.
 #
 # Python builds a program (its arena layout, its input buffers and its stage
 # words) and makes ONE call here. This file owns everything the run does:
@@ -706,8 +706,9 @@ def arena_prog_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var result = PythonObject(None)
         if operation == "x_prep_run":
             result = _prep_run(prog, args[0], context)
-        elif operation == "x_metrics_run":
-            result = _metrics_run(prog, args[0], context)
+        # TOMBSTONE: the "x_metrics_run" arm (Python `_expansion_metrics._Prog` programs; every x_metrics program
+        # is now built and run natively through `_metrics_run_plan`/`_metrics_run`, and x_metrics connects no
+        # Python program class) deleted 2026-11-11 by lane pyout-metrics-cnn; code recoverable at 6f82d0255d.
         else:
             raise Error("ValueError: unknown native arena program operation")
         return result.steal_data()
