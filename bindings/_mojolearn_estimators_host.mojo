@@ -61,7 +61,8 @@ from core.logistic_native_api import (
 )
 from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from core.kde_native_host import KDE_HOST_API
+from core.kde_native_host import KDE_HOST_API, KDEHostKernels
+from core.kde_native_api import KDEQueryRequest
 from core.pca_native_host import PCA_HOST_API
 from core.tsvd_native_host import TSVD_HOST_API
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
@@ -126,7 +127,7 @@ from glm.host.gram_solve_host import host_linear_gram_fit
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
-from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
+from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE
 from core.device_fold import host_sum_f32_fixed
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
@@ -149,7 +150,6 @@ from core.estimators_host_impl import (
     cd_predict_host_run,
     dbscan_fit_host_run,
     host_pca_validate_first,
-    kde_score_samples_host_run,
     kernel_ridge_predict_host_run,
     labeled_reference_predict_host_run,
     minmax_transform_host_run,
@@ -286,15 +286,14 @@ def kde_score_samples_binding(
     var has_weights = _index(params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var weights = List[Float32]()
+    var weights_address = 0
     if has_weights:
-        weights = read_f32(_index(weights_addr), max(0, n_train))
+        weights_address = _index(weights_addr)
+    var request = KDEQueryRequest(Int(tp), Int(qp), weights_address, Int(op), n_train, n_query,
+                                  n_features, Float64(bandwidth), has_weights, want_total, kname^, mname^)
     var total = Float64(0.0)
     with GILReleased(Python()):
-        total = kde_score_samples_host_run(
-            tp, qp, op, weights, has_weights, n_train, n_query, n_features,
-            bandwidth, kname, mname, want_total,
-        )
+        total = KDEHostKernels.query(request)
     if want_total:
         return PythonObject(total)
     return PythonObject(n_query)
