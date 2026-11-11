@@ -495,7 +495,7 @@ _native_archive_bridge.register(SpectralClustering, _SPECTRAL_FORMAT, (
 
 
 class _DenseCOO:
-    """A dense float32 matrix (`_expansion_decomp._M`) as the duck-typed COO
+    """A dense float32 matrix (rows `r`, columns `c`, host address `addr`) as the duck-typed COO
     `_coo_triples` reads: row-major order, exact zeros dropped (what
     `sp.coo_matrix(dense)` keeps), -0.0 a zero and NaN kept. The scan is the
     base binding's `nonzero_f32_count` / `nonzero_f32_fill`
