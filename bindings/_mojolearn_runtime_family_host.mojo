@@ -21,6 +21,7 @@ from bindings.host_svc_native import host_svc_attribute_c
 from bindings.gp_resident_boundary import GPPreparedLease
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.gp_kernel_cache_boundary import GPPreparedKernel
+from bindings.gp_class_table_boundary import GPPreparedClassTable
 from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
 from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
 from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
@@ -187,6 +188,18 @@ def register_GPPreparedKernel(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_GPPreparedKernel", existing)
 
 
+def register_GPPreparedClassTable(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[GPPreparedClassTable]()
+    except error:
+        if not py_type_absent(error, String(reflect[GPPreparedClassTable].name())):
+            raise error
+        _ = module.add_type[GPPreparedClassTable]("_GPPreparedClassTable")
+        return
+    py_type_attach(module.module, "_GPPreparedClassTable", existing)
+
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -197,6 +210,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_GPPreparedLease(module)
         register_GPPackedKernel(module)
         register_GPPreparedKernel(module)
+        register_GPPreparedClassTable(module)
         register_DBSCANReferenceOwner(module)
         register_DBSCANHolder(module)
         register_AggloReferenceOwner(module)

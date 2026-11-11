@@ -196,3 +196,26 @@ writer, removing Python map/list code reconstruction. Class comparison,
 first-label retention, admitted inputs and sorting routes remain unchanged.
 Decode table/state cleanup is the next bounded follow-up; no full-family
 completion or runtime result is claimed by this encoding chunk.
+
+GP decoding now uses `GPLabelTable` (native int64/float64 gather storage and
+availability state) and the prepared-only `GPPreparedClassTable` (native list
+of public class pins). Numeric gather calls the explicitly supplied base
+image's v2 descriptor. Arbitrary-width integer classes still return the
+original objects when an int64 gather table cannot represent them. The cache
+retains exact prior label matching, including float bit patterns and fresh
+NumPy-scalar misses. The shared old class-table helpers remain for SVC.
+
+Ordinary binary/fused prediction codes and nonfused combine/widening scratch
+are native lists. Only actual public probabilities or worker-transport outputs
+are Array-backed; the same fused/pointer/resident and combine calls receive
+their addresses. Unused combine probabilities use native scratch. The
+homogeneous list label admission now reuses `labels_list_scalar_kind`, removing
+the Python set/map pair while retaining empty/mixed/bool/out-of-int64 behavior.
+
+Remaining GP boundary debt is explicit: exact input list staging through
+`array_type`/`buffer_info`, the general primitive-label dict/sorted/index table,
+the shared archive-compatible postfix capture, and the broader GP fitted-state
+admission tuple. These are not claimed removed by the compiled RUN migration.
+Public classes, fitted model fields, estimator objects, exporter-backed result
+Arrays and interpreter transport pins remain intentionally observable boundary
+storage. All current chunks still await root compilation/runtime evidence.

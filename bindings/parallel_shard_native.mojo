@@ -466,13 +466,13 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var retained_columns = List[PythonObject]()
     for i in range(len(columns)):  # driver-loop: unpack one returned worker column owner per class
         retained_columns.append(columns[i])
-    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp"), retained_columns, n_star, context)
+    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp"), retained_columns, n_star, context, proba_method)
     if proba_method:
         return combined.probabilities
     # `codes32.astype("<i8")`: the exact widening
-    var codes32 = combined.codes
-    var codes = shard_array("<i8", Python.tuple(n_star), n_star, context)
-    _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
+    var codes32 = combined.codes^
+    var codes = List[Int64](length=n_star, fill=0)
+    _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
     _ = codes32  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     return gp_decode_labels(fields["classes_"], codes, _worker_binding("_mojolearn"), context)

@@ -13,7 +13,7 @@
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array
@@ -22,19 +22,19 @@ from bindings.family_common import (
 )
 from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer_address
 from core.gp_label_gather_impl import label_float_gather_f64
-from bindings.archive_schema_native import _schema_label_store
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import (
     _flatten_labels,
     ClassicalLabels, NativeTextLabels, _TextCodeStorage, _TextLabels, _PythonTextCodes, _NativeTextCodes,
     _text_buffer_labels_into, _text_list_labels_into,
 )
-from bindings.label_input_sources import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
+from bindings.label_input_sources import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
 from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.gp_label_snapshot_native import gp_label_list
 from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, _label_same, _labels_recordable
+from bindings.gp_class_table_boundary import GPPreparedClassTable
+from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
 from bindings.p3_labels_metrics_native import p3_dict_codes
@@ -162,16 +162,10 @@ def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject,
     var b = native_loaded_module("builtins")
     if len(flat) == 0:
         return None
-    var kinds = py_call(b.set, py_call(b.map, b.type, flat))
-    if len(kinds) != 1:
+    var kind = labels_list_scalar_kind(flat)
+    if kind != LABELS_LIST_INT and kind != LABELS_LIST_FLOAT:
         return None
-    var code = String("")
-    if py_contains(kinds, b.int):
-        code = "q"
-    elif py_contains(kinds, b.float):
-        code = "d"
-    else:
-        return None
+    var code = String("q") if kind == LABELS_LIST_INT else String("d")
     var store = PythonObject(None)
     try:
         store = py_call(context["array_type"], PythonObject(code), flat)
@@ -343,38 +337,70 @@ def _gp_label_kind(classes: PythonObject, context: PythonObject) raises -> Strin
     return "object"
 
 
-def _gp_class_table(classes: PythonObject, context: PythonObject) raises -> PythonObject:
-    """(kind, packed `array` table or None) of an admitted label list: the
-    int64 / float64 gather table for int / float classes, None for object
-    classes or a class outside int64."""
+def _gp_class_table(classes: PythonObject, context: PythonObject) raises -> GPLabelTable:
     var b = native_loaded_module("builtins")
     var kind = _gp_label_kind(classes, context)
-    var k = len(classes)
-    var table = PythonObject(None)
-    if (kind == "int" or kind == "float") and k > 0:
-        var wide = Python.list()
-        for i in range(k):  # driver-loop: over the distinct classes
-            _ = py_call(wide.append, family_call(b.int if kind == "int" else b.float, classes[i]))
-        try:
-            table = py_call(context["array_type"], PythonObject(String("q") if kind == "int" else String("d")), wide)
-        except:
-            table = PythonObject(None)  # a class outside int64: the label objects come back
-    return Python.tuple(PythonObject(kind), table)
+    var native_kind = GP_LABEL_I64 if kind == "int" else GP_LABEL_F64 if kind == "float" else 0
+    var table = GPLabelTable(native_kind, len(classes))
+    if table.available:
+        for i in range(len(classes)):  # driver-loop: UNPACK the distinct admitted class values
+            # Keep the old builtin conversion before storage. An out-of-range
+            # integer changes only the table route, never the public class.
+            var value = family_call(b.int if native_kind == GP_LABEL_I64 else b.float, classes[i])
+            try:
+                if native_kind == GP_LABEL_I64:
+                    table.integers[i] = Int64(Int(py=value))
+                else:
+                    table.reals[i] = Float64(py=value)
+            except:
+                table.refuse_numeric()
+    return table^
 
 
-def _gp_decode_with(classes: PythonObject, kind: String, table: PythonObject, codes: PythonObject,
+def _gp_prepared_class_table(owner: PythonObject, classes: PythonObject, context: PythonObject) raises -> PythonObject:
+    var mods = NativeModules()
+    if owner is not None:
+        var held = gpsvm_side_get(_GP_CLASS_TABLE_SLOT, owner)
+        if held is not None:
+            var typed = False
+            try:
+                _ = held.downcast_value_ptr[GPPreparedClassTable]()
+                typed = True
+            except:
+                pass
+            if typed:
+                var cached = held.downcast_value_ptr[GPPreparedClassTable]()
+                var same = len(cached[].labels) == len(classes)
+                if same:
+                    for i in range(len(classes)):  # driver-loop: exact original class identity/scalar equality policy
+                        if not _label_same(mods, cached[].labels[i], classes[i]):
+                            same = False
+                            break
+                if same:
+                    return held
+    classical_admit_value(classes, context)
+    var table = _gp_class_table(classes, context)
+    var pins = List[PythonObject]()
+    for i in range(len(classes)):  # driver-loop: retain public class identities across RUN/PACK
+        pins.append(classes[i])
+    var prepared = GPPreparedClassTable(pins^, table^)
+    var packed = PythonObject(alloc=prepared^)
+    if owner is not None and _labels_recordable(mods, classes):
+        _ = gpsvm_side_put(_GP_CLASS_TABLE_SLOT, owner, packed)
+    return packed
+
+
+def _gp_decode_with(classes: PythonObject, table: GPLabelTable, codes: Int, n: Int,
                     base: PythonObject, context: PythonObject) raises -> PythonObject:
     var k = len(classes)
-    var n = Int(py=codes.size)
-    if (kind == "int" or kind == "float") and k > 0 and table is not None:
-        var out = family_array(Python.tuple(n), String("<i8") if kind == "int" else String("<f8"), context)
-        _ = family_call(neural_descriptor_entry(base, String("gather_i64") if kind == "int" else String("gather_f64")),
-                        py_call(table.buffer_info)[0], PythonObject(k), classical_address(codes),
-                        PythonObject(n), classical_address(out))
-        _ = out  # keep the Python object alive through the native call above
+    if table.available and k > 0:
+        var dst = family_array(Python.tuple(n), String("<i8") if table.kind == GP_LABEL_I64 else String("<f8"), context)
+        var connection = GPLabelsConnection(base)
+        gp_labels_gather(connection, table.kind, LabelsGatherRequest(table.address(), codes, Int(py=classical_address(dst)), k, n))
+        _ = dst
         _ = table
-        return out
-    var rows = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(codes)))
+        return dst
+    var rows = FAMILY_I64P(unsafe_from_address=codes)
     # One PyList_New(n) and direct slot stores of the class objects (lane
     # p3-svm-gp-kernel, row 79): the k class pointers are read once, every
     # row stores a new reference to its class, no Python call per row.
@@ -403,30 +429,54 @@ def _gp_decode_with(classes: PythonObject, kind: String, table: PythonObject, co
     return result
 
 
-def gp_decode_labels(var classes: PythonObject, codes: PythonObject, base: PythonObject,
-                     context: PythonObject) raises -> PythonObject:
-    """`_labels.decode_labels(classes, codes)` for int64 codes (an Array of
-    shape (n,)): an int64 / float64 Array through the base binding's gather
-    for int / float classes, else the list of label objects."""
-    classes = classifier_label_list(classes, context)
-    classical_admit_value(classes, context)
-    var built = _gp_class_table(classes, context)
-    return _gp_decode_with(classes, String(built[0]), built[1], codes, base, context)
-
-
 comptime _GP_CLASS_TABLE_SLOT = "gp_class_table_v1"
 
 
-def gp_decode_labels(owner: PythonObject, var classes: PythonObject, codes: PythonObject, base: PythonObject,
-                     context: PythonObject) raises -> PythonObject:
-    """`gp_decode_labels(classes, codes, base)` for the fitted `owner`: the
-    label admission, kind and gather table are built once per class list
-    (the same label objects) and kept in a weak-keyed native record
-    (bindings/gp_svm_records.mojo), not on every predict."""
+def _gp_decode_prepared(owner: PythonObject, var classes: PythonObject, codes: Int, n: Int,
+                        base: PythonObject, context: PythonObject) raises -> PythonObject:
     classes = classifier_label_list(classes, context)
-    var built = gpsvm_class_table(owner, _GP_CLASS_TABLE_SLOT, classes)
-    if built is None:
-        classical_admit_value(classes, context)
-        built = _gp_class_table(classes, context)
-        gpsvm_class_table_put(owner, _GP_CLASS_TABLE_SLOT, classes, built)
-    return _gp_decode_with(classes, String(built[0]), built[1], codes, base, context)
+    var packed = _gp_prepared_class_table(owner, classes, context)
+    var prepared = packed.downcast_value_ptr[GPPreparedClassTable]()
+    var result = _gp_decode_with(classes, prepared[].table, codes, n, base, context)
+    _ = packed
+    return result
+
+
+def _gp_decode_prepared(owner: PythonObject, var classes: PythonObject, codes: PythonObject,
+                        base: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Preserve class admission/table lookup before reading transport metadata.
+    classes = classifier_label_list(classes, context)
+    var packed = _gp_prepared_class_table(owner, classes, context)
+    var prepared = packed.downcast_value_ptr[GPPreparedClassTable]()
+    var result = _gp_decode_with(classes, prepared[].table, Int(py=classical_address(codes)), Int(py=codes.size), base, context)
+    _ = codes
+    _ = packed
+    return result
+
+
+def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    var result = _gp_decode_prepared(PythonObject(None), classes, codes, base, context)
+    _ = codes
+    return result
+
+
+def gp_decode_labels(owner: PythonObject, classes: PythonObject, codes: PythonObject, base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    var result = _gp_decode_prepared(owner, classes, codes, base, context)
+    _ = codes
+    return result
+
+
+def gp_decode_labels(classes: PythonObject, codes: List[Int64], base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    var result = _gp_decode_prepared(PythonObject(None), classes, Int(codes.unsafe_ptr()), len(codes), base, context)
+    _ = codes
+    return result
+
+
+def gp_decode_labels(owner: PythonObject, classes: PythonObject, codes: List[Int64], base: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    var result = _gp_decode_prepared(owner, classes, Int(codes.unsafe_ptr()), len(codes), base, context)
+    _ = codes
+    return result
