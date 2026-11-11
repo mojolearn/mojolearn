@@ -529,7 +529,7 @@ def _table_from_spelled(
     var inv = codepoint_to_byte()
     var sv = SpelledVocab(n)
     var key_err = List[String](capacity=n)
-    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for k in range(n):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
         var key = items[k][0]
         var val = items[k][1]
         var is_int = String(py=val.__class__.__name__) == "int"
@@ -568,7 +568,7 @@ def _table_from_spelled(
         var m = Int(py=py_call(bi.len, merges))
         var sm = SpelledMerges(m)
         var errs = List[String](capacity=3 * m)
-        for k in range(m):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        for k in range(m):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
             var item = merges[k]
             var it = String(py=item.__class__.__name__)
             var kind = 2
@@ -919,7 +919,7 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     var entries = py_call(bi.list, tokens)
     var arena = List[UInt8]()
     var lengths = List[Int]()
-    for i in range(len(entries)):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for i in range(len(entries)):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
         var bytes = _token_bytes(entries[i])
         lengths.append(len(bytes))
         tokenizer_append_bytes(arena, bytes)
@@ -933,7 +933,7 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     var rights = List[List[UInt8]](capacity=len(pairs))
     var refused = String("")
     var failed = False
-    for i in range(len(pairs)):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for i in range(len(pairs)):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
         try:
             if len(pairs[i]) != 2:
                 raise Error("tokenizer: every merge must be a pair of bytes")
