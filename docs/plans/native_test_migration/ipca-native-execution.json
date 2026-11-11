@@ -6,7 +6,7 @@
     "e97482b20b",
     "769351665c"
   ],
-  "execution": "Actual fixture compilation failed139 on CPU/GPU; no numerical runtime reached. Confirmed standalone immutable nested List pointer capture compiler crash; awaiting supported Mojo/MAX fix.",
+  "execution": "Original actual fixtures compiled with exit 139 on CPU/GPU and never reached numerical runtime. Owner-authorized six-field test-layout refactor is uncompiled/unrun; CPU15/GPU17 remain owed. Pure60 already passed at root and require no unchanged rerun.",
   "coverage": {
     "0": "actual provider mode/vendor/fit-partial-query-resident capabilities",
     "1-2": "original 6x3, count2, fit batch3; whiten false/true; state, query and inverse",
@@ -79,8 +79,19 @@
     "submitted": false,
     "compiler": "Mojo1.0.0(ed45d567)",
     "max": "26.5.0",
-    "original_fixtures_changed": false,
-    "workaround": false,
-    "accepted_distinct_evidence": "Root reports pure60 passed, thin actual host fit/partial compiled and ran, public boundary compiled. These do not execute the pending original actual fixtures."
-  }
+    "original_fixtures_changed": true,
+    "workaround": "Narrow owner-authorized test-layout exception only: IPCATestRoom uses six named flat Mojo List fields. No product, algorithm, compiler, toolchain or Python fallback changes.",
+    "accepted_distinct_evidence": "Root reports pure60 passed, thin actual host fit/partial compiled and ran, public boundary compiled. These do not execute the pending refactored actual fixtures.",
+    "authorization": {
+      "date": "2026-11-10",
+      "source": "Explicit user approval relayed by root to this lane",
+      "scope": "Only replace IPCATestRoom nested List storage with six named List[Float32] fields; preserve all cases, assertions, dimensions, inputs, oracles, tolerances, guards and cleanup",
+      "broader_workaround_permission": false
+    },
+    "minimal_reproducer_and_controls_unchanged": true,
+    "upstream_status": "Confirmed original standalone compiler crash remains open; draft not submitted. This layout change is not a compiler fix.",
+    "original_fixture_archive": "E/pca-native-tests/ipca-before-authorized-flat-room.mojo",
+    "refactor_evidence": "E/pca-native-tests/ipca-flat-room-static.json"
+  },
+  "removed": "Only the test room nested container and its fixed six-field indexing loops; all six buffers, canaries and checks retained under named fields. No Python tests or product code removed."
 }
