@@ -45,6 +45,11 @@ from bindings.native_process_pool import (
     process_pool_close,
 )
 from bindings.native_transport import transport_close
+from core.parallel_entry_table import (
+    ParallelEntryKey, parallel_ivf_finalize, parallel_ivf_merge_shards, parallel_ivf_shard_plan,
+    parallel_rebase_offsets_i32, parallel_topk_merge_f32,
+)
+from std.python._cpython import GILReleased
 from bindings.native_codec import codec_initialize
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_key_fields, prepared_key_same, prepared_get, prepared_put, prepared_drop
@@ -92,6 +97,16 @@ def _t(name: String) raises -> PythonObject:
 def _ctx() raises -> PythonObject:
     """The family owners' shared context (array types, codes, classes)."""
     return _t("context")
+
+
+def _table_key(family: String) raises -> ParallelEntryKey:
+    """UNPACK: the (tier, vendor) key of the image whose native table the
+    owner calls for `family` ("base" or "ivf"), recorded at import by
+    python/mojolearn/_native_parallel_shard.py (core/parallel_entry_table.mojo)."""
+    var key = py_get(_t("table_keys"), PythonObject(family))
+    if key is None:
+        raise Error("ImportError: mojolearn: the " + family + " binding publishes no native entry table")
+    return ParallelEntryKey(Int(py=key[0]), Int(py=key[1]))
 
 
 def _worker_binding(name: String) raises -> PythonObject:
@@ -575,7 +590,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var offsets = b.list()
     for r in range(len(parts)):  # driver-loop: one offset table per tree range
         _ = py_call(offsets.append, parts[r]["_offsets"])
-    py_setitem(merged, "_offsets", _rebase_offsets(offsets, _worker_binding("_mojolearn").msel_rebase_offsets_i32, context))
+    py_setitem(merged, "_offsets", _rebase_offsets(offsets, _table_key("base"), context))
     var node_names = Python.list("_colid", "_quesval", "_left_child", "_leaves")
     for k in range(len(node_names)):  # small-loop(the four flat node arrays)
         var name = String(node_names[k])
@@ -623,10 +638,11 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     return estimator
 
 
-def _rebase_offsets(arrays: PythonObject, entry: PythonObject, context: PythonObject) raises -> PythonObject:
+def _rebase_offsets(arrays: PythonObject, key: ParallelEntryKey, context: PythonObject) raises -> PythonObject:
     """`parallel_ensemble._merge_offsets`: the shards' int32 node-offset
-    tables joined, then rebased by the native `msel_rebase_offsets_i32` into
-    one table of 1 + sum(sizes) - len(shards) entries."""
+    tables joined, then rebased by the base image's `msel_rebase_offsets_i32`
+    (its parallel table entry, core/parallel_entry_table.mojo) into one table
+    of 1 + sum(sizes) - len(shards) entries."""
     var b = shard_b()
     var parts = b.list()
     var n_raw = 0
@@ -644,8 +660,12 @@ def _rebase_offsets(arrays: PythonObject, entry: PythonObject, context: PythonOb
     _ = lens  # keep the Python object alive through the native call above
     var n_out = 1 + n_raw - len(parts)
     var out = shard_array("<i4", Python.tuple(n_out), n_out, context)
-    _ = family_call(entry, classical_address(raw), PythonObject(n_raw), classical_address(lens),
-                    PythonObject(len(parts)), PythonObject(n_out), classical_address(out))
+    var raw_addr = Int(py=classical_address(raw))
+    var lens_addr = Int(py=classical_address(lens))
+    var out_addr = Int(py=classical_address(out))
+    var n_parts = len(parts)
+    with GILReleased(Python()):
+        _ = parallel_rebase_offsets_i32(key, raw_addr, n_raw, lens_addr, n_parts, n_out, out_addr)
     _ = raw  # keep the Python object alive through the native call above
     _ = lens  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -863,10 +883,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 _ = py_call(parts.extend, _map(pool, requests))
                 wave += n_devices
 
-            var merge = _t("reference_merge")
-            if py_type(merge) is b.str:
-                raise Error("ImportError: " + String(merge))
-            var merged = _merge_candidates(parts, ranges, end - first, k, merge, context)
+            var merged = _merge_candidates(parts, ranges, end - first, k, _table_key("base"), context)
             var output = PythonObject(None)
             if method == "kneighbors":
                 var wide = shard_array("<i8", Python.tuple(end - first, k), (end - first) * k, context)
@@ -897,11 +914,12 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     return parallel_public_result(result, method, kind, context)
 
 
-def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k: Int, entry: PythonObject,
+def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k: Int, key: ParallelEntryKey,
                       context: PythonObject) raises -> PythonObject:
     """`parallel_neighbors_reference._merge`: (float32 distances, uint32
     global indices), each (n_queries, k), from the reference blocks'
-    candidates by the native `shard_topk_merge_f32`."""
+    candidates by the base image's `shard_topk_merge_f32` (its parallel table
+    entry, core/parallel_entry_table.mojo)."""
     var b = shard_b()
     var distances = shard_array("<f4", Python.tuple(n_queries, k), n_queries * k, context)
     var indices = shard_array("<u4", Python.tuple(n_queries, k), n_queries * k, context)
@@ -931,8 +949,14 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
         tp[5 * p + 3] = Int64(ranges[2 * p + 1])
         tp[5 * p + 4] = Int64(Int(py=dist.shape[1]))
         _ = table  # keep the Python object alive through the native call above
-    var rc = Int(py=family_call(entry, classical_address(table), PythonObject(count), PythonObject(n_queries),
-                                PythonObject(k), classical_address(distances), classical_address(indices)))
+    var table_addr = Int(py=classical_address(table))
+    var dist_addr = Int(py=classical_address(distances))
+    var idx_addr = Int(py=classical_address(indices))
+    var rc = 0
+    with GILReleased(Python()):
+        rc = parallel_topk_merge_f32(key, table_addr, count, n_queries, k, dist_addr, idx_addr)
+    _ = distances  # keep the Python object alive through the native call above
+    _ = indices  # keep the Python object alive through the native call above
     _ = keep  # keep the Python objects alive through the native call above
     _ = table  # keep the Python object alive through the native call above
     if rc == 1:
@@ -1176,7 +1200,6 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         raise Error("TypeError: distributed IVF requires its exact connected class")
     var admitted = parallel_ivf_admit(index, PARALLEL_SHARD_BOUNDARY.get_or_create_ptr()[].tables, context)
     var fields = py_fields(index)
-    var native = admitted[0]
     var n = Int(py=fields["n_rows_"])
     var n_lists = Int(py=fields["n_lists_"])
     var ind = admitted[1]
@@ -1188,11 +1211,16 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     var soff = shard_array("<i4", Python.tuple(parts_count, n_lists + 1), parts_count * (n_lists + 1), context)
     var local_all = shard_array("<i4", Python.tuple(n), n, context)
     var map_all = shard_array("<i4", Python.tuple(n), n, context)
-    var status = Int(py=family_call(py_attr(native, "ivf_shard_plan"),
-                                    Python.list(classical_address(ind), classical_address(offs),
-                                                classical_address(soff), classical_address(local_all),
-                                                classical_address(map_all)),
-                                    Python.list(n, n_lists, parts_count)))
+    var ivf_key = _table_key("ivf")
+    var ind_addr = Int(py=classical_address(ind))
+    var offs_addr = Int(py=classical_address(offs))
+    var soff_addr = Int(py=classical_address(soff))
+    var local_addr = Int(py=classical_address(local_all))
+    var map_addr = Int(py=classical_address(map_all))
+    var status = 0
+    with GILReleased(Python()):
+        status = parallel_ivf_shard_plan(ivf_key, ind_addr, offs_addr, soff_addr, local_addr, map_addr,
+                                         n, n_lists, parts_count)
     _ = soff  # keep the Python object alive through the native call above
     _ = local_all  # keep the Python object alive through the native call above
     _ = map_all  # keep the Python object alive through the native call above
@@ -1218,7 +1246,6 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     py_setitem(own, "metric_code_", fields["metric_code_"])
     py_setitem(own, "devices", devices)
     py_setitem(own, "n_candidates_", PythonObject(None))
-    py_setitem(own, "_native", native)
     var token = String("ivf-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, obj)))
     py_setitem(own, "_token", token)
     var maps = b.list()
@@ -1265,7 +1292,6 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
         raise Error("ValueError: query features differ from index")
     var pool = own["_pool"]
     var maps = own["_id_maps"]
-    var native = own["_native"]
     try:
         var requests = b.list()
         for i in range(len(own["devices"])):  # driver-loop: one search request per stored shard
@@ -1283,23 +1309,27 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
         var result = shard_array("<f4", Python.tuple(m, k), m * k, context)
         var ids = shard_array("<i4", Python.tuple(m, k), m * k, context)
         var counts = shard_array("<i4", Python.tuple(m), m, context)
-        var addrs = Python.list(classical_address(result), classical_address(ids), classical_address(counts))
-        var sizes = Python.list(len(parts), m, k)
+        var ivf_key = _table_key("ivf")
+        var addrs: List[Int] = [Int(py=classical_address(result)), Int(py=classical_address(ids)),
+                                Int(py=classical_address(counts))]
+        var sizes: List[Int] = [len(parts), m, k]
         for i in range(len(parts)):  # driver-loop: four buffer addresses per result shard
             var p = parts[i]
             var mapping = maps[i]
-            _ = py_call(addrs.extend, Python.list(classical_address(p[0]), classical_address(p[1]),
-                                                  classical_address(p[2]),
-                                                  classical_address(mapping) if Int(py=mapping.shape[0]) > 0
-                                                  else classical_address(p[2])))
-            _ = py_call(sizes.append, Int(py=mapping.shape[0]))
-        var merged = family_call(py_attr(native, "ivf_merge_shards"), addrs, sizes)
+            addrs.append(Int(py=classical_address(p[0])))
+            addrs.append(Int(py=classical_address(p[1])))
+            addrs.append(Int(py=classical_address(p[2])))
+            addrs.append(Int(py=classical_address(mapping)) if Int(py=mapping.shape[0]) > 0
+                         else Int(py=classical_address(p[2])))
+            sizes.append(Int(py=mapping.shape[0]))
+        var status = 0
+        with GILReleased(Python()):
+            status = parallel_ivf_merge_shards(ivf_key, addrs, sizes)
         _ = parts  # keep the Python objects alive through the native call above
         _ = maps  # keep the Python objects alive through the native call above
         _ = result  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
         _ = counts  # keep the Python object alive through the native call above
-        var status = Int(py=merged[0])
         if status != 0:
             if status == 1:
                 raise Error("ValueError: invalid IVF candidate count")
@@ -1309,8 +1339,10 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
                 raise Error("ValueError: NaN distance in an IVF shard result")
             raise Error("ValueError: IVF shard merge failed")
         if Int(py=own["metric_code_"]) == 1:
-            _ = family_call(py_attr(native, "ivf_finalize_distances"), classical_address(result),
-                            PythonObject(m * k), own["metric_code_"])
+            var result_addr = Int(py=classical_address(result))
+            var metric = Int(py=own["metric_code_"])
+            with GILReleased(Python()):
+                _ = parallel_ivf_finalize(ivf_key, result_addr, m * k, metric)
             _ = result  # keep the Python object alive through the native call above
         py_setitem(own, "n_candidates_", counts)
         return Python.tuple(result, ids)
