@@ -381,3 +381,26 @@ Only the runtime-family binding closure changes; metrics/base/x_decomp
 numerical implementations and provider ABIs remain unchanged. Compilation,
 native ownership/numerical fixtures and public boundary cases are root-owned
 and pending; source equivalence is not runtime or performance evidence.
+
+## Clustering configuration and assignment-code table removal
+
+`SpectralClusteringConfig` now carries the validated fit options, affinity,
+gamma and assignment method directly into fit. The original normalized fields
+are still published in the same sequence for the real archive/public schema;
+fit no longer reads those fields back to reconstruct its requests. The existing
+strict `prediction_data` Boolean refusal remains at its original post-validation
+stage, as do replacement-field removal, kernel calls and learned-state
+publication. Public parameter changes are unpacked again on each operation.
+
+Alternative assignment names now resolve to the existing native method codes
+(`kmeans` sentinel -1, `discretize`0, `cluster_qr`1). The now-unused Python
+`_ASSIGN_CODES` dictionary, its captured dictionary copy and the already-dead
+`_E_SPECTRAL_ASSIGN` constant are removed. The only remaining textual mention
+of that constant is a historical test docstring; no live caller was found.
+Assignment still uses the original entry and30/20 restart/iteration settings.
+The configuration is an extension of the already-counted fit-option role;
+the removed private assignment-code map is one separately anchored role.
+No numerical provider source, transfer, output allocation or default changes.
+Only the runtime-family binding closure and import-time Spectral metadata
+change. Native configuration/method cases and public seams remain root-owned
+execution work; no lane tests or compilation were run.

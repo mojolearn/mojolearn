@@ -54,9 +54,6 @@ _CLUSTER_AFFINITIES = _EMBED_AFFINITIES
 #: SpectralClustering's label assignments: cuVS's k-means, and scikit-learn's
 #: two others on the same embedding (x_cluster/spectral_assign.mojo).
 _ASSIGN_LABELS = ("kmeans", "discretize", "cluster_qr")
-#: `x_cluster/entries.mojo::ENTRY_SPECTRAL_ASSIGN` and its method codes.
-_E_SPECTRAL_ASSIGN = 12
-_ASSIGN_CODES = {"discretize": 0, "cluster_qr": 1}
 
 #: cuVS's own struct default for the eigensolver tolerance
 #: (`cuvs/preprocessing/spectral_embedding.hpp:59`, `tolerance{1e-5f}`).
@@ -73,7 +70,6 @@ _native_family_bridge.tables(family_cfb_sc_affinities=_CLUSTER_AFFINITIES,
                              family_cfb_se_affinities=_EMBED_AFFINITIES,
                              family_cfb_predict_affinities=_AFFINITIES,
                              family_cfb_assign_labels=_ASSIGN_LABELS,
-                             family_cfb_assign_codes=dict(_ASSIGN_CODES),
                              family_cfb_default_eigen_tol=DEFAULT_EIGEN_TOL,
                              family_spectral_umap_bindings=_native_spectral_umap_bridge.connect())
 
