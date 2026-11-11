@@ -168,6 +168,27 @@ def entry_ref_call(entry: EntryRef, operation: Int, addresses: List[Int], ints: 
     return result
 
 
+def entry_ref_call[NA: Int, NP: Int, NF: Int](entry: EntryRef, operation: Int,
+    addresses: Array[Int, NA], ints: Array[Int, NP], floats: Array[Float64, NF]) raises -> Int:
+    """`entry_ref_call` over fixed request envelopes held inline on the
+    caller's frame (`var a: Array[Int, 2] = [x, y]`): no heap at all."""
+    var aa = 0
+    var pp = 0
+    var ff = 0
+    comptime if NA > 0:
+        aa = Int(addresses.unsafe_ptr())
+    comptime if NP > 0:
+        pp = Int(ints.unsafe_ptr())
+    comptime if NF > 0:
+        ff = Int(floats.unsafe_ptr())
+    var result = entry_ref_call(entry, operation, aa, NA, pp, NP, ff, NF)
+    # Integer addresses carry no lifetime: keep the envelopes past the call.
+    _ = addresses
+    _ = ints
+    _ = floats
+    return result
+
+
 def entry_ref_same(left: EntryRef, right: EntryRef) -> Bool:
     """True when both refs hold the same pointer and layout word (tests: a
     connection owner reuses one resolved ref across calls)."""
