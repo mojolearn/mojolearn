@@ -153,6 +153,7 @@ check-native-ipca-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . che
 check-native-ipca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/ipca_native_cpu.mojo"
 check-native-ipca-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_native_gpu.mojo"
 check-native-kpca-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kpca_contract.mojo"
+check-native-kpca-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kpca_state.mojo"
 check-native-tsvd-fit-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_fit_cpu.mojo"
 check-native-tsvd-fit-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_fit_gpu.mojo"
 check-native-device-concurrency = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/native_device_concurrency.mojo"
