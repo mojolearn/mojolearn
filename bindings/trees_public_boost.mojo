@@ -45,8 +45,9 @@ from bindings.admitted_input import (
 )
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+from xtrees.trees_forest_run import ForestFit
 from bindings.trees_public_forest import (
-    ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
+    forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
     forest_capture_mode, forest_effective_mode, forest_export, forest_fit_dart_member, forest_kind,
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
     _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
