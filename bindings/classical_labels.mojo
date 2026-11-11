@@ -22,6 +22,7 @@
 from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty, native_scratch_bytes, native_scratch_address
 from bindings.native_loaded_module import native_loaded_module
 from std.math import isfinite
+from core.native_array_layout import NativeArrayLayout
 from std.memory import bitcast, memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -855,10 +856,28 @@ def labels_label_kind(var classes: PythonObject, context: PythonObject) raises -
     return String("int") if all_int else String("float") if all_real else String("object")
 
 
+trait _LabelsCodeSource:
+    def address(self) raises -> Int: ...
+
+
+@fieldwise_init
+struct _PythonLabelCodes(Copyable, Movable, _LabelsCodeSource):
+    var keep: PythonObject
+
+    def address(self) raises -> Int:
+        return labels_address(self.keep)
+
+
+@fieldwise_init
+struct _NativeLabelCodes(Copyable, Movable, _LabelsCodeSource):
+    var data: Int
+
+    def address(self) raises -> Int:
+        return self.data
+
+
 def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_labels.decode_labels(classes, codes)` for int64 or int32 codes:
-    integer classes an int64 Array, real classes a float64 Array (the base
-    binding's gathers), str or bool classes a Python list."""
+    """`_labels.decode_labels(classes, codes)` for int64 or int32 codes."""
     var b = labels_builtins()
     classes = classifier_label_list(classes, context)
     var kind = labels_label_kind(classes, context)
@@ -866,22 +885,56 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
     var n = Int(py=codes.size)
     var k = len(classes)
     var code_dtype = String(codes.dtype)
+    var source = _PythonLabelCodes(codes)
+    return _labels_decode_codes(classes, kind, source, code_dtype, n, k, b, context)
+
+
+def labels_decode_i32_codes(var classes: PythonObject, codes: List[Int32], context: PythonObject) raises -> PythonObject:
+    # PACK for native prediction scratch. The caller retains the typed owner;
+    # no private Array, memoryview, buffer export or input copy is needed.
+    var b = labels_builtins()
+    classes = classifier_label_list(classes, context)
+    var kind = labels_label_kind(classes, context)
+    var source = _NativeLabelCodes(Int(codes.unsafe_ptr()) if len(codes) else 0)
+    var result = _labels_decode_codes(classes, kind, source, "<i4", len(codes), len(classes), b, context)
+    _ = codes
+    return result
+
+
+def _labels_decode_codes[Codes: _LabelsCodeSource](classes: PythonObject, kind: String, codes: Codes,
+    code_dtype: String, n: Int, k: Int, b: PythonObject, context: PythonObject) raises -> PythonObject:
+    # One decode algorithm for legacy object inputs and native code storage.
+    # The source type specializes address access at compile time, retaining
+    # legacy admission/refusal order and pins without a runtime source switch.
     if kind != "int" and kind != "float" and (code_dtype == "<i4" or code_dtype == "<i8"):
         # p3-labels-metrics: str / bool / object classes decode as ONE
         # presized list filled in C from the code words (no widening copy,
-        # no Python append per row). An out-of-range code takes the loop
-        # below, which raises Python's IndexError as before.
-        var listed = p3_decode_list(classes, labels_address(codes), 4 if code_dtype == "<i4" else 8, n)
-        _ = codes  # keep the Python object alive through the native reads above
+        # no Python append per row). An out-of-range code takes the remaining
+        # decode path, which raises Python's IndexError as before.
+        var listed = p3_decode_list(classes, codes.address(), 4 if code_dtype == "<i4" else 8, n)
+        _ = codes  # keep a legacy Python input owner alive through native reads
         if listed is not None:
             return listed
-    var wide_codes = codes
+    var wide_codes = List[Int64]()
+    var wide_address = 0
     if code_dtype == "<i4":
-        wide_codes = admitted_vector(n, "<i8", context)
-        labels_cast(labels_address(codes), "<i4", labels_address(wide_codes), "<i8", n, context)
-        _ = wide_codes  # keep the Python object alive through the native call above
+        var layout = NativeArrayLayout([n], 8)
+        wide_codes = List[Int64](length=layout.count, fill=0)
+        wide_address = Int(wide_codes.unsafe_ptr()) if n else 0
+        labels_cast(codes.address(), "<i4", wide_address, "<i8", n, context)
+        _ = codes
+        _ = wide_codes  # keep native widening scratch alive through the cast/gather
     if (kind == "int" or kind == "float") and k > 0:
-        var table = admitted_vector(k, "<i8" if kind == "int" else "<f8", context)
+        var layout = NativeArrayLayout([k], 8)
+        var integers = List[Int64]()
+        var reals = List[Float64]()
+        var table_address: Int
+        if kind == "int":
+            integers = List[Int64](length=layout.count, fill=0)
+            table_address = Int(integers.unsafe_ptr())
+        else:
+            reals = List[Float64](length=layout.count, fill=0)
+            table_address = Int(reals.unsafe_ptr())
         var fits = True
         for i in range(k):  # driver-loop: over the k class values into the gather table
             if kind == "int":
@@ -889,18 +942,18 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
                 if Bool(py=v < PythonObject(-9223372036854775808)) or Bool(py=v > PythonObject(9223372036854775807)):
                     fits = False
                     break
-                _I64P(unsafe_from_address=labels_address(table))[i] = Int64(Int(py=py_call(b.int, v)))
-                _ = table  # keep the Python object alive through the native call above
+                _I64P(unsafe_from_address=table_address)[i] = Int64(Int(py=py_call(b.int, v)))
             else:
-                _F64P(unsafe_from_address=labels_address(table))[i] = Float64(py=py_call(b.float, classes[i]))
-                _ = table  # keep the Python object alive through the native call above
+                _F64P(unsafe_from_address=table_address)[i] = Float64(py=py_call(b.float, classes[i]))
         if fits:
             var out = admitted_vector(n, "<i8" if kind == "int" else "<f8", context)
-            labels_gather(context, LABELS_GATHER_I64 if kind == "int" else LABELS_GATHER_F64, labels_address(table), k,
-                          labels_address(wide_codes), n, labels_address(out))
-            _ = table  # keep the Python object alive through the native call above
+            labels_gather(context, LABELS_GATHER_I64 if kind == "int" else LABELS_GATHER_F64, table_address, k,
+                          (wide_address if code_dtype == "<i4" else codes.address()), n, labels_address(out))
+            _ = integers^
+            _ = reals^
             _ = out  # keep the Python object alive through the native call above
-            _ = wide_codes  # keep the Python object alive through the native call above
+            _ = codes
+            _ = wide_codes^  # keep native widening scratch alive through the cast/gather
             return out
     # TOMBSTONE: labels_decode_labels per-row Python append loop (removed: one native list fill) deleted 2026-11-09 by lane p2-labels-lists-arrays; code recoverable at e68654a757.
     # Restore: git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch
@@ -912,8 +965,9 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
     # Python's IndexError, as the subscript did.
     if code_dtype != "<i4" and code_dtype != "<i8":
         raise Error("TypeError: mojolearn: label codes must be int32 or int64, not " + code_dtype)
-    var listed = p3_decode_list(classes, labels_address(wide_codes), 8, n)
-    _ = wide_codes  # keep the Python object alive through the native reads above
+    var listed = p3_decode_list(classes, (wide_address if code_dtype == "<i4" else codes.address()), 8, n)
+    _ = codes
+    _ = wide_codes^  # keep native widening scratch alive through list packing
     if listed is None:
         raise Error("IndexError: list index out of range")
     return listed

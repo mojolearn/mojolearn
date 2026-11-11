@@ -7,7 +7,7 @@ Closed-form symmetric-data oracles do not derive expected values from kernels.
 """
 from std.math import sqrt
 from core.host_parallel import host_parallelize
-from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, nc_binary_decision, nc_scratch_address
+from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, NcLabelCodes, nc_binary_decision, nc_scratch_address
 from core.native_descriptor_abi import NativeDescriptorCall
 from checks.native_tests.nearest_centroid_plan_suite import require
 
@@ -43,14 +43,17 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
     var priors: List[Float32] = [0.5, 0.5]
     var request = NcQueryPlan(Int(q.unsafe_ptr()), Int(centers.unsafe_ptr()), Int(stats.unsafe_ptr()),
                              Int(priors.unsafe_ptr()), 3, 2, 2)
-    var codes = List[Int32](length=3, fill=-1)
-    request.distance_labels(driver, Int(codes.unsafe_ptr()), euclidean)
-    require(codes[0] == 0 and codes[1] == 0 and codes[2] == 1, "distance labels and first tie")
-    require(request.fused(driver, "nc_labels", Int(codes.unsafe_ptr()), 0 if euclidean else 1) == 0,
+    var codes = NcLabelCodes(3)
+    codes.values[0] = -1
+    codes.values[1] = -1
+    codes.values[2] = -1
+    request.distance_labels(driver, codes.address(), euclidean)
+    require(codes.values[0] == 0 and codes.values[1] == 0 and codes.values[2] == 1, "distance labels and first tie")
+    require(request.fused(driver, "nc_labels", codes.address(), 0 if euclidean else 1) == 0,
             "fused distance finite status")
-    require(codes[0] == 0 and codes[1] == 0 and codes[2] == 1, "fused distance labels")
-    request.score_labels(driver, Int(codes.unsafe_ptr()))
-    require(codes[0] == 0 and codes[1] == 0 and codes[2] == 1, "score labels and first tie")
+    require(codes.values[0] == 0 and codes.values[1] == 0 and codes.values[2] == 1, "fused distance labels")
+    request.score_labels(driver, codes.address())
+    require(codes.values[0] == 0 and codes.values[1] == 0 and codes.values[2] == 1, "score labels and first tie")
     var scores = List[Float32](length=6, fill=0)
     var differences = List[Float32](length=3, fill=0)
     request.decision(driver, Int(scores.unsafe_ptr()))
@@ -70,11 +73,15 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
     _ = centers^
     _ = deviations^
     _ = plan^
+    _ = codes^
 
 
 def empty_case(entry: NativeDescriptorCall, unit: Int) raises:
     var words = List[Float32](length=4, fill=1)
-    var codes = List[Int32](length=1, fill=-1)
+    var codes = NcLabelCodes(1)
+    codes.values[0] = -1
+    var empty_codes = NcLabelCodes(0)
+    require(empty_codes.address() == 0, "empty code owner must retain null Array address")
     var empty = List[Float32]()
     require(nc_scratch_address(empty) == 0, "empty scratch must retain null Array address")
     var address = Int(words.unsafe_ptr())
@@ -85,15 +92,17 @@ def empty_case(entry: NativeDescriptorCall, unit: Int) raises:
     var refused = False
     try:
         if unit == 0:
-            request.distance_labels(driver, Int(codes.unsafe_ptr()), True)
+            request.distance_labels(driver, codes.address(), True)
         elif unit == 1:
-            request.score_labels(driver, Int(codes.unsafe_ptr()))
+            request.score_labels(driver, codes.address())
         else:
             request.probabilities(driver, address, 0)
     except error:
         refused = String(error) == "x_neighbors: null buffer address"
-    require(refused and codes[0] == -1, "empty query changed refusal or wrote output")
+    require(refused and codes.values[0] == -1, "empty query changed refusal or wrote output")
     _ = words^
+    _ = codes^
+    _ = empty_codes^
 
 
 def run_checks(entry: NativeDescriptorCall) raises:
