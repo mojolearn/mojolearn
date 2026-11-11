@@ -7,8 +7,8 @@
 # and X, y and the fold indices stay resident for every candidate, value,
 # size or permutation (`MselFoldRows`); the loops over candidates, folds,
 # sizes and permutations are this owner's; the estimator and the scorers are
-# the caller's objects. The score tables use the base binding's
-# `row_means_f64` / `row_stds_f64` and the permutations the same counter
+# the caller's objects. The score tables use the `row_means_f64` /
+# `row_stds_f64` passes linked in and the permutations the same counter
 # draws, so every result is unchanged.
 from std.memory import unsafe_memcpy
 from core.admitted_convert import admitted_convert_vector
@@ -38,6 +38,11 @@ from bindings.msel_common import (
 )
 from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_common import msel_signed32
+from bindings.msel_helpers_key import msel_helpers_key
+from core.msel_helpers_calls import msel_gather_i64
+# lane calltable-msel: the score-table passes both base bindings exported,
+# linked into this door instead of called through CPython.
+from core.array_helpers_impl import row_means_f64, row_stds_f64
 from bindings.family_common import FAMILY_I32P
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_cv_splitter, msel_cv_folds_admitted, msel_materialize_y, msel_device_rows_ok,
@@ -179,60 +184,51 @@ def msel_sampler_len(dists: PythonObject, n_iter: PythonObject, context: PythonO
 # ---------------------------------------------------------------- score tables
 
 
+def _score_ptr(values: List[Float64]) -> MutPointer[Float64, MutUntrackedOrigin]:
+    """The address of a score buffer the caller keeps alive past the pass."""
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(values.unsafe_ptr()))
+
+
 def msel_row_means(rows: List[List[Float64]], context: PythonObject) raises -> List[Float64]:
-    """`_row_means`: `fsum(row) / len(row)` of each row, by `row_means_f64`."""
+    """`_row_means`: `fsum(row) / len(row)` of each row, by `row_means_f64`
+    (the host pass both base bindings exported, linked into this door over
+    native buffers: no cross-module call, no Python array)."""
     var m = len(rows)
     var k = len(rows[0]) if m else 0
-    var flat = msel_new(max(m * k, 1), "<f8", context)
-    var fp = msel_pf64(flat)
-    _ = flat  # keep the Python object alive through the native call above
-    for i in range(m):  # driver-loop: over candidates
-        for j in range(k):  # driver-loop: over folds
-            fp[i * k + j] = rows[i][j]
-            _ = flat  # keep the Python object alive through the native call above
-    var out = msel_new(max(m, 1), "<f8", context)
+    var res = List[Float64](length=m, fill=0.0)
     if m and k:
-        if msel_truth(family_call(msel_entry("row_means_f64", context), PythonObject(msel_addr(flat)), PythonObject(m),
-                                  PythonObject(k), PythonObject(msel_addr(out)))):
+        var flat = List[Float64](length=m * k, fill=0.0)
+        for i in range(m):  # driver-loop: over candidates
+            for j in range(k):  # driver-loop: over folds
+                flat[i * k + j] = rows[i][j]
+        if row_means_f64(_score_ptr(flat),
+                         _score_ptr(res), m, k):
             raise Error("-inf + inf in fsum")
-        _ = flat  # keep the Python object alive through the native calls above
-        _ = out  # keep the Python object alive through the native calls above
-    var res = List[Float64]()
-    var op = msel_pf64(out)
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(m):  # driver-loop: over candidates
-        res.append(op[i])
-        _ = out  # keep the Python object alive through the native call above
+        _ = flat  # keep the storage alive through the pass above
     return res^
 
 
 def msel_row_stds(rows: List[List[Float64]], means: List[Float64], context: PythonObject) raises -> List[Float64]:
     """`_row_stds`: each row's population standard deviation about its mean
-    (`row_stds_f64`)."""
+    (`row_stds_f64`, the host pass both base bindings exported, linked into
+    this door over native buffers)."""
     var m = len(rows)
-    var res = List[Float64]()
+    var res = List[Float64](length=m, fill=0.0)
     if m == 0:
         return res^
     var k = len(rows[0])
-    var flat = msel_new(max(m * k, 1), "<f8", context)
-    var fp = msel_pf64(flat)
-    _ = flat  # keep the Python object alive through the native call above
+    if k == 0:
+        return res^
+    var flat = List[Float64](length=m * k, fill=0.0)
     for i in range(m):  # driver-loop: over candidates
         for j in range(k):  # driver-loop: over folds
-            fp[i * k + j] = rows[i][j]
-            _ = flat  # keep the Python object alive through the native call above
-    var mu = msel_f64_list(means, context)
-    var out = msel_new(m, "<f8", context)
-    _ = family_call(msel_entry("row_stds_f64", context), PythonObject(msel_addr(flat)), PythonObject(m), PythonObject(k),
-                    PythonObject(msel_addr(mu)), PythonObject(msel_addr(out)))
-    _ = flat  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = mu  # keep the Python object alive through the native call above
-    var op = msel_pf64(out)
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(m):  # driver-loop: over candidates
-        res.append(op[i])
-        _ = out  # keep the Python object alive through the native call above
+            flat[i * k + j] = rows[i][j]
+    var mu = means.copy()
+    row_stds_f64(_score_ptr(flat),
+                 _score_ptr(mu),
+                 _score_ptr(res), m, k)
+    _ = flat  # keep the storage alive through the pass above
+    _ = mu
     return res^
 
 
@@ -488,13 +484,13 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
         for f in range(nf):  # driver-loop: over folds
             lengths.append(Int(py=folds[f][0].size))
         var perms = rng.permutation_rows(lengths, context)
+        var key = msel_helpers_key(context)
         for f in range(nf):  # driver-loop: over folds (one device gather each)
             var tr = msel_index_i64(folds[f][0], context)
             var size = lengths[f]
             if size > 0:
                 var out = msel_new(size, "<i8", context)
-                _ = family_call(msel_entry("gather_i64", context), PythonObject(msel_addr(tr)), PythonObject(size),
-                                PythonObject(msel_addr(perms[f])), PythonObject(size), PythonObject(msel_addr(out)))
+                _ = msel_gather_i64(key, msel_addr(tr), size, msel_addr(perms[f]), size, msel_addr(out))
                 _ = tr  # keep the Python object alive through the native call above
                 _ = out  # keep the Python object alive through the native call above
                 tr = out
@@ -769,7 +765,8 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var random_state = _search_seed(args[7], context)
     var base = PythonObject(None)
     if not msel_sabotage():
-        _ = msel_entry("gather_i64", context)
+        # admission of the helper table the permutation gathers use
+        _ = msel_helpers_key(context)
         base = _perm_base(y, context)
         if base is not None and Int(py=base.size) < 2:
             base = PythonObject(None)
