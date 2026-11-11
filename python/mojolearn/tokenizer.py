@@ -103,20 +103,6 @@ def _identity_of_handle(m, handle):
     return _TOKENIZER_NATIVE.tokenizer_public_call('identity_handle', (handle,), _TOKENIZER_CONTEXT)
 
 
-def _native(fn, *args, prefix="mojolearn: "):
-    """Call a binding entry; a refusal it raises as `ValueError: ...` or
-    `TypeError: ...` (the Mojo side names the Python type) is re-raised as
-    that type with `prefix`."""
-    try:
-        return fn(*args)
-    except Exception as exc:
-        msg = str(exc)
-        for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)):  # glue: maps two native error prefixes
-            if msg.startswith(name):
-                raise kind(prefix + msg[len(name):]) from None
-        raise
-
-
 def _binding():
     return _Entries(_backend.load_host_module(_EXTENSION))  # import-time: tokenizer host binding module loaded once by load_host_module (text input step)
 

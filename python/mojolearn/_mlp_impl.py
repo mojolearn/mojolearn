@@ -12,110 +12,30 @@ The checkpoint bytes are unchanged: the same canonical JSON/hex envelope and
 SHA-256 as before, so files written by earlier releases load here and files
 written here load there.
 
-The module-level helpers below (`_validate_state`, `_decode_state`, ...) serve
-legacy callers; the public trainer and MLPInference now use native validation.
+State, checkpoint and schedule validation are native; the Python copies
+(`_validate_state`, `_decode_state`, `_schedule`, ...) were deleted
+(pyout-neural-lm, 2026-11-11). The helpers left here (`_array`, `_batch`,
+`_encode_state`, `_canonical`) are read by tests only.
 """
 import json
-from . import _portable_math as math
-import operator
 import os
-import struct
 
 from . import _backend, _linalg_impl, _training_impl
 from ._array import Array
-from ._buffer import as_f32_c, as_i32_c, all_finite, frombytes
+from ._buffer import as_f32_c, as_i32_c, all_finite
 from ._bufcheck import is_int32, is_native_f32, le_bytes, probe
 
 _NAMES = ('weight1', 'bias1', 'weight2', 'bias2')
 _SHAPES = ((16, 8), (16,), (3, 16), (3,))
 _TOTAL = 195
-_MAX_STEP = (1 << 31) - 1
 _STATE_SCHEMA = 'mojolearn.small-mlp-trainer.v1'
 _FILE_SCHEMA = 'mojolearn.small-mlp-checkpoint.v1'
 _FILE_LIMIT = 32768
-#: `numpy.finfo(numpy.float32).max`, as a Python float.
-_F32_MAX = 3.4028234663852886e+38
 
 
 def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'),
                       ensure_ascii=True, allow_nan=False).encode('ascii')
-
-
-def _schedule(value):
-    if not isinstance(value, dict) or not value:
-        raise ValueError('SmallMLPTrainer data_schedule must be a nonempty JSON object')
-    remaining = [128]
-
-    def visit(item, depth=0):
-        remaining[0] -= 1
-        if depth > 8 or remaining[0] < 0:
-            raise ValueError('SmallMLPTrainer data_schedule is too complex')
-        if type(item) is dict:
-            if any(type(key) is not str for key in item):  # glue: validates schedule config keys
-                raise ValueError('SmallMLPTrainer data_schedule keys must be strings')
-            if len(item) > 128 or any(len(key) > 2048 for key in item):  # glue: validates schedule config keys
-                raise ValueError('SmallMLPTrainer data_schedule object is too large')
-            for child in item.values():  # glue: walks schedule config tree
-                visit(child, depth + 1)
-        elif type(item) is list:
-            if len(item) > 128:
-                raise ValueError('SmallMLPTrainer data_schedule list is too large')
-            for child in item:  # glue: walks schedule config tree
-                visit(child, depth + 1)
-        elif type(item) is str and len(item) > 2048:
-            raise ValueError('SmallMLPTrainer data_schedule string is too large')
-        elif type(item) is int and item.bit_length() > 4096:
-            raise ValueError('SmallMLPTrainer data_schedule integer is too large')
-        elif item is not None and type(item) not in (str, int, float, bool):
-            raise ValueError('SmallMLPTrainer data_schedule must contain JSON values')
-    visit(value)
-    try:
-        encoded = _canonical(value)
-    except (ValueError, OverflowError) as exc:
-        raise ValueError('SmallMLPTrainer data_schedule must be finite JSON') from exc
-    if len(encoded) > 2048:
-        raise ValueError('SmallMLPTrainer data_schedule exceeds 2048 bytes')
-    return json.loads(encoded)
-
-
-def _is_bool(value):
-    # `bool` and NumPy's `bool_` (which is not a `bool` subclass), judged by
-    # name so that numpy need not be importable here.
-    return isinstance(value, bool) or type(value).__name__ == 'bool_'
-
-
-def _round_f32(value):
-    # DEVIATION 2423: `float(np.float32(value))` is one round-to-nearest-even
-    # to binary32 and back, which is exactly what `struct` does.
-    return struct.unpack('<f', struct.pack('<f', value))[0]
-
-
-def _scalar(value, name):
-    if _is_bool(value):
-        raise ValueError('SmallMLPTrainer ' + name + ' must be a finite float32 scalar')
-    try:
-        value = float(value)
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError('SmallMLPTrainer ' + name + ' must be a scalar') from exc
-    if not math.isfinite(value) or abs(value) > _F32_MAX:
-        raise ValueError('SmallMLPTrainer ' + name + ' must be finite float32')
-    return _round_f32(value)
-
-
-def _config(lr, betas, eps, weight_decay):
-    try:
-        beta1, beta2 = betas
-    except (TypeError, ValueError) as exc:
-        raise ValueError('SmallMLPTrainer betas must contain two scalars') from exc
-    result = {name: _scalar(value, name) for name, value in  # glue: validates five scalar hyperparameters
-              (('lr', lr), ('beta1', beta1), ('beta2', beta2),
-               ('eps', eps), ('weight_decay', weight_decay))}
-    if result['lr'] <= 0 or result['eps'] <= 0 or result['weight_decay'] < 0:
-        raise ValueError('SmallMLPTrainer requires lr > 0, eps > 0 and weight_decay >= 0')
-    if not 0 <= result['beta1'] < 1 or not 0 <= result['beta2'] < 1:
-        raise ValueError('SmallMLPTrainer betas must remain in [0, 1) in float32')
-    return result
 
 
 def _array(value, shape, name, dtype='<f4'):
@@ -171,43 +91,6 @@ def _require_mode():
     if mode not in ('identical', 'fast') or _backend.numeric_mode() != mode:
         raise RuntimeError('SmallMLPTrainer requires process-selected IDENTICAL or FAST mode; select it before use')
     return mode
-
-
-def _validate_state(state):
-    required = {'schema', 'architecture', 'numeric_mode', 'parameter_order',
-                'weights', 'optimizer', 'config', 'data_schedule'}
-    if not isinstance(state, dict) or set(state) != required:
-        raise ValueError('SmallMLPTrainer state has missing or unknown fields')
-    if (state['schema'] != _STATE_SCHEMA or state['architecture'] != [8, 16, 3]
-            or state['numeric_mode'] != _require_mode() or state['parameter_order'] != list(_NAMES)):
-        raise ValueError('SmallMLPTrainer state schema/architecture/mode/order mismatch')
-    if not isinstance(state['weights'], dict) or set(state['weights']) != set(_NAMES):
-        raise ValueError('SmallMLPTrainer state requires all four named parameters')
-    weights = [_array(state['weights'][name], shape, name) for name, shape in zip(_NAMES, _SHAPES)]  # glue: validates each named weight
-    cfg = state['config']
-    if not isinstance(cfg, dict) or set(cfg) != {'lr', 'beta1', 'beta2', 'eps', 'weight_decay'}:
-        raise ValueError('SmallMLPTrainer state optimizer configuration mismatch')
-    config = _config(cfg['lr'], (cfg['beta1'], cfg['beta2']), cfg['eps'], cfg['weight_decay'])
-    opt = state['optimizer']
-    if not isinstance(opt, dict) or set(opt) != {'kind', 'step', 'm', 'v', 'flags'} or opt['kind'] != 'AdamW':
-        raise ValueError('SmallMLPTrainer state optimizer mismatch')
-    if _is_bool(opt['step']):
-        raise ValueError('SmallMLPTrainer step must be an integer')
-    try:
-        step = operator.index(opt['step'])
-    except TypeError as exc:
-        raise ValueError('SmallMLPTrainer step must be an integer') from exc
-    if not 0 <= step <= _MAX_STEP:
-        raise ValueError('SmallMLPTrainer step is outside its supported range')
-    moments = dict(step=step, m=_array(opt['m'], (_TOTAL,), 'm'),
-                   v=_array(opt['v'], (_TOTAL,), 'v'),
-                   flags=_array(opt['flags'], (4,), 'flags', '<i4'))
-    # DEVIATION 2425: `np.any(v < 0)` and the binary-flags test are min/max
-    # scans in the core Mojo helpers (Array.min/max).
-    flags = Array.from_buffer(moments['flags'])
-    if Array.from_buffer(moments['v']).min() < 0 or flags.min() < 0 or flags.max() > 1:
-        raise ValueError('SmallMLPTrainer state requires nonnegative v and binary flags')
-    return weights, moments, config, _schedule(state['data_schedule'])
 
 
 class SmallMLPTrainer:
@@ -393,44 +276,6 @@ def _encode_state(state):
     for key in ('m', 'v', 'flags'):  # glue: encodes three optimizer arrays
         state['optimizer'][key] = _encode_array(state['optimizer'][key])
     return state
-
-
-def _decode_array(value, shape, dtype):
-    if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
-            or value['dtype'] != dtype or value['shape'] != list(shape)
-            or not isinstance(value['hex'], str)):
-        raise ValueError('SmallMLPTrainer checkpoint tensor descriptor mismatch')
-    cells = math.prod(shape)  # glue: product of shape dims
-    if len(value['hex']) != cells * 8:
-        raise ValueError('SmallMLPTrainer checkpoint tensor length mismatch')
-    try:
-        raw = bytes.fromhex(value['hex'])
-    except ValueError as exc:
-        raise ValueError('SmallMLPTrainer checkpoint tensor is not hexadecimal') from exc
-    if len(raw) != cells * 4:
-        raise ValueError('SmallMLPTrainer checkpoint tensor byte count mismatch')
-    # `np.frombuffer(raw, dtype='<f4').astype(native, copy=True)`:
-    # `_buffer.frombytes` reads the little-endian bytes into a fresh
-    # native Array (DEVIATION 2427).
-    return frombytes(raw, dtype, tuple(shape))
-
-
-def _decode_state(payload):
-    if not isinstance(payload, dict):
-        raise ValueError('SmallMLPTrainer checkpoint payload must be an object')
-    # Bound expected descriptors before looking at any caller-controlled shape.
-    try:
-        if not isinstance(payload['weights'], dict) or set(payload['weights']) != set(_NAMES):
-            raise ValueError('SmallMLPTrainer checkpoint parameter registry mismatch')
-        payload['weights'] = {name: _decode_array(payload['weights'][name], shape, '<f4')
-                              for name, shape in zip(_NAMES, _SHAPES)}  # glue: decodes each named weight
-        for key in ('m', 'v', 'flags'):  # glue: decodes three optimizer arrays
-            payload['optimizer'][key] = _decode_array(
-                payload['optimizer'][key], (4,) if key == 'flags' else (_TOTAL,),
-                '<i4' if key == 'flags' else '<f4')
-    except (KeyError, TypeError) as exc:
-        raise ValueError('SmallMLPTrainer checkpoint state is incomplete') from exc
-    return payload
 
 
 #: The compiled training entries the native owner calls, resolved once at import.

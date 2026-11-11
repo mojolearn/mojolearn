@@ -108,7 +108,6 @@ from fractions import Fraction
 
 import ctypes
 import operator
-import numbers
 from ._arrays import _addr, _addr_ro
 
 from . import _backend
@@ -1156,21 +1155,6 @@ class Generator(object):
         microbatches. Raises `RuntimeError` when the 32-bit counter is exhausted.
         """
         return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
-
-    @staticmethod
-    def _shape(shape):
-        if isinstance(shape, numbers.Integral):
-            shape = (int(shape),)
-        else:
-            shape = tuple(int(d) for d in shape)  # glue: shape tuple of ints
-        n = 1
-        for d in shape:  # glue: validates each shape dimension
-            if d < 1:
-                raise ValueError(
-                    "mojolearn.Generator: shape must be positive, got %r"
-                    % (shape,))
-            n *= d
-        return shape, n
 
     def uniform(self, shape, low=0.0, high=1.0):
         """Draw float32 values uniform in [low, high).

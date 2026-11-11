@@ -50,7 +50,7 @@ def _poison(patch):
     for route in causal_lm._NATIVE_CONTEXT["block_classes"].values():
         for cls in route.values():
             patch.setattr(cls, "__init__", _forbidden)
-    for name in ("_route", "_block_classes", "_block_kwargs", "_float_weight"):
+    for name in ("_route", "_block_classes", "_float_weight"):
         patch.setattr(causal_lm, name, _forbidden)
     for name in ("binding", "load_host_module", "default_mode", "vendor"):
         patch.setattr(_backend, name, _forbidden)
