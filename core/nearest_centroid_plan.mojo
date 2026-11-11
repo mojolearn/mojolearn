@@ -171,8 +171,8 @@ struct NcFitPlan(Movable):
         self.split = split
         self.counts = List[Float32](length=classes, fill=0)
         self.wide_counts = List[Int64](length=classes, fill=0)
-        self.centroids = List[Float32](length=classes * features, fill=0)
-        self.dataset_centroid = List[Float32](length=features if euclidean and not split else 0, fill=0)
+        self.centroids = List[Float32]()
+        self.dataset_centroid = List[Float32]()
 
     def count(mut self, driver: NcDriver, labels: Int) raises:
         var info = List[Int32](length=1, fill=0)
@@ -184,6 +184,9 @@ struct NcFitPlan(Movable):
         _ = info^
 
     def statistics(mut self, driver: NcDriver, x: Int, labels: Int, stats: Int) raises -> Int:
+        # Priors have already validated and class_prior_ has been published.
+        # Rejected priors never allocate the potentially large centroid scratch.
+        self.centroids = List[Float32](length=self.classes * self.features, fill=0)
         var f: InlineArray[Float64, 0] = []
         if self.euclidean:
             if self.split:
@@ -200,6 +203,7 @@ struct NcFitPlan(Movable):
         var status = List[Int32](length=1, fill=0)
         var p: InlineArray[Int, 4] = [self.rows, self.features, self.classes, Int(status.unsafe_ptr())]
         if self.euclidean and not self.split:
+            self.dataset_centroid = List[Float32](length=self.features, fill=0)
             var a: InlineArray[Int, 6] = [x, labels, Int(self.counts.unsafe_ptr()),
                 nc_scratch_address(self.centroids), stats, nc_scratch_address(self.dataset_centroid)]
             _ = driver.run("nc_stats", a, p, f)
