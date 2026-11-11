@@ -1968,7 +1968,7 @@ FAMILIES = (
             "core/dense_coo.mojo", "core/msel_host.mojo",
         ),
         exports=(
-            "labels_native_api_v2",
+            "labels_native_api_v2", "labels_native_api_v3",
             # Native C-entry registrations are part of the exported ABI too.
             "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",

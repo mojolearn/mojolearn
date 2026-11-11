@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native-only label requests; v2 admission retains the v1 wire slot layout."""
+"""Native label requests; v3 appends threshold without changing v1/v2 slots."""
 from std.memory import bitcast
 from core.hotpath_impl import HpStat, HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -8,8 +8,8 @@ from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 
 # v1 providers may construct Python values and require the GIL. A client that
 # releases it must require v2, even though operation and buffer slots agree.
-comptime LABELS_NATIVE_ABI_NAME = "mojolearn.labels.v2"
-comptime LABELS_NATIVE_FACTORY = "labels_native_api_v2"
+comptime LABELS_NATIVE_ABI_NAME = "mojolearn.labels.v3"
+comptime LABELS_NATIVE_FACTORY = "labels_native_api_v3"
 comptime LABELS_OP_MODE = 0
 comptime LABELS_OP_CAPABILITIES = 1
 comptime LABELS_OP_PREPARE_TARGETS = 2
@@ -20,7 +20,8 @@ comptime LABELS_OP_GATHER_I32 = 6
 comptime LABELS_OP_GATHER_I64 = 7
 comptime LABELS_OP_GATHER_F64 = 8
 comptime LABELS_OP_CLASS_RATIO_F64 = 9
-comptime LABELS_NATIVE_OPERATION_COUNT = 10
+comptime LABELS_OP_THRESHOLD_I64 = 10
+comptime LABELS_NATIVE_OPERATION_COUNT = 11
 comptime LABELS_CAP_DEVICE = 1
 
 
@@ -70,6 +71,18 @@ struct LabelsRatioRequest(Copyable, Movable):
     var mode: Int
 
 
+@fieldwise_init
+struct LabelsThresholdRequest(Copyable, Movable):
+    var source: Int
+    var dst: Int
+    var code: Int
+    var count: Int
+    var strict: Bool
+    var below: Int64
+    var above: Int64
+    var threshold: Float64
+
+
 trait LabelsNativeKernels:
     @staticmethod
     def mode() -> Int: ...
@@ -85,6 +98,8 @@ trait LabelsNativeKernels:
     def gather(kind: Int, r: LabelsGatherRequest) raises: ...
     @staticmethod
     def ratio(r: LabelsRatioRequest) raises -> Int: ...
+    @staticmethod
+    def threshold(r: LabelsThresholdRequest) raises -> Int: ...
 
 
 def labels_stat_store(value: HpStat, address: Int) raises -> Int:
@@ -116,7 +131,7 @@ def labels_stat_load(kind: Int, address: Int) raises -> HpStat:
 def labels_native_dispatch[K: LabelsNativeKernels](operation: Int, aa: Int, na: Int,
     pp: Int, np: Int, ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) -> Int:
     try:
-        if result == 0 or nf != 0:
+        if result == 0 or nf != (1 if operation == LABELS_OP_THRESHOLD_I64 else 0) or (nf > 0 and ff == 0):
             raise Error("labels native ABI: invalid result or scalar span")
         if na < 0 or np < 0 or (na > 0 and aa == 0) or (np > 0 and pp == 0):
             raise Error("native descriptor: null or invalid word span")
@@ -147,6 +162,12 @@ def labels_native_dispatch[K: LabelsNativeKernels](operation: Int, aa: Int, na: 
             if na != 2 or np != 3:
                 raise Error("labels native ABI: class_ratio_f64 takes 2 addresses and 3 words")
             value = K.ratio(LabelsRatioRequest(a[0], a[1], p[0], p[1], p[2]))
+        elif operation == LABELS_OP_THRESHOLD_I64:
+            if na != 2 or np != 5:
+                raise Error("labels native ABI: threshold takes 2 addresses, 5 words and 1 scalar")
+            var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
+            value = K.threshold(LabelsThresholdRequest(a[0], a[1], p[0], p[1], p[2] != 0,
+                Int64(p[3]), Int64(p[4]), f[0]))
         else:
             raise Error("labels native ABI: unknown operation")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
@@ -159,6 +180,12 @@ def labels_native_dispatch[K: LabelsNativeKernels](operation: Int, aa: Int, na: 
 @fieldwise_init
 struct LabelsNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
+
+    def threshold(self, r: LabelsThresholdRequest) raises -> Int:
+        var a: InlineArray[Int, 2] = [r.source, r.dst]
+        var p: InlineArray[Int, 5] = [r.code, r.count, Int(r.strict), Int(r.below), Int(r.above)]
+        var f: InlineArray[Float64, 1] = [r.threshold]
+        return native_descriptor_call_fixed(self.entry, LABELS_OP_THRESHOLD_I64, a, p, f)
 
     def metadata(self, operation: Int) raises -> Int:
         var a: InlineArray[Int, 0] = []

@@ -9,11 +9,12 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hotpath_impl import (
     HOTPATH_SABOTAGE, HpStat, HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE,
-    cast_elements, reduce_stat, gather_i32,
+    cast_elements, reduce_stat, gather_i32, threshold_labels_i64,
 )
 from core.hotpath_device import (
     HPD_MAX_N, HPD_F32, HPD_F64, HPD_I32, HPD_I64, HPD_U32, HPD_U8,
     device_gather_i32, device_isum, device_all_integral, device_reduce_arg, device_cast_elements,
+    device_threshold_labels_i64,
 )
 from core.hotpath_device_impl import device_all_finite_span
 from core.neural_context import process_ctx
@@ -30,6 +31,19 @@ comptime LABELS_DEVICE_INPUT = not HOTPATH_SABOTAGE
 comptime LABELS_DEVICE_CONTEXT = (
     "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
 )
+
+
+def labels_device_threshold_eligible(source: Int, code: Int, count: Int, dst: Int) -> Bool:
+    return Bool(LABELS_DEVICE_ELEM) and count >= 1 and count <= HPD_MAX_N and (code == HPD_F32 or code == HPD_F64) and source != 0 and dst != 0
+
+
+def labels_device_threshold(source: Int, code: Int, count: Int, threshold: Float64,
+    strict: Bool, below: Int64, above: Int64, dst: Int) raises -> Int:
+    if labels_device_threshold_eligible(source, code, count, dst):
+        var ctx = process_ctx[LABELS_DEVICE_CONTEXT]()
+        device_threshold_labels_i64(ctx, source, code, count, threshold, strict, below, above, dst)
+        return 0
+    return threshold_labels_i64(source, code, count, threshold, strict, below, above, dst)
 
 
 def labels_device_gather_i32(table: Int, classes: Int, codes: Int, count: Int, dst: Int) raises -> Int:

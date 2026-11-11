@@ -23,21 +23,26 @@ if isinstance(base, str):
 
 v1 = base.labels_native_api_v1
 v2 = base.labels_native_api_v2
+v3 = base.labels_native_api_v3
 valid = ctypes.pythonapi.PyCapsule_IsValid
 valid.argtypes = (ctypes.py_object, ctypes.c_char_p)
 valid.restype = ctypes.c_int
 assert valid(v1(), b"mojolearn.labels.v1") == 1
 assert valid(v2(), b"mojolearn.labels.v2") == 1
+assert valid(v3(), b"mojolearn.labels.v3") == 1
 
 variant = sys.argv[1]
 if variant == "old_v1":
     # This remains an exact compiled factory of the same extension. Admission
     # must reject its old capsule identity before any GIL-released operation.
-    base.labels_native_api_v2 = v1
+    base.labels_native_api_v3 = v1
+    expected = "neural native ABI: invalid capsule or version"
+elif variant == "old_v2":
+    base.labels_native_api_v3 = v2
     expected = "neural native ABI: invalid capsule or version"
 else:
-    del base.labels_native_api_v2
-    expected = "TypeError: native provider requires compiled entry labels_native_api_v2"
+    del base.labels_native_api_v3
+    expected = "TypeError: native provider requires compiled entry labels_native_api_v3"
 try:
     try:
         entry(0, (np.array([3, 1, 3], dtype=np.int64), 0), context)
@@ -46,12 +51,12 @@ try:
     else:
         raise AssertionError("old or missing provider was accepted")
 finally:
-    base.labels_native_api_v2 = v2
+    base.labels_native_api_v3 = v3
 print("PASS native label provider admission", variant)
 '''
 
 
-@pytest.mark.parametrize("variant", ["old_v1", "missing_v2"])
+@pytest.mark.parametrize("variant", ["old_v1", "old_v2", "missing_v3"])
 def test_label_provider_requires_native_only_version_before_execution(variant):
     result = subprocess.run(
         [sys.executable, "-c", textwrap.dedent(_SCRIPT), variant],

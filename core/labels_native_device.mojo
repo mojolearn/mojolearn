@@ -10,7 +10,7 @@ from core.label_rows_device import LRD_MAX_N, device_argmax_rows
 from core.neural_context import process_ctx
 from core.label_device_steps import (
     LABELS_DEVICE_CONTEXT, labels_device_cast, labels_device_reduce,
-    labels_device_gather_i32, labels_device_try_finite,
+    labels_device_gather_i32, labels_device_try_finite, labels_device_threshold,
 )
 from core.labels_prepare import LabelsPreparationKernels, labels_prepare_targets
 from core.labels_admission import (
@@ -18,12 +18,16 @@ from core.labels_admission import (
 )
 from core.labels_native_api import (
     LABELS_CAP_DEVICE, LabelsNativeKernels, LabelsPrepareRequest, LabelsReduceRequest,
-    LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest, labels_native_dispatch,
+    LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest, LabelsThresholdRequest, labels_native_dispatch,
 )
 from core.native_descriptor_abi import NativeDescriptorError
 
 
 struct LabelsDeviceKernels(LabelsNativeKernels, LabelsPreparationKernels):
+    @staticmethod
+    def threshold(r: LabelsThresholdRequest) raises -> Int:
+        return labels_device_threshold(r.source, r.code, r.count, r.threshold, r.strict, r.below, r.above, r.dst)
+
     @staticmethod
     def mode() -> Int:
         return Int(GLOBAL_NUMERIC_MODE)
