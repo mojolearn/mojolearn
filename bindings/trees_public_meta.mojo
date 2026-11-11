@@ -1117,14 +1117,22 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
         # `_column_means(b, Xa, None)` (`_means`: lm_col_sums, lm_means_finish)
         # then `_center` (lm_center), through the ridge multi table.
         var sums = _zeros(d, context)
-        rm_col_sums(key, trees_address(Xa), trees_address(sums), n, d)
+        var xa_addr = trees_address(Xa)
+        var sums_addr = trees_address(sums)
+        with GILReleased(Python()):  # the former ridge exports released it (lane perf-audit-20261111)
+            rm_col_sums(key, xa_addr, sums_addr, n, d)
         var m64 = _zeros(d, context)
         xm = admitted_vector(d, "<f4", context)
-        rm_means_finish(key, trees_address(sums), trees_address(m64), trees_address(xm), d, n, False, 0.0)
+        var m64_addr = trees_address(m64)
+        var xm_addr = trees_address(xm)
+        with GILReleased(Python()):
+            rm_means_finish(key, sums_addr, m64_addr, xm_addr, d, n, False, 0.0)
         _ = m64  # keep the store alive through the native call above
         _ = sums  # keep the store alive through the native calls above
         work_x = admitted_array(Python.tuple(n, d), "<f4", context)
-        rm_center(key, trees_address(Xa), trees_address(xm), trees_address(work_x), n, d)
+        var work_addr = trees_address(work_x)
+        with GILReleased(Python()):
+            rm_center(key, xa_addr, xm_addr, work_addr, n, d)
         _ = work_x  # keep the store alive through the native call above
         _ = Xa  # keep the store alive through the native calls above
     else:
@@ -1134,8 +1142,14 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var icpt32 = admitted_vector(m, "<f4", context)
     # UNPACK: the member's alpha as Python's float() reads it.
     var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, "alpha", PythonObject(1.0))))
-    rm_fit(key, trees_address(work_x), trees_address(Ya), trees_address(coef), trees_address(ymean), n, d, m, alpha,
-           intercept, trees_address(xm) if intercept else 0, trees_address(icpt32) if intercept else 0)
+    var fit_x = trees_address(work_x)
+    var fit_y = trees_address(Ya)
+    var fit_coef = trees_address(coef)
+    var fit_ymean = trees_address(ymean)
+    var fit_xm = trees_address(xm) if intercept else 0
+    var fit_icpt = trees_address(icpt32) if intercept else 0
+    with GILReleased(Python()):  # the device ridge program over every target (data-sized)
+        rm_fit(key, fit_x, fit_y, fit_coef, fit_ymean, n, d, m, alpha, intercept, fit_xm, fit_icpt)
     _ = xm  # keep the store alive through the native call above
     _ = Ya  # keep the store alive through the native call above
     _ = icpt32  # keep the Python object alive through the native call above
@@ -1209,8 +1223,14 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
-        rm_predict(_estimators_key(table), trees_address(Xa), trees_address(mr[0]), trees_address(mr[1]),
-                   trees_address(out), n, _cols(Xa), outputs)
+        var rm_key = _estimators_key(table)
+        var p_x = trees_address(Xa)
+        var p_coef = trees_address(mr[0])
+        var p_icpt = trees_address(mr[1])
+        var p_out = trees_address(out)
+        var p_cols = _cols(Xa)
+        with GILReleased(Python()):  # the former ridge_predict_multi export released it
+            rm_predict(rm_key, p_x, p_coef, p_icpt, p_out, n, p_cols, outputs)
         _ = mr  # keep the coef and intercept stores alive through the native call above
         _ = out  # keep the Python object alive through the native call above
         _ = Xa  # keep the Python object alive through the native call above
