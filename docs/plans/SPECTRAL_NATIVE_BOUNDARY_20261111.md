@@ -150,3 +150,28 @@ iterations. Preserve original assignment workloads/options; no tests executed
 by this lane. Additional roots: `_mojolearn_x_cluster` and host, plus the
 family runtime closure. Source audit: `E/spectral-native-owner/assignment-source-audit.json`.
 RBF/COO/kNN preparation remains the next staged execution transport.
+
+## Native RBF cell plan
+
+`core/spectral_affinity_plan.mojo::spectral_rbf_affinity(entry, request)` now
+owns the existing RBF driver chain. `SpectralRBFRequest` fields are source,
+destination, rows, features, gamma and resident. Reuse the existing x_decomp
+native descriptor: its image capability preserves the default resident route.
+Host/device numerical cells and switches are unchanged. The boundary pins the
+actual provider and both input/output Arrays across the complete native call.
+
+Removed: Python squared/scaled/zero scratch Arrays, parameter lists, the handle
+list and `_cells_free`, and compiled callable dispatch for each cell. Native
+Lists own host scratch; a native operation owner returns the five device buffers
+in the same ascending allocation order, also on errors. The plan performs the
+same one input upload, one constant upload and one final download. It adds no
+numerical loop, fused replacement or copy. All scalar rounding remains inside
+the existing descriptor operations.
+
+Pure-native tests can call the plan with the existing x_decomp host/device API
+entry or a native recording entry to inspect allocation/error cleanup. Original
+RBF numerical workloads remain required; no execution by this lane. Additional
+build closure is the existing x_decomp descriptor already imported by the
+family runtime, not a new provider export. Source evidence:
+`E/spectral-native-owner/rbf-source-audit.json`. COO and precomputed-kNN
+preparation, shared public metadata/admission and routed tuples remain staged.
