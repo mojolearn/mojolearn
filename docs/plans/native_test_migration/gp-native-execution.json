@@ -1,6 +1,6 @@
 {
-  "family": "GaussianProcessRegressor native execution, first tranche",
-  "status": "Authored CPU7/GPU8; not compiled or executed by lane",
+  "family": "GaussianProcessRegressor native execution",
+  "status": "Authored CPU13/GPU14; not compiled or executed by lane",
   "dependencies": {
     "typed_api_provider": "7f5f0bf795",
     "independent_reference_inputs": "b469feccbe",
@@ -58,20 +58,42 @@
       "source": "Existing tuned pointer and resident query routes",
       "workload": "Same original16x2 surface data, kernel, settings and recovery bound",
       "checks": "Actual pointer fit/query and resident lease query respectively; ordinary covariance path retained; lease closes once before named model buffers die"
+    },
+    {
+      "unit": "CPU7-10/GPU8-11",
+      "source": "test_gp_optimizer.py::arm_gradient",
+      "workload": "Original seed4/40x3; Constant1.5*RBF[.8,1.2,2]+White.2; Constant1*Matern1.1 nu.5+White.1; Constant.7*Matern[1,.6,1.4] nu1.5+White.1; Matern.9 nu2.5+Constant.3+White.2",
+      "checks": "Actual native analytic gradient and native theta conversion/perturbation; original central h1e-2 with normalized error<5e-3; independent Float64 analytic gradient normalized error<1e-3 and LMLerror<1e-3*(abs(ref)+1). CPU perturbations parallel; GPU perturbations ordered."
+    },
+    {
+      "unit": "CPU11/GPU12",
+      "source": "test_gp_optimizer.py::arm_optimize",
+      "workload": "Original seed5/48x3, Constant1*RBF1+White.1, fmin_l_bfgs_b, default bounds1e-5..1e5, no restarts/key0, alpha2^-20",
+      "checks": "Actual optimizer takes positive steps and improves original start; selected native parameters are admitted Float32 values; returned run/fit/re-evaluated likelihoods agree as in original assertion; guarded native spans. No repeated-fit identity campaign."
+    },
+    {
+      "unit": "CPU12/GPU13",
+      "source": "test_gp_optimizer.py::arm_restarts",
+      "workload": "Original seed6/48x3, Constant1*Matern[1,1,1]nu2.5+White.1, original2restarts/key7/default bounds/alpha",
+      "checks": "Three saved starts, selected minimum negative likelihood/earliest tie, finite selected objective, fit/re-evaluated likelihood consistency; retain permitted failed non-selected starts rather than require all starts to converge."
     }
   ],
   "additional_independent_oracles": "All posterior graphs also compare NumPy Float64 mean (atol2e-3/rtol2e-4) and covariance (atol2e-3). These extend independent coverage to the original workloads; they are not weakened replacements for prior failures. The strict original surface/diagonal/sample bounds are retained separately. No saved product output or old-version bits are references.",
   "storage_checks": "All raw result spans have prefix/suffix guards; borrowed training/target/query values are checked unchanged. Named owners survive every synchronous descriptor call and resident cleanup. Flat List captures only; DBSCAN blocked and original IPCA compiler reproductions are untouched.",
   "parallel_plan": "CPU independent graphs use host_parallelize; independent oracle cells and every pairwise-reduction level use the same host policy. GPU graphs run one at a time on the physical GPU due the separately reproduced unsupported concurrent shared-context submission; kernels remain parallel. This does not clear that concurrency failure.",
   "compile_flags": {
-    "both": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
-    "cpu_additional": ["-D MOJOLEARN_COLUMN_CPU=1"]
+    "both": [
+      "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+      "-I ."
+    ],
+    "cpu_additional": [
+      "-D MOJOLEARN_COLUMN_CPU=1"
+    ]
   },
   "remaining": [
     "Typed request-wire/envelope/error-propagation contracts",
     "Native production normalization via final scaler dependency; normalized Python assertions stay",
-    "Original four40x3 gradient and central-difference workloads",
-    "Original48x3 optimizer and restart workloads",
+    "Public fixed-kernel/no-free-parameter optimizer bypass and kernel object publication remain Python until native plan coverage is available",
     "Binary/all-member classifier fit/query/combine and native owner-state coverage",
     "Native source tests compile/run by root, followed by reviewed Python numerical-only cleanup"
   ],
