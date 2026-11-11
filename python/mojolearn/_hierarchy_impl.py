@@ -48,8 +48,8 @@ _METRICS = {
     "l2": DISTANCE_L2_SQRT_EXPANDED,
 }
 
-# The compiled family owner (bindings/cluster_native.mojo): predict is one
-# native call, handed the binding `_bind` resolves; it reads this table.
+# Public operations enter the compiled Agglomerative owner once. The metric
+# dictionary above is retained for the saved-model schema below.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.connect_bindings("_mojolearn_estimators", "_mojolearn_solver", "_mojolearn_x_cluster", "_mojolearn_x_neighbors")
 
@@ -59,16 +59,8 @@ _native_family_bridge.connect_bindings("_mojolearn_estimators", "_mojolearn_solv
 _ALL_METRICS = {"euclidean": -1, "l2": -1, "l1": 1, "manhattan": 1, "cityblock": 1,
                 "cosine": 4, "precomputed": 5}
 
-#: `bodies.LINK_*`.
-_LINKAGES = {"ward": 0, "complete": 1, "average": 2, "single": 3}
-
-# `cuvs/cluster/agglomerative.hpp::Linkage`, as cuML's Python spells it.
-_CONNECTIVITIES = {"pairwise": 0, "knn": 1}
-
-_native_family_bridge.tables(family_agglo_predict_metrics=dict(_METRICS),
-                             family_cfb_agglo_all_metrics=dict(_ALL_METRICS),
-                             family_cfb_agglo_linkages=dict(_LINKAGES),
-                             family_cfb_agglo_connectivities=dict(_CONNECTIVITIES))
+# Fit linkage/connectivity/metric decisions are typed native state. The
+# remaining metric mappings serve only the saved-model schema.
 
 # The dense connectivity matrix is `m * m` of their `int`, so it overflows
 # past this (`hierarchy/impl/cluster/detail/connectivities.mojo`).
@@ -347,7 +339,7 @@ class AgglomerativeClustering(ParamsMixin):
         return _NATIVE(self, "family_cfb_agglo_predict", (None, X), _NATIVE_CONTEXT)
 
     # The training rows of a `prediction_data=True` fit stay on the device
-    # under a handle held in `_resident_holder` (bindings/cfb_resident.mojo),
+    # under its native opaque `_resident_holder` (bindings/agglo_native_boundary.mojo),
     # released on refit and by the native finalizer connected below.
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle; the copy uploads
@@ -427,5 +419,3 @@ _native_archive_bridge.register(AgglomerativeClustering, _AGGLOMERATIVE_FORMAT, 
     ("array", "labels", "labels_"),
     ("i8", "meta", (("int", "n_clusters_"), ("int", "n_features_in_"), ("int", "n_leaves_"))),
 ), host_archive_agglo_metrics=tuple(_ALL_METRICS))
-_native_archive_bridge.lifetime(AgglomerativeClustering, "labeled_reference_release", "_resident_holder")
-

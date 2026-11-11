@@ -10,7 +10,7 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute,
 )
 from hierarchy.solver_descriptor_schema import (
-    HIERARCHY_SOLVER_ABI, HIERARCHY_SOLVER_OPERATIONS, HIERARCHY_SOLVER_LINKAGE,
+    HIERARCHY_SOLVER_ABI, HIERARCHY_SOLVER_OPERATIONS,
     HIERARCHY_SOLVER_MODE, HIERARCHY_SOLVER_CAPABILITIES, HIERARCHY_SOLVER_CAP_LINKAGE,
     HIERARCHY_SOLVER_CAP_DEVICE,
 )
@@ -39,14 +39,3 @@ def hierarchy_solver_admit(binding: PythonObject) raises -> PythonObject:
     var snapshot = PythonObject(alloc=CompiledBindingSnapshot(provider, binding, String(HIERARCHY_SOLVER_ABI), mode, [capabilities]))
     compiled_binding_retain(binding, factory, String(HIERARCHY_SOLVER_ABI), snapshot)
     return snapshot
-
-
-def hierarchy_solver_linkage(snapshot: PythonObject, addresses: List[Int],
-                             params: List[Int]) raises -> Int:
-    var owner = snapshot.downcast_value_ptr[CompiledBindingSnapshot]()
-    if owner[].abi != String(HIERARCHY_SOLVER_ABI):
-        raise Error("hierarchy linkage requires its admitted solver provider")
-    var result = neural_descriptor_execute(owner[].provider, HIERARCHY_SOLVER_LINKAGE,
-                                          addresses, params, [])
-    _ = snapshot
-    return result

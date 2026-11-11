@@ -22,6 +22,7 @@ from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_
 from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
 from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
 from bindings.native_owner_registry import register_native_owner
+from bindings.agglo_native_boundary import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
 from bindings.kde_admission_boundary import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -119,6 +120,34 @@ def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_DBSCANHolder", existing)
     register_native_owner(existing, module.module, dbscan_holder_pins)
 
+def register_AggloReferenceOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[AggloReferenceOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[AggloReferenceOwner].name())):
+            raise error
+        _ = module.add_type[AggloReferenceOwner]("_AggloReferenceOwner")
+        register_native_owner(lookup_py_type_object[AggloReferenceOwner](), module.module, agglo_reference_owner_pins)
+        return
+    py_type_attach(module.module, "_AggloReferenceOwner", existing)
+    register_native_owner(existing, module.module, agglo_reference_owner_pins)
+
+
+def register_AggloHolder(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[AggloHolder]()
+    except error:
+        if not py_type_absent(error, String(reflect[AggloHolder].name())):
+            raise error
+        _ = module.add_type[AggloHolder]("_AggloHolder")
+        register_native_owner(lookup_py_type_object[AggloHolder](), module.module, agglo_holder_pins)
+        return
+    py_type_attach(module.module, "_AggloHolder", existing)
+    register_native_owner(existing, module.module, agglo_holder_pins)
+
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -128,6 +157,8 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_KDEAdmissionOwner(module)
         register_DBSCANReferenceOwner(module)
         register_DBSCANHolder(module)
+        register_AggloReferenceOwner(module)
+        register_AggloHolder(module)
         module.def_py_c_function(classical_family_c, "family_native_call")
         module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")
