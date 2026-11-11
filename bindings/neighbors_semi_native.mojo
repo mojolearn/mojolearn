@@ -37,14 +37,14 @@ from bindings.classical_labels import classical_encode_labels, classical_decode_
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
-from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word
+from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_rows_match_check
 from neighbors.neighbors_semi_run import (
     xn_achi2_negative_check, xn_achi2_fit_negative, xn_achi2_width, xn_achi2_request, xn_achi2_csr_count,
     xn_achi2_csr_fill, xn_schi2_skew_check, xn_schi2_missing_fit, xn_schi2_log_request, xn_schi2_transform_request,
     xn_semi_knn_k, xn_semi_sqdist_request, xn_semi_knn_select_request, xn_semi_knn_sq_request,
     xn_lp_knn_graph_request, xn_lp_knn_product_request, xn_semi_matmul_request, xn_semi_rbf_request,
     xn_semi_row_normalize_request, xn_semi_row_argmax_request, xn_lp_laplacian_request, xn_lp_col_degree_request,
-    xn_lp_laplacian_deg_request, xn_lp_alpha_check, xn_lp_rows_check, xn_lp_static_weight, xn_lp_labels_request,
+    xn_lp_laplacian_deg_request, xn_lp_alpha_check, xn_lp_static_weight, xn_lp_labels_request,
     xn_lp_clamp_request, xn_lp_mode, xn_lp_iterate_knn_request, xn_lp_iterate_request, xn_lp_iterations,
     xn_lp_dense_proba_request,
 )
@@ -678,7 +678,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var encoded = classical_encode_labels(args[2], context)
     var allc = encoded.classes
     var codes = encoded.codes
-    xn_lp_rows_check(Int(py=codes.size), n)
+    xn_rows_match_check(Int(py=codes.size), n)
     var skip = -1
     for i in range(len(allc)):  # driver-loop: over the k class labels (the unlabeled marker)
         var c = allc[i]

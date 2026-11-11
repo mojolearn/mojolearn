@@ -153,11 +153,6 @@ def xn_lp_alpha_check(alpha: Float64) raises:
         raise Error("alpha must be in (0, 1)")
 
 
-def xn_lp_rows_check(count: Int, n: Int) raises:
-    if count != n:
-        raise Error("X and y have different numbers of rows")
-
-
 def xn_lp_static_weight(alpha: Float64) -> Float64:
     """LabelSpreading's clamp weight, float32(1 - alpha); propagation
     passes 1.0 and never reads alpha."""
