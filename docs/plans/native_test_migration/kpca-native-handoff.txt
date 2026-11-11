@@ -36,3 +36,39 @@ Wire20 + state/query38 =58 pure fixtures. No Python deletion in this chunk.
 RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kpca_state.mojo
 Entry kpca_state_suite.run_checks(); uncompiled/unrun. JSON/TOML/source/
 whitespace checks only, no lane build/test/box/timing/identity execution.
+
+Third chunk: actual CPU15 / ordered GPU16 native fixtures. Product dependencies
+c613f33133 + 2c3a36c216 + b234379d5a + 6d7be8a166; reference-only commit
+8fb56a8da65db41e665db0594d9a36ae3674ee4f must be included with this chunk.
+Original train80x6/query20x6, seeds0/3, first5 rows times6 and all original
+rbf/linear/poly/cosine settings/tolerances retained. Raw and precomputed
+gamma .2 options each receive independent eigen/score/query oracles.
+Both fused and existing decomposed query paths execute actual native ops.
+Positive and sign-changing 2x1 inputs check exact dyadic centering/means;
+signed eigenvalues4.5/0 expose the previous spurious constant eigenmode.
+Null removal/all-positive requested=-1 and zero-rank cases are explicit.
+Additional backend coverage: existing Lanczos option on both columns and
+existing resident RBF/Lanczos on GPU. This does not claim the public 80-row
+auto route selects those options. Null-pointer/overflow exact refusals and
+actual provider metadata are included. Single-word global-mean output has
+two canaries; all source/output owners remain pinned through native calls.
+
+Python deletion is pending root compilation/execution of these replacements:
+one numerical array_equal in test_kernel_pca_options can then be replaced
+by the public shape seam. Exact pending patch is saved at
+E/pca-native-tests/kpca-native-python-cleanup.patch. Original assertion is
+still present. All four independent sklearn algorithm oracles, feature-name
+and Python ownership/refusal/interoperability coverage remain in Python.
+No product/kernel/default changes; no timing, development identity or
+previous-version bits comparison. No new A/B define.
+
+Root reported prior pure58 and corrected shared-helper2x2 passing at80df;
+no rerun of unchanged pure suites requested. These NEW execution fixtures
+remain UNCOMPILED/UNRUN. Only Python AST/TOML/JSON/hash/whitespace checks here.
+RUN OWED: kpca_native_cpu_suite.run_checks() (15),
+          kpca_native_gpu_suite.run_checks() (16).
+Use -D MOJOLEARN_NUMERIC_IDENTICAL=1 both columns, add
+-D MOJOLEARN_COLUMN_CPU=1 on CPU. Root bundles compilation/execution.
+CPU graphs use host_parallelize. GPU graphs ordered, one job per physical
+GPU/shared context; kernels stay parallel. This is numerical coverage and
+does not clear existing recorded shared-context concurrency failures.
