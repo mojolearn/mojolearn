@@ -260,3 +260,18 @@ Live boxed compatibility consumers remain recorded: portable host math
 lifetime/upload controller `gp_resident_stats`. Those exports are retained;
 retired source-name probes are not treated as reasons to preserve dispatch.
 No lane compilation, test, timing, identity run or box job was launched.
+
+
+### Next tranche: exact-list numeric input storage
+
+This source follows the immutable `de371e5d37`/root `d6090df58b` freeze and
+must not be included in its active compilation. `GPLabelInput` now owns
+Float64/int64 input words natively. The two GP homogeneous-list paths use
+public CPython scalar slots after exact per-item type admission, replacing
+private `array_type` owners and `buffer_info()` calls. The existing shared
+kind scan, numeric prepare kernel, class ordering and bool publication stay
+unchanged. A bigint outside int64 still returns to the existing general label
+path. This is scalar UNPACK under the GIL, not a numerical kernel replacement;
+the original single input conversion is retained without an extra data copy.
+The 51-role frozen audit remains immutable; this pending follow-up is separate.
+No lane build, runtime test or timing was performed.

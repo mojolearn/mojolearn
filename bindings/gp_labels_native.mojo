@@ -36,6 +36,7 @@ from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, _label_same,
 from bindings.gp_class_table_boundary import GPPreparedClassTable
 from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
+from bindings.gp_label_input_boundary import gp_label_input
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
 from bindings.p3_labels_metrics_native import p3_dict_codes
 
@@ -157,23 +158,17 @@ def _gp_float_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonO
 
 
 def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
-    """`_encode_label_list_native`: a flat list of exact ints (within int64)
-    or exact floats through `prepare_targets`, else None."""
-    var b = native_loaded_module("builtins")
     if len(flat) == 0:
         return None
     var kind = labels_list_scalar_kind(flat)
     if kind != LABELS_LIST_INT and kind != LABELS_LIST_FLOAT:
         return None
-    var code = String("q") if kind == LABELS_LIST_INT else String("d")
-    var store = PythonObject(None)
-    try:
-        store = py_call(context["array_type"], PythonObject(code), flat)
-    except:
-        return None  # an int outside int64: a class only Python can hold
-    var address = Int(py=py_call(store.buffer_info)[0])
-    var result = _gp_prepare[S](address, 3 if code == "q" else 1, len(flat), False, base, context)
-    _ = store^
+    var captured = gp_label_input(flat, kind)
+    if not captured:
+        return None
+    var values = captured.take()
+    var result = _gp_prepare[S](values.address(), values.code(), values.count(), False, base, context)
+    _ = values
     return result^
 
 
@@ -259,26 +254,15 @@ def gp_encode_labels_into[S: _TextCodeStorage](y: PythonObject, base: PythonObje
 
 
 def _gp_flat_list_labels[S: _TextCodeStorage](y: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
-    """An exact flat list or tuple of exact ints, exact floats or exact bools
-    (`labels_list_scalar_kind`, one class-pointer read per label through the
-    container's C storage) through one `prepare_targets` call, else None.
-    Ints and floats: the array `_gp_list_labels` builds from the same values,
-    so the same classes, codes and NaN refusal. Bools: stored as their 0/1
-    ints with the classes returned as bools, which is the ORDER RULE's
-    False < True with dense codes. An int outside int64 returns None (the
-    walk then encodes or refuses it as before)."""
     var kind = labels_list_scalar_kind(y)
     if kind == LABELS_LIST_OTHER:
         return None
-    var code = String("d") if kind == LABELS_LIST_FLOAT else String("q")
-    var store = PythonObject(None)
-    try:
-        store = py_call(context["array_type"], PythonObject(code), y)
-    except:
+    var captured = gp_label_input(y, kind)
+    if not captured:
         return None
-    var address = Int(py=py_call(store.buffer_info)[0])
-    var result = _gp_prepare[S](address, 1 if kind == LABELS_LIST_FLOAT else 3, len(y), kind == LABELS_LIST_BOOL, base, context)
-    _ = store^
+    var values = captured.take()
+    var result = _gp_prepare[S](values.address(), values.code(), values.count(), values.as_bool, base, context)
+    _ = values
     return result^
 
 
