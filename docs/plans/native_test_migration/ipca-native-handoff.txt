@@ -1,6 +1,15 @@
 Mojolearn IncrementalPCA native tests (2026-11-10)
 
-Current execution status and narrow owner-authorized exception (2026-11-10):
+Toolchain upgrade status (2026-11-11):
+  Mojo1.2.0/MAX26.7.0 compiles original standalone nested capture13.
+  The owner-directed upgrade removes the obsolete six-buffer exception:
+  IPCATestRoom is restored byte-for-byte from its original nested-source
+  archive, with CPU15/GPU17 cases, dimensions, oracles and guards unchanged.
+  Full restored suites remain unbuilt/unrun until root execution. Original
+  Mojo1.0 failures and prior accepted flat-layout execution are historical
+  evidence, retained below and in ipca-native-execution.json.
+
+Historical execution status and narrow owner-authorized exception (2026-11-10):
   Root compiled and passed the 60 pure state/wire fixtures; do not rerun them
   unchanged. Original actual CPU15/GPU17 fixture builds exited 139 before
   numerical runtime. The immutable nested List pointer-capture compiler bug

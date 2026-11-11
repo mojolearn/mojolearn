@@ -22,9 +22,9 @@ def require(value: Bool, message: String) raises:
 
 def fixture(driver: OpticsFitDriver, unit: Int) raises:
     if unit == 8:
-        var a: InlineArray[Int, 2] = [0, 0]
-        var p: InlineArray[Int, 8] = [0, 0, 0, 2, 2, 0, 1, -1]
-        var f: InlineArray[Float64, 4] = [1, 0.05, 1, 2]
+        var a: Array[Int, 2] = [0, 0]
+        var p: Array[Int, 8] = [0, 0, 0, 2, 2, 0, 1, -1]
+        var f: Array[Float64, 4] = [1, 0.05, 1, 2]
         var refused = False
         try:
             _ = native_descriptor_call_fixed(driver.entry, OPTICS_FIT_RUN, a, p, f)
@@ -57,14 +57,18 @@ def fixture(driver: OpticsFitDriver, unit: Int) raises:
     require(len(result.storage[0].core_distances) == rows and len(result.storage[0].reachability) == rows
         and len(result.storage[0].ordering) == rows and len(result.storage[0].predecessor) == rows
         and len(result.storage[0].labels) == rows, "named graph/result lengths")
-    var cores = result.storage[0].core_distances.unsafe_ptr()
-    var reach = result.storage[0].reachability.unsafe_ptr()
-    var order = result.storage[0].ordering.unsafe_ptr()
-    var pred = result.storage[0].predecessor.unsafe_ptr()
-    var labels = result.storage[0].labels.unsafe_ptr()
+    # Capture one reference to the result slot. Derive its nested field
+    # pointers inside the callback, so no captured interior reference competes
+    # with another captured container origin (Mojo 1.2's explicit rule).
+    var graph = result.storage.unsafe_ptr()
     var flags = List[Int](length=rows, fill=0)
     var fp = flags.unsafe_ptr()
-    def check(row: Int) {imm cores, imm reach, imm order, imm pred, imm labels, imm fp, imm unit, imm step}:
+    def check(row: Int) {imm graph, imm fp, imm unit, imm step}:
+        var cores = graph[].core_distances.unsafe_ptr()
+        var reach = graph[].reachability.unsafe_ptr()
+        var order = graph[].ordering.unsafe_ptr()
+        var pred = graph[].predecessor.unsafe_ptr()
+        var labels = graph[].labels.unsafe_ptr()
         var group_size = 60 if unit == 6 else (2 if unit == 4 else 3)
         var first = row % group_size == 0
         var expected_core = Float32(0) if unit == 6 else step

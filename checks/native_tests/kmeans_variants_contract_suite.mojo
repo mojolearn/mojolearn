@@ -244,18 +244,18 @@ def fixture(unit: Int) raises:
                 _ = driver.metadata(999)
             elif unit == 14:
                 expected = "metadata takes no arguments"
-                var a: InlineArray[Int, 1] = [1]
-                var p: InlineArray[Int, 0] = []
-                var f: InlineArray[Float64, 0] = []
+                var a: Array[Int, 1] = [1]
+                var p: Array[Int, 0] = []
+                var f: Array[Float64, 0] = []
                 _ = native_descriptor_call_fixed(entry, VARIANTS_MODE, a, p, f)
             elif unit == 15:
                 expected = "invalid numerical request"
                 _ = driver.metadata(VARIANTS_MINIBATCH_FIT)
             else:
                 expected = "invalid numerical request"
-                var a: InlineArray[Int, 3] = [101, 103, 0]
-                var p: InlineArray[Int, 15] = [107, 109, 2, 3, 5, 7, 11, -1, 13, 17, 1, 19, 0, 1, 1]
-                var f: InlineArray[Float64, 2] = [0.125, 0.25]
+                var a: Array[Int, 3] = [101, 103, 0]
+                var p: Array[Int, 15] = [107, 109, 2, 3, 5, 7, 11, -1, 13, 17, 1, 19, 0, 1, 1]
+                var f: Array[Float64, 2] = [0.125, 0.25]
                 _ = native_descriptor_call_fixed(entry, VARIANTS_MINIBATCH_FIT, a, p, f)
         except problem:
             caught = String(problem).find(expected) >= 0

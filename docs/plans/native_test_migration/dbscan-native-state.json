@@ -41,5 +41,14 @@
       "E/wave15r2-cpu-build.log"
     ],
     "independent_evidence": "Root passed CPU103 (wire45/options41/actual17) atbda409162a and GPU20 at4583aac78f. These do not include state28; pending Python cleanup remains withheld."
+  },
+  "toolchain_upgrade": {
+    "date": "2026-11-11",
+    "source": "/Users/andrewhendel/mojolearn-evidence/modular-check-20261111/results.tsv",
+    "minimal_reproduction": "01_mutable_field_capture and both controls compile exit0 on Mojo1.2.0/MAX26.7.0",
+    "review": "Existing fill_workspace scoped mutable borrow remains; it releases its captured pointer before moving the owner. All33 parallel writes, allocation identity and post-move checks unchanged.",
+    "fixtures": 28,
+    "execution": "Root must compile/run the previously blocked suite; minimal-probe compile is not fixture runtime acceptance",
+    "historical_failures": "Both Mojo1.0 fixture diagnostics and standalone failing/control source/logs remain preserved"
   }
 }
