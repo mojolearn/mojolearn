@@ -5,7 +5,7 @@
 # registered under the same names. bindings/_mojolearn_tokenizer_host.mojo keeps a native refusal under each
 # name, and import setup replaces it with this module's entry (python/mojolearn/host_surface.py
 # HOST_IMPORT_ALIASES). Existing shared Python types stay registered by their
-# prior owners; the KMeans resident type is registered once in this family owner.
+# prior owners; KMeans and KDE boundary owners are registered once in this family owner.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -19,6 +19,8 @@ from bindings.classical_family_door import classical_family_c
 from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
 from bindings.kmeans_owner_boundary import KMeansResidentOwner
+from bindings.kde_native_boundary import KDEResidentOwner
+from bindings.kde_admission_boundary import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -59,11 +61,37 @@ def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_KMeansResidentOwner", existing)
 
 
+
+def register_KDEResidentOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[KDEResidentOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[KDEResidentOwner].name())):
+            raise error
+        _ = module.add_type[KDEResidentOwner]("_KDEResidentOwner")
+        return
+    py_type_attach(module.module, "_KDEResidentOwner", existing)
+
+
+def register_KDEAdmissionOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[KDEAdmissionOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[KDEAdmissionOwner].name())):
+            raise error
+        _ = module.add_type[KDEAdmissionOwner]("_KDEAdmissionOwner")
+        return
+    py_type_attach(module.module, "_KDEAdmissionOwner", existing)
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_family_host")
         register_kmeans_resident_owner(module)
+        register_KDEResidentOwner(module)
+        register_KDEAdmissionOwner(module)
         module.def_py_c_function(classical_family_c, "family_native_call")
         module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")

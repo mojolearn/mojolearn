@@ -501,9 +501,8 @@ class KernelDensity(NumericModeMixin):
         already released (a copied instance)."""
         return _NATIVE(self, "family_density_kde_release", (), _NATIVE_CONTEXT)
 
-    # No Python `__del__`: dropping an instance releases its device fit
-    # through the native finalizer connected below the class
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # No Python `__del__`: the typed resident owner's native destructor
+    # releases its device fit after the last in-flight query drops its pin.
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle (the integer is
@@ -628,7 +627,7 @@ _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("setflag", "_w"))),
     ("when_set", "_w", (("array", "weights", "_w"),)),
 ))
-_native_archive_bridge.lifetime(KernelDensity, "kde_fit_release")
+# Resident teardown belongs to the typed native owner stored in `_resident`.
 
 # KernelDensity resolves the import-connected entry inside native execution.
 _native_family_bridge.connect_bindings("_mojolearn_estimators")
