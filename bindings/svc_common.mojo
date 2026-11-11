@@ -140,6 +140,18 @@ def svc_prefix(source: PythonObject, count: Int, shape: PythonObject, typestr: S
     return out
 
 
+def svc_prefix(source: Int, count: Int, shape: PythonObject, typestr: String,
+               context: PythonObject) raises -> PythonObject:
+    """PACK a native owner with the existing one-copy compact Array layout."""
+    var result = family_array(shape, typestr, context)
+    var width = 8 if typestr == "<f8" or typestr == "<i8" else 4
+    if count > 0:
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
+            src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=source), count=count * width)
+        _ = result
+    return result
+
+
 def svc_scalar_array(value: Float64, typestr: String, context: PythonObject) raises -> PythonObject:
     """`Array.from_list([value], typestr)` for "<f4" or "<f8"."""
     var out = family_array(Python.tuple(1), typestr, context)

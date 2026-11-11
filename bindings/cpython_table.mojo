@@ -46,8 +46,8 @@ from core.shared_slot import SharedSlot
 
 #: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
 #: name carries it too). V8: the layout word.
-comptime _CPYTHON_TABLE_LAYOUT = 10
-comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV10"
+comptime _CPYTHON_TABLE_LAYOUT = 12
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV12"
 
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
@@ -105,6 +105,11 @@ comptime _PyCallable_Check = ExternalFunction[
 # void PyErr_Clear(void)
 comptime _PyErr_Clear = ExternalFunction[
     "PyErr_Clear", def() thin abi("C") -> NoneType]
+# Exact admitted scalar identity/order: no arbitrary Python protocols.
+comptime _PyObject_Hash = ExternalFunction[
+    "PyObject_Hash", def(PyObjectPtr) thin abi("C") -> Int]
+comptime _PyList_Sort = ExternalFunction[
+    "PyList_Sort", def(PyObjectPtr) thin abi("C") -> c_int]
 # PyObject *PyList_New(Py_ssize_t len)  (new)
 comptime _PyList_New = ExternalFunction[
     "PyList_New", def(Int) thin abi("C") -> PyObjectPtr]
@@ -184,6 +189,9 @@ comptime _PyWeakref_NewRef = ExternalFunction[
 # PyObject *PyObject_CallNoArgs(PyObject *callable)  (new, NULL on error)
 comptime _PyObject_CallNoArgs = ExternalFunction[
     "PyObject_CallNoArgs", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+# int PyObject_GenericSetAttr(PyObject *o, PyObject *name, PyObject *value)
+comptime _PyObject_GenericSetAttr = ExternalFunction[
+    "PyObject_GenericSetAttr", def(PyObjectPtr, PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
 # PyObject *PyObject_GenericGetAttr(PyObject *o, PyObject *name)  (new)
 comptime _PyObject_GenericGetAttr = ExternalFunction[
     "PyObject_GenericGetAttr", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> PyObjectPtr]
@@ -313,6 +321,8 @@ struct CPythonTable(Defaultable, Movable):
     var PyType_IsSubtype: _PyType_IsSubtype.type
     var PyCallable_Check: _PyCallable_Check.type
     var PyErr_Clear: _PyErr_Clear.type
+    var PyObject_Hash: _PyObject_Hash.type
+    var PyList_Sort: _PyList_Sort.type
     var PyList_New: _PyList_New.type
     var PyList_Append: _PyList_Append.type
     var PyFloat_FromDouble: _PyFloat_FromDouble.type
@@ -338,6 +348,7 @@ struct CPythonTable(Defaultable, Movable):
     var PyMethod_New: _PyMethod_New.type
     var PyWeakref_NewRef: _PyWeakref_NewRef.type
     var PyObject_CallNoArgs: _PyObject_CallNoArgs.type
+    var PyObject_GenericSetAttr: _PyObject_GenericSetAttr.type
     var PyObject_GenericGetAttr: _PyObject_GenericGetAttr.type
     var PyEval_GetFrame: _PyEval_GetFrame.type
     var PyFrame_GetCode: _PyFrame_GetCode.type
@@ -390,6 +401,8 @@ struct CPythonTable(Defaultable, Movable):
         self.PyType_IsSubtype = _PyType_IsSubtype.load(lib)
         self.PyCallable_Check = _PyCallable_Check.load(lib)
         self.PyErr_Clear = _PyErr_Clear.load(lib)
+        self.PyObject_Hash = _PyObject_Hash.load(lib)
+        self.PyList_Sort = _PyList_Sort.load(lib)
         self.PyList_New = _PyList_New.load(lib)
         self.PyList_Append = _PyList_Append.load(lib)
         self.PyFloat_FromDouble = _PyFloat_FromDouble.load(lib)
@@ -415,6 +428,7 @@ struct CPythonTable(Defaultable, Movable):
         self.PyMethod_New = _PyMethod_New.load(lib)
         self.PyWeakref_NewRef = _PyWeakref_NewRef.load(lib)
         self.PyObject_CallNoArgs = _PyObject_CallNoArgs.load(lib)
+        self.PyObject_GenericSetAttr = _PyObject_GenericSetAttr.load(lib)
         self.PyObject_GenericGetAttr = _PyObject_GenericGetAttr.load(lib)
         self.PyEval_GetFrame = _PyEval_GetFrame.load(lib)
         self.PyFrame_GetCode = _PyFrame_GetCode.load(lib)

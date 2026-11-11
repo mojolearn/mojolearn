@@ -172,5 +172,3 @@ def linear_table_entry[family: Int](key: LinearEntryKey, index: Int,
         )
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     raise Error("native linear entries: unsupported execution key")
-
-

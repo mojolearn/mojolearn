@@ -640,6 +640,12 @@ _ARRAY_CONTEXT = dict(
     from_buffer_slots={name: Array.__dict__[name] for name in Array.__slots__})  # glue: retain fixed native Array member descriptor identities
 
 
+# glue: retain canonical native owner identities once, after Array and its
+# storage context exist; fitted-buffer replacement admission reads this table.
+from ._native_owner_lifetime import connect_owner_context as _connect_array_owners
+_connect_array_owners(_ARRAY_CONTEXT)
+
+
 def _bound(op):
     """`a.<op>(*args)` as `array_native_call(op, _ARRAY_CONTEXT, a, *args)`:
     a C `property` whose getter is a C `functools.partial` building another

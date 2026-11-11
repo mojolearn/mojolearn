@@ -49,6 +49,8 @@ from bindings.family_common import (
     family_entry, family_array,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
+from core.svr_native_api import SvrFitPlan, SvrFitRequest, SvrQueryRequest
+from bindings.svr_native_boundary import svr_connection, svr_run_fit, svr_run_query, SvrResidentPin, svr_resident_pin
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
@@ -79,7 +81,7 @@ from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from core.host_finite_scan import host_all_finite_f32_strided
-from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
+from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from std.os import getenv
@@ -1235,6 +1237,13 @@ def _svm_query(source: PythonObject, est: String, context: PythonObject, entry_t
     return _SvmQuery(q.keep, q.owner, q.source.addr, q.shape[0], q.shape[1], DoorRowsStore.none())
 
 
+def _svm_query_refuse(finite: Int, range_word: Int, q: _SvmQuery, est: String) raises:
+    if q.store.active():
+        door_rows_refuse(finite, range_word, est, q.store.base_rows)
+    else:
+        admitted_finite_refuse(finite, est)
+
+
 def _svm_query_refuse(words: PythonObject, q: _SvmQuery, est: String) raises:
     """The refusal of a query the resident entry flagged (its [finite,
     range] words; None: another route, which tests the query itself), in
@@ -1494,14 +1503,6 @@ def _pred_count(pred: PythonObject) raises -> Int:
 # ---------------------------------------------------------------- SVR
 
 
-def _kernel_tail(fields: PythonObject, params: PythonObject) raises:
-    """degree and coef0 as the optional trailing params, only for 'poly'
-    and 'sigmoid'."""
-    var k = String(svc_field(fields, "_hp_kernel"))
-    if k == "poly" or k == "sigmoid":
-        _ = py_call(params.append, family_call(svc_builtins().int, svc_field(fields, "_hp_degree")))
-        _ = py_call(params.append, family_call(svc_builtins().float, svc_field(fields, "_hp_coef0")))
-
 
 def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, native: PythonObject) raises:
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
@@ -1547,84 +1548,64 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         gamma = _resolve_gamma(fields, binding, x_meta, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3], PythonObject(None),
                          PythonObject(None), "SVR", context, native)
-    # WORST-CASE OUTPUT BUFFERS: at most n_rows coefficients (DEVIATION 873)
-    var dual = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
-    var support = family_array(Python.tuple(PythonObject(n_rows)), "<i4", context)
-    var sv = family_array(Python.tuple(PythonObject(n_rows * n_cols)), "<f4", context)
-    var info = family_array(Python.tuple(PythonObject(6)), "<f8", context)
-    # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding: n_rows,
-    # n_features, kernel, gamma, C, epsilon, tol, max_iter,
-    # nochange_steps[, the per-row bounds' address[, degree, coef0[, the
-    # fold's three store ids, scale_gamma]]]
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(_kernel_code(fields, context)),
-                             PythonObject(gamma), svc_field(fields, "_hp_C"), svc_field(fields, "_hp_epsilon"),
-                             svc_field(fields, "_hp_tol"), svc_field(fields, "_hp_max_iter"),
-                             svc_field(fields, "_hp_nochange_steps"))
+    var plan = SvrFitPlan(n_rows, n_cols)
+    # Capture boundary scalar references in the same field-read order as
+    # the former option list. Conversion remains after address admission.
+    var kernel = _kernel_code(fields, context)
+    var c_value = svc_field(fields, "_hp_C")
+    var epsilon_value = svc_field(fields, "_hp_epsilon")
+    var tolerance_value = svc_field(fields, "_hp_tol")
+    var iterations_value = svc_field(fields, "_hp_max_iter")
+    var steps_value = svc_field(fields, "_hp_nochange_steps")
     var k = String(svc_field(fields, "_hp_kernel"))
-    if device_x and native is None:
-        # The 16-value device-X form (lane a8a); degree and coef0 are the
-        # constructor values off 'poly' / 'sigmoid', as the short forms pass.
-        _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
-        _ = c_rows  # keep the Python object alive through the native call below
-        if k == "poly" or k == "sigmoid":
-            _kernel_tail(fields, params)
-        else:
-            _ = py_call(params.append, PythonObject(3))
-            _ = py_call(params.append, PythonObject(0.0))
-        _ = py_call(params.append, PythonObject(fold.base_id))
-        _ = py_call(params.append, PythonObject(fold.base_rows))
-        _ = py_call(params.append, PythonObject(fold.index_id))
-        _ = py_call(params.append, PythonObject(1 if scale_gamma else 0))
-    elif c_rows is not None or k == "poly" or k == "sigmoid":
-        _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
-        _ = c_rows  # keep the Python object alive through the native call above
-        _kernel_tail(fields, params)
-        _ = c_rows  # keep the Python object alive through the native call above
-    var n_support = svc_int(svr_execute(binding, native, True, Python.list(PythonObject(x_meta.source.addr), classical_address(targets),
-                                        classical_address(dual), classical_address(support), classical_address(sv),
-                                        classical_address(info)), params))
-    _ = targets  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = c_rows  # keep the Python object alive through the native call above
+    var bounds_address = 0 if c_rows is None else Int(py=classical_address(c_rows))
+    var degree = 3
+    var coef0 = Float64(0)
+    if k == "poly" or k == "sigmoid":
+        degree = svc_int(svc_field(fields, "_hp_degree"))
+        coef0 = svc_float(svc_field(fields, "_hp_coef0"))
+    var target_address = Int(py=classical_address(targets))
+    var connection = svr_connection(binding)
+    var c = Float64(py=c_value)
+    var epsilon = Float64(py=epsilon_value)
+    var tolerance = Float64(py=tolerance_value)
+    var max_iter = Int(py=iterations_value)
+    var nochange_steps = Int(py=steps_value)
+    var request = SvrFitRequest(x_meta.source.addr, target_address,
+        Int(plan.dual.unsafe_ptr()), Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()),
+        Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, kernel,
+        max_iter, nochange_steps, degree,
+        fold.base_id, fold.base_rows, fold.index_id, device_x and native is None,
+        scale_gamma, native is not None, gamma, c, epsilon, tolerance, coef0)
+    svr_run_fit(connection, request, plan)
+    _ = targets
+    _ = x
+    _ = c_rows
+    var n_support = plan.count
     if device_x and native is None:
         # X's finite and range words and the gamma solved with (lane a8a)
-        _svm_fit_refuse(Int(svc_read_f64(info, 3)), Int(svc_read_f64(info, 4)), fold, "SVR")
-        gamma = svc_read_f64(info, 5)
+        _svm_fit_refuse(Int(plan.info[3]), Int(plan.info[4]), fold, "SVR")
+        gamma = plan.info[5]
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(n_cols))
     py_setitem(fields, PythonObject("n_support_"), PythonObject(n_support))
-    _ = info  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(svc_read_f64(info, 2))))
-    py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(svc_round_f32(svc_read_f64(info, 0)), "<f4", context))
-    py_setitem(fields, PythonObject("support_"), svc_prefix(support, n_support, Python.tuple(PythonObject(n_support)), "<i4", context))
-    _ = info  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
+    py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(plan.info[2])))
+    py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(svc_round_f32(plan.info[0]), "<f4", context))
+    py_setitem(fields, PythonObject("support_"), svc_prefix(Int(plan.support.unsafe_ptr()), n_support, Python.tuple(PythonObject(n_support)), "<i4", context))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("support_vectors_"),
-               svc_prefix(sv, n_support * n_cols, Python.tuple(PythonObject(n_support), PythonObject(n_cols)), "<f4", context))
-    _ = info  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
+               svc_prefix(Int(plan.vectors.unsafe_ptr()), n_support * n_cols, Python.tuple(PythonObject(n_support), PythonObject(n_cols)), "<f4", context))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("dual_coef_"),
-               svc_prefix(dual, n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
-    _ = info  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
+               svc_prefix(Int(plan.dual.unsafe_ptr()), n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
+    _ = plan
+    _ = connection
     _ = x^
     _ = x_meta  # retain captured storage owners through the last native use
     _ = targets^
@@ -1653,7 +1634,6 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     var query = q
     var query_address = q_meta.address
     var held = PythonObject(None)
-    var words = PythonObject(None)
     if precomputed and n_support > 0:
         # the cross-kernel's columns at the support vectors (SVC's rule)
         held = _i32_array(svc_field(fields, "support_"), context)
@@ -1663,48 +1643,42 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
         query_address = _addr(query)
         n_features = n_support
         sv = dual
-    # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_predict_binding:
-    # n_rows, n_features, n_support, b, kernel, gamma, cache_size_mib
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_features), PythonObject(n_support),
-                             PythonObject(svc_read_f32(svc_field(fields, "intercept_"), 0)),
-                             PythonObject(_kernel_code(fields, context)), svc_field(fields, "_gamma"),
-                             svc_field(fields, "_hp_cache_size"))
-    _kernel_tail(fields, params)
-    if resident_entry is not None:
-        # Device-resident support rows and duals (lane ne1-a-gp-svm;
-        # bindings/fitted_resident_door.mojo). ORDER MATCHES
-        # bindings/_mojolearn_svm.mojo::svr_predict_resident_binding:
-        # svr_predict's 9 (degree 3 and coef0 0 where the kernel reads
-        # neither, svr_predict's own defaults), then lease, slot.
-        if len(params) == 7:
-            _ = py_call(params.append, PythonObject(3))
-            _ = py_call(params.append, PythonObject(Float64(0.0)))
-        var lease = 0
-        if not (String(svc_field(fields, "_hp_kernel")) == "precomputed"):
-            # precomputed reads no support rows (its query is the gathered cross-kernel)
-            lease = fitted_resident_lease(model, _SVR_RESIDENT_SLOT, binding, "svm_resident_lease",
-                                          Python.list(dual, sv))
-        _ = py_call(params.append, PythonObject(lease))
-        _ = py_call(params.append, PythonObject(0))
-        if q_meta.store.active():
-            # then the fold's store ids (no query address; lane a7a)
-            _ = py_call(params.append, PythonObject(q_meta.store.base_id))
-            _ = py_call(params.append, PythonObject(q_meta.store.base_rows))
-            _ = py_call(params.append, PythonObject(q_meta.store.index_id))
-        words = family_call(resident_entry, PythonObject(query_address),
-                        classical_address(dual) if n_support > 0 else PythonObject(0),
-                        classical_address(sv) if n_support > 0 else PythonObject(0),
-                        classical_address(out), params)
-    else:
-        _ = svr_execute(binding, native, False, Python.list(PythonObject(query_address),
-                        classical_address(dual) if n_support > 0 else PythonObject(0),
-                        classical_address(sv) if n_support > 0 else PythonObject(0),
-                        classical_address(out)), params)
+    var bias = svc_read_f32(svc_field(fields, "intercept_"), 0)
+    var kernel = _kernel_code(fields, context)
+    var gamma_value = svc_field(fields, "_gamma")
+    var cache_value = svc_field(fields, "_hp_cache_size")
+    var degree = 3
+    var coef0 = Float64(0)
+    var k = String(svc_field(fields, "_hp_kernel"))
+    if k == "poly" or k == "sigmoid":
+        degree = svc_int(svc_field(fields, "_hp_degree"))
+        coef0 = svc_float(svc_field(fields, "_hp_coef0"))
+    var connection = svr_connection(binding)
+    var resident = resident_entry is not None
+    var lease = SvrResidentPin(PythonObject(None), 0)
+    if resident and String(svc_field(fields, "_hp_kernel")) != "precomputed":
+        var mirrors: List[PythonObject] = [dual, sv]
+        lease = svr_resident_pin(model, _SVR_RESIDENT_SLOT, binding, connection, mirrors)
+    var dual_address = Int(py=classical_address(dual)) if n_support > 0 else 0
+    var vector_address = Int(py=classical_address(sv)) if n_support > 0 else 0
+    var output_address = Int(py=classical_address(out))
+    var gamma = Float64(py=gamma_value)
+    var cache_mib = Float64(py=cache_value)
+    var status: InlineArray[Int32, 2] = [0, 0]
+    var request = SvrQueryRequest(query_address, dual_address, vector_address, output_address,
+        Int(status.unsafe_ptr()), n_rows, n_features, n_support, kernel, degree,
+        lease.handle, 0, q_meta.store.base_id, q_meta.store.base_rows, q_meta.store.index_id,
+        bias, gamma, cache_mib, coef0)
+    svr_run_query(connection, request, resident)
     _ = query  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = sv  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    _svm_query_refuse(words, q_meta, "SVR")
+    if resident:
+        _svm_query_refuse(Int(status[0]), Int(status[1]), q_meta, "SVR")
+    _ = status
+    _ = lease
+    _ = connection
     _ = query^
     _ = held^
     _ = q^

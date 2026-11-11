@@ -9,6 +9,7 @@
 # None: a label is not a str (numbers and mixed lists keep the ORDER RULE's
 # own refusals and encodings in `_labels.sorted_classes`).
 from std.python import Python, PythonObject
+from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
@@ -55,14 +56,23 @@ def _is_str(value: PythonObject) raises -> Bool:
 
 
 def _read(labels: PythonObject, mut table: StrTable) raises -> Bool:
+    var pins = List[PythonObject]()
+    return _read_source[False](labels, pins, table)
+
+
+def _read(labels: List[PythonObject], mut table: StrTable) raises -> Bool:
+    return _read_source[True](PythonObject(None), labels, table)
+
+
+def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], mut table: StrTable) raises -> Bool:
     # Every label's code points; False when one is not a str. The C API
     # entries are resolved once per call, not once per label.
     ref cpy = Python().cpython()
     var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
     var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
     var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
-    for i in range(len(labels)):  # driver-loop: the explicit label input step, one read per label
-        var value = labels[i]
+    for i in range(label_source_count[native](labels, pins)):  # driver-loop: the explicit label input step, one read per label
+        var value = label_source_value[native](labels, pins, i)
         if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
             return False
         var count = get_length(value._obj_ptr)
@@ -77,6 +87,9 @@ def _read(labels: PythonObject, mut table: StrTable) raises -> Bool:
         for k in range(count):  # driver-loop: over one label's code points
             table.points.append(source[k])
         mem_free(address)
+    _ = pins
+    _ = labels
+    _ = pins
     return True
 
 

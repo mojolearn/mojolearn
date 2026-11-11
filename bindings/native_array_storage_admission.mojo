@@ -94,7 +94,7 @@ def array_storage_address(value: PythonObject, base: PythonObject, slots: Python
     return address
 
 
-def array_storage_address(value: PythonObject) raises -> PythonObject:
+def array_storage_context() raises -> PythonObject:
     # Only exact Array callers reach this overload. Keep the import-connected
     # full slot inventory, independent of mutable Python class attributes.
     var module = native_loaded_module("mojolearn._array")
@@ -109,4 +109,9 @@ def array_storage_address(value: PythonObject) raises -> PythonObject:
         if not native_namespace_string_keys(context._obj_ptr, b.str):
             raise Error("TypeError: Array native address context requires native string keys")
         dict_keys_admit(context)
+    return context
+
+
+def array_storage_address(value: PythonObject) raises -> PythonObject:
+    var context = array_storage_context()
     return array_storage_address(value, context["array_class"], context["from_buffer_slots"])

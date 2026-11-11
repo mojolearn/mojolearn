@@ -25,13 +25,12 @@ from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer
 from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import (
-    _flatten_labels,
     ClassicalLabels, NativeTextLabels, _TextCodeStorage, _TextLabels, _PythonTextCodes, _NativeTextCodes,
     _text_buffer_labels_into, _text_list_labels_into,
 )
 from bindings.label_input_sources import labels_storage_source, labels_list_scalar_kind, LABELS_LIST_OTHER, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
 from bindings.perf3_label_doors_text import labels_all_exact_str
-from bindings.gp_label_snapshot_native import gp_label_list
+from bindings.gp_label_snapshot_native import gp_label_pins
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put, _label_same, _labels_recordable
 from bindings.gp_class_table_boundary import GPPreparedClassTable
@@ -40,8 +39,8 @@ from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
 from bindings.gp_label_input_boundary import gp_label_input
 from bindings.gp_label_order_boundary import gp_integer_classes
+from bindings.gp_mixed_label_boundary import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
-from bindings.p3_labels_metrics_native import p3_dict_codes
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 
@@ -160,7 +159,7 @@ def _gp_float_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonO
     return result^
 
 
-def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
+def _gp_list_labels[S: _TextCodeStorage](flat: List[PythonObject], base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     if len(flat) == 0:
         return None
     var kind = labels_list_scalar_kind(flat)
@@ -175,7 +174,7 @@ def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject,
     return result^
 
 
-def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: PythonObject) raises -> _TextLabels[S]:
+def _gp_sorted_classes[S: _TextCodeStorage](labels: List[PythonObject], context: PythonObject) raises -> _TextLabels[S]:
     """First equal label retained; native keys where their order is equivalent."""
     var b = native_loaded_module("builtins")
     if len(labels) == 0:
@@ -210,12 +209,12 @@ def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: Pytho
         return gp_integer_classes[S](labels, context)
     # Exact NumPy/mixed-real comparisons retain their existing native scalar
     # semantics; a mathematical integer/Float64 key would change those rules.
-    var classes = family_call(b.sorted, py_call(b.dict.fromkeys, labels))
-    var table = py_call(b.dict, py_call(b.zip, classes, py_call(b.range, PythonObject(len(classes)))))
+    var classes = gp_mixed_classes(labels)
+    var table = gp_mixed_index(classes)
     if len(classes) > 2147483648:
         raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
     var codes = S(len(labels), context)
-    p3_dict_codes(table, labels, codes.address(), -1)
+    gp_mixed_codes(table, labels, codes.address())
     _ = labels
     return _TextLabels[S](classes, codes^, len(labels))
 
@@ -252,8 +251,7 @@ def gp_encode_labels_into[S: _TextCodeStorage](y: PythonObject, base: PythonObje
     if text:
         # a local copy first, as trees_public_score.mojo:352 (pass 2, C7)
         return text.take()
-    var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y
-    var flat = _flatten_labels(source, context)
+    var flat = gp_label_pins(y, context)
     classical_admit_value(flat, context)
     fast = _gp_list_labels[S](flat, base, context)
     if fast:

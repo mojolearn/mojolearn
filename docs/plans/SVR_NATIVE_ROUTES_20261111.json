@@ -1,0 +1,145 @@
+{
+  "base": "3db92c31f3",
+  "status": "four scoped fit/query transport roles source implemented; compile/runtime pending; full SVM completion still has shared storage and score debt",
+  "family": "SVR",
+  "roles": [
+    {
+      "name": "fit option list",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1559,
+        "text": "var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(_kernel_code(fields, context)),"
+      },
+      "after_plan": "typed scalar fit request preserving 9/10/12 candidate and 16 device-X forms",
+      "status": "source switched; compilation/runtime pending"
+    },
+    {
+      "name": "fit pointer list",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1583,
+        "text": "var n_support = svc_int(svr_execute(binding, native, True, Python.list(PythonObject(x_meta.source.addr), classical_address(targets),"
+      },
+      "after_plan": "typed addresses and native result integer",
+      "status": "source switched; compilation/runtime pending"
+    },
+    {
+      "name": "worst-case dual/support/vector/info scratch",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1551,
+        "text": "var dual = family_array(Python.tuple(PythonObject(n_rows)), \"<f4\", context)"
+      },
+      "after_plan": "native Float32/Int32/Float64 owners; same public prefix copies/order",
+      "status": "source switched; compilation/runtime pending"
+    },
+    {
+      "name": "query option/status transport",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1668,
+        "text": "var params = Python.list(PythonObject(n_rows), PythonObject(n_features), PythonObject(n_support),"
+      },
+      "after_plan": "typed direct/resident/fold request and native finite/range status",
+      "status": "source switched; compilation/runtime pending",
+      "after": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1668,
+        "text": "SvrQueryRequest + native status words, SvrResidentPin keeps typed prepared lease alive"
+      }
+    }
+  ],
+  "preserved_routes": {
+    "fit_default_device": "_svm_fit_entry detects existing native resident export; non-precomputed device-X/fold/scale-gamma form \u2192 svr_fit_host_borrowed; same status6 words",
+    "fit_default_host": "svm.host.svm_host_impl.svr_fit_host",
+    "fit_candidate": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH switch stays unchanged; original svm/native_svr_dispatch or host native descriptor route, host X admission",
+    "predict_resident": "svm.svm_resident_state.svr_predict_resident_host; same lease/fold/status, private tuple envelopes only migrated",
+    "predict_fallback": "original host-list or CPU direct output route; precomputed support-column gather kept",
+    "weights_gamma": "existing _c_rows/_resolve_gamma and scale_gamma kernels unchanged"
+  },
+  "query_shared_reuse": "Any prepared record/mirror tuple migration is reuse of existing GP lease state schema and will not count as a new aggregate role; actual lifetime pins remain boundary-owned.",
+  "pending_extra": "SVR.score and internal precomputed support-column gather not automatically claimed complete by these four roles.",
+  "public_storage": [
+    "support_",
+    "support_vectors_",
+    "dual_coef_",
+    "intercept_",
+    "n_features_in_",
+    "n_support_",
+    "n_iter_",
+    "_gamma"
+  ],
+  "original_python_coverage": [
+    "test_host_svr_native.py",
+    "test_svr_surface.py",
+    "test_host_model_svm.py"
+  ],
+  "native_fixture_plan": "actual same-provider deterministic linear/RBF/poly/sigmoid/precomputed fits and direct/resident query cases with independent references; CPU units parallel, GPU numerical units ordered under existing upstream concurrency park",
+  "jobs": "none; root only",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/svr",
+  "additive_api": {
+    "status": "fit and query connected; legacy ABI retained for live compatibility",
+    "abi": "mojolearn.svr.native.v1",
+    "operations": {
+      "fit": 0,
+      "predict": 1,
+      "resident_query": 2,
+      "lease_open": 3,
+      "lease_close": 4,
+      "device": 5
+    },
+    "fit_layout": "7 addresses /12 integers /5 Float64",
+    "query_layout": "5 addresses /10 integers /4 Float64",
+    "providers": [
+      "svm/svr_native_device.mojo",
+      "svm/host/svr_native_host.mojo"
+    ],
+    "exports": [
+      "bindings/_mojolearn_svm.mojo::svr_native_api_v1",
+      "bindings/_mojolearn_svm_host.mojo::svr_native_api_v1"
+    ],
+    "preserved_numerics": "all existing solver/resident implementation files unchanged; wrappers retain exact read_f32 and output-copy sequence",
+    "temporary_duplication": "old separately callable Python exports and existing candidate wrappers remain live until public consumers switch; same wrappers will be consolidated with their typed implementation in the public switch chunk"
+  },
+  "fit_switch": {
+    "source": "bindings/svc_kernel_native.mojo::_svr_fit",
+    "private_storage": "SvrFitPlan dual/support/vectors/info native lists",
+    "boundary": "SvrConnection pins compiled image; X/y/weights owners survive released GIL; public prefix Array copies and publication order unchanged",
+    "shared_pack": "svc_prefix native-address overload retains original output allocation then memcpy",
+    "tests": "original Python coverage retained; direct native numerical cases will accompany complete query tranche; no run claim"
+  },
+  "source_review": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/svr/query-source-conservation.json",
+  "new_fixture_coverage": {
+    "cpu_cases": 12,
+    "ordered_gpu_cases": 21,
+    "boundary_cases": 9,
+    "status": "authored, uncompiled/unrun",
+    "native_suites": [
+      "checks.native_tests.svr_native_cpu_suite",
+      "checks.native_tests.svr_native_gpu_suite"
+    ],
+    "original_workload": "150x5 test_svr_surface planted salts/noise; same linear/RBF quality bounds; original Python retained"
+  },
+  "retained_boundaries": [
+    "shared _c_rows temporary Array",
+    "precomputed _i32_array/_gather Arrays",
+    "public support/dual/vector/intercept Arrays",
+    "SVR.score prediction and R2 envelopes",
+    "legacy exported SVR bindings/native v1 candidate ABI remain compatible"
+  ],
+  "prepared_owner": {
+    "type": "SvrPreparedLease",
+    "registration": "_mojolearn_runtime_family_host only",
+    "scope": "weak prepared registry, never estimator field; outside native_owner_lifetime",
+    "state": "reuses GPLeaseState; exact binding/generation/mirror identity; provider and mirror pins survive native release; live query holds owner",
+    "no_weakref": "drop local lease before query, retaining prior per-call upload behavior",
+    "copies": "no tensor copy added; public prefix copies unchanged",
+    "aggregate_count": "shared prepared-lease schema reuse, not an additional aggregate role"
+  },
+  "build_roots": [
+    "_mojolearn_svm",
+    "_mojolearn_svm_host",
+    "_mojolearn_native_classical_family_host",
+    "_mojolearn_runtime_family_host"
+  ]
+}
