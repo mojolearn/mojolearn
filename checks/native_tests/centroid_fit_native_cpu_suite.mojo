@@ -77,7 +77,7 @@ def affinity_equal_case(driver: CentroidFitDriver, unit: Int) raises:
         "equal similarities shortcut retains empty message diagnostic")
     require(len(result.storage[0].center_indices) == (2 if separate else 1)
         and result.storage[0].center_indices[0] == 0, "equal preference exemplar choice")
-    require(result.storage[0].labels[0] == 0 and result.storage[0].labels[1] == (1 if separate else 0),
+    require(result.storage[0].labels[0] == 0 and result.storage[0].labels[1] == Int32(1 if separate else 0),
         "equal preference label choice")
     require(len(result.storage[0].affinity) == 4 and result.storage[0].affinity[1] == (Float32(2) if precomputed else Float32(0)),
         "public affinity retains original similarities before preference/noise")

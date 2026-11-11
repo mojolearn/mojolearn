@@ -53,7 +53,7 @@ def fixture(driver: OpticsFitDriver, unit: Int) raises:
     var result = OpticsFitResultSlot()
     driver.fit(OpticsFitRequest(VariantsSpan(Int(values.unsafe_ptr()), len(values)), rows, features,
         5 if unit == 6 else 2, 5 if unit == 6 else 2, 0 if xi else 1, True,
-        OpticsMetric(metric, 3 if unit == 3 else 2), max_eps, 0.05, eps), result)
+        OpticsMetric(metric, Float64(3 if unit == 3 else 2)), max_eps, 0.05, eps), result)
     require(len(result.storage[0].core_distances) == rows and len(result.storage[0].reachability) == rows
         and len(result.storage[0].ordering) == rows and len(result.storage[0].predecessor) == rows
         and len(result.storage[0].labels) == rows, "named graph/result lengths")
@@ -74,7 +74,7 @@ def fixture(driver: OpticsFitDriver, unit: Int) raises:
             ok = ok and isinf(cores[row]) and isinf(reach[row]) and pred[row] == -1 and labels[row] == -1
         else:
             ok = ok and abs(cores[row] - expected_core) < 0.00001
-            ok = ok and (isinf(reach[row]) if first else abs(reach[row] - expected_core) < 0.00001)
+            ok = ok and (Bool(isinf(reach[row])) if first else abs(reach[row] - expected_core) < 0.00001)
             ok = ok and Int(pred[row]) == expected_pred and Int(labels[row]) == row // group_size
         fp[row] = 0 if ok else 1
     host_parallelize(check, rows)
