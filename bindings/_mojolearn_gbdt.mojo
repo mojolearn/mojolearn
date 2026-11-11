@@ -49,7 +49,11 @@ the wrapper holds the caller's arrays for the length of the call.
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import DevicePlan, device_plan_current
-from bindings.py_lists import py_list_int, py_list_f64
+from bindings.py_lists import py_list_int
+from bindings.gbdt_fit_boundary import gbdt_fit_args_py, gbdt_fit_outcome_py
+from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, GbdtImage
+from core.native_descriptor_abi import NativeDescriptorError
+from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
 from std.memory import bitcast
@@ -296,17 +300,7 @@ def _gbdt_device_plan() raises -> DevicePlan:
     return device_plan_current("MOJOLEARN_GBDT_DEVICE_COUNT")
 
 
-def _gbdt_fit_impl(
-    row_major: Bool,
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    weights_addr: PythonObject,
-    cat_flags_addr: PythonObject,
-    eval_x_addr: PythonObject,
-    eval_y_addr: PythonObject,
-    params: PythonObject,
-    strs: PythonObject,
-) raises -> PythonObject:
+def gbdt_fit_native(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitOutcome:
     """Fit a gradient-boosted ensemble.
 
     Returns `[model_text, best_iteration, stopped_early, learn_losses,
@@ -414,7 +408,7 @@ def _gbdt_fit_impl(
             "gbdt_fit: params must hold at least 35 values, got "
             + String(len(params))
         )
-    var n_class_weights = Int(py=params[34])
+    var n_class_weights = params.i(34)
     if n_class_weights < 0:
         raise Error(
             "gbdt_fit: n_class_weights must not be negative, got "
@@ -428,18 +422,18 @@ def _gbdt_fit_impl(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4 and len(strs) != 5 and len(strs) != 8:
+    if len(params.strs) != 4 and len(params.strs) != 5 and len(params.strs) != 8:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
             " nan_mode], optionally feature_border_type, optionally then"
             " boosting_type, the fold_len_multiplier's float64 bits and"
-            " fold_permutation_block, got " + String(len(strs))
+            " fold_permutation_block, got " + String(len(params.strs))
         )
     # the optional fifth string, their `feature_border_type` (empty or
     # absent is GreedyLogSum); an older wrapper sends four
     var border_type_name = String("GreedyLogSum")
-    if len(strs) >= 5:
-        border_type_name = String(py=strs[4])
+    if len(params.strs) >= 5:
+        border_type_name = params.strs[4]
         if border_type_name == "":
             border_type_name = String("GreedyLogSum")
     # the Ordered tail (lane/catboost-parity): `boosting_type`, then
@@ -449,38 +443,38 @@ def _gbdt_fit_impl(
     var boosting_type_name = String("Plain")
     var fold_len_multiplier = Float64(2.0)
     var fold_permutation_block = 0
-    if len(strs) == 8:
-        boosting_type_name = String(py=strs[5])
+    if len(params.strs) == 8:
+        boosting_type_name = params.strs[5]
         fold_len_multiplier = bitcast[DType.float64](
-            UInt64(Int(String(py=strs[6])))
+            UInt64(Int(params.strs[6]))
         )
-        fold_permutation_block = Int(String(py=strs[7]))
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
+        fold_permutation_block = Int(params.strs[7])
+    var xp = _f32_ptr(params.x)
+    var yp = _f32_ptr(params.y)
     # unread when n_weights / n_flags is 0; the wrapper passes the X
     # address rather than allocating a throwaway, as `kmeans_fit` does,
     # and `_f32_ptr` still refuses a null.
-    var wp = _f32_ptr(Int(py=weights_addr))
-    var cp = _u32_ptr(Int(py=cat_flags_addr))
+    var wp = _f32_ptr(params.weights)
+    var cp = _u32_ptr(params.cat_flags)
     # unread when params[20] is 0, the same contract the weights have;
     # the wrapper passes the X address rather than allocating a throwaway
-    var ep = _f32_ptr(Int(py=eval_x_addr))
-    var eyp = _f32_ptr(Int(py=eval_y_addr))
+    var ep = _f32_ptr(params.eval_x)
+    var eyp = _f32_ptr(params.eval_y)
 
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_flags = Int(py=params[3])
+    var n_rows = params.i(0)
+    var n_features = params.i(1)
+    var n_weights = params.i(2)
+    var n_flags = params.i(3)
 
     # Read BEFORE the GIL is released, like every other Python value here:
     # `params` is a Python list and touching it without the GIL is a data
     # race, not a slow path.
     var class_weights = List[Float32]()
     for i in range(n_class_weights):  # small-loop(n_class_weights: one weight per class): Python parameter list, not row data
-        class_weights.append(Float32(Float64(py=params[35 + i])))
+        class_weights.append(Float32(params.f(35 + i)))
     # their `EGrowPolicy` by ORDINAL (enums.h order: SymmetricTree,
     # Depthwise, Lossguide), resolved to the spelling `train` takes
-    var grow_code = Int(py=params[31])
+    var grow_code = params.i(31)
     var grow_name = String("SymmetricTree")
     if grow_code == 1:
         grow_name = String("Depthwise")
@@ -497,20 +491,20 @@ def _gbdt_fit_impl(
     # exact slot layout. An old extension rejects the new longer request.
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
-        min_split_gain = Float64(py=params[fixed_and_weights])
+        min_split_gain = params.f(fixed_and_weights)
 
     var min_child_hessian = Float64(-1)
     if len(params) >= fixed_and_weights + 2:
-        min_child_hessian = Float64(py=params[fixed_and_weights + 1])
+        min_child_hessian = params.f(fixed_and_weights + 1)
 
     var feature_fraction = Float64(1)
     if len(params) >= fixed_and_weights + 3:
-        feature_fraction = Float64(py=params[fixed_and_weights + 2])
+        feature_fraction = params.f(fixed_and_weights + 2)
 
     # MultiRMSE's target dimension, the one value of the +4 tail
     var target_dim = 1
     if len(params) == fixed_and_weights + 4:
-        target_dim = Int(py=params[fixed_and_weights + 3])
+        target_dim = params.i(fixed_and_weights + 3)
         if target_dim < 2:
             raise Error(
                 "gbdt_fit: the target-dimension tail needs a dimension >= 2,"
@@ -521,69 +515,69 @@ def _gbdt_fit_impl(
     # read here, with the GIL held, like every other Python value
     var group_sizes = List[UInt32]()
     if len(params) >= fixed_and_weights + 5:
-        var n_groups = Int(py=params[fixed_and_weights + 4])
+        var n_groups = params.i(fixed_and_weights + 4)
         if n_groups < 1:
             raise Error(
                 "gbdt_fit: the group tail needs a positive group count, got "
                 + String(n_groups)
             )
         # one memcpy (no per-group host loop)
-        group_sizes = list_u32(_u32_ptr(Int(py=params[fixed_and_weights + 3])), n_groups)
+        group_sizes = list_u32(_u32_ptr(params.i(fixed_and_weights + 3)), n_groups)
 
     # the PairLogit pairs tail; a count of -1 means generate them
     var pair_winners = List[UInt32]()
     var pair_losers = List[UInt32]()
     var pair_weights = List[Float32]()
     if len(params) == fixed_and_weights + 8:
-        var n_pairs = Int(py=params[fixed_and_weights + 6])
+        var n_pairs = params.i(fixed_and_weights + 6)
         if n_pairs != -1 and n_pairs < 1:
             raise Error(
                 "gbdt_fit: the pairs tail needs a positive pair count or -1,"
                 " got " + String(n_pairs)
             )
         if n_pairs > 0:
-            var pp = _u32_ptr(Int(py=params[fixed_and_weights + 5]))
-            var pw = _f32_ptr(Int(py=params[fixed_and_weights + 7]))
+            var pp = _u32_ptr(params.i(fixed_and_weights + 5))
+            var pw = _f32_ptr(params.i(fixed_and_weights + 7))
             # cpu3-bindings: the interleaved pairs split on the device and
             # the weights in one memcpy (no per-pair host loop)
             device_split_pairs(process_ctx[_DEVCTX_SLOT](), pp, n_pairs, pair_winners, pair_losers)
             pair_weights = list_f32(pw, n_pairs)
 
     var fp = GbdtFitParams(
-        Int(py=params[4]),
-        Int(py=params[5]),
-        Int(py=params[6]),
-        Float32(Float64(py=params[7])),
-        Float32(Float64(py=params[8])),
-        UInt64(Int(py=params[9])),
-        Int(py=params[10]),
-        String(py=strs[0]),
-        Float32(Float64(py=params[11])),
-        Float32(Float64(py=params[12])),
-        Float32(Float64(py=params[13])),
-        Float32(Float64(py=params[14])),
-        Float32(Float64(py=params[15])),
-        Int(py=params[16]),
-        Int(py=params[17]),
-        String(py=strs[1]),
-        Float32(Float64(py=params[18])),
-        Float32(Float64(py=params[19])),
-        String(py=strs[2]),
-        Float64(py=params[21]),
-        Int(py=params[22]),
-        Int(py=params[23]),
-        Int(py=params[24]),
-        String(py=strs[3]),
-        Float32(Float64(py=params[25])),
-        Int(py=params[26]) != 0,
-        Int(py=params[27]),
-        Int(py=params[28]),
-        Int(py=params[29]),
-        Int(py=params[30]),
+        params.i(4),
+        params.i(5),
+        params.i(6),
+        Float32(params.f(7)),
+        Float32(params.f(8)),
+        UInt64(params.i(9)),
+        params.i(10),
+        params.strs[0],
+        Float32(params.f(11)),
+        Float32(params.f(12)),
+        Float32(params.f(13)),
+        Float32(params.f(14)),
+        Float32(params.f(15)),
+        params.i(16),
+        params.i(17),
+        params.strs[1],
+        Float32(params.f(18)),
+        Float32(params.f(19)),
+        params.strs[2],
+        params.f(21),
+        params.i(22),
+        params.i(23),
+        params.i(24),
+        params.strs[3],
+        Float32(params.f(25)),
+        params.i(26) != 0,
+        params.i(27),
+        params.i(28),
+        params.i(29),
+        params.i(30),
         class_weights^,
         grow_name,
-        Int(py=params[32]),
-        Int(py=params[33]),
+        params.i(32),
+        params.i(33),
         min_split_gain,
         min_child_hessian,
         feature_fraction,
@@ -592,7 +586,7 @@ def _gbdt_fit_impl(
         fold_len_multiplier,
         fold_permutation_block,
     )
-    var n_eval_rows = Int(py=params[20])
+    var n_eval_rows = params.i(20)
 
     var result: GbdtFitResult
     var device_plan = _gbdt_device_plan()
@@ -611,18 +605,8 @@ def _gbdt_fit_impl(
         )
         ctx.synchronize()
 
-    # One PyList_New per curve filled slot by slot (bindings/py_lists.mojo),
-    # not one bound append per boosting iteration (p3-trees).
-    var learn = py_list_f64(result.learn_losses)
-    var test = py_list_f64(result.test_losses)
-
-    var out = Python.list()
-    out.append(PythonObject(result.text))
-    out.append(PythonObject(result.best_iteration))
-    out.append(PythonObject(result.stopped_early))
-    out.append(learn)
-    out.append(test)
-    return out
+    return GbdtFitOutcome(result.text.copy(), result.best_iteration, result.stopped_early, result.learn_losses.copy(),
+                          result.test_losses.copy())
 
 
 def gbdt_fit_binding(
@@ -635,11 +619,11 @@ def gbdt_fit_binding(
     params: PythonObject,
     strs: PythonObject,
 ) raises -> PythonObject:
-    """`gbdt_fit`: X column-major, as documented on `_gbdt_fit_impl`."""
-    return _gbdt_fit_impl(
-        False, x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr,
-        eval_y_addr, params, strs,
-    )
+    """`gbdt_fit`: X column-major, as documented on `gbdt_fit_native`.
+    UNPACK and PACK only (bindings/gbdt_fit_boundary.mojo); the GBDT doors
+    call the fit natively through this image's table entry."""
+    var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
+    return gbdt_fit_outcome_py(gbdt_fit_native(False, args))
 
 
 def gbdt_fit_rowmajor_binding(
@@ -658,15 +642,18 @@ def gbdt_fit_rowmajor_binding(
     set stays column-major. Served only when
     `gbdt_fit_row_major_available()` says so (raw float columns only, so
     `params[3]` must be 0); the Python layer asks first."""
-    if Int(py=params[3]) != 0:
+    var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
+    return gbdt_fit_outcome_py(gbdt_fit_rowmajor_native(args))
+
+
+def gbdt_fit_rowmajor_native(args: GbdtFitArgs) raises -> GbdtFitOutcome:
+    """The row-major fit's own refusal, then `gbdt_fit_native`."""
+    if args.i(3) != 0:
         raise Error(
             "gbdt_fit_rowmajor takes raw float columns only; pass categorical"
             " or one-hot features through gbdt_fit"
         )
-    return _gbdt_fit_impl(
-        True, x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr,
-        eval_y_addr, params, strs,
-    )
+    return gbdt_fit_native(True, args)
 
 
 def gbdt_fit_row_major_available_binding() raises -> PythonObject:
@@ -989,6 +976,37 @@ def ordered_doc_count_binding() raises -> PythonObject:
     return PythonObject(ordered_doc_count())
 
 
+# ---- The image's native gbdt entry (lane calltable-gbdt-forest-dart,
+# 2026-11-11; ABI gbdt/fit_request.mojo, table core/gbdt_entry_table.mojo):
+# the GBDT doors fit, probe and read the model dimension through it instead
+# of the Python entries above, which remain for the unconverted Python
+# callers (python/mojolearn/ensemble*.py) and only UNPACK and PACK.
+struct _GbdtGpuImage(GbdtImage):
+    @staticmethod
+    def fit(row_major: Bool, args: GbdtFitArgs) raises -> GbdtFitOutcome:
+        if row_major:
+            comptime if GBDT_QUANT_DEVICE:
+                return gbdt_fit_rowmajor_native(args)
+            raise Error("AttributeError: mojolearn: this gbdt binding has no gbdt_fit_rowmajor")
+        return gbdt_fit_native(False, args)
+
+    @staticmethod
+    def row_major() -> Bool:
+        comptime if GBDT_QUANT_DEVICE:
+            return gbdt_fit_row_major_available()
+        return False
+
+    @staticmethod
+    def model_dim(text: String) raises -> Int:
+        return gbdt_model_dim(text)
+
+
+def gbdt_gpu_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's gbdt entry (`GBDT_ENTRY_ABI`, gbdt/fit_request.mojo)."""
+    return gbdt_entry_dispatch[_GbdtGpuImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gbdt.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -996,6 +1014,8 @@ def build__mojolearn_gbdt() -> PythonObject:
     comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
+        # The native gbdt entry (core/gbdt_entry_table.mojo) under this image's key.
+        gbdt_entry_publish["MojolearnGbdtEntryOwnerGpuV1"](COMPILED_VENDOR, gbdt_gpu_entry_v1)
         m.def_function[ordered_doc_count_binding]("gbdt_ordered_doc_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")

@@ -86,18 +86,27 @@ def _entries(module):
 _NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
 
 
-def _native_key(table):
-    # glue: once at import, the connected x_trees image's (tier, vendor) key,
-    # which its native callers read instead of looking entries up by name
-    # (lane calltable-trees). An image without one leaves the key absent and
-    # its native callers refuse.
+#: The images whose native callers read a (tier, vendor) key, with the two
+#: probes each exports: x_trees (lane calltable-trees; its glue and DART
+#: tables) and gbdt (lane calltable-gbdt-forest-dart; core/gbdt_entry_table.mojo).
+_NATIVE_KEYED = {
+    "_mojolearn_x_trees": ("x_trees_numeric_mode", "x_trees_vendor", "x_trees_native_key"),
+    "_mojolearn_gbdt": ("gbdt_numeric_mode", "gbdt_vendor", "gbdt_native_key"),
+}
+
+
+def _native_key(table, name):
+    # glue: once at import, the connected image's (tier, vendor) key, which
+    # its native callers read instead of looking entries up by name. An image
+    # without one leaves the key absent and its native callers refuse.
+    mode_probe, vendor_probe, slot = _NATIVE_KEYED[name]
     try:
-        mode = int(table["x_trees_numeric_mode"]())  # import-time: the image's compiled tier
-        vendor = _NATIVE_VENDORS.get(str(table["x_trees_vendor"]()), -1)  # import-time: the image's vendor
+        mode = int(table[mode_probe]())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(table[vendor_probe]()), -1)  # import-time: the image's vendor
     except Exception:  # noqa: BLE001 - absent probes leave the key absent
         return
     if vendor >= 0 and mode in (0, 1):
-        table["x_trees_native_key"] = (mode, vendor)
+        table[slot] = (mode, vendor)
 
 
 def _bindings():
@@ -112,8 +121,8 @@ def _bindings():
                 per_mode[name] = _entries(_backend.binding(name, mode))
             except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
                 per_mode[name] = _refusal(error)
-            if name == "_mojolearn_x_trees" and isinstance(per_mode[name], dict):
-                _native_key(per_mode[name])
+            if name in _NATIVE_KEYED and isinstance(per_mode[name], dict):
+                _native_key(per_mode[name], name)
         connected[mode] = per_mode
     return connected
 
