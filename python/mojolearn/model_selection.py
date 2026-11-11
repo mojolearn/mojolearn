@@ -23,9 +23,7 @@ Behavior to know:
   so a given ``random_state`` gives a reproducible split, but not the same
   rows scikit-learn would pick for that seed.
 """
-import array
 import copy
-import itertools
 import numbers
 import os
 import warnings
@@ -517,31 +515,6 @@ __all__ += [
 ]
 
 
-def _as_index(values):
-    if isinstance(values, range) and values.step == 1:
-        # a contiguous row range, written by the base binding (lane cgr4-py-compute)
-        return _arange_rows(values.start, max(len(values), 0))
-    store = None
-    if isinstance(values, list):
-        # ints (and bools) go in as they are, in C; anything array('q')
-        # refuses keeps the int() path (lane metrics-apple)
-        try:
-            store = array.array('q', values)
-        except TypeError:
-            store = None
-    if store is None:
-        store = array.array('q', map(int, values))
-    return Array._owned(store, (len(store),), '<i8', 'C')
-
-
-def _arange_rows(start, n):
-    """Int64 rows start, start + 1, ..., start + n - 1 (`arange_i64`)."""
-    out = empty((n,), '<i8')
-    if n:
-        _native('arange_i64')(_addr(out), int(start), int(n))
-    return out
-
-
 # ---------------------------------------------------------------- native rows
 # lane/py-misc-msel (2026-09-28): the group splitters, PredefinedSplit,
 # unshuffled KFold and StratifiedShuffleSplit build their rows with the core
@@ -566,21 +539,6 @@ _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
 _FLIP = bytes([1, 0]) + bytes(254)
 
 
-def _row_means(rows):
-    """`fsum(row) / len(row)` of each equal-length row of float scores, by
-    the core helper `row_means_f64` (lane py-runtime-b: the search results'
-    mean test and train scores and the permutation test's mean score; the
-    same exact sum, rounded once, then one division)."""
-    m = len(rows)
-    k = len(rows[0]) if m else 0
-    flat = array.array('d', itertools.chain.from_iterable(rows))  # glue: score rows packed as one float64 table
-    out = array.array('d', bytes(8 * max(m, 1)))
-    if m and k:
-        if int(_native('row_means_f64')(flat.buffer_info()[0], m, k, out.buffer_info()[0])):
-            raise ValueError('-inf + inf in fsum')
-    return out.tolist()[:m]
-
-
 class _Splitter:
     """sklearn's BaseCrossValidator protocol: split(X, y, groups) yields
     (train, test) Int64 index Arrays; get_n_splits."""
@@ -599,15 +557,6 @@ class _Splitter:
         # every splitter builds its rows natively in its own `split` (lane
         # py-runtime-b deleted the Python `_test_folds` definitions)
         raise NotImplementedError
-
-
-def _check_splits(n_splits):
-    if is_bool(n_splits) or not isinstance(n_splits, numbers.Integral):
-        raise ValueError(f'The number of folds must be of Integral type. {n_splits!r} was passed.')
-    if n_splits <= 1:
-        raise ValueError(f'k-fold cross-validation requires at least one train/test split by setting '
-                         f'n_splits=2 or more, got n_splits={n_splits}.')
-    return int(n_splits)
 
 
 class _KFoldBase(_Splitter):
