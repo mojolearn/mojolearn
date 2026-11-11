@@ -1,0 +1,113 @@
+{
+  "baseline": "fc8a09b92243d71ad5306f2f7f8d7ee066aeff6f",
+  "status": "additive typed fit API authored; public consumers still pending",
+  "roles": [
+    {
+      "family": "MeanShift",
+      "before": "bindings/cluster_fit_a_native.mojo:474",
+      "role": "fit integer option list",
+      "after": "pending"
+    },
+    {
+      "family": "MeanShift",
+      "before": "bindings/cluster_fit_a_native.mojo:476",
+      "role": "fit bandwidth option list",
+      "after": "pending"
+    },
+    {
+      "family": "MeanShift",
+      "before": "bindings/cluster_fit_a_native.mojo:476",
+      "role": "nested fit result envelope",
+      "after": "pending"
+    },
+    {
+      "family": "AffinityPropagation",
+      "before": "bindings/cluster_fit_a_native.mojo:624",
+      "role": "preference list/nested-list staging and private converted Array",
+      "after": "pending"
+    },
+    {
+      "family": "AffinityPropagation",
+      "before": "bindings/cluster_fit_a_native.mojo:634",
+      "role": "fit integer option list",
+      "after": "pending"
+    },
+    {
+      "family": "AffinityPropagation",
+      "before": "bindings/cluster_fit_a_native.mojo:636",
+      "role": "fit damping/preference option list",
+      "after": "pending"
+    },
+    {
+      "family": "AffinityPropagation",
+      "before": "bindings/cluster_fit_a_native.mojo:637",
+      "role": "nested fit result envelope",
+      "after": "pending"
+    },
+    {
+      "family": "shared MeanShift/AP queries",
+      "before": "bindings/cluster_native.mojo:200",
+      "role": "nearest query option and result envelopes",
+      "after": "pending"
+    },
+    {
+      "family": "shared MeanShift/AP queries",
+      "before": "bindings/cluster_native.mojo:155",
+      "role": "resident query/owner tuples and Python-callable numeric dispatch",
+      "after": "pending"
+    }
+  ],
+  "distinct_role_count": 9,
+  "counting": "bounded semantic container roles, not runtime-instance counts or struct counts",
+  "public_calls": {
+    "MeanShift": [
+      "MeanShift.fit -> family_cfa_meanshift_fit -> _meanshift_fit -> ENTRY_MEANSHIFT -> meanshift_entry -> meanshift_fit",
+      "MeanShift.fit_predict -> same fit -> labels_",
+      "MeanShift.predict -> family_xc_predict -> _xc_nearest -> resident centers or ENTRY_NEAREST"
+    ],
+    "AffinityPropagation": [
+      "AffinityPropagation.fit -> family_cfa_ap_fit -> _affinity_fit -> ENTRY_AFFINITY -> affinity_entry -> affinity_fit",
+      "AffinityPropagation.fit_predict -> same fit -> labels_",
+      "AffinityPropagation.predict -> family_xc_ap_predict -> precomputed refusal / empty-center fill(-1) / _xc_nearest"
+    ]
+  },
+  "reuse": "MeanShift/AP queries already use the same ENTRY_NEAREST and x_cluster resident-center operations as migrated variants; reuse typed descriptors for those exact operations, not KMeans fit algorithms.",
+  "retained_boundary_outputs": [
+    "MeanShift.cluster_centers_",
+    "MeanShift.labels_",
+    "MeanShift.bandwidth_",
+    "MeanShift.n_iter_",
+    "AffinityPropagation.cluster_centers_indices_",
+    "AffinityPropagation.labels_",
+    "AffinityPropagation.affinity_matrix_",
+    "AffinityPropagation._message_diag",
+    "AffinityPropagation.n_iter_",
+    "AffinityPropagation.cluster_centers_ when euclidean",
+    "both n_features_in_"
+  ],
+  "kernel_sources": [
+    "x_cluster/meanshift.mojo",
+    "x_cluster/affinity.mojo",
+    "x_cluster/device_ops.mojo",
+    "x_cluster/host/host_ops.mojo"
+  ],
+  "compatibility_notes": [
+    "MeanShift seeds and optional bandwidth admission/refusal order; bin_seeding/min_bin_freq/cluster_all default words preserved.",
+    "AP scalar-vs-vector preference classification and ordered shape/finite validation require careful boundary normalization.",
+    "AP precomputed fit does not publish cluster_centers_; preserve stale existing-attribute behavior if any.",
+    "AP diagnostic message diagonals are observable boundary storage; do not count their removal.",
+    "Existing AP_EXACT/AP_SPLIT fast switches stay unchanged; no new fast investment."
+  ],
+  "compiled": false,
+  "executed": false,
+  "additive_api": {
+    "core": "core/cluster_centroid_fit_api.mojo",
+    "factory": "cluster_centroid_fit_native_api_v1",
+    "providers": [
+      "x_cluster/centroid_fit_host.mojo",
+      "x_cluster/centroid_fit_device.mojo"
+    ],
+    "dispatch": "x_cluster/centroid_fit_dispatch.mojo",
+    "algorithms": "same ENTRY_MEANSHIFT and ENTRY_AFFINITY through the shared existing execution owner; no kernel changes"
+  }
+}
