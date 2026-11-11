@@ -3,6 +3,9 @@
 # metadata, never Python loaders, constructors, or callbacks. The public
 # router is switched only after every existing format has a native builder.
 from std.python import Python, PythonObject
+from bindings.cpython_table import cpython_table
+from core.gp_native_api import GPKernelView
+from core.gp_native_archive import GPArchiveKernelPlan
 from bindings.native_loaded_module import native_loaded_module
 from std.memory import bitcast
 from std.math import isfinite
@@ -127,10 +130,15 @@ def host_archive_linear_decoded(cls: PythonObject, members: List[NativeArchiveDe
     return archive_linear_pack(cls, plan, members, ridge, context)
 
 
-def host_archive_mode(arrays: PythonObject, fields: PythonObject, context: PythonObject) raises:
+def host_archive_mode_value(arrays: PythonObject, context: PythonObject) raises -> PythonObject:
     var mode = _archive_string(arrays, "numeric_mode", context)
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("mojolearn: invalid saved numeric_mode " + _archive_builtin_repr(mode))
+    return mode
+
+
+def host_archive_mode(arrays: PythonObject, fields: PythonObject, context: PythonObject) raises:
+    var mode = host_archive_mode_value(arrays, context)
     py_setitem(fields, "numeric_mode", mode)
 
 
@@ -1825,14 +1833,47 @@ def host_archive_gpc_rows(arrays: PythonObject, name: String, dtype: String, cou
     return value
 
 
+def host_archive_gpc_nodes(plan: GPArchiveKernelPlan, where: String) raises -> PythonObject:
+    # These are output scalar identity pins, not numerical working state.
+    # The old table boxed each source scale once; overlapping/negative slices
+    # can reuse that exact object in multiple public saved-kernel nodes.
+    var scale_pins = List[PythonObject](capacity=plan.view.scale_count)
+    for i in range(plan.view.scale_count):  # PACK immutable saved scale objects under the GIL
+        scale_pins.append(PythonObject(plan.scale(i)))
+    if not plan.valid():
+        raise Error(where + " kernel arrays disagree with each other")
+    ref cpy = Python().cpython()
+    var api = cpython_table()
+    var raw = api[].PyList_New(plan.view.nodes)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var nodes = PythonObject(from_owned=raw)
+    var offset = 0
+    for i in range(plan.view.nodes):  # PACK saved postfix node metadata in original order
+        var span = plan.span(i, offset)
+        var raw_scales = api[].PyList_New(span.count)
+        if not raw_scales:
+            raise cpy.unsafe_get_error()
+        var node_scales = PythonObject(from_owned=raw_scales)
+        for j in range(span.count):  # PACK retained scalar identities through exact list slots
+            if api[].PyList_SetItem(raw_scales, j, cpy.Py_NewRef(scale_pins[span.start + j]._obj_ptr)) != 0:
+                raise cpy.unsafe_get_error()
+        var node = Python.tuple(PythonObject(plan.kind(i)), PythonObject(plan.parameter_value(i)), node_scales)
+        if api[].PyList_SetItem(raw, i, node.steal_data()) != 0:
+            raise cpy.unsafe_get_error()
+        offset = span.next_offset
+    _ = plan
+    _ = scale_pins
+    return nodes
+
+
 def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     # The refusals keep GaussianProcessClassifier.load's wording and order;
     # the fields follow the constructor's, _validate_params's, then the
     # loader's and _set_fitted's assignments.
     var where = host_archive_where(path, context)
-    var mode = Python.dict()
-    host_archive_mode(arrays, mode, context)
+    var mode = host_archive_mode_value(arrays, context)
     var meta = host_archive_meta(arrays, "meta", 6, path, context)
     var n_train = classical_i64(meta, 0)
     var n_features = classical_i64(meta, 1)
@@ -1840,28 +1881,22 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     var max_iter = classical_i64(meta, 3)
     var n_ls = classical_i64(meta, 4)
     var n_classes = classical_i64(meta, 5)
-    var kind_list = py_call(_archive_exact(arrays, "kinds", "<i4", context)._mv.tolist)
-    var param_list = py_call(_archive_exact(arrays, "kparams", "<f4", context)._mv.tolist)
-    var length_list = py_call(_archive_exact(arrays, "ls_len", "<i4", context)._mv.tolist)
-    var table = py_call(_archive_exact(arrays, "ls", "<f4", context)._mv.tolist)
-    var count = len(kind_list)
-    var total = 0
-    for i in range(len(length_list)):  # driver-loop: saved postfix kernel node metadata
-        total += Int(py=length_list[i])
-    if len(param_list) != count or len(length_list) != count or total != n_ls:
-        raise Error(where + " kernel arrays disagree with each other")
-    var b = native_loaded_module("builtins")
-    var nodes = Python.list()
-    var offset = 0
-    for i in range(count):  # driver-loop: saved postfix kernel node metadata
-        var length = Int(py=length_list[i])
-        # table[offset:offset + length], Python's slice of the saved table.
-        var part = table[py_call(b.slice, offset, offset + length)]
-        var node_scales = Python.list()
-        for j in range(len(part)):  # driver-loop: saved kernel node parameter metadata
-            _ = py_call(node_scales.append, py_call(b.float, part[j]))
-        _ = py_call(nodes.append, Python.tuple(py_call(b.int, kind_list[i]), py_call(b.float, param_list[i]), node_scales))
-        offset += length
+    var kinds = _archive_exact(arrays, "kinds", "<i4", context)
+    var parameters = _archive_exact(arrays, "kparams", "<f4", context)
+    var lengths = _archive_exact(arrays, "ls_len", "<i4", context)
+    var scales = _archive_exact(arrays, "ls", "<f4", context)
+    var view = GPKernelView(Int(py=classical_address(kinds)), Int(py=classical_address(parameters)),
+        Int(py=classical_address(lengths)), Int(py=classical_address(scales)),
+        Int(py=kinds.size), Int(py=scales.size))
+    var plan = GPArchiveKernelPlan(view^, Int(py=parameters.size), Int(py=lengths.size), n_ls)
+    var nodes = host_archive_gpc_nodes(plan, where)
+    # Raw descriptor addresses remain borrowed from these admitted owners
+    # through validation and every public node/scalar PACK.
+    _ = kinds
+    _ = parameters
+    _ = lengths
+    _ = scales
+    _ = plan
     var kernel = host_archive_allocate(context["host_archive_gpc_saved_kernel"], context)
     py_setitem(sequential_fields(kernel), "_node_list", nodes)
     if max_iter < 1:
@@ -1877,7 +1912,7 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     py_setitem(fields, "random_state", PythonObject(None))
     py_setitem(fields, "multi_class", "one_vs_rest")
     py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "numeric_mode", mode["numeric_mode"])
+    py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_kernel", kernel)
     py_setitem(fields, "_max_iter_predict", max_iter)
     var x = _archive_exact(arrays, "x", "<f4", context)
