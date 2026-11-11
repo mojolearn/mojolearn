@@ -103,11 +103,15 @@ from glm.impl.gram_solve import linear_gram_fit_host
 from core.gram_multi_gpu import gram_plan_current
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
-from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
+from glm.impl.center_device import col_sums_pair_device, scale_rows_device
 from glm.impl.ols_prep_device import ols_prep_device
-from glm.impl.lm_finish import lm_intercept, lm_means_finish
+from glm.impl.lm_finish import lm_intercept
 from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
-from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
+from glm.impl.ridge_multi import MULTIOUT_RIDGE
+from core.linear_multi_device import (
+    lm_col_sums_run, lm_means_finish_run, lm_center_run, ridge_fit_multi_run, ridge_predict_multi_run,
+    publish_ridge_multi,
+)
 from core.estimators_impl import (
     pca_whiten_overlap_check,
 )
@@ -742,8 +746,7 @@ def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: Py
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        col_sums_device(ctx, xa, oa, nr, nc)
+        lm_col_sums_run(xa, oa, nr, nc)
     return PythonObject(0)
 
 
@@ -764,8 +767,7 @@ def lm_means_finish_binding(
     var t = Float64(py=total)
     if nc <= 0:
         return PythonObject(0)
-    lm_means_finish(_f64_ptr(Int(py=sums_addr)), _f64_ptr(Int(py=mean64_addr)), _f32_ptr(Int(py=mean32_addr)),
-                    nc, nr, weighted, t)
+    lm_means_finish_run(Int(py=sums_addr), Int(py=mean64_addr), Int(py=mean32_addr), nc, nr, weighted, t)
     return PythonObject(0)
 
 
@@ -927,8 +929,7 @@ def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: Pyt
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        center_device(ctx, xa, ma, oa, nr, nc)
+        lm_center_run(xa, ma, oa, nr, nc)
     return PythonObject(0)
 
 
@@ -1153,27 +1154,23 @@ def ridge_fit_multi_binding(
     if len(params) != 5 and len(params) != 7:
         raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y"
                     " (, xmean_addr, icpt_addr)")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var mp = _f32_ptr(Int(py=ymean_addr))
+    var xp = Int(py=x_addr)
+    var yp = Int(py=y_addr)
+    var wp = Int(py=coef_addr)
+    var mp = Int(py=ymean_addr)
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nt = Int(py=params[2])
     var alpha = Float32(Float64(py=params[3]))
     var center = Int(py=params[4]) != 0
     # The intercept addresses are read with the GIL held, before the one
-    # GIL-released device section that runs the fit and then the intercepts.
+    # GIL-released device section that runs the fit and then the intercepts
+    # (ne2-g-linear, N408: `ridge_multi_icpt_kernel` in the same session).
     var want_icpt = len(params) == 7 and nt > 0 and nf > 0
-    var xm = _f32_ptr(Int(py=params[5])) if want_icpt else wp
-    var ic = _f32_ptr(Int(py=params[6])) if want_icpt else wp
+    var xm = Int(py=params[5]) if want_icpt else 0
+    var ic = Int(py=params[6]) if want_icpt else 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        # ne2-g-linear (N408): the intercepts in the same device session
-        # (`ridge_multi_icpt_kernel` on the device coef and ymean).
-        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center, want_icpt, xm, ic)
-        ctx.synchronize()
-        _ = ctx^
+        ridge_fit_multi_run(xp, yp, wp, mp, nr, nf, nt, alpha, center, want_icpt, xm, ic)
     return PythonObject(0)
 
 
@@ -1189,17 +1186,15 @@ def ridge_predict_multi_binding(
     n_targets."""
     if len(params) != 3:
         raise Error("ridge_predict_multi: params must contain n_rows, n_features, n_targets")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var ip = _f32_ptr(Int(py=icpt_addr))
-    var op = _f32_ptr(Int(py=out_addr))
+    var xp = Int(py=x_addr)
+    var cp = Int(py=coef_addr)
+    var ip = Int(py=icpt_addr)
+    var op = Int(py=out_addr)
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nt = Int(py=params[2])
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ridge_predict_multi_host(ctx, xp, cp, ip, op, nr, nf, nt)
-        ctx.synchronize()
+        ridge_predict_multi_run(xp, cp, ip, op, nr, nf, nt)
     return PythonObject(0)
 
 
@@ -1764,6 +1759,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[qn_softmax_binding]("qn_softmax")
         var published_module = m.finalize()
         _publish_linear_entry_table()
+        # The ridge multi table (core/linear_entry_table_multi.mojo).
+        publish_ridge_multi()
         return published_module
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))
