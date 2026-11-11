@@ -429,7 +429,10 @@ def _ids(var value: PythonObject) raises -> List[Int]:
             raise Error("TypeError: tokenizer ids require a native integer buffer")
         var packed = List[UInt8](length=layout.count * layout.itemsize, fill=0)
         layout.copy_to(Int(packed.unsafe_ptr()))
-        for i in range(layout.count):  # cpu-route: capture admitted native integer input storage without scalar callbacks
+        # Typed Mojo decode of the one packed copy: the result is sized once
+        # and filled by index (no CPython call, no per-element growth).
+        result = List[Int](length=layout.count, fill=0)
+        for i in range(layout.count):  # typed Mojo over the admitted buffer: no CPython call per element
             var bits = UInt64(0)
             if layout.itemsize != 1 and layout.itemsize != 2 and layout.itemsize != 4 and layout.itemsize != 8:
                 raise Error("TypeError: tokenizer integer buffer is wider than 64 bits")
@@ -441,7 +444,7 @@ def _ids(var value: PythonObject) raises -> List[Int]:
                 bits |= UInt64(0xffffffffffffffff) << UInt64(layout.itemsize * 8)
             if not signed and bits > UInt64(9223372036854775807):
                 raise Error("ValueError: tokenizer id exceeds the supported integer range")
-            result.append(Int(bits))
+            result[i] = Int(bits)
     except error:
         pin.release()
         raise error
