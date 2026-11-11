@@ -20,6 +20,10 @@ The sabotage arm (`gp_infer_host_sabotage`) is the reference binding's:
 `gaussian_process/host/gpr_oracle.mojo::GPR_ORACLE_HOST_SABOTAGE`
 (`-D MOJOLEARN_HOST_SABOTAGE=1`).
 """
+from core.gp_native_provider import GPProviderAPI
+from core.gp_native_host_infer import GPHostInferenceKernels
+from core.shared_slot import SharedSlot
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -69,10 +73,19 @@ def gp_numeric_mode_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp_infer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+comptime GP_HOST_INFER_NATIVE_API = SharedSlot[GPProviderAPI[GPHostInferenceKernels], "MojolearnGPHostInferenceKernelsV1"]
+
+
+def gp_native_api_v1_binding() raises -> PythonObject:
+    var api = GP_HOST_INFER_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
 def build__mojolearn_gp_infer_host() -> PythonObject:
     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_gp_infer_host")
+        module.def_function[gp_native_api_v1_binding]("gp_native_api_v1")
         module.def_function[gp_infer_host_numeric_mode_binding]("gp_infer_host_numeric_mode")
         module.def_function[gp_infer_host_vendor_binding]("gp_infer_host_vendor")
         module.def_function[gp_infer_host_column_binding]("gp_infer_host_column")
