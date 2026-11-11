@@ -28,7 +28,7 @@ _SYMBOLS = {
         "x_decomp_native_api_v1",
     )),
     "base": ("_mojolearn", (
-        "nonzero_f32_count", "nonzero_f32_fill", "nonzero_f64_count", "nonzero_f64_fill", "knn_affinity_f32",
+        "spectral_preparation_native_api_v1",
     )),
     "cluster": ("_mojolearn_x_cluster", ("spectral_assign_native_api_v1",)),
 }

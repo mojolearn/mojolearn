@@ -1127,10 +1127,24 @@ def labels_native_api_v2_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+from core.spectral_preparation_api import SpectralPreparationAPI
+from core.spectral_preparation_host import SpectralPreparationHost
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
+
+comptime _SPECTRAL_PREPARATION_SLOT = "MojolearnSpectralPreparationHostIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_PREP_IDENTICAL else "MojolearnSpectralPreparationHostFastV1"
+comptime SPECTRAL_PREPARATION_API = SharedSlot[SpectralPreparationAPI[SpectralPreparationHost], _SPECTRAL_PREPARATION_SLOT]
+
+
+def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_PREPARATION_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_core_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
+        module.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         module.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
         module.def_function[core_host_vendor_binding]("core_host_vendor")

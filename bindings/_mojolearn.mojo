@@ -2038,10 +2038,24 @@ def labels_native_api_v2_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+from core.spectral_preparation_api import SpectralPreparationAPI
+from core.spectral_preparation_device import SpectralPreparationDevice
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
+
+comptime _SPECTRAL_PREPARATION_SLOT = "MojolearnSpectralPreparationDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_PREP_IDENTICAL else "MojolearnSpectralPreparationDeviceFastV1"
+comptime SPECTRAL_PREPARATION_API = SharedSlot[SpectralPreparationAPI[SpectralPreparationDevice], _SPECTRAL_PREPARATION_SLOT]
+
+
+def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_PREPARATION_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn")
+        m.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
         m.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
