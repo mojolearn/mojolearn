@@ -9,14 +9,21 @@ from core.linear_entry_table_multi import (
     ridge_multi_table_entry, RIDGE_MULTI_ABI, RM_OP_COUNT, RM_COL_SUMS, RM_MEANS_FINISH, RM_CENTER, RM_FIT,
     RM_PREDICT,
 )
-from core.native_descriptor_call import native_descriptor_call
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 
 
-def ridge_multi_call(key: LinearEntryKey, op: Int, addrs: List[Int], ints: List[Int],
+def ridge_multi_ref(key: LinearEntryKey) raises -> EntryRef:
+    """The ridge multi entry of the estimators image the key names, resolved
+    once per operation (lane entry-table-zero-alloc); the table refusals
+    raise here."""
+    return EntryRef(ridge_multi_table_entry(key, 0, String(RIDGE_MULTI_ABI), RM_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, RM_OP_COUNT))
+
+
+def ridge_multi_call(entry: EntryRef, op: Int, addrs: List[Int], ints: List[Int],
                      floats: List[Float64]) raises -> Int:
-    """One ridge multi operation in the estimators image the key names."""
-    var entry = ridge_multi_table_entry(key, 0, String(RIDGE_MULTI_ABI), RM_OP_COUNT)
-    return native_descriptor_call(entry, op, addrs, ints, floats)
+    """One ridge multi operation through the resolved entry: one indirect call."""
+    return entry_ref_call(entry, op, addrs, ints, floats)
 
 
 def ridge_multi_available(key: LinearEntryKey) -> Bool:
@@ -29,14 +36,14 @@ def ridge_multi_available(key: LinearEntryKey) -> Bool:
         return False
 
 
-def rm_col_sums(key: LinearEntryKey, x: Int, sums: Int, rows: Int, cols: Int) raises:
+def rm_col_sums(key: EntryRef, x: Int, sums: Int, rows: Int, cols: Int) raises:
     var addrs: List[Int] = [x, sums]
     var ints: List[Int] = [rows, cols]
     var floats = List[Float64]()
     _ = ridge_multi_call(key, RM_COL_SUMS, addrs, ints, floats)
 
 
-def rm_means_finish(key: LinearEntryKey, sums: Int, mean64: Int, mean32: Int, cols: Int, rows: Int,
+def rm_means_finish(key: EntryRef, sums: Int, mean64: Int, mean32: Int, cols: Int, rows: Int,
                     weighted: Bool, total: Float64) raises:
     var addrs: List[Int] = [sums, mean64, mean32]
     var ints: List[Int] = [cols, rows, 1 if weighted else 0]
@@ -44,14 +51,14 @@ def rm_means_finish(key: LinearEntryKey, sums: Int, mean64: Int, mean32: Int, co
     _ = ridge_multi_call(key, RM_MEANS_FINISH, addrs, ints, floats)
 
 
-def rm_center(key: LinearEntryKey, x: Int, mu: Int, dst: Int, rows: Int, cols: Int) raises:
+def rm_center(key: EntryRef, x: Int, mu: Int, dst: Int, rows: Int, cols: Int) raises:
     var addrs: List[Int] = [x, mu, dst]
     var ints: List[Int] = [rows, cols]
     var floats = List[Float64]()
     _ = ridge_multi_call(key, RM_CENTER, addrs, ints, floats)
 
 
-def rm_fit(key: LinearEntryKey, x: Int, y: Int, coef: Int, ymean: Int, n: Int, d: Int, m: Int, alpha: Float64,
+def rm_fit(key: EntryRef, x: Int, y: Int, coef: Int, ymean: Int, n: Int, d: Int, m: Int, alpha: Float64,
            center_y: Bool, xmean: Int, icpt: Int) raises:
     """Ridge on every column of Y; with xmean and icpt nonzero also the
     intercepts (the former 7-word params)."""
@@ -62,7 +69,7 @@ def rm_fit(key: LinearEntryKey, x: Int, y: Int, coef: Int, ymean: Int, n: Int, d
     _ = ridge_multi_call(key, RM_FIT, addrs, ints, floats)
 
 
-def rm_predict(key: LinearEntryKey, x: Int, coef: Int, icpt: Int, dst: Int, n: Int, d: Int, m: Int) raises:
+def rm_predict(key: EntryRef, x: Int, coef: Int, icpt: Int, dst: Int, n: Int, d: Int, m: Int) raises:
     var addrs: List[Int] = [x, coef, icpt, dst]
     var ints: List[Int] = [n, d, m]
     var floats = List[Float64]()

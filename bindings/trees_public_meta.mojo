@@ -76,7 +76,7 @@ from bindings.base_helpers_released import (
     base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
 )
 from core.linear_entry_table import LinearEntryKey
-from core.linear_multi_calls import ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
+from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
@@ -1116,7 +1116,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var m = _cols(Ya)
     var est = _attr(model, "estimator", PythonObject(None))
     var intercept = _truthy(_attr(est, "fit_intercept", PythonObject(True)))
-    var key = _estimators_key(table)
+    var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
     var xm: PythonObject
     var work_x = Xa
     if intercept:
@@ -1229,7 +1229,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
-        var rm_key = _estimators_key(table)
+        var rm_key = ridge_multi_ref(_estimators_key(table))
         var p_x = trees_address(Xa)
         var p_coef = trees_address(mr[0])
         var p_icpt = trees_address(mr[1])
