@@ -43,6 +43,9 @@ existing conversion site, closing inherited conversion callbacks without moving
 publication stages. New traps cover metadata rebinding, formatter-free rank
 selection, each conversion stage and valid native scalar storage. New copy calls
 use the supported Mojo 1.2 `unsafe_memcpy` spelling; arguments are unchanged.
+The follow-up numeric-admission mode preserves native `TypeError` for
+multi-element object arrays; comparison truth keeps its existing `ValueError`.
+Neither refusal invokes object-element conversion hooks.
 
 Retained and owed: the existing OneClass coefficient weak-cache tuple/layout
 record in `gp_svm_records.mojo`, shared lifecycle/public storage admission,
@@ -71,7 +74,7 @@ The original 150x6 training and 40x6 held-out inputs from
 only was executed: system Python lacked NumPy; the existing Pixi Python prepared
 the exact bytes. Both logs are retained. No estimator, oracle or test executed.
 
-Twenty-nine Python boundary cases (thirteen definitions) cover scalar conversions,
+Thirty-five Python boundary cases (fifteen definitions) cover scalar conversions,
 public storage/pickle lifetime, original weighted row indices, coefficient
 replacement, native support-index conversion, factory refusals, callback traps,
 formatter refusal and early/late publication stages. All existing Python
@@ -93,7 +96,7 @@ commit/push logs remain there. Independent source review is separate from
 compilation and execution.
 
 RUN OWED: combined SDK-1.2 product compilation, 12 CPU / 22 default GPU native
-cases (or the stated switch-off coverage), and 29 retained boundary cases.
+cases (or the stated switch-off coverage), and 35 retained boundary cases.
 Other SVM work still owed after the combined freeze: SVC's eight inventoried
 roles, SVR/LinearSVR score composition, shared weighted/precomputed temporary
 storage, and the explicitly retained OneClass weak-cache record. No box job was
