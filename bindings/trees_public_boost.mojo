@@ -47,7 +47,7 @@ from bindings.admitted_input import (
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_forest import (
     ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
-    forest_capture_mode, forest_effective_mode, forest_export, forest_fit_arrays, forest_kind,
+    forest_capture_mode, forest_effective_mode, forest_export, forest_fit_dart_member, forest_kind,
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
     _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
 )
@@ -612,14 +612,14 @@ def _member_fit_weighted(member: PythonObject, xcm: AdmittedX, codes: PythonObje
                                                              _P(weights.address)), "into", context)
         _ = weights  # keep the Python object alive through the native call above
     else:
-        var fit = ForestFit("rf_classifier_fit_weighted", True, Python.list(_P(weights.address)), True)
+        var fit = ForestFit(True, weights=weights.address)
         _ = weights  # keep the Python object alive through the native call above
         result = _launch(rf, fit, xcm, trees_address(labels.codes), params, criterion, False, context)
         _ = weights  # keep the Python object alive through the native call above
     # Both fit routes receive only the codes' address. The model owns the
     # classes table, not this freshly encoded label buffer.
     _ = labels
-    _member_store(member, forest_fit_arrays(result, context), xcm.cols)
+    _member_store(member, result, xcm.cols)
     _fitted(member)
     _ = weights^
 
@@ -646,7 +646,7 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
     var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), _A(rows), _P(y.address), params, code),
                                "into", context)
     _ = y  # keep the Python object alive through the native call above
-    _member_store(member, forest_fit_arrays(result, context), x_cols)
+    _member_store(member, result, x_cols)
     _ = y  # keep the Python object alive through the native call above
     _fitted(member)
     _ = y^
@@ -1147,7 +1147,7 @@ def _ada_member_round(member: PythonObject, session: Session, labels: TreesLabel
                                                              Python.list(_F(lr), _P(1 if last else 0)), _A(stats)),
                                "into", context)
     _ = stats  # keep the Python object alive through the native call above
-    _member_store(member, forest_fit_arrays(result, context), d)
+    _member_store(member, result, d)
     _fitted(member)
 
 
@@ -1173,7 +1173,7 @@ def _ada_member_round_r2(member: PythonObject, session: Session, n: Int, d: Int,
                                                                          _P(1 if last else 0)), _A(stats)),
                                "into", context)
     _ = stats  # keep the Python object alive through the native call above
-    _member_store(member, forest_fit_arrays(result, context), d)
+    _member_store(member, result, d)
     _fitted(member)
 
 
@@ -1599,7 +1599,7 @@ def _dart_member(fields: PythonObject, handle: PythonObject, c: Int, n: Int, d: 
                  cols: PythonObject, max_depth: PythonObject, seed: Int, j: Int, memo: PythonObject,
                  context: PythonObject) raises -> PythonObject:
     """One DART member: a one-tree RandomForestRegressor fitted by
-    `rf_regressor_fit_dart_export` on the round's device X and class-c
+    the rf image's native DART member fit (XF_FIT_DART) on the round's device X and class-c
     target (`RandomForestRegressor._fit_in_dart`).
 
     The member's settings are the same for every tree of one fit except its
@@ -1638,13 +1638,15 @@ def _dart_member_fit(tree: PythonObject, tf: PythonObject, mode: String, handle:
     class-c target, its arrays stored on the member."""
     var code = tf["_cfg"]["criterion"]
     var rf = trees_table(context, mode, "_mojolearn_rf")
-    var entry = trees_need(rf, "rf_regressor_fit_dart_export", "rebuild the forest binding for DART member fits on the device")
     var m = n if rows is None else len(rows)
     var dc = d if cols is None else len(cols)
     var params = _rf_params(tf, "rf_regressor", m, dc, 0, rf, context)
-    var result = forest_export(rf, py_call_typed(entry, _int(handle), _P(c), _P(0) if rows is None else _A(rows),
-                                                 _P(0) if cols is None else _A(cols), params, code), "into", context)
-    _member_store(tree, forest_fit_arrays(result, context), dc)
+    # the rf image's native DART member fit (XF_FIT_DART; lane calltable-forest)
+    var result = forest_fit_dart_member(rf, Int(py=_int(handle)), c, 0 if rows is None else trees_address(rows),
+                                        0 if cols is None else trees_address(cols), params, code, context)
+    _ = rows  # the row and column ids are read through their addresses above
+    _ = cols
+    _member_store(tree, result, dc)
     return tree
 
 
