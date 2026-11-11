@@ -30,7 +30,7 @@ _SYMBOLS = {
     "base": ("_mojolearn", (
         "nonzero_f32_count", "nonzero_f32_fill", "nonzero_f64_count", "nonzero_f64_fill", "knn_affinity_f32",
     )),
-    "cluster": ("_mojolearn_x_cluster", ("x_cluster_call",)),
+    "cluster": ("_mojolearn_x_cluster", ("spectral_assign_native_api_v1",)),
 }
 
 

@@ -27,6 +27,20 @@ from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
 from x_cluster.resident import xc_centers_prepare, xc_centers_release, xc_centers_count, xc_resident_query
 
 
+from core.shared_slot import SharedSlot
+from core.spectral_assignment_api import SpectralAssignmentAPI
+from core.spectral_assignment_device import SpectralAssignmentDevice
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
+
+comptime _SPECTRAL_ASSIGN_SLOT = "MojolearnSpectralAssignDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralAssignDeviceFastV1"
+comptime SPECTRAL_ASSIGN_API = SharedSlot[SpectralAssignmentAPI[SpectralAssignmentDevice], _SPECTRAL_ASSIGN_SLOT]
+
+
+def spectral_assign_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_ASSIGN_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
     var api = HIERARCHY_CLUSTER_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -141,6 +155,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[hierarchy_cluster_native_api_v1_binding]("hierarchy_cluster_native_api_v1")
         m.def_function[kmeans_variants_native_api_v1_binding]("kmeans_variants_native_api_v1")
+        m.def_function[spectral_assign_native_api_v1_binding]("spectral_assign_native_api_v1")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
