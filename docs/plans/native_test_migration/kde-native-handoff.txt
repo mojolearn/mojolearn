@@ -39,3 +39,13 @@ New native execution will use the actual typed driver and independently
 check density/total, released-handle refusal and retained native leases.
 CPU graphs parallel; GPU numeric/ownership graphs ordered over contexts.
 No new shared-context stress or claim that the known Metal failure is fixed.
+
+Second chunk:32 native descriptor contracts, dependency f052c4918c.
+Every prepare/query Boolean combination, distinct descriptor fields,
+length-delimited NUL/Unicode/empty names, unrounded Float64 options,
+exact integer handles beyond2^53, binary64 totals/signed zero, release,
+copy independence and provider failures. Malformed span/result/total/name
+errors preserve exact messages. Mock performs no numerical operation.
+Error/total/name storage stays owned; independent cases parallel.
+RUN OWED: kde_contract_suite.run_checks()(32). Combined pure state+wire62.
+No lane build/test/runtime/identity/timing; no Python deletion.
