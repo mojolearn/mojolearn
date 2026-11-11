@@ -6,7 +6,7 @@
     "8a624987ef"
   ],
   "public_boundary_context": "55425fb83f",
-  "status": "authored; native compilation and execution owed",
+  "status": "CPU110 and AppleMetalGPU51 native fixtures compiled and passed. Installed Python boundary, concurrentGPUsubmission and other vendors untested.",
   "fixtures": {
     "cpu_numerical": 48,
     "gpu_numerical": 48,
@@ -97,18 +97,25 @@
     "cpu": "independent profiles and independent oracle comparisons use host_parallelize",
     "gpu": "one graph at a time on one physical GPU/shared contexts; unchanged kernels and CPU oracle cells remain parallel"
   },
-  "python_removed": 0,
+  "python_removed": {
+    "numerical_controller_cases": 48,
+    "scope": "Legacy score/total byte comparisons replaced by independent native references; public Arraydtype/shape and scalar-type checks retained for everycase."
+  },
   "pending_cleanup": {
-    "file": "python/mojolearn/tests/test_neighbors_kde_native.py",
-    "definition": "test_scores_equal_former_path",
-    "expanded_cases": 48,
-    "patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/kde-native-python-cleanup.patch",
-    "condition": "Root compiles and runs replacement native numerical fixtures before applying patch",
-    "retained": "Python score-array dtype/shape and total scalar type; all other original input/layout/ownership/mutation/refusal/sklearn/archive/interop seams remain."
+    "remaining": false,
+    "applied_patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/kde-native-python-cleanup.patch",
+    "condition": "Applied after all CPU110/GPU51 native fixtures passed."
   },
   "product_changes": false,
   "kernel_changes": false,
   "algorithm_changes": false,
-  "runtime_evidence": false,
+  "runtime_evidence": {
+    "source": "2e67b8ddf30212467a45639eace50e520c835529",
+    "summary": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-wave14-accepted-results.json",
+    "cpu_compile_exit": 0,
+    "cpu_run_exit": 0,
+    "gpu_compile_exit": 0,
+    "gpu_run_exit": 0
+  },
   "performance_or_identity_claim": false
 }
