@@ -1,0 +1,76 @@
+{
+  "family": "PolynomialCountSketch",
+  "dependencies": [
+    "d40d051034",
+    "d44927e0b6"
+  ],
+  "contract_commit": "1a46dafa114d7f7676899330792142c9203ded2f",
+  "status": "authored; native compilation and execution owed",
+  "cpu_fixtures": 12,
+  "gpu_fixtures": 12,
+  "contract_fixtures_additional": 34,
+  "entries": [
+    "checks/native_tests/pcs_native_cpu.mojo",
+    "checks/native_tests/pcs_native_gpu.mojo"
+  ],
+  "flags": {
+    "both": [
+      "MOJOLEARN_NUMERIC_IDENTICAL=1"
+    ],
+    "cpu_additional": [
+      "MOJOLEARN_COLUMN_CPU=1"
+    ]
+  },
+  "profiles_each_with_old_and_resident_routes": [
+    "original60x6 degree3 gamma.5 coef1 components32 native draw seed7, original1e-3/1e-3 bound",
+    "degree1 signed hash collision, exact analytic outputs",
+    "degree2 wraparound and cancelling cross terms, exact analytic outputs",
+    "degree3 complete collision with augmentation, exact analytic cubes",
+    "zero augmented features with no draw, zero output",
+    "zero rows with normal native hash draw, untouched guards"
+  ],
+  "oracle": "Independent Float64 full feature-tensor polynomial expansion conditioned on actual native-drawn hash indices/signs. No production count-sketch buffers, convolution recurrence, RNG implementation or saved product output in the oracle. Tiny values separately hand-calculated.",
+  "source": {
+    "origin": "test_x_neighbors_sanity.py::_data/test_polynomial_count_sketch",
+    "shape": [
+      60,
+      6
+    ],
+    "seed": 0,
+    "first_five_rows_scale": 6,
+    "parameters": {
+      "degree": 3,
+      "gamma": 0.5,
+      "coef0": 1,
+      "components": 32,
+      "draw_seed": 7
+    },
+    "rtol": 0.001,
+    "atol": 0.001,
+    "numpy": "2.5.2",
+    "sha256": "f2829d2082c898c5ff19de0236dbed545ef5a9bc64af7b3d4038dac2ea1933ae",
+    "generator_sha256": "ffc8d59e764cc4953deb844767a65b581e182f0b2bb728e1cbf45acc723c074e",
+    "oracle": "Native Float64 exhaustive feature-monomial expansion conditioned on actual drawn hashes; no count sketches or convolution recurrence.",
+    "execution": "Input preparation only; no Mojolearn import, compile, test, timing or identity execution."
+  },
+  "ownership": "Flat typed List owners only, existing compiled PCA/TSVD helper patterns. Source/hash/output owners named through calls, guard words on both integer tables and output; source/hash mutation checks.",
+  "scheduling": {
+    "cpu": "independent graphs and independent oracle output cells use host_parallelize",
+    "gpu": "graphs ordered one at a time on one physical GPU/shared contexts; kernels and oracle cells remain parallel"
+  },
+  "concurrency": "Existing MAX/Metal shared-context failures remain separately failed.",
+  "python_removed": 0,
+  "python_retained": "All external sklearn, NumPy RandomState/late-connect, public shape/refusal/ownership and existing numerical assertions are retained. No deletion before root replacement execution.",
+  "product_changes": false,
+  "kernel_changes": false,
+  "algorithm_changes": false,
+  "runtime_evidence": false,
+  "identity_or_performance_run": false,
+  "python_pending_cleanup": {
+    "assertions": 1,
+    "source": "test_x_neighbors_sanity.py::test_polynomial_count_sketch (32-component native draw range/sign assertion only)",
+    "condition": "Root compiles and runs replacement actual PCS fixtures first",
+    "patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/pcs-native-python-cleanup.patch",
+    "retained_after_cleanup": "External sklearn numerical oracle, public hash shapes, seeded public repeatability, RandomState16-component/range/feature-name and NumPy late-connect seams"
+  }
+}
