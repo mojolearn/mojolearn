@@ -172,7 +172,9 @@ from x_decomp.eigh_ops import eigh_op_dense, eigh_op_sym
 from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.device_plan import plan_for_single
+from core.neural_context import process_ctx
 
 
 #: rounds enqueued between two synchronize() calls
@@ -297,27 +299,14 @@ def xd_first_where(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: 
     return -1 if f == XD_NO_FLAG else Int(f)
 
 
-struct _XdContext(Defaultable, Movable):
-    """ONE process-lifetime DeviceContext for every x_decomp entry (the x_cnn
-    `_Global` pattern, CURRENT DIRECTIVES 2026-09-27): a context per call
-    exhausts Metal's per-process command queues within one fit, and a
-    fit here is hundreds of calls. Every entry still frees and drains its
-    own buffers before returning; the context outlives them all."""
-    var ctx: Optional[DeviceContext]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-
-
-comptime X_DECOMP_CONTEXT = SharedSlot[_XdContext, "MojolearnXDecompContextIdenticalV3"]
-
-
 def xd_ctx() raises -> DeviceContext:
-    """The shared context, created on first use."""
-    var slot = X_DECOMP_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    """One image-independent context with synchronized first publication.
+
+    This family has always used the default root, even inside a bound device
+    plan. Keep that root explicitly; the native owner only changes publication.
+    V4 names the shared native context layout instead of the former Optional.
+    """
+    return process_ctx["MojolearnXDecompContextIdenticalV4"](plan_for_single())
 
 comptime TPB = 128
 #: rows of shortest paths per launch (the heap scratch is DIJKSTRA_ROWS x n ints)
@@ -1679,12 +1668,15 @@ comptime XD_STAGE_MIN = 1 << 18
 
 struct _XdStage(Defaultable, Movable):
     var buf: Optional[HostBuffer[DType.float32]]
+    var lock: List[Int64]
 
     def __init__(out self):
+        # SharedSlot may construct a losing candidate: no device work here.
         self.buf = Optional[HostBuffer[DType.float32]]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime X_DECOMP_STAGE = SharedSlot[_XdStage, "MojolearnXDecompStageIdenticalV1"]
+comptime X_DECOMP_STAGE = SharedSlot[_XdStage, "MojolearnXDecompStageIdenticalV2", 2]
 
 
 def _xd_staged(n: Int) -> Bool:
@@ -1696,11 +1688,12 @@ def _xd_staged(n: Int) -> Bool:
 
 
 def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
-    """The process's pinned stage (XD_STAGE_FLOATS floats), created on first use."""
+    """The pinned stage; caller holds its lease through DMA and the host copy."""
     var slot = X_DECOMP_STAGE.get_or_create_ptr()
     if not slot[].buf:
-        slot[].buf = ctx.enqueue_create_host_buffer[DType.float32](XD_STAGE_FLOATS)
+        var buf = ctx.enqueue_create_host_buffer[DType.float32](XD_STAGE_FLOATS)
         ctx.synchronize()
+        slot[].buf = buf^
     return F32Ptr(unsafe_from_address=Int(slot[].buf.value().unsafe_ptr()))
 
 
@@ -1738,14 +1731,23 @@ def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], p: F32Ptr, n: In
     if not _xd_staged(n):
         ctx.enqueue_copy(dst_ptr=p, src_buf=buf.create_sub_buffer[DType.float32](0, n))
         return
-    var stage = _xd_stage_ptr(ctx)
-    var off = 0
-    while off < n:
-        var cnt = min(XD_STAGE_FLOATS, n - off)
-        ctx.enqueue_copy(dst_ptr=stage, src_buf=buf.create_sub_buffer[DType.float32](off, cnt))
-        ctx.synchronize()
-        _xd_read_out(p + off, stage, cnt)
-        off += cnt
+    var slot = X_DECOMP_STAGE.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        # One lease spans first publication and every chunk's DMA, wait and
+        # host read. Another caller must not overwrite the shared stage while
+        # this call is still consuming it. The measured transfer path stays.
+        var stage = _xd_stage_ptr(ctx)
+        var off = 0
+        while off < n:
+            var cnt = min(XD_STAGE_FLOATS, n - off)
+            ctx.enqueue_copy(dst_ptr=stage, src_buf=buf.create_sub_buffer[DType.float32](off, cnt))
+            ctx.synchronize()
+            _xd_read_out(p + off, stage, cnt)
+            off += cnt
+    finally:
+        shared_slot_unlock(lock)
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], p: I32Ptr, n: Int) raises:
