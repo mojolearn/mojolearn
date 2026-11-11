@@ -95,7 +95,7 @@ def _flag(c: XtCall, k: Int) -> UInt8:
 def _i(c: XtCall, k: Int) raises -> Int:
     if k < 0 or k >= c.n_params:
         raise Error("x_trees glue: parameter " + String(k) + " is missing")
-    if _flag(c, k) & 1:
+    if (_flag(c, k) & 1) != 0:
         raise Error("TypeError: x_trees glue: parameter " + String(k) + " must be an integer")
     return MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=c.ints)[k]
 
@@ -103,7 +103,7 @@ def _i(c: XtCall, k: Int) raises -> Int:
 def _f(c: XtCall, k: Int) raises -> Float64:
     if k < 0 or k >= c.n_params:
         raise Error("x_trees glue: parameter " + String(k) + " is missing")
-    if _flag(c, k) & 2:
+    if (_flag(c, k) & 2) != 0:
         raise Error("TypeError: x_trees glue: parameter " + String(k) + " must be a real number")
     return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=c.floats)[k]
 
