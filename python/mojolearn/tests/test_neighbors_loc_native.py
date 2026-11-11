@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""LocalOutlierFactor, NearestCentroid and KNNImputer: each public method is
-one native call (bindings/neighbors_local_native.mojo) and returns, bit for
-bit, what the former Python path returned (tests/_legacy_neighbors_loc.py),
-with the same fitted attributes and the same refusals."""
+"""Public neighbor-family call, metadata and refusal seams.
+
+LOF numerical comparisons live in direct native fixtures with independent
+mathematical references. Remaining centroid/imputer legacy comparisons keep
+their existing coverage until their numerical migration is complete.
+"""
 import numpy as np
 import pytest
 
@@ -37,37 +39,40 @@ def _data(n=60, d=5, seed=0):
 
 # ---------------------------------------------------------------- LOF
 
-_LOF_ATTRS = ("negative_outlier_factor_", "offset_", "n_neighbors_", "n_features_in_", "n_samples_fit_")
-
-
 @pytest.mark.parametrize("contamination", ["auto", 0.1, 0.25, 0.5])
 @pytest.mark.parametrize("k", [1, 7, 200])
-def test_lof_fit_and_fit_predict_match_former_path(contamination, k):
+def test_lof_fit_and_fit_predict_preserve_public_state(contamination, k):
     X = _data()
-    new = mojolearn.LocalOutlierFactor(n_neighbors=k, contamination=contamination)
-    old = legacy.LegacyLocalOutlierFactor(n_neighbors=k, contamination=contamination)
-    assert audit_native_call(new.fit, X).assert_native() is new
-    old.fit(X)
-    assert _attrs(new, _LOF_ATTRS) == _attrs(old, _LOF_ATTRS)
-    _same(mojolearn.LocalOutlierFactor(n_neighbors=k, contamination=contamination).fit_predict(X),
-          legacy.LegacyLocalOutlierFactor(n_neighbors=k, contamination=contamination).fit_predict(X))
+    model = mojolearn.LocalOutlierFactor(n_neighbors=k, contamination=contamination)
+    assert audit_native_call(model.fit, X).assert_native() is model
+    scores = np.asarray(model.negative_outlier_factor_)
+    assert scores.shape == (60,)
+    assert scores.dtype == np.float32
+    assert isinstance(model.offset_, float)
+    assert model.n_neighbors_ == min(k, 59)
+    assert model.n_features_in_ == 5
+    assert model.n_samples_fit_ == 60
+    labels = np.asarray(audit_native_call(
+        mojolearn.LocalOutlierFactor(n_neighbors=k, contamination=contamination).fit_predict, X
+    ).assert_native())
+    assert labels.shape == (60,)
+    assert labels.dtype == np.int64
 
 
 @pytest.mark.parametrize("contamination", ["auto", 0.2])
-def test_lof_novelty_methods_match_former_path(contamination):
+def test_lof_novelty_methods_preserve_public_outputs(contamination):
     X, Q = _data(), _data(25, seed=3)
-    new = mojolearn.LocalOutlierFactor(n_neighbors=6, contamination=contamination, novelty=True).fit(X)
-    old = legacy.LegacyLocalOutlierFactor(n_neighbors=6, contamination=contamination, novelty=True).fit(X)
-    # decision_function returns float64 as documented; the former path kept
-    # the float32 words, which widen exactly.
-    _same(audit_native_call(new.decision_function, Q).assert_native(),
-          np.asarray(old.decision_function(Q)).astype("<f8"))
-    _same(audit_native_call(new.predict, Q).assert_native(), old.predict(Q))
+    model = mojolearn.LocalOutlierFactor(n_neighbors=6, contamination=contamination, novelty=True).fit(X)
+    decision = np.asarray(audit_native_call(model.decision_function, Q).assert_native())
+    predicted = np.asarray(audit_native_call(model.predict, Q).assert_native())
+    assert decision.shape == predicted.shape == (25,)
+    assert decision.dtype == np.float64
+    assert predicted.dtype == np.int64
 
 
 @pytest.mark.parametrize("kwargs, kind, text", [
-    (dict(metric="manhattan"), NotImplementedError, "LocalOutlierFactor: metric='manhattan' (p=2) is not implemented"),
-    (dict(metric="minkowski", p=3), NotImplementedError, "(p=3) is not implemented"),
+    (dict(metric="manhattan"), NotImplementedError, "LocalOutlierFactor: metric='manhattan' (p=2) is not implemented; euclidean (or minkowski with p=2) only"),
+    (dict(metric="minkowski", p=3), NotImplementedError, "LocalOutlierFactor: metric='minkowski' (p=3) is not implemented; euclidean (or minkowski with p=2) only"),
     (dict(metric_params={"a": 1}), NotImplementedError, "metric_params is not implemented"),
     (dict(contamination=0.7), ValueError, "contamination must be 'auto' or in (0, 0.5]"),
     (dict(n_neighbors=0), ValueError, "n_neighbors must be >= 1"),
@@ -75,10 +80,7 @@ def test_lof_novelty_methods_match_former_path(contamination):
 def test_lof_refusals_keep_their_wording(kwargs, kind, text):
     with pytest.raises(kind, match=None) as err:
         mojolearn.LocalOutlierFactor(**kwargs).fit(_data())
-    assert text in str(err.value)
-    with pytest.raises(kind) as old:
-        legacy.LegacyLocalOutlierFactor(**kwargs).fit(_data())
-    assert str(err.value) == str(old.value)
+    assert str(err.value) == text
 
 
 def test_lof_one_sample_and_novelty_refusals():
