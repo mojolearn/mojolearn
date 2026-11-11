@@ -42,3 +42,10 @@ RUN OWED (run from repository root)
   Python AST, TOML/JSON and whitespace checks only. Actual fit/randomized/
   TSQR/fold numerical execution is not covered by this query-only chunk.
   Public native lease owner remains pilot-owned and in progress.
+
+Lease-state follow-up: dependency 14ad3ca7ab, 12 parallel native fixtures.
+  All admission identity combinations, zero-token invalidity, take-once
+  cleanup, native driver retention after move, and replacement-owner
+  independence. Python registration/destructor/pin seams remain pilot-owned.
+  RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_lease_state.mojo
+  Source/TOML/JSON/whitespace review only; no compilation or execution.
