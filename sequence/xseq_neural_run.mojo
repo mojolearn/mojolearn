@@ -4,8 +4,9 @@ models (LSTM/GRU/RNN regressors and classifiers) and the multi-layer
 perceptrons (`bindings/xseq_neural_native.mojo` is the UNPACK/PACK
 boundary; lane doorsplit-cnn-xseq, 2026-11-11).
 
-Typed values only: the descriptor entry of the model's connected image (the
-boundary unwraps it from the provider it admitted), address words, shape
+Typed values only: the descriptor entry of the model's connected image and
+the address of the admitted provider's call workspace (`XseqNeuralEntry`; the
+boundary unwraps both from the provider it admitted), address words, shape
 words, integer and Float64 scalars. Here: the cell, layout and schedule
 words, the optimizer slots and their refusals, the seeded uniform draws, the
 fit and predict descriptor calls with their result-count refusals, the
@@ -18,7 +19,8 @@ it before the split; the plain word copies run with it held, as before.
 from std.math import sqrt
 from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
+from core.native_descriptor_call import native_descriptor_call_spans
+from core.native_call_output import NativeCallWorkspaceLease
 from sequence.ops_impl import net_of
 from sequence.neural_model_dispatch import (
     RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM,
@@ -67,41 +69,67 @@ def xseq_run_as_f32_check(shape: List[Int], ndim: Int, name: String) raises:
 
 # ---------------------------------------------------------------- native entry
 
-def xseq_neural_run_call(entry: NativeDescriptorCall, operation: Int, addresses: List[Int], ints: List[Int],
+@fieldwise_init
+struct XseqNeuralEntry(ImplicitlyCopyable, Movable):
+    """The model descriptor entry of the connected image and the address of
+    the admitted provider's `NativeCallWorkspace` (0: a private temporary
+    workspace per call). The boundary keeps the provider referenced across
+    every call that uses the address."""
+    var call: NativeDescriptorCall
+    var workspace: Int
+
+
+def xseq_neural_run_call(entry: XseqNeuralEntry, operation: Int, addresses: List[Int], ints: List[Int],
                          floats: List[Float64]) raises -> Int:
-    """One synchronous call of the image's model descriptor entry. The caller
-    keeps every addressed buffer alive and has released the GIL."""
-    return native_descriptor_call(entry, operation, addresses, ints, floats)
+    """One synchronous call of the image's model descriptor entry under the
+    provider's workspace lease (`neural_descriptor_execute` did the same
+    before the door split): the ABI output and its error storage are the
+    provider's retained scratch, reused across calls; a nested or concurrent
+    call that finds it busy gets a private one. The provider's call counters
+    are not bumped (nothing product-side reads them). The caller keeps every
+    addressed buffer alive and has released the GIL."""
+    var loan = NativeCallWorkspaceLease(entry.workspace)
+    var scratch = loan.pointer()
+    try:
+        return native_descriptor_call_spans(entry.call, operation,
+            Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
+            Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+    finally:
+        loan.release()
+        # Span addresses and the workspace pointer do not retain these owners.
+        _ = addresses
+        _ = ints
+        _ = floats
 
 
-def xseq_run_uniform(entry: NativeDescriptorCall, address: Int, n: Int, seed: UInt64, offset: Int, low: Float64,
+def xseq_run_uniform(entry: XseqNeuralEntry, address: Int, n: Int, seed: UInt64, offset: Int, low: Float64,
                      high: Float64) raises -> Int:
     """`XseqStream.fill_uniform_native`: n float32 draws U(low, high) at
     `address` from the counter-based stream; the advanced counter."""
     if n:
         var scalars: List[Float64] = [low, high]
-        _ = native_descriptor_call(entry, MODEL_UNIFORM, [address],
-                                   [n, Int(seed & 0xFFFFFFFF), Int(seed >> 32), offset], scalars)
+        _ = xseq_neural_run_call(entry, MODEL_UNIFORM, [address],
+                                 [n, Int(seed & 0xFFFFFFFF), Int(seed >> 32), offset], scalars)
     return offset + n
 
 
-def xseq_run_argmax(entry: NativeDescriptorCall, scores: Int, codes: Int, rows: Int, cols: Int) raises:
+def xseq_run_argmax(entry: XseqNeuralEntry, scores: Int, codes: Int, rows: Int, cols: Int) raises:
     """First-max-wins row argmax of a C-ordered float32 block into int64
     codes (`argmax_rows_f32`)."""
     if rows:
-        _ = native_descriptor_call(entry, MODEL_ARGMAX, [scores, codes], [rows, cols], List[Float64]())
+        _ = xseq_neural_run_call(entry, MODEL_ARGMAX, [scores, codes], [rows, cols], List[Float64]())
 
 
-def xseq_run_threshold(entry: NativeDescriptorCall, scores: Int, codes: Int, rows: Int) raises:
+def xseq_run_threshold(entry: XseqNeuralEntry, scores: Int, codes: Int, rows: Int) raises:
     """p > 0.5 per row (`threshold_labels_i64`; NaN takes class 0)."""
     if rows:
-        _ = native_descriptor_call(entry, MODEL_THRESHOLD, [scores, codes], [rows], List[Float64]())
+        _ = xseq_neural_run_call(entry, MODEL_THRESHOLD, [scores, codes], [rows], List[Float64]())
 
 
-def xseq_run_curve_min(entry: NativeDescriptorCall, curve: Int, count: Int) raises -> Float64:
+def xseq_run_curve_min(entry: XseqNeuralEntry, curve: Int, count: Int) raises -> Float64:
     """The first-wins minimum of `count` float32 curve words (`reduce_stat` 0)."""
     var best = List[Float64](length=1, fill=0)
-    _ = native_descriptor_call(entry, MODEL_MIN, [curve, Int(best.unsafe_ptr())], [count], List[Float64]())
+    _ = xseq_neural_run_call(entry, MODEL_MIN, [curve, Int(best.unsafe_ptr())], [count], List[Float64]())
     var result = best[0]
     _ = best^
     return result
@@ -228,14 +256,14 @@ struct XseqRnnFitRequest(Copyable, Movable):
     var seed: UInt64
 
 
-def xseq_run_rnn_fit(entry: NativeDescriptorCall, req: XseqRnnFitRequest, optimizer: XseqOptimizer, x: Int,
+def xseq_run_rnn_fit(entry: XseqNeuralEntry, req: XseqRnnFitRequest, optimizer: XseqOptimizer, x: Int,
                      target: Int, params: Int, losses: Int, rates: Int) raises:
     """`_ints()` (cell, D, H, L, O), then the schedule words, then the
     RNN_FIT call."""
     var ip: List[Int] = [req.cell, req.d, req.hidden, req.layers, req.outputs, req.task, req.n, req.steps_t,
                          req.epochs, req.batch, optimizer.kind, optimizer.flags, 1 if req.shuffle else 0,
                          Int(req.seed & 0xFFFFFFFF), Int(req.seed >> 32)]
-    _ = native_descriptor_call(entry, RNN_FIT, [x, target, params, losses, rates], ip, optimizer.floats)
+    _ = xseq_neural_run_call(entry, RNN_FIT, [x, target, params, losses, rates], ip, optimizer.floats)
 
 
 def xseq_run_rnn_layout(ints: List[Int], params_size: Int) raises -> Int:
@@ -260,7 +288,7 @@ struct XseqRnnPredictRequest(Copyable, Movable):
     var token: Int              # 0: no resident record, upload per call
 
 
-def xseq_run_rnn_predict(entry: NativeDescriptorCall, req: XseqRnnPredictRequest, x: Int, params: Int, out_words: Int,
+def xseq_run_rnn_predict(entry: XseqNeuralEntry, req: XseqRnnPredictRequest, x: Int, params: Int, out_words: Int,
                          seq: Int) raises:
     """RNN_PREDICT and its result-count refusal."""
     var ip = req.ints.copy()
@@ -275,7 +303,7 @@ def xseq_run_rnn_predict(entry: NativeDescriptorCall, req: XseqRnnPredictRequest
         addresses.append(req.model)
         addresses.append(req.token)
         addresses.append(req.n_params)
-    var written = native_descriptor_call(entry, RNN_PREDICT, addresses, ip, List[Float64]())
+    var written = xseq_neural_run_call(entry, RNN_PREDICT, addresses, ip, List[Float64]())
     if written != req.n * req.ints[4]:
         raise Error("RuntimeError: recurrent prediction returned an invalid result count")
 
@@ -321,7 +349,7 @@ def xseq_run_mlp_param_count(sizes: List[Int]) -> Int:
     return total
 
 
-def xseq_run_mlp_glorot(entry: NativeDescriptorCall, base: Int, sizes: List[Int], logistic: Bool, seed: UInt64,
+def xseq_run_mlp_glorot(entry: XseqNeuralEntry, base: Int, sizes: List[Int], logistic: Bool, seed: UInt64,
                         offset: Int) raises -> Int:
     """Glorot-uniform per layer, drawn straight into the flat block at `base`
     the entry trains, w then b of each layer, as the packed layout orders
@@ -360,7 +388,7 @@ struct XseqMlpFitRequest(Copyable, Movable):
     var n_out: Int              # 0: a float target (no class-count word)
 
 
-def xseq_run_mlp_fit(entry: NativeDescriptorCall, req: XseqMlpFitRequest, floats: List[Float64], x: Int, target: Int,
+def xseq_run_mlp_fit(entry: XseqNeuralEntry, req: XseqMlpFitRequest, floats: List[Float64], x: Int, target: Int,
                      params: Int, curve: Int) raises -> Int:
     """The descriptor's int words, then MLP_FIT; the epochs run."""
     var ip: List[Int] = [req.rows, req.d, req.o, req.activation, req.out_act, req.loss_code, req.solver,
@@ -370,7 +398,7 @@ def xseq_run_mlp_fit(entry: NativeDescriptorCall, req: XseqMlpFitRequest, floats
         ip.append(req.hidden[i])
     if req.n_out != 0:
         ip.append(1 if req.o > 1 else 2)
-    return native_descriptor_call(entry, MLP_FIT, [x, target, params, curve], ip, floats)
+    return xseq_neural_run_call(entry, MLP_FIT, [x, target, params, curve], ip, floats)
 
 
 def xseq_run_copy_f32(dst: Int, src: Int, count: Int):
@@ -427,7 +455,7 @@ struct XseqMlpPredictRequest(Copyable, Movable):
     var token: Int              # 0: no resident record, upload per call
 
 
-def xseq_run_mlp_predict(entry: NativeDescriptorCall, req: XseqMlpPredictRequest, x: Int, params: Int,
+def xseq_run_mlp_predict(entry: XseqNeuralEntry, req: XseqMlpPredictRequest, x: Int, params: Int,
                          out_words: Int) raises:
     """MLP_PREDICT (4096-row chunks) and its result-count refusal."""
     var ip: List[Int] = [req.rows, req.columns, req.n_outputs, req.activation, req.out_act, 4096, len(req.hidden)]
@@ -441,6 +469,6 @@ def xseq_run_mlp_predict(entry: NativeDescriptorCall, req: XseqMlpPredictRequest
         addresses.append(req.model)
         addresses.append(req.token)
         addresses.append(req.params_size)
-    var written = native_descriptor_call(entry, MLP_PREDICT, addresses, ip, List[Float64]())
+    var written = xseq_neural_run_call(entry, MLP_PREDICT, addresses, ip, List[Float64]())
     if written != req.rows * req.width:
         raise Error("RuntimeError: mlp_predict: this binding predates the two-column probability; rebuild it")

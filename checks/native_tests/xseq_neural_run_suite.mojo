@@ -11,12 +11,13 @@ The cases are independent units and run across the native host worker pool.
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
+from core.native_call_output import NativeCallWorkspace
 from sequence.neural_model_dispatch import (
     RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM,
 )
 from sequence.xseq_neural_run import (
     XseqRunF32P, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
-    xseq_run_shape_text, xseq_run_size, xseq_run_as_f32_check, xseq_neural_run_call, xseq_run_uniform,
+    XseqNeuralEntry, xseq_run_shape_text, xseq_run_size, xseq_run_as_f32_check, xseq_neural_run_call, xseq_run_uniform,
     xseq_run_argmax, xseq_run_threshold, xseq_run_curve_min, xseq_run_opt_sgd, xseq_run_opt_adam, xseq_run_opt_nadam,
     xseq_run_opt_lion, xseq_run_opt_rmsprop, xseq_run_opt_adagrad, xseq_run_rnn_cell, xseq_run_rnn_gates,
     xseq_run_rnn_rank_check, xseq_run_rnn_dims_check, xseq_run_rnn_param_count, xseq_run_rnn_bound,
@@ -77,6 +78,11 @@ def fake_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: 
         return 1
 
 
+def _fake() -> XseqNeuralEntry:
+    """The fake entry with no retained workspace (a private one per call)."""
+    return XseqNeuralEntry(fake_entry, 0)
+
+
 def case(unit: Int) raises:
     if unit == 0:
         require(xseq_run_shape_text(List[Int]()) == "()" and xseq_run_shape_text([5]) == "(5,)"
@@ -107,23 +113,31 @@ def case(unit: Int) raises:
     elif unit == 2:
         var words = List[Float32](length=4, fill=-1.0)
         var address = Int(words.unsafe_ptr())
-        require(xseq_run_uniform(fake_entry, address, 3, UInt64(7), 5, -1.0, 1.0) == 8, "uniform counter")
+        require(xseq_run_uniform(_fake(), address, 3, UInt64(7), 5, -1.0, 1.0) == 8, "uniform counter")
         require(words[0] == 5.0, "uniform draws at the stream counter")
-        require(xseq_run_uniform(fake_entry, address + 4, 0, UInt64(7), 8, -1.0, 1.0) == 8 and words[1] == -1.0,
+        require(xseq_run_uniform(_fake(), address + 4, 0, UInt64(7), 8, -1.0, 1.0) == 8 and words[1] == -1.0,
                 "an empty draw makes no call")
         _ = words
     elif unit == 3:
         var codes = List[Int64](length=1, fill=-1)
-        xseq_run_argmax(fake_entry, 64, Int(codes.unsafe_ptr()), 0, 3)
+        xseq_run_argmax(_fake(), 64, Int(codes.unsafe_ptr()), 0, 3)
         require(codes[0] == -1, "argmax of no rows makes no call")
-        xseq_run_argmax(fake_entry, 64, Int(codes.unsafe_ptr()), 2, 3)
+        xseq_run_argmax(_fake(), 64, Int(codes.unsafe_ptr()), 2, 3)
         require(codes[0] == 23, "argmax words")
-        xseq_run_threshold(fake_entry, 64, Int(codes.unsafe_ptr()), 4)
+        xseq_run_threshold(_fake(), 64, Int(codes.unsafe_ptr()), 4)
         require(codes[0] == 104, "threshold words")
         _ = codes
     elif unit == 4:
-        require(xseq_run_curve_min(fake_entry, 64, 3) == 2.5, "curve minimum word")
-        require(xseq_neural_run_call(fake_entry, 3, [1, 2], [3], List[Float64]()) == 3020100, "entry envelope words")
+        require(xseq_run_curve_min(_fake(), 64, 3) == 2.5, "curve minimum word")
+        require(xseq_neural_run_call(_fake(), 3, [1, 2], [3], List[Float64]()) == 3020100, "entry envelope words")
+        # A retained provider workspace is leased for the call and free again after it.
+        var workspace = List[NativeCallWorkspace]()
+        workspace.append(NativeCallWorkspace())
+        var held = XseqNeuralEntry(fake_entry, Int(workspace.unsafe_ptr()))
+        require(xseq_neural_run_call(held, 3, [1, 2], [3], List[Float64]()) == 3020100, "leased entry words")
+        require(xseq_neural_run_call(held, 3, [1, 2], [3], List[Float64]()) == 3020100, "workspace reused")
+        require(workspace[0].busy == 0, "workspace lease released")
+        _ = workspace
     elif unit == 5:
         var sgd = xseq_run_opt_sgd(1, True, 0.9, 0.01, 0.0)
         require(sgd.kind == 1 and sgd.flags == 1 and len(sgd.floats) == 6 and sgd.floats[0] == 0.9
@@ -193,7 +207,7 @@ def case(unit: Int) raises:
     elif unit == 9:
         var optimizer = xseq_run_opt_adam("adam", 2, 0.9, 0.999, 1e-8, 0.0)
         var request = XseqRnnFitRequest(2, 3, 2, 1, 1, 0, 4, 5, 2, 2, True, UInt64(0x100000002))
-        xseq_run_rnn_fit(fake_entry, request, optimizer, 64, 72, 80, 88, 96)
+        xseq_run_rnn_fit(_fake(), request, optimizer, 64, 72, 80, 88, 96)
     elif unit == 10:
         var ints: List[Int] = [2, 3, 2, 1, 1]
         require(xseq_run_rnn_layout(ints, 59) == 59, "recurrent layout")
@@ -202,12 +216,12 @@ def case(unit: Int) raises:
             require(False, "wrong params_ size accepted")
         except problem:
             _refuses(problem, "ValueError: recurrent params_ size differs from the fitted network layout")
-        xseq_run_rnn_predict(fake_entry, XseqRnnPredictRequest(ints.copy(), 59, 0, 4, 5, 64, False, 0, 0),
+        xseq_run_rnn_predict(_fake(), XseqRnnPredictRequest(ints.copy(), 59, 0, 4, 5, 64, False, 0, 0),
                              64, 72, 80, 88)
-        xseq_run_rnn_predict(fake_entry, XseqRnnPredictRequest(ints.copy(), 59, 0, 4, 5, 64, True, 4096, 7),
+        xseq_run_rnn_predict(_fake(), XseqRnnPredictRequest(ints.copy(), 59, 0, 4, 5, 64, True, 4096, 7),
                              64, 72, 80, 88)
         try:
-            xseq_run_rnn_predict(fake_entry, XseqRnnPredictRequest(ints.copy(), 59, 0, 4, 5, 0, False, 0, 0),
+            xseq_run_rnn_predict(_fake(), XseqRnnPredictRequest(ints.copy(), 59, 0, 4, 5, 0, False, 0, 0),
                                  64, 72, 80, 88)
             require(False, "short recurrent result accepted")
         except problem:
@@ -233,7 +247,7 @@ def case(unit: Int) raises:
         require(xseq_run_mlp_param_count(sizes) == 13, "packed parameter count")
     elif unit == 12:
         var block = List[Float32](length=13, fill=-1.0)
-        var counter = xseq_run_mlp_glorot(fake_entry, Int(block.unsafe_ptr()), [2, 3, 1], False, UInt64(9), 0)
+        var counter = xseq_run_mlp_glorot(_fake(), Int(block.unsafe_ptr()), [2, 3, 1], False, UInt64(9), 0)
         require(counter == 13, "stream counter after the draws")
         require(block[0] == 0.0 and block[6] == 6.0 and block[9] == 9.0 and block[12] == 12.0 and block[1] == -1.0,
                 "w then b of each layer, in layout order")
@@ -241,7 +255,7 @@ def case(unit: Int) raises:
     elif unit == 13:
         var request = XseqMlpFitRequest(4, 2, 1, 3, 0, 0, 0, 0, True, 2, 7, False, 11, 10, [3], 0)
         var floats = List[Float64](length=8, fill=0.0)
-        require(xseq_run_mlp_fit(fake_entry, request, floats, 64, 72, 80, 88) == 7, "epochs run")
+        require(xseq_run_mlp_fit(_fake(), request, floats, 64, 72, 80, 88) == 7, "epochs run")
     elif unit == 14:
         var src: List[Float32] = [1.0, 2.0, 3.0, 4.0, 5.0]
         var dst = List[Float32](length=5, fill=0.0)
@@ -280,10 +294,10 @@ def case(unit: Int) raises:
             require(False, "output width mismatch accepted")
         except problem:
             _refuses(problem, "ValueError: MLP output weights differ from n_outputs_")
-        xseq_run_mlp_predict(fake_entry, XseqMlpPredictRequest(5, 2, 3, 3, 4, [4], False, 3, 31, 0, 0), 64, 72, 80)
-        xseq_run_mlp_predict(fake_entry, XseqMlpPredictRequest(5, 2, 3, 3, 4, [4], False, 3, 31, 4096, 7), 64, 72, 80)
+        xseq_run_mlp_predict(_fake(), XseqMlpPredictRequest(5, 2, 3, 3, 4, [4], False, 3, 31, 0, 0), 64, 72, 80)
+        xseq_run_mlp_predict(_fake(), XseqMlpPredictRequest(5, 2, 3, 3, 4, [4], False, 3, 31, 4096, 7), 64, 72, 80)
         try:
-            xseq_run_mlp_predict(fake_entry, XseqMlpPredictRequest(5, 2, 1, 3, 1, [4], True, 2, 31, 0, 0), 64, 72, 80)
+            xseq_run_mlp_predict(_fake(), XseqMlpPredictRequest(5, 2, 1, 3, 1, [4], True, 2, 31, 0, 0), 64, 72, 80)
             require(False, "one-column probability accepted")
         except problem:
             _refuses(problem, "RuntimeError: mlp_predict: this binding predates the two-column probability; rebuild it")

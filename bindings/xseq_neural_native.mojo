@@ -25,7 +25,6 @@ from bindings.native_model_records import records_open, model_generation
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
 from providers.python.autograd_pyapi import cast_in_of
-from core.native_descriptor_abi import NativeDescriptorCall
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_descriptor
 from bindings.optimizer_admission import opt_schedule
 from bindings.optimizer_schedule_native import schedule_operation
@@ -39,7 +38,7 @@ from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xse
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
 from sequence.xseq_neural_run import (
-    XseqOptimizer, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
+    XseqNeuralEntry, XseqOptimizer, XseqRnnFitRequest, XseqRnnPredictRequest, XseqMlpFitRequest, XseqMlpPredictRequest,
     xseq_run_as_f32_check, xseq_run_uniform, xseq_run_argmax, xseq_run_threshold, xseq_run_curve_min,
     xseq_run_opt_sgd, xseq_run_opt_adam, xseq_run_opt_nadam, xseq_run_opt_lion, xseq_run_opt_rmsprop,
     xseq_run_opt_adagrad, xseq_run_rnn_cell, xseq_run_rnn_gates, xseq_run_rnn_rank_check, xseq_run_rnn_dims_check,
@@ -81,10 +80,12 @@ def _shape_words(value: PythonObject) raises -> List[Int]:
     return words^
 
 
-def _entry(provider: PythonObject) raises -> NativeDescriptorCall:
-    """UNPACK: the admitted model provider's descriptor entry, the typed word
-    the RUN calls take (the provider stays referenced by the caller)."""
-    return provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+def _entry(provider: PythonObject) raises -> XseqNeuralEntry:
+    """UNPACK: the admitted model provider's descriptor entry and the address
+    of its retained call workspace, the typed words the RUN calls take (the
+    provider stays referenced by the caller through every call)."""
+    var owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
+    return XseqNeuralEntry(owner[].entry, Int(owner[].workspace.unsafe_ptr()))
 
 
 # ---------------------------------------------------------------- shared input steps
