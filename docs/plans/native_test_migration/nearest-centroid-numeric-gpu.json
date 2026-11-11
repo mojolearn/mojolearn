@@ -1,0 +1,27 @@
+{
+  "suite": "nearest_centroid_numeric_gpu",
+  "fixtures": 11,
+  "dependency": "9b23755391; adopted root b0d28426b8",
+  "execution": "uncompiled and unrun",
+  "coverage": {
+    "existing_fixture_units": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "existing_empty_case_units": [
+      0,
+      1,
+      2
+    ]
+  },
+  "resource_policy": "One physical GPU, one job at a time; graph submissions ordered over shared DeviceContext; kernels retain existing parallel execution. Bundle with NMF GPU fixtures.",
+  "assertions": "Existing assertions and original data/settings unchanged. No new numerical oracle.",
+  "excluded": "Concurrent shared DeviceContext submission. Original parallel NC suite and native device concurrency suite unchanged; their prior Metal failures remain recorded and unresolved.",
+  "product_changes": []
+}
