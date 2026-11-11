@@ -4179,7 +4179,7 @@ def _pandas_gate(text):
         if re.match(r"\s*(?:from\b.*\bimport\b|import\b)", line) and (
                 trusted & set(_MOJO_IDENT_RE.findall(line))):
             return None
-        assignment = re.match(r"\s*([^=\n]+)=(?!=)", line)
+        assignment = re.match(r"\s*([^=\n]+?)(?<![!<>=:])=(?!=)", line)
         if assignment and trusted & set(_MOJO_IDENT_RE.findall(assignment.group(1))):
             return None
     starts = [ln for ln, cont in rest if not cont and ln.strip()]
