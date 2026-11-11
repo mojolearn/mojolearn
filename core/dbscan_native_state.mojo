@@ -37,3 +37,27 @@ struct DBSCANReferenceState(Movable):
         var handle = self.handle
         self.handle = -1
         return handle
+
+
+def dbscan_metric_code(name: String) -> Int:
+    if name == "euclidean" or name == "l2":
+        return 0
+    if name == "manhattan" or name == "l1" or name == "cityblock":
+        return 1
+    if name == "cosine":
+        return 2
+    if name == "precomputed":
+        return 3
+    return -1
+
+
+def dbscan_method_code(name: String) -> Int:
+    if name == "brute":
+        return 0
+    if name == "rbc":
+        return 1
+    return -1
+
+
+def dbscan_method_accepts(method: Int, metric: Int) -> Bool:
+    return (method == 0 and metric >= 0 and metric <= 3) or (method == 1 and metric == 0)
