@@ -20,7 +20,7 @@ from core.xcnn_entry_table import (
     XC_CONV2D_BACKWARD_M, XC_CHAN_COPY_M, XC_MAP2_M, XC_RELU_FORWARD, XC_RELU_BACKWARD, XC_ADD,
 )
 from bindings.xcnn_common import (
-    XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed,
+    XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed,
     xcnn_idn, xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new,
     xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,

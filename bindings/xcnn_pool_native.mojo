@@ -32,7 +32,7 @@ from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from x_cnn.shape_words import pool_params, PP_OH, PP_OW
 from bindings.xcnn_common import (
-    XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_call, xcnn_call_f, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
+    XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_call, xcnn_call_f, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
     xcnn_size, xcnn_tuple, xcnn_module_entries, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new, xcnn_reshape_t, xcnn_wrap,
     xcnn_host_of, xcnn_host_f32, xcnn_host_i32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
 )

@@ -34,7 +34,7 @@ from core.xcnn_entry_table import (
     XC_GRAPH_OP, XC_GRAPH_OP_M, XC_LINEAR_FORWARD_M, XC_LINEAR_BACKWARD, XC_GCN_BACKWARD_T, XC_SAGE_BACKWARD_T,
 )
 from bindings.xcnn_common import (
-    xcnn_builtins, xcnn_entries, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t, xcnn_on_dev,
+    xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t, xcnn_on_dev,
     xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_reshape, xcnn_host_i32, xcnn_slice_f32, xcnn_download,
     xcnn_device_io_off, xcnn_dev_fields, xcnn_reshape_t,

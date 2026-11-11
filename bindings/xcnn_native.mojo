@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_call, xcnn_word
+from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_ref, xcnn_call, xcnn_word
 from core.xcnn_entry_table import XC_RES_FREE
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.py_balanced import py_type, py_call, py_setitem
