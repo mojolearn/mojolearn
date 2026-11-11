@@ -50,7 +50,7 @@ from bindings.classical_warnings import classical_warning
 from ensemble.rf_notices import rf_notice_text
 from xtrees.trees_forest_run import (
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
-    forest_export_verdict_check, forest_fit_notice_codes,
+    forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features,
 )
 from checks.numerics import portable_log2_64
 from bindings.forest_fit_boundary import forest_fit_request_py
@@ -106,9 +106,8 @@ def _float(value: PythonObject) raises -> PythonObject:
 
 
 def _refuse(name: String, why: String) raises:
-    """`randomforest._refuse`."""
-    raise Error("NotImplementedError: " + name + " is not implemented: " + why
-                + " Refused by name rather than accepted and ignored.")
+    """`randomforest._refuse` (xtrees/trees_forest_run.mojo)."""
+    trees_refuse(name, why)
 
 
 def _class_fields(cls: PythonObject) raises -> PythonObject:
@@ -1401,8 +1400,7 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
         raise Error("RuntimeError: this estimator is not fitted yet")
     var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    trees_check_features(x.cols, fitted)
     return _stage(fields, kind, x^, context)
 
 

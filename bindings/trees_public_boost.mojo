@@ -45,7 +45,11 @@ from bindings.admitted_input import (
 )
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from xtrees.trees_forest_run import ForestFit
+from xtrees.trees_forest_run import ForestFit, trees_check_features
+from xtrees.trees_boost_run import (
+    boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
+    boost_count_fraction_ok, boost_count_check, boost_weight_flags_check, boost_dart_cap_check,
+)
 from bindings.trees_public_forest import (
     forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
     forest_capture_mode, forest_effective_mode, forest_export, forest_fit_dart_member, forest_kind,
@@ -574,9 +578,7 @@ def _ada_session_choice(fields: PythonObject, xt: PythonObject, context: PythonO
     MOJOLEARN_TE_ADA_SESSION_SHARE, else 'exact'. Every best-splitter tree
     member fits through it, so a GPU binary runs every round on the device
     and the CPU column keeps its per-round steps."""
-    if _mode(fields, context) == "fast" and (_switches(xt) & 4) != 0:
-        return "share"
-    return "exact"
+    return boost_ada_session_choice(_mode(fields, context), _switches(xt))
 
 
 def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
@@ -658,16 +660,10 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
 
 def _bagging_validate(fields: PythonObject, context: PythonObject) raises:
     """`_BaggingBase._validate_params`."""
-    if _truthy(fields["oob_score"]) and not _truthy(fields["bootstrap"]):
-        raise Error("Out of bag estimation only available if bootstrap=True")
-    if _truthy(fields["warm_start"]):
-        _refuse("warm_start=True", "there is no incremental fit here.")
-    if fields["n_jobs"] is not None:
-        _refuse("n_jobs", "the sub-fits run one after another on the device.")
-    if _truthy(fields["verbose"]):
-        _refuse("verbose", "nothing logs per estimator.")
-    if Int(py=_int(fields["n_estimators"])) < 1:
-        raise Error("n_estimators must be >= 1")
+    var oob = _truthy(fields["oob_score"])
+    boost_bagging_validate(oob, oob and _truthy(fields["bootstrap"]), _truthy(fields["warm_start"]),
+                           fields["n_jobs"] is not None, _truthy(fields["verbose"]))
+    boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
     _ = _seed(fields["random_state"], context)
 
 
@@ -679,14 +675,12 @@ def _count(v: PythonObject, total: Int, name: String, context: PythonObject) rai
         k = Int(py=_int(v))
     elif Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):
         var f = Float64(py=_float(v))
-        if not (f > 0.0 and f <= 1.0):
+        if not boost_count_fraction_ok(f):
             raise Error(name + "=" + _str(v) + " is outside (0, 1]")
         k = Int(py=_int(_F(f * Float64(total))))
     else:
         raise Error(name + " must be an int or a float")
-    if not (1 <= k and k <= total):
-        raise Error(name + " resolves to " + String(k) + ", outside [1, " + String(total) + "]")
-    return k
+    return boost_count_check(name, k, total)
 
 
 def _bagging_batched_ok(fields: PythonObject, base: PythonObject, n_rows: Int, n: Int, n_feat: Int, d: Int,
@@ -828,8 +822,7 @@ def _bagging_x(fields: PythonObject, X: PythonObject, context: PythonObject) rai
         raise Error("RuntimeError: this estimator is not fitted yet")
     var x = _x_f32(X, context)
     var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    trees_check_features(x.cols, fitted)
     return x^
 
 
@@ -1058,10 +1051,8 @@ def _ada_validate(fields: PythonObject, classifier: Bool, context: PythonObject)
         if not py_contains(losses, fields["loss"]):
             raise Error("loss must be one of " + _repr(py_call(trees_builtins().tuple, losses)) + ", got "
                         + _repr(fields["loss"]))
-    if Int(py=_int(fields["n_estimators"])) < 1:
-        raise Error("n_estimators must be >= 1")
-    if not Float64(py=_float(fields["learning_rate"])) > 0:
-        raise Error("learning_rate must be > 0")
+    boost_check_n_estimators(Int(py=_int(fields["n_estimators"])))
+    boost_check_learning_rate(Float64(py=_float(fields["learning_rate"])))
     _ = _seed(fields["random_state"], context)
 
 
@@ -1077,10 +1068,9 @@ def _normalized_weights(xt: PythonObject, sample_weight: PythonObject, n: Int, c
     _ = flags  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = sw  # keep the Python object alive through the native call above
-    if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0 or _i32_word(flags, 2) != 0 or _i32_word(flags, 3) != 0:
-        raise Error("sample_weight must be finite and nonnegative")
-    if _i32_word(flags, 4) == 0:
-        raise Error("Sample weights must contain at least one non-zero number.")
+    boost_weight_flags_check(
+        _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0 or _i32_word(flags, 2) != 0 or _i32_word(flags, 3) != 0,
+        _i32_word(flags, 4) != 0)
     var w = admitted_vector(n, "<f8", context)
     trees_cast(trees_address(out) + 8, "<f8", trees_address(w), "<f8", n, context)
     _ = w  # keep the Python object alive through the native call above
@@ -1425,8 +1415,7 @@ def _ada_x(fields: PythonObject, X: PythonObject, context: PythonObject) raises 
         raise Error("RuntimeError: this estimator is not fitted yet")
     var x = _x_f32(X, context)
     var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    trees_check_features(x.cols, fitted)
     return x^
 
 
@@ -1555,7 +1544,6 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
 # -------------------------------------------------------------------- DART
 
 
-comptime _DART_VALUES_CAP = 1 << 26
 
 
 def _dart_thr(v: Float64) -> Int:
@@ -1716,9 +1704,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
                     + "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit is refused by name")
     var n_iters = Int(py=_int(fields["n_estimators"]))
     var node_cap = 2 * Int(py=_int(fields["num_leaves"])) - 1
-    if not (1 <= node_cap and node_cap <= 65535 and n_iters * K * node_cap <= _DART_VALUES_CAP):
-        raise Error("NotImplementedError: mojolearn DART: n_estimators * classes * (2 * num_leaves - 1) must be at most "
-                    + String(_DART_VALUES_CAP) + " and num_leaves at most 32768 (the round's leaf-value store); refused by name")
+    boost_dart_cap_check(n_iters, K, node_cap)
     var all_cols = _arange(xt, d, context)
     var inits32_store = py_call(context["array_type"], PythonObject("f"), inits)
     var inits32 = classical_wrap_array(inits32_store, Python.tuple(len(inits)), "<f4", "C", context)
@@ -2022,8 +2008,7 @@ def _dart_raw(model: PythonObject, fields: PythonObject, X: PythonObject, contex
         raise Error("RuntimeError: this estimator is not fitted yet")
     var x = _x_f32(X, context)
     var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    trees_check_features(x.cols, fitted)
     var n = x.rows
     var d = x.cols
     var K = Int(py=_int(py_get(fields, "n_classes_", _P(1))))
@@ -2193,8 +2178,7 @@ def _rte_transform(fields: PythonObject, x: AdmittedX, context: PythonObject) ra
     var n = x.rows
     var d = x.cols
     var fitted = Int(py=_int(fields["n_features_in_"]))
-    if d != fitted:
-        raise Error("X has " + String(d) + " features, fit saw " + String(fitted))
+    trees_check_features(d, fitted)
     var xt = _xt(fields, context)
     var ff = py_fields(fields["forest_"])
     var trees = Int(py=_int(fields["n_trees_"]))

@@ -123,3 +123,15 @@ def forest_fit_notice_codes(mask: Int) raises -> List[Int]:
         if (mask & codes[i]) != 0:
             out.append(codes[i])
     return out^
+
+
+def trees_refuse(name: String, why: String) raises:
+    """`randomforest._refuse`: a parameter refused by name."""
+    raise Error("NotImplementedError: " + name + " is not implemented: " + why
+                + " Refused by name rather than accepted and ignored.")
+
+
+def trees_check_features(cols: Int, fitted: Int) raises:
+    """A predict's feature-count refusal against the fitted width."""
+    if cols != fitted:
+        raise Error("X has " + String(cols) + " features, fit saw " + String(fitted))
