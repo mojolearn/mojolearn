@@ -2786,7 +2786,12 @@ def test_registry_executable_helper_edits_follow_proved_callers():
     assert not result["every_rules"], "a caller proof must not be replaced by an all-lanes rule"
     with _Seeded({path: old}, {path: old + "\n_UNPLACED = unknown_side_effect()\n"}):
         result = lane_select.select([path], ref=_FAKE_REF)
-    assert result["unattributed"] == [path], result["reasons"]
+    # The import-time rule added with this tooling batch proves that every
+    # lane imports this module. A new top-level side effect therefore selects
+    # all lanes; only the named helper edit above uses caller narrowing.
+    assert not result["unattributed"], result["reasons"]
+    assert len(result["lanes"]) == result["total"], result["reasons"]
+    assert "import-time code changed" in result["reasons"][path]
 
 
 def test_merged_layout_changes_select_members_of_changed_link_units():

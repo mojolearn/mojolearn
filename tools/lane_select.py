@@ -4257,6 +4257,19 @@ def pandas_gated_units(path, old_text, new_text, changed):
                and new_u["top"].get(u[1], (None,))[0] == "def"}
     texts = _mojo_unit_texts(new_u)
     idents = {unit: frozenset(_MOJO_IDENT_RE.findall(_mojo_code_text(text))) for unit, text in texts.items()}
+    # Only helpers reachable from a gated body inherit its exclusion. An
+    # independent changed export with no local callers is not a helper merely
+    # because the set of other definitions naming it happens to be empty.
+    reachable = {h for h in helpers if any(
+        h in idents.get(("t", gate), ()) and h not in prefix
+        for gate, prefix in gates.items())}
+    pending = list(reachable)
+    while pending:
+        caller = pending.pop()
+        discovered = (set(idents.get(("t", caller), ())) & helpers) - reachable
+        reachable.update(discovered)
+        pending.extend(discovered)
+    helpers &= reachable
     residue = frozenset(_MOJO_IDENT_RE.findall(_mojo_code_text("\n".join(new_u["residue"]))))
     elsewhere = {h: _mojo_files_naming(h, path) for h in helpers}
     shrinking = True
