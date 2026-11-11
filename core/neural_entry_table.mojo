@@ -33,6 +33,13 @@ here at module init, once per (tier, vendor) key:
                               (`_mojolearn_x_sequence_host`). NEURAL_MLP_PROGRAM_ABI;
                               operations are the program's own codes
                               (SMALL_MLP_PROGRAM_OPEN .. SMALL_MLP_PROGRAM_SESSIONS).
+  NEURAL_TABLE_EMBEDDING      the Embedding layer's training binding
+                              (`_backend.binding("_mojolearn_embedding", mode)`):
+                              GPU `_mojolearn_embedding`, CPU
+                              `_mojolearn_embedding_host`. NEURAL_EMBEDDING_ABI.
+  NEURAL_TABLE_EMBEDDING_INFER the host inference lookup binding
+                              (`_mojolearn_embedding_infer_host`, CPU only):
+                              forward only.
 
 The operation codes are the images' own (documented beside each dispatch):
 Transformer 0/1 reserve/release a session, 2/3 session forward/backward,
@@ -47,13 +54,30 @@ independent numerical work to split.
 """
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall, TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
-from core.native_descriptor_call import native_descriptor_call
+from core.native_descriptor_call import native_descriptor_call, native_descriptor_words
+
+
+def neural_entry_spans(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int, result: Int,
+    max_floats: Int) raises -> List[List[Int]]:
+    """A descriptor entry's admission of its spans: [addresses, ints]."""
+    if result == 0 or nf < 0 or nf > max_floats or (nf > 0 and ff == 0):
+        raise Error("native neural entry: null result or invalid float span")
+    var spans = List[List[Int]]()
+    spans.append(native_descriptor_words(aa, na))
+    spans.append(native_descriptor_words(pp, np))
+    return spans^
+
+
+def neural_entry_result(result: Int, value: Int):
+    MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = value
 
 comptime NEURAL_TABLE_BLOCK_FORWARD = 0
 comptime NEURAL_TABLE_BLOCK_TRAIN = 1
 comptime NEURAL_TABLE_MAMBA_TRAIN = 2
 comptime NEURAL_TABLE_MLP_PROGRAM = 3
-comptime NEURAL_TABLE_LAST = 3
+comptime NEURAL_TABLE_EMBEDDING = 4
+comptime NEURAL_TABLE_EMBEDDING_INFER = 5
+comptime NEURAL_TABLE_LAST = 5
 
 # The operation counts every publisher and reader agree on: the readers'
 # former capsule admissions (`neural_descriptor_reuse(..., 36)` and `(..., 44)`).
@@ -62,6 +86,29 @@ comptime NEURAL_MAMBA_OPERATIONS = 44
 # The small MLP program: open, step, download, apply, close, sessions.
 comptime NEURAL_MLP_PROGRAM_ABI = "mojolearn.neural.small_mlp_program.v1"
 comptime NEURAL_MLP_PROGRAM_OPERATIONS = 6
+# The Embedding entries (a: addresses, p: Int words; the former Python
+# entries' words in their order, resident tensor handles first):
+#   EMB_OP_FORWARD        a [weight, ids, y]        p [V, d, T(, token)]     -> T * d
+#   EMB_OP_BACKWARD       a [dy, ids, dw]           p [V, d, T, pad, acc(, plan)] -> V * d
+#   EMB_OP_TABLE_RELEASE  -                         p [token]                -> 1 dropped, 0 not
+#   EMB_OP_FORWARD_DEV    a [weight, ids]           p [y_h, V, d, T, token]  -> T * d
+#   EMB_OP_BACKWARD_DEV   a [ids]                   p [dy_h, dw_h, V, d, T, pad, acc, plan] -> V * d
+#   EMB_OP_TENSOR_ALLOC   -                         p [n, zero]              -> handle
+#   EMB_OP_TENSOR_FREE    -                         p [handle]               -> handle
+#   EMB_OP_TENSOR_UPLOAD  a [source]                p [handle, n]            -> n
+#   EMB_OP_TENSOR_COPY    -                         p [dst, src, n]          -> n
+# A host image serves FORWARD (and BACKWARD on the training host) only.
+comptime NEURAL_EMBEDDING_ABI = "mojolearn.neural.embedding.v1"
+comptime NEURAL_EMB_OPERATIONS = 9
+comptime EMB_OP_FORWARD = 0
+comptime EMB_OP_BACKWARD = 1
+comptime EMB_OP_TABLE_RELEASE = 2
+comptime EMB_OP_FORWARD_DEV = 3
+comptime EMB_OP_BACKWARD_DEV = 4
+comptime EMB_OP_TENSOR_ALLOC = 5
+comptime EMB_OP_TENSOR_FREE = 6
+comptime EMB_OP_TENSOR_UPLOAD = 7
+comptime EMB_OP_TENSOR_COPY = 8
 
 # Transformer block operation codes (transformer/native_block_dispatch.mojo).
 comptime NEURAL_BLOCK_RESERVE = 0
@@ -246,6 +293,72 @@ def neural_table_publish[family: Int](key: NeuralEntryKey, publisher: Int, entry
             comptime NAME = "MojolearnEntriesNeuralMlpProgramFastHIPV1"
             entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
             return
+    comptime if family == NEURAL_TABLE_EMBEDDING:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+    comptime if family == NEURAL_TABLE_EMBEDDING_INFER:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_EMBEDDING_ABI)], [NEURAL_EMB_OPERATIONS], [entry])
+            return
     raise Error("native neural entries: unsupported execution key")
 
 
@@ -354,6 +467,56 @@ def neural_table_entry[family: Int](key: NeuralEntryKey) raises -> NativeDescrip
         if key.vendor == 3 and key.mode == 0:
             comptime NAME = "MojolearnEntriesNeuralMlpProgramFastHIPV1"
             return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+    comptime if family == NEURAL_TABLE_EMBEDDING:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingIdenticalHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingFastHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+    comptime if family == NEURAL_TABLE_EMBEDDING_INFER:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferIdenticalHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralEmbeddingInferFastHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_EMBEDDING_ABI), NEURAL_EMB_OPERATIONS)
     raise Error("native neural entries: unsupported execution key")
 
 

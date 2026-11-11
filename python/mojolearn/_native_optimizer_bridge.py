@@ -241,6 +241,10 @@ def connect_embedding(training, embedding_cls, archive_context):
                 entry = getattr(module, name, None)
                 if isinstance(entry, BuiltinFunctionType):
                     cells[name] = entry
+            # glue: the binding's fixed tier and vendor answers, read once at
+            # import: the native entry table key (core/neural_entry_table.mojo)
+            cells["entry_mode"] = int(module.embedding_numeric_mode())
+            cells["entry_vendor"] = str(module.embedding_vendor())
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
@@ -263,7 +267,7 @@ def connect_embedding(training, embedding_cls, archive_context):
         context["embedding_host_binding"] = {"module": host_module, **{
             name: getattr(host_module, name) for name in names  # glue: fixed host ABI connection at import
             if isinstance(getattr(host_module, name, None), BuiltinFunctionType)
-        }}
+        }, "entry_mode": int(host_module.embedding_numeric_mode()), "entry_vendor": "cpu", "entry_infer": True}
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
         context["embedding_host_binding"] = type(error).__name__ + ": " + str(error)
     context["embedding_host_names"] = names
