@@ -44,6 +44,7 @@ from layout.tile_layout import col_major, row_major
 from nn.argsort import argsort
 from linalg.matmul import matmul
 from linalg.gemv import gemv_gpu
+from layout.tensor_engine import DefaultEngine
 from nn.topk import top_k
 from max.gpu import block_idx, thread_idx
 from max.gpu.sync import barrier
@@ -720,7 +721,9 @@ def _topk_one(ctx: DeviceContext, batch: Int, n: Int, k: Int) raises -> String:
     ctx.enqueue_copy(dst_buf=vals, src_ptr=hv.unsafe_ptr())
     ctx.synchronize()
 
-    top_k[largest=False, target="gpu"](
+    # Mojo 1.2.0: `k` (per-row k tensor) is left at None so every row uses max_k; its
+    # engine parameter cannot be inferred from None and is named here.
+    top_k[KEngine=DefaultEngine, largest=False, target="gpu"](
         TileTensor(vals, row_major(batch, n)),
         k,
         1,

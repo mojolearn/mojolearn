@@ -159,6 +159,7 @@ from neighbors.checks.apple_mma_distance import (
 from gemm.checks.gemm_identical import APPLE_MMA
 from layout import TileTensor
 from layout.tile_layout import row_major
+from layout.tensor_engine import DefaultEngine
 from nn.topk import top_k
 
 # THE IDENTICAL k-NN ROUTING ROWS, read from the kernel matrix since
@@ -1645,7 +1646,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 )
                 var ov = out_dist.create_sub_buffer[DType.float32](q * k, rows * k)
                 var oi = out_idx32.create_sub_buffer[DType.int32](q * k, rows * k)
-                top_k[largest=False, target="gpu"](
+                # Mojo 1.2.0: `k` (per-row k tensor) is left at None so every row uses max_k; its
+                # engine parameter cannot be inferred from None and is named here.
+                top_k[KEngine=DefaultEngine, largest=False, target="gpu"](
                     TileTensor(dv, row_major(rows, n_index)),
                     k,
                     1,
