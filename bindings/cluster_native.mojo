@@ -38,7 +38,7 @@ from core.kmeans_variants_api import (
     VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectPredictRequest, VARIANTS_CAP_RESIDENT,
 )
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_nonfinite,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_array, family_nonfinite,
     family_shape_repr,
 )
 
@@ -98,23 +98,6 @@ def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject
         raise Error("mojolearn: X has " + String(d) + " features, " + String(py_type(model).__name__)
                     + " was fitted with " + String(Int(py=fitted)))
     return x
-
-
-def xc_call_floats(binding: PythonObject, which: Int, x: PythonObject, aux: PythonObject, ints: PythonObject,
-                   floats: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_XCluster._call(which, x, aux, ints, floats)`: the binding's
-    `x_cluster_call(which, x, x_size, aux, aux_size, ints, floats)` with the
-    aux block's address only when it holds values; returns (f, i, s). The
-    caller keeps `x` and `aux` alive across the call."""
-    var entry = family_entry(binding, "x_cluster_call", context)
-    var aux_address = PythonObject(0)
-    var aux_size = 0
-    if aux is not None:
-        aux_size = Int(py=aux.size)
-        if aux_size:
-            aux_address = classical_address(aux)
-    return family_call(entry, PythonObject(which), classical_address(x), PythonObject(Int(py=x.size)), aux_address,
-                       PythonObject(aux_size), ints, floats)
 
 
 def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: String,

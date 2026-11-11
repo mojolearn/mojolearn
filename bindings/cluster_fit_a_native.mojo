@@ -30,7 +30,7 @@ from bindings.family_common import (
     family_type_name, family_call, family_array, family_nonfinite, family_shape_repr,
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
-from bindings.cluster_native import cluster_operation, xc_call_floats, _xc_array
+from bindings.cluster_native import cluster_operation, _xc_array
 from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import (
     MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VARIANTS_CAP_DEVSCAN,
@@ -38,6 +38,8 @@ from core.kmeans_variants_api import (
 from core.kmeans_variants_plan import MiniBatchStreamState
 from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest, CentroidFitResultSlot
 from core.affinity_preference_plan import AffinityPreferencePlan
+from core.optics_fit_api import OpticsMetric, OpticsFitRequest, OpticsFitResultSlot
+from bindings.optics_fit_boundary import optics_fit_connection, OpticsPackedResult
 from bindings.cluster_centroid_fit_boundary import centroid_fit_connection, CentroidPackedResult
 from bindings.affinity_preference_boundary import affinity_preference_prepare
 from bindings.kmeans_variants_boundary import (
@@ -46,7 +48,6 @@ from bindings.kmeans_variants_boundary import (
 from providers.python.estimator_binding_pyapi import _estimator_mode_word
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-comptime _E_OPTICS = 6
 # OPTICS metric codes (x_cluster/optics.mojo)
 comptime _OPTICS_PRECOMPUTED = 5
 
@@ -496,7 +497,7 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
 
 # ---------------------------------------------------------------- OPTICS
 
-def _optics_metric(model: PythonObject, context: PythonObject) raises -> PythonObject:
+def _optics_metric(model: PythonObject, context: PythonObject) raises -> OpticsMetric:
     """`OPTICS._metric_code`: (code, p); euclidean at p=2 keeps the
     squared-distance route (-1)."""
     var b = native_loaded_module("builtins")
@@ -513,21 +514,21 @@ def _optics_metric(model: PythonObject, context: PythonObject) raises -> PythonO
         if not pv >= 1:
             raise Error("p must be >= 1 for minkowski, got " + family_str(p))
         if pv == 2:
-            return Python.tuple(PythonObject(-1), PythonObject(2.0))
+            return OpticsMetric(-1, 2.0)
         if pv == 1:
-            return Python.tuple(PythonObject(1), PythonObject(1.0))
+            return OpticsMetric(1, 1.0)
         if isinf(pv) and pv > 0:
-            return Python.tuple(PythonObject(2), p)
-        return Python.tuple(PythonObject(3), p)
+            return OpticsMetric(2, pv)
+        return OpticsMetric(3, pv)
     if _one_of(metric, "euclidean", "l2"):
-        return Python.tuple(PythonObject(-1), PythonObject(2.0))
+        return OpticsMetric(-1, 2.0)
     var table = context["family_cfa_optics_metrics"]
     if not py_contains(table, metric):
         var names = py_call(native_loaded_module("operator").add, py_call(b.sorted, table),
                             Python.list(PythonObject("minkowski")))
         raise Error("NotImplementedError: mojolearn OPTICS: metric=" + family_repr(metric)
                     + " is not implemented; one of " + family_repr(names) + " (x_cluster/NOT_IMPLEMENTED.tsv)")
-    return Python.tuple(table[metric], p)
+    return OpticsMetric(Int(py=table[metric]), pv)
 
 
 def _optics_size(value: PythonObject, n: Int, name: String) raises -> Int:
@@ -553,8 +554,7 @@ def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject
                 context: PythonObject) raises:
     """`OPTICS.fit(X)`."""
     var code = _optics_metric(model, context)
-    var metric = Int(py=code[0])
-    var pw = code[1]
+    var metric = code.code
     var method = _attr(model, "cluster_method")
     if not _one_of(method, "xi", "dbscan"):
         raise Error("cluster_method must be 'xi' or 'dbscan', got " + family_repr(method))
@@ -578,22 +578,29 @@ def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     # ORDER MATCHES x_cluster/entries.mojo::optics_entry: n, d, min_samples,
     # min_cluster_size, method (0 xi), predecessor_correction, metric;
     # max_eps, xi, eps, p.
-    var ints = Python.list(PythonObject(n), PythonObject(d), PythonObject(ms), PythonObject(mcs),
-                           PythonObject(0 if is_xi else 1),
-                           _flag(_truthy(_attr(model, "predecessor_correction"))), PythonObject(metric))
-    var floats = Python.list(max_eps, _float(_attr(model, "xi")), eps, pw)
-    var result = xc_call_floats(binding, _E_OPTICS, x, PythonObject(None), ints, floats, context)
-    _ = x^
-    var f = result[0]
-    var i = result[1]
-    _set(model, "core_distances_", _xc_array(f[0], Python.tuple(n), "<f4", "f", context))
-    _set(model, "reachability_", _xc_array(f[1], Python.tuple(n), "<f4", "f", context))
-    _set(model, "ordering_", _xc_array(i[0], Python.tuple(n), "<i4", "i", context))
-    _set(model, "predecessor_", _xc_array(i[1], Python.tuple(n), "<i4", "i", context))
-    _set(model, "labels_", _xc_array(i[2], Python.tuple(n), "<i4", "i", context))
+    var predecessor_correction = _truthy(_attr(model, "predecessor_correction"))
+    # Preserve the second xi read at its original stage after the flag.
+    var repeated_xi = Float64(py=_float(_attr(model, "xi")))
+    var connection = optics_fit_connection(binding)
+    var request = OpticsFitRequest(variants_span(x), n, d, ms, mcs,
+        0 if is_xi else 1, predecessor_correction, code,
+        Float64(py=max_eps), repeated_xi, Float64(py=eps))
+    var result = OpticsFitResultSlot()
+    try:
+        with GILReleased(Python()):
+            connection.driver.fit(request, result)
+    finally:
+        _ = connection.provider
+        _ = x
+    var packed = OpticsPackedResult(result)
+    _set(model, "core_distances_", _xc_array(packed.core_distances, Python.tuple(n), "<f4", "f", context))
+    _set(model, "reachability_", _xc_array(packed.reachability, Python.tuple(n), "<f4", "f", context))
+    _set(model, "ordering_", _xc_array(packed.ordering, Python.tuple(n), "<i4", "i", context))
+    _set(model, "predecessor_", _xc_array(packed.predecessor, Python.tuple(n), "<i4", "i", context))
+    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
     if is_xi:
-        var rows = Int(py=py_call(native_loaded_module("builtins").len, i[3])) // 2
-        _set(model, "cluster_hierarchy_", _xc_array(i[3], Python.tuple(rows, 2), "<i4", "i", context))
+        var rows = len(result.storage[0].hierarchy) // 2
+        _set(model, "cluster_hierarchy_", _xc_array(packed.hierarchy, Python.tuple(rows, 2), "<i4", "i", context))
     _set(model, "n_features_in_", PythonObject(d))
 
 
