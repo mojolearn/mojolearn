@@ -10,11 +10,11 @@ def labels_host_native_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff
     return labels_native_dispatch[LabelsHostKernels](operation, aa, na, pp, np, ff, nf, result, context, sink)
 
 
-struct LabelsHostNativeAPI(Defaultable, Movable):
+struct LabelsHostNativeAPI[ABI: StaticString](Defaultable, Movable):
     var name: String
     var entries: List[NativeDescriptorCall]
 
     def __init__(out self):
-        self.name = String(LABELS_NATIVE_ABI_NAME)
+        self.name = String(Self.ABI)
         self.entries = List[NativeDescriptorCall]()
         self.entries.append(labels_host_native_v2)

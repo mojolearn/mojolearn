@@ -9,7 +9,7 @@ from core.labels_native_api import (
     LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT,
     LABELS_OP_MODE, LABELS_OP_CAPABILITIES, LABELS_CAP_DEVICE,
     LabelsNativeDriver, LabelsPrepareRequest, LabelsReduceRequest,
-    LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest,
+    LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest, LabelsThresholdRequest,
 )
 from core.labels_native_host import LabelsHostKernels, labels_host_fsum
 from providers.python.neural_descriptor_pyapi import (
@@ -30,7 +30,7 @@ struct _LabelsProvider(Defaultable, Movable):
         self.driver = Optional[LabelsNativeDriver]()
 
 
-comptime _LABELS_PROVIDER = SharedSlot[_LabelsProvider, "MojolearnLabelsProviderV3", 3]
+comptime _LABELS_PROVIDER = SharedSlot[_LabelsProvider, "MojolearnLabelsProviderV4", 3]
 
 
 def _labels_route(context: PythonObject) raises -> Int:
@@ -90,6 +90,16 @@ def labels_reduce_stat(context: PythonObject, addr: Int, code: Int, n: Int, what
     try:
         with GILReleased(Python()):
             return driver.value().reduce(request) if driver else LabelsHostKernels.reduce(request)
+    finally:
+        _ = pin
+
+
+def labels_threshold(context: PythonObject, request: LabelsThresholdRequest) raises -> Int:
+    var pin = _labels_pin(context)
+    var driver = pin.driver.copy()
+    try:
+        with GILReleased(Python()):
+            return driver.value().threshold(request) if driver else LabelsHostKernels.threshold(request)
     finally:
         _ = pin
 

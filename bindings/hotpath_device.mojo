@@ -117,7 +117,6 @@ from core.hotpath_device import (
     device_select_mask_u8_i64,
     device_strat_fold_assign_i32,
     device_stratified_fold_ids,
-    device_threshold_labels_i64,
     device_uniform_init_f32,
 )
 from core.input_device import (
@@ -135,6 +134,7 @@ from core.label_device_steps import (
     LABELS_DEVICE_CAST as IDN_HPDEV_CAST, LABELS_DEVICE_INPUT as _HPDEV_INPUT,
     LABELS_DEVICE_CONTEXT as _HPDEV_SLOT, labels_device_reduce, labels_device_cast,
     labels_device_gather_i32, labels_device_try_finite,
+    labels_device_threshold, labels_device_threshold_eligible,
 )
 from bindings.labels_stat_boundary import labels_stat_pack
 from core.hotpath_impl import HpStat
@@ -225,14 +225,13 @@ def threshold_labels_i64_binding(
         var c = Int(py=code)
         var s = Int(py=src_addr)
         var d = Int(py=dst_addr)
-        if count >= 1 and count <= HPD_MAX_N and (c == HPD_F32 or c == HPD_F64) and s != 0 and d != 0:
+        if labels_device_threshold_eligible(s, c, count, d):
             var t = Float64(py=thr)
             var st = Int(py=strict) != 0
             var lo = Int64(Int(py=below))
             var hi = Int64(Int(py=above))
-            var ctx = process_ctx[_HPDEV_SLOT]()
             with GILReleased(Python()):
-                device_threshold_labels_i64(ctx, s, c, count, t, st, lo, hi, d)
+                _ = labels_device_threshold(s, c, count, t, st, lo, hi, d)
             return PythonObject(0)
     return host_threshold_labels_i64_binding(src_addr, code, n, thr, strict, below, above, dst_addr)
 

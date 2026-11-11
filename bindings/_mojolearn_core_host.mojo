@@ -1119,7 +1119,13 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_core_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
-comptime LABELS_HOST_NATIVE_API = SharedSlot[LabelsHostNativeAPI, "MojolearnLabelsHostNativeV2"]
+comptime LABELS_HOST_NATIVE_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v2"], "MojolearnLabelsHostNativeV2"]
+comptime LABELS_HOST_NATIVE_V3_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v3"], "MojolearnLabelsHostNativeV3"]
+
+
+def labels_native_api_v3_binding() raises -> PythonObject:
+    var api = LABELS_HOST_NATIVE_V3_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def labels_native_api_v2_binding() raises -> PythonObject:
@@ -1146,6 +1152,7 @@ def build__mojolearn_core_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_core_host")
         module.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         module.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
+        module.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
         module.def_function[core_host_vendor_binding]("core_host_vendor")
         module.def_function[core_host_column_binding]("core_host_column")

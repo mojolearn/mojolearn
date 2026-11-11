@@ -17,10 +17,10 @@ from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan, class_wei
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
 
 
-def class_weight_rows_admitted[Profile: Int = CLASS_WEIGHT_CLASSICAL](
+def class_weight_plan_admitted[Profile: Int = CLASS_WEIGHT_CLASSICAL](
     class_weight: PythonObject, classes: PythonObject, codes: PythonObject,
     n: Int, k: Int, balanced: Bool, xtrees: PythonObject, context: PythonObject,
-) raises -> PythonObject:
+) raises -> ClassWeightPlan:
     var inputs = ClassWeightInputs()
     if balanced:
         var counts = List[Int32](unsafe_uninit_length=k)
@@ -43,6 +43,14 @@ def class_weight_rows_admitted[Profile: Int = CLASS_WEIGHT_CLASSICAL](
             inputs.all_one = class_weight_all_one(inputs.values)
         plan = class_weight_plan(inputs.values, inputs.all_one)
     _ = inputs^
+    return plan^
+
+
+def class_weight_rows_admitted[Profile: Int = CLASS_WEIGHT_CLASSICAL](
+    class_weight: PythonObject, classes: PythonObject, codes: PythonObject,
+    n: Int, k: Int, balanced: Bool, xtrees: PythonObject, context: PythonObject,
+) raises -> PythonObject:
+    var plan = class_weight_plan_admitted[Profile](class_weight, classes, codes, n, k, balanced, xtrees, context)
     if plan.all_one:
         return PythonObject(None)
     var output = admitted_storage_native(List[Int](length=1, fill=n), "<f4", context, as_array=True)

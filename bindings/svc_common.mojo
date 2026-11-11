@@ -29,6 +29,8 @@ from bindings.classical_labels import _flatten_labels, _sorted_classes, _classif
 from bindings.classical_labels import labels_accuracy, classical_score_from_codes
 from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
+from bindings.p3_labels_metrics_native import p3_decode_list
+from bindings.labels_descriptor_boundary import labels_gather
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
     family_array, family_shape_repr,
@@ -297,6 +299,45 @@ def svc_decode(owner: PythonObject, var classes: PythonObject, codes: PythonObje
         built = Python.tuple(PythonObject(kind), _svc_class_table(classes, kind, context))
         gpsvm_class_table_put(owner, _SVC_CLASS_TABLE_SLOT, classes, built)
     return _svc_decode_with(classes, Int(py=built[0]), built[1], codes, context)
+
+
+def svc_decode(owner: PythonObject, var classes: PythonObject, codes: List[Int64],
+               context: PythonObject) raises -> PythonObject:
+    """PACK native code storage with the same weak class table and label types."""
+    classes = classifier_label_list(classes, context)
+    var built = gpsvm_class_table(owner, _SVC_CLASS_TABLE_SLOT, classes)
+    if built is None:
+        var kind = svc_label_kind(classes, context)
+        built = Python.tuple(PythonObject(kind), _svc_class_table(classes, kind, context))
+        gpsvm_class_table_put(owner, _SVC_CLASS_TABLE_SLOT, classes, built)
+    var kind = Int(py=built[0])
+    var table = built[1]
+    var n = len(codes)
+    var address = Int(codes.unsafe_ptr()) if n else 0
+    if table is not None:
+        var result = family_array(Python.tuple(n), "<i8" if kind == 0 else "<f8", context)
+        if n > 0:
+            labels_gather(context, 1 if kind == 0 else 2,
+                Int(py=classical_address(table)), len(classes), address, n,
+                Int(py=classical_address(result)))
+        _ = codes
+        _ = table
+        return result
+    var values = p3_decode_list(classes, address, 8, n)
+    _ = codes
+    if values is None:
+        raise Error("IndexError: list index out of range")
+    if kind == 2:
+        return values
+    # Preserve the old numeric-label PACK attempt and overflow behavior:
+    # an integer outside int64 remains a list of its original Python labels.
+    var b = svc_builtins()
+    try:
+        var store = py_call(context["array_type"], PythonObject("q" if kind == 0 else "d"),
+            py_call(b.map, b.int if kind == 0 else b.float, values))
+        return classical_wrap_array(store, Python.tuple(n), "<i8" if kind == 0 else "<f8", "C", context)
+    except:
+        return values
 
 
 def svc_threshold_codes(scores: PythonObject, threshold: Float64, strict: Bool, below: Int, above: Int,

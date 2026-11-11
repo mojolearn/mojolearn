@@ -442,5 +442,50 @@
   ],
   "compiled": false,
   "executed": false,
-  "removed": "nothing yet; inventory precedes implementation"
+  "removed": "nothing yet; inventory precedes implementation",
+  "additive_svc_api": "380a4acf70",
+  "shared_extensions": {
+    "status": "source-only; uncompiled/unrun",
+    "additive_svc_api": "380a4acf70",
+    "native_api": {
+      "labels": "mojolearn.labels.v3",
+      "factory": "labels_native_api_v3",
+      "operations": 11,
+      "new_opcode": 10,
+      "preserved": "v1/v2 factories retain original capsule names and operations 0\u20139 layouts",
+      "slots": [
+        "device labels v3 table uses MojolearnLabelsNativeTable{Identical,Fast}V4",
+        "host labels v3 table uses MojolearnLabelsHostNativeV3",
+        "boundary provider cache uses MojolearnLabelsProviderV4, unchanged layout tag3"
+      ]
+    },
+    "routes": [
+      "threshold dispatch uses original IDN_HPDEV_ELEM/count/dtype/address admission",
+      "same device_threshold_labels_i64 or threshold_labels_i64 implementation, no numerical edits",
+      "legacy wrapper retains its two conversion/refusal orders and reuses shared native route",
+      "native Int64 label PACK retains existing weak class-table cache, numeric gather, text/object labels and huge-integer overflow result",
+      "class-weight plan factoring keeps old wrapper and exact preparation order"
+    ],
+    "numerical_files_unchanged": [
+      "core/hotpath_impl_rows.mojo",
+      "core/hotpath_device.mojo",
+      "core/hotpath_device_impl.mojo"
+    ],
+    "tests": {
+      "cpu_native": 7,
+      "gpu_native_ordered": 7,
+      "version_boundary": 3,
+      "executed": false
+    },
+    "remaining": "LinearSVC public consumer switch and own fit/query/weight fixtures pending",
+    "source_syntax": "Python AST only; no imports or execution",
+    "affected_roots": [
+      "base _mojolearn",
+      "core_host",
+      "runtime_family_host",
+      "estimators",
+      "estimators_host",
+      "transitive consumers of shared label/class-weight helpers; root closure builder determines reuse"
+    ]
+  }
 }
