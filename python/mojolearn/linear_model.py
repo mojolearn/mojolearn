@@ -18,7 +18,7 @@ import array
 import numbers
 from . import _portable_math as math
 
-from . import _backend, _mojolearn_estimators, _serialize
+from . import _backend, _mojolearn_estimators
 from ._array import Array
 from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
@@ -46,17 +46,6 @@ _LOGISTIC_FORMAT = "mojolearn-logistic-1"
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-
-def _saved_mode(est):
-    """The tier `predict` would run on now, persisted as GradientBoosting
-    persists it, so a loaded model never silently changes tier."""
-    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
-    if not isinstance(mode, str) or mode.strip().lower() not in (
-        "fast", "identical"
-    ):
-        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-    return mode.strip().lower()
 
 
 # ---------------------------------------------------------------------------

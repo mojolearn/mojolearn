@@ -56,7 +56,7 @@ binding.
 """
 import os
 
-from . import _backend, _native_classical_bridge, _serialize
+from . import _backend, _native_classical_bridge
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT

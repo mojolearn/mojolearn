@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU dimensionality reduction."""
 
-from . import _backend, _mojolearn_estimators, _native_archive_bridge, _native_pca_bridge, _native_tsvd_bridge, _serialize
+from . import _backend, _mojolearn_estimators, _native_archive_bridge, _native_pca_bridge, _native_tsvd_bridge
 from ._array import Array
 from ._mode import NumericModeMixin
 
@@ -18,34 +18,6 @@ _TSVD_FORMAT = "mojolearn-tsvd-1"
 # writes the schema registered below each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-
-def _saved_mode(est):
-    """The tier `transform` would run on now, persisted as GradientBoosting
-    persists it, so a loaded model never silently changes tier."""
-    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
-    if not isinstance(mode, str) or mode.strip().lower() not in (
-        "fast", "identical"
-    ):
-        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-    return mode.strip().lower()
-
-
-def _restore_mode(obj, arrays):
-    mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "identical"):
-        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-    obj.numeric_mode = mode
-
-
-def _check_saved_by(arrays, path, cls):
-    """The file's `estimator` must be `cls` or a base of it, so the host
-    subclasses of `_classical_host.py` load the plain class's file."""
-    saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name
-        raise ValueError(
-            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
-        )
 
 
 # Maintainer notes (moved from the docstring).
