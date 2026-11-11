@@ -83,6 +83,19 @@ from x_decomp.descriptor_device import X_DECOMP_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 
+from core.shared_slot import SharedSlot
+from core.tsvd_native_decomp import TSVDDecompAPI
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompDeviceFastV1"
+comptime TSVD_DECOMP_API = SharedSlot[TSVDDecompAPI[DevExec, DevRDev, True], _TSVD_DECOMP_API_NAME]
+
+
+def tsvd_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = TSVD_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def x_decomp_native_api_v1_binding() raises -> PythonObject:
     """The x_decomp kernel-call table (x_decomp/descriptor_schema.mojo): one
     capsule over this image's dispatch function, connected once per module
@@ -99,6 +112,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
+        m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
