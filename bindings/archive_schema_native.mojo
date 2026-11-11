@@ -150,7 +150,9 @@
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import GILReleased, PyObjectPtr
+from core.archive_entry_table import archive_export_family, archive_resident_export
+from core.parallel_entry_table import ParallelEntryKey
 from bindings.native_loaded_module import native_loaded_module
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_attributes import _type_mro
@@ -948,7 +950,21 @@ def _schema_device_array(fields: PythonObject, step: PythonObject, name: String,
     var export = py_call(b.getattr, held[2], step[4], PythonObject(None))
     if export is None or py_type(export) is not py_type(b.len):
         raise Error("TypeError: mojolearn " + name + ": the resident index has no compiled " + String(step[4]))
-    _ = py_call(export, held[1], py_call(store.buffer_info)[0], count)
+    # UNPACK: the image that minted the handle is the compiled entry's module;
+    # its (tier, vendor) key was recorded at load
+    # (python/mojolearn/_native_table_key.py). The copy runs through that
+    # image's archive export table (core/archive_entry_table.mojo), not its
+    # Python door.
+    var family = archive_export_family(String(step[4]))
+    var key = py_get(context["native_table_keys"], export.__self__)
+    if family < 0 or key is None:
+        raise Error("TypeError: mojolearn " + name + ": the resident index has no native export " + String(step[4]))
+    var table_key = ParallelEntryKey(Int(py=key[0]), Int(py=key[1]))
+    var handle = Int(py=held[1])
+    var dst = Int(py=py_call(store.buffer_info)[0])
+    with GILReleased(Python()):
+        _ = archive_resident_export(family, table_key, handle, dst, count)
+    _ = held  # keep the resident index's owner alive through the native copy above
     return classical_wrap_array(store, py_call(b.tuple, dims), dtype, "C", context)
 
 

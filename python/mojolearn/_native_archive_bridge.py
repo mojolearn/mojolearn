@@ -58,7 +58,9 @@ def connect():
                    host_archive_formats={}, host_archive_fitted_estimators=[],
                    host_archive_classical_formats=(), host_archive_forest_formats=(),
                    host_archive_lifetime_layouts={}, archive_class_formats={})
+    from ._native_table_key import KEYS as _native_table_keys
     save.update(archive_save_schemas={}, host_archive_context=archive,
+                native_table_keys=_native_table_keys,
                 classifier_labels_class=ClassLabels,
                 classifier_labels_namespace=dict(vars(ClassLabels)),
                 classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
