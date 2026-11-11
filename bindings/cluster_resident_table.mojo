@@ -24,7 +24,7 @@ Rules (plan section 2A):
   again at its next call.
 - Model death: the records module's `records_release` posts the dead
   model's key on its dead-key ring (bindings/native_model_records.mojo);
-  `cres_lookup` and `cres_store` drain the ring at entry
+  native lease lookup and store drain the ring at entry
   (`records_dead_keys_since`, from the last sequence word this table saw)
   and `cres_forget_key` drops every family's entry of each dead key; when
   the ring overflowed since the last drain every entry is released. The
@@ -33,7 +33,7 @@ Rules (plan section 2A):
   addresses taken, so a new model at the same address can never be served
   the old copy.
 - Nothing here computes on data: the device copy is the same bytes."""
-from std.python import Python, PythonObject
+from std.python import PythonObject
 # Imports: std and the records module's contract only (the records module
 # never reaches this table: this table polls its dead-key ring).
 from bindings.native_model_records import model_identity_key, model_generation, records_dead_keys_since
@@ -61,26 +61,18 @@ measured (profile item 14)."""
 struct CresHeld(Copyable, Movable):
     # Copyable (all fields are): Dict iteration (keys() included) requires Copyable key and value types.
     var generation: Int
-    var objects: PythonObject
     var dims: List[Int]
     var binding: PythonObject
-    var release: PythonObject
-    var query: PythonObject
-    var handle: Int
     var nbytes: Int
     var tick: Int
     var native_variant: Optional[VariantsResidentLease]
     var native_spectral: Optional[SpectralResidentLease]
 
-    def __init__(out self, generation: Int, objects: PythonObject, var dims: List[Int], binding: PythonObject,
-                 release: PythonObject, query: PythonObject, handle: Int, nbytes: Int, tick: Int):
+    def __init__(out self, generation: Int, var dims: List[Int], binding: PythonObject,
+                 nbytes: Int, tick: Int):
         self.generation = generation
-        self.objects = objects
         self.dims = dims^
         self.binding = binding
-        self.release = release
-        self.query = query
-        self.handle = handle
         self.nbytes = nbytes
         self.tick = tick
         self.native_variant = None
@@ -101,7 +93,7 @@ struct CresTable(Defaultable, Movable):
         self.seen = 0
 
 
-comptime _CRES = SharedSlot[CresTable, "MojolearnClusterResidentHeldV6"]
+comptime _CRES = SharedSlot[CresTable, "MojolearnClusterResidentHeldV7"]
 
 
 def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:
@@ -125,10 +117,6 @@ def _release_quiet(var held: CresHeld):
         variants_resident_retire(held.native_variant.take())
         _ = held^
         return
-    try:
-        _ = held.release(PythonObject(held.handle))
-    except:
-        pass
     _ = held^
 
 
@@ -189,15 +177,6 @@ def cres_count() raises -> Int:
     return len(_table()[].entries)
 
 
-def _same_objects(a: PythonObject, b: PythonObject) raises -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):  # driver-loop: over the few fitted objects of one entry
-        if not (a[i] is b[i]):
-            return False
-    return True
-
-
 def _same_dims(a: List[Int], b: List[Int]) -> Bool:
     if len(a) != len(b):
         return False
@@ -211,7 +190,7 @@ def _evict_one(t: UnsafePointer[CresTable, MutAnyOrigin]) raises -> Bool:
     """Release the least recently used entry; False when none was released."""
     var oldest_slot = 0
     var oldest_tick = -1
-    # Keys only: CresHeld is Movable, not Copyable, and Dict.items() requires Copyable values.
+    # Iterate keys to avoid copying lease references for an LRU scan.
     for key in t[].entries.keys():  # driver-loop: over at most CRES_HELD_MAX held entries
         var tick = t[].entries[key].tick
         if oldest_tick < 0 or tick < oldest_tick:
@@ -224,53 +203,8 @@ def _evict_one(t: UnsafePointer[CresTable, MutAnyOrigin]) raises -> Bool:
     return len(t[].entries) < before
 
 
-def cres_lookup(model: PythonObject, family: Int, binding: PythonObject, objects: PythonObject,
-                dims: List[Int]) raises -> PythonObject:
-    """`(query_entry, handle)` of the entry minted from these very `objects`
-    (a tuple) by `binding` at these shape words and the model's current
-    generation, else None (a stale entry is released here)."""
-    var slot = model_identity_key(model) + family
-    var t = _table()
-    _drain_dead(t)
-    if slot not in t[].entries:
-        return PythonObject(None)
-    var generation = model_generation(model)
-    var query = PythonObject(None)
-    var handle = 0
-    ref held = t[].entries[slot]
-    var same = (not held.native_variant and not held.native_spectral and held.generation == generation and held.binding is binding and _same_dims(held.dims, dims)
-                and _same_objects(held.objects, objects))
-    if same:
-        t[].tick += 1
-        held.tick = t[].tick
-        query = held.query
-        handle = held.handle
-    if not same:
-        _forget_slot(slot)
-        return PythonObject(None)
-    return Python.tuple(query, PythonObject(handle))
-
-
-def cres_store(model: PythonObject, family: Int, binding: PythonObject, objects: PythonObject, var dims: List[Int],
-               release: PythonObject, query: PythonObject, handle: Int, nbytes: Int) raises:
-    """Hold a freshly minted handle (the model's older entry of this family
-    is released first); the least recently used entries are released while
-    the table is over its bounds."""
-    var slot = model_identity_key(model) + family
-    var t = _table()
-    _drain_dead(t)
-    _forget_slot(slot)
-    while len(t[].entries) > 0 and (len(t[].entries) >= CRES_HELD_MAX or t[].bytes + nbytes > CRES_HELD_BYTES):  # driver-loop: LRU eviction over held entries
-        if not _evict_one(t):
-            break
-    t[].tick += 1
-    t[].bytes += nbytes
-    t[].entries[slot] = CresHeld(model_generation(model), objects, dims^, binding, release, query, handle, nbytes,
-                                 t[].tick)
-
-
-# Variant calls retain a native Arc and its boundary pins together. Existing
-# families keep their old entries; both forms share the same LRU/cap/accounting.
+# Both families retain native Arcs and required boundary pins. They share
+# one unchanged bounded LRU and byte accounting mechanism.
 def cres_variant_lookup(model: PythonObject, binding: PythonObject, centers: PythonObject,
                         provider: PythonObject, dims: List[Int]) raises -> Optional[VariantsResidentLease]:
     var slot = model_identity_key(model) + CRES_X_CLUSTER
@@ -285,9 +219,10 @@ def cres_variant_lookup(model: PythonObject, binding: PythonObject, centers: Pyt
     # released-GIL work; never keep a borrowed Dict value across that work.
     ref held = t[].entries[slot]
     if held.native_variant:
+        ref lease = held.native_variant.value()
         matched = (held.generation == generation and held.binding is binding
-            and held.objects is centers and _same_dims(held.dims, dims)
-            and held.native_variant.value().provider is provider)
+            and lease.centers is centers and _same_dims(held.dims, dims)
+            and lease.provider is provider)
     if matched:
         t[].tick += 1
         held.tick = t[].tick
@@ -315,8 +250,7 @@ def cres_variant_store(model: PythonObject, binding: PythonObject, var dims: Lis
         t[].bytes -= replaced.value().nbytes
     t[].tick += 1
     t[].bytes += nbytes
-    var held = CresHeld(model_generation(model), lease.centers, dims^, binding,
-        PythonObject(None), PythonObject(None), lease.native[].handle, nbytes, t[].tick)
+    var held = CresHeld(model_generation(model), dims^, binding, nbytes, t[].tick)
     held.native_variant = lease^
     t[].entries[slot] = held^
     if replaced:
@@ -369,8 +303,7 @@ def cres_spectral_store(model: PythonObject, binding: PythonObject, var dims: Li
         t[].bytes -= replaced.value().nbytes
     t[].tick += 1
     t[].bytes += nbytes
-    var held = CresHeld(model_generation(model), PythonObject(None), dims^, binding,
-        PythonObject(None), PythonObject(None), lease.native[].handle, nbytes, t[].tick)
+    var held = CresHeld(model_generation(model), dims^, binding, nbytes, t[].tick)
     held.native_spectral = lease^
     t[].entries[slot] = held^
     if replaced:
