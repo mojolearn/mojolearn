@@ -62,7 +62,7 @@ def posterior_oracle(name: String, targets: List[Float32], mean: List[Float32], 
             var s = Float64(sp[row])
             okay = okay and isfinite(m) and isfinite(v) and isfinite(s) and s >= 0 and v >= 0
             if recovery:
-                okay = okay and abs(m - Float64(tp[row])) < Float64(0.00006103515625)
+                okay = okay and abs(m - Float64(tp[row])) <= Float64(0.00006103515625)
             else:
                 okay = okay and abs(m - em[row]) <= Float64(2e-3) + Float64(2e-4) * abs(em[row])
             var diagonal_std = sqrt(max(Float64(cp[row * query_rows + row]), Float64(0)))

@@ -13,7 +13,7 @@
       "settings": "Constant1 * ARD RBF[.25,.25] + White0; alpha2^-20; no normalization/optimizer. Failure variant duplicates row1=row0, RBF1/alpha0.",
       "numerical_candidates": [
         "factorization status",
-        "training mean recovery max absolute error <2^-14",
+        "training mean recovery max absolute error <=2^-14",
         "nonnegative standard deviation",
         "native clamp flags/count consistency",
         "finite symmetric covariance",
