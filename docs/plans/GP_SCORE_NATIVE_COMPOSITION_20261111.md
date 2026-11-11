@@ -85,3 +85,16 @@ replace the classifier's count pipeline with a match-reduction shortcut.
 The provider descriptor and range switch are the existing metrics program
 interface. Public GPC score still waits for exact label admission/decode
 composition; this additive owner adds no removal count by itself.
+
+## Shared scalar-pin and integer-view admission
+
+The existing score-key UNPACK now also accepts a native `List[PythonObject]`
+of admitted class pins, using the same scalar C-API normalization loop. Its
+existing Python list/tuple entry remains a wrapper over that same body.
+The metrics integer-store view admission is factored into `MetricIntegerView`;
+legacy `mc_int_store` retains its original Array storage and conversion,
+while the GP composition can choose native storage after identical admission.
+The source owner is explicitly retained after the conversion on both success
+and refusal. This does not change the host integer encoder or introduce the
+different device-label encoder used elsewhere. No `classical_labels` algorithm
+was modified. Native key and COUNT composition remains unfinished at this point.
