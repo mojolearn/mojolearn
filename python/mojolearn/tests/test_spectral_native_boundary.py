@@ -48,3 +48,71 @@ def test_spectral_refuses_python_preparation_factory_without_calling_it(monkeypa
                                   np.asarray([[0, 1, 2, 3], [1, 0, 1, 2],
                                               [2, 1, 0, 1], [3, 2, 1, 0]], dtype=np.float32))
     assert calls == []
+
+
+@pytest.mark.parametrize("parameter", ["n_components", "n_neighbors", "random_state", "affinity"])
+def test_standalone_embedding_admits_scalars_before_conversion(parameter):
+    from mojolearn import manifold
+
+    calls = []
+
+    class ConversionHook:
+        @property
+        def __class__(self):
+            calls.append("class")
+            return int
+
+        def __int__(self):
+            calls.append("int")
+            return 2
+
+        def __float__(self):
+            calls.append("float")
+            return 2.0
+
+    options = {parameter: ConversionHook()}
+    with pytest.raises(TypeError):
+        manifold.spectral_embedding(np.eye(4, dtype=np.float32), **options)
+    assert calls == []
+
+
+def test_standalone_embedding_refuses_input_shape_hook():
+    from mojolearn import manifold
+
+    calls = []
+
+    class ShapeHook:
+        @property
+        def shape(self):
+            calls.append("shape")
+            return (4, 4)
+
+        def __array__(self, *args, **kwargs):
+            calls.append("array")
+            return np.eye(4, dtype=np.float32)
+
+    with pytest.raises(TypeError):
+        manifold.spectral_embedding(ShapeHook(), n_components=2, affinity="precomputed")
+    assert calls == []
+
+
+@pytest.mark.parametrize("flag", ["norm_laplacian", "drop_first"])
+def test_standalone_flag_refusal_does_not_read_custom_metaclass_name(flag):
+    from mojolearn import manifold
+
+    calls = []
+
+    class NamingMeta(type):
+        @property
+        def __name__(cls):
+            calls.append("name")
+            return "spoofed"
+
+    class BadBool(metaclass=NamingMeta):
+        def __bool__(self):
+            calls.append("bool")
+            return True
+
+    with pytest.raises(TypeError, match="BadBool"):
+        manifold.spectral_embedding(np.eye(4, dtype=np.float32), **{flag: BadBool()})
+    assert calls == []

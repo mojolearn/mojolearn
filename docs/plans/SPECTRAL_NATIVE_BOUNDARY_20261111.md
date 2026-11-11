@@ -250,3 +250,18 @@ No numerical source or copy changed. Source audit:
 `E/spectral-native-owner/route-pins-source-audit.json`. Normalized scalar instance
 metadata, the standalone convenience operation's temporary model and shared
 admission metadata remain pending; this does not claim all Python imports gone.
+
+## Standalone admission repair
+
+Source audit found that `spectral_embedding(...)` bypassed the estimator's
+scalar admission and could reach conversion/class or input shape hooks. It
+now reuses `spectral_admit` before the existing validator, and admits the
+standalone input after the option/route checks before any shape inspection.
+It retains the existing exact sparse-input path instead of imposing the
+estimator door's dense-only contract. Invalid Boolean diagnostics obtain the
+canonical type name getset, so a custom metaclass name property cannot run.
+
+Seven new hook-refusal cases bring the boundary file to five definitions and
+11 expanded cases. All are authored, unrun. This repairs inherited boundary
+behavior; it changes no supported numerical option, kernel, route or copy.
+Evidence: `E/spectral-native-owner/standalone-admission-source-audit.json`.
