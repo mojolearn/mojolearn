@@ -87,6 +87,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.samba_entry_table_neural_host import publish_samba_neural_host_primitives
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
@@ -719,6 +720,9 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[embedding_forward_binding]("embedding_forward")
         module.def_function[rms_norm_forward_binding]("rms_norm_forward")
         module.def_function[linear_forward_binding]("linear_forward")
+        # Native Samba callers read this image's primitive entry from the
+        # table, not through the module (lane calltable-samba-mamba).
+        publish_samba_neural_host_primitives()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_neural_host: ", error))
