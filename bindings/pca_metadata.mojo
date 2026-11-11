@@ -7,6 +7,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.pca_descriptor_boundary import pca_connection
 
 
 def pca_dictionary(context: PythonObject) raises -> PythonObject:
@@ -118,13 +119,5 @@ def pca_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject
     return mode
 
 
-def pca_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var mode = pca_mode(fields, context)
-    var entries = context["pca_bindings"][mode]
-    if py_type(entries) is native_loaded_module("builtins").str:
-        raise Error("ImportError: " + String(entries))
-    if String(entries["estimators_vendor"]()) != String(context["vendor"]):
-        raise Error("RuntimeError: PCA native vendor differs from selected execution")
-    if Int(py=entries["estimators_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
-        raise Error("RuntimeError: PCA native mode differs from selected execution")
-    return entries
+def pca_entries(fields: PythonObject, context: PythonObject) raises -> Int:
+    return pca_connection(String(pca_mode(fields, context)), context)

@@ -180,6 +180,7 @@ from bindings.msel_device import (
     tsvd_fit_fold_binding,
     qn_fit_fold_binding,
     logistic_fold_native_api_v1_binding,
+    pca_fold_native_api_v1_binding,
     qn_infer_fold_binding,
     kmeans_fit_fold_binding,
     kmeans_predict_fold_binding,
@@ -2102,6 +2103,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[tsvd_fit_fold_binding]("tsvd_fit_fold")
         m.def_function[qn_fit_fold_binding]("qn_fit_fold")
         m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
+        m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")
         m.def_function[qn_infer_fold_binding]("qn_infer_fold")
         m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
         m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")

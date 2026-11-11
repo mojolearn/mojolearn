@@ -10,8 +10,11 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
-from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same
-from bindings.native_model_records import records_open, model_generation, records_key_append
+from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.native_model_records import records_open, model_generation
+from bindings.pca_descriptor_boundary import pca_connection, pca_connection_matches, pca_mode_name
+from core.pca_query_state import PCAQueryState
+from providers.python.pca_query_cache_pyapi import PCAQueryPins, PCAQueryAdmission, PCAQueryCache
 
 
 def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
@@ -99,77 +102,10 @@ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation
     return fields
 
 
-def _entry_dictionary(value: PythonObject) raises -> PythonObject:
-    if py_type(value) is not py_type(Python.dict()):
-        raise Error("TypeError: PCA binding tables require native dictionaries")
-    var keys = py_call(py_type(Python.list()), value)
-    for index in range(len(keys)):  # driver-loop: string-key admission before keyed table access
-        if py_type(keys[index]) is not py_type(PythonObject("")):
-            raise Error("TypeError: PCA binding tables require native string keys")
-    return py_call(py_type(Python.dict()).__dict__["copy"], value)
-
-
-def pca_query_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("numeric_mode must be identical, fast or None")
-    var bindings = _entry_dictionary(context["pca_bindings"])
-    var selected = bindings[mode]
-    if py_type(selected) is py_type(PythonObject("")):
-        raise Error("ImportError: " + String(selected))
-    var entries = _entry_dictionary(selected)
-    var records = context["pca_query_connections"]
-    if py_type(records) is not py_type(Python.tuple()):
-        raise Error("TypeError: PCA query connections require their import-time tuple")
-    var connected = PythonObject(None)
-    for index in range(len(records)):  # driver-loop: the two import-connected numeric modes
-        var record = records[index]
-        if py_type(record) is not py_type(Python.tuple()) or len(record) != 2 or py_type(record[0]) is not py_type(PythonObject("")) or py_type(record[1]) is not py_type(Python.tuple()) or len(record[1]) != 6:
-            raise Error("TypeError: PCA query connections require native mode/entry records")
-        if String(record[0]) == String(mode):
-            connected = record[1]
-    if connected is None:
-        raise Error("TypeError: PCA query mode was not connected at import")
-    var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform",
-                             "pca_whiten_transform", "pca_whiten_inverse_transform")
-    var builtin_type = py_type(native_loaded_module("builtins").len)
-    for index in range(6):  # small-loop(all consumed compiled entries, before either reader executes)
-        var entry = py_get(entries, names[index])
-        if index >= 4 and entry is None:
-            # Missing or explicitly None whitening exports keep the existing
-            # optional-pair refusal at pca_whiten_entries when whitening runs.
-            continue
-        var registration = connected[index]
-        if py_type(registration) is not py_type(Python.tuple()) or len(registration) != 3:
-            raise Error("TypeError: PCA query requires its import-connected entry record")
-        if entry is None or py_type(entry) is not builtin_type or entry is not registration[0]:
-            raise Error("TypeError: PCA query requires its connected compiled entry " + String(names[index]))
-        # Preserve the exact native function's import-time owner/name. Some
-        # legitimate bindings may use None owners or exported aliases; neither
-        # requires the universal ModuleType/export-key assumptions.
-        if entry.__self__ is not registration[1] or py_type(registration[2]) is not py_type(PythonObject("")) or String(entry.__name__) != String(registration[2]):
-            raise Error("TypeError: PCA query compiled entry metadata changed after import")
-    if String(py_call(entries["estimators_vendor"])) != String(context["vendor"]):
-        raise Error("RuntimeError: PCA native vendor differs from selected execution")
-    if Int(py=py_call(entries["estimators_numeric_mode"])) != (1 if String(mode) == "identical" else 0):
-        raise Error("RuntimeError: PCA native mode differs from selected execution")
-    return entries
-
-
-# Per-model query record (lane perf2-pca-decomp). A transform used to re-admit
-# all 22 connected settings and fitted fields (scalar parser, NumPy dtype
-# builds, generic admission), decode six scalars, copy and re-check both
-# binding tables and call the two compiled getters on every call. Those steps
-# read only the identities and exact types recorded below, so while the record
-# matches they would accept again and produce the same decoded values and
-# entries. Class admission (classical_family_admit), the X snapshot and the
-# fitted-array shape/dtype/finite snapshots still run on every call.
-# The record notices: set_params or any assignment or deletion of one of the
-# 22 fields (refit replaces them), a changed process default mode while
-# numeric_mode is None, replaced connected tables or a replaced selected entry.
-# It does not notice in-place edits of the private connected context objects
-# other than the selected mode's entry table, which nothing public reaches.
-comptime _PCA_QUERY_SLOT = "pca_query_v1"
+# The native record retains the original generation/identity admission fast
+# paths. Buffer shape/dtype/finiteness and mutable scalar storage are still
+# admitted on every call; only immutable decoded settings are reusable.
+comptime _PCA_QUERY_SLOT = "pca_query_native_v2"
 
 
 def _pca_query_decoded(name: String) -> Bool:
@@ -191,117 +127,97 @@ def _pca_query_plain(value: PythonObject, ndarray: PythonObject, decoded: Bool) 
     return not decoded and cls is ndarray
 
 
-def _pca_query_key(state: PythonObject, context: PythonObject) raises -> PythonObject:
+def _pca_query_key(state: PythonObject, context: PythonObject) raises -> PCAQueryPins:
     var ndarray = py_get(context, "ndarray")
     if ndarray is None or py_type(state) is not py_type(Python.dict()):
-        return PythonObject(None)
+        return PCAQueryPins(False)
+    var key = _pca_context_key(state, context)
     var parameters = context["pca_parameters"]
     var stored = context["pca_state"]
-    var key = Python.list(context, ndarray, parameters, stored, py_get(context, "vendor"),
-                          context["pca_bindings"], context["pca_query_connections"])
-    for group in range(2):  # small-loop(connected settings, then fitted state)
+    for group in range(2):  # driver-loop: connected settings, then fitted state
         var names = parameters if group == 0 else stored
-        for index in range(len(names)):  # driver-loop: connected PCA field inventory, identity only
+        for index in range(len(names)):  # driver-loop: admitted field identities, never array values
             var name = names[index]
             if not py_contains(state, name):
-                _ = py_call(key.append, False)
+                key.absent()
                 continue
             var value = state[name]
             if not _pca_query_plain(value, ndarray, _pca_query_decoded(String(name))):
-                return PythonObject(None)
-            _ = py_call(key.append, True)
-            _ = py_call(key.append, value)
-    if py_get(state, "numeric_mode") is None:
-        # The query then selects the process default mode, read per call.
-        var backend = context["backend_fields"]
-        _ = py_call(key.append, backend)
-        _ = py_call(key.append, backend["_DEFAULT_MODE"])
-    return key
+                return PCAQueryPins(False)
+            key.append(value)
+    return key^
 
 
-def _pca_entries_key(context: PythonObject, mode: PythonObject) raises -> PythonObject:
-    # The selected mode's binding table and the six entries the query
-    # consumes (pca_query_entries' names), by identity (N316: every other
-    # entry of the table was listed into the key before; none is read).
-    var selected = py_get(context["pca_bindings"], mode)
-    var key = Python.list(selected)
-    if py_type(selected) is py_type(Python.dict()):
-        var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform",
-                                 "pca_whiten_transform", "pca_whiten_inverse_transform")
-        for index in range(6):  # small-loop(the six consumed compiled entry names)
-            records_key_append(key, py_get(selected, names[index]))
-    return key
-
-
-def _pca_context_key(state: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The connected-context part of _pca_query_key (no per-field items):
-    # what a generation word of the instance dictionary does not cover.
-    var key = Python.list(context, py_get(context, "ndarray"), context["pca_parameters"], context["pca_state"],
-                          py_get(context, "vendor"), context["pca_bindings"], context["pca_query_connections"])
+def _pca_context_key(state: PythonObject, context: PythonObject) raises -> PCAQueryPins:
+    var key = PCAQueryPins()
+    key.append(context)
+    key.append(py_get(context, "ndarray"))
+    key.append(context["pca_parameters"])
+    key.append(context["pca_state"])
+    key.append(py_get(context, "vendor"))
+    key.append(context["pca_bindings"])
     if py_get(state, "numeric_mode") is None:
         var backend = context["backend_fields"]
-        records_key_append(key, backend)
-        records_key_append(key, backend["_DEFAULT_MODE"])
-    return key
+        key.append(backend)
+        key.append(backend["_DEFAULT_MODE"])
+    return key^
 
 
 def _pca_generation(model: PythonObject) raises -> Int:
-    # The model's generation word (bindings/native_model_records.mojo), its
-    # record entry opened first; 0 proves nothing.
     _ = records_open(model)
     return model_generation(model)
 
 
-def pca_query_admitted(model: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:
-    """(fields, entries) of a PCA transform or inverse_transform: the full
-    admission on first use and after any recorded change, else the record."""
+def _pca_query_state(fields: PythonObject, connection: Int) raises -> PCAQueryState:
+    # Preserve the original post-provider order: fitted-array presence, three
+    # integer conversions, dimension refusal, then whitening truth.
+    if not py_contains(fields, "components_"):
+        raise Error("RuntimeError: this estimator is not fitted yet")
+    var fit_rows = Int(py=fields["n_samples_"])
+    var features = Int(py=fields["n_features_in_"])
+    var count = Int(py=fields["n_components_"])
+    if features < 1 or count < 0:
+        raise Error("PCA fitted dimensions are invalid")
+    return PCAQueryState(fit_rows, features, count, Bool(py=fields["whiten"]), connection)
+
+
+def pca_query_admitted(model: PythonObject, context: PythonObject, operation: String) raises -> PCAQueryAdmission:
     var state = classical_family_admit(model)
     var mods = NativeModules()
-    # Generation path (N315, N316): the record was taken (or last matched)
-    # at the model's generation word; an unchanged word proves the instance
-    # dictionary, and so every per-field item of the key, unchanged. Only
-    # the connected-context items and the six consumed entries are compared
-    # then; the 22-field key is not built. A word of 0 proves nothing.
     var generation = _pca_generation(model)
-    if generation != 0:
-        var stamped = prepared_get(mods, _PCA_QUERY_SLOT, model)
-        if (stamped is not None and len(stamped) == 7 and Int(py=stamped[5]) == generation
-                and prepared_key_same(stamped[6], _pca_context_key(state, context))
-                and prepared_key_same(stamped[3], _pca_entries_key(context, stamped[2]))):
+    var held = prepared_get(mods, _PCA_QUERY_SLOT, model)
+    if generation != 0 and held is not None:
+        var cache = held.downcast_value_ptr[PCAQueryCache]()
+        var context_key = _pca_context_key(state, context)
+        if (cache[].generation == generation and cache[].context_key.identity.same(context_key.identity)
+                and pca_connection_matches(cache[].state.connection, cache[].mode, context)):
             var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
-            _ = py_call(py_type(Python.dict()).__dict__["update"], fields, stamped[1])
-            return Python.tuple(fields, stamped[4])
+            var decoded = cache[].state.copy()
+            _ = held  # the downcast owner remains alive through its final native read
+            return PCAQueryAdmission(fields, decoded^)
     var key = _pca_query_key(state, context)
-    if key is not None:
-        var held = prepared_get(mods, _PCA_QUERY_SLOT, model)
-        if held is not None and prepared_key_same(held[0], key) and prepared_key_same(held[3], _pca_entries_key(context, held[2])):
-            if len(held) == 7 and generation != 0 and Int(py=held[5]) != generation:
-                # Re-stamp at the current word (the dictionary changed and
-                # changed back, or our own bookkeeping wrote it).
-                prepared_put(mods, _PCA_QUERY_SLOT, model,
-                             Python.tuple(held[0], held[1], held[2], held[3], held[4], PythonObject(generation),
-                                          _pca_context_key(state, context)))
+    if key.identity.valid and held is not None:
+        var cache = held.downcast_value_ptr[PCAQueryCache]()
+        if cache[].key.identity.same(key.identity) and pca_connection_matches(cache[].state.connection, cache[].mode, context):
+            if generation != 0 and cache[].generation != generation:
+                cache[].generation = generation
+                cache[].context_key = _pca_context_key(state, context)
             var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)
-            _ = py_call(py_type(Python.dict()).__dict__["update"], fields, held[1])
-            return Python.tuple(fields, held[4])
+            var decoded = cache[].state.copy()
+            _ = held
+            return PCAQueryAdmission(fields, decoded^)
     var fields = _pca_query_fields_from(state, context, operation)
     if py_get(context, "ndarray") is None:
         raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
-    var entries = pca_query_entries(fields, context)
-    if key is not None:
-        # Only a model fitted by its lifecycle flags is recorded: the
-        # attribute-name fallback reads fields outside the key.
+    var mode = pca_mode_name(fields["numeric_mode"])
+    var connection = pca_connection(mode, context)
+    var decoded = _pca_query_state(fields, connection)
+    if key.identity.valid:
+        # Only the lifecycle-flagged models were cached before. The attribute
+        # fallback reads additional names outside the identity inventory.
         var flagged = Bool(py=py_get(fields, "_mojolearn_fitted", False)) or Bool(py=py_get(fields, "_mojolearn_fitting", False))
         if flagged:
-            var overlay = Python.dict()
-            var decoded = Python.tuple("_mojolearn_fitted", "_mojolearn_fitting", "n_samples_", "n_features_in_",
-                                       "n_components_", "whiten", "numeric_mode", "_pca_query_scalar_owners")
-            for index in range(len(decoded)):  # small-loop(eight decoded query field names)
-                if py_contains(fields, decoded[index]):
-                    py_setitem(overlay, decoded[index], fields[decoded[index]])
-            var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
-            prepared_put(mods, _PCA_QUERY_SLOT, model,
-                         Python.tuple(key, overlay, mode, _pca_entries_key(context, mode), entries,
-                                      PythonObject(generation), _pca_context_key(state, context)))
-    return Python.tuple(fields, entries)
+            var owner = PCAQueryCache(decoded.copy(), key^, _pca_context_key(state, context), generation, mode^)
+            prepared_put(mods, _PCA_QUERY_SLOT, model, PythonObject(alloc=owner^))
+    return PCAQueryAdmission(fields, decoded^)

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # PCA helpers shared by the native PCA owner (bindings/pca_fit_native.mojo,
 # bindings/pca_query_native.mojo) and the decomposition doors: the
-# input_copied_ rule, the whitening entry check, the compiled-entry refusal
-# and the too-small refusal text.
+# input_copied_ rule, the compiled-entry refusal and too-small refusal text.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type
@@ -34,11 +33,6 @@ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
     # Nested native sequences are materialized. Pandas/Torch publication and
     # feature-name semantics remain outside this private dense-buffer slice.
     return True
-
-
-def pca_whiten_entries(entries: PythonObject) raises:
-    if py_get(entries, "pca_whiten_transform") is None or py_get(entries, "pca_whiten_inverse_transform") is None:
-        raise Error("NotImplementedError: PCA whiten=True requires the compiled whitened transform pair")
 
 
 def pca_refusal(var error: Error) -> Error:

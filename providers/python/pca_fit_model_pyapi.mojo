@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_ty
 from bindings.sequential_admission import sequential_admit_value
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
-from providers.python.pca_model_pyapi import _entry_dictionary
+from bindings.pca_descriptor_boundary import pca_connection, pca_mode_name
 
 
 def pca_fit_fields(state: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
@@ -38,7 +38,7 @@ def pca_fit_fields(state: PythonObject, operation: String, context: PythonObject
     return fields
 
 
-def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonObject) raises -> String:
+def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonObject) raises -> Tuple[String, Bool]:
     var b = native_loaded_module("builtins")
     var solver = fields["svd_solver"]
     var text = String(solver) if py_type(solver) is b.str else String("")
@@ -54,57 +54,16 @@ def pca_fit_preflight(fields: PythonObject, operation: String, context: PythonOb
                     + "algorithm; accepting the name and running an exact arm would be a silent substitution, "
                     + "which is why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
     var tol = PCAFitScalar(fields["tol"], context)
-    py_setitem(fields, "tol", tol.convert(operation, context, False))
-    if Float64(py=fields["tol"]) != 0:
+    var tolerance = tol.convert(operation, context, False)
+    if Float64(py=tolerance) != 0:
         raise Error("NotImplementedError: mojolearn PCA: tol is ARPACK's convergence tolerance and "
                     + "svd_solver='arpack' is not implemented; leave tol=0.0")
     var whiten = PCAFitScalar(fields["whiten"], context, True, operation)
-    py_setitem(fields, "whiten", whiten.truth(operation, context))
-    return text
+    return (text, whiten.truth(operation, context))
 
 
-def pca_fit_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    var mode = py_call(py_call(fields["numeric_mode"].strip).lower)
-    if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("numeric_mode must be identical, fast or None")
-    var bindings = _entry_dictionary(context["pca_bindings"])
-    var selected = bindings[mode]
-    if py_type(selected) is py_type(PythonObject("")):
-        raise Error("ImportError: " + String(selected))
-    var entries = _entry_dictionary(selected)
-    var records = context["pca_fit_connections"]
-    if py_type(records) is not py_type(Python.tuple()):
-        raise Error("TypeError: PCA fit connections require their import-time tuple")
-    var connected = PythonObject(None)
-    for index in range(len(records)):  # driver-loop: fixed import-connected numeric modes
-        var record = records[index]
-        if py_type(record) is not py_type(Python.tuple()) or len(record) != 2 or py_type(record[0]) is not py_type(PythonObject("")) or py_type(record[1]) is not py_type(Python.tuple()) or len(record[1]) != 7:
-            raise Error("TypeError: PCA fit connections require native mode/entry records")
-        if String(record[0]) == String(mode):
-            connected = record[1]
-    if connected is None:
-        raise Error("TypeError: PCA fit mode was not connected at import")
-    var names = Python.tuple("estimators_vendor", "estimators_numeric_mode", "pca_fit_owned", "pca_fit_randomized",
-                             "pca_fit_full", "pca_whiten_transform", "pca_whiten_inverse_transform")
-    var builtin_type = py_type(native_loaded_module("builtins").len)
-    for index in range(7):  # small-loop(seven consumed compiled entry identities)
-        var entry = py_get(entries, names[index])
-        if index >= 2 and entry is None:
-            continue
-        var registration = connected[index]
-        if py_type(registration) is not py_type(Python.tuple()) or len(registration) != 3:
-            raise Error("TypeError: PCA fit requires its import-connected entry record")
-        if entry is None or py_type(entry) is not builtin_type or entry is not registration[0]:
-            raise Error("TypeError: PCA fit requires its connected compiled entry " + String(names[index]))
-        if entry.__self__ is not registration[1] or py_type(registration[2]) is not py_type(PythonObject("")) or String(entry.__name__) != String(registration[2]):
-            raise Error("TypeError: PCA fit compiled entry metadata changed after import")
-    if String(py_call(entries["estimators_vendor"])) != String(context["vendor"]):
-        raise Error("RuntimeError: PCA native vendor differs from selected execution")
-    var numeric = Int(py=py_call(entries["estimators_numeric_mode"]))
-    if numeric != (1 if String(mode) == "identical" else 0):
-        raise Error("RuntimeError: PCA native mode differs from selected execution")
-    py_setitem(entries, "_pca_numeric_mode", numeric)
-    return entries
+def pca_fit_entries(fields: PythonObject, context: PythonObject) raises -> Int:
+    return pca_connection(pca_mode_name(fields["numeric_mode"]), context)
 
 
 def pca_fit_host_only(model: PythonObject) raises -> Bool:
