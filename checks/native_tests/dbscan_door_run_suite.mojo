@@ -5,6 +5,7 @@ Each fixture is one typed check or request builder: accepted and refused
 values, the refusal wording, and the precomputed brute-arm override.
 Independent fixtures run across the host's cores.
 """
+from std.math import inf
 from core.host_parallel import host_parallelize
 from cluster.dbscan_door_run import (
     DBSCAN_METRIC_PRECOMPUTED, DBSCAN_EPS_NN_BRUTE_FORCE, dbscan_check_method, dbscan_check_prediction,
@@ -77,7 +78,7 @@ def fixture(unit: Int) raises:
         dbscan_check_x(Int(x.unsafe_ptr()), 2, 2, False, 0)
         _ = x
     elif unit == 8:
-        var x: List[Float32] = [0.0, Float32.MAX, 2.0, 3.0]
+        var x: List[Float32] = [0.0, inf[DType.float32](), 2.0, 3.0]
         try:
             dbscan_check_x(Int(x.unsafe_ptr()), 2, 2, False, 0)
             raise Error("accepted")
@@ -86,7 +87,7 @@ def fixture(unit: Int) raises:
         _ = x
     elif unit == 9:
         # an X the public door already admitted is not scanned again
-        var x: List[Float32] = [0.0, Float32.MAX, 2.0, 3.0]
+        var x: List[Float32] = [0.0, inf[DType.float32](), 2.0, 3.0]
         dbscan_check_x(Int(x.unsafe_ptr()), 2, 2, True, 0)
         _ = x
     elif unit == 10:
