@@ -18,6 +18,7 @@ from std.sys.compile import is_defined
 from bindings.classical_family_door import classical_family_c
 from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
+from bindings.gp_resident_boundary import GPPreparedLease
 from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
 from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
 from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
@@ -148,6 +149,18 @@ def register_AggloHolder(mut module: PythonModuleBuilder) raises:
     register_native_owner(existing, module.module, agglo_holder_pins)
 
 
+def register_GPPreparedLease(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[GPPreparedLease]()
+    except error:
+        if not py_type_absent(error, String(reflect[GPPreparedLease].name())):
+            raise error
+        _ = module.add_type[GPPreparedLease]("_GPPreparedLease")
+        return
+    py_type_attach(module.module, "_GPPreparedLease", existing)
+
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -155,6 +168,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_kmeans_resident_owner(module)
         register_KDEResidentOwner(module)
         register_KDEAdmissionOwner(module)
+        register_GPPreparedLease(module)
         register_DBSCANReferenceOwner(module)
         register_DBSCANHolder(module)
         register_AggloReferenceOwner(module)

@@ -16,7 +16,8 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
-from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
+from bindings.fitted_resident_door import fitted_resident_drop
+from bindings.gp_resident_boundary import gp_resident_lease
 from bindings.classical_arrays import classical_address
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.classical_attributes import classical_connect_numpy
@@ -451,8 +452,11 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         # reads is not the field itself, or cannot be made read-only) uploads
         # per call, as before.
         if xt is fields["X_train_"] and lf is fields["L_"] and dual is fields["alpha_"]:
-            lease = fitted_resident_lease(model, _GPR_RESIDENT_SLOT, ext, "gp_resident_lease",
-                                          Python.list(xt, dual, lf))
+            var mirrors = List[PythonObject]()
+            mirrors.append(xt)
+            mirrors.append(dual)
+            mirrors.append(lf)
+            lease = gp_resident_lease(model, _GPR_RESIDENT_SLOT, connection, mirrors)
         else:
             fitted_resident_drop(model, _GPR_RESIDENT_SLOT)
         route = 2
