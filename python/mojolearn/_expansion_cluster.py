@@ -105,13 +105,6 @@ class _XCluster(NumericModeMixin):
         if getattr(self, attr, None) is None:
             raise RuntimeError(f"this {type(self).__name__} is not fitted yet")
 
-    def _input_like_fit(self, X):
-        x = _f32(X)
-        if x.shape[1] != self.n_features_in_:
-            raise ValueError(f"mojolearn: X has {x.shape[1]} features, {type(self).__name__} "
-                             f"was fitted with {self.n_features_in_}")
-        return x
-
 
 class _CentersMixin:
     """predict / transform / score against `cluster_centers_` (squared
