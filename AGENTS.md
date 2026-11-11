@@ -15,6 +15,15 @@ imports it and adds only what is specific to Claude sessions.
 - Code stays lower case: the package, module and command names (`pip install mojolearn`, `import mojolearn`,
   `python -m mojolearn verify`), paths, URLs and domains (mojolearn.org). Put them in backticks in prose.
 
+## The verify command is protected (Andrew, 2026-11-11)
+
+`python -m mojolearn verify` and everything it needs (the verification modules shipped in the wheel, their fixtures,
+records, ledger and the commands they run) is kept working at all times. Preserving verify trumps every other rule
+in this file: no Python removal, boundary migration, dead-code deletion, wheel slimming, test migration, refactor or
+cleanup may remove, move out of the wheel, weaken or break any part of it. Verification tooling is a testing tool,
+not product execution ("No Python in the runtime"), so its Python is never a violation of that rule. A change that
+touches anything verify imports says so in its report and states how verify was exercised afterwards.
+
 ## Hard rules (Andrew)
 
 Copied verbatim, with their dates, from Andrew's own rules so that every agent has them. They override anything
