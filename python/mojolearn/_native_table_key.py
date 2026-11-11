@@ -35,10 +35,11 @@ def key_of(module):
     return KEYS.get(module)
 
 
-def connected_key(name):
+def connected_key(name, required=False):
     """The key of the IDENTICAL image `name` the binding loader connects
-    (a CPU install's host twin included), or None when it is not built
-    (import-time glue; the native caller then refuses by the table's word)."""
+    (a CPU install's host twin included). When it is not built: None (the
+    native caller then refuses by the table's word), or, with `required`,
+    the loader's ImportError (import-time glue)."""
     from . import _backend
     try:
         with _backend.host_helper_scope():
@@ -46,5 +47,11 @@ def connected_key(name):
         if type(module) is _backend._HostBinding:
             module = _backend.load_host_module(module._HostBinding__basename)  # import-time: resolve the CPU-only proxy
     except (ImportError, AttributeError):
+        if required:
+            raise
         return None
-    return KEYS.get(module)
+    key = KEYS.get(module)
+    if key is None and required:
+        raise ImportError(f"mojolearn: the compiled {name} binding reports no native table key "
+                          "(numeric mode and vendor read-back); rebuild it with bash bindings/build*.sh")
+    return key

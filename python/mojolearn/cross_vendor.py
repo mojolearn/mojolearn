@@ -22,7 +22,7 @@ from ._native_table_key import connected_key as _connected_key
 _native_cross_vendor = _load_host_module("_mojolearn_tokenizer_host").cross_vendor_call
 # glue: once at import, the base image's native table key; the native fold
 # calls that image's fold_pair_f32 through its parallel table, not a door.
-_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key("_mojolearn")))
+_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key("_mojolearn", required=True)))
 
 
 # ------------------------------------------------------------ the fold
