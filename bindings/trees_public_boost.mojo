@@ -47,17 +47,22 @@ from bindings.admitted_input import (
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_forest import (
     ForestFit, forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
-    forest_capture_mode, forest_effective_mode, forest_export, forest_fit_arrays, forest_kind,
+    forest_capture_mode, forest_effective_mode, forest_export, forest_fit_dart_member, forest_kind,
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
-    _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins, ForestHandle, forest_handle_done,
+    _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
 )
 from bindings.trees_resident_table import (
-    TREES_RESIDENT_DART, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_watch,
-    trees_resident_forget,
+    TREES_RESIDENT_DART, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_watch,
+    trees_resident_forget, trees_resident_unpin,
 )
 from bindings.native_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from core.trees_entry_table import TreesEntryKey
+from xtrees.dart_abi import XD_CAP_ROUND, XD_CAP_RESIDENT, XD_FOREST_RELEASE
+from xtrees.dart_calls import (
+    xd_entry, xd_caps, xd_open, xd_step, xd_add, xd_close, xd_predict, xd_forest_prepare, xd_forest_predict,
+    xd_forest_release,
+)
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
     xt_bag_rows, xt_class_counts, xt_class_priors, xt_count_equal, xt_count_rows, xt_dart_rescale,
@@ -607,14 +612,14 @@ def _member_fit_weighted(member: PythonObject, xcm: AdmittedX, codes: PythonObje
                                                              _P(weights.address)), "into", context)
         _ = weights  # keep the Python object alive through the native call above
     else:
-        var fit = ForestFit("rf_classifier_fit_weighted", True, Python.list(_P(weights.address)), True)
+        var fit = ForestFit(True, weights=weights.address)
         _ = weights  # keep the Python object alive through the native call above
         result = _launch(rf, fit, xcm, trees_address(labels.codes), params, criterion, False, context)
         _ = weights  # keep the Python object alive through the native call above
     # Both fit routes receive only the codes' address. The model owns the
     # classes table, not this freshly encoded label buffer.
     _ = labels
-    _member_store(member, forest_fit_arrays(result, context), xcm.cols)
+    _member_store(member, result, xcm.cols)
     _fitted(member)
     _ = weights^
 
@@ -641,7 +646,7 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
     var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), _A(rows), _P(y.address), params, code),
                                "into", context)
     _ = y  # keep the Python object alive through the native call above
-    _member_store(member, forest_fit_arrays(result, context), x_cols)
+    _member_store(member, result, x_cols)
     _ = y  # keep the Python object alive through the native call above
     _fitted(member)
     _ = y^
@@ -1142,7 +1147,7 @@ def _ada_member_round(member: PythonObject, session: Session, labels: TreesLabel
                                                              Python.list(_F(lr), _P(1 if last else 0)), _A(stats)),
                                "into", context)
     _ = stats  # keep the Python object alive through the native call above
-    _member_store(member, forest_fit_arrays(result, context), d)
+    _member_store(member, result, d)
     _fitted(member)
 
 
@@ -1168,7 +1173,7 @@ def _ada_member_round_r2(member: PythonObject, session: Session, n: Int, d: Int,
                                                                          _P(1 if last else 0)), _A(stats)),
                                "into", context)
     _ = stats  # keep the Python object alive through the native call above
-    _member_store(member, forest_fit_arrays(result, context), d)
+    _member_store(member, result, d)
     _fitted(member)
 
 
@@ -1594,7 +1599,7 @@ def _dart_member(fields: PythonObject, handle: PythonObject, c: Int, n: Int, d: 
                  cols: PythonObject, max_depth: PythonObject, seed: Int, j: Int, memo: PythonObject,
                  context: PythonObject) raises -> PythonObject:
     """One DART member: a one-tree RandomForestRegressor fitted by
-    `rf_regressor_fit_dart_export` on the round's device X and class-c
+    the rf image's native DART member fit (XF_FIT_DART) on the round's device X and class-c
     target (`RandomForestRegressor._fit_in_dart`).
 
     The member's settings are the same for every tree of one fit except its
@@ -1633,13 +1638,15 @@ def _dart_member_fit(tree: PythonObject, tf: PythonObject, mode: String, handle:
     class-c target, its arrays stored on the member."""
     var code = tf["_cfg"]["criterion"]
     var rf = trees_table(context, mode, "_mojolearn_rf")
-    var entry = trees_need(rf, "rf_regressor_fit_dart_export", "rebuild the forest binding for DART member fits on the device")
     var m = n if rows is None else len(rows)
     var dc = d if cols is None else len(cols)
     var params = _rf_params(tf, "rf_regressor", m, dc, 0, rf, context)
-    var result = forest_export(rf, py_call_typed(entry, _int(handle), _P(c), _P(0) if rows is None else _A(rows),
-                                                 _P(0) if cols is None else _A(cols), params, code), "into", context)
-    _member_store(tree, forest_fit_arrays(result, context), dc)
+    # the rf image's native DART member fit (XF_FIT_DART; lane calltable-forest)
+    var result = forest_fit_dart_member(rf, Int(py=_int(handle)), c, 0 if rows is None else trees_address(rows),
+                                        0 if cols is None else trees_address(cols), params, code, context)
+    _ = rows  # the row and column ids are read through their addresses above
+    _ = cols
+    _member_store(tree, result, dc)
     return tree
 
 
@@ -1702,7 +1709,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
     # (the DART door's host finite scan of X; `x_trees_dart_open` tests the X it uploads, xtrees/dart_device.mojo,
     # the host column in xtrees/dart_host.mojo, and the refusal is mapped to TREES_NONFINITE at the open below)
     # `_dart_device`: the round's entries and the leaf-value cap.
-    if trees_entry(xt, "x_trees_dart_open") is None:
+    var dart_key = _xk(xt)
+    if (xd_caps(dart_key) & XD_CAP_ROUND) == 0:
         raise Error("NotImplementedError: mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
                     + "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit is refused by name")
     var n_iters = Int(py=_int(fields["n_estimators"]))
@@ -1726,16 +1734,18 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
     var max_drop = Int(py=_int(fields["max_drop"]))
     var drop_rate = _float(fields["drop_rate"])
     var drop_rate_f = Float64(py=drop_rate)
-    var handle = PythonObject(0)
+    var handle_word = 0
     try:
-        handle = py_call_typed(_x(xt, "x_trees_dart_open"), _P(x.address), _P(y32.address), _A(inits32),
-                               Python.list(_P(n), _P(d), _P(K), _P(kind), _P(n_iters), _P(node_cap)))
+        handle_word = xd_open(dart_key, x.address, y32.address, trees_address(inits32), n, d, K, kind, n_iters,
+                              node_cap)
     except error:
         # the open's device test of X (lane a8c), in the forest's one wording
         if TREES_NONFINITE in String(error):
             raise Error(TREES_NONFINITE)
         raise error^
     _ = inits32  # keep the Python object alive through the native call above
+    # the session handle as the rf member fit (`rf_regressor_fit_dart_export`) still takes it
+    var handle = PythonObject(handle_word)
     var cache_start = -1
     var cache = PythonObject(None)
     var memo = Python.list()
@@ -1748,8 +1758,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
             _ = coefs64  # keep the Python object alive through the native call above
             _ = weights64  # keep the Python object alive through the native call above
             _ = state  # keep the Python object alive through the native call above
-            _ = py_call_typed(_x(xt, "x_trees_dart_step"), handle, _A(coef32), _A(thr64), _A(flags), _A(bad),
-                              Python.list(), Python.list(_P(it), _P(drop_seed), _P(it), _P(skip_thr)))
+            _ = xd_step(dart_key, handle_word, trees_address(coef32), trees_address(thr64), trees_address(flags),
+                        trees_address(bad), it, drop_seed, it, skip_thr)
             _ = flags  # keep the Python object alive through the native call above
             _ = thr64  # keep the Python object alive through the native call above
             _ = coef32  # keep the Python object alive through the native call above
@@ -1764,12 +1774,12 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
             _ = flags  # keep the Python object alive through the native call above
             _ = coefs64  # keep the Python object alive through the native call above
             _ = weights64  # keep the Python object alive through the native call above
-            var shrink = PythonObject(rescaled[1])
+            var shrink = rescaled[1]
             _ = state  # keep the Python object alive through the native call above
             _ = flags  # keep the Python object alive through the native call above
             _ = coefs64  # keep the Python object alive through the native call above
             _ = weights64  # keep the Python object alive through the native call above
-            var factor = PythonObject(rescaled[2])
+            var factor = rescaled[2]
             _ = rescaled
             _ = state  # keep the Python object alive through the native call above
             _ = flags  # keep the Python object alive through the native call above
@@ -1794,15 +1804,23 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
                 var lo = _i32_word(offsets, 0)
                 var n_nodes = _i32_word(offsets, 1) - lo
                 var values = admitted_vector(n_nodes, "<f4", context)
-                _ = py_call_typed(_x(xt, "x_trees_dart_add"), handle, _A(tf["_colid"]), _A(tf["_quesval"]),
-                                  _A(tf["_left_child"]), _A(values), _A(rows if rows is not None else all_cols),
-                                  Python.list(_P(j), _P(c), _P(lo), _P(n_nodes), shrink, factor, _F(lam), _F(l1), _F(mds), _P(m)))
+                var add_colid = tf["_colid"]
+                var add_ques = tf["_quesval"]
+                var add_left = tf["_left_child"]
+                var add_rows = rows if rows is not None else all_cols
+                _ = xd_add(dart_key, handle_word, trees_address(add_colid), trees_address(add_ques),
+                           trees_address(add_left), trees_address(values), trees_address(add_rows), j, c, lo, n_nodes,
+                           shrink, factor, lam, l1, mds, m)
+                _ = add_colid  # keep the Python objects alive through the native call above
+                _ = add_ques
+                _ = add_left
+                _ = add_rows
                 _ = inits32  # keep the Python object alive through the native call above
                 _ = values  # keep the Python object alive through the native call above
                 _ = py_call(trees.append, tree)
                 _ = py_call(tree_values.append, values)
     finally:
-        _ = py_call_typed(_x(xt, "x_trees_dart_close"), handle, _A(bad))
+        _ = xd_close(dart_key, handle_word, trees_address(bad))
         _ = bad  # keep the Python object alive through the native call above
         _ = inits32  # keep the Python object alive through the native call above
     if _i32_word(bad, 0) != 0:
@@ -1850,7 +1868,7 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     return _keep_ret_codes^
 
 
-comptime _DART_SLOT = "trees_dart_forest_v1"
+comptime _DART_SLOT = "trees_dart_forest_v2"
 
 
 def _dart_key(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
@@ -1888,15 +1906,24 @@ def _dart_freeze(fields: PythonObject, context: PythonObject) raises:
         _ = fitted_freeze(values[i], context)
 
 
-def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> PythonObject:
-    """`(key, [cols, ques, lefts, vals], sizes, coefs, starts)`: the per-tree
-    address lists `x_trees_dart_predict` reads, built once per fitted state
-    and kept in the native side table (lane perf-trees-owed, 2026-11-06;
-    every predict rebuilt them, about 30 Python calls per tree). The key
-    holds the arrays, so the cached addresses stay valid; a replaced tree,
-    array or sequence item changes the key and the lists are rebuilt. The
-    addresses and values are the ones the per-call build produced, so the
-    launch and its bits are unchanged."""
+def _dart_words(values: PythonObject, code: String, typestr: String, context: PythonObject) raises -> PythonObject:
+    """One flat native array of a Python list of words (UNPACK, once per
+    fitted state): its address is what the native DART calls read."""
+    var store = py_call(context["array_type"], PythonObject(code), values)
+    return classical_wrap_array(store, Python.tuple(len(values)), typestr, "C", context)
+
+
+def _dart_forest(model: PythonObject, fields: PythonObject, K: Int, context: PythonObject) raises -> PythonObject:
+    """`(key, colids, quesvals, lefts, leaf_values, sizes, coefs, starts, T)`:
+    the per-tree words the native DART predict reads (xtrees/dart_abi.mojo
+    XD_PREDICT / XD_FOREST_PREPARE), as flat int64 / float64 arrays built once
+    per fitted state and kept in the native side table (lane perf-trees-owed,
+    2026-11-06; lane calltable-gbdt-forest-dart, 2026-11-11: flat arrays, not
+    Python lists the callee walked on every predict). The key holds the
+    arrays, so the cached addresses stay valid; a replaced tree, array or
+    sequence item changes the key and the arrays are rebuilt. The addresses
+    and values are the ones the per-call build produced, so the launch and
+    its bits are unchanged."""
     var key = _dart_key(model, fields, K)
     var held = trees_side_get(_DART_SLOT, model)
     if held is not None and trees_key_same(held[0], key):
@@ -1923,21 +1950,24 @@ def _dart_forest(model: PythonObject, fields: PythonObject, K: Int) raises -> Py
         _ = py_call(coefs.append, _float(tree_coefs[i]))
     var init = fields["init_score_"]
     var starts = Python.list(_float(init)) if K == 1 else py_call(b.list, py_call(b.map, b.float, init))
-    var record = Python.list(key, Python.list(cols, ques, lefts, vals), sizes, coefs, starts)
+    var record = Python.list(key, _dart_words(cols, "q", "<i8", context), _dart_words(ques, "q", "<i8", context),
+                             _dart_words(lefts, "q", "<i8", context), _dart_words(vals, "q", "<i8", context),
+                             _dart_words(sizes, "q", "<i8", context), _dart_words(coefs, "d", "<f8", context),
+                             _dart_words(starts, "d", "<f8", context), PythonObject(count))
     _ = trees_side_put(_DART_SLOT, model, record)
     return record
 
 
 def _dart_resident_predict(model: PythonObject, fields: PythonObject, forest: PythonObject, xt: PythonObject,
-                           x_addr: Int, n: Int, d: Int, K: Int, score: PythonObject, context: PythonObject) raises:
+                           key: TreesEntryKey, x_addr: Int, n: Int, d: Int, K: Int, score: PythonObject,
+                           context: PythonObject) raises:
     """DART's raw score over the device-kept forest (N039 / N041): the
-    forest is uploaded once per fitted model (`x_trees_dart_forest_prepare`)
-    and kept in the tree resident table under the model's identity and
-    generation, the dimensions and the identities of the fitted sequences;
-    a predict uploads X only. Same buffers, same launch: no bit change."""
-    var prepare = _x(xt, "x_trees_dart_forest_prepare")
-    var query = _x(xt, "x_trees_dart_forest_predict")
-    var release = _x(xt, "x_trees_dart_forest_release")
+    forest is uploaded once per fitted model (XD_FOREST_PREPARE) and kept in
+    the tree resident table under the model's identity and generation, the
+    dimensions and the identities of the fitted sequences, with the image's
+    native XD_FOREST_RELEASE as its release; a predict uploads X only. Same
+    buffers, same launch: no bit change."""
+    var nt = Int(py=forest[8])
     var mirrors = List[PythonObject]()
     mirrors.append(fields["trees_"])
     mirrors.append(fields["tree_values_"])
@@ -1946,29 +1976,41 @@ def _dart_resident_predict(model: PythonObject, fields: PythonObject, forest: Py
     var words = List[Int]()
     words.append(K)
     words.append(d)
-    words.append(len(forest[2]))
+    words.append(nt)
     var model_key = model_identity_key(model)
     var generation = model_generation(model)
     var handle = trees_resident_find(model_key, generation, TREES_RESIDENT_DART, xt, words, mirrors)
     var kept = handle > 0
     if not kept:
         _dart_freeze(fields, context)
-        var made = py_call_typed(prepare, forest[1], forest[2], forest[3], forest[4], Python.list(_P(d), _P(K)))
-        handle = Int(py=made[0])
+        var made: List[Int] = [0, 0]
+        handle = xd_forest_prepare(key, trees_address(forest[1]), trees_address(forest[2]), trees_address(forest[3]),
+                                   trees_address(forest[4]), trees_address(forest[5]), trees_address(forest[6]),
+                                   trees_address(forest[7]), Int(made.unsafe_ptr()), d, K, nt)
+        var made_bytes = made[1]
+        _ = made
+        _ = forest  # keep the flat arrays alive through the native call above
         try:
             if trees_resident_watch(model, model_key):
-                kept = trees_resident_put(model_key, generation, TREES_RESIDENT_DART, xt, release, handle,
-                                          words^, mirrors^, Int(py=made[1]))
+                kept = trees_resident_put_native(model_key, generation, TREES_RESIDENT_DART, xt, xd_entry(key),
+                                                 XD_FOREST_RELEASE, handle, words^, mirrors^, made_bytes)
         except error:
-            _ = py_call(release, PythonObject(handle))
+            _ = xd_forest_release(key, handle)
             raise error^
     if kept:
         trees_resident_pin(handle)
-    var use = ForestHandle(handle, kept, release)
     try:
-        _ = py_call_typed(query, PythonObject(handle), _P(x_addr), _A(score), Python.list(_P(n), _P(d), _P(K)))
+        _ = xd_forest_predict(key, handle, x_addr, trees_address(score), n, d, K)
     finally:
-        forest_handle_done(use)
+        # End the call's use of the snapshot: unpin a kept one, release one
+        # the call owns alone (non-raising on this path).
+        if kept:
+            trees_resident_unpin(handle)
+        else:
+            try:
+                _ = xd_forest_release(key, handle)
+            except:
+                pass
     _ = score  # keep the Python object alive through the native call above
 
 
@@ -1987,13 +2029,16 @@ def _dart_raw(model: PythonObject, fields: PythonObject, X: PythonObject, contex
     var score = admitted_vector(K * n, "<f8", context)
     if n == 0:
         return score
-    var forest = _dart_forest(model, fields, K)
+    var forest = _dart_forest(model, fields, K, context)
     var xt = _xt(fields, context)
-    if trees_entry(xt, "x_trees_dart_forest_prepare") is not None:
-        _dart_resident_predict(model, fields, forest, xt, x.address, n, d, K, score, context)
+    var key = _xk(xt)
+    if (xd_caps(key) & XD_CAP_RESIDENT) != 0:
+        _dart_resident_predict(model, fields, forest, xt, key, x.address, n, d, K, score, context)
     else:
-        _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.address), forest[1], forest[2], forest[3],
-                          forest[4], _A(score), Python.list(_P(n), _P(d), _P(K)))
+        _ = xd_predict(key, x.address, trees_address(score), trees_address(forest[1]), trees_address(forest[2]),
+                       trees_address(forest[3]), trees_address(forest[4]), trees_address(forest[5]),
+                       trees_address(forest[6]), trees_address(forest[7]), n, d, K, Int(py=forest[8]))
+    _ = forest  # keep the flat arrays alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = score  # keep the Python object alive through the native call above
     _ = x^

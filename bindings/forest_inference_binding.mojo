@@ -26,34 +26,27 @@ def _f32_ptr(address: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
 
 
-def forest_prepare_gpu_binding[RF_INPUT: Bool](
-    offsets_addr: PythonObject, colid_addr: PythonObject,
-    quesval_addr: PythonObject, left_child_addr: PythonObject,
-    leaves_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Prepare an owned immutable GPU snapshot. GIL serializes registry access.
+def forest_prepare_gpu_native[RF_INPUT: Bool](model: List[Int], features: Int, trees: Int, outputs: Int,
+                                             ordered_word: Int) raises -> Int:
+    """Prepare an owned immutable GPU snapshot (XF_RESIDENT_PREPARE; lane
+    calltable-forest). `model` holds the five array addresses. The caller
+    holds the GIL, which serializes registry access.
 
-    An optional fourth entry picks the snapshot's aggregation: 1 the strict
+    `ordered_word` picks the snapshot's aggregation: 1 the strict
     increasing-tree kernel (the sequential route's bits), 0 the 32-grove
-    graph. Absent, the compiled default `FOREST_ORDERED_RESIDENT` applies."""
-    if len(params) != 3 and len(params) != 4:
-        raise Error("forest_prepare_gpu requires features, trees, outputs[, ordered]")
-    var features = Int(py=params[0])
-    var trees = Int(py=params[1])
-    var outputs = Int(py=params[2])
+    graph, -1 the compiled default `FOREST_ORDERED_RESIDENT`."""
     var ordered = FOREST_ORDERED_RESIDENT
-    if len(params) == 4:
-        var flag = Int(py=params[3])
-        if flag != 0 and flag != 1:
+    if ordered_word != -1:
+        if ordered_word != 0 and ordered_word != 1:
             raise Error("forest_prepare_gpu ordered must be 0 or 1")
-        ordered = flag == 1
+        ordered = ordered_word == 1
     if features < 1 or trees < 1 or trees >= 2147483647 or outputs < 1:
         raise Error("invalid resident forest dimensions")
-    var op = _i32_ptr(Int(py=offsets_addr))
-    var cp = _i32_ptr(Int(py=colid_addr))
-    var tp = _f32_ptr(Int(py=quesval_addr))
-    var lp = _i32_ptr(Int(py=left_child_addr))
-    var vp = _f32_ptr(Int(py=leaves_addr))
+    var op = _i32_ptr(model[0])
+    var cp = _i32_ptr(model[1])
+    var tp = _f32_ptr(model[2])
+    var lp = _i32_ptr(model[3])
+    var vp = _f32_ptr(model[4])
     var nodes = Int(op[trees])
     if nodes < 1 or nodes > 2147483647 // outputs:
         raise Error("invalid resident forest node count")
@@ -63,8 +56,32 @@ def forest_prepare_gpu_binding[RF_INPUT: Bool](
     var thresholds = list_f32(tp, nodes)
     var left = list_i32(lp, nodes)
     var leaves = list_f32(vp, nodes * outputs)
-    return PythonObject(resident_prepare[RF_INPUT](
-        offsets, columns, thresholds, left, leaves, features, outputs, ordered))
+    return resident_prepare[RF_INPUT](offsets, columns, thresholds, left, leaves, features, outputs, ordered)
+
+
+def _model_py(offsets_addr: PythonObject, colid_addr: PythonObject, quesval_addr: PythonObject,
+              left_child_addr: PythonObject, leaves_addr: PythonObject) raises -> List[Int]:
+    """The five array address words (UNPACK)."""
+    var model: List[Int] = [Int(py=offsets_addr), Int(py=colid_addr), Int(py=quesval_addr),
+                            Int(py=left_child_addr), Int(py=leaves_addr)]
+    return model^
+
+
+def forest_prepare_gpu_binding[RF_INPUT: Bool](
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`forest_prepare_gpu`: UNPACK of `forest_prepare_gpu_native`; an
+    optional fourth params entry is the ordered word."""
+    if len(params) != 3 and len(params) != 4:
+        raise Error("forest_prepare_gpu requires features, trees, outputs[, ordered]")
+    var ordered = Int(py=params[3]) if len(params) == 4 else -1
+    if len(params) == 4 and ordered != 0 and ordered != 1:
+        raise Error("forest_prepare_gpu ordered must be 0 or 1")
+    return PythonObject(forest_prepare_gpu_native[RF_INPUT](
+        _model_py(offsets_addr, colid_addr, quesval_addr, left_child_addr, leaves_addr),
+        Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), ordered))
 
 
 def forest_release_gpu_binding[RF_INPUT: Bool](handle: PythonObject) raises -> PythonObject:
@@ -77,31 +94,49 @@ def forest_ordered_resident_binding() raises -> PythonObject:
     return PythonObject(1 if FOREST_ORDERED_RESIDENT else 0)
 
 
-def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](
-    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
-    params: PythonObject) raises -> PythonObject:
-    """Borrowed synchronous prediction; REUSE_IO=True is the public
-    `forest_predict_resident_reuse_gpu`.
+def forest_predict_resident_into_gpu_native[RF_INPUT: Bool, REUSE_IO: Bool = False](
+    handle: Int, x_addr: Int, out_addr: Int, rows: Int, features: Int, outputs: Int) raises -> Int:
+    """Borrowed synchronous prediction (XF_RESIDENT_PREDICT with
+    REUSE_IO=True, the public `forest_predict_resident_reuse_gpu`).
 
     DEVIATION 2483: parallel_groves already selects this pointer-through body
     through forest_predict_resident_reuse_gpu. Output may change on a
     nonfinite-result error; caller ownership lasts until return.
     """
-    if len(params) != 3:
-        raise Error("resident prediction requires rows, features, outputs")
-    var rows = Int(py=params[0])
-    var features = Int(py=params[1])
-    var outputs = Int(py=params[2])
     if rows < 0 or features < 1 or outputs < 1:
         raise Error("invalid resident prediction dimensions")
     if rows > 2147483647 // features or rows > 2147483647 // outputs:
         raise Error("resident prediction dimensions exceed Int32")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    resident_predict_into[RF_INPUT](Int(py=handle),
+    var xp = _f32_ptr(x_addr)
+    var op = _f32_ptr(out_addr)
+    resident_predict_into[RF_INPUT](handle,
         xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
         rows, features, outputs, REUSE_IO)
-    return PythonObject(rows)
+    return rows
+
+
+def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](
+    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject) raises -> PythonObject:
+    if len(params) != 3:
+        raise Error("resident prediction requires rows, features, outputs")
+    return PythonObject(forest_predict_resident_into_gpu_native[RF_INPUT, REUSE_IO](
+        Int(py=handle), Int(py=x_addr), Int(py=out_addr), Int(py=params[0]), Int(py=params[1]), Int(py=params[2])))
+
+
+def forest_predict_resident_labels_gpu_native[RF_INPUT: Bool](
+    handle: Int, x_addr: Int, out_addr: Int, rows: Int, features: Int, outputs: Int) raises -> Int:
+    """XF_RESIDENT_LABELS: the resident classifier's int32 codes."""
+    if rows < 0 or features < 1 or outputs < 2:
+        raise Error("invalid resident label prediction dimensions")
+    if rows > 2147483647 // features or rows > 2147483647 // outputs:
+        raise Error("resident label prediction dimensions exceed Int32")
+    var xp = _f32_ptr(x_addr)
+    var op = _i32_ptr(out_addr)
+    resident_predict_labels[RF_INPUT](handle,
+        xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
+        rows, features, outputs)
+    return rows
 
 
 def forest_predict_resident_labels_gpu_binding[RF_INPUT: Bool](
@@ -109,19 +144,8 @@ def forest_predict_resident_labels_gpu_binding[RF_INPUT: Bool](
     params: PythonObject) raises -> PythonObject:
     if len(params) != 3:
         raise Error("resident label prediction requires rows, features, outputs")
-    var rows = Int(py=params[0])
-    var features = Int(py=params[1])
-    var outputs = Int(py=params[2])
-    if rows < 0 or features < 1 or outputs < 2:
-        raise Error("invalid resident label prediction dimensions")
-    if rows > 2147483647 // features or rows > 2147483647 // outputs:
-        raise Error("resident label prediction dimensions exceed Int32")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _i32_ptr(Int(py=out_addr))
-    resident_predict_labels[RF_INPUT](Int(py=handle),
-        xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
-        rows, features, outputs)
-    return PythonObject(rows)
+    return PythonObject(forest_predict_resident_labels_gpu_native[RF_INPUT](
+        Int(py=handle), Int(py=x_addr), Int(py=out_addr), Int(py=params[0]), Int(py=params[1]), Int(py=params[2])))
 
 
 def forest_stage_input_gpu_binding[RF_INPUT: Bool](
@@ -158,3 +182,17 @@ def forest_identical_fused_labels_binding() raises -> PythonObject:
     """T38 capability; absent define preserves incumbent classification."""
     from core.forest_experiments import T38_FUSED_LABELS
     return PythonObject(T38_FUSED_LABELS)
+
+
+def forest_gpu_resident_caps() -> Int:
+    """The resident capability bits both GPU forest images report through
+    XF_CAPS (core/forest_fit_request.mojo; lane calltable-forest): the
+    ordered word (`forest_ordered_resident`), the resident label query
+    (`forest_predict_resident_labels_gpu`) and, when compiled, the T38 fused
+    labels (`forest_identical_fused_labels`)."""
+    from core.forest_experiments import T38_FUSED_LABELS
+    from core.forest_fit_request import XF_CAP_ORDERED_RESIDENT, XF_CAP_RESIDENT_LABELS, XF_CAP_FUSED_LABELS
+    var caps = XF_CAP_ORDERED_RESIDENT | XF_CAP_RESIDENT_LABELS
+    comptime if T38_FUSED_LABELS:
+        caps |= XF_CAP_FUSED_LABELS
+    return caps

@@ -98,7 +98,10 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from core.hostptr import f32_ptr, f64_ptr, read_f32, u32_ptr
-from bindings.py_lists import py_list_f64
+from bindings.gbdt_fit_boundary import gbdt_fit_args_py, gbdt_fit_outcome_py
+from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
+from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, GbdtImage
+from core.native_descriptor_abi import NativeDescriptorError
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the model text
 # reader, the predict walks and links, the binary transforms, and the scans
 # and reads of the fit's tails, moved word for word out of this shell.
@@ -486,55 +489,54 @@ def _gbdt_fit_pointwise_arm(
     w_address: Int,
     ex_address: Int,
     ey_address: Int,
-    params: PythonObject,
-    strs: PythonObject,
-) raises -> PythonObject:
+    params: GbdtFitArgs,
+) raises -> GbdtFitOutcome:
     """`gbdt_fit` with `use_pointwise_searcher=True`: the slots were checked
     by the caller; this reads them again, refuses by name every value the
     pointwise oracle does not restate, applies `train`'s own raises on the
     rest, and fits through `gbdt_pointwise_host_fit`."""
-    var n_class_weights = Int(py=params[34])
+    var n_class_weights = params.i(34)
     var fixed_and_weights = 35 + n_class_weights
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
-        min_split_gain = Float64(py=params[fixed_and_weights])
+        min_split_gain = params.f(fixed_and_weights)
     var min_child_hessian = Float64(-1)
     if len(params) >= fixed_and_weights + 2:
-        min_child_hessian = Float64(py=params[fixed_and_weights + 1])
+        min_child_hessian = params.f(fixed_and_weights + 1)
     var feature_fraction = Float64(1)
     if len(params) == fixed_and_weights + 3:
-        feature_fraction = Float64(py=params[fixed_and_weights + 2])
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_flags = Int(py=params[3])
-    var border_count = Int(py=params[4])
-    var n_estimators = Int(py=params[5])
-    var max_depth = Int(py=params[6])
-    var learning_rate = Float32(Float64(py=params[7]))
-    var l2_leaf_reg = Float32(Float64(py=params[8]))
-    var random_seed = UInt64(Int(py=params[9]))
-    var score_function = Int(py=params[10])
-    var loss = String(py=strs[0])
-    var loss_border = Float32(Float64(py=params[15]))
-    var leaf_iterations = Int(py=params[16])
-    var leaf_method = Int(py=params[17])
-    var bagging_temperature = Float32(Float64(py=params[18]))
-    var subsample = Float32(Float64(py=params[19]))
-    var bootstrap_type = String(py=strs[1])
-    var n_eval_rows = Int(py=params[20])
-    var od_type = String(py=strs[2])
-    var od_pvalue = Float64(py=params[21])
-    var od_wait = Int(py=params[22])
-    var use_best_model = Int(py=params[23])
-    var best_model_min_trees = Int(py=params[24])
-    var nan_mode_name = String(py=strs[3])
-    var random_strength = Float32(Float64(py=params[25]))
-    var border_build_max_samples = Int(py=params[27])
-    var boost_from_average = Int(py=params[30])
-    var grow_code = Int(py=params[31])
-    var max_leaves = Int(py=params[32])
-    var min_data_in_leaf = Int(py=params[33])
+        feature_fraction = params.f(fixed_and_weights + 2)
+    var n_rows = params.i(0)
+    var n_features = params.i(1)
+    var n_weights = params.i(2)
+    var n_flags = params.i(3)
+    var border_count = params.i(4)
+    var n_estimators = params.i(5)
+    var max_depth = params.i(6)
+    var learning_rate = Float32(params.f(7))
+    var l2_leaf_reg = Float32(params.f(8))
+    var random_seed = UInt64(params.i(9))
+    var score_function = params.i(10)
+    var loss = params.strs[0]
+    var loss_border = Float32(params.f(15))
+    var leaf_iterations = params.i(16)
+    var leaf_method = params.i(17)
+    var bagging_temperature = Float32(params.f(18))
+    var subsample = Float32(params.f(19))
+    var bootstrap_type = params.strs[1]
+    var n_eval_rows = params.i(20)
+    var od_type = params.strs[2]
+    var od_pvalue = params.f(21)
+    var od_wait = params.i(22)
+    var use_best_model = params.i(23)
+    var best_model_min_trees = params.i(24)
+    var nan_mode_name = params.strs[3]
+    var random_strength = Float32(params.f(25))
+    var border_build_max_samples = params.i(27)
+    var boost_from_average = params.i(30)
+    var grow_code = params.i(31)
+    var max_leaves = params.i(32)
+    var min_data_in_leaf = params.i(33)
 
     if loss != String("Logloss"):
         _refuse_pointwise("loss='" + loss + "'")
@@ -623,15 +625,7 @@ def _gbdt_fit_pointwise_arm(
             stopped_early = fit.stopped_early
     if has_nan:
         _refuse_pointwise("an X carrying NaN")
-    var learn = py_list_f64(losses)
-    var test = py_list_f64(test_losses)
-    var out = Python.list()
-    out.append(PythonObject(text))
-    out.append(PythonObject(best_iteration))
-    out.append(PythonObject(stopped_early))
-    out.append(learn)
-    out.append(test)
-    return out
+    return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 
 
 def _refuse_ordered_host(what: String) raises:
@@ -650,51 +644,50 @@ def _gbdt_fit_ordered_arm(
     flags_address: Int,
     eval_x_address: Int,
     eval_y_address: Int,
-    params: PythonObject,
-    strs: PythonObject,
+    params: GbdtFitArgs,
     border_type: Int,
-) raises -> PythonObject:
+) raises -> GbdtFitOutcome:
     """`gbdt_fit` with `boosting_type='Ordered'`: `train`'s Ordered refusals
     in its words, the host binding's own (what the oracle does not restate),
     the loss resolved as `train` resolves it under Ordered (their GPU
     `useExact` needs Plain, `catboost_options.cpp:290-293`, so MAE, MAPE and
     Quantile keep Gradient), then `gbdt_ordered_host_fit`."""
-    var n_class_weights = Int(py=params[34])
+    var n_class_weights = params.i(34)
     var fixed_and_weights = 35 + n_class_weights
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_flags = Int(py=params[3])
-    var border_count = Int(py=params[4])
-    var n_estimators = Int(py=params[5])
-    var max_depth = Int(py=params[6])
-    var learning_rate = Float32(Float64(py=params[7]))
-    var l2_leaf_reg = Float32(Float64(py=params[8]))
-    var random_seed = UInt64(Int(py=params[9]))
-    var score_function = Int(py=params[10])
-    var loss_border = Float32(Float64(py=params[15]))
-    var leaf_iterations = Int(py=params[16])
-    var leaf_method = Int(py=params[17])
-    var bagging_temperature = Float32(Float64(py=params[18]))
-    var subsample = Float32(Float64(py=params[19]))
-    var n_eval_rows = Int(py=params[20])
-    var od_pvalue = Float64(py=params[21])
-    var od_wait = Int(py=params[22])
-    var random_strength = Float32(Float64(py=params[25]))
-    var use_pointwise = Int(py=params[26]) != 0
-    var border_build_max_samples = Int(py=params[27])
-    var permutation_count = Int(py=params[28])
-    var boost_from_average = Int(py=params[30])
-    var grow_code = Int(py=params[31])
+    var n_rows = params.i(0)
+    var n_features = params.i(1)
+    var n_weights = params.i(2)
+    var n_flags = params.i(3)
+    var border_count = params.i(4)
+    var n_estimators = params.i(5)
+    var max_depth = params.i(6)
+    var learning_rate = Float32(params.f(7))
+    var l2_leaf_reg = Float32(params.f(8))
+    var random_seed = UInt64(params.i(9))
+    var score_function = params.i(10)
+    var loss_border = Float32(params.f(15))
+    var leaf_iterations = params.i(16)
+    var leaf_method = params.i(17)
+    var bagging_temperature = Float32(params.f(18))
+    var subsample = Float32(params.f(19))
+    var n_eval_rows = params.i(20)
+    var od_pvalue = params.f(21)
+    var od_wait = params.i(22)
+    var random_strength = Float32(params.f(25))
+    var use_pointwise = params.i(26) != 0
+    var border_build_max_samples = params.i(27)
+    var permutation_count = params.i(28)
+    var boost_from_average = params.i(30)
+    var grow_code = params.i(31)
     var feature_fraction = Float64(1)
     if len(params) >= fixed_and_weights + 3:
-        feature_fraction = Float64(py=params[fixed_and_weights + 2])
-    var loss = String(py=strs[0])
-    var bootstrap_type = String(py=strs[1])
-    var od_type = String(py=strs[2])
-    var nan_mode = nan_mode_from_name(String(py=strs[3]))
-    var fold_len_multiplier = bitcast[DType.float64](UInt64(Int(String(py=strs[6]))))
-    var fold_permutation_block = Int(String(py=strs[7]))
+        feature_fraction = params.f(fixed_and_weights + 2)
+    var loss = params.strs[0]
+    var bootstrap_type = params.strs[1]
+    var od_type = params.strs[2]
+    var nan_mode = nan_mode_from_name(params.strs[3])
+    var fold_len_multiplier = bitcast[DType.float64](UInt64(Int(params.strs[6])))
+    var fold_permutation_block = Int(params.strs[7])
 
     # ---- `train`'s Ordered refusals (`gbdt/train.mojo`), their words ----
     if grow_code != 0:
@@ -752,8 +745,8 @@ def _gbdt_fit_ordered_arm(
         _refuse_ordered_host("cat_features or one_hot_features")
     # the detector as `gbdt_fit` resolves it, through the same host function
     # (`load_overfitting_detector_options`, their `Load`)
-    var use_best_model = Int(py=params[23])
-    var best_model_min_trees = Int(py=params[24])
+    var use_best_model = params.i(23)
+    var best_model_min_trees = params.i(24)
     var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
     var od_kind = od.od_type
     if use_best_model == 1 and n_eval_rows == 0:
@@ -814,8 +807,8 @@ def _gbdt_fit_ordered_arm(
             _refuse_ordered_host("loss='" + loss + "'")
         hloss = _resolve_pointwise_loss(
             pw_objective, loss,
-            Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
-            Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
+            Float32(params.f(11)), Float32(params.f(12)),
+            Float32(params.f(13)), Float32(params.f(14)),
             leaf_method, leaf_iterations, String(""), Float32(-1.0),
         )
         if hloss.method == GBDT_LEAF_EXACT:
@@ -897,15 +890,7 @@ def _gbdt_fit_ordered_arm(
         best = fit.best_iteration
         stopped = fit.stopped_early
     _ = flags_address
-    var learn = py_list_f64(losses)
-    var test = py_list_f64(test_losses)
-    var out = Python.list()
-    out.append(PythonObject(text))
-    out.append(PythonObject(best))
-    out.append(PythonObject(stopped))
-    out.append(learn)
-    out.append(test)
-    return out
+    return GbdtFitOutcome(text^, best, stopped, losses^, test_losses^)
 
 
 def _gbdt_host_eval_arm(
@@ -944,6 +929,14 @@ def gbdt_fit_binding(
     params: PythonObject,
     strs: PythonObject,
 ) raises -> PythonObject:
+    """`gbdt_fit`: UNPACK and PACK only (bindings/gbdt_fit_boundary.mojo)
+    around `gbdt_fit_native`; the GBDT doors call the fit natively through
+    this image's table entry."""
+    var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
+    return gbdt_fit_outcome_py(gbdt_fit_native(args))
+
+
+def gbdt_fit_native(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     """`gbdt_fit_binding` (`bindings/_mojolearn_gbdt.mojo:169-407`): the same
     slot checks in the same words, then the refusals of what the host fit
     does not restate, then the host fit and the model text. Returns
@@ -954,7 +947,7 @@ def gbdt_fit_binding(
             "gbdt_fit: params must hold at least 35 values, got "
             + String(len(params))
         )
-    var n_class_weights = Int(py=params[34])
+    var n_class_weights = params.i(34)
     if n_class_weights < 0:
         raise Error(
             "gbdt_fit: n_class_weights must not be negative, got "
@@ -968,48 +961,48 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4 and len(strs) != 5 and len(strs) != 8:
+    if len(params.strs) != 4 and len(params.strs) != 5 and len(params.strs) != 8:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
             " nan_mode], optionally feature_border_type, optionally then"
             " boosting_type, the fold_len_multiplier's float64 bits and"
-            " fold_permutation_block, got " + String(len(strs))
+            " fold_permutation_block, got " + String(len(params.strs))
         )
     # `feature_border_type`, the optional fifth string (lane/catboost-parity);
     # the seven types are the device fit's own host functions
     # (`calc_quantization` / `select_borders`), restated nowhere
     var border_type = BORDER_TYPE_GREEDY_LOG_SUM
-    if len(strs) >= 5:
-        border_type = border_type_from_name(String(py=strs[4]))
+    if len(params.strs) >= 5:
+        border_type = border_type_from_name(params.strs[4])
     # the Ordered tail (lane/catboost-parity): its own arm, before any of
     # the Plain arms' refusals
-    if len(strs) == 8 and String(py=strs[5]) == String("Ordered"):
+    if len(params.strs) == 8 and params.strs[5] == String("Ordered"):
         return _gbdt_fit_ordered_arm(
-            Int(py=x_addr), Int(py=y_addr), Int(py=cat_flags_addr),
-            Int(py=eval_x_addr), Int(py=eval_y_addr), params, strs,
+            params.x, params.y, params.cat_flags,
+            params.eval_x, params.eval_y, params,
             border_type,
         )
-    if len(strs) == 8 and String(py=strs[5]) != String("Plain"):
+    if len(params.strs) == 8 and params.strs[5] != String("Plain"):
         raise Error(
             "gbdt_fit: boosting_type must be 'Plain' or 'Ordered', got '"
-            + String(py=strs[5]) + "'"
+            + params.strs[5] + "'"
         )
-    var xp = f32_ptr(Int(py=x_addr))
-    var yp = f32_ptr(Int(py=y_addr))
-    var weights_address = Int(py=weights_addr)
+    var xp = f32_ptr(params.x)
+    var yp = f32_ptr(params.y)
+    var weights_address = params.weights
     _ = f32_ptr(weights_address)
-    var cp = u32_ptr(Int(py=cat_flags_addr))
-    _ = f32_ptr(Int(py=eval_x_addr))
-    _ = f32_ptr(Int(py=eval_y_addr))
+    var cp = u32_ptr(params.cat_flags)
+    _ = f32_ptr(params.eval_x)
+    _ = f32_ptr(params.eval_y)
 
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_weights = Int(py=params[2])
-    var n_flags = Int(py=params[3])
+    var n_rows = params.i(0)
+    var n_features = params.i(1)
+    var n_weights = params.i(2)
+    var n_flags = params.i(3)
     var class_weights = List[Float32]()
     for i in range(n_class_weights):  # small-loop(class weight words of params)
-        class_weights.append(Float32(Float64(py=params[35 + i])))
-    var grow_code = Int(py=params[31])
+        class_weights.append(Float32(params.f(35 + i)))
+    var grow_code = params.i(31)
     if grow_code != 0 and grow_code != 1 and grow_code != 2:
         raise Error(
             "gbdt_fit: grow_policy code must be 0 (SymmetricTree), 1"
@@ -1017,18 +1010,18 @@ def gbdt_fit_binding(
         )
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
-        min_split_gain = Float64(py=params[fixed_and_weights])
+        min_split_gain = params.f(fixed_and_weights)
     var min_child_hessian = Float64(-1)
     if len(params) >= fixed_and_weights + 2:
-        min_child_hessian = Float64(py=params[fixed_and_weights + 1])
+        min_child_hessian = params.f(fixed_and_weights + 1)
     var feature_fraction = Float64(1)
     if len(params) >= fixed_and_weights + 3:
-        feature_fraction = Float64(py=params[fixed_and_weights + 2])
+        feature_fraction = params.f(fixed_and_weights + 2)
     # MultiRMSE's target dimension, the one value of the +4 tail
     # (`bindings/_mojolearn_gbdt.mojo`'s), in its words
     var target_dim = 1
     if len(params) == fixed_and_weights + 4:
-        target_dim = Int(py=params[fixed_and_weights + 3])
+        target_dim = params.i(fixed_and_weights + 3)
         if target_dim < 2:
             raise Error(
                 "gbdt_fit: the target-dimension tail needs a dimension >= 2,"
@@ -1038,17 +1031,17 @@ def gbdt_fit_binding(
     # checked, refused and resolved in the words and by the rule
     # `gbdt/train.mojo::train` uses, so the CPU column refuses exactly where
     # the device column does and QueryRMSE sees the same queries
-    var tail_loss = String(py=strs[0])
-    var tail_rows = Int(py=params[0])
+    var tail_loss = params.strs[0]
+    var tail_rows = params.i(0)
     var host_group_sizes = List[Int]()
     if len(params) >= fixed_and_weights + 5:
-        var n_groups = Int(py=params[fixed_and_weights + 4])
+        var n_groups = params.i(fixed_and_weights + 4)
         if n_groups < 1:
             raise Error(
                 "gbdt_fit: the group tail needs a positive group count, got "
                 + String(n_groups)
             )
-        var gp = u32_ptr(Int(py=params[fixed_and_weights + 3]))
+        var gp = u32_ptr(params.i(fixed_and_weights + 3))
         host_group_sizes = gbdt_host_group_sizes(gp, n_groups, tail_rows)
         if tail_loss != String("QueryRMSE") and tail_loss != String("PairLogit") and tail_loss != String("YetiRank"):
             raise Error(
@@ -1064,15 +1057,15 @@ def gbdt_fit_binding(
     var host_pair_losers = List[UInt32]()
     var host_pair_weights = List[Float32]()
     if len(params) == fixed_and_weights + 8:
-        var n_pairs = Int(py=params[fixed_and_weights + 6])
+        var n_pairs = params.i(fixed_and_weights + 6)
         if n_pairs != -1 and n_pairs < 1:
             raise Error(
                 "gbdt_fit: the pairs tail needs a positive pair count or -1,"
                 " got " + String(n_pairs)
             )
         if n_pairs > 0:
-            var pp = u32_ptr(Int(py=params[fixed_and_weights + 5]))
-            var pw = f32_ptr(Int(py=params[fixed_and_weights + 7]))
+            var pp = u32_ptr(params.i(fixed_and_weights + 5))
+            var pw = f32_ptr(params.i(fixed_and_weights + 7))
             gbdt_host_read_pairs(
                 pp, pw, n_pairs, host_pair_winners, host_pair_losers, host_pair_weights
             )
@@ -1097,36 +1090,36 @@ def gbdt_fit_binding(
         if not (len(host_group_sizes) > 0 and len(host_group_sizes) < tail_rows):
             host_group_sizes = List[Int](length=tail_rows, fill=1)
 
-    var border_count = Int(py=params[4])
-    var n_estimators = Int(py=params[5])
-    var max_depth = Int(py=params[6])
-    var learning_rate = Float32(Float64(py=params[7]))
-    var l2_leaf_reg = Float32(Float64(py=params[8]))
-    var random_seed = UInt64(Int(py=params[9]))
-    var score_function = Int(py=params[10])
-    var loss = String(py=strs[0])
+    var border_count = params.i(4)
+    var n_estimators = params.i(5)
+    var max_depth = params.i(6)
+    var learning_rate = Float32(params.f(7))
+    var l2_leaf_reg = Float32(params.f(8))
+    var random_seed = UInt64(params.i(9))
+    var score_function = params.i(10)
+    var loss = params.strs[0]
     if loss == String("YetiRank") and l2_leaf_reg == Float32(0.0):
         # `catboost_options.cpp:357-359`, as `gbdt/train.mojo::train` applies it
         l2_leaf_reg = Float32(1e-20)
-    var loss_border = Float32(Float64(py=params[15]))
-    var leaf_iterations = Int(py=params[16])
-    var leaf_method = Int(py=params[17])
-    var bootstrap_type = String(py=strs[1])
-    var n_eval_rows = Int(py=params[20])
-    var od_type = String(py=strs[2])
-    var od_pvalue = Float64(py=params[21])
-    var od_wait = Int(py=params[22])
-    var use_best_model = Int(py=params[23])
-    var best_model_min_trees = Int(py=params[24])
-    var nan_mode_name = String(py=strs[3])
-    var random_strength = Float32(Float64(py=params[25]))
-    var use_pointwise = Int(py=params[26]) != 0
-    var border_build_max_samples = Int(py=params[27])
-    var permutation_count = Int(py=params[28])
-    var ctr_permutation_id = Int(py=params[29])
-    var boost_from_average = Int(py=params[30])
-    var max_leaves = Int(py=params[32])
-    var min_data_in_leaf = Int(py=params[33])
+    var loss_border = Float32(params.f(15))
+    var leaf_iterations = params.i(16)
+    var leaf_method = params.i(17)
+    var bootstrap_type = params.strs[1]
+    var n_eval_rows = params.i(20)
+    var od_type = params.strs[2]
+    var od_pvalue = params.f(21)
+    var od_wait = params.i(22)
+    var use_best_model = params.i(23)
+    var best_model_min_trees = params.i(24)
+    var nan_mode_name = params.strs[3]
+    var random_strength = Float32(params.f(25))
+    var use_pointwise = params.i(26) != 0
+    var border_build_max_samples = params.i(27)
+    var permutation_count = params.i(28)
+    var ctr_permutation_id = params.i(29)
+    var boost_from_average = params.i(30)
+    var max_leaves = params.i(32)
+    var min_data_in_leaf = params.i(33)
 
     # `gbdt_fit`'s own checks (`gbdt/estimator.mojo:446-464`)
     if n_rows <= 0:
@@ -1209,8 +1202,8 @@ def gbdt_fit_binding(
         # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
         # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)
         return _gbdt_fit_pointwise_arm(
-            Int(py=x_addr), Int(py=y_addr), Int(py=weights_addr),
-            Int(py=eval_x_addr), Int(py=eval_y_addr), params, strs,
+            params.x, params.y, params.weights,
+            params.eval_x, params.eval_y, params,
         )
     # the score function each covered lane runs: Cosine under SymmetricTree
     # and Depthwise, NewtonL2 under Lossguide (the policy defaults)
@@ -1482,16 +1475,16 @@ def gbdt_fit_binding(
     var ns_boot_param = Float32(0.0)
     if bootstrap_type == String("Bernoulli"):
         ns_boot = GBDT_BOOT_BERNOULLI
-        var subsample = Float32(Float64(py=params[19]))
+        var subsample = Float32(params.f(19))
         ns_boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
     elif bootstrap_type == String("Bayesian") and grow_code != 0:
-        if Float32(Float64(py=params[19])) >= Float32(0.0):
+        if Float32(params.f(19)) >= Float32(0.0):
             raise Error(
                 "Error: default bootstrap type (bayesian) doesn't support"
                 " 'subsample' option"
             )
         ns_boot = GBDT_BOOT_BAYESIAN
-        ns_boot_param = Float32(Float64(py=params[18]))
+        ns_boot_param = Float32(params.f(18))
     var ns_loss = GbdtHostLoss(
         GBDT_OBJ_RMSE if is_rmse else GBDT_OBJ_LOGLOSS, border, Float32(0.5),
         ns_method, ns_iterations, ns_boot, ns_boot_param, border,
@@ -1499,17 +1492,17 @@ def gbdt_fit_binding(
     if is_pointwise:
         pw_loss = _resolve_pointwise_loss(
             pw_objective, loss,
-            Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
-            Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
+            Float32(params.f(11)), Float32(params.f(12)),
+            Float32(params.f(13)), Float32(params.f(14)),
             leaf_method, leaf_iterations, bootstrap_type,
-            Float32(Float64(py=params[19])), Float32(Float64(py=params[18])),
+            Float32(params.f(19)), Float32(params.f(18)),
         )
     # the symmetric stochastic arm's bootstrap, `train`'s resolution
     # (`gbdt/train.mojo`), the Ordered arm's words above
     var sym_boot_kind = -1
     var sym_boot_param = Float32(1.0)
     if symmetric_stochastic:
-        var sym_subsample = Float32(Float64(py=params[19]))
+        var sym_subsample = Float32(params.f(19))
         if bootstrap_type == String("Bayesian"):
             if sym_subsample >= Float32(0.0):
                 raise Error(
@@ -1517,7 +1510,7 @@ def gbdt_fit_binding(
                     " 'subsample' option"
                 )
             sym_boot_kind = GBDT_BOOT_BAYESIAN
-            sym_boot_param = Float32(Float64(py=params[18]))
+            sym_boot_param = Float32(params.f(18))
         elif bootstrap_type == String("Bernoulli"):
             sym_boot_kind = GBDT_BOOT_BERNOULLI
             sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
@@ -1525,8 +1518,8 @@ def gbdt_fit_binding(
             sym_boot_kind = GBDT_BOOT_POISSON
             sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
     var flags = gbdt_host_load_u32(cp, n_flags)
-    var x_address = Int(py=x_addr)
-    var y_address = Int(py=y_addr)
+    var x_address = params.x
+    var y_address = params.y
     _ = xp
     _ = yp
     var text = String("")
@@ -1540,7 +1533,7 @@ def gbdt_fit_binding(
         var xs = f32_ptr(x_address)
         has_nan = gbdt_host_has_nan_ptr(xs, n_rows * n_features)
         if not has_nan and n_eval_rows > 0:
-            var exs = f32_ptr(Int(py=eval_x_addr))
+            var exs = f32_ptr(params.eval_x)
             has_nan = gbdt_host_has_nan_ptr(exs, n_eval_rows * n_features)
     if has_nan:
         _refuse(
@@ -1548,8 +1541,8 @@ def gbdt_fit_binding(
             + String(grow_code) + " (NaN is measured on SymmetricTree with"
             " Logloss only, the gbdt-nan-modes lane)"
         )
-    var eval_x_address = Int(py=eval_x_addr)
-    var eval_y_address = Int(py=eval_y_addr)
+    var eval_x_address = params.eval_x
+    var eval_y_address = params.eval_y
     var test_losses = List[Float64]()
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
@@ -1718,15 +1711,7 @@ def gbdt_fit_binding(
             )
             losses = ns_model.losses.copy()
 
-    var learn = py_list_f64(losses)
-    var test = py_list_f64(test_losses)
-    var out = Python.list()
-    out.append(PythonObject(text))
-    out.append(PythonObject(best_iteration))
-    out.append(PythonObject(stopped_early))
-    out.append(learn)
-    out.append(test)
-    return out
+    return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 
 
 # ===========================================================================
@@ -1993,6 +1978,33 @@ def gbdt_binary_classes_binding(
     return gbdt_binary_prediction_binding[False, DType.int32](raw_addr, out_addr, params)
 
 
+# ---- The image's native gbdt entry (lane calltable-gbdt-forest-dart,
+# 2026-11-11; ABI gbdt/fit_request.mojo, table core/gbdt_entry_table.mojo):
+# the GBDT doors fit and read the model dimension through it instead of the
+# Python entries above, which remain for the unconverted Python callers and
+# only UNPACK and PACK. The host image serves no row-major fit.
+struct _GbdtHostImage(GbdtImage):
+    @staticmethod
+    def fit(row_major: Bool, args: GbdtFitArgs) raises -> GbdtFitOutcome:
+        if row_major:
+            raise Error("AttributeError: mojolearn: this gbdt binding has no gbdt_fit_rowmajor")
+        return gbdt_fit_native(args)
+
+    @staticmethod
+    def row_major() -> Bool:
+        return False
+
+    @staticmethod
+    def model_dim(text: String) raises -> Int:
+        return _parse_model(text).dim
+
+
+def gbdt_host_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's gbdt entry (`GBDT_ENTRY_ABI`, gbdt/fit_request.mojo)."""
+    return gbdt_entry_dispatch[_GbdtHostImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gbdt_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -2000,6 +2012,8 @@ def build__mojolearn_gbdt_host() -> PythonObject:
     comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_gbdt_host")
+        # The native gbdt entry (core/gbdt_entry_table.mojo) under the cpu key.
+        gbdt_entry_publish["MojolearnGbdtEntryOwnerHostV1"]("cpu", gbdt_host_entry_v1)
         module.def_function[gbdt_host_numeric_mode_binding]("gbdt_host_numeric_mode")
         module.def_function[gbdt_host_vendor_binding]("gbdt_host_vendor")
         module.def_function[gbdt_host_column_binding]("gbdt_host_column")

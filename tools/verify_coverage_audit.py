@@ -2466,7 +2466,7 @@ _METADATA = "a metadata answer (a profile word, count or flag of the build or th
 SABOTAGE_NA_ENTRIES = {
     **{e: _LIFECYCLE for e in (
         "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
-        "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
+        "forest_release_gpu", "moe_weights_free",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
         "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
         "rf_data_session_open", "rf_data_session_close")},
