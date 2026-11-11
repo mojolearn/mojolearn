@@ -152,3 +152,17 @@ struct GPCQueryTables(Movable):
         self.pis = List[Int](length=members, fill=0)
         self.wsrs = List[Int](length=members, fill=0)
         self.factors = List[Int](length=members, fill=0)
+
+
+struct GPCQueryScratch(Movable):
+    """Only unexposed query outputs; selected public/transport spans are external."""
+    var mean: List[Float32]
+    var variance: List[Float32]
+    var probability: List[Float64]
+
+    def __init__(out self, rows: Int, external: Int) raises:
+        if rows < 0 or external < 0 or external > 7:
+            raise Error("GP query scratch: invalid row count or external span mask")
+        self.mean = List[Float32](length=0 if (external & 1) != 0 else rows, fill=0)
+        self.variance = List[Float32](length=0 if (external & 2) != 0 else rows, fill=0)
+        self.probability = List[Float64](length=0 if (external & 4) != 0 else rows, fill=0)

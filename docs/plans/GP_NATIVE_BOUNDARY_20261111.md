@@ -149,3 +149,14 @@ parallel consumers; affected image roots are listed by the export inventory.
 Source audit only: the orchestrator still owes compilation, normalization
 fixtures (including missing/refusal paths) and installed behavior. No timing
 or cross-vendor identity claim is made.
+
+Selected GPC query outputs now use `GPCQueryScratch` native Float32/Float64
+lists whenever they are private. The caller selects only actual public or
+interpreter-transport outputs for Array packing: public latent mean/variance,
+worker probability or mean, and final binary outputs. Nonfused OVR retains
+native probability columns and supplies their native address table to the
+same combine request. Cross-interpreter columns still unpack through their
+own mandatory exporter pins. No tensor copies, numerical kernels or fused
+route defaults changed. This removes private latent scratch Arrays and
+nonfused probability-column Arrays; native storage stays alive through RUN.
+The query owner addition is uncompiled/unrun in this lane.
