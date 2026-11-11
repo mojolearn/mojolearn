@@ -773,11 +773,10 @@ def _schema_class_table(value: PythonObject, integral: PythonObject, real: Pytho
     raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
 
 
-def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
-    # Validate import-connected layout storage before the shared GP owner
-    # hashes a key, indexes a layout or converts any layout scalar.
+def _schema_kernel_layouts(table: PythonObject) raises:
+    # Validate every import-connected layout before node capture or keyed lookup.
     var b = native_loaded_module("builtins")
-    if py_type(table) is not b.dict or py_type(nodes) is not b.list:
+    if py_type(table) is not b.dict:
         raise Error("TypeError: saved kernel layouts require native dictionary/list storage")
     var keys = py_call(b.list, table)
     for i in range(len(keys)):  # driver-loop: all key identities before dictionary lookup can compare one
@@ -802,7 +801,14 @@ def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: Pytho
                     raise Error("TypeError: saved kernel fields require native names")
         else:
             raise Error("RuntimeError: unknown saved kernel layout")
-    # Retain Peer5's shared strict node capture for execution and archives.
+
+
+def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
+    # Archive destination admission retains its position before layout admission.
+    var b = native_loaded_module("builtins")
+    if py_type(table) is not b.dict or py_type(nodes) is not b.list:
+        raise Error("TypeError: saved kernel layouts require native dictionary/list storage")
+    _schema_kernel_layouts(table)
     var captured = gp_kernel_nodes(kernel, table)
     _ = py_call(nodes.extend, captured)
 
