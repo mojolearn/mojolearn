@@ -26,7 +26,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesLabels, trees_builtins, trees_table,
-    trees_helper, trees_env, trees_reshape, trees_freeze, trees_address,
+    trees_helper, trees_reshape, trees_freeze, trees_address,
     trees_forest_x, trees_finite_f32, trees_encode_labels,
     trees_decode_labels, trees_argmax_rows, trees_class_rows_only, trees_weighted_rows, trees_cast,
 )
@@ -47,9 +47,10 @@ from bindings.native_model_records import model_identity_key, model_generation
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from bindings.metrics_native_support import metric_is_integral, metric_warning_location
 from bindings.classical_warnings import classical_warning
-from ensemble.rf_notices import (
-    rf_notice_text, RF_NOTICE_ALL, RF_NOTICE_BINS_CLAMPED,
-    RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
+from ensemble.rf_notices import rf_notice_text
+from xtrees.trees_forest_run import (
+    ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
+    forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features,
 )
 from checks.numerics import portable_log2_64
 from bindings.forest_fit_boundary import forest_fit_request_py
@@ -66,7 +67,7 @@ from core.forest_calls import (
 )
 
 comptime _INT32_MAX = 2147483647
-comptime _MODEL_FIELDS = 5
+comptime _MODEL_FIELDS = FOREST_MODEL_FIELDS
 
 
 # ------------------------------------------------------------- utilities
@@ -105,9 +106,8 @@ def _float(value: PythonObject) raises -> PythonObject:
 
 
 def _refuse(name: String, why: String) raises:
-    """`randomforest._refuse`."""
-    raise Error("NotImplementedError: " + name + " is not implemented: " + why
-                + " Refused by name rather than accepted and ignored.")
+    """`randomforest._refuse` (xtrees/trees_forest_run.mojo)."""
+    trees_refuse(name, why)
 
 
 def _class_fields(cls: PythonObject) raises -> PythonObject:
@@ -518,10 +518,6 @@ def _check_count(value: PythonObject, message: String) raises -> Int:
     return Int(py=value)
 
 
-def _dtypes() raises -> PythonObject:
-    return Python.tuple("<i4", "<i4", "<f4", "<i4", "<f4")
-
-
 def forest_export(native: PythonObject, descriptor: PythonObject, selection: String,
                   context: PythonObject) raises -> PythonObject:
     """`_forest_protocol._export_fit_result` of a fit a Python entry returned
@@ -548,30 +544,16 @@ def forest_export_handle(key: ForestEntryKey, handle: Int, selection: String,
     calls of the image (XF_EXPORT_*)."""
     try:
         var sizes = xf_export_sizes(key, handle)
-        var trees = sizes.trees
-        var nodes = sizes.nodes
-        var outputs = sizes.outputs
-        if not (1 <= trees and trees < 2147483647 and nodes >= trees and outputs >= 1
-                and nodes <= 2147483647 // outputs):
-            raise Error("native forest export exceeds supported counts")
-        if len(sizes.meta) < 2 or sizes.meta[0] != trees or sizes.meta[1] != outputs:
-            raise Error("native forest export metadata disagrees with counts")
-        var dtypes = _dtypes()
-        var counts: List[Int] = [trees + 1, nodes, nodes, nodes, nodes * outputs]
+        var counts = forest_export_counts(sizes)
         var arrays = Python.list()
         var dst = List[Int]()
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-            var array = admitted_vector(counts[i], String(dtypes[i]), context)
+            var array = admitted_vector(counts[i], forest_export_dtype(i), context)
             dst.append(trees_address(array))
             _ = py_call(arrays.append, array)
         xf_export_into(key, sizes, dst)
         if selection == "verify":
-            var verdict = xf_export_verify(key, handle, dst)
-            if verdict == -1:
-                raise Error("RuntimeError: forest export legacy metadata mismatch")
-            if verdict > 0:
-                var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
-                raise Error("RuntimeError: forest export byte mismatch: " + String(names[verdict - 1]))
+            forest_export_verdict_check(xf_export_verify(key, handle, dst))
         _ = arrays  # the five Arrays own the addresses the calls above wrote
         var meta = Python.list()
         for k in range(len(sizes.meta)):  # small-loop(meta: at most eight export metadata words): PACK
@@ -587,52 +569,13 @@ def forest_export_handle(key: ForestEntryKey, handle: Int, selection: String,
         raise error^
 
 
-def _export_selection() raises -> String:
-    """`MOJOLEARN_FOREST_EXPORT`: 'into' (default) or 'verify'."""
-    # TOMBSTONE: the MOJOLEARN_FOREST_EXPORT=legacy arm and its plain rf_/et_*_fit entries (dead native entries: no release, identity or CI path set it) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
-    # Restore: git apply experiments/removed/dead_entries_trees.patch
-    var selection = trees_env("MOJOLEARN_FOREST_EXPORT", "into")
-    if selection != "into" and selection != "verify":
-        raise Error("MOJOLEARN_FOREST_EXPORT must be into or verify")
-    return selection
-
-
-struct ForestFit(Copyable, Movable):
-    """The fit an operation launches, as the image's native request words
-    (XF_FIT): classifier or regressor, whether the image may read X
-    row-major (the plain and weighted ET fits and the plain RF fits; the
-    fit reads it row-major when X arrives C-ordered), and the trailing
-    words (row weights, a shard start, the auxiliary outputs, the largest
-    weight). Lane calltable-forest: this replaced the compiled entry name
-    and its trailing Python argument list."""
-    var classifier: Bool
-    var rowmajor_ok: Bool
-    var weights: Int
-    var tree_start: Int
-    var oob: Int
-    var score: Int
-    var importance: Int
-    var weight_max: Float64
-
-    def __init__(out self, classifier: Bool, rowmajor_ok: Bool = False, weights: Int = 0, tree_start: Int = 0,
-                 oob: Int = 0, score: Int = 0, importance: Int = 0, weight_max: Float64 = 0.0):
-        self.classifier = classifier
-        self.rowmajor_ok = rowmajor_ok
-        self.weights = weights
-        self.tree_start = tree_start
-        self.oob = oob
-        self.score = score
-        self.importance = importance
-        self.weight_max = weight_max
-
-
 def _launch(native: PythonObject, fit: ForestFit, x: AdmittedX, y_addr: Int, params: PythonObject,
             criterion: PythonObject, device_scan: Bool, context: PythonObject) raises -> PythonObject:
     """One fit launch and its export, through the connected image's native
     entry: the params list unpacked once (`forest_fit_request_py`), the fit
     (XF_FIT), the owned export copied into the model Arrays."""
     var key = forest_key(native)
-    var selection = _export_selection()
+    var selection = forest_export_selection()
     var args = forest_fit_request_py(x.address, y_addr, params, criterion)
     args.weights = fit.weights
     args.tree_start = fit.tree_start
@@ -853,16 +796,10 @@ def _rf_fit_notices(meta: PythonObject, context: PythonObject) raises:
     binding without the word has none to report."""
     if len(meta) < 3:
         return
-    var mask = Int(py=meta[2])
-    if mask < 0 or (mask & ~RF_NOTICE_ALL) != 0:
-        raise Error("forest fit returned unknown notice bits " + String(mask))
-    if mask == 0:
-        return
-    var codes: List[Int] = [RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL]
-    for i in range(len(codes)):  # small-loop(codes): the three fit notice bits
-        if (mask & codes[i]) != 0:
-            classical_warning(rf_notice_text(codes[i]), trees_builtins().UserWarning, context,
-                              metric_warning_location(2), "UserWarning")
+    var codes = forest_fit_notice_codes(Int(py=meta[2]))
+    for i in range(len(codes)):  # small-loop(codes): at most the three fit notice bits (PACK)
+        classical_warning(rf_notice_text(codes[i]), trees_builtins().UserWarning, context,
+                          metric_warning_location(2), "UserWarning")
 
 
 def rf_fit(model: PythonObject, args: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
@@ -1245,24 +1182,6 @@ def _model_arrays(fields: PythonObject) raises -> PythonObject:
     return py_call(trees_builtins().tuple, out)
 
 
-struct ForestHandle(Movable):
-    """A forest snapshot a predict launches on: its handle, and whether the
-    resident table keeps it (pinned for the call) or the call owns it alone
-    (released when the call ends through the image's native release
-    `release_op` (XF_RESIDENT_RELEASE / XF_STRICT_RELEASE): a model that
-    takes no weak reference, or a snapshot over the table's byte cap)."""
-    var handle: Int
-    var kept: Bool
-    var key: ForestEntryKey
-    var release_op: Int
-
-    def __init__(out self, handle: Int, kept: Bool, key: ForestEntryKey, release_op: Int):
-        self.handle = handle
-        self.kept = kept
-        self.key = key.copy()
-        self.release_op = release_op
-
-
 def forest_handle_done(use: ForestHandle):
     """End a predict's use of its snapshot (non-raising: error paths)."""
     if use.kept:
@@ -1344,10 +1263,9 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
     if held > 0:
         trees_resident_pin(held)
         return ForestHandle(held, True, key, XF_RESIDENT_RELEASE)
-    var dtypes = _dtypes()
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
         var a = arrays[i]
-        if py_type(a) is not context["array_class"] or String(a.dtype) != String(dtypes[i]) or Int(py=a.ndim) != 1:
+        if py_type(a) is not context["array_class"] or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
             raise Error("forest model arrays must have their original flat dtypes")
     var nodes = Int(py=arrays[1].size)
     var offsets = arrays[0]
@@ -1405,10 +1323,9 @@ def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput,
     var handle = trees_resident_find(model_key, generation, TREES_RESIDENT_FOREST_STRICT, native, words, mirrors)
     var kept = handle > 0
     if not kept:
-        var dtypes = _dtypes()
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
             var a = arrays[i]
-            if py_type(a) is not context["array_class"] or String(a.dtype) != String(dtypes[i]) or Int(py=a.ndim) != 1:
+            if py_type(a) is not context["array_class"] or String(a.dtype) != forest_export_dtype(i) or Int(py=a.ndim) != 1:
                 raise Error("forest model arrays must have their original flat dtypes")
             _ = fitted_freeze(a, context)
         handle = xf_strict_prepare(key, _model_addresses(arrays), features, trees, outputs)
@@ -1483,8 +1400,7 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
         raise Error("RuntimeError: this estimator is not fitted yet")
     var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=_int(fields["n_features_in_"]))
-    if x.cols != fitted:
-        raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+    trees_check_features(x.cols, fitted)
     return _stage(fields, kind, x^, context)
 
 
@@ -1693,8 +1609,7 @@ def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba
         if not py_contains(inner_fields, "_offsets"):
             raise Error("RuntimeError: this estimator is not fitted yet")
         var fitted = Int(py=_int(inner_fields["n_features_in_"]))
-        if x.cols != fitted:
-            raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+        trees_check_features(x.cols, fitted)
         return _public_deferred(model, inner, inner_fields, inner_kind,
                                 _stage(inner_fields, inner_kind, x.copy(), context), proba, codes, context)
     return _public_deferred(model, model, fields, kind, _stage(fields, kind, x.copy(), context), proba, codes, context)
