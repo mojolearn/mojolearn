@@ -1648,7 +1648,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 var oi = out_idx32.create_sub_buffer[DType.int32](q * k, rows * k)
                 # Mojo 1.2.0: `k` (per-row k tensor) is left at None so every row uses max_k; its
                 # engine parameter cannot be inferred from None and is named here.
-                top_k[KEngine=DefaultEngine, largest=False, target="gpu"](
+                top_k[KEngine=DefaultEngine[], largest=False, target="gpu"](
                     TileTensor(dv, row_major(rows, n_index)),
                     k,
                     1,

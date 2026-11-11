@@ -723,7 +723,7 @@ def _topk_one(ctx: DeviceContext, batch: Int, n: Int, k: Int) raises -> String:
 
     # Mojo 1.2.0: `k` (per-row k tensor) is left at None so every row uses max_k; its
     # engine parameter cannot be inferred from None and is named here.
-    top_k[KEngine=DefaultEngine, largest=False, target="gpu"](
+    top_k[KEngine=DefaultEngine[], largest=False, target="gpu"](
         TileTensor(vals, row_major(batch, n)),
         k,
         1,
