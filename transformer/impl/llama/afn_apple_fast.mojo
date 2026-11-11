@@ -53,7 +53,7 @@ from max.gpu.primitives.warp import shuffle_xor
 from std.math import exp, sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -69,7 +69,7 @@ from core.shared_slot import SharedSlot
 # ---------------------------------------------------------------------------
 
 comptime AFN_ATTN_ON = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_ATTN_ALL = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_ALL"]()
 # A01: not tested in this campaign; standalone A/B recipe in attention.json.

@@ -12,7 +12,7 @@ from std.math import fma
 from max.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys import size_of
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
@@ -160,7 +160,7 @@ comptime LABELS_SAMPLED_ORDER = True
 comptime ROWS_SORTED_SAMPLE = RF_SAMPLE_SORTED if RF_SAMPLE_SET else (
     is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
     or (
-        has_apple_gpu_accelerator()
+        TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
         # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
         and not (
@@ -201,7 +201,7 @@ comptime ROWS_SORTED_MIN_COLS = 64
 comptime FUSED_BOOTSTRAP_GATHER = RF_SAMPLE_FUSED if RF_SAMPLE_SET else (
     not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
     and (
-        has_nvidia_gpu_accelerator()
+        TARGET_HAS_NVIDIA_GPU
         or is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"]()
     )
 )

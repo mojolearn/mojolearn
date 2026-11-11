@@ -8,11 +8,11 @@ that composes. One module so `train.mojo`, `gls_borders_device.mojo`,
 `doc_parallel_boosting.mojo`, `resident_model.mojo` and `bootstrap.mojo`
 read the same flags without importing each other."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime SYM_FEAT_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the

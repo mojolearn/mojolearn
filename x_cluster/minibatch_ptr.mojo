@@ -28,7 +28,7 @@ IDENTICAL compiles none of this.
 """
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_cluster.bodies import SplitMix64
@@ -42,7 +42,7 @@ from core.device_scan import device_first_nonfinite
 from x_cluster.out import ClusterOut
 
 comptime MBK_ZEROCOPY = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and MINIBATCH_FAST_DEV
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and MINIBATCH_FAST_DEV
     and not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"]()
 )  # default since the M3 A/B (docstring above); MINIBATCH_FAST_DEV is required
 

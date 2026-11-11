@@ -61,12 +61,8 @@ error and the reason a float32 substitute was not shipped.
 """
 
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-    size_of,
-)
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from std.testing import assert_equal, assert_true
 from max.gpu.host import DeviceContext
 
@@ -123,11 +119,11 @@ struct SabCase(Copyable, Movable):
 
 
 def _vendor() -> String:
-    if has_apple_gpu_accelerator():
+    if TARGET_HAS_APPLE_GPU:
         return String("apple")
-    if has_nvidia_gpu_accelerator():
+    if TARGET_HAS_NVIDIA_GPU:
         return String("nvidia")
-    if has_amd_gpu_accelerator():
+    if TARGET_HAS_AMD_GPU:
         return String("amd")
     return String("unknown-vendor")
 

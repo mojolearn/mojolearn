@@ -30,7 +30,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
 from core.apple_fast_tree_experiments import (
     AFT_P02, AFT_P03, AFT_GROVE_BLOCK, AFT_GROVES_PER_BLOCK,
@@ -45,7 +45,7 @@ from core.forest_experiments import (T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHU
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T08 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T08"]()
 )
 
@@ -82,7 +82,7 @@ def finite_key(value: Float32) -> UInt32:
 # F13 M3 2026-10-06 MEASURED shared rows, depths4/11/9skew:
 # cold B/A0.9331/0.9938/0.9510, repeat1.1091/0.9332/0.9786; quality equal.
 # One warmup+score, mixed; FAST opt-in remains OFF. ab-20261006/repairs-54c1f35a5/F13.
-comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or AFT_P03 or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
+comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or AFT_P03 or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
 comptime FOREST_SHARED_ROW_CAPACITY = AFT_ROW_STAGE_BYTES // (4 * AFT_GROVES_PER_BLOCK) if AFT_P03 else 256
 
 #: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves

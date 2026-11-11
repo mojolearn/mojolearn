@@ -23,7 +23,7 @@ kernel.
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -31,7 +31,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mu
 from x_decomp.cells import F32Ptr, div0, mul, sub
 
 comptime DECOMP_FAST_LASSO_GRP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF"]()
 )  # FAST + Apple default since the M3 A/B clus3-mbdl-lassogrp-istella (n=1):
 # mb-dict-learning istella 6827 -> 3185 ms (-53%), sparsity .08636 and

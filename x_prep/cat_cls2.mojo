@@ -29,7 +29,7 @@ Op 157 `cat_zero` clears the scratch the flags live in (scratch starts
 undefined)."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, raw, st, sti, ldi
 
@@ -39,7 +39,7 @@ from x_prep.common import FP, IP, p, raw, st, sti, ldi
 #: (turns both off) / -D MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF; the old -D
 #: names stay harmless.
 comptime CAT_CLS2_PACK = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF"]()
 )
 comptime CAT_CLS2_PRESENT = CAT_CLS2_PACK and not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF"]()

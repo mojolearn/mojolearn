@@ -7,7 +7,8 @@ from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined, get_defined_int
 from std.math import ceildiv
 from std.memory import unsafe_memcpy
-from std.sys.info import has_apple_gpu_accelerator, size_of
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
@@ -148,7 +149,7 @@ comptime TPB_DEFAULT = 128
 # bit moves. `-D MOJOLEARN_IDN_RF_COLS40_OFF` restores 10.
 comptime IDN_RF_COLS40 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
+    and not TARGET_HAS_APPLE_GPU
     and not (
         is_defined["MOJOLEARN_IDN_RF_COLS40_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -160,7 +161,7 @@ comptime IDN_RF_COLS40 = (
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_F01 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F01"]()
 )
 comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
@@ -169,7 +170,7 @@ comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
             GLOBAL_NUMERIC_MODE == NUMERIC_FAST
             or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         )
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_RF_COLS10"]()
     )
     or IDN_RF_COLS40
@@ -234,7 +235,7 @@ comptime ALIGN_VALUE = 512
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_F02 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F02"]()
 )
 comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)

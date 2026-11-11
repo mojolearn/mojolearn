@@ -82,7 +82,7 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_upper_kernel,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from cholesky.checks.fast_trsm import fast_cho_solve
 
 #: FAST on Apple: `cho_solve` takes the blocked solves of
@@ -92,7 +92,7 @@ from cholesky.checks.fast_trsm import fast_cho_solve
 #: pinned substitution.
 comptime FAST_CHO_SOLVE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_CHOL_FAST_SERIAL_SOLVE"]()
 )
 
@@ -227,7 +227,7 @@ comptime CHOL_BACK_CH = 2048
 #: are unchanged. `-D MOJOLEARN_CHOL_BACK_FTZ_ON` keeps it.
 comptime CHOL_BACK_FMA_NO_FTZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_CHOL_BACK_FTZ_ON"]()
 )
 comptime CHOL_BACK_UNROLL = 1 if is_defined["MOJOLEARN_CHOL_BACK_UNROLL_OFF"]() else (

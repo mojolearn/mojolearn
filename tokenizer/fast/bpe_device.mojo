@@ -37,7 +37,7 @@ from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -48,7 +48,7 @@ from tokenizer.impl.ranks import RankTable
 from tokenizer.train.bpe_train import PieceGroups
 from core.shared_slot import SharedSlot
 
-comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime _ALL = is_defined["MOJOLEARN_BPE_ALL"]()
 comptime BPE_LIVEBUF = _FAST_APPLE and (_ALL or is_defined["MOJOLEARN_BPE_LIVEBUF"]())
 comptime BPE_MERGE_BATCH = _FAST_APPLE and (_ALL or is_defined["MOJOLEARN_BPE_MERGE_BATCH"]())

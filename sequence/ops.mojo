@@ -33,7 +33,7 @@ from checks.numerics import (
 )
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import fma as _std_fma
 from std.memory import bitcast
 
@@ -63,7 +63,7 @@ comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 #: contraction.
 comptime SEQ_FAST_FMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEQ_FAST_FMA_OFF"]()
 )
 
@@ -90,7 +90,7 @@ comptime SEQ_SOFTMAX_ONE_EXP = not (
 #: TSA2_STL: STL's LOESS passes as one thread per output
 #: point over every series (sequence/stl_grid.mojo), the inner iterations
 #: queued, one wait per fit (providers/python/sequence_pyapi.mojo::stl_py).
-comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
 comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
 # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_SPEC (DROPPED-noise) deleted 2026-10-03 by dfbdc7943; code recoverable at dfbdc7943^.
@@ -406,7 +406,7 @@ comptime SUMSQ_STAGE = 64
 # 0.250 s with it off, same bits 8f410a4ae2d620af) and spilled the one-thread recurrent cells 2.7x before 3c5f15500; NVIDIA
 # never measured it (the L40S pod lost its runtime during the A/B). It stays available as -D MOJOLEARN_IDN_GEMM_STAGE64 for
 # the owed NVIDIA A/B; MOJOLEARN_IDN_GEMM_STAGE_OFF / IDN_ALL_OFF still force it off.
-comptime GEMM_STAGE_V2 = not has_apple_gpu_accelerator() and is_defined["MOJOLEARN_IDN_GEMM_STAGE64"]() and not (
+comptime GEMM_STAGE_V2 = not TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_IDN_GEMM_STAGE64"]() and not (
     is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GEMM_STAGE = 16

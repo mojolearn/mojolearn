@@ -19,7 +19,7 @@ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
 from sequence.fold32 import FOLD_L, tree32
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-seq (2026-10-02). `GarchObj.eval` writes the n residuals
 #: to the thread's device scratch, `garch_sigma2` writes sigma2_t and reads
@@ -38,7 +38,7 @@ from std.sys.info import has_apple_gpu_accelerator
 #: restores the stored code; the old -D MOJOLEARN_SEQ_GARCH_REG=1 is harmless.
 comptime GARCH_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"]()
 )
 #: lane/apple-fast-seq (2026-10-02). `op_garch`'s starting values are the
@@ -57,7 +57,7 @@ comptime GARCH_REG = (
 #: -D MOJOLEARN_SEQ_GARCH_GRID=1 is harmless.
 comptime GARCH_GRID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
 )
 comptime GARCH_GRID_N = 64

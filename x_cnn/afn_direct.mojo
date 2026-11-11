@@ -28,7 +28,7 @@ the same staged values.
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -41,7 +41,7 @@ from x_cnn.ops import (
 # E01: not tested in this campaign; existing implicit-convolution A/B arm.
 comptime AFN_CNN_DIRECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and is_defined["MOJOLEARN_AFN_CNN_DIRECT"]()
 )
 #: `x_cnn/device.mojo`'s `DC_MAXK` and `DC_MAXW`, restated (that file

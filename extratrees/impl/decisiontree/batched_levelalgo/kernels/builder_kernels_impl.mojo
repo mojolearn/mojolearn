@@ -11,7 +11,7 @@ from ensemble.tree_identical_ideas import T14, T14_EXACT
 from ensemble.tree_moments import moment_pair, moment_finish, et_leaf_moment_host
 from checks.soft_f64 import sf64_from_f32
 from std.sys.compile import is_defined
-from std.sys.info import has_amd_gpu_accelerator, has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -89,7 +89,7 @@ def _search_rows_per_thread() -> Int:
     # range fold, draws keyed by (seed, tree, node, feature)), which is why
     # NVIDIA and AMD run IDENTICAL at 64. `_1=1` restores one row per thread
     # on Apple for an A/B.
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return 16
     # NVIDIA AND AMD: 64, both modes (lane trees speed pass, 2026-09-28).
     # 1M rows, 100 trees depth 12, IDENTICAL, one process per arm, the same
@@ -101,7 +101,7 @@ def _search_rows_per_thread() -> Int:
     # the root search is 7.8k blocks per feature at one row per thread; the
     # per-block reduce + publish, not the rows, was the cost the 4090
     # measurement above could not see at 16 features.
-    comptime if has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator():
+    comptime if TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU:
         return 64
     return 1
 
@@ -318,8 +318,8 @@ arm that must move: the plain path adds one to every count it publishes."""
 comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
 
 comptime RELAXED_PUBLISH = (
-    has_nvidia_gpu_accelerator()
-    or has_amd_gpu_accelerator()
+    TARGET_HAS_NVIDIA_GPU
+    or TARGET_HAS_AMD_GPU
     or is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"]()
 ) and not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"]()
 """DEVIATION 3022 (lane/forest-train-speed, 2026-09-17): the search's publish
@@ -726,7 +726,7 @@ def et_snap_code(
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_ET_RANGE_ROW_TILE = 2 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F09"]()
 ) else 1
 
@@ -1732,7 +1732,7 @@ def shared_class_counts_for[MAX_ACC: Int, CLASSIFICATION: Bool]() -> Bool:
     if not CLASSIFICATION or is_defined["MOJOLEARN_ET_NO_SHARED_CLASS_COUNTS"]():
         return False
     return is_defined["MOJOLEARN_ET_SHARED_CLASS_COUNTS"]() or (
-        has_apple_gpu_accelerator() and MAX_ACC >= 8
+        TARGET_HAS_APPLE_GPU and MAX_ACC >= 8
     )
 
 

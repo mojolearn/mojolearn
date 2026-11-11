@@ -21,10 +21,10 @@ host binding and the other vendors compile main's code unchanged.
                 same kernels, the same words.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
-comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane/idn-gates (2026-10-04): PREP3_MAXABS is also the IDENTICAL default on
 #: every vendor's GPU binding (a maximum has one answer in any order: the
 #: program route's max_abs_ and scale_ words); -D MOJOLEARN_IDN_GATES_OFF (or

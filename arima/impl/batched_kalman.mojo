@@ -151,7 +151,7 @@ from arima.impl.timeSeries.arima_helpers import (
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 comptime RD_MAX = 8
@@ -162,7 +162,7 @@ comptime KAPPA = Float32(1e6)
 # Two SIMD groups per block amortize scheduling for independent series; each
 # lane retains the full Kalman recurrence and its state. Register pressure can
 # outweigh the benefit. Explicit caller overrides of kalman_tpb still win.
-comptime AFCL_P12 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P12"]()
+comptime AFCL_P12 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P12"]()
 comptime KALMAN_TPB = 64 if AFCL_P12 else 32
 comptime INIT_TPB = 128
 
@@ -215,7 +215,7 @@ comptime KALMAN_FAST_RD = (
     (
         (
             (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
+            and TARGET_HAS_APPLE_GPU
         )
         or IDN_KALMAN_RD
     )
@@ -264,7 +264,7 @@ comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 comptime KALMAN_LL_ONLY = (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"]()
     )
     or IDN_ARIMA_LLONLY
@@ -286,7 +286,7 @@ comptime KALMAN_LL_ONLY = (
 comptime KALMAN_FAST_EVAL_WS = (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"]()
     )
     or IDN_ARIMA_EVAL_WS

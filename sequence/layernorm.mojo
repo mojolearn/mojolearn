@@ -10,7 +10,7 @@ g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
 from std.sys.compile import is_defined, get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from sequence.fold32 import FOLD_L, tree32
 from max.gpu.primitives.warp import shuffle_xor
 
@@ -65,7 +65,7 @@ comptime LN_RW_LANES = FOLD_L
 # 257x129: forward B/A0.9739/1.1342/0.9834, backward0.8322/2.0792/1.0993,
 # downstream0.6184/1.2856/0.9373. Mixed/regression, one warmup+score; FAST quality
 # varies within recorded contract. Existing IDENTICAL decision separate. ab-20261006/repairs-54c1f35a5/F20.
-comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
+comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
 
 
 def ln_fold_rows(M: Int) -> Int:

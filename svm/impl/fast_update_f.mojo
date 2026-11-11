@@ -19,7 +19,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -32,7 +32,7 @@ comptime FUF_TPB = 256
 # norms and alpha deltas add 8 KiB, keeping the total at 24 KiB (below the
 # 32 KiB Apple shared-memory floor). No working-set point or training row is
 # omitted, and the ascending update arithmetic is unchanged.
-comptime AFCL_L06 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L06 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L06"]())
 comptime FUF_TILE_FLOATS = 4096 if AFCL_L06 else 3072
 comptime FUF_MAX_K = 64

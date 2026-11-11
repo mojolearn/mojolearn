@@ -21,7 +21,7 @@ from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-tier (2026-10-02). `theta_run` writes five state words
 #: and one error per step to the thread's device scratch and reads the
@@ -55,7 +55,7 @@ from std.sys.info import has_apple_gpu_accelerator
 #: followers (THETA_SPEC) off IDENTICAL.
 comptime THETA_REG_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
 )
 comptime THETA_REG = THETA_REG_FAST or (
@@ -84,7 +84,7 @@ comptime THETA_REG = THETA_REG_FAST or (
 #: -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless.
 comptime THETA_SNAP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"]()
 )
 #: the snapshot's offset in the Nelder-Mead scratch (after the (k + 1) k +

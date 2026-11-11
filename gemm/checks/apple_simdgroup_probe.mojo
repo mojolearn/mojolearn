@@ -33,7 +33,7 @@ from std.ffi import external_call
 from max.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import bitcast
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import identical_mul_add
 from max.gpu.host import DeviceContext
 from transformer.impl.llama.modeling_llama import _download, _zeros
@@ -171,7 +171,7 @@ def probe_kernel(res: UnsafePointer[UInt32, MutAnyOrigin], kind_in: Int32):
 
 
 def main() raises:
-    comptime assert has_apple_gpu_accelerator(), "Apple GPU probe"
+    comptime assert TARGET_HAS_APPLE_GPU, "Apple GPU probe"
     var trials = 1 << 16
     var ctx = DeviceContext()
     for kind in range(NKIND):

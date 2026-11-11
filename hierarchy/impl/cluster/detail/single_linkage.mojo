@@ -48,11 +48,11 @@ from checks.numerics import (
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst_device
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 comptime SL_FAST_BORUVKA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SL_FAST_BORUVKA_OFF"]()
 )
 """FAST on Apple: the PAIRWISE Euclidean MST from Boruvka rounds with the

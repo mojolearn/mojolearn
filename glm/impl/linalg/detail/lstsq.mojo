@@ -132,7 +132,7 @@ from max.gpu import block_idx as _ols_bidx, block_dim as _ols_bdim, thread_idx a
 from cluster.checks.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn, gemv_n, pinned_gemm_nt_kernel
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.xtdz_coalesced import xty_launch
 from core.column_stats import (
@@ -165,7 +165,7 @@ from glm.impl.matrix.math import (
 #: change (the order of each cell's sum).
 comptime OLS_FAST_SMALL_NT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_OLS_FAST_SMALL_NT"]()
 )
 comptime OLS_FAST_SMALL_NT_MAX = 64

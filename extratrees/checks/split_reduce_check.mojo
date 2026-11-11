@@ -89,11 +89,7 @@ THE ARMS
 from std.math import ceildiv
 from max.gpu import WARP_SIZE
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 
@@ -601,11 +597,11 @@ struct RunOut(Copyable, Movable):
 
 
 def vendor() -> String:
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return "Apple"
-    elif has_nvidia_gpu_accelerator():
+    elif TARGET_HAS_NVIDIA_GPU:
         return "NVIDIA"
-    elif has_amd_gpu_accelerator():
+    elif TARGET_HAS_AMD_GPU:
         return "AMD"
     else:
         return "unknown vendor"

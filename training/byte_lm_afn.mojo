@@ -9,7 +9,7 @@ FAST build on NVIDIA or AMD, compiles main's code unchanged.
 docs/apple-fast/notes/neural-lm.md lists what each one changes.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.atomic import Atomic
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -23,7 +23,7 @@ from core.step_phase import step_count_d2h, step_count_h2d, step_count_launch, s
 from training.checks.loss_contract import CE_NEG_INF_BITS
 
 comptime BYTE_LM_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 
 

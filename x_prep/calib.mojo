@@ -42,7 +42,7 @@ Integer words (codes, folds, ranks, counts) are read and written with
 ldi / sti; the statistics are float32 through the lane's add/sub/mul/div.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, ld, st, ldi, sti
 from x_prep.prims import add, sub, mul, div, logf, expf
@@ -53,7 +53,7 @@ from x_prep.transform import log1pf
 #: .7553 / logloss .5507 identical); -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it
 #: off, the old -D MOJOLEARN_CALIB_GNB_FOLDS is harmless
 comptime CALIB_FOLDS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_CALIB_GNB_FOLDS_OFF"]()
 )
 #: words per Platt problem in STATE: A, B, fval, done, hi, lo, da, db, gd, nrows

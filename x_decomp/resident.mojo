@@ -19,7 +19,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from core.admitted_finite_status import enqueue_finite_status
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
@@ -940,7 +940,7 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
 #: Still opt-in: both gains come from not doing in fit what sklearn does in fit (NOSCAN skips the
 #: NaN/inf refusal, LAZY defers components_ out of the timed fit). Default needs Andrew's API decision.
 
-comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
 #: lane/idn-gates (2026-10-04): DEVSCAN alone is also the IDENTICAL default
 #: on every vendor (the refusal is a predicate: no output word depends on

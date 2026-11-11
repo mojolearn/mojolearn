@@ -363,7 +363,7 @@ from gemm.contract import OP_NT
 # TOMBSTONE: MOJOLEARN_CHOL_FAST_BLOCKED (DROPPED-slower+quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: blocked right-looking Cholesky (x_decomp/fast_chol.mojo, 3 n / 32 launches); cholesky synthetic 259.4 -> 330.7 ms, relative_residual 1.66e-7 -> 1.98e-6.
 # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch; record in docs/TOMBSTONES.md.
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -408,7 +408,7 @@ comptime CHOL_NB_PINNED = 32
 #: n = 20,000: 64 22.5 s, 128 14.6 s, 256 11.6 s, 512 11.7 s).
 comptime CHOL_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_CHOL_FAST_PINNED"]()
 )
 comptime CHOL_TRSM_INV = CHOL_FAST_APPLE and not is_defined[

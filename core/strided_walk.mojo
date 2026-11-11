@@ -29,11 +29,7 @@ NVIDIA, AMD and CPU columns compile the unchanged loop.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -62,7 +58,7 @@ comptime APPLE_IDENTICAL_STEP_UNROLL = (
 #: reverts.
 comptime APPLE_FAST_STEP_UNROLL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF"]()
 )
 
@@ -76,7 +72,7 @@ comptime APPLE_FAST_STEP_UNROLL = (
 #: restores main's kernels (the A/B define).
 comptime NV_AMD_IDENTICAL_STEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and (has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator())
+    and (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU)
     and not is_defined["MOJOLEARN_NV_AMD_STEPS_OFF"]()
 )
 

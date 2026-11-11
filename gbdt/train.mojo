@@ -149,7 +149,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane cpu4-gbdt (2026-10-04): the permutation-INDEPENDENT simple CTR
 #: (FeatureFreq) is written by `compute_simple_ctrs_device_resident` in every

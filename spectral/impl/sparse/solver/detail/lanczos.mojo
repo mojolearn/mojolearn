@@ -161,7 +161,8 @@ from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.warp import sum as _fl_warp_sum
 from std.memory import stack_allocation
 from std.math import sqrt as _fl_sqrt
-from std.sys.info import has_accelerator, has_apple_gpu_accelerator
+from std.sys.info import has_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
@@ -675,7 +676,7 @@ def _norm2(
 #: pinned step.
 comptime LANCZOS_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_LANCZOS_FAST_OFF"]()
 )
 comptime FL_TPB = 256
@@ -861,7 +862,7 @@ comptime FL_SPMV_WARP_MIN = 64
 # lane partition and sum. This reaches SpectralEmbedding/Clustering's
 # Lanczos product; LLE's separate dense solve is outside this candidate.
 comptime AFCL_G11 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G11"]()
 )
 comptime FL_SPMV_ROWS_PER_TG = 4 if AFCL_G11 else 8

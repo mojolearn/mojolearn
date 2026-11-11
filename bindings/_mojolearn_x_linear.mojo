@@ -25,7 +25,7 @@ from x_linear.spearman_device import spearman_sign_device
 from x_linear.device import linear_ctx as _p2m_ctx
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
 from x_linear.ridgecv import ridge_best_alpha

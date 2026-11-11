@@ -407,7 +407,7 @@ def device():
          "from max.gpu.host import DeviceBuffer, DeviceContext\n",
          "from std.sys.compile import is_defined\n",
          "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST\n",
-         "from std.sys.info import has_apple_gpu_accelerator\n", imports("device"),
+         "from core.accelerator_target import TARGET_HAS_APPLE_GPU\n", imports("device"),
          """
 comptime BLOCK = 128
 
@@ -489,7 +489,7 @@ def _i(addr: Int) -> IP:
         if name in FAST_ALT:
             am, af, ad = FAST_ALT[name]
             al = ", ".join([b[0] for b in bufs if b[1] not in ("fscr", "iscr")] + [p[0] for p in scal])
-            body = (f"    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined[\"{ad}\"]():\n"
+            body = (f"    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined[\"{ad}\"]():\n"
                     f"        from x_neighbors.{am} import {af}\n"
                     f"        {af}({al})\n        return\n" + body)
         for b in bufs:

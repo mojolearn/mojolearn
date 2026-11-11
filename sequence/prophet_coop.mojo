@@ -31,7 +31,7 @@ the folds' orders differ, so the bits differ: FAST only, Apple only. The
 fit is sliced over launches as prophet_fit_team (macOS long-launch rule)."""
 from max.gpu.primitives.warp import shuffle_xor
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_sqrt
 from sequence.fit_team import PT_DONE, TEAM_REC, SeqTeam, _ldi, _spend, _sti
@@ -54,7 +54,7 @@ from sequence.prophet import COOP_NT, COOP_PW, MEM, PROPHET_COOP_IDN
 comptime PROPHET_COOP = (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_PROPHET_COOP_OFF"]()
     )
     or PROPHET_COOP_IDN

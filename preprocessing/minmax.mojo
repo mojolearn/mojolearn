@@ -19,7 +19,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: lane/apple-fast-prep (2026-10-02): the row-tiled extrema kernel below is
@@ -30,7 +30,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 #: `-D MOJOLEARN_PREP_FAST_MINMAX` stays harmless. Every other build takes
 #: `extrema_chunks_kernel`, so IDENTICAL compiles main's code unchanged.
 comptime PREP_FAST_MINMAX = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"]()
 )
 from checks.numerics import ftz, identical_div, identical_mul

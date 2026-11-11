@@ -37,7 +37,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from x_linear.ops import FP, IP, ld, st
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: FAST + Apple default since the M3 re-A/B on lane head c338b88dd (n=1, taxi,
@@ -45,16 +45,16 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 #: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path. Ridge's
 #: unweighted moments (x_linear/ridge_grid.mojo) and k-fold RidgeCV's fold
 #: Grams (x_linear/device.mojo) from `fast_gram_into`.
-comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                                and not is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF"]())
 
 # AFCL-L01/L02: NEVER RUN — PENDING MEASUREMENT. Source-only, uncompiled,
 # unverified; defaults OFF. Half-sized row chunks increase independent
 # threadgroups at the cost of partial-buffer traffic. Four fold accumulators
 # reduce dependency depth without dropping any statistic or changing FP32.
-comptime AFCL_L01 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L01 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L01"]())
-comptime AFCL_L02 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L02 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L02"]())
 comptime FG_TPB = 256
 comptime FG_CH = 4096 if AFCL_L01 else 8192

@@ -90,7 +90,7 @@ from arima.impl.lbfgs_device import arima_mark_infeasible_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
@@ -726,7 +726,7 @@ def batched_loglike_grad(
 # no cross-vendor IDENTICAL vote. Retain existing default and Apple-only guard.
 # Evidence: ab-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23,
 # overnight-ab-20261006/{amd,nvidia} normalized controls.
-comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
+comptime ARIMA_FAST_BATCH_GRAD = TARGET_HAS_APPLE_GPU and (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
         and not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"]()

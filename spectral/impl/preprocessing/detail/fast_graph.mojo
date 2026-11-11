@@ -37,7 +37,7 @@ from max.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -72,7 +72,7 @@ comptime SPECTRAL_GRAPH_FAST = (
     (
         (
             (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
+            and TARGET_HAS_APPLE_GPU
         )
         or IDN_SPECTRAL_GRAPH_DEVICE
     )

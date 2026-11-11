@@ -92,7 +92,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: Threads per block for every kernel here. See PORTABILITY above.
 comptime SORT_BLOCK = 512
@@ -110,7 +110,7 @@ comptime SORT_BLOCK = 512
 #: (lane/apple-fast-rfet-scan @ 500168cfe).
 comptime SEG_SUMS_BLOCK_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SEG_SUMS_SERIAL"]()
 )
 comptime SEG_SUMS_TPB = 256

@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Opt-in Apple FAST tree candidates: source only, no qualification evidence."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # Every candidate stays OFF absent its define. No performance or quality
 # evidence exists: uncompiled, unverified, unmeasured. Definitions have no
 # effect on other vendors or IDENTICAL; none changes estimator budgets.
 comptime _APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 comptime AFT_N01 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N01"]()
 comptime AFT_N02 = _APPLE_FAST and is_defined["MOJOLEARN_AFT_N02"]()

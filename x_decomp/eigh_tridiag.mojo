@@ -42,7 +42,7 @@ main's round-robin Jacobi on the untouched input. One readback decides.
 """
 from std.math import fma
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -108,7 +108,7 @@ from x_decomp.eigh_tridiag_cells import (
 #: Default/OFF builds required before merge; same synchronized output storage.
 #: OFF restores prior Jacobi, including all existing fallback behavior.
 comptime EIGH_FAST_TRIDIAG = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"]()
 )
 #: lane gap-linalg (2026-10-08; docs/plans/gaps-2026-10-08.md section 3.1):

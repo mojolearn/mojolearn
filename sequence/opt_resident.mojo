@@ -23,7 +23,7 @@ entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident
 this file takes typed handles, addresses and parameters only."""
 from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -53,7 +53,7 @@ from core.shared_slot import SharedSlot
 #:    device (a third return value), so the Python side skips uploading its
 #:    still untouched zero host copies on the first step.
 #: IDENTICAL and the other vendors compile the main path unchanged.
-comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab2 @ 40027eb8e): RAW_UP measured as a pair with
 #: OPT_FAST_STREAM below (see there): KEEP, the FAST + Apple default since

@@ -41,7 +41,7 @@ differ from the step loop's. IDENTICAL compiles none of this.
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -54,7 +54,7 @@ from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
 # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
 # `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off.
 comptime MINIBATCH_FAST_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
 )
 # AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.

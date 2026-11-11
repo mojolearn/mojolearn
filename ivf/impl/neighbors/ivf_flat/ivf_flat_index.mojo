@@ -44,7 +44,7 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_ann.switches import ANN3_HOST_PASSES
 
@@ -103,7 +103,7 @@ comptime IVF_DEFAULT_N_PROBES = 20
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
 comptime IVF_TRAINSET_STRIDE = (
-    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
     and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
 )
 #: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST

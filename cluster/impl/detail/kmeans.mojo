@@ -79,7 +79,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 from std.os import getenv
 from std.time import perf_counter_ns
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from cluster.checks.reduce_by_key import (
@@ -412,7 +412,7 @@ def init_random(
 comptime KMEANS_FAST_PP_NOSYNC = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and (
-        has_apple_gpu_accelerator()
+        TARGET_HAS_APPLE_GPU
         or (
             (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
             and not is_defined["MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY"]()
@@ -896,7 +896,7 @@ comptime IDN_KMEANS_INCR_INIT = (
     )
 )
 comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
-    has_apple_gpu_accelerator() and (
+    TARGET_HAS_APPLE_GPU and (
         (
             GLOBAL_NUMERIC_MODE == NUMERIC_FAST
             and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
@@ -1494,7 +1494,7 @@ def kmeans_fit_main(
 
 comptime KMEANS_LAZY_SHIFT = (
     (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
         # lane gap-ivf (2026-10-08): FAST on NVIDIA and AMD too (FAST is judged on
         # speed and quality only; a fit to max_iter is unchanged), and IDENTICAL
         # on every column with the host restatement following

@@ -68,7 +68,7 @@ passed as a `DatasetView`, not as loose scalars.
 
 from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -84,7 +84,7 @@ comptime RF_BINS_ROW_MAJOR = (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
         or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     )
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
 )
 """Apple FAST, and Apple IDENTICAL for narrow data only

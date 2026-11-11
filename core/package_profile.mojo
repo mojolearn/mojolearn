@@ -2,7 +2,7 @@
 """Compile-time defaults for the distribution being built."""
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 # The native package builder changes only this distribution setting to True.
 # Existing wheel and measurement builds keep their explicit mode flags.
@@ -16,7 +16,7 @@ def identical_mode_enabled() -> Bool:
             and is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()
         ), "select only one numeric mode"
         comptime if is_defined["MOJOLEARN_NUMERIC_FAST"]():
-            comptime assert has_apple_gpu_accelerator(), "fast mode requires an Apple GPU target"
+            comptime assert TARGET_HAS_APPLE_GPU, "fast mode requires an Apple GPU target"
             return False
         return True
     return is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]()

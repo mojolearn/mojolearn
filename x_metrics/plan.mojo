@@ -27,12 +27,12 @@ from x_metrics.contingency import (
 )
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # The planner and its emitted chunk parameters use the same selected width.
-comptime AFCL_P09 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P09"]()
+comptime AFCL_P09 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P09"]()
 
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1

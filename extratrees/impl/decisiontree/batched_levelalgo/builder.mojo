@@ -172,7 +172,8 @@ from max.gpu.primitives.block import min as block_min
 from max.gpu.primitives.block import max as block_max
 from max.gpu.primitives.block import sum as block_sum
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, size_of
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -2597,7 +2598,7 @@ def transpose_to_row_major_kernel(
 #: trees-small 2026-10-07 (docs/apple-fast/EXPERIMENTS.md row). FAST only now.
 comptime ET_BINNED_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
 )
 comptime ET_BINS = ET_QSTRIDE
@@ -3849,7 +3850,7 @@ def _device_tpb() -> Int:
     # speed evidence; opt-in and uncompiled/unverified/unmeasured.
     if (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and is_defined["MOJOLEARN_AFT_F06"]()
     ):
         return 64
@@ -3941,7 +3942,7 @@ comptime ET_ROW_MAJOR = (
 )
 
 comptime ET_TILED_SEARCH_APPLE_DEFAULT = (
-    has_apple_gpu_accelerator()
+    TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ET_TILED_SEARCH_OFF"]()
 )
 """Apple FAST default for the two tiled search kernels below. Apple M4, 1M
@@ -3971,7 +3972,7 @@ MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF` keeps the one-feature kernels."""
 
 comptime IDN_ET_TILED_SEARCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
+    and not TARGET_HAS_APPLE_GPU
     and not (
         is_defined["MOJOLEARN_IDN_ET_TILED_SEARCH_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -4003,7 +4004,7 @@ comptime ET_RANGE_TILED = (
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T09 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T09"]()
 )
 comptime ET_FEATURE_TILE = 8 if AFCL_T09 else 16
@@ -4041,7 +4042,7 @@ whose grids put the feature slot on the fast axis so the blocks reading
 one row chunk's features run together and share its cache lines."""
 
 comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]() or (
-    has_apple_gpu_accelerator()
+    TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_ET_RM_NARROW_OFF"]()
 )
 """Apple, both modes (trees-apple2, 2026-09-28): `ensure_row_major` also
@@ -4096,7 +4097,7 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_F07 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F07"]()
 )
 comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
@@ -4106,7 +4107,7 @@ comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
         and (
             is_defined["MOJOLEARN_ET_PART_ROWS"]()
             or (
-                has_apple_gpu_accelerator()
+                TARGET_HAS_APPLE_GPU
                 and not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"]()
             )
         )
@@ -4124,7 +4125,7 @@ comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
         # moves and the host column is untouched.
         # `-D MOJOLEARN_IDN_ET_PART_ROWS_OFF` restores one row per thread.
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not has_apple_gpu_accelerator()
+        and not TARGET_HAS_APPLE_GPU
         and not (
             is_defined["MOJOLEARN_IDN_ET_PART_ROWS_OFF"]()
             or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -4143,7 +4144,7 @@ hashes); `-D MOJOLEARN_ET_PART_ROWS_OFF` is the A arm. Elsewhere opt-in
 (`-D MOJOLEARN_ET_PART_ROWS=1`); Apple M4 1M rows was a wash."""
 
 comptime ET_PART_FLAGS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or has_apple_gpu_accelerator())
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or TARGET_HAS_APPLE_GPU)
     and PART_ROWS_PER_THREAD == 1
     and not is_defined["MOJOLEARN_ET_PART_FLAGS_OFF"]()
 )
@@ -4157,7 +4158,7 @@ gathering the split column again. Same directions, same partition.
 comptime ET_STAGE_LIVE_PREFIX = (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        or has_apple_gpu_accelerator()
+        or TARGET_HAS_APPLE_GPU
         # fam-forests (2026-10-04), `IDN_ET_STAGE_LIVE`: IDENTICAL on NVIDIA
         # and AMD too. Only the live prefix is ever read, so no bit moves.
         # `-D MOJOLEARN_IDN_ET_STAGE_LIVE_OFF` restores full-capacity staging.
@@ -4320,7 +4321,7 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime FOREST_ROW_SLOT_CAP = (1 << 27) if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F08"]()
 ) else (1 << 26)
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched

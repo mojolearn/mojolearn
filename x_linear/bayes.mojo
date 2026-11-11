@@ -27,7 +27,8 @@ from x_linear.ops import (
     cholesky, chol_solve, centered_gram, centered_xty, mean_of,
     add_acc, axpy_acc, axpy_centered,
 )
-from std.sys.info import is_gpu, has_apple_gpu_accelerator
+from std.sys.info import is_gpu
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_linear.team import Team
 from x_linear.tops import fold_parts, fold_blocks, fold_fa_blocked, FOLD_BLOCK, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_cholesky
@@ -106,7 +107,7 @@ def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum:
 #: (w0 lives in the host's sse scratch, unused on the device); ip[5] (set by
 #: x_linear/device.mojo, `MOJOLEARN_X_LINEAR_GRAM_SSE=0` is the A/B arm) turns
 #: it on. IDENTICAL and the other vendors never compile it.
-comptime X_LINEAR_GRAM_SSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime X_LINEAR_GRAM_SSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: |error| <= mag * 2^-12 must stay <= 2^-8 * sse: mag * 2^-4 <= sse
 comptime GRAM_SSE_TRUST = Float32(0.0625)
 

@@ -32,7 +32,7 @@ the paired quality check holds). IDENTICAL compiles none of this.
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -44,7 +44,7 @@ from x_cluster.bodies import FPtr, IPtr
 # n=1, Istella): meanshift 52.1 -> 34.9 ms, n_clusters 12 and silhouette
 # .4035 unchanged. `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it off.
 comptime MEANSHIFT_FAST_GRID = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"]()
 )
 comptime MSG_TPB = 256

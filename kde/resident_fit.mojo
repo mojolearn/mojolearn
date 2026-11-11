@@ -30,7 +30,7 @@ cpu host route). The context and the buffers are destroyed in DEVIATION
 1946's order, buffers before the context.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
 
 from core.hostptr import copy_f32
@@ -85,8 +85,8 @@ def kde_host_rules_needed(metric: Int, finite_tested: Bool) -> Bool:
 # Immutable snapshots independently measured faster (cold0.7578/0.9473/0.6224,
 # repeated0.4999/0.9233/0.7824) but remain OFF: ownership semantics change and
 # combination with direct preparation is unmeasured; one sample limits inference.
-comptime KDE_FAST_IMMUTABLE_FIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"]()
-comptime KDE_FAST_DIRECT_PREP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"]()
+comptime KDE_FAST_IMMUTABLE_FIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"]()
+comptime KDE_FAST_DIRECT_PREP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"]()
 
 
 struct ResidentKdeFit(Movable):

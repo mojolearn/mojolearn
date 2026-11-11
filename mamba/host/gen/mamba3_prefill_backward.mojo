@@ -24,7 +24,7 @@ from mamba.host.gen.modeling_mamba import mamba_zeros
 # `_m3_scratch`'s other arm is exactly the `mamba_zeros[False]` call it
 # replaces; the ten gradient outputs stay real buffers.
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
 from mamba.host.gen.device_optimizations import arena_active, arena_begin, arena_end, arena_release, arena_take
 
@@ -40,7 +40,7 @@ comptime IDN_M3_BWD_SKIP_DEAD = (
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime AFN_M3_BWD_ARENA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 ) and (
     is_defined["MOJOLEARN_AFN_MAMBA3_BWD_ARENA"]()
     or is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()

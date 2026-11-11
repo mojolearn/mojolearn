@@ -26,7 +26,7 @@ residual test, which still decides convergence on the host.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr
@@ -126,7 +126,7 @@ def dev_lanczos_run(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: I
 #: the last batch instead of after every batch.
 comptime IPCA_FAST_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"]()
 )
 

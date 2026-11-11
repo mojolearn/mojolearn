@@ -73,7 +73,7 @@ from std.math import erf, exp
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -99,7 +99,7 @@ from gemm.afn_apple_fast2 import AFN_GEMM2_ON, afn2_gemm_dispatch
 #: The tier and the vendor every candidate is behind.
 comptime AFN_GEMM_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
 comptime AFN_GEMM_ALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_ALL"]()

@@ -18,7 +18,7 @@ matrix value on a refused cell fails here (checked by a source sabotage).
 """
 
 from std.memory import bitcast
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from checks.numerics import ftz, identical_mul_add
 from neighbors.checks.apple_mma_distance import (
@@ -46,7 +46,7 @@ def _ord(i: Int, f: Int, seed: Int) -> Float32:
 
 
 def main() raises:
-    comptime assert has_apple_gpu_accelerator(), "Apple GPU probe"
+    comptime assert TARGET_HAS_APPLE_GPU, "Apple GPU probe"
     var ctx = DeviceContext()
     var total = 0
     var bad = 0

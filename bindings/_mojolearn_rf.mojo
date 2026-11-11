@@ -67,7 +67,7 @@ from core.forest_inference_model import (
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
@@ -257,7 +257,7 @@ def _check_criterion(
 #: MOJOLEARN_RF_FAST_BATCH32K` (the 16K arm was DROPPED-noise,
 #: lane/apple-fast-trees2 @ bfd1d7cc6).
 comptime RF_FAST_BATCH = 0 if not (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 ) else (
     32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else 0
 )

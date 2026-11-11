@@ -99,12 +99,12 @@ from core.device_plan import DevicePlan
 from glm.impl.qn.multi_gpu import glm_device_plan, gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 
 comptime QN_FAST_XTDZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_QN_FAST_XTDZ_OFF"]()
 )
 """FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
@@ -314,7 +314,7 @@ def mean_kernel(
 # `-D MOJOLEARN_QN_FAST_BLOCKS` name is harmless.
 comptime QN_FAST_BLOCKS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_QN_FAST_BLOCKS_OFF"]()
 )
 comptime QNB_ROWS = 1024
@@ -527,7 +527,7 @@ comptime QNT_TPB = 256
 # DUAL_CD (unjudged).
 # ---------------------------------------------------------------------------
 
-comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime QN_FAST_SLIM = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_EVAL_SLIM_OFF"]()
 comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF"]()
 comptime QN_FAST_FUSED = QN_FAST_LS_BATCH
@@ -1341,7 +1341,7 @@ def _qn_idn_fused_body(
 #: 0.0): the same words. Apple only (NVIDIA / AMD keep their measured shape);
 #: QNI_G is picked so QNI_G * (D + 2) <= QNT_ROWS. -D
 #: MOJOLEARN_QN_IDN_FUSED_MULTI_OFF keeps one tile a block.
-comptime QN_IDN_FUSED_MULTI = has_apple_gpu_accelerator() and not is_defined[
+comptime QN_IDN_FUSED_MULTI = TARGET_HAS_APPLE_GPU and not is_defined[
     "MOJOLEARN_QN_IDN_FUSED_MULTI_OFF"
 ]()
 

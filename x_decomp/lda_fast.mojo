@@ -30,7 +30,7 @@ budget, `lfs_v_cap_rule`). Past them the entry returns 0 and
 Python keeps main's chain.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -46,7 +46,7 @@ from x_decomp.resident import _ptr, pool_alloc, pool_free
 #: -D MOJOLEARN_LDA_FUSED_SS_OFF turns it off; the old -D MOJOLEARN_LDA_FUSED_SS
 #: is harmless (no longer read).
 comptime LDA_FUSED_SS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_LDA_FUSED_SS_OFF"]()
 )
 #: Lanes per document (one SIMD group).

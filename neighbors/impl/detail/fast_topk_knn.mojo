@@ -28,7 +28,7 @@ from max.gpu import block_idx, thread_idx
 from std.math import sqrt, inf
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -44,7 +44,7 @@ comptime FKT_QB = 256
 # candidate coverage, per-slice top-k and the final merge remain complete.
 # Keep MOJOLEARN_KNN_FAST_MMA_OFF in BOTH arms to reach this scalar caller.
 comptime AFCL_G02 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G02"]()
 )
 comptime FKT_T = 128 if AFCL_G02 else 64
@@ -53,7 +53,7 @@ comptime FKT_MAX_K = 16
 
 comptime FAST_TOPK_KNN_ENABLED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_KNN_FAST_TOPK_OFF"]()
 )
 

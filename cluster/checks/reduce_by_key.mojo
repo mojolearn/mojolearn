@@ -72,7 +72,7 @@ from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDEN
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
@@ -785,7 +785,7 @@ def finish_sum_kernel(
 # and scale selection are unchanged. Keep the existing experimental blocked
 # accumulator enabled in BOTH arms; this does not promote it on Apple.
 comptime AFCL_G06 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G06"]()
 )
 comptime BLOCK_ACC_ROWS_BASELINE = (

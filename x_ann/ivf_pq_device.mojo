@@ -20,7 +20,7 @@ from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
 from x_ann.pq_kmeans_device import pq_codebooks_device
 from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit_rows
@@ -51,7 +51,7 @@ row is still encoded against the trained codebooks. IDENTICAL trains on every
 row. Quality: bench/speed/ann_fast_quality.py."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
 
-comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 """FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_PQ_SEED`): each
 subspace codebook is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over a
 stride sample of its training rows, its own stream per subspace) and

@@ -22,13 +22,13 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P10: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Keep 256 threads but exchange feature reuse for more rows per block. This
 # covers every width with masked tails; it is not an input-width dispatch rule.
-comptime AFCL_P10 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P10"]()
+comptime AFCL_P10 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P10"]()
 comptime GATHER_COLS = 16 if AFCL_P10 else 32
 comptime GATHER_ROWS = 256 // GATHER_COLS
 

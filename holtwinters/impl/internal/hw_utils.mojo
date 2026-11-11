@@ -47,7 +47,7 @@ not a property anyone should be relying on for a recorded stage.
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -156,7 +156,7 @@ comptime MAX_BLOCKS_PER_DIM = 65535
 # Half as many independent optimizer series per block lowers per-block
 # register demand for long seasonal state. It does not change any recurrence,
 # season length, initial state, parameter search or stopping budget.
-comptime AFCL_P14 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P14"]()
+comptime AFCL_P14 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P14"]()
 comptime HW_OPTIM_TPB = 64 if AFCL_P14 else 128
 
 
@@ -249,7 +249,7 @@ def hw_is_finite(v: Float32) -> Bool:
 
 comptime HW_EST_FAST_BLOCK = 32 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_HW_EST_BLOCK64"]()
 ) else 64
 """FAST on Apple: a (series, start) block with `d <= 32` runs as ONE SIMD

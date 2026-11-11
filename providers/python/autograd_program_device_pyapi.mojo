@@ -29,7 +29,7 @@
 # caller routes only tensors on that GPU here.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from bindings.py_balanced import py_call
 from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
 from autograd.rankn import ShapeN
@@ -72,7 +72,7 @@ def ops_imported_run_device_py[KIND: Int](
     device address per declared output, of its declared shape, float32 (an
     'int32' output: int32). Returns None; the outputs are written when it
     returns."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         raise Error("ValueError: ops_imported_run_device takes CUDA or ROCm device buffers; on Apple GPUs "
                     + "pass host arrays to ops_imported_run")
     var b = native_loaded_module("builtins")

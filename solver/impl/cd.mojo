@@ -113,7 +113,7 @@ from std.sys.compile import is_defined
 
 from core.gemm import gemm_nt, gemv_n
 from checks.numerics import NUMERIC_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from solver.checks.profile_dot import (
@@ -189,7 +189,7 @@ comptime CD_SQUARED_GUARD = Float32(1.0e-5)
 #: rounding differs. `-D MOJOLEARN_CD_FAST_GRAM_OFF` keeps the row sweeps.
 comptime CD_FAST_GRAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"]()
 )
 #: Widest design the Gram path takes. Was 256 (just above istella's 220

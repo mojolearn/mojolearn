@@ -84,7 +84,7 @@ from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator_cores,
 )
 from std.sys.compile import is_defined
-from std.sys.info import has_amd_gpu_accelerator, has_nvidia_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_NVIDIA_GPU
 from max.gpu.host import DeviceAttribute
 
 #: lane fg-ivf (read_ivf.md idea B5), DEFAULT ON on NVIDIA and AMD
@@ -116,7 +116,7 @@ def kmeans_fused_grid_cores(ctx: DeviceContext) -> Int:
     """The SM / CU count the fused grid is sized from: the device's (cached
     after the first query) under `KMEANS_LIVE_CORES` on NVIDIA and AMD, else
     0 (the table row)."""
-    comptime if KMEANS_LIVE_CORES and (has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator()):
+    comptime if KMEANS_LIVE_CORES and (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU):
         try:
             var slot = _KMEANS_LIVE_CORES_SLOT.get_or_create_ptr()
             if slot[].cores <= 0:

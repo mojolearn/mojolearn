@@ -38,7 +38,7 @@ different fold order (FAST bits only).
 from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_linear.ops import FP, IP, ld, st, ldi, sti, fexp, fm, fd, fa, fs, fmad, fabs, fmax, fsqrt, i2f
@@ -67,7 +67,7 @@ from x_linear.lbfgs import LBFGS_M
 #: then; rollback -D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (the old -D name is
 #: harmless; HUBER_FAST_BLOCK512 still forces it on).
 comptime HUBER_DEVICE_LBFGS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and (not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"]() or is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]())
 )
 #: (FAST + Apple, default ON since 2026-10-05; needs HUBER_DEVICE_LBFGS) the partials of
@@ -88,7 +88,7 @@ comptime HUBER_FAST_BLOCK512 = HUBER_DEVICE_LBFGS and not is_defined["MOJOLEARN_
 # 256 rows shorten each partial chain and expose twice the row parallelism
 # of the existing 512-row schedule; scratch and final folds grow accordingly.
 # Solver tolerance, line-search budget and stopping observations are unchanged.
-comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L04"]())
 comptime HF_FOLD = 256 if AFCL_L04 else (512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK)
 #: Evaluation units enqueued between two reads of the stop word.

@@ -31,7 +31,7 @@ that file records as a bug found by audit rather than by a test.
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.primitives.block import max as block_max

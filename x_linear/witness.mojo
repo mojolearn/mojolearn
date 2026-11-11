@@ -21,7 +21,8 @@ from max.gpu import block_idx, thread_idx
 from std.atomic import Atomic
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, is_apple_gpu
+from std.sys.info import is_apple_gpu
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import IP, sti
@@ -91,7 +92,7 @@ struct Witness(Movable):
 
     def ok(mut self, mut ctx: DeviceContext, count: Int, what: String) raises -> Bool:
         """Waits and checks words [0, count); off Apple True at once."""
-        comptime if not has_apple_gpu_accelerator():
+        comptime if not TARGET_HAS_APPLE_GPU:
             return True
         if count <= 0:
             return True

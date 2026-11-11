@@ -35,7 +35,7 @@ different order. Same leaves, same rows, same quality.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import isfinite, sqrt
 from std.memory import stack_allocation
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -85,7 +85,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 from gbdt.options.catboost_options import LEAF_ESTIMATION_NEWTON
 
 comptime SYM_ITER_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the

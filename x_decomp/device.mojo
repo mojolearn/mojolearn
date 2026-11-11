@@ -35,7 +35,7 @@ from x_decomp.classical_device import contrast_kernel
 from core.blocked_moments import bm_centered_gram_panels
 from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 # TOMBSTONE: MOJOLEARN_IDN_LU_NB128 (DELETE-slower: grid g50ebe26a5 lu-solve synthetic NV L40S 352.1 -> 541.4 ms, AMD MI325X
 # 331.3 -> 697.0 ms, avg 1.80x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 885c23dc7.
@@ -489,7 +489,7 @@ def absmax_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32, by_col: Int32):
 # This candidate specializes that operation and groups four independent
 # coalesced output stripes per thread; it does not claim a new fusion.
 # Runtime cost selection is by operation, never by a benchmark shape.
-comptime AFCL_L10 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L10 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L10"]())
 
 
@@ -1072,7 +1072,7 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
 # lane/apple-fast-rec-decomp (2026-10-04): the FAST + Apple guard of the
 # recovered `-D MOJOLEARN_...` candidates in this file (FA_FAST_QRR;
 # SVD_FAST_CHOLQR deleted 2026-10-09). IDENTICAL and every other vendor compile main's code.
-comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower: rab3-svdcholqr istella 1782.1 -> 15378.0 ms, +762.9%) deleted 2026-10-09
 # on lane/owed-deletions-D1 (CholeskyQR2 passes for linalg.svd's U, `cholqr_guard_kernel`); code recoverable at b639a2bd2.

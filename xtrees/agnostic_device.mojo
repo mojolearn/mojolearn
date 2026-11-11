@@ -11,7 +11,7 @@ the same units in the same stage order: the same words."""
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.neural_context import process_ctx
 from x_linear.ops import fa as lin_fa, fexp as lin_fexp, ld as lin_ld, row_dot as lin_row_dot
@@ -38,7 +38,7 @@ comptime AGN_TPB = 128
 #:   Bit-inert (the same units in the same order per row). M3 A/B
 #:   kap2-kshap-batch-istella: kernel-shap istella 27,011 -> 15,325 ms
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
-comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
 #: lane idn-shap-pca (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
 #: Apple (-D MOJOLEARN_AGN_IDN_SYN_POOL_OFF restores the per-chunk buffers):

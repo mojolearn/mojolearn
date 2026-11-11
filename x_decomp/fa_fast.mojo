@@ -52,7 +52,7 @@ from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -91,7 +91,7 @@ from x_decomp.rr_svd import RS_TPB, rs_decide, rs_pair
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
 
 #: the guard of every route in this file: a FAST build for the Apple GPU
-comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_FA_ALL (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: every FA define at once; factor-analysis istella 10300.9 -> 20530.8 ms (+99.3%, rab6-faqfix), quality noise.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_ALL.patch; record in docs/TOMBSTONES.md.

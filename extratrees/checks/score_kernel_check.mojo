@@ -92,12 +92,8 @@ THE ARMS
 
 from std.math import ceildiv
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-    size_of,
-)
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from max.gpu.host import DeviceContext
 
 from extratrees.checks.fixed_point import choose_scale, quantize
@@ -368,11 +364,11 @@ def _vendor() -> String:
     """Which GPU family this run used. A HOST-side check (`has_*`), not a
     target check (`is_*`): the kernel is one GPU-agnostic source and nothing in
     it branches on the vendor."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return "Apple"
-    elif has_nvidia_gpu_accelerator():
+    elif TARGET_HAS_NVIDIA_GPU:
         return "NVIDIA"
-    elif has_amd_gpu_accelerator():
+    elif TARGET_HAS_AMD_GPU:
         return "AMD"
     else:
         return "unknown vendor"

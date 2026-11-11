@@ -577,7 +577,7 @@ def sample_features_pertree_host(
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv, exp, log
 from std.memory import stack_allocation
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.primitives.block import sum as block_sum
@@ -664,7 +664,7 @@ def sampler_report_len(work_items_size: Int) -> Int:
 
 def device_has_float64() -> Bool:
     """Can a kernel on this box hold a `double`? Mojo 1.0 exposes no fp64 capability query, so this is written as the one fact that is true today: of the three GPU targets Mojo supports, Apple is the one whose backend refuses the TYPE."""
-    return not has_apple_gpu_accelerator()
+    return not TARGET_HAS_APPLE_GPU
 
 
 

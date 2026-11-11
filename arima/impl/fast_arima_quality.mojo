@@ -45,7 +45,7 @@ from std.math import inf, sqrt, floor
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -57,7 +57,7 @@ from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
-comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 #: MOJOLEARN_ARIMA_FAST_CONST_BOTH (default off, READY-AB). Every order of
 #: the AutoARIMA grid fitted with and without the constant (mean for d + D ==

@@ -42,7 +42,7 @@ from x_neighbors.items import (
 )
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, _down_i, BLOCK, kernel_kernel
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_neighbors.ocsvm_init import (
     XN_OCSVM_DEV_INIT, oci_chunks, oci_part_item, oci_scan_item, oci_alpha_item, oci_nu_hi, oci_nu_lo,
@@ -71,7 +71,7 @@ comptime OCSVM_CHUNK = 64
 #   MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256: 256 iterations between two reads
 #     of the stop flag, not 64 (fewer synchronizes; the iterations past the
 #     stop are no-op launches, as they are now).
-comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # All three are the FAST + Apple default since the M3 A/B (n=1, quality
 # identical): ocsvm taxi 375.7 -> 65.0 ms (RES+2L+CHUNK256; RES alone -77%).
 # -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF / _2L_OFF / _CHUNK256_OFF turn them

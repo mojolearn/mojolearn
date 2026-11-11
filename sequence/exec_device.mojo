@@ -84,7 +84,7 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_fwd
 from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.shared_slot import SharedSlot
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
@@ -98,7 +98,7 @@ comptime SEQ_COOP_NVAMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
+comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
 #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
 #: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
 #: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
@@ -138,7 +138,7 @@ comptime TPB = 128
 #: -D MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF restore the serial copies; the old
 #: -D MOJOLEARN_SEQ_FAST_PIPE_UP=1 / _DOWN=1 are harmless. IDENTICAL and
 #: the other vendors compile the main path unchanged.
-comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane idn-opt-resident (2026-10-04): IDENTICAL takes the same pipelined
 #: copies on every vendor (NVIDIA, AMD, Apple). Copies only: the same bytes,
 #: the same launches, no bit moves. -D MOJOLEARN_IDN_SEQ_PIPE_UP_OFF /

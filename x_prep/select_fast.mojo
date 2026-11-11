@@ -45,7 +45,7 @@ the sums: pairwise instead of row order, never less accurate.
 from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -60,7 +60,7 @@ from x_prep.stats import f_sf, pos_inf, F32_MAX
 #: SELECT_FCLS is the FAST + Apple default since the M3 A/B (select-f-classif taxi
 #: 131.4 -> 17.5 ms, -87%, n_selected same); -D MOJOLEARN_SELECT_FCLS_OFF turns it
 #: off (-D MOJOLEARN_SELECT_FCLS is now harmless).
-comptime SELECT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime SELECT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime SELECT_FREG = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FREG_OFF"]()
 comptime SELECT_FCLS = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FCLS_OFF"]()
 

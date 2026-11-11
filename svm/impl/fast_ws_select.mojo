@@ -31,7 +31,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from svm.impl.smo_sets import in_lower, in_upper
 
 #: SCHEDULING (the walk's selection is ranked over the whole sorted list, so
@@ -39,7 +39,7 @@ from svm.impl.smo_sets import in_lower, in_upper
 #: pipeline limit for the one-block walk (now `fws_pick_kernel`) was 832 threads (Metal validation,
 #: steward 1790601522115), no Dynamic Caching, and the over-limit dispatch
 #: is dropped with no error: svc / svr moved on M2 Metal only.
-comptime FWS_T = 256 if has_apple_gpu_accelerator() else 1024
+comptime FWS_T = 256 if TARGET_HAS_APPLE_GPU else 1024
 comptime FWS_WARPS = FWS_T // WARP_SIZE
 #: The ballot word: one bit per hardware lane (AMD's wave is 64 wide).
 comptime FWS_VOTE = DType.uint64 if WARP_SIZE == 64 else DType.uint32

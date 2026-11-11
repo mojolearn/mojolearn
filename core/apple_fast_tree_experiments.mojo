@@ -6,10 +6,10 @@ default. No quality or speed claim, including for combinations. These guards
 keep IDENTICAL and non-Apple paths outside this experiment programme.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime AFT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 # P01: two rather than four logical 32-tree groves per threadgroup; less
 # shared reduction state, more independently schedulable blocks.

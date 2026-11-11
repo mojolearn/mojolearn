@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Exact existing ImportedProgram device copies/replay/cleanup, shared by the
 # public packed door and the framework provider. This owner has no Python ABI.
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP, Args
 from sequence.exec_device import DeviceExec
@@ -73,7 +73,7 @@ def _device_input(mut ex: DeviceExec, dst: FP, src: CastIn, ids: Bool) raises:
 def program_device_execute[KIND: Int](sid: Int, pid: Int, srcs: List[CastIn],
     shapes: List[ShapeN], out_counts: List[Int], out_addrs: List[Int], out_texts: List[String],
 ) raises:
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         raise Error("ValueError: ops_imported_run_device takes CUDA or ROCm device buffers; on Apple GPUs "
                     + "pass host arrays to ops_imported_run")
     var plan = program_execute_prepare[DeviceExec, KIND](sid, pid, sid, False, False)

@@ -38,7 +38,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_silu
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
 
@@ -56,7 +56,7 @@ from sequence.ops import FP, add, fma3, ld, mul, st, sub
 # sequence/moe_tiled.mojo in IDENTICAL.
 comptime MOE_REGTILE = (
     (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
         or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
     )
     and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()

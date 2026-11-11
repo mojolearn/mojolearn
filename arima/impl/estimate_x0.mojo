@@ -92,7 +92,7 @@ from arima.impl.idn_arma_ls import idn_arma_ls_kernel
 from arima.impl.idn_ls_math import ILS_MAX_COLS, ILS_TPB, X0_IDN_PAR_LS, X0_IDN_PAR_LS_MIN_OBS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
@@ -100,7 +100,7 @@ comptime X0_TPB = 128
 
 comptime X0_FAST_LS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_X0_FAST_LS_OFF"]()
 )
 """FAST on Apple: long series solve the start-parameter least squares with

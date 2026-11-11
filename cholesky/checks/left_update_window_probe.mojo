@@ -22,7 +22,7 @@ host flush-before-round chain), so a pass cannot be vacuous.
 
 from std.math import fma
 from std.memory import bitcast
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from checks.numerics import ftz
 from cholesky.checks.potrf import CHOL_APPLE_LEFT, _chol_left_update
@@ -80,7 +80,7 @@ def _fbr_step(a: Float32, b: Float32, c: Float32) -> Float32:
 
 
 def main() raises:
-    comptime assert has_apple_gpu_accelerator(), "Apple GPU probe"
+    comptime assert TARGET_HAS_APPLE_GPU, "Apple GPU probe"
     comptime assert CHOL_APPLE_LEFT, "the left-looking update is compiled out"
     var ctx = DeviceContext()
     var n = 320

@@ -95,7 +95,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.column_stats import STATS_TPB
 from core.device_scan import device_first_nonfinite
@@ -107,7 +107,7 @@ from tsa.impl.timeSeries.arima_helpers import prepare_data
 # Two independent per-lane chains reduce recurrence dependency in the series
 # sums without changing the shared STATS_TPB launch or any KPSS lag/decision.
 # The existing block reduction combines the two chain totals; bits may change.
-comptime AFCL_P11 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P11"]()
+comptime AFCL_P11 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P11"]()
 
 
 #: Table 1, Kwiatkowski 1992 (`stationarity.cuh:131-132`), as `float`.
