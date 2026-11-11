@@ -1513,12 +1513,14 @@ ANNOTATIONS = {
     "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
                               "run by bindings/parallel_neighbor_worker.mojo reference_vote"),
     "fold_pair_f32": ("covered", ["cross-vendor-fold"],
-                      "mojolearn.cross_vendor hands it to the native fold at import "
-                      "(_buffer_native('fold_pair_f32')); every ordered_fold and fold_pair runs it"),
+                      "no Python door since lane calltable-parallel-archive: the native fold calls the base "
+                      "image's parallel table entry (core/parallel_entry_table.mojo PB_FOLD_PAIR_F32); "
+                      "every ordered_fold and fold_pair runs it"),
     "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker.mojo ivf_search"),
     "ivf_finalize_distances": ("covered", ["par-ivf"],
-                               "called by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
-                               "`ivf_search`) on a cosine index"),
+                               "run by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
+                               "`ivf_search`) on a cosine index through the IVF image's parallel table entry "
+                               "(PI_FINALIZE), the same body as this door"),
     "pca_fit": ("covered", ["pca", "pca-full-whiten", "pca-whiten"],
                 "the native PCA owner is handed it at connect (_native_pca_bridge.connect)"),
     "x_decomp_pca_mle_rank": ("covered", ["x-decomp-pca-randomized"],
@@ -2295,15 +2297,15 @@ ANNOTATIONS.update({
         "covered", ["par-forest", "par-forest-et", "par-forest-et-clf", "par-forest-reg"],
         "parallel_ensemble.fit_forest is one native call (bindings/parallel_shard_native.mojo "
         "fit_forest -> _fit_forest), which rebases the tree ranges' node offsets through "
-        "_rebase_offsets with the worker binding's msel_rebase_offsets_i32 "
-        "(_native_parallel_shard._WORKER_BINDINGS['_mojolearn'], the core host twin on a CPU install); "
+        "_rebase_offsets through the base image's parallel table entry (PB_REBASE_OFFSETS; no Python "
+        "door since lane calltable-parallel-archive; the core host twin on a CPU install); "
         "the four lanes fit 16 trees in four ranges and are held to the plain fit"),
     "shard_topk_merge_f32": (
         "covered", ["par-reference-knn", "par-reference-knn-reg"],
         "ReferenceShardedNeighbors.kneighbors/predict/predict_proba are one native call "
         "(bindings/parallel_shard_native.mojo reference_query -> _reference_query), which merges every "
-        "reference block's candidates with the reference_merge entry _native_parallel_shard._connect_merge "
-        "resolved (_buffer._native('shard_topk_merge_f32')); both lanes query four reference blocks and "
+        "reference block's candidates through the base image's parallel table entry (PB_TOPK_MERGE_F32; "
+        "no Python door since lane calltable-parallel-archive); both lanes query four reference blocks and "
         "are held to the plain estimator"),
     "linear_constructor_native_call": (
         "covered", ["public-set-params", "x-huber-outliers"],
