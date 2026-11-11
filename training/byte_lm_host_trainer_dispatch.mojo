@@ -2,7 +2,7 @@
 # CPU implementation of the same ByteLM descriptor table as GPU trainers.
 # Only the session/host execution owner differs; metadata transport is shared.
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from std.memory import memcpy, memcmp
+from std.memory import unsafe_memcpy, unsafe_memcmp
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
@@ -215,7 +215,7 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
             step = owner[].export_state([addresses[1], addresses[2], addresses[3], addresses[4]], cfg)
             if step != p[11]:
                 raise Error("Byte-LM state export returned a different completed step")
-            if memcmp(i32_ptr(addresses[4]), expected.unsafe_ptr(), len(expected)) != 0:
+            if unsafe_memcmp(i32_ptr(addresses[4]), expected.unsafe_ptr(), len(expected)) != 0:
                 raise Error("Byte-LM exported flags differ from the admitted flags")
         except error:
             if p[16] == 1:

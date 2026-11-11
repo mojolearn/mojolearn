@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed LinearSVC OVR state around the existing QN solver operations."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i32_ptr
 from core.logistic_native_api import QnFitRequest, QnNativeDriver, QnNativeKernels, qn_native_dispatch
@@ -118,7 +118,7 @@ independent 0/1 target writes replace the old boundary's scalar data loop.
             o.max_iter, o.linesearch_max_iter, o.memory, o.intercept, o.normalized,
             o.loss, o.l1, o.l2, o.gradient_tolerance, o.change_tolerance, 0)
         var iterations = K.fit(request)
-        memcpy(dest=state.coefficients.unsafe_ptr() + fit * width,
+        unsafe_memcpy(dest=state.coefficients.unsafe_ptr() + fit * width,
             src=weights.unsafe_ptr(), count=width)
         state.info[3 * fit] = info[0]
         state.info[3 * fit + 1] = info[1]

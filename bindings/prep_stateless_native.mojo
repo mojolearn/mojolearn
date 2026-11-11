@@ -6,7 +6,7 @@
 # Python `_Prog` built) and runs it through the shared transport
 # (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
 # and runs the one transform program.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

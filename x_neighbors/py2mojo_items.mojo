@@ -94,7 +94,7 @@ def p2m_relabel_first_item(t: Int, lab: IP, res: IP, info: IP, first: IP, rk: IP
     if v < 0 or v >= n:
         info.unsafe_store(1, Int32(1))
         return
-    _ = Atomic[DType.int32].min(first + v, Int32(t))
+    _ = Atomic[Int32].min(first + v, Int32(t))
 
 
 @always_inline
@@ -166,7 +166,7 @@ def p2m_ccount_add_item(t: Int, lab: IP, nk: FP, info: IP, cnt: IP, n: Int, n_cl
     if v < 0 or v >= n_classes:
         info.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + v, Int32(1))
 
 
 def p2m_ccount_emit_item(t: Int, lab: IP, nk: FP, info: IP, cnt: IP, n: Int, n_classes: Int):

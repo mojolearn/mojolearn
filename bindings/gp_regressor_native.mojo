@@ -8,7 +8,7 @@ from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequ
 from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
 from bindings.gp_score_boundary import GPRPredictionRoom, gpr_score_result
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word, gp_require
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.gp_argument_pins import GPArgumentPins
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_owned

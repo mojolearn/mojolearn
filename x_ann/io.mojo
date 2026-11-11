@@ -8,7 +8,7 @@ copies straight from the caller's list (no private copy first), and a
 download moves the staged words with one memcpy instead of appending them
 one by one. Plain copies: the same words. At the IVF shapes these lists are
 1M x 28 floats (the residuals) and 1M x 14 codes."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
@@ -43,7 +43,7 @@ def download_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) r
     ctx.synchronize()
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -59,7 +59,7 @@ def download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) rai
     ctx.synchronize()
     var out = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 

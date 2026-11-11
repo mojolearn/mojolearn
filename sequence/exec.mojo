@@ -23,7 +23,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
 so the many tiny launches of a small recurrent step stay on the calling
 thread. A single task runs on the calling thread without touching the
 pool."""
-from std.memory import memcpy, memset_zero
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -252,7 +252,7 @@ struct HostExec(Exec, Movable):
     def alloc(mut self, n: Int) raises -> FP:
         var count = n if n > 0 else 1
         var p = alloc[Float32](count)
-        memset_zero(p, count)
+        unsafe_memset_zero(p, count)
         var q = FP(unsafe_from_address=Int(p))
         self.bufs.append(q)
         self.buf_sizes.append(count)
@@ -280,7 +280,7 @@ struct HostExec(Exec, Movable):
 
     def _profiled_upload(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0:
-            memcpy(dest=dst, src=src, count=n)
+            unsafe_memcpy(dest=dst, src=src, count=n)
             self.execution_profile.copied(3, n * 4)
 
     def download(mut self, dst: FP, src: FP, n: Int) raises:
@@ -290,7 +290,7 @@ struct HostExec(Exec, Movable):
 
     def _profiled_download(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0 and Int(dst) != Int(src):
-            memcpy(dest=dst, src=src, count=n)
+            unsafe_memcpy(dest=dst, src=src, count=n)
             self.execution_profile.copied(3, n * 4)
 
     def download_async(mut self, dst: FP, src: FP, n: Int) raises:

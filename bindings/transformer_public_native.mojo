@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_error_class import error_without_class
@@ -334,9 +334,9 @@ def transformer_state_read(mut mods: NativeModules, state: PythonObject, operati
     var first = min(held, window - start)
     for head in range(b * kv):  # cpu-route: byte-preserving chronological ring-cache copy
         if first != 0:
-            memcpy(dest=dst + head * held * hd, src=src + (head * window + start) * hd, count=first * hd)
+            unsafe_memcpy(dest=dst + head * held * hd, src=src + (head * window + start) * hd, count=first * hd)
         if held > first:
-            memcpy(dest=dst + (head * held + first) * hd, src=src + head * window * hd, count=(held - first) * hd)
+            unsafe_memcpy(dest=dst + (head * held + first) * hd, src=src + head * window * hd, count=(held - first) * hd)
     _ = buffer
     return output
 

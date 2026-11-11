@@ -22,7 +22,7 @@ tensors, refuses by name, and calls one entry here or in its siblings. What used
 The update itself is the existing native step (training/estimator.mojo,
 training/optimizer_multi_gpu.mojo, the host oracle): nothing here does
 arithmetic on parameter or gradient values."""
-from std.memory import memcpy, memset_zero
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 from std.os import getenv
 
 from core.device_plan import DevicePlan
@@ -227,7 +227,7 @@ def gather(addrs: List[Int], nbytes: List[Int], first: Int, count: Int, total: I
     for j in range(count):  # driver-loop: over parameter tensors (one memcpy each)
         var n = nbytes[first + j] // 4
         if n > 0:
-            memcpy(dest=base + at, src=F32P(unsafe_from_address=addrs[first + j]), count=n)
+            unsafe_memcpy(dest=base + at, src=F32P(unsafe_from_address=addrs[first + j]), count=n)
         at += n
     return f^
 
@@ -242,7 +242,7 @@ def scatter(f: Flat, addrs: List[Int], nbytes: List[Int], first: Int, count: Int
     for j in range(count):  # driver-loop: over parameter tensors (one memcpy each)
         var n = nbytes[first + j] // 4
         if n > 0:
-            memcpy(dest=F32P(unsafe_from_address=addrs[first + j]), src=src + at, count=n)
+            unsafe_memcpy(dest=F32P(unsafe_from_address=addrs[first + j]), src=src + at, count=n)
         at += n
 
 
@@ -258,7 +258,7 @@ def stack_microbatches(req: PublicStep) -> List[Float32]:
             var k = i * req.j + j
             var c = req.g_bytes[k] // 4
             if c > 0:
-                memcpy(dest=base + at, src=F32P(unsafe_from_address=req.g_addr[k]), count=c)
+                unsafe_memcpy(dest=base + at, src=F32P(unsafe_from_address=req.g_addr[k]), count=c)
             at += c
     return out^
 
@@ -268,7 +268,7 @@ def zero_tensors(addrs: List[Int], nbytes: List[Int]):
     for j in range(len(addrs)):  # driver-loop: over gradient tensors (one memset each)
         var n = nbytes[j] // 4
         if n > 0:
-            memset_zero(F32P(unsafe_from_address=addrs[j]), n)
+            unsafe_memset_zero(F32P(unsafe_from_address=addrs[j]), n)
 
 
 def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:

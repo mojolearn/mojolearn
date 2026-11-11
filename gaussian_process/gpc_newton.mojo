@@ -151,7 +151,7 @@ def gpc_newton_scale_nan_kernel(gate: _GI, wsr: _GP, v: _GP, dst: _GP, nan_at: _
         gpc_scale_item(i, wsr, v, dst)
         var c = dst.unsafe_load(i)
         if c != c:
-            _ = Atomic[DType.int32].min(nan_at, Int32(i))
+            _ = Atomic[Int32].min(nan_at, Int32(i))
 
 
 def gpc_newton_a_kernel(gate: _GI, b: _GP, wsr: _GP, x: _GP, dst: _GP, n: Int32):

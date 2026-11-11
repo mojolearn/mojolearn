@@ -51,7 +51,7 @@ from gbdt.gpu_data.compressed_index_builder import (
     pack_quantized_columns_host,
 )
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcmp, memcpy
+from std.memory import bitcast, unsafe_memcmp, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from gbdt.gpu_data.kernel.binarize import (
@@ -499,8 +499,8 @@ def _insert_staged_tensor_on_device(
     var h_bins = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     var h_flag = ctx.enqueue_create_host_buffer[DType.uint32](2)
     ctx.synchronize()
-    memcpy(dest=h_words.unsafe_ptr(), src=words.unsafe_ptr(), count=n_words)
-    memcpy(
+    unsafe_memcpy(dest=h_words.unsafe_ptr(), src=words.unsafe_ptr(), count=n_words)
+    unsafe_memcpy(
         dest=h_bins.unsafe_ptr(),
         src=staged.candidate.bins.unsafe_ptr(),
         count=n_rows,
@@ -666,7 +666,7 @@ def device_bins_for_borders(
     var h_b = ctx.enqueue_create_host_buffer[DType.float32](max(nb, 1))
     ctx.synchronize()
     if nb > 0:
-        memcpy(dest=h_b.unsafe_ptr(), src=borders.unsafe_ptr(), count=nb)
+        unsafe_memcpy(dest=h_b.unsafe_ptr(), src=borders.unsafe_ptr(), count=nb)
     var d_b = ctx.enqueue_create_buffer[DType.float32](max(nb, 1))
     ctx.enqueue_copy(dst_buf=d_b, src_ptr=h_b.unsafe_ptr())
     var d_bins = ctx.enqueue_create_buffer[DType.uint32](max(n_rows, 1))
@@ -836,13 +836,13 @@ def fit_feature_freq_tensor_candidate_device(
         src_buf=d_bins.create_sub_buffer[DType.uint32](0, n_rows),
     )
     ctx.synchronize()
-    memcpy(
+    unsafe_memcpy(
         dest=counts.unsafe_ptr().bitcast[Int64](),
         src=h_counts.unsafe_ptr(),
         count=entry_count,
     )
-    memcpy(dest=values.unsafe_ptr(), src=h_values.unsafe_ptr(), count=n_rows)
-    memcpy(dest=bins.unsafe_ptr(), src=h_bins.unsafe_ptr(), count=n_rows)
+    unsafe_memcpy(dest=values.unsafe_ptr(), src=h_values.unsafe_ptr(), count=n_rows)
+    unsafe_memcpy(dest=bins.unsafe_ptr(), src=h_bins.unsafe_ptr(), count=n_rows)
     _ = h_meta^
     _ = d_meta^
     _ = d_codes^
@@ -1133,7 +1133,7 @@ def _same_table(a: TFeatureFreqTensorTable, b: TFeatureFreqTensorTable) -> Bool:
     # element loop): equal lengths were checked above
     if len(a.counts) == 0:
         return True
-    return memcmp(a.counts.unsafe_ptr(), b.counts.unsafe_ptr(), len(a.counts)) == 0
+    return unsafe_memcmp(a.counts.unsafe_ptr(), b.counts.unsafe_ptr(), len(a.counts)) == 0
 
 
 struct TTensorCtrFeature(Copyable, Movable):
@@ -1505,12 +1505,12 @@ def stage_next_feature_freq_after_winner(
     var h_q = ctx.enqueue_create_host_buffer[DType.uint32](n_base + n_rows)
     ctx.synchronize()
     if n_base > 0:
-        memcpy(
+        unsafe_memcpy(
             dest=h_q.unsafe_ptr(),
             src=base_quantized_cindex.unsafe_ptr(),
             count=n_base,
         )
-    memcpy(
+    unsafe_memcpy(
         dest=h_q.unsafe_ptr() + n_base,
         src=staged.candidate.bins.unsafe_ptr(),
         count=n_rows,

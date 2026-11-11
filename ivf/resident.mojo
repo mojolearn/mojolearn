@@ -31,7 +31,7 @@ columns).
 from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex, IvfFlatSearchParams
@@ -128,7 +128,7 @@ def ivf_resident_export_list_data(ctx: DeviceContext, handle: Int, dst_addr: Int
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=e.dev.dlist_data)
     ctx.synchronize()
-    memcpy(dest=f32_ptr(dst_addr), src=host.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=f32_ptr(dst_addr), src=host.unsafe_ptr(), count=n)
     _ = host^
 
 

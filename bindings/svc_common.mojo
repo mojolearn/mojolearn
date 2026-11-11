@@ -14,7 +14,7 @@
 # ORDER RULE (`_labels.sorted_classes`) is the builtins' `sorted` over the
 # first-seen labels, as the Python label input step ran it: the classes and
 # codes are the ones `encode_labels` returned for a flat label list.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
@@ -133,7 +133,7 @@ def svc_prefix(source: PythonObject, count: Int, shape: PythonObject, typestr: S
     var out = family_array(shape, typestr, context)
     var width = 8 if typestr == "<f8" or typestr == "<i8" else 4
     if count > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source))),
                count=count * width)
         _ = out  # keep the Python object alive through the native call above
@@ -146,7 +146,7 @@ def svc_prefix(source: Int, count: Int, shape: PythonObject, typestr: String,
     var result = family_array(shape, typestr, context)
     var width = 8 if typestr == "<f8" or typestr == "<i8" else 4
     if count > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
             src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=source), count=count * width)
         _ = result
     return result

@@ -5,7 +5,7 @@
 The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import stack_allocation, memcpy
+from std.memory import stack_allocation, unsafe_memcpy
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -205,8 +205,8 @@ def _coarse(
     list_indices = List[Int32](length=n, fill=Int32(0))
     labels = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
-        memcpy(dest=labels.unsafe_ptr(), src=flat.labels.unsafe_ptr().bitcast[Int32](), count=n)
+        unsafe_memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
+        unsafe_memcpy(dest=labels.unsafe_ptr(), src=flat.labels.unsafe_ptr().bitcast[Int32](), count=n)
     _ = flat^
     _ = ctx^
     cst.host("convert")
@@ -287,7 +287,7 @@ def _codebooks(
                     sub, n_train, pq_len, n_codes,
                     UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
                 )
-                memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
+                unsafe_memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
                 init_kind = INIT_ARRAY
                 cbs.host("seed")
         _ = kmeans_fit_rows(
@@ -330,7 +330,7 @@ def _coarse_resident(
     swap(offsets, flat.list_offsets)
     list_indices = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
+        unsafe_memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
     _ = flat^
     cst.host("convert")
 

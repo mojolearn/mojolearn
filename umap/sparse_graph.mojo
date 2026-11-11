@@ -28,7 +28,7 @@ failure, folded by `Atomic.min` (an order-free integer min), decoded once.
 """
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
@@ -784,10 +784,10 @@ def _ug_csr_up(ctx: DeviceContext, graph: SparseFuzzySimplicialGraph) raises -> 
     var h_col = ctx.enqueue_create_host_buffer[DType.uint32](cap)
     var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
     ctx.synchronize()
-    memcpy(dest=h_off.unsafe_ptr(), src=graph.offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    unsafe_memcpy(dest=h_off.unsafe_ptr(), src=graph.offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
     if nnz > 0:
-        memcpy(dest=h_col.unsafe_ptr(), src=graph.indices.unsafe_ptr(), count=nnz)
-        memcpy(dest=h_val.unsafe_ptr(), src=graph.values.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_col.unsafe_ptr(), src=graph.indices.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_val.unsafe_ptr(), src=graph.values.unsafe_ptr(), count=nnz)
     var off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
     var off = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var col = ctx.enqueue_create_buffer[DType.uint32](cap)
@@ -919,7 +919,7 @@ def categorical_intersection(
     var src = _ug_csr_up(ctx, graph)
     var h_t = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
-    memcpy(dest=h_t.unsafe_ptr(), src=target.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_t.unsafe_ptr(), src=target.unsafe_ptr(), count=n)
     var d_t = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
     var rg = _ug_blocks(n)

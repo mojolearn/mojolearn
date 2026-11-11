@@ -135,7 +135,7 @@ rc 134), an open defect. Build:
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from core.hostptr import f32_ptr, read_f32, copy_f32
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined, get_defined_int
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.

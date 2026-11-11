@@ -13,7 +13,7 @@
 # Python made them all up front, or in one device program). The public
 # `split` stays a generator shell that `yield from`s the result, so its
 # refusals are still raised at the first `next`.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.builtin.sort import sort
 from std.os import getenv
 from bindings.native_loaded_module import NativeModules, native_loaded_module
@@ -342,10 +342,10 @@ def _fold_rows_run(mut prog: _Prog, n: Int, k: Int, code: Int, order: Int, conte
         var test = msel_new(c, "<i8", context)
         var train = msel_new(n - c, "<i8", context)
         if c > 0:
-            memcpy(dest=msel_p64(test), src=FAMILY_I64P(unsafe_from_address=base + 4 * at), count=c)
+            unsafe_memcpy(dest=msel_p64(test), src=FAMILY_I64P(unsafe_from_address=base + 4 * at), count=c)
             _ = test  # keep the Python object alive through the native call above
         if n - c > 0:
-            memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=base + 4 * (at + 2 * c)), count=n - c)
+            unsafe_memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=base + 4 * (at + 2 * c)), count=n - c)
             _ = train  # keep the Python object alive through the native call above
         _ = py_call(res.append, Python.tuple(train, test))
     _ = arena  # count words and copied row addresses remain owned through the final fold
@@ -701,7 +701,7 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
         var at = 0
         for c in range(len(counts)):  # driver-loop: over classes (one draw each)
             if counts[c] > 0:
-                memcpy(dest=msel_p64(perms) + at, src=msel_p64(draws[c]), count=counts[c])
+                unsafe_memcpy(dest=msel_p64(perms) + at, src=msel_p64(draws[c]), count=counts[c])
                 _ = perms  # keep the Python object alive through the native call above
             at += counts[c]
     var folds = msel_new(n, "<i4", context)
@@ -1145,9 +1145,9 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
         rng.draws += UInt64(Int(words[used]) + Int(words[used + 1]) + k + 2)
         var out_tr = msel_new(n_train, "<i8", context)
         var out_te = msel_new(n_test, "<i8", context)
-        memcpy(dest=msel_p64(out_tr), src=FAMILY_I64P(unsafe_from_address=base + 4 * tr_words), count=n_train)
+        unsafe_memcpy(dest=msel_p64(out_tr), src=FAMILY_I64P(unsafe_from_address=base + 4 * tr_words), count=n_train)
         _ = out_tr  # keep the Python object alive through the native copy above
-        memcpy(dest=msel_p64(out_te), src=FAMILY_I64P(unsafe_from_address=base + 4 * te_words), count=n_test)
+        unsafe_memcpy(dest=msel_p64(out_te), src=FAMILY_I64P(unsafe_from_address=base + 4 * te_words), count=n_test)
         _ = out_te  # keep the Python object alive through the native copy above
         # The copied addresses point into this arena: keep it through the copies.
         _ = arena^
@@ -1174,9 +1174,9 @@ def _class_order(codes: PythonObject, n: Int, k: Int, context: PythonObject) rai
     var base = _arena_base(arena)
     var ord32 = msel_new(n, "<i4", context)
     var off32 = msel_new(k + 1, "<i4", context)
-    memcpy(dest=msel_p32(ord32), src=FAMILY_I32P(unsafe_from_address=base + 4 * ordr), count=n)
+    unsafe_memcpy(dest=msel_p32(ord32), src=FAMILY_I32P(unsafe_from_address=base + 4 * ordr), count=n)
     _ = ord32  # keep the Python object alive through the native copy above
-    memcpy(dest=msel_p32(off32), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=k + 1)
+    unsafe_memcpy(dest=msel_p32(off32), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=k + 1)
     _ = off32  # keep the Python object alive through the native copy above
     _ = arena^
     _ = prog^

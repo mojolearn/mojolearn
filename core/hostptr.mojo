@@ -5,7 +5,7 @@ Counts are nonnegative numbers of elements. Callers validate spans and keep
 both allocations alive for the entire call. Copies require disjoint spans (or exactly the same
 span); partial overlap is not supported. No pointer is retained.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -57,7 +57,7 @@ def read_f32(addr: Int, n: Int) raises -> List[Float32]:
     # over host threads is gone; GPU callers hand the list to one upload)
     var out = List[Float32](unsafe_uninit_length=n)
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -68,7 +68,7 @@ def read_i32(addr: Int, n: Int) raises -> List[Int32]:
         raise Error("mojolearn: negative int32 copy length")
     var out = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -91,7 +91,7 @@ def read_u16(addr: Int, n: Int) raises -> List[UInt16]:
         raise Error("mojolearn: negative uint16 copy length")
     var out = List[UInt16](length=n, fill=UInt16(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -101,7 +101,7 @@ def read_i8(addr: Int, n: Int) raises -> List[Int8]:
         raise Error("mojolearn: negative int8 copy length")
     var out = List[Int8](length=n, fill=Int8(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -110,7 +110,7 @@ def list_f32(src: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> List[Float
     per-element host loop); the List then goes to one device upload."""
     var out = List[Float32](length=max(n, 0), fill=Float32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -118,14 +118,14 @@ def list_i32(src: MutPointer[Int32, MutUntrackedOrigin], n: Int) -> List[Int32]:
     """One memcpy of n borrowed int32 words into an owned List."""
     var out = List[Int32](length=max(n, 0), fill=Int32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
 def store_f32(dst: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32], n: Int):
     """One memcpy of the first n words of `values` into a borrowed output."""
     if n > 0:
-        memcpy(dest=dst, src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=dst, src=values.unsafe_ptr(), count=n)
     _ = len(values)
 
 
@@ -133,5 +133,5 @@ def list_u32(src: MutPointer[UInt32, MutUntrackedOrigin], n: Int) -> List[UInt32
     """One memcpy of n borrowed uint32 words into an owned List."""
     var out = List[UInt32](length=max(n, 0), fill=UInt32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^

@@ -123,7 +123,7 @@ comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL an
     is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 from std.sys.info import has_apple_gpu_accelerator
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed import kpp_seed
@@ -371,7 +371,7 @@ def download_f32(
     comptime if ANN3_HOST_PASSES:
         var moved = List[Float32](length=n, fill=Float32(0.0))
         if n > 0:
-            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
         _ = host^
         return moved^
     var out = List[Float32]()
@@ -390,7 +390,7 @@ def download_u32(
     comptime if ANN3_HOST_PASSES:
         var moved = List[UInt32](length=n, fill=UInt32(0))
         if n > 0:
-            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
         _ = host^
         return moved^
     var out = List[UInt32]()
@@ -705,7 +705,7 @@ def _ivf_flat_build_impl[resident: Bool](
             # lane ann-apple3, OPT-IN: one memcpy per sampled row
             xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
             for r in range(n_train):
-                memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
+                unsafe_memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
         else:
             xt = List[Float32](capacity=n_train * dim)
             for r in range(n_train):

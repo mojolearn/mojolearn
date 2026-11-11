@@ -7,7 +7,7 @@
 # codes. Every stage group stages the words, operands and order the Python
 # helper of the same name staged.
 from std.os import getenv
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.native_array_storage import native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -229,7 +229,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
     if n > 0 and classical_c_order(view, context):
         src = Int(py=classical_address(view))
         if typestr == "<i4":
-            memcpy(dest=dest, src=I32P(unsafe_from_address=src), count=n)
+            unsafe_memcpy(dest=dest, src=I32P(unsafe_from_address=src), count=n)
             _ = view  # keep the Python object alive through the copy above
             _ = out  # keep the Python object alive through the copy above
             return out

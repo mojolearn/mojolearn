@@ -250,9 +250,9 @@ def samba_targets_scan_kernel(
     var t = targets.unsafe_load(i)
     if t == ignore:
         return
-    _ = Atomic[DType.int32].fetch_add(count, Int32(1))
+    _ = Atomic[Int32].fetch_add(count, Int32(1))
     if t < Int32(0) or t >= vocab:
-        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+        _ = Atomic[Int32].min(first_bad, Int32(i))
 
 
 def _admit_targets_device(

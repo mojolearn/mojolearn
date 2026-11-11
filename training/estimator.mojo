@@ -92,7 +92,7 @@ time.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.gpu import block_dim, block_idx, thread_idx
 from training.maximize import maximize_negate
 from std.os import getenv
@@ -469,7 +469,7 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
     below overlaps this copy with the DMA of the other stage half. A
     transport choice: no bit moves."""
     if n > 0:
-        memcpy(dest=dst, src=src, count=n)
+        unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 # ===========================================================================
@@ -1441,7 +1441,7 @@ def identical_ce_loss_host(
 
     # The targets as a host List (N int32: one memcpy), for `ce_count`.
     var h_targets = List[Int32](length=n_rows, fill=Int32(0))
-    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    unsafe_memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
     # The shape third of `ce_refuse_inputs` here, before any buffer is
     # sized from N * V; the non-finite scan and the targets walk are the
     # first statement of `identical_ce_forward_into`
@@ -1515,7 +1515,7 @@ def identical_ce_loss_dev(
     identical_ce_admit_call(reduction, want_grad, n_rows)
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
     var h_targets = List[Int32](length=n_rows, fill=Int32(0))
-    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    unsafe_memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
     ce_refuse_shape(n_rows, n_rows * vocab, cfg)
     var count = ce_count(h_targets, ignore_index)
     _ = h_targets^

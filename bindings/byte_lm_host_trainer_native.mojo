@@ -12,7 +12,7 @@ after it returned. The same entry and argument words as the Python body,
 so the step keeps its bits.
 """
 from std.python import Python, PythonObject
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -240,7 +240,7 @@ def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape: 
         var count = 1
         for j in range(len(shapes[i])):  # driver-loop: over admitted tensor shape metadata
             count *= shapes[i][j]
-        memcpy(dest=target + offset,
+        unsafe_memcpy(dest=target + offset,
             src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owned))), count=count)
         offset += count
         _ = owned

@@ -27,7 +27,7 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_tree_native import host_tree_operation
 from bindings.trees_lifetime import trees_resident_new
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.trees_gbdt_metadata import gbdt_tree_metadata
 from bindings.trees_public_inputs import (
     trees_builtins, trees_table, trees_entry, trees_need, trees_helper,
@@ -510,14 +510,14 @@ def gbdt_tree_metadata_op(model: PythonObject, which: String, context: PythonObj
         var n = len(parsed.counts)
         var out = admitted_vector(n, "<u4", context)
         if n:
-            memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
+            unsafe_memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
                    src=parsed.counts.unsafe_ptr(), count=n)
             _ = out  # keep the Python object alive through the native call above
         return out
     var n = len(parsed.values)
     var out = admitted_vector(n, "<f8", context)
     if n:
-        memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
+        unsafe_memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
                src=parsed.values.unsafe_ptr(), count=n)
         _ = out  # keep the Python object alive through the native call above
     return out

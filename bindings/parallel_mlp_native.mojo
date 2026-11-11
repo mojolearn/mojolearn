@@ -11,7 +11,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
@@ -340,7 +340,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
     var stack = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=stacked._addr))
     var offset = 0
     for j in range(len(total)):  # driver-loop: over the first shard's gradient tensors
-        memcpy(dest=stack + offset, src=Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr)), count=counts[j])
+        unsafe_memcpy(dest=stack + offset, src=Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr)), count=counts[j])
         offset += counts[j]
     for shard in range(1, n_shards):  # driver-loop: over logical gradient shards (one copy each)
         var current = py_call(b[].bi.list, shards[shard])
@@ -349,7 +349,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
         offset = 0
         for j in range(len(total)):  # driver-loop: over this shard's gradient tensors
             var value = _parallel_array(current[j], dims[j], False, False)
-            memcpy(dest=stack + shard * count + offset, src=Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=counts[j])
+            unsafe_memcpy(dest=stack + shard * count + offset, src=Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=counts[j])
             offset += counts[j]
             _ = value^
     var base = Int(py=stacked._addr)
@@ -363,7 +363,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
     offset = 0
     for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
         var destination = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
-        memcpy(dest=destination, src=source + offset, count=counts[j])
+        unsafe_memcpy(dest=destination, src=source + offset, count=counts[j])
         offset += counts[j]
     _ = stacked^
     return total
@@ -407,9 +407,9 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
         var n = Int(py=value.size)
         op[j] = Int32(offset)
         var src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=next["weights"][names[j]]._addr))
-        memcpy(dest=pp + offset, src=src, count=n)
+        unsafe_memcpy(dest=pp + offset, src=src, count=n)
         src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-        memcpy(dest=gp + offset, src=src, count=n)
+        unsafe_memcpy(dest=gp + offset, src=src, count=n)
         offset += n
         _ = value^
     op[4] = Int32(offset)
@@ -432,7 +432,7 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
         var value = next["weights"][names[j]]
         var n = Int(py=value.size)
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-        memcpy(dest=dst, src=pp + offset, count=n)
+        unsafe_memcpy(dest=dst, src=pp + offset, count=n)
         offset += n
     py_setitem(saved, "step", step + 1)
     _ = params^

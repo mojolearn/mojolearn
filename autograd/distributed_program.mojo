@@ -5,7 +5,7 @@
 # physically partitioned into disjoint contiguous ranges. Transport stages
 # bytes through native host memory (also valid on AMD without peer access).
 # No speedup or cross-vendor qualification is inferred from this source.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY, OP_FILL, OP_SCALE, dummy_ptr
 from autograd.ops import OP_AG_ACCUMULATE

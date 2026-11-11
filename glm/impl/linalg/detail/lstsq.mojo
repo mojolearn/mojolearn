@@ -263,7 +263,7 @@ def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, dst: MutP
     if i < Int(n):
         var mag = abs(v.unsafe_load(i))
         if mag == mag and mag > Float32(0.0):
-            _ = Atomic[DType.int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
+            _ = Atomic[Int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
 
 
 def ols_device_abs_max(ctx: DeviceContext, mut v: DeviceBuffer[DType.float32], n: Int, tpb: Int) raises -> Float32:

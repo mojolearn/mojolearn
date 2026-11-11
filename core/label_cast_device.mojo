@@ -17,7 +17,7 @@ The host twin is core/label_cast.mojo (the same element functions around
 `host_unique_inverse`), so both columns give the same bytes."""
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_raw_bits, cast_w64_bits, narrow_w64
@@ -87,7 +87,7 @@ def device_unique_inverse_cast(
     var h_raw = ctx.enqueue_create_host_buffer[DType.float32](words)
     ctx.synchronize()
     h_raw.unsafe_ptr().unsafe_store(words - 1, Float32(0))
-    memcpy(dest=_BP(unsafe_from_address=Int(h_raw.unsafe_ptr())), src=_BP(unsafe_from_address=src.start()), count=nbytes)
+    unsafe_memcpy(dest=_BP(unsafe_from_address=Int(h_raw.unsafe_ptr())), src=_BP(unsafe_from_address=src.start()), count=nbytes)
     var d_raw = ctx.enqueue_create_buffer[DType.float32](words)
     ctx.enqueue_copy(dst_buf=d_raw, src_ptr=h_raw.unsafe_ptr())
     var d_src = ctx.enqueue_create_buffer[DType.uint64](n)
@@ -123,7 +123,7 @@ def device_unique_inverse_cast(
     if not codes_on_device:
         ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr), src_buf=d_codes)
     ctx.synchronize()
-    memcpy(dest=_BP(unsafe_from_address=classes_addr), src=_BP(unsafe_from_address=Int(h_out.unsafe_ptr())), count=k * size)
+    unsafe_memcpy(dest=_BP(unsafe_from_address=classes_addr), src=_BP(unsafe_from_address=Int(h_out.unsafe_ptr())), count=k * size)
     _ = h_raw^
     _ = h_out^
     _ = d_raw^

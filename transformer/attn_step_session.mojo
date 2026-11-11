@@ -31,7 +31,7 @@ weights by the caller's addresses and the process weight epoch
 whole caller buffers.
 """
 
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec

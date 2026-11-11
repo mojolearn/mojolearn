@@ -8,7 +8,7 @@
 # and transfer counts are retained.
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.p3nc_fitted_freeze import fitted_freeze
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_is_array
@@ -41,7 +41,7 @@ def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject
         return x
     var b = native_loaded_module("builtins")
     var out = family_array(py_call(b.tuple, x.shape), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=Int(py=x.size))
     _ = out  # keep the Python object alive through the native call above
     return out

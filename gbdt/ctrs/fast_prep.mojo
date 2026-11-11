@@ -55,7 +55,7 @@ quality remain unverified.
 
 from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T28, T28_SORT, T28_PREFIX
 from std.sys.info import has_apple_gpu_accelerator
@@ -306,7 +306,7 @@ def _read_counts_wide(
     ctx.enqueue_copy(dst_ptr=h_absent.unsafe_ptr(), src_buf=d_absent)
     ctx.synchronize()
     dst.resize(unsafe_uninit_length=n)
-    memcpy(
+    unsafe_memcpy(
         dest=dst.unsafe_ptr().bitcast[Int64](),
         src=h_wide.unsafe_ptr(),
         count=n,
@@ -381,7 +381,7 @@ def device_dense_codes(
     if n <= 0:
         raise Error("device_dense_codes: empty column")
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    memcpy(dest=h.unsafe_ptr(), src=src, count=n)
+    unsafe_memcpy(dest=h.unsafe_ptr(), src=src, count=n)
     var x = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     var codes = ctx.enqueue_create_buffer[DType.uint32](n)
@@ -525,7 +525,7 @@ def read_codes(
     ctx.synchronize()
     var out = List[UInt32]()
     out.resize(n, UInt32(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     return out^
 
 
@@ -536,7 +536,7 @@ def upload_codes(
     per feature, for the fast drivers when `CTR_ONEHOT_DEVICE` is off."""
     var n = len(codes)
     var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    memcpy(dest=h.unsafe_ptr(), src=codes.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h.unsafe_ptr(), src=codes.unsafe_ptr(), count=n)
     var d = ctx.enqueue_create_buffer[DType.uint32](n)
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
@@ -638,7 +638,7 @@ def ctr_borders_from_device(
     ctx.synchronize()
     var values = List[Float32]()
     values.resize(n, Float32(0.0))
-    memcpy(dest=values.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=values.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     return compute_ctr_borders(values, description)
 
 
@@ -657,7 +657,7 @@ def _read_column(
     ctx.synchronize()
     var col = List[Float32]()
     col.resize(n, Float32(0.0))
-    memcpy(dest=col.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=col.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     return col^
 
 
@@ -800,7 +800,7 @@ struct CtrPrepFast(Movable):
                 + " entries for " + String(self.n) + " rows"
             )
         var h = ctx.enqueue_create_host_buffer[DType.uint8](self.n)
-        memcpy(
+        unsafe_memcpy(
             dest=h.unsafe_ptr(), src=binarized_target.unsafe_ptr(),
             count=self.n,
         )
@@ -829,7 +829,7 @@ struct CtrPrepFast(Movable):
                 + " entries for " + String(self.n) + " rows"
             )
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.n)
-        memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=self.n)
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=self.n)
         self.prefix_ready = False
         self.orders[p] = ctx.enqueue_create_buffer[DType.uint32](self.n)
         ctx.enqueue_copy(dst_buf=self.orders[p], src_ptr=h.unsafe_ptr())

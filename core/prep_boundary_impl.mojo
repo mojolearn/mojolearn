@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public preprocessing validation and row-buffer preparation. No model math.
 from core.cast_in import CastIn, cast_w64_bits
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from core.admitted_input import admitted_raw_word
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -147,11 +147,11 @@ def prep_gather_rows(source: CastIn, indices: Int, rows: Int, output: Int) raise
         for r in range(lo, hi):  # admitted input: this task's selected rows
             var start = base + Int(index.unsafe_load(r)) * s0
             if s1 == item or cols == 1:
-                memcpy(dest=dst.unsafe_offset(r * row_bytes),
+                unsafe_memcpy(dest=dst.unsafe_offset(r * row_bytes),
                        src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=start), count=row_bytes)
             else:
                 for c in range(cols):  # admitted input: strided items of one selected row
-                    memcpy(dest=dst.unsafe_offset(r * row_bytes + c * item),
+                    unsafe_memcpy(dest=dst.unsafe_offset(r * row_bytes + c * item),
                            src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=start + c * s1), count=item)
 
     if tasks <= 1:

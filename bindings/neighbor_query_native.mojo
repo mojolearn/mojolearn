@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete standalone queries, sharing the worker's native search ownership.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -620,7 +620,7 @@ def _ivf_clone(model: PythonObject, kind: PythonObject, context: PythonObject) r
     for i in range(len(snapshots)):  # small-loop(five fitted index arrays, one memcpy each)
         var copy = family_array(snapshots[i].python_shape(), dtypes[i], context)
         if snapshots[i].count > 0:
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(copy))),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(copy))),
                    src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshots[i].source.addr),
                    count=snapshots[i].count * 4)
         py_setitem(target, names[i], copy)

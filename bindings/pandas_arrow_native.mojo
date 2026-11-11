@@ -7,7 +7,7 @@
 # The values are copied into a fresh NumPy-layout block, so no Arrow buffer
 # is retained past the read and Arrow ownership stays with the caller's
 # pandas object.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
@@ -144,7 +144,7 @@ def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> 
                     var bit = offset + r
                     target[r] = (bits[bit >> 3] >> UInt8(bit & 7)) & UInt8(1)
             else:
-                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst),
+                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst),
                        src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data + offset * item),
                        count=length * item)
             if nulls > 0:

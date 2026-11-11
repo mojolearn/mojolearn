@@ -23,7 +23,7 @@ work per task (`_unit_work`: roughly the rows one unit touches), so a
 fixture of five rows never wakes the pool. The sequential Float32 prefixes
 (DEVIATION 6107) stay one unit per problem.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count, host_predict_chunk
 from x_metrics.common import FP, IP, STAGE_INTS, LEAF
@@ -65,10 +65,10 @@ def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int, legacy: 
         var work = List[Float32](length=pl.size, fill=Float32(0))
         var wp = work.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if arena_len > 0:
-            memcpy(dest=wp, src=f, count=arena_len)
+            unsafe_memcpy(dest=wp, src=f, count=arena_len)
         _run(wp, q, pl.stages, threads)
         if arena_len > 0:
-            memcpy(dest=f, src=wp, count=arena_len)
+            unsafe_memcpy(dest=f, src=wp, count=arena_len)
         _ = len(work)
     _ = len(pl.rows)
 

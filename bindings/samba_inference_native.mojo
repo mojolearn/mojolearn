@@ -13,7 +13,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries
 from bindings.samba_training_native import samba_ids

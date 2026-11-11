@@ -11,7 +11,7 @@ build registers (`x_decomp_dev_eigh`, `x_decomp_dev_lu`) and the solver
 drivers the binding registers under one name with a host and a GPU body
 (`x_decomp_ica_solve`, `x_decomp_nmf_solve`, ...). x_decomp/decomp_owner_host.mojo
 and decomp_owner_dev.mojo implement it for the two bindings."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from x_decomp.api import eigh_run, lu_solve_run, move_run, rand_run
 from x_decomp.cells import F32Ptr, I32Ptr
@@ -258,7 +258,7 @@ def kit_rows[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, star
         return kit.take_rows(a, idx)
     var out = kit.zeros(stop - start, cols)
     if (stop - start) * cols:
-        memcpy(dest=kit.ptr(out), src=kit.ptr(a).unsafe_offset(start * cols), count=(stop - start) * cols)
+        unsafe_memcpy(dest=kit.ptr(out), src=kit.ptr(a).unsafe_offset(start * cols), count=(stop - start) * cols)
     return out
 
 

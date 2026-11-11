@@ -114,7 +114,7 @@ def gp_clamp_count_kernel(clamped: _GI, cnt: _GI, n: Int32):
     var t = Int(block_idx.x) * GP_YDOT_TPB + Int(thread_idx.x)
     if t < Int(n):
         if clamped.unsafe_load(t) != Int32(0):
-            _ = Atomic[DType.int32].fetch_add(cnt, Int32(1))
+            _ = Atomic[Int32].fetch_add(cnt, Int32(1))
 
 
 def gpr_fit_ptr_device(

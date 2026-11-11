@@ -12,7 +12,7 @@ streams, float32 scalars and the Ritz test's binary64 comparisons, resident
 where the Python kit was. The kernel matrix's x_neighbors steps stay the
 caller's (bindings/kpca_native.mojo), on the entries the shell called."""
 from std.math import sqrt
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from x_decomp.cells import F32Ptr
 from x_decomp.moves import MOVE_REV_COLS

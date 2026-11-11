@@ -11,7 +11,7 @@
 # the same call; LDA's and QDA's two-class decision function is staged in the
 # scoring program instead of a second program over a downloaded block (the same
 # matmul stage over the same words).
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.native_array_storage import native_array_empty
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -142,7 +142,7 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
         return PythonObject(None)
     var m = admit_weight_words(sample_weight, n, context)
     var w = f32_array(n, context)
-    memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.address), count=n)
+    unsafe_memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.address), count=n)
     _ = w  # keep the Python object alive through the native call above
     _ = m  # keep the Python object alive through the native call above
     _ = m^
@@ -861,7 +861,7 @@ def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int
             var dest = F32P(unsafe_from_address=Int(py=classical_address(block)))
             _ = block  # keep the Python object alive through the native call above
             for k in range(K):  # driver-loop: over the classes (model structure)
-                memcpy(dest=dest + k * ncat[j], src=F32P(unsafe_from_address=pr.base) + off + (j * K + k) * cmax, count=ncat[j])
+                unsafe_memcpy(dest=dest + k * ncat[j], src=F32P(unsafe_from_address=pr.base) + off + (j * K + k) * cmax, count=ncat[j])
                 _ = block  # keep the Python object alive through the native call above
         _ = py_call(out.append, block)
     return out
@@ -1189,7 +1189,7 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         _ = scalings  # keep the Python object alive through the native call above
         var src = F32P(unsafe_from_address=pr.base) + scal
         for i in range(d):  # driver-loop: over the scalings' rows (model structure)
-            memcpy(dest=dest + i * rank2, src=src + i * d, count=rank2)
+            unsafe_memcpy(dest=dest + i * rank2, src=src + i * d, count=rank2)
             _ = scalings  # keep the Python object alive through the native call above
     _set(fields, "scalings_", scalings)
     _lda_publish_coef(pr, fields, K, d, coef, inter, bin[0], bin[1], context)

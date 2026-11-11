@@ -90,7 +90,7 @@ from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_pro
 # Restored 2026-11-09 by lane/r1-restore-measured-winners as ops cnn_conv_block / cnn_linear: rules_cnn.mojo's block and head
 # VJPs (the same conv_block_backward_into / linear_backward_into calls) are autograd/rules_step_ops.mojo's
 # CNN_CONV_BLOCK_TAG / CNN_LINEAR_TAG (autograd/cnn_block_op.mojo); the device epoch stays deleted.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
 # out of this shell.
 from x_cnn.device_entries_impl import (
@@ -625,7 +625,7 @@ def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_add
         var y = adaptive_pool_impl(src, idx, prm, kind, idx_out)
         copy_f32(y.unsafe_ptr(), po, n_write)
         if kind == 2:
-            memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
+            unsafe_memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
             _ = len(idx_out)
     return PythonObject(n_write)
 

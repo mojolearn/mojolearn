@@ -146,7 +146,7 @@ def _rbc_max_degree_kernel(
     var row = Int(block_idx.x) * RBC_CANON_TPB + Int(thread_idx.x)
     if row < Int(n_queries):
         var degree = adj_ia[row + 1] - adj_ia[row]
-        _ = Atomic[DType.int32].max(maximum, degree)
+        _ = Atomic[Int32].max(maximum, degree)
 
 
 def _rbc_merge_row(
@@ -203,7 +203,7 @@ def _rbc_bucket_count(ia: MutPointer[Int32, MutAnyOrigin], n: Int32, counts: Mut
     var row = Int(block_idx.x) * RBC_CANON_TPB + Int(thread_idx.x)
     if row < Int(n):
         var bucket = _degree_bucket(Int(ia[row + 1] - ia[row]))
-        _ = Atomic[DType.int32].fetch_add(counts + bucket, Int32(1))
+        _ = Atomic[Int32].fetch_add(counts + bucket, Int32(1))
 
 
 def _rbc_bucket_offsets(counts: MutPointer[Int32, MutAnyOrigin], offsets: MutPointer[Int32, MutAnyOrigin]):
@@ -220,7 +220,7 @@ def _rbc_bucket_scatter(ia: MutPointer[Int32, MutAnyOrigin], n: Int32, counts: M
     var row = Int(block_idx.x) * RBC_CANON_TPB + Int(thread_idx.x)
     if row < Int(n):
         var bucket = _degree_bucket(Int(ia[row + 1] - ia[row]))
-        var slot = Atomic[DType.int32].fetch_add(counts + bucket, Int32(1))
+        var slot = Atomic[Int32].fetch_add(counts + bucket, Int32(1))
         rows[Int(offsets[bucket] + slot)] = Int32(row)
 
 

@@ -7,7 +7,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, py_ints
@@ -451,7 +451,7 @@ def _transformer_decode_copy(value: PythonObject, context: PythonObject) raises 
     var array = value  # native-owned contiguous snapshot captured once at session admission
     var result = List[Float32](length=Int(py=array.size), fill=0)
     if len(result) != 0:
-        memcpy(dest=result.unsafe_ptr(), src=f32_ptr(Int(py=array._addr)), count=len(result))
+        unsafe_memcpy(dest=result.unsafe_ptr(), src=f32_ptr(Int(py=array._addr)), count=len(result))
     _ = array
     return result^
 
@@ -567,8 +567,8 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             handle.optional.append(_transformer_decode_copy(optional[i], context))
         handle.k_cache = List[Float32](length=pieces[2], fill=0)
         handle.v_cache = List[Float32](length=pieces[2], fill=0)
-        memcpy(dest=handle.k_cache.unsafe_ptr(), src=f32_ptr(pieces[0]), count=pieces[2])
-        memcpy(dest=handle.v_cache.unsafe_ptr(), src=f32_ptr(pieces[1]), count=pieces[2])
+        unsafe_memcpy(dest=handle.k_cache.unsafe_ptr(), src=f32_ptr(pieces[0]), count=pieces[2])
+        unsafe_memcpy(dest=handle.v_cache.unsafe_ptr(), src=f32_ptr(pieces[1]), count=pieces[2])
     handle.open = True
     py_setitem(values, "_handle", PythonObject(alloc=handle^))
     py_setitem(slots, "cached_tokens", PythonObject(cached))
@@ -707,11 +707,11 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
         if pieces[2] != len(h[].k_cache) or pieces[2] != len(h[].v_cache):
             raise Error("TransformerDecodeSession: cache dimensions differ from the retained native session")
         if load:
-            memcpy(dest=h[].k_cache.unsafe_ptr(), src=f32_ptr(pieces[0]), count=pieces[2])
-            memcpy(dest=h[].v_cache.unsafe_ptr(), src=f32_ptr(pieces[1]), count=pieces[2])
+            unsafe_memcpy(dest=h[].k_cache.unsafe_ptr(), src=f32_ptr(pieces[0]), count=pieces[2])
+            unsafe_memcpy(dest=h[].v_cache.unsafe_ptr(), src=f32_ptr(pieces[1]), count=pieces[2])
         else:
-            memcpy(dest=f32_ptr(pieces[0]), src=h[].k_cache.unsafe_ptr(), count=pieces[2])
-            memcpy(dest=f32_ptr(pieces[1]), src=h[].v_cache.unsafe_ptr(), count=pieces[2])
+            unsafe_memcpy(dest=f32_ptr(pieces[0]), src=h[].k_cache.unsafe_ptr(), count=pieces[2])
+            unsafe_memcpy(dest=f32_ptr(pieces[1]), src=h[].v_cache.unsafe_ptr(), count=pieces[2])
     if not load:
         keys.publish()
         vals.publish()

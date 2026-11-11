@@ -114,7 +114,7 @@ from svm.impl.svm_parameter import (
     check_rung1_scope,
 )
 from svm.host.finite_scan import check_finite_ptr
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from svm.host.svm_host_impl import (
     IForestHostRun,
     if_host_resident_new_token,
@@ -573,9 +573,9 @@ def iforest_run_binding(
             var held_token = held[0].token
             if_host_resident_put(held)
             if want == IF_WANT_PREDICT:
-                memcpy(dest=i32_ptr(out_i32_address), src=run.labels.unsafe_ptr(), count=n_query)
+                unsafe_memcpy(dest=i32_ptr(out_i32_address), src=run.labels.unsafe_ptr(), count=n_query)
             else:
-                memcpy(dest=f32_ptr(out_f32_address), src=run.values.unsafe_ptr(), count=n_query)
+                unsafe_memcpy(dest=f32_ptr(out_f32_address), src=run.values.unsafe_ptr(), count=n_query)
             ip[0] = run.offset_
             ip[1] = Float64(run.max_samples_)
             ip[2] = Float64(n_features)
@@ -590,10 +590,10 @@ def iforest_run_binding(
         )
     if want == IF_WANT_PREDICT:
         var oi = i32_ptr(out_i32_address)
-        memcpy(dest=oi, src=run.labels.unsafe_ptr(), count=n_query)
+        unsafe_memcpy(dest=oi, src=run.labels.unsafe_ptr(), count=n_query)
     else:
         var of = f32_ptr(out_f32_address)
-        memcpy(dest=of, src=run.values.unsafe_ptr(), count=n_query)
+        unsafe_memcpy(dest=of, src=run.values.unsafe_ptr(), count=n_query)
     ip[0] = run.offset_
     ip[1] = Float64(run.max_samples_)
     ip[2] = Float64(n_features)

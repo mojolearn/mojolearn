@@ -16,7 +16,7 @@ model, the session steps the caller's own state through the per-call
 and `load_state` are then no-ops on a state that is always current.
 """
 from std.python import Python, PythonObject
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -157,7 +157,7 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
             var logits = samba_forward(values["_model"], column, values["_state"], PythonObject(None), True, context)
             var row = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=logits._addr))
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's logits
-                memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)
+                unsafe_memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)
             _ = logits^
             _ = column^
         _ = ids

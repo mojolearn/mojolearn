@@ -2,7 +2,7 @@
 # Complete portable state for native captured-program data parallelism.
 # Files contain the canonical unpartitioned bytes, never device IDs or just
 # hashes. Restoring repartitions those bytes onto the requested topology.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.distributed_program import DistributedProgram

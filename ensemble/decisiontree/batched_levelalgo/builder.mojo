@@ -6,7 +6,7 @@ from ensemble.tree_identical_ideas import T02, T03, T04, T05, T05_ROW_VISITS, T0
 from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined, get_defined_int
 from std.math import ceildiv
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -3496,14 +3496,14 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         )
         tree.sparsetree.resize(n_nodes, SparseTreeNode[Self.O.DataT]())
         tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
-        memcpy(
+        unsafe_memcpy(
             dest=tree.sparsetree.unsafe_ptr(),
             src=self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[Self.O.DataT]
             ](),
             count=n_nodes,
         )
-        memcpy(
+        unsafe_memcpy(
             dest=tree.vector_leaf.unsafe_ptr(),
             src=self.leaf_h_leaves.unsafe_ptr(),
             count=n_nodes * n_out,
@@ -3676,14 +3676,14 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         if n_nodes == 0:
             return
         self._ensure_leaf_capacity(ctx, n_nodes, n_out)
-        memcpy(
+        unsafe_memcpy(
             dest=self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[Self.O.DataT]
             ](),
             src=tree.sparsetree.unsafe_ptr(),
             count=n_nodes,
         )
-        memcpy(
+        unsafe_memcpy(
             dest=self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[
                 InstanceRange
             ](),
@@ -3710,7 +3710,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         log_launch_ctx(ctx, "xfer_leaf_download")
         ctx.enqueue_copy(dst_buf=hl, src_buf=dl)
         ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=tree.vector_leaf.unsafe_ptr(),
             src=self.leaf_h_leaves.unsafe_ptr(),
             count=n_nodes * n_out,

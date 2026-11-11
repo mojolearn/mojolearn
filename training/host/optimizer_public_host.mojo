@@ -10,7 +10,7 @@ bindings/optimizer_public_host_pyapi.mojo is the door.
 The optimizer's state lives in a host slot here, allocated on the first
 step; there is no device, so there is no resident state and no
 device-parameter step (refused by name)."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.mojolearn_training_host_impl import clip_grad_norm_host_into, optimizer_step_host_into
 from training.host.samba_ops_oracle import host_samba_accumulate
@@ -81,9 +81,9 @@ def host_download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
     var h = host_slot(handle, n)
     var pool = HOST_OPT_POOL.get_or_create_ptr()
     if m_addr != 0:
-        memcpy(dest=F32P(unsafe_from_address=m_addr), src=pool[].m[h].unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=F32P(unsafe_from_address=m_addr), src=pool[].m[h].unsafe_ptr(), count=n)
     if v_addr != 0:
-        memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].v[h].unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].v[h].unsafe_ptr(), count=n)
     return n
 
 
@@ -92,9 +92,9 @@ def host_upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
     var h = host_slot(handle, n)
     var pool = HOST_OPT_POOL.get_or_create_ptr()
     if m_addr != 0:
-        memcpy(dest=pool[].m[h].unsafe_ptr(), src=F32P(unsafe_from_address=m_addr), count=n)
+        unsafe_memcpy(dest=pool[].m[h].unsafe_ptr(), src=F32P(unsafe_from_address=m_addr), count=n)
     if v_addr != 0:
-        memcpy(dest=pool[].v[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
+        unsafe_memcpy(dest=pool[].v[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
     return n
 
 

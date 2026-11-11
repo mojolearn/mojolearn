@@ -7,7 +7,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, 
 from core.samba_ids_impl import samba_training_ids_into
 from core.samba_count_impl import samba_target_count
 from providers.python.samba_execution_pyapi import samba_provider_gradients
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_from_state
 from bindings.byte_perf_helpers import byte_view_bytes
@@ -245,8 +245,8 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
                 var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=pair._addr))
                 var embedding_src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=dembed._addr))
                 var head_src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=dhead._addr))
-                memcpy(dest=dst, src=embedding_src, count=vocab * d)
-                memcpy(dest=dst + vocab * d, src=head_src, count=vocab * d)
+                unsafe_memcpy(dest=dst, src=embedding_src, count=vocab * d)
+                unsafe_memcpy(dest=dst + vocab * d, src=head_src, count=vocab * d)
                 _ = py_call(_native_function(entries, "accumulate"), Python.list(dembed._addr, pair._addr), py_ints([vocab * d, 2, -1]))
                 _ = pair^
         py_setitem(gradients, "embed.weight", dembed)

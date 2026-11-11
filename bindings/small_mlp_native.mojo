@@ -18,7 +18,7 @@ balanced call helpers retain original owners without leaking references.
 """
 from std.math import isfinite
 from std.sys import is_defined
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -997,9 +997,9 @@ def small_mlp_grads_rows(handle: Int, x_addr: Int, y_addr: Int, rows: Int) raise
         raise Error("SmallMLPTrainer batch must be in [1, 256]")
     var x = List[Float32](length=rows * 8, fill=Float32(0))
     var y = List[Int32](length=rows, fill=Int32(0))
-    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())),
+    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())),
            src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=x_addr), count=rows * 8)
-    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
            src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=y_addr), count=rows)
     var entries = _mode_entries()
     var index = mlp_store_index(handle)

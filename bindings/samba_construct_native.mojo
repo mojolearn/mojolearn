@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from core.samba_construct_native_impl import samba_fill_ones
 from std.math import sqrt
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.generator_state_native import generator_init, generator_fields, generator_validate, generator_next
@@ -37,7 +37,7 @@ def samba_load_weights(model: PythonObject, weights: PythonObject, context: Pyth
         if Int(py=py_call(context["all_finite_f32"], value._addr, value.size)) != 1:
             raise Error("SambaStack: " + String(name) + " is not finite")
         var target = fields["arrays"][name]
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=target._addr)),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=target._addr)),
                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=Int(py=value.nbytes))
         _ = value^
     return PythonObject(None)

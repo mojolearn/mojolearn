@@ -6,7 +6,7 @@ from std.collections import InlineArray
 from core.tree_math import tree_log
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
 
@@ -3087,7 +3087,7 @@ def upload_dataset(
         d_data = ctx.enqueue_create_buffer[DType.float32](count)
         var h_data = ctx.enqueue_create_host_buffer[DType.float32](count)
         ctx.synchronize()
-        memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
+        unsafe_memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
         ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
         ctx.synchronize()
         _ = h_data^
@@ -3097,7 +3097,7 @@ def upload_dataset(
     )
     ctx.synchronize()
     if not labels_on_device:
-        memcpy(
+        unsafe_memcpy(
             dest=h_labels.unsafe_ptr(),
             src=class_ids.unsafe_ptr(),
             count=Int(n_rows),
@@ -3162,7 +3162,7 @@ def class_ids_device_kernel(
         out_ids[unsafe_offset=i] = Int32(Int(v))
     else:
         out_ids[unsafe_offset=i] = Int32(0)
-        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+        _ = Atomic[Int32].min(first_bad, Int32(i))
 
 
 def upload_dataset_labels_f32(
@@ -3198,7 +3198,7 @@ def upload_dataset_labels_f32(
     var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
     var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.synchronize()
-    memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_lf, src_ptr=h_lf.unsafe_ptr())
     ctx.enqueue_memset(d_bad, Int32(n))
     ctx.enqueue_function[class_ids_device_kernel](
@@ -3312,7 +3312,7 @@ def upload_dataset_labels_quantized(
     var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
     ctx.synchronize()
-    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
     # reads back one word, so the upload above has landed after it
     var mag = device_abs_sum_blocked(ctx, d_y, n)
@@ -3408,7 +3408,7 @@ def upload_dataset_labels_quantized_weighted(
     var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.synchronize()
-    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
     var has_w = weights_addr != 0 and n > 0
     if has_w:
@@ -4419,7 +4419,7 @@ def _stage_upload_if_changed[
                         j += 1
                 if same_live:
                     return
-            memcpy(dest=hp, src=sp, count=live)
+            unsafe_memcpy(dest=hp, src=sp, count=live)
             var view = dst.create_sub_buffer[dt](0, live)
             ctx.enqueue_copy(dst_buf=view, src_ptr=sp)
             return
@@ -4457,7 +4457,7 @@ def _stage_upload_if_changed[
         for i in range(n):
             hp.unsafe_store(i, sp.unsafe_load(i))
     else:
-        memcpy(dest=hp, src=sp, count=n)
+        unsafe_memcpy(dest=hp, src=sp, count=n)
     ctx.enqueue_copy(dst_buf=dst, src_ptr=src.unsafe_ptr())
 
 
@@ -5457,7 +5457,7 @@ def search_batch(
     # in the range pass; the sync above is the batch's ONE drain, so the
     # values are complete here and nowhere earlier did the host need them.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    memcpy(
+    unsafe_memcpy(
         dest=any_nonconst.unsafe_ptr(),
         src=ws.h_nonconst.unsafe_ptr(),
         count=n_nodes,
@@ -5466,7 +5466,7 @@ def search_batch(
     # --- 8. the batch's splits, as `:492-494` hands them to the host --
     # (packed by `pack_splits_kernel` above; one block copy, no host loop)
     var splits = List[Split](length=n_nodes, fill=Split())
-    memcpy(
+    unsafe_memcpy(
         dest=splits.unsafe_ptr(),
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,
@@ -5958,7 +5958,7 @@ struct EtDeviceLoop(Movable):
         """`NodeQueue.__init__` for the group: tree ids, roots, header."""
         var h_tree = ctx.enqueue_create_host_buffer[DType.int32](self.g)
         ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=h_tree.unsafe_ptr(),
             src=tree_ids.unsafe_ptr() + first,
             count=self.g,
@@ -6442,9 +6442,9 @@ struct EtDeviceLoop(Movable):
                 length=n_s,
                 fill=SparseTreeNode[DType.float32].CreateLeafNode(Int32(0)),
             )
-            memcpy(dest=nodes.unsafe_ptr(), src=np + base, count=n_s)
+            unsafe_memcpy(dest=nodes.unsafe_ptr(), src=np + base, count=n_s)
             var leaves = List[Float32](length=n_s * k_out, fill=Float32(0.0))
-            memcpy(
+            unsafe_memcpy(
                 dest=leaves.unsafe_ptr(),
                 src=lp + base * k_out,
                 count=n_s * k_out,
@@ -7965,14 +7965,14 @@ def search_batch_regression(
 
     # DEVIATION 450: the deferred `h_nonconst` read -- see the twin.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    memcpy(
+    unsafe_memcpy(
         dest=any_nonconst.unsafe_ptr(),
         src=ws.h_nonconst.unsafe_ptr(),
         count=n_nodes,
     )
 
     var splits = List[Split](length=n_nodes, fill=Split())
-    memcpy(
+    unsafe_memcpy(
         dest=splits.unsafe_ptr(),
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,

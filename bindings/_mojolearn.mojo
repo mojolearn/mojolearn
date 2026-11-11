@@ -194,7 +194,7 @@ from bindings.msel_device import (
 )
 from std.os import abort
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder

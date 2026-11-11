@@ -60,7 +60,7 @@ lands them.
 from bindings.p3_labels_metrics_native import p3_type_word
 from core.experiment_guards_base import BASE_GUARDS_OK
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -546,7 +546,7 @@ def silhouette_binding(
             DISTANCE_L2_SQRT_UNEXPANDED, scores,
         )
         if n_rows > 0:
-            memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
+            unsafe_memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
         _ = len(scores)
     return PythonObject(Float64(mean))
 
@@ -613,8 +613,8 @@ def spectral_fit_predict_dataset_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
         _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-        memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-        memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+        unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+        unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
         _ = len(labels)
         _ = len(embedding)
     return PythonObject(n_out)
@@ -659,8 +659,8 @@ def spectral_fit_predict_graph_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
         _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-        memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-        memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+        unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+        unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
         _ = len(labels)
         _ = len(embedding)
     return PythonObject(n_out)
@@ -728,7 +728,7 @@ def spectral_embedding_dataset_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(n_out)
 
@@ -780,7 +780,7 @@ def spectral_embedding_graph_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(n_out)
 
@@ -803,10 +803,10 @@ def _write_spectral_state(
     var evec = f32_ptr(_index(addrs[first + 1]))
     var dg = f32_ptr(_index(addrs[first + 2]))
     var cent = f32_ptr(_index(addrs[first + 3]))
-    memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
+    unsafe_memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
+    unsafe_memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
+    unsafe_memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
+    unsafe_memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
 
 
 def spectral_fit_predict_dataset_state_binding(
@@ -840,8 +840,8 @@ def spectral_fit_predict_dataset_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -880,8 +880,8 @@ def spectral_fit_predict_graph_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -922,8 +922,8 @@ def spectral_predict_binding(
             input, train_x, n_train, n_queries, n_features, k, n_clusters,
             n_neighbors, affinity, state,
         )
-        memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-        memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
+        unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
+        unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
         _ = len(out.labels)
         _ = len(out.embedding)
     return PythonObject(0)
@@ -1030,9 +1030,9 @@ def precision_recall_curve_binding(
         var result = binary_ranking_checked(y, scores, n, True)
         m = result[1]
         var curve = result[0].unsafe_ptr()
-        memcpy(dest=precision, src=curve, count=m + 1)
-        memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
-        memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
+        unsafe_memcpy(dest=precision, src=curve, count=m + 1)
+        unsafe_memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
+        unsafe_memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
         _ = len(result[0])
     return PythonObject(m)
 
@@ -1079,14 +1079,14 @@ def confusion_matrix_binding(
         with GILReleased(Python()):
             check_classification_ptr(y, p, n, k, True)
             var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
-            memcpy(dest=output, src=values[0].unsafe_ptr(), count=len(values[0]))
+            unsafe_memcpy(dest=output, src=values[0].unsafe_ptr(), count=len(values[0]))
             _ = len(values[0])
     else:
         var output = f32_ptr(address)
         with GILReleased(Python()):
             check_classification_ptr(y, p, n, k, True)
             var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
-            memcpy(dest=output, src=values[1].unsafe_ptr(), count=len(values[1]))
+            unsafe_memcpy(dest=output, src=values[1].unsafe_ptr(), count=len(values[1]))
             _ = len(values[1])
     return PythonObject(k * k)
 
@@ -1112,7 +1112,7 @@ def precision_recall_fscore_binding(
     with GILReleased(Python()):
         check_classification(y, p, n, k, False)
         var values = host_precision_recall_fscore(y, p, n, k, average, positive, zero, selected)
-        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
         written = len(values)
     return PythonObject(written)
 
@@ -1218,7 +1218,7 @@ def umap_fit_transform_binding(
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
     require_finite_f32(embedding, "UMAP returned a non-finite embedding")
-    memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(config.n_components)
 
@@ -1283,7 +1283,7 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
     require_finite_f32(embedding, "UMAP returned a non-finite embedding")
-    memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(config.n_components)
 
@@ -1333,7 +1333,7 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
     if len(embedding) != rows * config.n_components:
         raise Error("UMAP transform returned an unexpected shape")
     require_finite_f32(embedding, "UMAP transform returned a non-finite embedding")
-    memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(config.n_components)
 

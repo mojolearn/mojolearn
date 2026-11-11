@@ -13,7 +13,7 @@
 #
 # Codes OP_CAST_FIRST..OP_CAST_LAST (3500..3502) are this family;
 # sequence/dispatch.mojo routes and fences them.
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from core.cast_in import (
@@ -186,7 +186,7 @@ def upload_bytes[E: Exec](mut ex: E, dst: FP, addr: Int, nbytes: Int) raises:
         ex.upload(dst, FP(unsafe_from_address=addr), full)
     if rem > 0:
         var tail = List[Float32](length=1, fill=Float32(0))
-        memcpy(dest=_BP(unsafe_from_address=Int(tail.unsafe_ptr())),
+        unsafe_memcpy(dest=_BP(unsafe_from_address=Int(tail.unsafe_ptr())),
                src=_BP(unsafe_from_address=addr + full * 4), count=rem)
         ex.upload(dst + full, FP(unsafe_from_address=Int(tail.unsafe_ptr())), 1)
         _ = tail^
@@ -202,7 +202,7 @@ def download_bytes[E: Exec](mut ex: E, addr: Int, src: FP, nbytes: Int) raises:
     if rem > 0:
         var tail = List[Float32](length=1, fill=Float32(0))
         ex.download(FP(unsafe_from_address=Int(tail.unsafe_ptr())), src + full, 1)
-        memcpy(dest=_BP(unsafe_from_address=addr + full * 4),
+        unsafe_memcpy(dest=_BP(unsafe_from_address=addr + full * 4),
                src=_BP(unsafe_from_address=Int(tail.unsafe_ptr())), count=rem)
         _ = tail^
 

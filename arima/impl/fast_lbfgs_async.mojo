@@ -38,7 +38,7 @@ from std.math import isinf, isnan
 from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.lbfgs_device import (
@@ -251,7 +251,7 @@ def _drive(
             ist[I_KCUR * bs + b] = Int32(k + 1)
         if _prelude(ist, fst, x, xp, grad, gradp, drt, b, bs, n, ftol):
             _candidate(cand, xp, drt, fst[F_STEP * bs + b], b, n)
-            _ = Atomic[DType.int32].max(any_active, Int32(1))
+            _ = Atomic[Int32].max(any_active, Int32(1))
             return
         need_verdict = True
 
@@ -317,7 +317,7 @@ def async_step_kernel(
         still = True
     if still and Int(lsi) < Int(max_ls_in):
         _candidate(cand, xp, drt, fst[F_STEP * bs + b], b, n)
-        _ = Atomic[DType.int32].max(any_active, Int32(1))
+        _ = Atomic[Int32].max(any_active, Int32(1))
         return
     _drive(
         ist, fst, x, xp, grad, gradp, drt, cand, S, Y, yhist, alpha, fx_hist, any_active,
@@ -341,7 +341,7 @@ def _down_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], off: Int, n:
     ctx.synchronize()
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -353,7 +353,7 @@ def _down_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], off: Int, n: I
     ctx.synchronize()
     var out = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 

@@ -11,7 +11,7 @@ from bindings.generation_buffers import generation_array, py_ints
 from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32
 from core.hostptr import f32_ptr
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
 
@@ -452,7 +452,7 @@ def admit_block_f32(mut mods: NativeModules, value: PythonObject, name: String, 
                 return captured
             var owned = _block_destination(mods, dims, count, use, context)
             if count > 0:
-                memcpy(dest=f32_ptr(Int(py=owned._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
+                unsafe_memcpy(dest=f32_ptr(Int(py=owned._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
             _ = captured^
             return owned
         # F-order: the byte-preserving C gather, metadata captured once above

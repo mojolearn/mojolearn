@@ -142,7 +142,7 @@ from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined

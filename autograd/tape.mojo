@@ -30,7 +30,7 @@ from autograd.loss_ops import (
     LS_BCE_LOGITS,
 )
 from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
-from std.memory import memcmp
+from std.memory import unsafe_memcmp
 from autograd.pass1_ops import OP_P1_SCE_VJP
 from autograd.composed_ops import OP_AGC_LINEAR_PAIR
 from sequence.gemm_tiled import GR_TILE, seq_gemm_route
@@ -731,7 +731,7 @@ struct Tape(Movable):
                 continue
             var before = self._snapshots[k].copy()
             var now = self.values(ex, x)
-            if len(now) != len(before) or memcmp(now.unsafe_ptr(), before.unsafe_ptr(), len(now)) != 0:
+            if len(now) != len(before) or unsafe_memcmp(now.unsafe_ptr(), before.unsafe_ptr(), len(now)) != 0:
                 self.mark_mutated(x)
                 raise Error("tensor storage changed between record and backward")
             return

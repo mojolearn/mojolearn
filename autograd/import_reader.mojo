@@ -48,7 +48,7 @@ resolved path); `onnx_buffers` gives each one's address."""
 # step before the runtime: names, dims, attributes and byte ranges, on the
 # host; tensor element values are never computed on (integer and bool
 # tensors are decoded to integers, the description the shape folding reads).
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os.path import exists, isfile, realpath
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -1625,7 +1625,7 @@ def _w_value(mut w: List[Int], v: GValue):
 def onnx_read(file: String) raises -> Int:
     """Read the ONNX model at `file`; returns its handle (>= 1)."""
     var p = alloc[OnnxGraph](1)
-    p.init_pointee_move(onnx_read_file(file))
+    p.unsafe_write(onnx_read_file(file))
     var s = _ONNX_GRAPHS.get_or_create_ptr()
     var h = s[].next_id
     s[].next_id += 1
@@ -1760,6 +1760,6 @@ def onnx_close(hid: Int) raises:
             var p = OnnxPtr(unsafe_from_address=s[].addr[i])
             _ = s[].ids.pop(i)
             _ = s[].addr.pop(i)
-            p.destroy_pointee()
+            p.unsafe_deinit_pointee()
             p.free()
             return

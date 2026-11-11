@@ -11,7 +11,7 @@ from x_neighbors.svgp_b32_gate import (
 )
 from gemm.host.gemm_oracle import gemm_oracle
 from gemm.contract import OP_TN as _SVGP_OP_TN
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
@@ -604,7 +604,7 @@ def op_lp_iterate_knn(
     var a_nxt = Int(nxt.unsafe_ptr())
     var a_hs = Int(hs.unsafe_ptr())
     if nc > 0:
-        memcpy(dest=FP(unsafe_from_address=a_cur), src=FP(unsafe_from_address=ld), count=nc)
+        unsafe_memcpy(dest=FP(unsafe_from_address=a_cur), src=FP(unsafe_from_address=ld), count=nc)
     var n_iter = 0
     var converged = False
     for it in range(max_iter):  # driver-loop: over propagation iterations (each depends on the last)
@@ -614,7 +614,7 @@ def op_lp_iterate_knn(
             converged = True
             break
         if nc > 0:
-            memcpy(dest=FP(unsafe_from_address=a_prev), src=FP(unsafe_from_address=a_cur), count=nc)
+            unsafe_memcpy(dest=FP(unsafe_from_address=a_prev), src=FP(unsafe_from_address=a_cur), count=nc)
         op_lp_knn_product(cols, vals, a_cur, a_nxt, n, n, k, c)
         if variant == 0:
             _host_lp_clamp(a_nxt, ystatic, unlabeled, a_cur, n, c)
@@ -623,7 +623,7 @@ def op_lp_iterate_knn(
     if not converged:
         n_iter += 1
     if nc > 0:
-        memcpy(dest=FP(unsafe_from_address=ld), src=FP(unsafe_from_address=a_cur), count=nc)
+        unsafe_memcpy(dest=FP(unsafe_from_address=ld), src=FP(unsafe_from_address=a_cur), count=nc)
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))

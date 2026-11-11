@@ -9,7 +9,7 @@
 # them. The same entries on the same words in the same order: the bits do not
 # move. Every entry is called through `family_call`, so a cell's own refusal
 # (an unconverged Jacobi, a NaN order) keeps its Python class and words.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -206,7 +206,7 @@ struct LinKit(Movable):
         """`_xd_matrix`: a host copy of a C-order float32 buffer."""
         var out = self.zeros(rows, cols)
         if rows * cols:
-            memcpy(dest=self.ptr(out), src=KIT_F32P(unsafe_from_address=addr), count=rows * cols)
+            unsafe_memcpy(dest=self.ptr(out), src=KIT_F32P(unsafe_from_address=addr), count=rows * cols)
             _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -225,7 +225,7 @@ struct LinKit(Movable):
                 # a borrowed matrix asked for its owned store (no kit path
                 # does today): one copy of the admitted words, as of_buffer made
                 if count:
-                    memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))),
+                    unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))),
                            src=KIT_F32P(unsafe_from_address=self.matrices[a].borrowed), count=count)
                 self.matrices[a].borrowed = 0
                 self.matrices[a].keep = PythonObject(None)
@@ -288,7 +288,7 @@ struct LinKit(Movable):
         var cols = self.c(a)
         var result = admitted_zeros([rows, cols], "<f4", self.context).keep
         if rows * cols:
-            memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
+            unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
                    count=rows * cols)
             _ = result  # keep the Python object alive through the native call above
         return result
@@ -297,7 +297,7 @@ struct LinKit(Movable):
         """`_M.out((length,))`."""
         var result = admitted_zeros([length], "<f4", self.context).keep
         if length:
-            memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
+            unsafe_memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
                    count=length)
             _ = result  # keep the Python object alive through the native call above
         return result
@@ -598,7 +598,7 @@ struct LinKit(Movable):
         var cols = self.c(a)
         var out = self.zeros(rows, cols)
         if rows * cols:
-            memcpy(dest=self.ptr(out), src=self.ptr(a), count=rows * cols)
+            unsafe_memcpy(dest=self.ptr(out), src=self.ptr(a), count=rows * cols)
             _ = out  # keep the Python object alive through the native call above
         return out
 

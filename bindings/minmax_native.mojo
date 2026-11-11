@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # MinMaxScaler owns preparation, launches, running extrema, outputs and state
 # here. The preprocessing and x_prep kernels and their order are unchanged.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -105,7 +105,7 @@ def _fit_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     var cn = dest+n*d
     var arena = List[Float32](length=cn+d,fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap,src=_ptr(values),count=n*d)
+    unsafe_memcpy(dest=ap,src=_ptr(values),count=n*d)
     scaler_feature_indices(ap+keep,d)
     var program = List[Int32]()
     _stage(program,1,d,0,n,d,st)
@@ -114,7 +114,7 @@ def _fit_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     _run(arena,program,entries)
     scaler_refuse_infinite_columns(ap,st,d)
     var filled = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
-    memcpy(dest=_ptr(filled),src=ap+dest,count=n*d)
+    unsafe_memcpy(dest=_ptr(filled),src=ap+dest,count=n*d)
     _ = filled  # keep the Python object alive through the native call above
     var colnan = _copy_row(ap+cn,d,context)
     _ = arena^
@@ -126,8 +126,8 @@ def _keep_extrema(fields: PythonObject, output: PythonObject, colnan: PythonObje
     var arena = List[Float32](length=12*d+1,fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     if colnan is not None:
-        memcpy(dest=ap,src=_ptr(colnan),count=d)
-    memcpy(dest=ap+d,src=_ptr(output),count=5*d)
+        unsafe_memcpy(dest=ap,src=_ptr(colnan),count=d)
+    unsafe_memcpy(dest=ap+d,src=_ptr(output),count=5*d)
     var program = List[Int32]()
     _stage(program,267,d,d,d,0,6*d,11*d)
     _stage(program,248,1,11*d,d,12*d)
@@ -288,7 +288,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     var stats = Python.tuple(fields["data_min_"],fields["data_max_"],fresh["data_min_"],fresh["data_max_"])
     for k in range(4):  # small-loop(stats: old/new extrema buffers)
         var value = _statistic(stats[k],d,"extrema",context)
-        memcpy(dest=ap+k*d,src=_ptr(value),count=d)
+        unsafe_memcpy(dest=ap+k*d,src=_ptr(value),count=d)
         _ = value  # keep the Python object alive through the native call above
         _ = value^
     var entries = _minmax_entries(fitted_mode,context)
@@ -354,14 +354,14 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var held = prepared_get(mods, _ROWS_SLOT, model)
     if (held is not None and held[0] is min_value and held[1] is scale_value and Int(py=held[3]) == d
             and String(held[4]) == String(mode)):
-        memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
+        unsafe_memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
         _ = held  # keep the Python object alive through the copy above
     else:
         var mean = _statistic(min_value,d,"min_",context)
         var scale = _statistic(scale_value,d,"scale_",context)
-        memcpy(dest=ap, src=_ptr(mean), count=d)
+        unsafe_memcpy(dest=ap, src=_ptr(mean), count=d)
         _ = mean  # keep the Python object alive through the native call above
-        memcpy(dest=ap+d, src=_ptr(scale), count=d)
+        unsafe_memcpy(dest=ap+d, src=_ptr(scale), count=d)
         _ = scale  # keep the Python object alive through the native call above
         arena[7*d+4] = 1
         var program = List[Int32]()
@@ -372,7 +372,7 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _run(arena, program, entries)
         if bitcast[DType.int32](arena[7*d+1]) == 0 and bitcast[DType.int32](arena[7*d+2]) == 0:
             var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
-            memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
+            unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
             _ = rows  # keep the Python object alive through the copy above
             py_setattr(min_value, "_readonly", PythonObject(True))
             py_setattr(scale_value, "_readonly", PythonObject(True))
@@ -417,18 +417,18 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     if not finite or colnan:
         var keep = List[Float32](length=3*n*d+2*d, fill=0)
         var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
-        memcpy(dest=kp, src=_ptr(values), count=n*d)
+        unsafe_memcpy(dest=kp, src=_ptr(values), count=n*d)
         _ = values  # keep the Python object alive through the native call above
-        memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
+        unsafe_memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
         _ = output  # keep the Python object alive through the native call above
-        memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
+        unsafe_memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
         var restore = List[Int32]()
         # Match _Prog.put_codes: nan_keep consumes numeric Float32 flags,
         # not the int32 mask words published by c2_nan_sub.
         _stage(restore, 10, d, 2*n*d, 2*n*d+d)
         _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
         _run(keep, restore, entries)
-        memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
+        unsafe_memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
         _ = output  # keep the Python object alive through the native call above
         _ = keep^
     _ = arena^

@@ -6,7 +6,7 @@ plan replaces the temporary Python StandardScaler, its fitted fields and
 prepared-row cache. The direct switch, missing-value programs and separate
 fit/transform kernels are unchanged. Callers own the input/output spans.
 """
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from core.scaler_native_api import ScalerDriver, PrepProgramDriver, ScalerFitRequest, ScalerTransformRequest, PrepProgramRequest
 from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import scaler_all_finite, scaler_check_stats, scaler_check_missing, scaler_feature_indices, scaler_refuse_infinite_columns
@@ -42,7 +42,7 @@ def _gp_nan_fill(source: GPNormF32P, n: Int, program_driver: PrepProgramDriver) 
     var dest = stat + 1
     var arena = List[Float32](length=dest+n, fill=0)
     var ap = GPNormF32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap, src=source, count=n)
+    unsafe_memcpy(dest=ap, src=source, count=n)
     scaler_feature_indices(ap+keep, 1)
     var program = List[Int32]()
     _stage(program, 1, 1, 0, n, 1, st)
@@ -50,7 +50,7 @@ def _gp_nan_fill(source: GPNormF32P, n: Int, program_driver: PrepProgramDriver) 
     _gp_prep_run(program_driver, arena, program)
     scaler_refuse_infinite_columns(ap, st, 1)
     var values = List[Float32](length=n, fill=0)
-    memcpy(dest=values.unsafe_ptr(), src=ap+dest, count=n)
+    unsafe_memcpy(dest=values.unsafe_ptr(), src=ap+dest, count=n)
     _ = arena
     return values^
 
@@ -65,7 +65,7 @@ def gp_normalize_targets(scaler: ScalerDriver, program_driver: PrepProgramDriver
     # Preserve targets -> column and transformed column -> flat copies.
     var column = List[Float32](length=n, fill=0)
     var xp = GPNormF32P(unsafe_from_address=Int(column.unsafe_ptr()))
-    memcpy(dest=xp, src=GPNormF32P(unsafe_from_address=r.source), count=n)
+    unsafe_memcpy(dest=xp, src=GPNormF32P(unsafe_from_address=r.source), count=n)
     var stats = List[Float32](length=3, fill=0)
     var sp = GPNormF32P(unsafe_from_address=Int(stats.unsafe_ptr()))
     var finite = True
@@ -79,9 +79,9 @@ def gp_normalize_targets(scaler: ScalerDriver, program_driver: PrepProgramDriver
     var fp = GPNormF32P(unsafe_from_address=Int(fitted.unsafe_ptr()))
     if finite:
         scaler_check_stats(sp, sp+1, sp+2, 1)
-        memcpy(dest=fp, src=sp, count=1)
-        memcpy(dest=fp+1, src=sp+1, count=1)
-        memcpy(dest=fp+2, src=sp+2, count=1)
+        unsafe_memcpy(dest=fp, src=sp, count=1)
+        unsafe_memcpy(dest=fp+1, src=sp+1, count=1)
+        unsafe_memcpy(dest=fp+2, src=sp+2, count=1)
     else:
         # Original unweighted missing-value fit, d=1; no weighted branch
         # exists for the private GP StandardScaler.
@@ -93,16 +93,16 @@ def gp_normalize_targets(scaler: ScalerDriver, program_driver: PrepProgramDriver
             raise Error("x_prep: the program exceeds the native Int32 indexing bound")
         var arena = List[Float32](length=size, fill=0)
         var ap = GPNormF32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-        memcpy(dest=ap, src=xp, count=n)
+        unsafe_memcpy(dest=ap, src=xp, count=n)
         var program = List[Int32]()
         _stage(program, 1, 1, 0, n, 1, st)
         _stage(program, 101, 1, 0, n, 1, -1, dst)
         _stage(program, 102, 1, dst+2, sc)
         _gp_prep_run(program_driver, arena, program)
         _ = scaler_check_missing(ap, st, dst, sc, 1)
-        memcpy(dest=fp, src=ap+dst+1, count=1)
-        memcpy(dest=fp+1, src=ap+dst+2, count=1)
-        memcpy(dest=fp+2, src=ap+sc, count=1)
+        unsafe_memcpy(dest=fp, src=ap+dst+1, count=1)
+        unsafe_memcpy(dest=fp+1, src=ap+dst+2, count=1)
+        unsafe_memcpy(dest=fp+2, src=ap+sc, count=1)
         _ = arena
     var mean = Float64(fp[0])
     var stddev = Float64(fp[2])
@@ -110,8 +110,8 @@ def gp_normalize_targets(scaler: ScalerDriver, program_driver: PrepProgramDriver
     # one-use prepared Python cache has no consumer after this private call.
     var rows = List[Float32](length=12, fill=0)
     var rp = GPNormF32P(unsafe_from_address=Int(rows.unsafe_ptr()))
-    memcpy(dest=rp, src=fp, count=1)
-    memcpy(dest=rp+1, src=fp+2, count=1)
+    unsafe_memcpy(dest=rp, src=fp, count=1)
+    unsafe_memcpy(dest=rp+1, src=fp+2, count=1)
     rows[11] = 1
     var row_program = List[Int32]()
     _stage(row_program, 264, 1, 0, 1, 1, 1, 10, 11, 2, 3, 4, 5, 6)
@@ -151,16 +151,16 @@ def gp_normalize_targets(scaler: ScalerDriver, program_driver: PrepProgramDriver
     if not finite or colnan:
         var keep = List[Float32](length=3*n+2, fill=0)
         var kp = GPNormF32P(unsafe_from_address=Int(keep.unsafe_ptr()))
-        memcpy(dest=kp, src=xp, count=n)
-        memcpy(dest=kp+n, src=op, count=n)
-        memcpy(dest=kp+2*n, src=rp+4, count=1)
+        unsafe_memcpy(dest=kp, src=xp, count=n)
+        unsafe_memcpy(dest=kp+n, src=op, count=n)
+        unsafe_memcpy(dest=kp+2*n, src=rp+4, count=1)
         var restore = List[Int32]()
         _stage(restore, 10, 1, 2*n, 2*n+1)
         _stage(restore, 103, n, 0, 1, n, 2*n+1, 2*n+2)
         _gp_prep_run(program_driver, keep, restore)
-        memcpy(dest=op, src=kp+2*n+2, count=n)
+        unsafe_memcpy(dest=op, src=kp+2*n+2, count=n)
         _ = keep
-    memcpy(dest=GPNormF32P(unsafe_from_address=r.dst), src=op, count=n)
+    unsafe_memcpy(dest=GPNormF32P(unsafe_from_address=r.dst), src=op, count=n)
     _ = output
     _ = rows
     _ = fitted

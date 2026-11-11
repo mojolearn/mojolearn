@@ -106,7 +106,7 @@ a compile slot should replace both with what it sees, exactly as
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from arima.impl.batched_arima import _refuse_non_finite
 from arima.impl.batched_kalman import ARIMA_EVAL_WS_EXOG, KALMAN_FAST_EVAL_WS, eval_ws_fits
@@ -241,7 +241,7 @@ def _download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) ra
     ctx.synchronize()
     var out = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 

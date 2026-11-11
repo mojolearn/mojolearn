@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Alternative label assignment UNPACK/PACK; execution is one native call."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.spectral_assignment_api import (
@@ -38,7 +38,7 @@ def spectral_assignment_pack(output: SpectralAssignmentOutput, rows: Int,
     var count = len(output.storage[0].labels)
     var store = native_array_zeros("i", count)
     if count > 0:
-        memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(store)),
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(store)),
             src=output.storage[0].labels.unsafe_ptr(), count=count)
     _ = output
     var layout = NativeArrayLayout(List[Int](length=1, fill=rows), 4)

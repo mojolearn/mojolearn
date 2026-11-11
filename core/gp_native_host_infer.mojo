@@ -16,7 +16,7 @@ from core.gp_native_api import (
 from core.pca_native_api import pca_vendor_code
 from gaussian_process.unnorm import gpc_binary_out, gpc_ovr_targets
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.gp_native_storage import gp_native_ints, gp_native_f64
 from gaussian_process.host.gp_host_entries import _rebuild_kernel_spec, _gpr_predict_run, _gpc_predict_run

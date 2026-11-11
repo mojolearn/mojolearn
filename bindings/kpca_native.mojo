@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """KernelPCA UNPACK/PACK around typed fit, eigen and query plans."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
@@ -139,9 +139,9 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
         var eigenvalues = _f32(kept, 0, context, True)
         var eigenvectors = _f32(x.rows, kept, context)
         if kept:
-            memcpy(dest=F32P(unsafe_from_address=_address(eigenvalues)),
+            unsafe_memcpy(dest=F32P(unsafe_from_address=_address(eigenvalues)),
                 src=F32P(unsafe_from_address=room.values_address()), count=kept)
-            memcpy(dest=F32P(unsafe_from_address=_address(eigenvectors)),
+            unsafe_memcpy(dest=F32P(unsafe_from_address=_address(eigenvectors)),
                 src=F32P(unsafe_from_address=room.vectors_address()), count=x.rows * kept)
         lifecycle_admit_fields(fields)
         py_setitem(fields, "eigenvalues_", eigenvalues)

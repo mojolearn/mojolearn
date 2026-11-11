@@ -9,7 +9,7 @@ call; the end-to-end sabotage arm
 (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
 bit here.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.hostptr import read_i32
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW

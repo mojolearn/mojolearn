@@ -30,7 +30,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 from checks.numerics import ftz
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -551,20 +551,20 @@ def holtwinters_fit_ptr(
         return direct
     # the traced sequence: bulk copies in and out, no per-cell host walk
     var data = List[Float32](length=_cells, fill=Float32(0.0))
-    memcpy(dest=data.unsafe_ptr(), src=data_ptr, count=_cells)
+    unsafe_memcpy(dest=data.unsafe_ptr(), src=data_ptr, count=_cells)
     var fitted = holtwinters_fit_host(
         data, n, batch_size, frequency, start_periods, seasonal, eps, init_method
     )
     var components_len = len(fitted.level)
-    memcpy(dest=comps_ptr, src=fitted.level.unsafe_ptr(), count=components_len)
-    memcpy(dest=comps_ptr + components_len, src=fitted.trend.unsafe_ptr(), count=components_len)
-    memcpy(dest=comps_ptr + 2 * components_len, src=fitted.season.unsafe_ptr(), count=components_len)
-    memcpy(dest=stats_ptr, src=fitted.sse.unsafe_ptr(), count=batch_size)
-    memcpy(dest=stats_ptr + batch_size, src=fitted.alpha.unsafe_ptr(), count=batch_size)
-    memcpy(dest=stats_ptr + 2 * batch_size, src=fitted.beta.unsafe_ptr(), count=batch_size)
-    memcpy(dest=stats_ptr + 3 * batch_size, src=fitted.gamma.unsafe_ptr(), count=batch_size)
-    memcpy(dest=flags_ptr, src=fitted.niter.unsafe_ptr(), count=batch_size)
-    memcpy(dest=flags_ptr + batch_size, src=fitted.criterion.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=comps_ptr, src=fitted.level.unsafe_ptr(), count=components_len)
+    unsafe_memcpy(dest=comps_ptr + components_len, src=fitted.trend.unsafe_ptr(), count=components_len)
+    unsafe_memcpy(dest=comps_ptr + 2 * components_len, src=fitted.season.unsafe_ptr(), count=components_len)
+    unsafe_memcpy(dest=stats_ptr, src=fitted.sse.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=stats_ptr + batch_size, src=fitted.alpha.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=stats_ptr + 2 * batch_size, src=fitted.beta.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=stats_ptr + 3 * batch_size, src=fitted.gamma.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=flags_ptr, src=fitted.niter.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=flags_ptr + batch_size, src=fitted.criterion.unsafe_ptr(), count=batch_size)
     _ = data^
     _ = fitted^
     return components_len
@@ -635,13 +635,13 @@ def holtwinters_forecast_ptr(
     fitted.level = List[Float32](length=components_len, fill=Float32(0.0))
     fitted.trend = List[Float32](length=components_len, fill=Float32(0.0))
     fitted.season = List[Float32](length=components_len, fill=Float32(0.0))
-    memcpy(dest=fitted.level.unsafe_ptr(), src=comps_ptr, count=components_len)
-    memcpy(dest=fitted.trend.unsafe_ptr(), src=comps_ptr + components_len, count=components_len)
-    memcpy(dest=fitted.season.unsafe_ptr(), src=comps_ptr + 2 * components_len, count=components_len)
+    unsafe_memcpy(dest=fitted.level.unsafe_ptr(), src=comps_ptr, count=components_len)
+    unsafe_memcpy(dest=fitted.trend.unsafe_ptr(), src=comps_ptr + components_len, count=components_len)
+    unsafe_memcpy(dest=fitted.season.unsafe_ptr(), src=comps_ptr + 2 * components_len, count=components_len)
     # `h <= 0` is refused inside `holtwinters_forecast_host_traced`, by name,
     # in their words ("h must be > 0. Currently: ...").
     var fc = holtwinters_forecast_host(fitted, h)
-    memcpy(dest=out_ptr, src=fc.unsafe_ptr(), count=h * batch_size)
+    unsafe_memcpy(dest=out_ptr, src=fc.unsafe_ptr(), count=h * batch_size)
     _ = fitted^
     return h * batch_size
 

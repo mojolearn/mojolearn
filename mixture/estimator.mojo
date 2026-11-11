@@ -515,7 +515,7 @@ def gmm_bad_row_kernel(
     for f in range(d):
         var u = bitcast[DType.uint32](x.unsafe_load(i * d + f)) & UInt32(0x7FFFFFFF)
         if u >= UInt32(0x7F800000):
-            _ = Atomic[DType.int32].min(bad_row, Int32(i))
+            _ = Atomic[Int32].min(bad_row, Int32(i))
             return
 
 
@@ -533,7 +533,7 @@ def gmm_bad_col_kernel(
         return
     var u = bitcast[DType.uint32](x.unsafe_load(Int(row_in) * d + f)) & UInt32(0x7FFFFFFF)
     if u >= UInt32(0x7F800000):
-        _ = Atomic[DType.int32].min(bad_col, Int32(f))
+        _ = Atomic[Int32].min(bad_col, Int32(f))
 
 
 def gmm_validate_data_device(
@@ -891,7 +891,7 @@ def gmm_init_random_kernel(
         var u = Float32(Int(draw[0] >> UInt32(8))) * scale
         s = ftz(s + u)
     if not (s > Float32(0.0)):
-        _ = Atomic[DType.int32].min(bad_row, Int32(i))
+        _ = Atomic[Int32].min(bad_row, Int32(i))
         return
     for k in range(ncomp):
         var ctr = SIMD[DType.uint32, 4](

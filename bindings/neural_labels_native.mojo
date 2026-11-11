@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native label preparation/publication for the neural classifiers. Numeric
 # sorting stays in the connected neural provider; text uses native code points.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys import size_of
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, ExternalFunction
@@ -277,7 +277,7 @@ def neural_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
                 checked[index] = True
             _object_store(base + i * size_of[PyObjectPtr](), value)
             continue
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base + i * layout.itemsize),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base + i * layout.itemsize),
                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=_item(layout, index)), count=layout.itemsize)
     _ = classes
     _ = codes

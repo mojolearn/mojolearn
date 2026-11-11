@@ -904,9 +904,9 @@ def adam_update_oop_status_kernel(
     v_out.unsafe_store(i,updated[2])
     comptime for field in range(3):
         if (bitcast[DType.uint32](updated[field]) & UInt32(0x7f800000))==UInt32(0x7f800000):
-            _ = Atomic[DType.int32].min(status+field,Int32(i))
+            _ = Atomic[Int32].min(status+field,Int32(i))
     if updated[2]<Float32(0):
-        _ = Atomic[DType.int32].min(status+3,Int32(i))
+        _ = Atomic[Int32].min(status+3,Int32(i))
 
 def sgd_update_kernel(
     param: MutPointer[Float32, MutAnyOrigin],

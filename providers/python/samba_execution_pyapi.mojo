@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.os import getenv
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_get, py_setitem, py_setattr, py_type
 from bindings.generation_buffers import generation_address, generation_array
 from bindings.causal_lm_public import _native_function, _mutable
@@ -63,7 +63,7 @@ def _samba_native_fields(value: PythonObject) raises -> PythonObject:
 def _samba_native_copy(values: List[Float32], shape: List[Int]) raises -> PythonObject:
     var output = generation_array(shape)
     if len(values) != 0:
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr)),
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr)),
             src=values.unsafe_ptr(), count=len(values))
     return output
 

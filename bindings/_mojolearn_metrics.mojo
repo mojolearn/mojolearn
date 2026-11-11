@@ -62,7 +62,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 comptime _DEVCTX_SLOT = "MojolearnMetricsContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnMetricsContextFastV3"
 
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from metrics.metrics_entries_impl import device_finite_f32_list
 from umap.estimator import fit_transform as umap_fit_transform
 from umap.sparse_estimator import sparse_fit_transform
@@ -144,7 +144,7 @@ def _device_finite_f32(values: List[Float32]) raises -> Bool:
 def _store_f32_list(output: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32]):
     """One memcpy of `values` into the caller's output (no per-value loop)."""
     if len(values) > 0:
-        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
     _ = len(values)
 
 
@@ -533,9 +533,9 @@ def precision_recall_curve_binding(true_addr: PythonObject, score_addr: PythonOb
         var result = binary_ranking_host[True](y,scores,n)
         m = result[1]
         var curve = result[0].unsafe_ptr()
-        memcpy(dest=precision, src=curve, count=m + 1)
-        memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
-        memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
+        unsafe_memcpy(dest=precision, src=curve, count=m + 1)
+        unsafe_memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
+        unsafe_memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
         _ = len(result[0])
     return PythonObject(m)
 
@@ -574,13 +574,13 @@ def confusion_matrix_binding(
         var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
         with GILReleased(Python()):
             var values = confusion_matrix_host[DType.int64](y,p,n,k,normalization)
-            memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+            unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
             _ = len(values)
     else:
         var output = _f32_ptr(address)
         with GILReleased(Python()):
             var values = confusion_matrix_host[DType.float32](y,p,n,k,normalization)
-            memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+            unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
             _ = len(values)
     return PythonObject(k*k)
 
@@ -605,7 +605,7 @@ def precision_recall_fscore_binding(
     var written = 0
     with GILReleased(Python()):
         var values = precision_recall_fscore_host(y,p,n,k,average,positive,zero,selected)
-        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
         written = len(values)
     return PythonObject(written)
 
@@ -675,7 +675,7 @@ def silhouette_binding(
     with GILReleased(Python()):
         mean = silhouette_host(x, lab, n_rows, n_cols, n_labels, chunk, scores)
     if n_rows > 0:
-        memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
+        unsafe_memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
     _ = len(scores)
     return PythonObject(Float64(mean))
 
@@ -802,8 +802,8 @@ def spectral_fit_predict_dataset_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -859,8 +859,8 @@ def spectral_fit_predict_graph_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -928,7 +928,7 @@ def spectral_embedding_dataset_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(n_out)
 
@@ -980,7 +980,7 @@ def spectral_embedding_graph_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(n_out)
 
@@ -1005,10 +1005,10 @@ def _write_spectral_state(
     var evec = _f32_ptr(Int(py=addrs[first + 1]))
     var dg = _f32_ptr(Int(py=addrs[first + 2]))
     var cent = _f32_ptr(Int(py=addrs[first + 3]))
-    memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
+    unsafe_memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
+    unsafe_memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
+    unsafe_memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
+    unsafe_memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
 
 
 def spectral_fit_predict_dataset_state_binding(
@@ -1049,8 +1049,8 @@ def spectral_fit_predict_dataset_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -1090,8 +1090,8 @@ def spectral_fit_predict_graph_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -1141,8 +1141,8 @@ def spectral_fit_predict_dense_binding(
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     if keep:
         _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(labels)
     _ = len(embedding)
     return PythonObject(n_out)
@@ -1184,7 +1184,7 @@ def spectral_embedding_dense_binding(
     if n_out < 0:
         return PythonObject(n_out)
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    unsafe_memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
     _ = len(embedding)
     return PythonObject(n_out)
 
@@ -1232,8 +1232,8 @@ def spectral_predict_binding(
         )
         if len(out.labels) != n_queries or len(out.embedding) != n_queries * k:
             raise Error("spectral_predict: the kernel returned the wrong number of outputs")
-        memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-        memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
+        unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
+        unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
         _ = len(out.labels)
         _ = len(out.embedding)
     return PythonObject(0)
@@ -1302,8 +1302,8 @@ def spectral_predict_resident_binding(
         )
         if len(out.labels) != n_queries or len(out.embedding) != n_queries * k:
             raise Error("spectral_predict: the kernel returned the wrong number of outputs")
-        memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-        memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
+        unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
+        unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
         _ = len(out.labels)
         _ = len(out.embedding)
     return PythonObject(0)

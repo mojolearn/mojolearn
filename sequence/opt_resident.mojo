@@ -21,7 +21,7 @@ statements on the same values: no bit moves against the per-call entries.
 handle indexes the pool and a closed handle's slot is reused. The Python
 entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident_pyapi.mojo`'s;
 this file takes typed handles, addresses and parameters only."""
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer
@@ -447,7 +447,7 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
             _ = v^
             if have_prev:
                 # overlaps the DMA just queued, into the other half
-                memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
+                unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
                        count=prev_cnt)
             ex.ctx.synchronize()
             have_prev = True
@@ -458,7 +458,7 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
             done += cnt
         off += sizes[j]
     if have_prev:
-        memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+        unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
     _pool_release_host(h0)
     _pool_release_host(h1)
     # the executor's own bookkeeping (no copy is pending: the queue is empty)
@@ -548,8 +548,8 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
             else:
                 var sp = FP(unsafe_from_address=stg[par])
                 var sg = FP(unsafe_from_address=stg[2 + par])
-                memcpy(dest=sp, src=hp, count=cnt)
-                memcpy(dest=sg, src=hg, count=cnt)
+                unsafe_memcpy(dest=sp, src=hp, count=cnt)
+                unsafe_memcpy(dest=sg, src=hg, count=cnt)
                 ex.ctx.enqueue_copy(dst_buf=vp, src_ptr=sp)
                 ex.ctx.enqueue_copy(dst_buf=vg, src_ptr=sg)
             var a = a0
@@ -564,7 +564,7 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
             _ = vp^
             if have_prev:
                 # overlaps chunk c's uploads, launch and DMA
-                memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
+                unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
                        count=prev_cnt)
             ex.ctx.synchronize()
             have_prev = True
@@ -575,7 +575,7 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
             c += 1
         off += sizes[j]
     if have_prev:
-        memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
+        unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
                count=prev_cnt)
     for k in range(6):
         _pool_release_host(hi[k])

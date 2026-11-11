@@ -10,7 +10,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.vendor import COMPILED_VENDOR
@@ -1701,7 +1701,7 @@ def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
 def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
     """`memcpy(dst, src, n)`: the one read of pinned memory (one thread;
     cpu-gpu-cleanup c-decomp removed the host-task split)."""
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:

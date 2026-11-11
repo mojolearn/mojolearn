@@ -555,7 +555,7 @@ def samba_tree_status_kernel(
         var value = ftz(identical_mul_add(Float32(1.0), left, right))
         dst[i] = value
         if (bitcast[DType.uint32](value) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            _ = Atomic[DType.int32].min(status, Int32(e))
+            _ = Atomic[Int32].min(status, Int32(e))
 
 
 def samba_leaf_ids_kernel(ids: MutPointer[Int32, MutAnyOrigin], a: Int32):

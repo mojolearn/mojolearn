@@ -12,7 +12,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from core.native_descriptor_abi import PRIMITIVE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv
 from core.device_plan import DevicePlan
@@ -318,7 +318,7 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
     if flat is not source:
         var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=flat._addr))
         var src = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr))
-        memcpy(dest=dst, src=src, count=Int(py=flat.nbytes))
+        unsafe_memcpy(dest=dst, src=src, count=Int(py=flat.nbytes))
     var first = checked["exp_avg"]
     var second = checked["exp_avg_sq"]
     if owner[].control.handle >= 0:
@@ -491,7 +491,7 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
         var offset = Int(py=item["offset"])
         op[i] = Int32(offset)
         var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-        memcpy(dest=gp + offset, src=src, count=Int(py=item["size"]))
+        unsafe_memcpy(dest=gp + offset, src=src, count=Int(py=item["size"]))
         _ = value^
     op[len(registry)] = Int32(n)
     var plan = py_ints([len(registry), 2, step + 1, 0])

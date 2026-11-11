@@ -67,7 +67,7 @@ def _series() -> Int:
 
 @always_inline
 def _raise_flag(flag: IP):
-    _ = Atomic[DType.int32].max(flag, Int32(1))
+    _ = Atomic[Int32].max(flag, Int32(1))
 
 
 # ---------------------------------------------------------------------------

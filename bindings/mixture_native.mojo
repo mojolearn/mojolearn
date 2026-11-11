@@ -15,7 +15,7 @@
 # set. EM iterations and n_init restarts already run inside those entries
 # (one call per fit), so no driver loop is added here. Same entries, same
 # inputs, same order: the bits do not move.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_refuse_empty
 from bindings.admitted_input import classical_view
@@ -225,7 +225,7 @@ def _concat(parts: PythonObject, context: PythonObject) raises -> PythonObject:
     for p in range(len(parts)):  # small-loop(parts: the few prior, warm-state and model blocks)
         var size = Int(py=parts[p].size)
         if size:
-            memcpy(dest=FAMILY_F32P(unsafe_from_address=dst + 4 * offset),
+            unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=dst + 4 * offset),
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parts[p]))), count=size)
             _ = out  # keep the Python object alive through the native call above
         offset += size

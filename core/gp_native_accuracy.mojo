@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """GP classifier accuracy over the existing unweighted COUNT program."""
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from core.hostptr import f32_ptr
 from core.labels_accuracy_plan import LabelAccuracyPlan, label_accuracy_plan
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -20,8 +20,8 @@ struct GPCAccuracyProgram(Movable):
         var address = Int(self.arena.unsafe_ptr())
         # Both original code arrays were copied once into the metrics arena;
         # their int32 words are copied as bits, with no numeric conversion.
-        memcpy(dest=f32_ptr(address), src=f32_ptr(truth), count=rows)
-        memcpy(dest=f32_ptr(address) + rows, src=f32_ptr(prediction), count=rows)
+        unsafe_memcpy(dest=f32_ptr(address), src=f32_ptr(truth), count=rows)
+        unsafe_memcpy(dest=f32_ptr(address) + rows, src=f32_ptr(prediction), count=rows)
         self.inputs = [0, Int32(2 * rows), -1]
         var known = True
         # Keep the original complement of input/scratch ranges, including

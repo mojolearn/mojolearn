@@ -9,14 +9,14 @@ from sequence.ops import FP
 from sequence.exec_trait import Exec
 from core.cast_in import CastIn
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 comptime DP = MutPointer[Float64, MutUntrackedOrigin]
 
 
 def read_words[E: Exec](mut ex: E, src: FP, dst: FP, n: Int, host_buffers: Bool) raises:
     if host_buffers:
-        memcpy(dest=dst, src=src, count=n)
+        unsafe_memcpy(dest=dst, src=src, count=n)
     else:
         var tmp = ex.alloc(n)
         copy_words(ex, src, tmp, n)
@@ -26,7 +26,7 @@ def read_words[E: Exec](mut ex: E, src: FP, dst: FP, n: Int, host_buffers: Bool)
 
 def write_words[E: Exec](mut ex: E, src: FP, dst: FP, n: Int, host_buffers: Bool) raises:
     if host_buffers:
-        memcpy(dest=dst, src=src, count=n)
+        unsafe_memcpy(dest=dst, src=src, count=n)
     else:
         var tmp = ex.alloc(n)
         ex.upload(tmp, src, n)

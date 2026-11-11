@@ -79,7 +79,7 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
                 kinds.append(p[i])
             var session = SambaResidentSession(ctx, kinds, p[0], p[1], p[2], p[3], p[4], p[5], p[6] != 0, Float32(f[0]), p[7], f32_ptr(a[0]))
             var owner = alloc[SambaResidentSession](1)
-            owner.init_pointee_move(session^)
+            owner.unsafe_write(session^)
             return Int(owner)
         var handle = a[0] if op == 13 else p[0]
         if handle == 0:
@@ -90,7 +90,7 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
                 raise Error("Samba resident resource belongs to another registry")
             if owner[].busy:
                 raise Error("Samba resident session busy")
-            owner.destroy_pointee()
+            owner.unsafe_deinit_pointee()
             owner.free()
             return 0
         if op == 14:

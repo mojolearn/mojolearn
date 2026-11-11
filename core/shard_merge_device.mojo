@@ -134,7 +134,7 @@ def _ivf_merge_kernel(
             break
     if status != 0:
         st.unsafe_store(row, Int32(status))
-        _ = Atomic[DType.int32].min(bad, Int32(row))
+        _ = Atomic[Int32].min(bad, Int32(row))
         return
     for j in range(filled, k):
         od.unsafe_store(base + j, bitcast[DType.float32](UInt32(0x7F800000)))
@@ -305,7 +305,7 @@ def _topk_merge_kernel(
         status = 2
     if status != 0:
         st.unsafe_store(row, Int32(status))
-        _ = Atomic[DType.int32].min(bad, Int32(row))
+        _ = Atomic[Int32].min(bad, Int32(row))
         return
     for a in range(k):
         var kv = keys.unsafe_load(base + a)
@@ -436,7 +436,7 @@ def _plan_owner_kernel(ind: _I32, n_: Int32, P_: Int32, cnt: _I32, owner: _I32, 
     if v < 0 or v >= n:
         flag.unsafe_store(1, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + v, Int32(1))
     owner.unsafe_store(v, Int32(_shard_of(i, n, Int(P_))))
 
 

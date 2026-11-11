@@ -36,7 +36,7 @@ DEVIATION 636 text are gone from this route. A fold runs on the fold
 store's context with lease 0 (its fresh fitted model is uploaded for the
 call, as a lease-0 predict always was).
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.device_plan import device_plan_current
@@ -151,7 +151,7 @@ def _svm_resident_decide(
         raise error^
     var words = (qx.finite_word(), qx.range_word())
     if words[0] == 0 and words[1] == 0:
-        memcpy(
+        unsafe_memcpy(
             dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
             src=preds.unsafe_ptr(),
             count=n_rows,
@@ -229,7 +229,7 @@ def svc_predict_resident_host(
             xl, n_rows, n_cols, List[Float32](), dl, n_support, b, label0, label1,
             kernel, gamma, predict_class, buffer_size_mib, degree, coef0,
         )
-        memcpy(
+        unsafe_memcpy(
             dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
             src=decided.unsafe_ptr(),
             count=len(decided),
@@ -294,7 +294,7 @@ def svr_predict_resident_host(
             xl, n_rows, n_cols, List[Float32](), dl, n_support, b, kernel, gamma,
             buffer_size_mib, degree, coef0,
         )
-        memcpy(
+        unsafe_memcpy(
             dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
             src=decided.unsafe_ptr(),
             count=len(decided),

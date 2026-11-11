@@ -38,7 +38,7 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_TN as _SVGP_OP_TN
 from x_linear.ff import ff_of, ff_add, ff_sub, ff_mul, ff_div, ff_sqrt, ff_ld, ff_st
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.atomic import Atomic
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -426,7 +426,7 @@ def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
                 # a racing read only costs a spare round: the flag is set
                 # whenever this edge could still lower an entry
                 if lab.unsafe_load(Int(hi)) > lo:
-                    Atomic[DType.int32].min(lab + Int(hi), lo)
+                    Atomic[Int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, Int32(1))
 
 
@@ -495,7 +495,7 @@ def cc_hook_round_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP
                 var lo = a if a < b else b
                 var hi = b if a < b else a
                 if lab.unsafe_load(Int(hi)) > lo:
-                    _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                    _ = Atomic[Int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, rid)
 
 
@@ -580,11 +580,11 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
     var o_c = o_l + max(n, 1)
     var hb = take_host_i32(ctx, o_c + 1)
     var hp = hb.unsafe_ptr()
-    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
+    unsafe_memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
     if nnz > 0:
-        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
+        unsafe_memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
     if n > 0:
-        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
+        unsafe_memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
     var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
     var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
@@ -640,7 +640,7 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
         ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_out)
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
+        unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
     var ip = IP(unsafe_from_address=info)
     ip.unsafe_store(0, Int32(rounds))
     ip.unsafe_store(1, hp[o_c] + Int32(1))
@@ -674,7 +674,7 @@ def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
                     var lo = x if x < y else y
                     var hi = y if x < y else x
                     if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        _ = Atomic[Int32].min(lab + Int(hi), lo)
                         changed.unsafe_store(0, Int32(1))
 
 
@@ -717,7 +717,7 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
         ctx.synchronize()
-        memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
     IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
     _ = hb^
     _ = d_a^
@@ -1543,7 +1543,7 @@ def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int6
     var u = q + 1
     while u < nc and Int(cells.unsafe_load(u)) // d == r:
         u += 1
-    var slot = Int(Atomic[DType.int32].fetch_add(counter, Int32(1)))
+    var slot = Int(Atomic[Int32].fetch_add(counter, Int32(1)))
     rq.unsafe_store(slot, Int32(q))
     rc.unsafe_store(slot, Int32(u - q))
 

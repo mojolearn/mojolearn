@@ -69,7 +69,7 @@ spelling of the same arm.
 """
 from bindings.native_owner_registry import register_native_owner
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -677,7 +677,7 @@ def bpe_decode_seq_binding(
     if len(ids) == 0:
         return PythonObject(0)
     var out = bpe_decode_seq_bytes(owner[], ids, cap)
-    memcpy(dest=_u8_ptr(_index(out_addr)), src=out.unsafe_ptr(), count=len(out))
+    unsafe_memcpy(dest=_u8_ptr(_index(out_addr)), src=out.unsafe_ptr(), count=len(out))
     return PythonObject(len(out))
 
 
@@ -702,7 +702,7 @@ def bpe_decode_batch_binding(
     if n > 0:
         tokenizer_store_i64(_i64_ptr(_index(lengths_addr)), lens)
     if len(joined) > 0:
-        memcpy(dest=_u8_ptr(_index(out_addr)), src=joined.unsafe_ptr(), count=len(joined))
+        unsafe_memcpy(dest=_u8_ptr(_index(out_addr)), src=joined.unsafe_ptr(), count=len(joined))
     return PythonObject(len(joined))
 
 
@@ -813,7 +813,7 @@ def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
     var n = len(arr)
     var out = List[UInt8](length=n, fill=UInt8(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(Int(py=arr.buffer_info()[0])), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(Int(py=arr.buffer_info()[0])), count=n)
         _ = arr  # keep the Python object alive through the native call above
     # Keepalive: Mojo drops `arr` at its last named use (`arr.buffer_info()`),
     # which freed the array before the memcpy read its buffer; small tokens
@@ -828,7 +828,7 @@ def _py_bytes(values: List[UInt8]) raises -> PythonObject:
     var bi = native_loaded_module("builtins")
     var arr = py_call(native_loaded_module("array").array, "B", py_call(bi.bytes, len(values)))
     if len(values) > 0:
-        memcpy(dest=_u8_ptr(Int(py=arr.buffer_info()[0])), src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=_u8_ptr(Int(py=arr.buffer_info()[0])), src=values.unsafe_ptr(), count=len(values))
         _ = arr  # keep the Python object alive through the native call above
     return arr.tobytes()
 

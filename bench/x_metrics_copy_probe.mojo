@@ -10,7 +10,7 @@ memory directly. Prints `XMCOPY <path> <words> <us>` (the best of 5).
     pixi run -e default mojo run -I . bench/x_metrics_copy_probe.mojo
 """
 from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 
@@ -63,22 +63,22 @@ def main() raises:
             var h = ctx.enqueue_create_host_buffer[DType.float32](n)
             ctx.synchronize()
             var t5 = perf_counter_ns()
-            memcpy(dest=h.unsafe_ptr(), src=hp, count=n)
+            unsafe_memcpy(dest=h.unsafe_ptr(), src=hp, count=n)
             ctx.enqueue_copy(dst_buf=d, src_buf=h)
             ctx.synchronize()
             var t6 = perf_counter_ns()
             ctx.enqueue_copy(dst_buf=h, src_buf=d)
             ctx.synchronize()
-            memcpy(dest=hp, src=h.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=hp, src=h.unsafe_ptr(), count=n)
             var t7 = perf_counter_ns()
             pin_up.append(t6 - t5)
             pin_down.append(t7 - t6)
             # a kernel on the host buffer's memory (shared storage on Apple)
             var t8 = perf_counter_ns()
-            memcpy(dest=h.unsafe_ptr(), src=hp, count=n)
+            unsafe_memcpy(dest=h.unsafe_ptr(), src=hp, count=n)
             ctx.enqueue_function[touch](h.unsafe_ptr(), Int32(n), grid_dim=(n + 255) // 256, block_dim=256)
             ctx.synchronize()
-            memcpy(dest=hp, src=h.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=hp, src=h.unsafe_ptr(), count=n)
             var t9 = perf_counter_ns()
             direct.append(t9 - t8)
             _ = d^

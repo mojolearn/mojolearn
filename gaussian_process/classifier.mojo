@@ -36,7 +36,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
@@ -191,7 +191,7 @@ def gpc_ovr_combine_host(col_addrs: List[Int], out_addr: Int, codes_addr: Int, n
     var ctx = _family_ctx()
     var hin = ctx.enqueue_create_host_buffer[DType.uint64](n * k)
     for c in range(k):
-        memcpy(dest=hin.unsafe_ptr() + c * n, src=_GU(unsafe_from_address=col_addrs[c]), count=n)
+        unsafe_memcpy(dest=hin.unsafe_ptr() + c * n, src=_GU(unsafe_from_address=col_addrs[c]), count=n)
     var din = ctx.enqueue_create_buffer[DType.uint64](n * k)
     ctx.enqueue_copy(dst_buf=din, src_ptr=hin.unsafe_ptr())
     var dout = ctx.enqueue_create_buffer[DType.uint64](n * k)
@@ -210,8 +210,8 @@ def gpc_ovr_combine_host(col_addrs: List[Int], out_addr: Int, codes_addr: Int, n
     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
     ctx.enqueue_copy(dst_ptr=hcodes.unsafe_ptr(), src_buf=dcodes)
     ctx.synchronize()
-    memcpy(dest=_GU(unsafe_from_address=out_addr), src=hout.unsafe_ptr(), count=n * k)
-    memcpy(dest=_GI(unsafe_from_address=codes_addr), src=hcodes.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=_GU(unsafe_from_address=out_addr), src=hout.unsafe_ptr(), count=n * k)
+    unsafe_memcpy(dest=_GI(unsafe_from_address=codes_addr), src=hcodes.unsafe_ptr(), count=n)
     _ = hin^
     _ = din^
     _ = dout^
@@ -409,7 +409,7 @@ def gpc_predict_binary_host(
         ctx.enqueue_copy(dst_ptr=hpr.unsafe_ptr(), src_buf=dpr)
         ctx.synchronize()
         proba = List[Float64](unsafe_uninit_length=n_star)
-        memcpy(
+        unsafe_memcpy(
             dest=MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(proba.unsafe_ptr())),
             src=hpr.unsafe_ptr(),
             count=n_star,

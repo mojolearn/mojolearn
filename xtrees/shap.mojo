@@ -163,7 +163,7 @@ def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32
             meta[unsafe_offset=SHAP_META_BAD] = 2
             return
         p = Int(parent[unsafe_offset=lo + p])
-    _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
+    _ = Atomic[Int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
 
 
 @always_inline
@@ -207,7 +207,7 @@ def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
             c += 1
         else:
             slot[unsafe_offset=t * d + f] = -1
-    _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
+    _ = Atomic[Int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
 
 
 @always_inline

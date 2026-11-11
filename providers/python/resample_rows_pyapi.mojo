@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Stable input metadata and retained storage for general row resampling.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_attr import py_attr
@@ -49,7 +49,7 @@ def _take_rows_contiguous(src: Int, row_stride: Int, row_bytes: Int, n: Int,
             if row < 0 or row >= n:
                 fp[c] = 1
                 return
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + i * row_bytes),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + i * row_bytes),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=src + row * row_stride), count=row_bytes)
 
     host_parallelize(_rows_task, tasks)
@@ -211,7 +211,7 @@ struct ResampleRows(Movable):
             # element x leaf loops) is gone.
             var index_array = py_call(context["ndarray"], admitted_shape_tuple([count]),
                                       dtype=py_call(native_numpy_dtype(context), "<i4"))
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(index_array)),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(index_array)),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=indices.addr), count=count * 4)
             _ = indices
             return py_call(py_attr(context["ndarray"], "take"), self.source, index_array, 0)

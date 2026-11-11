@@ -254,9 +254,9 @@ struct ScoreKeyIndex(Movable):
                             continue
                     if score_key_compare(kp[Int(prior)], kp[i]) == 0:
                         if keep_last:
-                            _ = Atomic[DType.int64].max(slots + slot, Int64(i))
+                            _ = Atomic[Int64].max(slots + slot, Int64(i))
                         else:
-                            _ = Atomic[DType.int64].min(slots + slot, Int64(i))
+                            _ = Atomic[Int64].min(slots + slot, Int64(i))
                         break
                     slot = (slot + 1) & mask
                 if ordered:

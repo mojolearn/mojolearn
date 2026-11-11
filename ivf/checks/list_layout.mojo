@@ -68,7 +68,7 @@ so it is a speed change and belongs behind a measurement.
 """
 
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from x_ann.switches import ANN3_HOST_PASSES
 
 
@@ -185,7 +185,7 @@ def build_list_layout(
         list_indices[slot] = UInt32(i)
         if with_data:
             comptime if ANN3_HOST_PASSES:
-                memcpy(dest=list_data.unsafe_ptr() + slot * dim, src=x.unsafe_ptr() + i * dim, count=dim)
+                unsafe_memcpy(dest=list_data.unsafe_ptr() + slot * dim, src=x.unsafe_ptr() + i * dim, count=dim)
             else:
                 for f in range(dim):
                     list_data[slot * dim + f] = x[i * dim + f]

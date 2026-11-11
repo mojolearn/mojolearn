@@ -53,7 +53,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
 from core.device_liveness import assert_device_alive
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from ensemble.importance_device import ImportanceStore
 from ensemble.oob_device import (
     OOB_STATS,
@@ -1878,7 +1878,7 @@ def compute_oob_score[
     oob_predictions = List[Float64](
         length=n_rows * num_outputs, fill=Float64(0.0)
     )
-    memcpy(
+    unsafe_memcpy(
         dest=oob_predictions.unsafe_ptr().bitcast[UInt64](),
         src=h_acc.unsafe_ptr(),
         count=n_rows * num_outputs,

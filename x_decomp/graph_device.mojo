@@ -115,7 +115,7 @@ def xg_hook_kernel(w: F32Ptr, lab: I32Ptr, n: Int32, changed: I32Ptr):
                     var lo = a if a < b else b
                     var hi = b if a < b else a
                     if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        _ = Atomic[Int32].min(lab + Int(hi), lo)
                         changed.unsafe_store(0, Int32(1))
 
 

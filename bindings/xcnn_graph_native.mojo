@@ -14,7 +14,7 @@ Native buffers own allocation, dtype admission and integer edge conversion;
 NumPy supplies exact native ndarray containers for completed results.
 """
 from std.math import sqrt
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.mode_metadata_native import _fields
 from bindings.native_buffer_owner import native_buffer_view
@@ -48,7 +48,7 @@ def _ones(count: Int, context: PythonObject) raises -> PythonObject:
 def _slice(source: PythonObject, offset: Int, count: Int, integer: Bool, context: PythonObject) raises -> PythonObject:
     var out = xcnn_host_i32([count], context) if integer else xcnn_host_f32([count], context)
     if count:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(source))) + offset * 4,
                count=count * 4)
     _ = source

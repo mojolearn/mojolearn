@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native byte admission, identity folds and state hashes for live training."""
 from std.math import isfinite
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -579,7 +579,7 @@ def cross_vendor_feed_batch(owner: PythonObject, step: Int, shard: Int) raises -
     var output = generation_array([batch, width], "i")
     var source = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=data._addr))
     var target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-    memcpy(dest=target, src=source + (local * k + shard) * n, count=n)
+    unsafe_memcpy(dest=target, src=source + (local * k + shard) * n, count=n)
     _ = data^
     return output
 

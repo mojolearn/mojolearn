@@ -3730,7 +3730,7 @@ def glm_sg_kernel(g: FP, step: FP, res: FP, m: Int32, d: Int32, alpha: Float32, 
     var j = _gt()
     if j < Int(m):
         var term = glm_g_item(j, g, step, res, Int(d), alpha, fd(Float32(1), ld(sc, 0)))
-        _ = Atomic[DType.int32].max(gm, Int32(Int(bitcast[DType.uint32](term))))
+        _ = Atomic[Int32].max(gm, Int32(Int(bitcast[DType.uint32](term))))
 
 
 def glm_flag_kernel(gm: IP, sc: FP, tol: Float32):

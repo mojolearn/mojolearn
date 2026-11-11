@@ -46,7 +46,7 @@ from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAM
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 from mamba.impl.mamba_decode_plan import MambaDecodePlan
 from core.hostptr import f32_ptr
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.shared_slot import SharedSlot
 
 
@@ -968,10 +968,10 @@ def mamba_session_decode(mut mods: NativeModules, session: PythonObject, input: 
         var dst = f32_ptr(output_address)
         for t in range(n):  # driver-loop: over decode tokens, one host-arm step each
             for r in range(b):  # driver-loop: over the session's batch rows, a host-arm copy of token t
-                memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
+                unsafe_memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
             _session_step_call(mods, hobj, Int(xt.unsafe_ptr()), Int(yt.unsafe_ptr()), report_addresses)
             for r in range(b):  # driver-loop: over the session's batch rows, a host-arm copy of token t
-                memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
+                unsafe_memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
         _ = xt^
         _ = yt^
     _ = keep^

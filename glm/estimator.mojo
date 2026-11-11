@@ -64,7 +64,7 @@ from glm.impl.linear_model.qn import (
     QNParams,
 )
 from checks.numerics import ftz
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from core.gram_splitk import (
     gram_splitk_applies,
     gram_splitk_chunk_count,
@@ -789,7 +789,7 @@ def qn_fit_ovr_host(
         info_ptr.unsafe_store(3 * k + 2, Float32(iters))
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w_all)
     ctx.synchronize()
-    memcpy(dest=coef_ptr, src=hw.unsafe_ptr(), count=n_fits * n_param)
+    unsafe_memcpy(dest=coef_ptr, src=hw.unsafe_ptr(), count=n_fits * n_param)
     _ = w^
     _ = w_all^
     _ = hw^
@@ -828,7 +828,7 @@ def qn_decision_function_host(
     ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
     ctx.synchronize()
     # lane a8c: one copy of the downloaded scores (was a per-word host loop)
-    memcpy(dest=out_ptr, src=hs.unsafe_ptr(), count=n_rows * n_targets)
+    unsafe_memcpy(dest=out_ptr, src=hs.unsafe_ptr(), count=n_rows * n_targets)
     _ = hs^
     _ = scores^
 

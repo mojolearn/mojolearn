@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Transport only: reuse agglo_entry and its existing host/device operations.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import read_f32, f32_ptr, i32_ptr, f64_ptr
 from x_cluster.entries import agglo_entry
 from x_cluster.ops import ClusterOps
@@ -27,10 +27,10 @@ def hierarchy_cluster_fit[O: ClusterOps](mut ops: O, a: List[Int], p: List[Int],
     if len(out.i[0]) != 2 * p[7] or len(out.i[1]) != p[2] or len(out.f[0]) != p[7]:
         raise Error("hierarchy cluster provider: invalid numerical output dimensions")
     if p[7] > 0:
-        memcpy(dest=i32_ptr(a[2]), src=out.i[0].unsafe_ptr(), count=2 * p[7])
-        memcpy(dest=f32_ptr(a[4]), src=out.f[0].unsafe_ptr(), count=p[7])
-    memcpy(dest=i32_ptr(a[3]), src=out.i[1].unsafe_ptr(), count=p[2])
-    memcpy(dest=f64_ptr(a[5]), src=out.s.unsafe_ptr(), count=2)
+        unsafe_memcpy(dest=i32_ptr(a[2]), src=out.i[0].unsafe_ptr(), count=2 * p[7])
+        unsafe_memcpy(dest=f32_ptr(a[4]), src=out.f[0].unsafe_ptr(), count=p[7])
+    unsafe_memcpy(dest=i32_ptr(a[3]), src=out.i[1].unsafe_ptr(), count=p[2])
+    unsafe_memcpy(dest=f64_ptr(a[5]), src=out.s.unsafe_ptr(), count=2)
     _ = out^
     _ = x^
     _ = edges^

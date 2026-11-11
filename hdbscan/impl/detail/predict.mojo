@@ -56,7 +56,7 @@ estimator's `labels_`; theirs are int64 (`hdbscan.pyx:1316`).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import identical_div
@@ -516,27 +516,27 @@ def _approximate_predict_lean(
     ctx.synchronize()
 
     # bulk host staging (byte copies, no arithmetic)
-    memcpy(dest=h_x.unsafe_ptr(), src=x_host.unsafe_ptr(), count=m * n)
-    memcpy(dest=h_q.unsafe_ptr(), src=queries.unsafe_ptr(), count=nq * n)
+    unsafe_memcpy(dest=h_x.unsafe_ptr(), src=x_host.unsafe_ptr(), count=m * n)
+    unsafe_memcpy(dest=h_q.unsafe_ptr(), src=queries.unsafe_ptr(), count=nq * n)
     if m > 0:
-        memcpy(dest=h_core.unsafe_ptr(), src=input_core_dists.unsafe_ptr(), count=m)
-        memcpy(dest=h_lab.unsafe_ptr(), src=labels.unsafe_ptr(), count=m)
+        unsafe_memcpy(dest=h_core.unsafe_ptr(), src=input_core_dists.unsafe_ptr(), count=m)
+        unsafe_memcpy(dest=h_lab.unsafe_ptr(), src=labels.unsafe_ptr(), count=m)
     if n_iic > 0:
-        memcpy(
+        unsafe_memcpy(
             dest=h_iic.unsafe_ptr(),
             src=pd.index_into_children.unsafe_ptr(),
             count=n_iic,
         )
     if n_deaths > 0:
-        memcpy(dest=h_deaths.unsafe_ptr(), src=pd.deaths.unsafe_ptr(), count=n_deaths)
+        unsafe_memcpy(dest=h_deaths.unsafe_ptr(), src=pd.deaths.unsafe_ptr(), count=n_deaths)
     if n_sel > 0:
-        memcpy(
+        unsafe_memcpy(
             dest=h_sel.unsafe_ptr(),
             src=pd.selected_clusters.unsafe_ptr(),
             count=n_sel,
         )
     if n_lam > 0:
-        memcpy(dest=h_lam.unsafe_ptr(), src=tree_lambdas.unsafe_ptr(), count=n_lam)
+        unsafe_memcpy(dest=h_lam.unsafe_ptr(), src=tree_lambdas.unsafe_ptr(), count=n_lam)
 
     # `:163-177` perform knn
     _ = knn_search_traced(
@@ -624,10 +624,10 @@ def _approximate_predict_lean(
     var h_lamv = List[Float32](length=nq, fill=Float32(0.0))
     var h_labels = List[Int32](length=nq, fill=Int32(0))
     var h_probs = List[Float32](length=nq, fill=Float32(0.0))
-    memcpy(dest=h_inds.unsafe_ptr(), src=o_inds.unsafe_ptr(), count=nq)
-    memcpy(dest=h_lamv.unsafe_ptr(), src=o_lam.unsafe_ptr(), count=nq)
-    memcpy(dest=h_labels.unsafe_ptr(), src=o_labels.unsafe_ptr(), count=nq)
-    memcpy(dest=h_probs.unsafe_ptr(), src=o_probs.unsafe_ptr(), count=nq)
+    unsafe_memcpy(dest=h_inds.unsafe_ptr(), src=o_inds.unsafe_ptr(), count=nq)
+    unsafe_memcpy(dest=h_lamv.unsafe_ptr(), src=o_lam.unsafe_ptr(), count=nq)
+    unsafe_memcpy(dest=h_labels.unsafe_ptr(), src=o_labels.unsafe_ptr(), count=nq)
+    unsafe_memcpy(dest=h_probs.unsafe_ptr(), src=o_probs.unsafe_ptr(), count=nq)
     trace.record_list_i32("hdbscan.predict.min_mr_inds", h_inds)
     trace.record_list_f32("hdbscan.predict.lambdas", h_lamv)
     trace.record_list_i32("hdbscan.predict.labels", h_labels)

@@ -18,7 +18,7 @@
 # native call, gamma='scale' rounded from the binding's exact limbs in exact
 # integer math (core/scale_gamma_exact.mojo). A binding without a door
 # takes the entries it has, as before.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights, admit_family_fold_meta
@@ -830,7 +830,7 @@ def _km_fit_owned(x_meta: ArrayMetadata, context: PythonObject) raises -> Python
     if x_meta.copied and x_meta.owned_writable:
         return x_meta.keep
     var result = family_array(x_meta.python_shape(), "<f4", context)
-    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
+    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_meta.source.addr), count=x_meta.count)
     return result
 

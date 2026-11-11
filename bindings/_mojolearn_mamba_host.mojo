@@ -35,7 +35,7 @@ The sabotage arm is `gemm_oracle`'s (`-D MOJOLEARN_HOST_SABOTAGE=1` walks
 every GEMM leaf descending), which every block's projections reach.
 """
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.os import abort
 from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE_MAMBA_HOST_STATE_API

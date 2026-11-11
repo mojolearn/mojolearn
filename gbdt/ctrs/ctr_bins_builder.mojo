@@ -61,7 +61,7 @@ position `i` -- see `gbdt/data/permutation.mojo`.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 
@@ -531,7 +531,7 @@ struct TCtrBinBuilderGpu(Movable):
         # device below (cpu3-gbdt-b), not in a host loop over the rows
         var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
         ctx.synchronize()
-        memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=n)
 
         self.indices = ctx.enqueue_create_buffer[DType.uint32](n)
         self.bins = ctx.enqueue_create_buffer[DType.uint32](n)
@@ -713,7 +713,7 @@ struct TCtrBinBuilderGpu(Movable):
         # and reads back one word (cpu3-gbdt-b), not a host loop over rows.
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.size)
         ctx.synchronize()
-        memcpy(dest=h.unsafe_ptr(), src=cat_bins.unsafe_ptr(), count=self.size)
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=cat_bins.unsafe_ptr(), count=self.size)
         ctx.enqueue_copy(
             dst_buf=self.decompressed_temp_bins, src_ptr=h.unsafe_ptr()
         )
@@ -826,5 +826,5 @@ struct TCtrBinBuilderGpu(Movable):
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=self.indices)
         ctx.synchronize()
         var out = List[UInt32](unsafe_uninit_length=self.size)
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=self.size)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=self.size)
         return out^

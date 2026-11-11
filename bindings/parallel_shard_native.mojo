@@ -24,7 +24,7 @@ call the Python binding loader. Neighbor and IVF requests dispatch to the
 native handlers in parallel_neighbor_worker; no estimator callback is stored.
 """
 from std.ffi import external_call
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from core.native_label_codes import NativeLabelCodes
 from std.python._cpython import PyObjectPtr
@@ -253,7 +253,7 @@ def _fit_scaler(args: PythonObject) raises -> PythonObject:
             var lo = ranges[2 * r]
             var w = ranges[2 * r + 1] - lo
             var value = parts[r][name]
-            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))) + lo,
+            unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))) + lo,
                    src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
                    count=w)
             _ = out  # keep the Python object alive through the native call above

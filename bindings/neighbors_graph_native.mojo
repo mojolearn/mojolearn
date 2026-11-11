@@ -30,7 +30,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_call, family_isinstance, family_str, family_array,
 )
 from bindings.cfb_spectral import _as_i32
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields, host_sparse_dense
 from bindings.cfb_sparse_read import cfb_sparse_triples
 from core.sparse_coo_csr_impl import sparse_coo_to_csr_summed, sparse_dense_row_counts, sparse_dense_fill
@@ -234,10 +234,10 @@ def _csr_of_triples(triples: PythonObject, n: Int, graph: Bool, context: PythonO
     var indices = family_array(Python.tuple(m), "<i4", context)
     var vals = family_array(Python.tuple(m), "<f4", context) if graph else PythonObject(None)
     if m > 0:
-        memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(indices))),
+        unsafe_memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(indices))),
                src=FAMILY_I32P(unsafe_from_address=Int(merged_indices.unsafe_ptr())), count=m)
         if graph:
-            memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(vals))),
+            unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(vals))),
                    src=FAMILY_F32P(unsafe_from_address=Int(merged_vals.unsafe_ptr())), count=m)
     _ = len(merged_indices)  # keep the scratch alive through the copies above
     _ = len(merged_vals)

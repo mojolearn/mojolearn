@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler's public lifecycle. The original preprocessing and x_prep
 # kernels, operation order, modes, and copy semantics remain unchanged.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -156,7 +156,7 @@ def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     var dest = stat+d
     var arena = List[Float32](length=dest+n*d, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap, src=_ptr(values), count=n*d)
+    unsafe_memcpy(dest=ap, src=_ptr(values), count=n*d)
     scaler_feature_indices(ap+keep, d)
     var program = List[Int32]()
     _stage(program, 1, d, 0, n, d, st)
@@ -164,7 +164,7 @@ def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     _run(arena, program, entries)
     scaler_refuse_infinite_columns(ap, st, d)
     var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
-    memcpy(dest=_ptr(output), src=ap+dest, count=n*d)
+    unsafe_memcpy(dest=_ptr(output), src=ap+dest, count=n*d)
     _ = output  # keep the Python object alive through the native call above
     _ = arena^
     return output
@@ -216,7 +216,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var held = prepared_get(mods, _STANDARD_ROWS_SLOT, model)
     if (held is not None and held[0] is mean and held[1] is scale and Int(py=held[3]) == d
             and String(held[4]) == mode_text and Bool(py=held[5]) == with_mean and Bool(py=held[6]) == with_std):
-        memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
+        unsafe_memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
         _ = held  # keep the Python object alive through the copy above
     else:
         var mean_raw = mean
@@ -229,9 +229,9 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
             _ = scale  # keep the Python object alive through the native call above
         mean = _statistic(mean, d, "mean_", context)
         scale = _statistic(scale, d, "scale_", context)
-        memcpy(dest=ap, src=_ptr(mean), count=d)
+        unsafe_memcpy(dest=ap, src=_ptr(mean), count=d)
         _ = mean  # keep the Python object alive through the native call above
-        memcpy(dest=ap+d, src=_ptr(scale), count=d)
+        unsafe_memcpy(dest=ap+d, src=_ptr(scale), count=d)
         _ = scale  # keep the Python object alive through the native call above
         arena[7*d+4] = 1
         var program = List[Int32]()
@@ -242,7 +242,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _run(arena, program, entries)
         if bitcast[DType.int32](arena[7*d+1]) == 0 and bitcast[DType.int32](arena[7*d+2]) == 0:
             var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
-            memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
+            unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
             _ = rows  # keep the Python object alive through the copy above
             if mean_raw is not None:
                 py_setattr(mean_raw, "_readonly", PythonObject(True))
@@ -290,11 +290,11 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     if not finite or colnan:
         var keep = List[Float32](length=3*n*d+2*d, fill=0)
         var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
-        memcpy(dest=kp, src=_ptr(values), count=n*d)
+        unsafe_memcpy(dest=kp, src=_ptr(values), count=n*d)
         _ = values  # keep the Python object alive through the native call above
-        memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
+        unsafe_memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
         _ = output  # keep the Python object alive through the native call above
-        memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
+        unsafe_memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
         var restore = List[Int32]()
         # c2_nan_sub publishes int32 words, while nan_keep reads numeric
         # Float32 flags. Preserve the old _Prog.put_codes i2f stage: raw
@@ -302,7 +302,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _stage(restore, 10, d, 2*n*d, 2*n*d+d)
         _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
         _run(keep, restore, entries)
-        memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
+        unsafe_memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
         _ = output  # keep the Python object alive through the native call above
         _ = keep^
     _ = arena^
@@ -388,18 +388,18 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     else:
         var old_mean = _statistic(fields["mean_"], d, "mean_", context)
         var new_mean = _statistic(fresh["mean_"], d, "mean_", context)
-        memcpy(dest=ap+2*d, src=_ptr(old_mean), count=d)
+        unsafe_memcpy(dest=ap+2*d, src=_ptr(old_mean), count=d)
         _ = old_mean  # keep the Python object alive through the native call above
-        memcpy(dest=ap+3*d, src=_ptr(new_mean), count=d)
+        unsafe_memcpy(dest=ap+3*d, src=_ptr(new_mean), count=d)
         _ = new_mean  # keep the Python object alive through the native call above
         if fields["var_"] is not None:
             var old_var = _statistic(fields["var_"], d, "var_", context)
-            memcpy(dest=ap+4*d, src=_ptr(old_var), count=d)
+            unsafe_memcpy(dest=ap+4*d, src=_ptr(old_var), count=d)
             _ = old_var  # keep the Python object alive through the native call above
             _ = old_var^
         if fresh["var_"] is not None:
             var new_var = _statistic(fresh["var_"], d, "var_", context)
-            memcpy(dest=ap+5*d, src=_ptr(new_var), count=d)
+            unsafe_memcpy(dest=ap+5*d, src=_ptr(new_var), count=d)
             _ = new_var  # keep the Python object alive through the native call above
             _ = new_var^
         var program = List[Int32]()
@@ -431,7 +431,7 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
             count = classical_typed(Python.tuple(d), "<i8", context["output_context"])
             var dest = I64P(unsafe_from_address=Int(py=classical_address(count)))
             _ = count  # keep the Python object alive through the native call above
-            memcpy(dest=dest, src=ip+2*d, count=d)
+            unsafe_memcpy(dest=dest, src=ip+2*d, count=d)
         _ = counts^
     py_setitem(fields, "n_samples_seen_", count)
     _ = arena^

@@ -12,7 +12,7 @@ program's forward (autograd/small_mlp_program.mojo, op SESSIONS).
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.optimizer_container_boundary import OptimizerInputOwners
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys import is_defined
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
@@ -368,7 +368,7 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
             for i in range(len(views)):  # driver-loop: over the caller's session arrays (one block copy each)
                 var n = views[i].shape[0] * width
                 if n > 0:
-                    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(packed.unsafe_ptr()) + 4 * base),
+                    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(packed.unsafe_ptr()) + 4 * base),
                            src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=addresses[i])), count=n)
                 base += n
             var wrote = py_call_typed(program, PythonObject(5),

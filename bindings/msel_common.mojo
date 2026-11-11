@@ -2,7 +2,7 @@
 # Shared native model-selection storage, label, fold and random helpers.
 # Binding entries are connected at import. Input admission precedes metadata,
 # indexing and conversion, and unsupported Python protocols never run.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.admitted_convert import admitted_convert_vector
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -505,7 +505,7 @@ def msel_slice_i64(array: PythonObject, start: Int, count: Int, context: PythonO
     """`array[start:start + count]` of a C int64 Array, copied."""
     var out = msel_new(count, "<i8", context)
     if count > 0:
-        memcpy(dest=msel_p64(out), src=msel_p64(array) + start, count=count)
+        unsafe_memcpy(dest=msel_p64(out), src=msel_p64(array) + start, count=count)
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -865,7 +865,7 @@ struct MselRng(Movable):
         for i in range(len(sizes)):  # driver-loop: over the requested draws
             var rows = msel_new(sizes[i], "<i8", context)
             if sizes[i] > 0:
-                memcpy(dest=msel_p64(rows), src=FAMILY_I64P(unsafe_from_address=base + 4 * outs[i]), count=sizes[i])
+                unsafe_memcpy(dest=msel_p64(rows), src=FAMILY_I64P(unsafe_from_address=base + 4 * outs[i]), count=sizes[i])
                 _ = rows  # keep the Python object alive through the native call above
             _ = py_call(result.append, rows)
         # The copied offsets are raw addresses into arena. Retain its storage

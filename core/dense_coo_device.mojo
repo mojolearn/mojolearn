@@ -60,7 +60,7 @@ def _coo_count_kernel(rows: _I, cols: _I, nnz: Int32, n: Int32, cnt: _I, flag: _
         if r < 0 or r >= Int(n) or c < 0 or c >= Int(n):
             flag.unsafe_store(0, Int32(1))
             return
-        _ = Atomic[DType.int32].fetch_add(cnt + r, Int32(1))
+        _ = Atomic[Int32].fetch_add(cnt + r, Int32(1))
 
 
 def _coo_scatter_kernel(rows: _I, cols: _I, nnz: Int32, n: Int32, start: _I, fill: _I, order: _I):
@@ -70,7 +70,7 @@ def _coo_scatter_kernel(rows: _I, cols: _I, nnz: Int32, n: Int32, start: _I, fil
         var c = Int(cols.unsafe_load(e))
         if r < 0 or r >= Int(n) or c < 0 or c >= Int(n):
             return
-        var slot = Atomic[DType.int32].fetch_add(fill + r, Int32(1))
+        var slot = Atomic[Int32].fetch_add(fill + r, Int32(1))
         order.unsafe_store(Int(start.unsafe_load(r)) + Int(slot), Int32(e))
 
 
@@ -99,7 +99,7 @@ def _knn_rows_kernel(
             j = q
         if v != v or v < Float32(0):
             bad.unsafe_store(i, Int32(1))
-            _ = Atomic[DType.int32].min(first, Int32(i))
+            _ = Atomic[Int32].min(first, Int32(i))
             return
         if k == 0:
             continue
@@ -115,7 +115,7 @@ def _knn_rows_kernel(
             have += 1
     if m < k:
         bad.unsafe_store(i, Int32(2))
-        _ = Atomic[DType.int32].min(first, Int32(i))
+        _ = Atomic[Int32].min(first, Int32(i))
         return
     for q in range(k):
         var j = Int(buf.unsafe_load(q) & UInt64(0xFFFFFFFF))

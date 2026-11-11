@@ -32,7 +32,7 @@
 #
 # A refusal comes back as ("__refuse__", exception name, message); the door
 # raises it, so the exception type and wording are the ones the Python had.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -346,7 +346,7 @@ def _key_bytes(env: _Env, raw: PythonObject, mut keys: List[UInt8]) raises -> In
     for _ in range(n):  # driver-loop: over one key's bytes (room for the memcpy)
         keys.append(UInt8(0))
     if n > 0:
-        memcpy(dest=keys.unsafe_ptr() + at,
+        unsafe_memcpy(dest=keys.unsafe_ptr() + at,
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=_address(arr)), count=n)
         _ = arr  # keep the Python object alive through the native call above
     _ = arr^

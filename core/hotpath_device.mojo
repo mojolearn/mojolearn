@@ -407,7 +407,7 @@ def _bincount_i32_kernel(src: _I32, n_: Int32, k: Int32, cnt: _I32, status: _I32
     if v < 0 or v >= Int(k):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + v, Int32(1))
 
 
 def _bincount_i64_kernel(src: _I64, n_: Int32, k: Int32, cnt: _I32, status: _I32):
@@ -418,7 +418,7 @@ def _bincount_i64_kernel(src: _I64, n_: Int32, k: Int32, cnt: _I32, status: _I32
     if v < 0 or v >= Int(k):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + v, Int32(1))
 
 
 def _widen_counts_kernel(cnt: _I32, k: Int32, base: _I64, accumulate: Int32):
@@ -490,7 +490,7 @@ def _bincount2_i32_kernel(a: _I32, b: _I32, n_: Int32, ka: Int32, kb: Int32, cnt
     if u < 0 or u >= Int(ka) or v < 0 or v >= Int(kb):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + (v * Int(ka) + u), Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + (v * Int(ka) + u), Int32(1))
 
 
 def device_bincount2_i32(
@@ -543,7 +543,7 @@ def _count_u8_kernel(mask: _U8, n_: Int32, total: _I32):
             c += 1
         i += stride
     if c != Int32(0):
-        _ = Atomic[DType.int32].fetch_add(total, c)
+        _ = Atomic[Int32].fetch_add(total, c)
 
 
 def _count_grid(n: Int) -> Int:
@@ -1030,7 +1030,7 @@ def _check_indices_kernel(idx: _I64, n_: Int32, bound: Int32, seen: _I32, status
     if v < 0 or v >= Int(bound):
         status.unsafe_store(0, Int32(1))
         return
-    var prev = Atomic[DType.int32].fetch_add(seen + v, Int32(1))
+    var prev = Atomic[Int32].fetch_add(seen + v, Int32(1))
     if prev != Int32(0):
         status.unsafe_store(1, Int32(1))
 
@@ -1160,8 +1160,8 @@ def _class_first_kernel(codes: _I32, n_: Int32, k: Int32, cnt: _I32, first: _I32
     if c < 0 or c >= Int(k):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + c, Int32(1))
-    _ = Atomic[DType.int32].min(first + c, Int32(i))
+    _ = Atomic[Int32].fetch_add(cnt + c, Int32(1))
+    _ = Atomic[Int32].min(first + c, Int32(i))
 
 
 def _pair_iota_kernel(src: _I32, n_: Int32, keys: _U32, vals: _U32):
@@ -1195,7 +1195,7 @@ def _rank_fold_kernel(
     while f < K - 1 and Int(cum.unsafe_load(c * K + f)) <= rank:
         f += 1
     fold.unsafe_store(r, Int32(f))
-    _ = Atomic[DType.int32].fetch_add(per_fold + f, Int32(1))
+    _ = Atomic[Int32].fetch_add(per_fold + f, Int32(1))
 
 
 def device_class_counts(
@@ -1372,7 +1372,7 @@ def _first_rank_kernel(order: _U32, k: Int32, cnt: _I32, rank_of: _I32, counts: 
     rank_of.unsafe_store(c, Int32(q))
     counts.unsafe_store(q, Int64(m))
     if m != Int32(0):
-        _ = Atomic[DType.int32].fetch_add(status + 1, Int32(1))
+        _ = Atomic[Int32].fetch_add(status + 1, Int32(1))
 
 
 def device_first_seen_i32(

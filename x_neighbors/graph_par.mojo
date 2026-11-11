@@ -792,10 +792,10 @@ def _lv_tadd(g: GA, c: Int, d: Int64):
     equal to the host column's sequential adds."""
     var dlo = d.cast[DType.int32]()
     var dhi = (d >> Int64(32)).cast[DType.int32]()
-    var old = Atomic[DType.int32].fetch_add(_is(g, L_TLO) + c, dlo)
+    var old = Atomic[Int32].fetch_add(_is(g, L_TLO) + c, dlo)
     var new_lo = (old + dlo).cast[DType.uint32]()
     var carry = Int32(1) if new_lo < old.cast[DType.uint32]() else Int32(0)
-    _ = Atomic[DType.int32].fetch_add(_is(g, L_THI) + c, dhi + carry)
+    _ = Atomic[Int32].fetch_add(_is(g, L_THI) + c, dhi + carry)
 
 
 @always_inline

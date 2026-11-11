@@ -5,7 +5,7 @@ Views borrow these owners for synchronous descriptor calls. Metadata copies
 use the same native bulk-copy primitive as the existing GP binding. No data
 arithmetic or numerical kernel is implemented here.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.gp_native_api import GPKernelView
 
 
@@ -15,7 +15,7 @@ def gp_native_ints(address: Int, count: Int) raises -> List[Int]:
     var result = List[Int](unsafe_uninit_length=count)
     if count > 0:
         var source = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=address)
-        memcpy(dest=result.unsafe_ptr(), src=source, count=count)
+        unsafe_memcpy(dest=result.unsafe_ptr(), src=source, count=count)
     return result^
 
 
@@ -25,7 +25,7 @@ def gp_native_f64(address: Int, count: Int) raises -> List[Float64]:
     var result = List[Float64](unsafe_uninit_length=count)
     if count > 0:
         var source = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=address)
-        memcpy(dest=result.unsafe_ptr(), src=source, count=count)
+        unsafe_memcpy(dest=result.unsafe_ptr(), src=source, count=count)
     return result^
 
 

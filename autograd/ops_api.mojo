@@ -2987,7 +2987,7 @@ def ops_session_registry_token() raises -> Int:
 def ops_session_open[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: Bool) raises -> Int:
     """A new session on `ex`; returns its id (>= 1)."""
     var p = alloc[OpsSession[E]](1)
-    p.init_pointee_move(OpsSession[E](ex^, record))
+    p.unsafe_write(OpsSession[E](ex^, record))
     var s = _OPS_SESSIONS.get_or_create_ptr()
     var sid = s[].next_id
     s[].next_id += 1
@@ -3025,8 +3025,8 @@ def ops_session_close[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raise
     try:
         p[].close()
     except e:
-        p.destroy_pointee()
+        p.unsafe_deinit_pointee()
         p.free()
         raise e
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()

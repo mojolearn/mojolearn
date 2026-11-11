@@ -22,7 +22,7 @@
 # The binding keeps no device state between calls (DEVIATION 873): `predict`
 # hands the fitted support vectors over at every call, as before. There is
 # no resident entry for them.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array, admit_family_fold_meta
 from core.admitted_input import admitted_cast_f32

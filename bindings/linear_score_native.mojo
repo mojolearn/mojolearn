@@ -7,7 +7,7 @@
 # `metrics.r2_score` runs), in one call. The same kernels in the same order
 # as the Python path it replaces, so the score keeps its bits.
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
@@ -98,7 +98,7 @@ def linear_regressor_score(model: PythonObject, args: PythonObject, context: Pyt
     # [coef row | intercept], the block _coef_block packed.
     var block = classical_array(cols + 1, 0, context)
     var wb = _F32P(unsafe_from_address=Int(py=classical_address(block)))
-    memcpy(dest=wb, src=_F32P(unsafe_from_address=Int(py=classical_address(coef))), count=cols)
+    unsafe_memcpy(dest=wb, src=_F32P(unsafe_from_address=Int(py=classical_address(coef))), count=cols)
     wb[cols] = _F32P(unsafe_from_address=Int(py=classical_address(intercept)))[0]
     var link = 0
     var stored = py_get(fields, "_link")

@@ -46,7 +46,7 @@ from experiments.classical_identical_ideas.graph_controls import C44_SAMPLING_DE
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
@@ -683,7 +683,7 @@ def _umap_epochs_download(
         ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
     var out = List[Float32](length=n_values, fill=Float32(0.0))
-    memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
     _ = host_out^
     _ = samples^
     return out^
@@ -965,7 +965,7 @@ def _uc_upload_initial(ctx: DeviceContext, initial: List[Float32]) raises -> Dev
     var n_init = len(initial)
     var h = ctx.enqueue_create_host_buffer[DType.float32](n_init)
     ctx.synchronize()
-    memcpy(dest=h.unsafe_ptr(), src=initial.unsafe_ptr(), count=n_init)
+    unsafe_memcpy(dest=h.unsafe_ptr(), src=initial.unsafe_ptr(), count=n_init)
     var first = ctx.enqueue_create_buffer[DType.float32](n_init)
     ctx.enqueue_copy(dst_buf=first, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
@@ -1003,10 +1003,10 @@ def umap_sparse_graph_to_device(
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cap)
     var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
     ctx.synchronize()
-    memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    unsafe_memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
     if nnz > 0:
-        memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
-        memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
     var g_off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
     var g_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var g_idx = ctx.enqueue_create_buffer[DType.uint32](cap)
@@ -1128,7 +1128,7 @@ def umap_dense_graph_to_device(
     var first = _uc_upload_initial(ctx, initial)
     var h_w = ctx.enqueue_create_host_buffer[DType.float32](nn)
     ctx.synchronize()
-    memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
+    unsafe_memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
     var g_w = ctx.enqueue_create_buffer[DType.float32](nn)
     var counts = ctx.enqueue_create_buffer[DType.int32](n)
     var codes = ctx.enqueue_create_buffer[DType.int32](n)
@@ -1286,10 +1286,10 @@ def umap_positive_coo_device(
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cap)
     var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
     ctx.synchronize()
-    memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    unsafe_memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
     if nnz > 0:
-        memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
-        memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
     var g_off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
     var g_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var g_idx = ctx.enqueue_create_buffer[DType.uint32](cap)
@@ -1387,7 +1387,7 @@ def umap_dense_positive_coo_device(
     var nn = n * n
     var h_w = ctx.enqueue_create_host_buffer[DType.float32](nn)
     ctx.synchronize()
-    memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
+    unsafe_memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
     var g_w = ctx.enqueue_create_buffer[DType.float32](nn)
     var counts = ctx.enqueue_create_buffer[DType.int32](n)
     var codes = ctx.enqueue_create_buffer[DType.int32](n)

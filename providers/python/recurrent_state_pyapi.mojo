@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole-operation recurrent state admission, native packing and finished output.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -125,11 +125,11 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
                 if Int(py=actual_shape[j]) != dimensions[i][j]:
                     raise Error(names[i] + ": shape differs from the recurrent parameter layout")
             var input = admit_nd_f32(source, names[i], False, context)
-            memcpy(dest=base + offset, src=xseq_f32p(input), count=counts[i])
+            unsafe_memcpy(dest=base + offset, src=xseq_f32p(input), count=counts[i])
             _ = input
         else:
             var output = xseq_zeros(tuple_shape, context)
-            memcpy(dest=xseq_f32p(output), src=base + offset, count=counts[i])
+            unsafe_memcpy(dest=xseq_f32p(output), src=base + offset, count=counts[i])
             py_setitem(result, names[i], output)
         offset += counts[i]
     _ = packed

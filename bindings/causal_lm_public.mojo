@@ -30,7 +30,7 @@ from providers.python.generation_metadata_pyapi import (
     _generation_fields,
 )
 from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP
-from std.memory import memcpy, memset_zero
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_weight_address, generation_copy, generation_mutable,
     generation_ids, generation_initialize_binding, generation_array_context, generation_array_snapshot, generation_buffer_view, py_ints,
@@ -458,7 +458,7 @@ def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject) r
                 var begin = Int(py=pieces[k][0])
                 var end = Int(py=pieces[k][1])
                 if end > begin:
-                    memcpy(dest=f32_ptr(Int(py=joined._addr)) + begin * cols, src=f32_ptr(_addr(pieces[k][2], keep)), count=(end - begin) * cols)
+                    unsafe_memcpy(dest=f32_ptr(Int(py=joined._addr)) + begin * cols, src=f32_ptr(_addr(pieces[k][2], keep)), count=(end - begin) * cols)
                     _ = joined  # keep the Python object alive through the native call above
             py_setitem(result, name, joined)
     _ = keep^
@@ -1038,7 +1038,7 @@ def _causal_logits_output(b: Int, l: Int, v: Int, output: PythonObject) raises -
     # Array's zero seed even for optional legacy/packed binding routes; reuse
     # removes allocation and Array metadata construction, not initialization.
     var keep = List[PythonObject]()
-    memset_zero(f32_ptr(_addr(output, keep)), b * l * v)
+    unsafe_memset_zero(f32_ptr(_addr(output, keep)), b * l * v)
     _ = keep
     return output
 

@@ -46,7 +46,7 @@ that is not one-hot is checked with the others rather than after them.
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.soft_f64 import (
@@ -563,7 +563,7 @@ struct ResidentCtrPlan(Movable):
         self.d_meta_f = _upload_f32(ctx, mf)
         self.d_counts = _upload_i64(ctx, counts)
         var h_oh = ctx.enqueue_create_host_buffer[DType.int32](len(oh))
-        memcpy(dest=h_oh.unsafe_ptr(), src=oh.unsafe_ptr(), count=len(oh))
+        unsafe_memcpy(dest=h_oh.unsafe_ptr(), src=oh.unsafe_ptr(), count=len(oh))
         self.d_one_hot = ctx.enqueue_create_buffer[DType.int32](len(oh))
         ctx.enqueue_copy(dst_buf=self.d_one_hot, src_ptr=h_oh.unsafe_ptr())
         self.d_bad = ctx.enqueue_create_buffer[DType.int32](1 + max(n_raw, 1))
@@ -593,7 +593,7 @@ def _upload_i64(ctx: DeviceContext, values: List[Int]) raises -> DeviceBuffer[DT
     ctx.synchronize()
     h.unsafe_ptr().unsafe_store(0, Int64(0))
     if len(values) > 0:
-        memcpy(
+        unsafe_memcpy(
             dest=h.unsafe_ptr(),
             src=values.unsafe_ptr().bitcast[Int64](),
             count=len(values),
@@ -611,7 +611,7 @@ def _upload_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffe
     ctx.synchronize()
     h.unsafe_ptr().unsafe_store(0, Float32(0.0))
     if len(values) > 0:
-        memcpy(dest=h.unsafe_ptr(), src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=values.unsafe_ptr(), count=len(values))
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
     _ = h^

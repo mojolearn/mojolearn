@@ -144,7 +144,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
 )
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
@@ -458,11 +458,11 @@ def _build_cindex_from_floats(
                         "There are NaNs in feature number " + String(f)
                         + " but there were no NaNs in the learn dataset"
                     )
-            memcpy(dest=hx, src=src, count=n_rows)
+            unsafe_memcpy(dest=hx, src=src, count=n_rows)
         else:
             # a substituting treatment copies the raw bytes and substitutes
             # on the device after the upload (cpu-gpu-cleanup t-gbdt)
-            memcpy(dest=hx, src=src, count=n_rows)
+            unsafe_memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
@@ -901,7 +901,7 @@ def _build_cindex_from_columns(
         # (cpu-gpu-cleanup t-gbdt). AS_IS means the border build's
         # full-column NaN scan saw none in THIS SAME buffer, so it needs no
         # pass at all.
-        memcpy(dest=hx, src=src, count=n_rows)
+        unsafe_memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
@@ -994,7 +994,7 @@ def _build_cindex_fused(
             staged += 1
             continue
         var hx = hxs[slot].unsafe_ptr()
-        memcpy(dest=hx, src=column_ptrs[f], count=n_rows)
+        unsafe_memcpy(dest=hx, src=column_ptrs[f], count=n_rows)
         ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         if treat != NAN_TREATMENT_AS_IS:
             _enqueue_nan_substitute(
@@ -1952,7 +1952,7 @@ def train(
         d_btarget = ctx.enqueue_create_buffer[DType.uint8](n_rows)
         var h_bt = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
         ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=h_bt.unsafe_ptr(),
             src=binarized_target.unsafe_ptr(),
             count=n_rows,
@@ -2145,7 +2145,7 @@ def train(
                     # the raw column is the code column (validated above)
                     var col = List[Float32]()
                     col.resize(unsafe_uninit_length=n_rows)
-                    memcpy(
+                    unsafe_memcpy(
                         dest=col.unsafe_ptr(),
                         src=x_src + f * n_rows,
                         count=n_rows,
@@ -3199,7 +3199,7 @@ def _upload_ctr_column(
         )
     var h = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     ctx.synchronize()
-    memcpy(dest=h.unsafe_ptr(), src=col.unsafe_ptr(), count=n_rows)
+    unsafe_memcpy(dest=h.unsafe_ptr(), src=col.unsafe_ptr(), count=n_rows)
     var d = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()

@@ -211,7 +211,7 @@ def sgd_ps_end_kernel(
         st(pf, 3 * c, eta)
         act.unsafe_store(c, Int32(active))
         if active != 0:
-            _ = Atomic[DType.int32].fetch_add(live, Int32(1))
+            _ = Atomic[Int32].fetch_add(live, Int32(1))
     witness_end(wf, woff, nonce)
 
 
@@ -313,7 +313,7 @@ def sgd_mb_ovr_act_kernel(
             if ld(stt, o) != Float32(0) or ld(stt, o + 1) != Float32(0):
                 sti(act, c, 0)
             else:
-                _ = Atomic[DType.int32].fetch_add(live, Int32(1))
+                _ = Atomic[Int32].fetch_add(live, Int32(1))
     witness_end(wf, woff, nonce)
 
 

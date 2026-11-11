@@ -5,7 +5,7 @@
 # require separate transitive admission: the current provider endpoint manages
 # the CPython GIL per call. Its migration is not established by this module's
 # import closure or a native-only fixture's unresolved-symbol inventory.
-from std.memory import memset_zero
+from std.memory import unsafe_memset_zero
 from core.native_execution import NativeExecutionEndpoint
 from core.borrowed_buffer import BorrowedBufferLayout
 
@@ -18,7 +18,7 @@ def _generation_zero_workspace(mut storage: List[Float32], count: Int) -> Int:
     if len(storage) != count:
         storage = List[Float32](length=count, fill=0)
     elif count > 0:
-        memset_zero(storage.unsafe_ptr(), count)
+        unsafe_memset_zero(storage.unsafe_ptr(), count)
     return Int(storage.unsafe_ptr())
 
 
@@ -227,7 +227,7 @@ struct NativeGenerationModel(Movable):
             var output: Int
             if address != 0:
                 # Same zero-fill as the workspace path before the head writes.
-                memset_zero(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), rows * self.vocab)
+                unsafe_memset_zero(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), rows * self.vocab)
                 output = address
             else:
                 output = _generation_zero_workspace(logits, rows * self.vocab)

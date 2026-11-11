@@ -5,7 +5,7 @@ over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
@@ -316,7 +316,7 @@ def _pcopy(dst: FP, src: FP, n: Int):
     pool on a GPU install; cpu-gpu-cleanup n-seq, 2026-10-02). Data movement
     only, the bytes are the same."""
     if n > 0:
-        memcpy(dest=dst, src=src, count=n)
+        unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def coop_kernel[OP: Int](
@@ -703,7 +703,7 @@ struct DeviceExec(Exec, Movable):
                     var done = 0
                     while done < n:
                         var cnt = min(SEQ_PIPE_CH, n - done)
-                        memcpy(dest=hpf + done, src=src + done, count=cnt)
+                        unsafe_memcpy(dest=hpf + done, src=src + done, count=cnt)
                         self.execution_profile.copied(3, cnt * 4)
                         var cv = self._sub(found[0], found[1] + done, cnt)
                         self.ctx.enqueue_copy(dst_buf=cv, src_ptr=hpf + done)
@@ -1524,7 +1524,7 @@ struct DeviceExec(Exec, Movable):
                 _ = v^
                 if have_prev:
                     # overlaps the DMA just queued, into the other half
-                    memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
+                    unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
                            count=prev_cnt)
                     self.execution_profile.copied(3, prev_cnt * 4)
                 self._synchronize()
@@ -1535,7 +1535,7 @@ struct DeviceExec(Exec, Movable):
                 half = 1 - half
                 done += cnt
         if have_prev:
-            memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+            unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
             self.execution_profile.copied(3, prev_cnt * 4)
         self._profile_stage(h0, False)
         self._profile_stage(h1, False)

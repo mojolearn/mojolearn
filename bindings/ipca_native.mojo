@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """IncrementalPCA admission/publication around typed native requests and owners."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -68,7 +68,7 @@ def _requested(fields: PythonObject, context: PythonObject) raises -> Int:
 
 def _copy_output(dst: PythonObject, values: List[Float32], count: Int) raises:
     if count:
-        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(dst))),
+        unsafe_memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(dst))),
                src=F32P(unsafe_from_address=Int(values.unsafe_ptr())), count=count)
     _ = values
     _ = dst

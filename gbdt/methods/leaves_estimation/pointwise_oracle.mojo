@@ -151,7 +151,7 @@ from gbdt.targets.kernel.yeti_rank import (
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from checks.soft_f64 import (
     sf64_add,
     sf64_from_f32,
@@ -935,13 +935,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             if n > 0:
                 var hp = self.h_f64.value().unsafe_ptr()
                 gradient.resize(unsafe_uninit_length=n)
-                memcpy(
+                unsafe_memcpy(
                     dest=gradient.unsafe_ptr().bitcast[UInt64](),
                     src=hp,
                     count=n,
                 )
                 self.cached_der2.resize(unsafe_uninit_length=n)
-                memcpy(
+                unsafe_memcpy(
                     dest=self.cached_der2.unsafe_ptr().bitcast[UInt64](),
                     src=hp + n,
                     count=n,
@@ -1299,7 +1299,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 return
             self._f64_staging()
             var hp = self.h_f64.value().unsafe_ptr()
-            memcpy(
+            unsafe_memcpy(
                 dest=hp,
                 src=self.weights_cpu.unsafe_ptr().bitcast[UInt64](),
                 count=n,
@@ -1321,7 +1321,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             )
             self.ctx.synchronize()
             second_der.resize(unsafe_uninit_length=n * dim)
-            memcpy(
+            unsafe_memcpy(
                 dest=second_der.unsafe_ptr().bitcast[UInt64](),
                 src=hp + n,
                 count=n * dim,
@@ -1445,7 +1445,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 src_buf=self.exact.value().point,
             )
             self.ctx.synchronize()
-            memcpy(
+            unsafe_memcpy(
                 dest=point.unsafe_ptr(),
                 src=self.exact.value().h_point.unsafe_ptr(),
                 count=n,
@@ -1519,12 +1519,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         var h_p = self.ctx.enqueue_create_host_buffer[DType.float32](n * dim)
         var d_p = self.ctx.enqueue_create_buffer[DType.float32](n * dim)
         self.ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=h_w.unsafe_ptr(),
             src=self.weights_cpu.unsafe_ptr().bitcast[UInt64](),
             count=n,
         )
-        memcpy(dest=h_p.unsafe_ptr(), src=point.unsafe_ptr(), count=n * dim)
+        unsafe_memcpy(dest=h_p.unsafe_ptr(), src=point.unsafe_ptr(), count=n * dim)
         self.ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
         self.ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
         self.ctx.enqueue_function[regularize_point_f64_kernel](
@@ -1538,7 +1538,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         )
         self.ctx.enqueue_copy(dst_ptr=h_p.unsafe_ptr(), src_buf=d_p)
         self.ctx.synchronize()
-        memcpy(dest=point.unsafe_ptr(), src=h_p.unsafe_ptr(), count=n * dim)
+        unsafe_memcpy(dest=point.unsafe_ptr(), src=h_p.unsafe_ptr(), count=n * dim)
         _ = h_w^
         _ = d_w^
         _ = d_p^

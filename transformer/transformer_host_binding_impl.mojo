@@ -9,7 +9,7 @@ binding (thin-shell lane, 2026-10-21): same operations, same order.
 """
 
 from std.os import abort
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -142,10 +142,10 @@ def _run_decode_steps(
     var cached = s0
     for t in range(n):  # driver-loop: over autoregressive decode tokens (each reads the cache the previous one wrote)
         for r in range(b):  # driver-loop: over the batch rows, token t's row copy in
-            memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
+            unsafe_memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
         cached = _run_forward(at, b, 1, dm, nh, nkv, hd, it, smax, cached, window, True, opts)
         for r in range(b):  # driver-loop: over the batch rows, token t's row copy out
-            memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
+            unsafe_memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
     _ = xt^
     _ = yt^
     return cached

@@ -5,7 +5,7 @@
 # The outer engine enters with the GIL held. Each numerical call/native lock
 # wait releases it; raw session busy reservations remain serialized with the
 # original public bindings. Lock order is the engine's per-layer order.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -81,7 +81,7 @@ def _native_execution_run(lease: NativeExecutionLease, operation: Int,
             scratch.words.resize(np + 1, 0)
             scratch.words[0] = lease.session
             if np > 0:
-                memcpy(dest=scratch.words.unsafe_ptr() + 1,
+                unsafe_memcpy(dest=scratch.words.unsafe_ptr() + 1,
                     src=MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp), count=np)
             words = Int(scratch.words.unsafe_ptr())
             word_count += 1

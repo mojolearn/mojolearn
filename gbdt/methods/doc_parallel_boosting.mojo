@@ -174,7 +174,7 @@ from gbdt.methods.leaves_estimation.device_walker import (
     enqueue_zero_average,
     weight_keep_mask_strided_kernel,
 )
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.gpu import block_dim, block_idx, thread_idx
 from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_neg, sf64_to_f32
 from gbdt.methods.kernel.two_level_leaves import (
@@ -772,7 +772,7 @@ def _test_loss_flush(
     )
     ctx.enqueue_copy(dst_ptr=h_losses.unsafe_ptr(), src_buf=d_losses)
     ctx.synchronize()
-    memcpy(
+    unsafe_memcpy(
         dest=(test_losses.unsafe_ptr() + base).bitcast[UInt64](),
         src=h_losses.unsafe_ptr(),
         count=pending,
@@ -1020,7 +1020,7 @@ def fit_two_level_feature_freq_tree(
     var weak = TObliviousTreeModel(structure^)
     weak.dim = 1
     weak.leaf_values = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(
+    unsafe_memcpy(
         dest=weak.leaf_values.unsafe_ptr(), src=h_leaves.unsafe_ptr(),
         count=n_leaves,
     )
@@ -1367,7 +1367,7 @@ def finish_deferred_estimation(
     leaf_values.clear()
     if tail.n_values > 0:
         leaf_values.resize(unsafe_uninit_length=tail.n_values)
-        memcpy(
+        unsafe_memcpy(
             dest=leaf_values.unsafe_ptr(),
             src=est_ws[0].h_est.unsafe_ptr(),
             count=tail.n_values,
@@ -1986,7 +1986,7 @@ def _estimate_and_apply(
         leaf_values.clear()
         if n_leaves > 0:
             leaf_values.resize(unsafe_uninit_length=n_leaves)
-            memcpy(
+            unsafe_memcpy(
                 dest=leaf_values.unsafe_ptr(),
                 src=h_est.unsafe_ptr(),
                 count=n_leaves,
@@ -2125,7 +2125,7 @@ def _estimate_and_apply(
         leaf_values.clear()
         if n_leaves * approx_dim > 0:
             leaf_values.resize(unsafe_uninit_length=n_leaves * approx_dim)
-            memcpy(
+            unsafe_memcpy(
                 dest=leaf_values.unsafe_ptr(),
                 src=h_est.unsafe_ptr(),
                 count=n_leaves * approx_dim,
@@ -2188,7 +2188,7 @@ def _estimate_and_apply(
         leaf_values.clear()
         if mw_len > 0:
             leaf_values.resize(unsafe_uninit_length=mw_len)
-            memcpy(
+            unsafe_memcpy(
                 dest=leaf_values.unsafe_ptr(),
                 src=h_est.unsafe_ptr(),
                 count=mw_len,
@@ -2792,7 +2792,7 @@ def walk_leaf_values(
     download (the boosting loop keeps its ensemble on the host; lane
     cpu4-gbdt's device-resident model item is not done)."""
     var out = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(
+    unsafe_memcpy(
         dest=out.unsafe_ptr(),
         src=est_ws[0].h_est.unsafe_ptr(),
         count=n_leaves,

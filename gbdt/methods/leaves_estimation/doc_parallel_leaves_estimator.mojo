@@ -47,7 +47,7 @@ would move every number in the fit for no reason.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import memcpy, stack_allocation
+from std.memory import unsafe_memcpy, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -533,10 +533,10 @@ struct DeviceLeafPartitioner(Movable):
         var offsets = List[Int]()
         offsets.resize(unsafe_uninit_length=n_leaves)
         sizes.resize(unsafe_uninit_length=n_leaves)
-        memcpy(
+        unsafe_memcpy(
             dest=offsets.unsafe_ptr().bitcast[Int64](), src=hp, count=n_leaves
         )
-        memcpy(
+        unsafe_memcpy(
             dest=sizes.unsafe_ptr().bitcast[Int64](),
             src=hp + n_leaves,
             count=n_leaves,

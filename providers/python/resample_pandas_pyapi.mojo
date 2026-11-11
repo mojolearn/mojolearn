@@ -6,7 +6,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys import size_of
 from std.sys.info import CompilationTarget
 from bindings.sequence_string_storage import sequence_storage_image, sequence_string_nan_raw
@@ -318,7 +318,7 @@ def _rp_scalar_array(value: PythonObject, context: PythonObject) raises -> Pytho
         if target.item > 0:
             if address == 0:
                 raise Error("TypeError: native flexible scalar has no stored bytes")
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.address), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=target.item)
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.address), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=target.item)
     else:
         extract(value._obj_ptr, MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target.address))
     _ = value
@@ -402,7 +402,7 @@ def _rp_copy(source: _RPArray, address: Int, destination: Int, target: _RPArray)
         _rp_object(destination, _rp_box(source, address))
         return
     if source.code == target.code:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=source.item)
         return
     if (target.kind == "M" or target.kind == "m") and source.kind == target.kind:
@@ -1943,7 +1943,7 @@ def _rp_cell(plan: MutPointer[Int, MutUntrackedOrigin], address: Int, destinatio
     operations of the matching `_rp_copy` branch."""
     var code = plan[0]
     if code == _RP_CELL_MEMCPY:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=plan[7])
         return
     if code == _RP_CELL_TIME:

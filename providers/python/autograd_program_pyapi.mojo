@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
 from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
 from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
 from providers.python.autograd_execution_profile_pyapi import execution_profile_object
@@ -732,7 +732,7 @@ def ops_imported_run_py(
         var a = output_array_dims(want, "int32" if dtype == "int32" else "float32")
         if count > 0:
             # the downloaded words as they are (an 'int32' output's words are its int32 items)
-            memcpy(dest=FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])),
+            unsafe_memcpy(dest=FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])),
                    src=r.outputs[k].data.unsafe_ptr(), count=count)
         _ = py_call(out.append, a)
     return _result(out)

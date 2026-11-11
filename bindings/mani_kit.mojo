@@ -10,7 +10,7 @@
 # compiled free cell in native code. No Python _M/_DevBuf object or finalizer
 # participates in this owner. The numerical kit keeps the existing entries
 # and resident/host operation ordering.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
@@ -139,7 +139,7 @@ def mk_store_part(store: PythonObject, a: Int, b: Int) raises -> PythonObject:
     var hi = min(max(b, lo), n)
     var out = words_new(hi - lo)
     if hi > lo:
-        memcpy(dest=mk_store_ptr(out), src=mk_store_ptr(store) + lo, count=hi - lo)
+        unsafe_memcpy(dest=mk_store_ptr(out), src=mk_store_ptr(store) + lo, count=hi - lo)
     _ = store  # keep the holder alive through the copy above
     return out
 
@@ -338,7 +338,7 @@ def mk_out(m: PythonObject, shape: PythonObject, ctx: PythonObject) raises -> Py
         raise Error("RuntimeError: an array store does not match its shape")
     var out = family_array(shape, "<f4", ctx)
     if n > 0:
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), src=mk_store_ptr(store), count=n)
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), src=mk_store_ptr(store), count=n)
     _ = store  # keep the holder alive through the copy above
     _ = out  # keep the Python object alive through the copy above
     return out
@@ -467,7 +467,7 @@ def mk_vstack_host(ms: List[PythonObject], ctx: PythonObject) raises -> PythonOb
         var part = mk_store(ms[i], ctx)
         var cnt = mk_store_len(part)
         if cnt > 0:
-            memcpy(dest=dst + off, src=mk_store_ptr(part), count=cnt)
+            unsafe_memcpy(dest=dst + off, src=mk_store_ptr(part), count=cnt)
         _ = part  # keep the holder alive through the copy above
         off += cnt
     _ = s  # keep the holder alive through the copies above
@@ -1398,7 +1398,7 @@ struct MKit(Movable):
         var src = mk_store(x, self.ctx)
         var store = mk_store_zeros((r + 1) * c, self.ctx)
         if r * c > 0:
-            memcpy(dest=mk_store_ptr(store), src=mk_store_ptr(src), count=r * c)
+            unsafe_memcpy(dest=mk_store_ptr(store), src=mk_store_ptr(src), count=r * c)
         _ = src  # keep the holder alive through the copy above
         return mk_new(store, r + 1, c, self.ctx)
 
@@ -1665,7 +1665,7 @@ def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) rais
         raise Error(name + ": a nonempty two-dimensional input is required")
     var store = mk_store_zeros(r * c, ctx)
     var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
-    memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
+    unsafe_memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
     _ = store
     _ = value
     if not host_all_finite_f32(src, r * c):

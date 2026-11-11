@@ -52,7 +52,7 @@ from bindings.device_plan_binding import device_plan_enter_binding, device_plan_
 from core.device_plan import device_plan_current
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -273,7 +273,7 @@ def svc_fit_binding(
             nochange_steps, degree, coef0, c_rows, scale_gamma,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
+    unsafe_memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
@@ -481,7 +481,7 @@ def svr_fit_binding(
             nochange_steps, c_rows, degree, coef0, scale_gamma,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
+    unsafe_memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
@@ -862,10 +862,10 @@ def iforest_run_binding(
         )
     if want == IF_WANT_PREDICT:
         var oi = _i32_ptr(Int(py=out_i32_addr))
-        memcpy(dest=oi, src=res.labels.unsafe_ptr(), count=n_query)
+        unsafe_memcpy(dest=oi, src=res.labels.unsafe_ptr(), count=n_query)
     else:
         var of = _f32_ptr(Int(py=out_f32_addr))
-        memcpy(dest=of, src=res.values.unsafe_ptr(), count=n_query)
+        unsafe_memcpy(dest=of, src=res.values.unsafe_ptr(), count=n_query)
     ip.unsafe_store(0, res.offset_)
     ip.unsafe_store(1, Float64(res.max_samples_))
     ip.unsafe_store(2, Float64(res.n_features_in_))

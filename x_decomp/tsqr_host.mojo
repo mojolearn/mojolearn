@@ -18,7 +18,7 @@ matrix, the panels' T factors, the tree tiles and the tree's tau in ONE
 process slot until `ts_apply_host` (or `ts_free_host`) uses it; a new factor
 with `keep=True` replaces it. Temporary factorizations own their state locally
 and leave the explicit retained factorization alone."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from checks.numerics import ftz, identical_div, identical_sqrt
 from core.host_parallel import host_parallelize
@@ -425,11 +425,11 @@ def _ts_factor_host_into(mut state: _TsHost, a: F32Ptr, bp: F32Ptr, r: F32Ptr,
     var ptl = _p(state.tiles)
     var ptau = _p(state.tau)
     if nrhs == 0:
-        memcpy(dest=pa, src=a, count=m * n)
+        unsafe_memcpy(dest=pa, src=a, count=m * n)
     else:
         def pack_row(i: Int) {imm pa, imm a, imm bp, imm n, imm d, imm nrhs}:
-            memcpy(dest=pa + i * n, src=a + i * d, count=d)
-            memcpy(dest=pa + i * n + d, src=bp + i * nrhs, count=nrhs)
+            unsafe_memcpy(dest=pa + i * n, src=a + i * d, count=d)
+            unsafe_memcpy(dest=pa + i * n + d, src=bp + i * nrhs, count=nrhs)
         host_parallelize(pack_row, m)
 
     def _blk(b: Int) {imm pa, imm pt, imm pt2, imm ptl, imm m, imm n, imm nb, imm npan, imm npair}:
@@ -446,7 +446,7 @@ def _ts_factor_host_into(mut state: _TsHost, a: F32Ptr, bp: F32Ptr, r: F32Ptr,
     while s < nb:
         _combine_level_host(ptl, ptau, n, nb, s)
         s *= TS_TREE_ARITY
-    memcpy(dest=r, src=ptl, count=n * n)
+    unsafe_memcpy(dest=r, src=ptl, count=n * n)
     state.m = m
     state.n = n
     state.live = True
@@ -479,7 +479,7 @@ def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
     var npair = ts_pairs(n)
     var cbuf = List[Float32](length=nb * n * k, fill=Float32(0.0))
     var pcb = _p(cbuf)
-    memcpy(dest=pcb, src=c, count=n * k)
+    unsafe_memcpy(dest=pcb, src=c, count=n * k)
     var pa = _p(st[].a)
     var pt = _p(st[].t)
     var pt2 = _p(st[].t2)

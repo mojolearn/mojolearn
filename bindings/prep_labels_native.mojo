@@ -11,7 +11,7 @@
 # attributes keep the names, types and dtypes the Python set (`_classes`,
 # `_cats`, `classes_`, `y_type_`, `numeric_mode_`, `_given`) and the refusals
 # keep their classes and wording.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_array_storage import native_array_zeros, native_array_empty, native_array_from_bytes
@@ -216,7 +216,7 @@ def _label_buffer(y: PythonObject, context: PythonObject) raises -> Optional[Lab
     if nw > LABEL_WORDS_MAX:
         return None
     var words = classical_wrap_array(native_array_zeros("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
-    memcpy(dest=I32P(unsafe_from_address=Int(py=classical_address(words))), src=I32P(unsafe_from_address=Int(py=classical_address(view))), count=nw)
+    unsafe_memcpy(dest=I32P(unsafe_from_address=Int(py=classical_address(words))), src=I32P(unsafe_from_address=Int(py=classical_address(view))), count=nw)
     _ = view  # keep the Python object alive through the native call above
     _ = words  # keep the Python object alive through the native call above
     return LabelBuf(spec[0], words, n, nw, spec[0] == 0 or spec[0] == 4)

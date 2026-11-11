@@ -3,7 +3,7 @@
 # stream synchronization remain in the same x_prep exported implementations.
 from bindings.native_array_storage import native_array_empty, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
@@ -444,7 +444,7 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                     source = Int(py=py_call_typed(entries["x_prep_dev_take_rows"],source,record[4],classical_address(record[2]),record[3]))
                     owned.append(source)
             if source < 0:
-                memcpy(dest=F32P(unsafe_from_address=arena+4*offset),src=F32P(unsafe_from_address=Int(py=classical_address(value))),count=words)
+                unsafe_memcpy(dest=F32P(unsafe_from_address=arena+4*offset),src=F32P(unsafe_from_address=Int(py=classical_address(value))),count=words)
             if ranges:
                 if source < 0 and len(ins) >= 3 and ins[len(ins)-1] < 0 and Int(ins[len(ins)-2]) == offset:
                     ins[len(ins)-2] = Int32(offset+words)

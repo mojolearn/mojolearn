@@ -8,7 +8,7 @@
 # entries `qn_predict_binary` / `qn_predict_multiclass` /
 # `qn_decision_function` and the score metrics are the Python methods' own,
 # in the same order with the same arguments: the bits do not move.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
@@ -209,7 +209,7 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(fields, PythonObject("retcode_"), PythonObject(result.state.retcode()))
     py_setitem(fields, PythonObject("_w"), w)
     var coef = family_array(Python.tuple(PythonObject(cols)), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coef))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coef))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w))), count=cols)
     _ = coef  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above

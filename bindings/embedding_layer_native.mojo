@@ -20,7 +20,7 @@ it replaces, so no bit moves.
 """
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_loaded_module import NativeModules
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
@@ -823,7 +823,7 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
         raise Error("ValueError: mojolearn: invalid saved numeric_mode " + _repr(mode))
     # the layer's own bytes (the binding keeps a device copy of the table)
     var table = new_array([v, d], "<f4")
-    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=table._addr)),
+    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=table._addr)),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=weight._addr)), count=v * d)
     _ = table  # keep the Python object alive through the native call above
     _ = weight  # keep the Python object alive through the native call above

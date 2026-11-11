@@ -3,7 +3,7 @@
 # The Python door (distributed_pyapi.mojo) converts arrays and options and
 # builds results; topology, ownership, graph walks and checkpoint bytes stay
 # here.
-from std.memory import alloc, memcpy
+from std.memory import alloc, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from autograd.ops_api import ops_session, _OpsStore
@@ -41,7 +41,7 @@ def check_device_ids(ids: List[Int]) raises:
 
 def register_distributed[E: Exec & Movable & Deinitable, KIND: Int](var d: DistributedProgram[E]) raises -> Int:
     var p = alloc[DistributedProgram[E]](1)
-    p.init_pointee_move(d^)
+    p.unsafe_write(d^)
     var s = _DISTRIBUTED.get_or_create_ptr()
     var id = s[].next_id
     s[].next_id += 1
@@ -151,7 +151,7 @@ def distributed_load_native[E: Exec & Movable & Deinitable, KIND: Int](
     for j in range(len(p.params)):  # driver-loop: checkpoint parameter bytes
         trainable.append(ck.ext_ints[DISTRIBUTED_HEADER_WORDS + j] != 0)
         var data = List[Float32](length=p.param_shapes[j].count(), fill=Float32(0))
-        memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=len(data))
+        unsafe_memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=len(data))
         values.append(data^)
     var cfg = distributed_optimizer_config(ip, fp)
     var d = DistributedProgram[E](p, trainable, device_ids, Int(ck.ext_ints[1]), cfg, ip, fp, ck.seed)
@@ -234,9 +234,9 @@ def distributed_state_native[E: Exec & Movable & Deinitable, KIND: Int](id: Int)
         var p = HostArray(sh)
         var m = HostArray(sh)
         var v = HostArray(sh)
-        memcpy(dest=p.data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
-        memcpy(dest=m.data.unsafe_ptr(), src=ck.m_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
-        memcpy(dest=v.data.unsafe_ptr(), src=ck.v_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        unsafe_memcpy(dest=p.data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        unsafe_memcpy(dest=m.data.unsafe_ptr(), src=ck.m_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        unsafe_memcpy(dest=v.data.unsafe_ptr(), src=ck.v_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
         out.parameters.append(p^)
         out.first_moments.append(m^)
         out.second_moments.append(v^)
@@ -305,10 +305,10 @@ def distributed_close_native[E: Exec & Movable & Deinitable, KIND: Int](id: Int)
     try:
         p[].close()
     except err:
-        p.destroy_pointee()
+        p.unsafe_deinit_pointee()
         p.free()
         raise err
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()
 
 

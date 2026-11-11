@@ -36,7 +36,7 @@ def lp_rowcount_kernel(g: FP, n_: Int64, cnt: IP, stats: IP):
             c += 1
     cnt.unsafe_store(i, Int32(c))
     _ = Atomic.fetch_add[ordering = Ordering.RELAXED](stats, Int32(c))
-    _ = Atomic[DType.int32].max(stats + 1, Int32(c))
+    _ = Atomic[Int32].max(stats + 1, Int32(c))
 
 
 def lp_ell_fill_kernel(g: FP, n_: Int64, maxk_: Int64, cols: IP, vals: FP):

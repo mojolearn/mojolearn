@@ -119,7 +119,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.os import getenv
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
-from std.memory import bitcast, memcpy, stack_allocation
+from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from gbdt.methods.leaves_estimation.device_walker import enqueue_scale_in_place
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -1487,12 +1487,12 @@ struct _PermPartition(Movable):
         if m > 0:
             self.snap.resize(unsafe_uninit_length=m)
             self.snap_off.resize(unsafe_uninit_length=m)
-            memcpy(
+            unsafe_memcpy(
                 dest=self.snap.unsafe_ptr().bitcast[Int64](),
                 src=self.h_snap64.unsafe_ptr(),
                 count=m,
             )
-            memcpy(
+            unsafe_memcpy(
                 dest=self.snap_off.unsafe_ptr().bitcast[Int64](),
                 src=self.h_snap_off64.unsafe_ptr(),
                 count=m,
@@ -1527,12 +1527,12 @@ struct _PermPartition(Movable):
         if n_leaves > 0:
             sizes.resize(unsafe_uninit_length=n_leaves)
             offsets.resize(unsafe_uninit_length=n_leaves)
-            memcpy(
+            unsafe_memcpy(
                 dest=sizes.unsafe_ptr(),
                 src=self.snap.unsafe_ptr() + k * n_leaves,
                 count=n_leaves,
             )
-            memcpy(
+            unsafe_memcpy(
                 dest=offsets.unsafe_ptr(),
                 src=self.snap_off.unsafe_ptr() + k * n_leaves,
                 count=n_leaves,
@@ -1869,7 +1869,7 @@ def _ordered_device_leaves(
     enqueued. The caller has drained since. One memcpy: the host model's
     download."""
     var leaves = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(
+    unsafe_memcpy(
         dest=leaves.unsafe_ptr(),
         src=est_ws[0].h_est.unsafe_ptr(),
         count=n_leaves,
@@ -2399,7 +2399,7 @@ def _ord_fast_take_leaves(
     """The estimation task's RESCALED leaves (`leaf * learning_rate`, formed
     on the device), after the drain that ran the copy; one memcpy."""
     var out = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(dest=out.unsafe_ptr(), src=fast_h_leaves[0].unsafe_ptr(), count=n_leaves)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=fast_h_leaves[0].unsafe_ptr(), count=n_leaves)
     return out^
 
 

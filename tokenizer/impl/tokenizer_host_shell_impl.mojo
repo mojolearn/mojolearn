@@ -9,7 +9,7 @@ pointers, lists and handles. The shell only unpacks Python objects, calls
 these functions and converts the typed results back. Moved word for word
 from the shell (thin-neural, 2026-10-21): same operations, same order.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -115,7 +115,7 @@ def tokenizer_store_i64(dst: MutPointer[Int64, MutUntrackedOrigin], values: List
 def tokenizer_store_u8(dst: MutPointer[UInt8, MutUntrackedOrigin], values: List[UInt8]):
     """`values` at `dst` (one memcpy)."""
     if len(values) > 0:
-        memcpy(dest=dst, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=dst, src=values.unsafe_ptr(), count=len(values))
 
 
 def tokenizer_append_bytes(mut arena: List[UInt8], bytes: List[UInt8]):
@@ -136,7 +136,7 @@ def _i64_list(addr: Int, n: Int) raises -> List[Int]:
 def _u8_list(addr: Int, n: Int) raises -> List[UInt8]:
     var out = List[UInt8](length=n, fill=UInt8(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(addr), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(addr), count=n)
     return out^
 
 
@@ -188,7 +188,7 @@ def bpe_encode_into(
     """`bpe_encode`'s work: encode `n` bytes, write the ids as int32."""
     var src = _u8_ptr(text_address)
     var text = List[UInt8](length=n, fill=UInt8(0))
-    memcpy(dest=text.unsafe_ptr(), src=src, count=n)
+    unsafe_memcpy(dest=text.unsafe_ptr(), src=src, count=n)
     # THE ONE CALL THAT COMPUTES ANYTHING.
     var ids = handle.tok.value().encode_bytes(text, allow)
     var count = len(ids)
@@ -269,7 +269,7 @@ def bpe_encode_batch_into(
             try:
                 if m > 0:
                     var src = _u8_ptr(text_address + a)
-                    memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
+                    unsafe_memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
                 var ids = owner[].tok.value().encode_bytes(doc, allow)
                 var c = len(ids)
                 countp.unsafe_store(k, c)
@@ -363,7 +363,7 @@ def bpe_train_fill(
         var m = Int(offs[k + 1]) - a
         var doc = List[UInt8](length=m, fill=UInt8(0))
         if m > 0:
-            memcpy(
+            unsafe_memcpy(
                 dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m
             )
         documents.append(doc^)
@@ -720,7 +720,7 @@ def bpe_encode_corpus_into(
             var doc = List[UInt8](length=m, fill=UInt8(0))
             try:
                 if m > 0:
-                    memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(data_address + a), count=m)
+                    unsafe_memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(data_address + a), count=m)
                 var ids = owner[].tok.value().encode_bytes(doc, False)
                 var c = len(ids)
                 countp.unsafe_store(k, c)
@@ -822,7 +822,7 @@ def tokens_gather_rows_into(
     """Row b reads `[lo + (base + b*length) % modulus : + width]`."""
     for b in range(batch):
         var start = lo + (base + b * length) % modulus
-        memcpy(dest=dst + b * width, src=src + start, count=width)
+        unsafe_memcpy(dest=dst + b * width, src=src + start, count=width)
     return batch * width
 
 

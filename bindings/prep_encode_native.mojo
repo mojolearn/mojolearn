@@ -8,7 +8,7 @@
 # stores the fitted attributes under the names, types and dtypes the Python
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.math import ceil
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -2453,7 +2453,7 @@ def _flat_copy(view: PythonObject, context: PythonObject) raises -> PythonObject
     var n = _v_size(view)
     var out = admitted_vector(n, _v_type(view, context), context)
     if n > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=labels_address(out)),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=labels_address(out)),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=_v_addr(view)),
                count=n * Int(py=view.itemsize))
         _ = out  # keep the Python object alive through the native call above
@@ -2466,7 +2466,7 @@ def _f32_target(view: PythonObject, context: PythonObject) raises -> PythonObjec
     var out = admitted_vector(n, "<f4", context)
     var t = _v_type(view, context)
     if t == "<f4":
-        memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=_v_addr(view)), count=n)
+        unsafe_memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=_v_addr(view)), count=n)
         _ = out  # keep the Python object alive through the native call above
     else:
         labels_cast(_v_addr(view), t, labels_address(out), "<f4", n, context)
@@ -2485,7 +2485,7 @@ def _all_integral(view: PythonObject, vector: Bool, context: PythonObject) raise
     if (t != "<f4" and t != "<f8") or n == 0 or (vector and not _is_vector(view)) or n * per > 1073741824:
         raise Error("TypeError: mojolearn: the integral test takes a float32 or float64 vector")
     var words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
-    memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=n * per)
+    unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=n * per)
     _ = words  # keep the Python object alive through the native call above
     var ch = max(4096, (n + 4095) // 4096)
     var nch = (n + ch - 1) // ch
@@ -2969,7 +2969,7 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     if target.rows != n:
         raise Error("mojolearn: X and y have different numbers of rows")
     var yv = admitted_vector(n, "<f4", context)
-    memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.address), count=n)
+    unsafe_memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.address), count=n)
     _ = yv  # keep the Python object alive through the native call above
     _ = target  # keep the Python object alive through the native call above
     var xo = p.put_x(values)
@@ -3024,7 +3024,7 @@ def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> 
             if kind >= 0 and _v_size(view) == d and _is_vector(view):
                 var per = 1 if kind <= 1 else 2
                 var words = classical_typed(Python.tuple(d * per), "<f4", context["output_context"])
-                memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=d * per)
+                unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=d * per)
                 _ = words  # keep the Python object alive through the native call above
                 _ = view  # keep the Python object alive through the native call above
                 return (words, kind)

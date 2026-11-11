@@ -27,7 +27,7 @@ segmentation, since the final partitions sit in memory in bit-reversed
 leaf order and a prefix sum of the sizes would be the wrong one.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
 
@@ -250,7 +250,7 @@ def compute_weighted_quantile(
     out_point.clear()
     if bin_count > 0:
         out_point.resize(unsafe_uninit_length=bin_count)
-        memcpy(
+        unsafe_memcpy(
             dest=out_point.unsafe_ptr(),
             src=s.h_point.unsafe_ptr(),
             count=bin_count,

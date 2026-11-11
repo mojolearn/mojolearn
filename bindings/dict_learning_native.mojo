@@ -17,7 +17,7 @@ from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -152,7 +152,7 @@ def _row(mut kit: DecompKit, source: PythonObject, name: String, context: Python
 def _copy_out(array: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
     # `_M.out()` of a converted input: a fresh (rows, cols) float32 Array.
     var result = classical_typed(Python.tuple(rows, cols), "<f4", context["output_context"])
-    memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
+    unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
            src=DecompF32(unsafe_from_address=Int(py=classical_address(array))), count=rows * cols)
     _ = result  # keep the Python object alive through the native call above
     return result

@@ -15,7 +15,7 @@ entry's bits. Cosine keeps DEVIATION 5113: the reference rows are scaled to
 unit rows by the same `cosine_unit_rows` before their one upload, the
 queries before theirs.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -74,7 +74,7 @@ struct ResidentLabeledReference(Movable):
         var ur = List[Float32]()
         if metric == LABELED_METRIC_COSINE:
             var rr = List[Float32](length=n_refs * d, fill=Float32(0))
-            memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
+            unsafe_memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
             ur = cosine_unit_rows(rr, n_refs, d, "labeled_reference_predict")
             ctx.enqueue_copy(dst_buf=refs, src_ptr=ur.unsafe_ptr())
         else:
@@ -222,7 +222,7 @@ def labeled_reference_predict_resident(
     var uq = List[Float32]()
     if metric == LABELED_METRIC_COSINE:
         var qq = List[Float32](length=n_queries * d, fill=Float32(0))
-        memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
+        unsafe_memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
         uq = cosine_unit_rows(qq, n_queries, d, "labeled_reference_predict")
         entry.ctx.enqueue_copy(dst_buf=queries, src_ptr=uq.unsafe_ptr())
     else:
@@ -284,7 +284,7 @@ def labeled_reference_predict_resident(
     entry.ctx.synchronize()
     entry.ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=out_labels)
     entry.ctx.synchronize()
-    memcpy(dest=out_labels_ptr, src=hl.unsafe_ptr(), count=n_queries)
+    unsafe_memcpy(dest=out_labels_ptr, src=hl.unsafe_ptr(), count=n_queries)
     # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
     _ = hl^
     _ = queries^

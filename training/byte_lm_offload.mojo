@@ -5,7 +5,7 @@ All arithmetic reuses the original GPU kernels. Host arrays store canonical
 state, saved activations and gradient sums. Backward recomputes one layer's
 forward stages. This trades transfers/recomputation for device capacity.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.device_scan import DeviceScanScratch
 from training.byte_lm import (
@@ -382,13 +382,13 @@ struct ByteOffloadedReplay(Movable, Writable):
             var slot = slots[j]
             var target = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addresses[j])
             if slot == 0:
-                memcpy(dest=target, src=self.p.unsafe_ptr(), count=len(self.p))
+                unsafe_memcpy(dest=target, src=self.p.unsafe_ptr(), count=len(self.p))
             elif slot == 1:
-                memcpy(dest=target, src=self.m.unsafe_ptr(), count=len(self.m))
+                unsafe_memcpy(dest=target, src=self.m.unsafe_ptr(), count=len(self.m))
             elif slot == 2:
-                memcpy(dest=target, src=self.v.unsafe_ptr(), count=len(self.v))
+                unsafe_memcpy(dest=target, src=self.v.unsafe_ptr(), count=len(self.v))
             else:
-                memcpy(dest=target, src=self.g.unsafe_ptr(), count=len(self.g))
+                unsafe_memcpy(dest=target, src=self.g.unsafe_ptr(), count=len(self.g))
 
     def export_values(mut self, slot: Int) raises -> List[Float32]:
         self.require_open()

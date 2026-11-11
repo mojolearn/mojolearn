@@ -12,7 +12,7 @@
 # (`kmeans_centers_prepare`, cluster/resident_centers.mojo) instead of
 # uploading them per call; a binding without those doors (the CPU host
 # binding) takes the per-call entries as before.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import (
     admit_family, admit_family_weights, admit_family_input, admit_family_cast, admitted_family_x,
@@ -262,7 +262,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         c0 = snapshot.keep
         # A COPY, on purpose: the kernel writes the centroids in place and
         # `c0` may borrow the caller's array.
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))),
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))),
                src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(c0))), count=k * d)
         _ = centers  # keep the Python object alive through the native call above
         _ = c0  # keep the Python object alive through the native call above

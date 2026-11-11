@@ -22,7 +22,7 @@ from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_
 from bindings.native_resident_capsule import resident_capsule
 from bindings.native_model_records import records_open, model_generation
 from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
@@ -651,7 +651,7 @@ struct DecompKit(Movable):
         var result = classical_typed(shape, "<f4", self.context)
         if n:
             var source = self.host(a)
-            memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
+            unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
                    src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
             _ = result  # keep the Python object alive through the native call above
             _ = source  # keep the Python object alive through the native call above
@@ -674,7 +674,7 @@ struct DecompKit(Movable):
         var out = self.zeros(rows, cols)
         if n:
             var source = self.host(a)
-            memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
+            unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
                    src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
             _ = source  # keep the Python object alive through the native call above
             _ = source^
@@ -825,7 +825,7 @@ struct DecompKit(Movable):
         var out = self.zeros(hi - lo, cols)
         var source = self.host(a)      # `self.s[...]`: the store is read (A is a host matrix after)
         if (hi - lo) * cols:
-            memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
+            unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
                    src=DecompF32(unsafe_from_address=Int(py=self.address(a))) + lo * cols,
                    count=(hi - lo) * cols)
             _ = source  # keep the Python object alive through the native call above
@@ -962,7 +962,7 @@ struct DecompKit(Movable):
             var count = self.size(ms[i])
             if count:
                 var source = self.host(ms[i])
-                memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))) + at,
+                unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))) + at,
                        src=DecompF32(unsafe_from_address=Int(py=self.address(ms[i]))), count=count)
                 _ = source  # keep the Python object alive through the native call above
                 _ = source^

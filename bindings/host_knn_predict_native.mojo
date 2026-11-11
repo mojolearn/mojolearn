@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete saved-host KNN prediction. The host ABI has no resident-index
 # entry: retain the established per-call search/vote and exact output layout.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
@@ -121,7 +121,7 @@ def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool
     for output in range(outputs):  # driver-loop: publish the native per-output probability blocks
         var width = counts[output]
         var block = host_archive_typed(Python.tuple(rows, width), "<f4", context)
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(block))),
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(block))),
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(proba)) + 4 * offset),
                count=rows * width)
         _ = py_call(result.append, block)

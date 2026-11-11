@@ -26,7 +26,7 @@ from gemm.checks.gemm_int15_epilogue import INT15_EPILOGUE_SABOTAGE
 from std.os import abort
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -167,7 +167,7 @@ def _upload_addr[wait: Bool = True](
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=host.unsafe_ptr(), src=p, count=n)
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=p, count=n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
@@ -205,7 +205,7 @@ def _download_addr[wait: Bool = True](
         ctx.synchronize()
         _ = view^
     ctx.synchronize()
-    memcpy(dest=p, src=host.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=p, src=host.unsafe_ptr(), count=n)
     _ = host^
 
 

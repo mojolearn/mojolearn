@@ -2,7 +2,7 @@
 # Native handlers for the neighbor/IVF shard protocol. The same compiled
 # search/vote entries as the plain API; no estimator Python method is invoked.
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
@@ -261,7 +261,7 @@ def _ragged_rows(source: PythonObject, ptr: PythonObject, nq: Int, context: Pyth
         var hi = Int(ip[i + 1])
         var out = shard_array(dtype, Python.tuple(hi - lo), hi - lo, context)
         if hi > lo:
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                    src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base) + lo * size,
                    count=(hi - lo) * size)
         _ = py_call(rows.append, out)

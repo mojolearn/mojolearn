@@ -20,7 +20,7 @@ buffers; the caller's X is read in place and never written.
 `RDev` is the resident half (pool, upload/download and the device entries);
 `NoRDev` stands in on the host binding, where nothing is resident.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from x_decomp.api import absmax_sign_run, ew_run, gemm_run, move_run, order_f_run, rand_run, svd_run
 from x_decomp.cells import F32Ptr
@@ -362,7 +362,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         if self.mats[a].host == 0:
             Self.D.download(self.mats[a].dev, dst, count)
         else:
-            memcpy(dest=dst, src=F32Ptr(unsafe_from_address=self.mats[a].host), count=count)
+            unsafe_memcpy(dest=dst, src=F32Ptr(unsafe_from_address=self.mats[a].host), count=count)
 
     def constant(mut self, value: Float32) -> Int:
         var out = self.zeros(1, 1)
@@ -529,7 +529,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var src = self.ptr(a)
         var dst = self.ptr(out)
         for r in range(rows):  # small-loop(rows of a host-resident sketch factor): one row copy each
-            memcpy(dest=dst.unsafe_offset(r * width), src=src.unsafe_offset(r * cols + start), count=width)
+            unsafe_memcpy(dest=dst.unsafe_offset(r * width), src=src.unsafe_offset(r * cols + start), count=width)
         return out
 
     def transpose(mut self, a: Int) raises -> Int:
@@ -583,7 +583,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var cols = self.mats[a].cols
         var out = self.zeros(rows, cols)
         var src = self.ptr(a)
-        memcpy(dest=self.ptr(out), src=src, count=rows * cols)
+        unsafe_memcpy(dest=self.ptr(out), src=src, count=rows * cols)
         return out
 
     def rand(mut self, rows: Int, cols: Int, seed: Int) raises -> Int:
@@ -712,7 +712,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             raise Error("x_decomp: randomized PCA padding cannot remove rows")
         var out = self.zeros(rows, cols)
         var src = self.ptr(a)
-        memcpy(dest=self.ptr(out), src=src, count=old_rows * cols)
+        unsafe_memcpy(dest=self.ptr(out), src=src, count=old_rows * cols)
         return out
 
 

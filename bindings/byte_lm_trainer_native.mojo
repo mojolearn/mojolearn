@@ -12,7 +12,7 @@ the session's create / admit / adopt / failure lifecycle) or the stateless
 step (`byte_lm_trainer_run`). The same compiled entries with the same
 argument words as the Python bodies, so the step keeps its bits.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -186,7 +186,7 @@ def _loss(out_loss: PythonObject) raises -> PythonObject:
 def _copy_i32(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     var out = _i32(n, context)
     if n > 0:
-        memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(out))),
                src=_I32P(unsafe_from_address=Int(py=classical_address(source))), count=n)
         _ = out  # keep the Python object alive through the native call above
     return out
@@ -728,7 +728,7 @@ def _stateless_export(mut mods: NativeModules, fields: PythonObject, shape: _Sha
     if record[2] is not fields["_state"] or Int(py=fields["_grad_step"]) != Int(py=state["completed_steps"]):
         raise Error("RuntimeError: Byte-LM has no gradient to export: no step has completed since open, restore, import or rollback")
     var grads = _gradient_outputs(mods, shape, named, context)
-    memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(grads[0]))),
+    unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(grads[0]))),
            src=_F32P(unsafe_from_address=Int(py=classical_address(record[0]))), count=shape.n_total())
     var result = _b(mods).dict()
     py_setitem(result, "flat_gradients", grads[0])
@@ -737,7 +737,7 @@ def _stateless_export(mut mods: NativeModules, fields: PythonObject, shape: _Sha
         for i in range(len(keys)):  # driver-loop: one copy per model parameter tensor
             var target = grads[1][keys[i]]
             var source = record[1][keys[i]]
-            memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(target))),
+            unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(target))),
                    src=_F32P(unsafe_from_address=Int(py=classical_address(source))), count=Int(py=target.size))
         py_setitem(result, "gradients", grads[1])
     _ = record
@@ -868,7 +868,7 @@ def byte_lm_construct(mut mods: NativeModules, trainer: PythonObject, args: Pyth
             var count = 1
             for width in shapes[i]:  # small-loop(parameter rank)
                 count *= width
-            memcpy(dest=dest + offset, src=_F32P(unsafe_from_address=Int(py=classical_address(owned))), count=count)
+            unsafe_memcpy(dest=dest + offset, src=_F32P(unsafe_from_address=Int(py=classical_address(owned))), count=count)
             _ = owned^
             offset += count
     else:
@@ -1217,7 +1217,7 @@ def _ids_batch(stack: PythonObject, k: Int, shape: _Shape, context: PythonObject
     length + 1) int32 array, for the per-step entry."""
     var cells = shape.batch() * (shape.length() + 1)
     var out = tsa_array("i", "<i4", Python.tuple(shape.batch(), shape.length() + 1), cells, 4, context)
-    memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(out))),
+    unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(out))),
            src=_I32P(unsafe_from_address=Int(py=classical_address(stack)) + k * cells * 4), count=cells)
     _ = stack  # keep the Python object alive through the native call above
     return out
