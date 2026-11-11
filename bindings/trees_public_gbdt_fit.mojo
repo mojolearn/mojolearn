@@ -185,8 +185,7 @@ def _check_ordered_options(boosting: String, fields: PythonObject, model: Python
         _eq(_field(fields, model, "leaf_estimation_method"), "Exact"),
         _truthy(_field(fields, model, "use_pointwise_searcher")),
         Bool(py=py_get(fields, "feature_fraction", PythonObject(1.0)) < PythonObject(1.0)),
-        _str(loss), _repr(loss), _str(score),
-    )
+        _str(loss), _repr(loss), _str(score))
     gbdt_check_ordered_options(boosting, facts)
 
 
@@ -211,8 +210,7 @@ def _validate_search_options(fields: PythonObject, model: PythonObject, context:
         _eq(grow, "SymmetricTree"), _repr(grow),
         _eq(score, "L2") or _eq(score, "NewtonL2"), _repr(score),
         rs is None, strength, strength_str,
-        _float(t["catboost_random_strength"]), _float(t["legacy_random_strength"]),
-    )
+        _float(t["catboost_random_strength"]), _float(t["legacy_random_strength"]))
     return gbdt_validate_search_options(facts)
 
 
