@@ -67,5 +67,29 @@
   ],
   "native_fixture_plan": "actual same-provider deterministic linear/RBF/poly/sigmoid/precomputed fits and direct/resident query cases with independent references; CPU units parallel, GPU numerical units ordered under existing upstream concurrency park",
   "jobs": "none; root only",
-  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/svr"
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/svr",
+  "additive_api": {
+    "status": "source authored, no consumer switched yet; compilation pending",
+    "abi": "mojolearn.svr.native.v1",
+    "operations": {
+      "fit": 0,
+      "predict": 1,
+      "resident_query": 2,
+      "lease_open": 3,
+      "lease_close": 4,
+      "device": 5
+    },
+    "fit_layout": "7 addresses /12 integers /5 Float64",
+    "query_layout": "5 addresses /10 integers /4 Float64",
+    "providers": [
+      "svm/svr_native_device.mojo",
+      "svm/host/svr_native_host.mojo"
+    ],
+    "exports": [
+      "bindings/_mojolearn_svm.mojo::svr_native_api_v1",
+      "bindings/_mojolearn_svm_host.mojo::svr_native_api_v1"
+    ],
+    "preserved_numerics": "all existing solver/resident implementation files unchanged; wrappers retain exact read_f32 and output-copy sequence",
+    "temporary_duplication": "old separately callable Python exports and existing candidate wrappers remain live until public consumers switch; same wrappers will be consolidated with their typed implementation in the public switch chunk"
+  }
 }
