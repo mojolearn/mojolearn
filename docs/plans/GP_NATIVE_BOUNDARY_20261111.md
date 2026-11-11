@@ -368,3 +368,38 @@ retained children, connected-class inventory, publication field names and
 constructor update plan. These do not overlap the preceding 13 rows or the
 frozen 51 rows. All five before/after anchors are present. Their compilation
 and execution are pending; public/lifetime pins remain excluded.
+
+### Remaining GP boundary audit at `884722eab6`
+
+The audit separates nine groups of required public/identity/lifetime references
+from actual removable mechanisms. Required references include first-occurrence
+class objects, mutable kernels/model members, provider images, resident storage,
+public optimizer history/gradients, archives and interpreter transport. Exact
+CPython dictionary/list/scalar reads and exporter-backed output packing are
+allowed only at the admitted UNPACK/PACK boundary; a C-API name is not by itself
+proof of callback safety.
+
+Eight reviewed mechanisms still need work: mixed real/NumPy general label
+ordering/index containers; generic label snapshot/flatten lists; GPC per-class
+result publication followed by scalar readback; GPR score composition; GPC
+score composition; inherited host argument repacking; a temporary list used
+while packing result tuples; and the internal tuple passed from kernel
+add/multiply to its compiled constructor. These are mechanism groups, not an
+exact remaining-role denominator. Mixed numeric ordering must retain existing
+promotion/equality/hash/first-object behavior; no Float64 approximation or
+feature removal is proposed.
+
+Published scalar compatibility fields such as `_alpha`, normalization metadata
+and `_max_iter_predict` also remain Python instance storage. They are unpacked
+into typed requests, but they are not buffer-lifetime pins and are not claimed
+fully native. Moving that storage requires preserving supported attribute
+mutation and publication behavior. Other shared class/admission consumers have
+not been exhaustively certified by this bounded audit. Real boxed-export
+portable-math, historical benchmark and resident-lifetime controllers remain
+live and are retained until their actual coverage migrates.
+
+Complete before/after and remaining-source anchors are in
+`~/mojolearn-evidence/python-mojo-migration-20261110/gp-native-owner/remaining-boundary-audit.json`.
+All anchors are present. The raw 24-file/246-match syntax inventory is not a
+violation count. This audit makes no runtime, performance or complete-family
+Python-free claim; the frozen 51 and following 13+5 role reports remain separate.
