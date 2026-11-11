@@ -14,7 +14,12 @@ Python bodies it replaces.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
+from core.native_descriptor_call import native_descriptor_call
+from core.xcnn_entry_table import (
+    XcnnEntryKey, xcnn_table_entry, XC_ENTRY_ABI, XC_OP_COUNT, XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_RES_FREE,
+    XC_RES_UPLOAD, XC_RES_DOWNLOAD,
+)
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from bindings.classical_attributes import classical_connect_numpy
@@ -116,12 +121,46 @@ def xcnn_entries(fields: PythonObject, context: PythonObject) raises -> PythonOb
     return entries
 
 
-def xcnn_entry(entries: PythonObject, name: String) raises -> PythonObject:
-    """A connected compiled entry of the layer's binding."""
-    var entry = py_get(entries["symbols"], PythonObject(name))
-    if entry is None:
-        raise Error("AttributeError: the CNN binding has no " + name)
-    return entry
+def xcnn_key(entries: PythonObject) raises -> XcnnEntryKey:
+    """The native table key of the layer's connected x_cnn image (the bridge
+    records it at import as `native_key`): the doors call that image's
+    published entry (core/xcnn_entry_table.mojo), not its Python entries."""
+    var key = py_get(entries, "native_key")
+    if key is None:
+        raise Error("ImportError: mojolearn: the x_cnn binding publishes no native entry table")
+    return XcnnEntryKey(Int(py=key[0]), Int(py=key[1]))
+
+
+def xcnn_call_f(entries: PythonObject, op: Int, addrs: List[Int], ints: List[Int],
+                floats: List[Float64]) raises -> Int:
+    """One x_cnn operation (`XC_*`) in the layer's connected image, through
+    its published native entry, with the GIL released. Plain words only: the
+    caller converted every address and handle and keeps the buffers alive.
+    An image without the operation refuses with the text a missing Python
+    entry raised ("the CNN binding has no x_cnn_<name>")."""
+    var entry = xcnn_table_entry(xcnn_key(entries), 0, String(XC_ENTRY_ABI), XC_OP_COUNT)
+    var result = 0
+    var py = Python()
+    with GILReleased(py):
+        result = native_descriptor_call(entry, op, addrs, ints, floats)
+    return result
+
+
+def xcnn_call(entries: PythonObject, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
+    """`xcnn_call_f` for the operations that read no Float64 scalar."""
+    var floats = List[Float64]()
+    return xcnn_call_f(entries, op, addrs, ints, floats)
+
+
+def xcnn_word(value: PythonObject) raises -> Int:
+    """A handle or address word held in a Python int (UNPACK)."""
+    return Int(py=value)
+
+
+def xcnn_ptr(value: PythonObject) raises -> Int:
+    """The admitted buffer address of a host array (UNPACK)."""
+    admit_native_buffer_exporter(value)
+    return native_buffer_address(value)
 
 
 def xcnn_mixed(entries: PythonObject) raises -> Bool:
@@ -345,11 +384,9 @@ def _xcnn_tensor_raw(module: PythonObject, shape: PythonObject, h: PythonObject,
 def xcnn_new(entries: PythonObject, shape: List[Int], nofill: Bool, context: PythonObject) raises -> PythonObject:
     """`DeviceTensor._new` (or `_new_out` with `nofill`: no +0.0 fill, on a
     binding that has `x_cnn_res_alloc_nofill`)."""
-    var symbols = entries["symbols"]
-    var alloc = py_get(symbols, "x_cnn_res_alloc_nofill") if nofill else PythonObject(None)
-    if alloc is None:
-        alloc = symbols["x_cnn_res_alloc"]
-    var h = Int(py=py_call_typed(alloc, PythonObject(max(xcnn_size(shape), 1))))
+    # The host image runs RES_ALLOC_NOFILL as its zero-filled allocation
+    # (x_cnn/host/entry_runs_host.mojo), the entry the Python lookup fell back to.
+    var h = xcnn_call(entries, XC_RES_ALLOC_NOFILL if nofill else XC_RES_ALLOC, List[Int](), [max(xcnn_size(shape), 1)])
     return xcnn_tensor(entries["module"], xcnn_tuple(shape), PythonObject(h), PythonObject(None), PythonObject(None),
                        context)
 
@@ -385,7 +422,7 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
     var t = xcnn_new(entries, shape, False, context)
     var size = xcnn_size(shape)
     if size:
-        _ = py_call_typed(entries["symbols"]["x_cnn_res_upload"], t.h, xcnn_addr(a), PythonObject(size))
+        _ = xcnn_call(entries, XC_RES_UPLOAD, [xcnn_word(t.h), xcnn_ptr(a)], [size])
         _ = a  # keep the Python object alive through the native call above
     _ = a^
     return t
@@ -424,7 +461,7 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
     var size = xcnn_size(shape)
     if size:
         var entries = xcnn_module_entries(_xcnn_slot_raw(value, "b", context), context)
-        _ = py_call_typed(entries["symbols"]["x_cnn_res_download"], handle, xcnn_addr(out), PythonObject(size))
+        _ = xcnn_call(entries, XC_RES_DOWNLOAD, [xcnn_word(handle), xcnn_ptr(out)], [size])
         _ = out
     return out
 
@@ -619,7 +656,7 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
         var handles = py_call(b.list, py_call(py_call(b.getattr, table, "values")))
         py_setitem(old, "h", Python.dict())
         for i in range(len(handles)):  # driver-loop: over the layer's resident array table
-            _ = py_call_typed(owner["symbols"]["x_cnn_res_free"], handles[i][0])
+            _ = xcnn_call(owner, XC_RES_FREE, [xcnn_word(handles[i][0])], List[Int]())
     dev = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_dev_class"])
     var state = _fields(dev)
     py_setitem(state, "b", entries["module"])
@@ -640,12 +677,10 @@ def xcnn_dev_get(layer: PythonObject, entries: PythonObject, name: String, count
     var cur = py_get(table, PythonObject(name))
     if cur is not None and Int(py=cur[1]) == n:
         return cur[0]
-    var symbols = entries["symbols"]
     if cur is not None:
-        _ = py_call_typed(symbols["x_cnn_res_free"], cur[0])
+        _ = xcnn_call(entries, XC_RES_FREE, [xcnn_word(cur[0])], List[Int]())
         _ = py_call(py_call(xcnn_builtins().getattr, table, "pop"), PythonObject(name))
-    var h = py_call_typed(symbols["x_cnn_res_alloc"], PythonObject(n))
-    var handle = PythonObject(Int(py=h))
+    var handle = PythonObject(xcnn_call(entries, XC_RES_ALLOC, List[Int](), [n]))
     py_setitem(table, PythonObject(name), Python.tuple(handle, n))
     return handle
 
@@ -656,7 +691,8 @@ def xcnn_dev_upload(layer: PythonObject, entries: PythonObject, name: String, ar
     of host array `a`."""
     var size = Int(py=array.size)
     var h = xcnn_dev_get(layer, entries, name, size, context)
-    _ = py_call_typed(entries["symbols"]["x_cnn_res_upload"], h, xcnn_addr(array), PythonObject(size))
+    _ = xcnn_call(entries, XC_RES_UPLOAD, [xcnn_word(h), xcnn_ptr(array)], [size])
+    _ = array  # keep the Python object alive through the native call above
     return h
 
 
@@ -675,7 +711,7 @@ def xcnn_download(dev: PythonObject, h: PythonObject, count: Int, context: Pytho
     var out = xcnn_host_f32([count], context)
     if count:
         var owner = xcnn_module_entries(xcnn_dev_fields(dev, context)["b"], context)
-        _ = py_call_typed(owner["symbols"]["x_cnn_res_download"], h, xcnn_addr(out), PythonObject(count))
+        _ = xcnn_call(owner, XC_RES_DOWNLOAD, [xcnn_word(h), xcnn_ptr(out)], [count])
         _ = out  # keep the Python object alive through the native call above
     return out
 
