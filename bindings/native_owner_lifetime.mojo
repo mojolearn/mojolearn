@@ -12,7 +12,7 @@ from bindings.native_loaded_module import NativeModules, native_namespace_string
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.cpython_table import cpython_table
 from bindings.native_resident_capsule import resident_capsule_owned
-from bindings.native_owner_registry import NativeOwnerPins, registered_native_owner_pins
+from bindings.native_owner_registry import NativeOwnerPins, registered_native_owner_pins, borrowed_native_owner
 
 
 comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
@@ -336,7 +336,7 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
             var address = inspect(Int(value._obj_ptr), index)
             if address <= 0:
                 raise Error("TypeError: native owner reinitialization cannot inspect retained native owners")
-            var held = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=address))
+            var held = borrowed_native_owner(address)
             native_release_admit(held, context, depth + 1)
         _ = value  # the inspector returns borrowed pins from this retained owner
         return

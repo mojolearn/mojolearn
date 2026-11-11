@@ -6,7 +6,16 @@ canonical result of lookup_py_type_object after add_type/attachment. Nothing
 here is exported to Python. Registration and admission hold the GIL.
 """
 from std.python import PythonObject
+from std.python._cpython import PyObjectPtr
 from core.shared_slot import SharedSlot
+
+
+def borrowed_native_owner(address: Int) raises -> PythonObject:
+    # Callers retain and admit this non-null PyObject address before inspection.
+    # PyObjectPtr is an opaque SDK wrapper, constructed by its supported upcast;
+    # it is not itself a Pointer with an unsafe_from_address initializer.
+    var raw = Pointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
+    return PythonObject(from_borrowed=PyObjectPtr(upcast_from=Optional(raw)))
 
 
 # Request -1 returns the number of retained Python owners. Requests 0..count-1

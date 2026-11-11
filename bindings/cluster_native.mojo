@@ -18,6 +18,10 @@ from bindings.classical_arrays import (
 from core.admitted_weights import admitted_fill
 from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.agglo_native_boundary import agglo_reference_labels, agglo_scalar_repr, agglo_hash_admitted
+from core.agglo_native_state import agglo_metric_code
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
@@ -218,26 +222,6 @@ def _reference_queries(source: PythonObject, n_features: Int, where: String, con
     return q
 
 
-def _labeled_reference(binding: PythonObject, refs: PythonObject, keys: PythonObject, labels: PythonObject,
-                       q: PythonObject, n_refs: Int, n_features: Int, metric: Int, eps: PythonObject,
-                       has_thresh: Int, context: PythonObject) raises -> PythonObject:
-    """The binding's `labeled_reference_predict`: the label of the nearest
-    reference row (ORDER MATCHES bindings/_mojolearn_estimators.mojo::
-    labeled_reference_predict_binding)."""
-    var nq = Int(py=q.shape[0])
-    var out = family_array(Python.tuple(nq), "<i4", context)
-    var chosen = family_array(Python.tuple(nq), "<i4", context)
-    var entry = family_entry(binding, "labeled_reference_predict", context)
-    _ = family_call(entry, Python.list(classical_address(refs), classical_address(keys), classical_address(labels),
-                                       classical_address(q), classical_address(out), classical_address(chosen)),
-                    Python.list(PythonObject(n_refs), PythonObject(nq), PythonObject(n_features), PythonObject(metric),
-                                eps, PythonObject(has_thresh)))
-    _ = chosen  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = chosen^
-    return out
-
-
 def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`AgglomerativeClustering.predict`: the nearest training row's cluster
@@ -253,13 +237,16 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
                     + "fitted yet; call fit first")
     var linkage = native_fitted_get(mods, model, "linkage")
     var metric = native_fitted_get(mods, model, "metric")
+    host_inference_scalar(linkage, context, True)
+    host_inference_scalar(metric, context, True)
     # `_predicts`: single linkage under a euclidean metric name.
     var predicts = py_type(linkage) is b.str and String(linkage) == "single"
     if predicts:
-        predicts = Bool(py=family_call(native_loaded_module("operator").contains, context["family_agglo_predict_metrics"], metric))
+        agglo_hash_admitted(metric)
+        predicts = (agglo_metric_code(String(metric)) == -1) if Bool(py=py_call(b.isinstance, metric, b.str)) else False
     if not predicts:
-        raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: linkage=" + family_repr(linkage)
-                    + ", metric=" + family_repr(metric) + " has no predict rule; DEVIATION 2740 is single "
+        raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: linkage=" + agglo_scalar_repr(linkage, context)
+                    + ", metric=" + agglo_scalar_repr(metric, context) + " has no predict rule; DEVIATION 2740 is single "
                     + "linkage's own criterion (the nearest training row's cluster) under "
                     + "the euclidean metric only")
     var refs = native_fitted_get(mods, model, "_fit_X", PythonObject(None))
@@ -267,12 +254,16 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not "
                     + "stored. Fit with AgglomerativeClustering(prediction_data=True), "
                     + "which keeps the training rows this rule needs (DEVIATION 2740)")
-    var n_features = Int(py=native_fitted_get(mods, model, "n_features_in_"))
+    var feature_value = native_fitted_get(mods, model, "n_features_in_")
+    host_inference_scalar(feature_value, context)
+    var n_features = Int(py=feature_value)
     var q = _reference_queries(source, n_features, "AgglomerativeClustering.predict", context)
-    # The key of every training row is its label: ties go to the lowest
-    # cluster label, then the lowest training index.
-    var result = _labeled_reference(binding, refs, labels, labels, q, Int(py=refs.shape[0]), n_features, 0,
-                                    PythonObject(0.0), 0, context)
+    classical_admit_value(refs, context)
+    classical_admit_value(labels, context)
+    # Historical internal entry: retain direct uploads without minting a holder.
+    var result = agglo_reference_labels(py_fields(model), binding, refs, labels, q,
+        Int(py=classical_address(refs)), Int(py=classical_address(labels)), Int(py=classical_address(q)),
+        Int(py=refs.shape[0]), Int(py=q.shape[0]), n_features, context, False)
     _ = q^
     return result
 
