@@ -1,0 +1,114 @@
+{
+  "family": "KernelDensity",
+  "dependencies": [
+    "f052c4918c",
+    "78be03c73b",
+    "8a624987ef"
+  ],
+  "public_boundary_context": "55425fb83f",
+  "status": "authored; native compilation and execution owed",
+  "fixtures": {
+    "cpu_numerical": 48,
+    "gpu_numerical": 48,
+    "gpu_ownership": 3,
+    "pure_state_and_wire_already_handed_off": 62,
+    "new_cpu_total_including_pure": 110,
+    "new_gpu_total": 51
+  },
+  "entries": {
+    "cpu": "checks/native_tests/kde_native_cpu.mojo",
+    "gpu": "checks/native_tests/kde_native_gpu.mojo",
+    "ownership_gpu": "checks/native_tests/kde_ownership_gpu.mojo"
+  },
+  "flags": {
+    "all": [
+      "MOJOLEARN_NUMERIC_IDENTICAL=1"
+    ],
+    "cpu_additional": [
+      "MOJOLEARN_COLUMN_CPU=1"
+    ]
+  },
+  "numerical": {
+    "original": "test_neighbors_kde_native.py::test_scores_equal_former_path",
+    "train": [
+      37,
+      5
+    ],
+    "query": [
+      11,
+      5
+    ],
+    "seeds": [
+      3,
+      9
+    ],
+    "bandwidth": 0.75,
+    "kernels": 6,
+    "metrics": [
+      "euclidean",
+      "manhattan",
+      "chebyshev",
+      "sqeuclidean"
+    ],
+    "weights": "none or admitted Float32 linspace(.25,3,37)",
+    "passes": 2,
+    "operations_each_pass": [
+      "score_samples",
+      "score"
+    ],
+    "gpu_additional": "same nonresident device query route once; resident fit prepared once with already-finite flag, as public fit admission",
+    "oracle": "Independent Float64 mathematical distances/radial kernels/stable log sums; cosine normalization by128-point quadrature, not product recurrence.",
+    "bound": "Existing kde_check: abs(actual-reference) <= 2e-4 * max(1,abs(reference)); mathematical -inf requires actual <= -1e38.",
+    "bound_origin": "kde/checks/kde_check.mojo::_close/check_kde_oracle_vs_float64; not chosen from native test results",
+    "reference_finite_scores": 200,
+    "reference_outside_support_scores": 328,
+    "reference_fully_outside_profiles": 24
+  },
+  "ownership": {
+    "original": "kde/checks/reused_workspace_check.mojo::check_resident",
+    "train": [
+      131,
+      7
+    ],
+    "train_salt": 29,
+    "weight_salt": 41,
+    "query_rows": [
+      9,
+      3
+    ],
+    "query_salts": [
+      46,
+      40
+    ],
+    "bandwidth": 0.25,
+    "kernel": "gaussian",
+    "metric": "euclidean",
+    "weighted": true,
+    "pool_expectation": "When existing KDE_CHUNK_POOL_ON is enabled: allocations4/reuse1 after two queries, retained bytes within budget. No pool default/flag changed.",
+    "cases": [
+      "two active native leases keep original train/weights after host mutation and registry release; new lookup refuses",
+      "one cached workspace claimed exclusively, clean return retains same allocation/reuse counters",
+      "unclean return discards workspace instead of recaching; another active native buffer lease remains valid"
+    ],
+    "submission": "Overlapping metadata ownership only; all GPU submissions ordered, no shared-context stress."
+  },
+  "lifetime": "Flat List owners use accepted native test patterns. All raw-address input/output/status/reference owners pinned through calls/finally. Handles released once; native leases returned on every exit.",
+  "scheduling": {
+    "cpu": "independent profiles and independent oracle comparisons use host_parallelize",
+    "gpu": "one graph at a time on one physical GPU/shared contexts; unchanged kernels and CPU oracle cells remain parallel"
+  },
+  "python_removed": 0,
+  "pending_cleanup": {
+    "file": "python/mojolearn/tests/test_neighbors_kde_native.py",
+    "definition": "test_scores_equal_former_path",
+    "expanded_cases": 48,
+    "patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/kde-native-python-cleanup.patch",
+    "condition": "Root compiles and runs replacement native numerical fixtures before applying patch",
+    "retained": "Python score-array dtype/shape and total scalar type; all other original input/layout/ownership/mutation/refusal/sklearn/archive/interop seams remain."
+  },
+  "product_changes": false,
+  "kernel_changes": false,
+  "algorithm_changes": false,
+  "runtime_evidence": false,
+  "performance_or_identity_claim": false
+}
