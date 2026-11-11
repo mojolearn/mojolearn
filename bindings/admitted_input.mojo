@@ -91,6 +91,7 @@
 #   bytes as before; the finite and sign tests are predicates.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
+from bindings.native_type_module import native_type_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.py_balanced import py_call, py_type
@@ -555,7 +556,7 @@ def _classical_view_storage(source: PythonObject, context: PythonObject, name: S
 
 def classical_refuse_sparse(source: PythonObject, est: String) raises:
     # scipy.sparse containers are recognized by their defining module, so no
-    # attribute or property of the container runs.
+    # attribute or property of the container or its metaclass runs.
     # p3-labels-metrics: this runs twice per classical call (the door and
     # the X check); an exact list or tuple is never sparse, and the module
     # name is tested as a native string (no Python startswith call).
@@ -563,7 +564,7 @@ def classical_refuse_sparse(source: PythonObject, est: String) raises:
     var cls = py_type(source)
     if cls is b.list or cls is b.tuple:
         return
-    var module = cls.__module__
+    var module = native_type_module(cls)
     if py_type(module) is b.str and String(py=module).startswith("scipy.sparse"):
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
 

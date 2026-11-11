@@ -65,6 +65,31 @@ def test_nmf_namespace_keys_are_admitted_before_hash_collision_equality(method):
     assert called == []
 
 
+@pytest.mark.parametrize("method", ["fit", "fit_transform"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_nmf_sparse_metadata_probe_never_calls_source_metaclass(method, nested):
+    called = []
+
+    class Meta(type):
+        def __getattribute__(cls, name):
+            if name == "__module__":
+                called.append(name)
+                raise AssertionError("Python source metaclass metadata hook executed")
+            return super().__getattribute__(name)
+
+    class Source(metaclass=Meta):
+        pass
+
+    model = _model()
+    # Nested fitting skips the public X check, reaching the algorithm's
+    # separate sparse probe. Both probes must read metadata natively.
+    if nested:
+        model._mojolearn_fitting = 1
+    with pytest.raises(TypeError, match="native|protocol|subclasses"):
+        getattr(model, method)(Source())
+    assert called == []
+
+
 @pytest.mark.parametrize("init", ["random", "nndsvd", "nndsvda", "nndsvdar", "custom"])
 @pytest.mark.parametrize("solver", ["cd", "mu"])
 def test_nmf_public_methods_do_not_call_legacy_python_entries(init, solver, monkeypatch):
