@@ -145,5 +145,5 @@ def publish_parallel_ivf_device() raises:
         return
     var owner = PARALLEL_IVF_DEVICE_OWNER.get_or_create_ptr()
     var key = ParallelEntryKey(Int(GLOBAL_NUMERIC_MODE), word)
-    parallel_table_publish(PARALLEL_TABLE_IVF, key.copy(), Int(owner), parallel_ivf_device_v1)
-    archive_table_publish(ARCHIVE_TABLE_IVF, key^, Int(owner), archive_ivf_device_v1)
+    parallel_table_publish(PARALLEL_TABLE_IVF, key, Int(owner), parallel_ivf_device_v1)
+    archive_table_publish(ARCHIVE_TABLE_IVF, key, Int(owner), archive_ivf_device_v1)
