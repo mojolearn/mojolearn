@@ -22,7 +22,6 @@ Request layouts (a: addresses, p: Int words, f: Float64 words):
   XL_OP_DECISION_ROWS  a [x, wb, out]        p [n, d, k, link, rows_mode, status]          -> n
   XL_OP_HUBER_OUT      a [x, wb, y, flags]   p [n, d, link]         f [thr]               -> n
   XL_OP_CLASS_PREP     a [codes, sw, cw, out] p [n, k, balanced, weighted]                 -> largest count
-  XL_OP_ROWS           a [src, dst, src2]    p [mode, n, k]         f [thr]               -> n
   XL_OP_SPEARMAN       a [x, y]              p [n]                                        -> sign
   XL_OP_BEST_ALPHA     a [scores]            p [n]                                        -> index or -1
 """
@@ -39,10 +38,9 @@ comptime XL_OP_DECISION_CODES = 4
 comptime XL_OP_DECISION_ROWS = 5
 comptime XL_OP_HUBER_OUT = 6
 comptime XL_OP_CLASS_PREP = 7
-comptime XL_OP_ROWS = 8
-comptime XL_OP_SPEARMAN = 9
-comptime XL_OP_BEST_ALPHA = 10
-comptime XL_OPERATION_COUNT = 11
+comptime XL_OP_SPEARMAN = 8
+comptime XL_OP_BEST_ALPHA = 9
+comptime XL_OPERATION_COUNT = 10
 # XL_OP_FLAGS bits.
 comptime XL_HAS_FIT_FOLD = 1
 # Fixed header words before the integer hyperparameters.
@@ -93,10 +91,6 @@ def xl_ops_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     elif operation == XL_OP_CLASS_PREP:
         want_a = 4
         want_p = 4
-    elif operation == XL_OP_ROWS:
-        want_a = 3
-        want_p = 3
-        want_f = 1
     elif operation == XL_OP_SPEARMAN:
         want_a = 2
         want_p = 1

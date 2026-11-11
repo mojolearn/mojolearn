@@ -11,11 +11,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_finite_scan import host_all_finite_f32
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from core.py2mojo_rows import rows_call, rows_host
 from core.shared_slot import SharedSlot
 from core.linear_entry_table_ext import (
     XL_OP_FLAGS, XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES,
-    XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_ROWS, XL_OP_SPEARMAN,
+    XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN,
     XL_FIT_HEADER, xl_ops_check_spans, xl_ops_int32, xl_ops_float32,
 )
 from x_linear.class_prep import class_prep_host
@@ -99,11 +98,6 @@ def x_linear_ops_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             r[] = x_linear_decision_huber_out_host(a[0], a[1], p[0], p[1], p[2], a[2], f[0], a[3])
         elif operation == XL_OP_CLASS_PREP:
             r[] = xl_class_prep_host_run(a[0], a[1], a[2], a[3], p[0], p[1], p[2] != 0, p[3] != 0)
-        elif operation == XL_OP_ROWS:
-            var call = rows_call(p[0], p[1], p[2], a[0], a[1], a[2], f[0])
-            if call.n > 0:
-                rows_host(call)
-            r[] = call.n
         elif operation == XL_OP_SPEARMAN:
             r[] = xl_spearman_host_run(a[0], a[1], p[0])
         else:

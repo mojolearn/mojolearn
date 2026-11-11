@@ -4,9 +4,10 @@
 # python/mojolearn/_solver_impl.py). Each public method is one call into
 # x_linear_c, which validates the arguments with the Python wording, encodes
 # labels (bindings/classical_labels.mojo), assembles the same int and float
-# parameter lists, makes the same `x_linear_fit` / `x_linear_decision` /
-# `x_linear_decision_codes` / `x_linear_class_prep` / `py2mojo_rows` /
-# `cd_fit` / `cd_predict` calls with the same operands in the same order, and
+# parameter lists, makes the same fit / decision / class-prep calls through
+# the native x_linear operations table (core/linear_entry_table_ext.mojo, no
+# CPython between the two modules) and the `cd_fit` / `cd_predict` calls, with
+# the same operands in the same order, and
 # writes the fitted attributes the Python wrote (same names, types, dtypes
 # and shapes). No kernel changes and no reduction order changes, so the bits
 # are the ones the Python path produced.
@@ -20,7 +21,16 @@ from std.ffi import c_int, c_long
 from std.math import isinf
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
+from core.linear_entry_table import LinearEntryKey, LINEAR_TABLE_X_LINEAR
+from core.linear_entry_table_ext import (
+    xl_ops_entry, XL_OP_FLAGS, XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES,
+    XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN, XL_OP_BEST_ALPHA,
+    XL_HAS_FIT_FOLD,
+)
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call
+from providers.python.linear_entry_boundary import linear_entry_connection
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -76,7 +86,6 @@ comptime LINK_SIGMOID = 2
 # core/py2mojo_rows.mojo modes (`_ROWS_*`).
 comptime _ROWS_SGD_PROBA = 2
 comptime _ROWS_LRCV_PROBA = 3
-comptime _ROWS_HUBER_OUT = 4
 # `_lbfgs_work`'s memory.
 comptime _LBFGS_M = 10
 # ElasticNet / Lasso refusals by name, word for word.
@@ -197,37 +206,50 @@ def _xl_mode(fields: PythonObject, context: PythonObject) raises -> String:
     return clean
 
 
-def _xl_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The estimator's connected x_linear entries (`est._bind(_BINDING)`),
-    with the binding's compiled-mode check, or the refusal recorded at
-    import ("<Class>: <message>")."""
+struct XLinearOps(Movable):
+    """The x_linear operations entry of the binding an estimator's mode
+    selects (core/linear_entry_table_ext.mojo), and the canonical connection
+    owner that pins that binding's image for the whole public call."""
+    var key: LinearEntryKey
+    var entry: NativeDescriptorCall
+    var images: PythonObject
+
+    def __init__(out self, var key: LinearEntryKey, entry: NativeDescriptorCall, var images: PythonObject):
+        self.key = key^
+        self.entry = entry
+        self.images = images^
+
+
+def _xl_entries(fields: PythonObject, context: PythonObject) raises -> XLinearOps:
+    """The estimator's connected x_linear binding (`est._bind(_BINDING)`) as
+    its native operations entry, with the binding's compiled-mode check, or
+    the refusal recorded at import ("<Class>: <message>")."""
     var mode = _xl_mode(fields, context)
-    var key = PythonObject(mode)
-    var entries = context["xl_bindings"][key]
+    var entries = context["xl_bindings"][PythonObject(mode)]
     if py_type(entries) is _b().str:
         raise Error(String(py=entries))
-    # The compiled mode of a connected entry table is fixed when its binding
-    # loads: checked once per (mode, entry table identity) and the verdict
-    # kept in the long-lived connection context (as classical_entries and
-    # logistic `_entries` do). A reconnection installs a new table, so the
-    # check runs again.
-    var verdicts = py_get(context, "xl_entries_admitted")
-    if verdicts is not None:
-        var seen = py_get(verdicts, key)
-        if seen is not None and seen is entries:
-            return entries
-    var reads = py_get(entries, "x_linear_numeric_mode")
-    if reads is not None:
-        var code = Int(py=py_call(reads))
-        if code != (1 if mode == "identical" else 0):
-            raise Error("RuntimeError: mojolearn: _mojolearn_x_linear was compiled for "
-                        + ("identical" if code == 1 else "fast") + ", but this call requested " + mode
-                        + "; rebuild the " + mode + " binding")
-    if verdicts is None:
-        verdicts = Python.dict()
-        py_setitem(context, "xl_entries_admitted", verdicts)
-    py_setitem(verdicts, key, entries)
-    return entries
+    # The connection owner was admitted at import against the binding's
+    # published table (python/mojolearn/_native_x_linear_bridge.py), so its
+    # native key is the binding's compiled mode and vendor.
+    var connection = linear_entry_connection(entries, LINEAR_TABLE_X_LINEAR)
+    var code = connection.key.mode
+    if code != (1 if mode == "identical" else 0):
+        raise Error("RuntimeError: mojolearn: _mojolearn_x_linear was compiled for "
+                    + ("identical" if code == 1 else "fast") + ", but this call requested " + mode
+                    + "; rebuild the " + mode + " binding")
+    var entry = xl_ops_entry(connection.key)
+    return XLinearOps(connection.key.copy(), entry, connection.images)
+
+
+def _xl_call(ops: XLinearOps, operation: Int, addresses: List[Int], ints: List[Int],
+             floats: List[Float64]) raises -> Int:
+    """One synchronous call of the x_linear operations entry with the GIL
+    released. The caller keeps every addressed buffer alive."""
+    var result = 0
+    var py = Python()
+    with GILReleased(py):
+        result = native_descriptor_call(ops.entry, operation, addresses, ints, floats)
+    return result
 
 
 def _xl_check_fitted(fields: PythonObject, model: PythonObject) raises:
@@ -300,15 +322,14 @@ def _xl_matrix(source: PythonObject, est: String, context: PythonObject) raises 
     return admit_x_unrecorded(source, est, context, defer_finite=True)
 
 
-def _xl_status(x: AdmittedX, dims: PythonObject, context: PythonObject) raises -> PythonObject:
+def _xl_status(x: AdmittedX, context: PythonObject) raises -> Tuple[PythonObject, Int]:
     """The deferred finite status word of `x` for a decision entry: a fresh
-    int32 word whose address rides as the last dims element (None, and no
-    element, when admit_x already tested X)."""
+    int32 word and its address, the request's status word (None and 0 when
+    admit_x already tested X)."""
     if x.finite:
-        return PythonObject(None)
+        return (PythonObject(None), 0)
     var word = admitted_vector(1, "<i4", context)
-    _ = py_call(dims.append, PythonObject(labels_address(word)))
-    return word
+    return (word, labels_address(word))
 
 
 def _xl_status_refuse(word: PythonObject, model: PythonObject) raises:
@@ -380,7 +401,7 @@ def _xl_width(x: AdmittedX, fields: PythonObject, model: PythonObject) raises:
 
 
 def _xl_decision(model: PythonObject, x: AdmittedX, coef: PythonObject, intercept: PythonObject, link: Int,
-                 squeeze: Bool, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+                 squeeze: Bool, ops: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_decision(est, X, coef, intercept, link)` over an X already read:
     link(X @ W^T + b) on the binding, (n, k) float32, or (n,) when
     `squeeze` and k == 1 (the `reshape` the callers applied)."""
@@ -389,10 +410,10 @@ def _xl_decision(model: PythonObject, x: AdmittedX, coef: PythonObject, intercep
     var k = block[1]
     var shape = Python.tuple(x.rows) if squeeze and k == 1 else Python.tuple(x.rows, k)
     var out = admitted_array(shape, "<f4", context)
-    var dims = Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k), PythonObject(link))
-    var word = _xl_status(x, dims, context)
-    _ = py_call_typed(entries["x_linear_decision"], PythonObject(x.address), PythonObject(labels_address(wb)),
-                      dims, PythonObject(labels_address(out)))
+    var status = _xl_status(x, context)
+    var word = status[0]
+    _ = _xl_call(ops, XL_OP_DECISION, [x.address, labels_address(wb), labels_address(out)],
+                 [x.rows, x.cols, k, link, status[1]], List[Float64]())
     _xl_status_refuse(word, model)
     _ = wb  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -401,18 +422,16 @@ def _xl_decision(model: PythonObject, x: AdmittedX, coef: PythonObject, intercep
 
 
 def _xl_codes(model: PythonObject, x: AdmittedX, coef: PythonObject, intercept: PythonObject, strict: Bool,
-              below: Int, above: Int, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+              below: Int, above: Int, ops: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_decision_codes`: each row's int32 class code on the binding."""
     var block = _xl_block(coef, intercept, context)
     var wb = block[0]
     var k = block[1]
     var out = admitted_vector(x.rows, "<i4", context)
-    var dims = Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k),
-                           PythonObject(LINK_IDENTITY), PythonObject(1 if strict else 0), PythonObject(below),
-                           PythonObject(above))
-    var word = _xl_status(x, dims, context)
-    _ = py_call_typed(entries["x_linear_decision_codes"], PythonObject(x.address), PythonObject(labels_address(wb)),
-                      dims, PythonObject(labels_address(out)))
+    var status = _xl_status(x, context)
+    var word = status[0]
+    _ = _xl_call(ops, XL_OP_DECISION_CODES, [x.address, labels_address(wb), labels_address(out)],
+                 [x.rows, x.cols, k, LINK_IDENTITY, 1 if strict else 0, below, above, status[1]], List[Float64]())
     _xl_status_refuse(word, model)
     _ = wb  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -420,60 +439,66 @@ def _xl_codes(model: PythonObject, x: AdmittedX, coef: PythonObject, intercept: 
     return out
 
 
-def _xl_run(entries: PythonObject, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, y_addr: Int, y_size: Int,
-            ip: PythonObject, fp: PythonObject, n_out: Int, n_fw: Int, n_iw: Int,
+def _xl_fit_ints(header: List[Int], ip: List[Int]) -> List[Int]:
+    """A fit request's Int words: its fixed header, then the route's
+    integer hyperparameters (core/linear_entry_table_ext.mojo)."""
+    var words = header.copy()
+    for i in range(len(ip)):  # driver-loop: over the route's integer hyperparameters (model structure)
+        words.append(ip[i])
+    return words^
+
+
+def _xl_run(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, y_addr: Int, y_size: Int,
+            ip: List[Int], fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int,
             context: PythonObject) raises -> PythonObject:
-    """`_run_array`: one `x_linear_fit` call; the flat float32 result. The
+    """`_run_array`: one XL_OP_FIT call; the flat float32 result. The
     targets are `y_size` 32-bit words at `y_addr` (the caller keeps them
     alive); `y_size` 0 is no targets (one zero word, as `zeros((1,))`)."""
     var out = admitted_vector(n_out, "<f4", context)
     var zero = admitted_vector(1, "<f4", context)
     var ya = y_addr if y_size > 0 else labels_address(zero)
-    _ = zero  # keep the Python object alive through the native call above
-    _ = py_call_typed(entries["x_linear_fit"], PythonObject(algo), PythonObject(x_addr), PythonObject(ya),
-                      Python.list(PythonObject(n), PythonObject(d), PythonObject(x_size), PythonObject(y_size),
-                                  PythonObject(n_out), PythonObject(max(n_fw, 1)), PythonObject(max(n_iw, 1)),
-                                  PythonObject(len(ip)), PythonObject(len(fp))),
-                      ip, fp, PythonObject(labels_address(out)))
+    var header: List[Int] = [algo, n, d, x_size, y_size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)]
+    _ = _xl_call(ops, XL_OP_FIT, [x_addr, ya, labels_address(out)], _xl_fit_ints(header, ip), fp)
     _ = zero  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = zero^
     return out
 
 
-def _xl_fold_matrix(source: PythonObject, est: String, entries: PythonObject, context: PythonObject) raises -> AdmittedX:
+def _xl_fold_matrix(source: PythonObject, est: String, ops: XLinearOps, context: PythonObject) raises -> AdmittedX:
     """`_xl_matrix` for a fit whose binding reads a device fold
-    (`x_linear_fit_fold`, lane a8c-device-x-linear-prep-rfe): a model-
-    selection DeviceRows fold keeps its rows on the device (the result's
-    `store` is active and no host words exist); any other input, or a binding
-    without the fold entry, is `_xl_matrix`'s."""
-    if py_get(entries, "x_linear_fit_fold") is not None and door_is_device_rows(source, context):
-        return admit_x_unrecorded(source, est, context, defer_finite=True, device_x=True)
+    (XL_OP_FIT_FOLD, lane a8c-device-x-linear-prep-rfe): a model-selection
+    DeviceRows fold keeps its rows on the device (the result's `store` is
+    active and no host words exist); any other input, or a binding without
+    the fold entry (XL_HAS_FIT_FOLD), is `_xl_matrix`'s."""
+    if door_is_device_rows(source, context):
+        var flags = _xl_call(ops, XL_OP_FLAGS, List[Int](), List[Int](), List[Float64]())
+        if (flags & XL_HAS_FIT_FOLD) != 0:
+            return admit_x_unrecorded(source, est, context, defer_finite=True, device_x=True)
     return _xl_matrix(source, est, context)
 
 
-def _xl_run_x(model: PythonObject, entries: PythonObject, algo: Int, x: AdmittedX, y_addr: Int, y_size: Int,
-              ip: PythonObject, fp: PythonObject, n_out: Int, n_fw: Int, n_iw: Int,
+def _xl_run_x(model: PythonObject, ops: XLinearOps, algo: Int, x: AdmittedX, y_addr: Int, y_size: Int,
+              ip: List[Int], fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int,
               context: PythonObject) raises -> PythonObject:
     """`_xl_run` over an admitted X: a device-resident fold (`x.store`) is
-    fitted by `x_linear_fit_fold` on rows gathered on the device (no host
+    fitted by XL_OP_FIT_FOLD on rows gathered on the device (no host
     gather, no upload of X) and refused on its words; any other X by
-    `x_linear_fit` from its host words."""
+    XL_OP_FIT from its host words."""
     if not x.store.active():
-        return _xl_run(entries, algo, x.address, x.rows * x.cols, x.rows, x.cols, y_addr, y_size, ip, fp, n_out,
+        return _xl_run(ops, algo, x.address, x.rows * x.cols, x.rows, x.cols, y_addr, y_size, ip, fp, n_out,
                        n_fw, n_iw, context)
     var out = admitted_vector(n_out, "<f4", context)
     var zero = admitted_vector(1, "<f4", context)
     var ya = y_addr if y_size > 0 else labels_address(zero)
-    var ids = Python.list(PythonObject(x.store.base_id), PythonObject(x.store.base_rows), PythonObject(x.store.index_id))
-    var words = py_call_typed(entries["x_linear_fit_fold"], PythonObject(algo), ids, PythonObject(ya),
-                              Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(x.rows * x.cols),
-                                          PythonObject(y_size), PythonObject(n_out), PythonObject(max(n_fw, 1)),
-                                          PythonObject(max(n_iw, 1)), PythonObject(len(ip)), PythonObject(len(fp))),
-                              ip, fp, PythonObject(labels_address(out)))
+    var words = List[Int](length=2, fill=0)
+    var header: List[Int] = [algo, x.store.base_id, x.store.base_rows, x.store.index_id, x.rows, x.cols,
+                             x.rows * x.cols, y_size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)]
+    _ = _xl_call(ops, XL_OP_FIT_FOLD, [ya, labels_address(out), Int(words.unsafe_ptr())], _xl_fit_ints(header, ip), fp)
     _ = zero  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    door_rows_refuse(Int(py=words[1]), Int(py=words[2]), _name(model), x.store.base_rows)
+    door_rows_refuse(words[0], words[1], _name(model), x.store.base_rows)
+    _ = words^
     _ = zero^
     return out
 
@@ -504,12 +529,6 @@ def _xl_owned(m: AdmittedX, context: PythonObject) raises -> PythonObject:
     return _xl_join(m.address, m.rows * m.cols, 0, 0, context)
 
 
-def _xl_ints(values: List[Int]) raises -> PythonObject:
-    # One PyList_New plus direct slot stores (bindings/py_lists.mojo), not a
-    # bound `append` lookup and call per hyperparameter.
-    return py_list_int(values)
-
-
 def _xl_reals(values: List[Float64]) raises -> PythonObject:
     return py_list_f64(values)
 
@@ -521,7 +540,7 @@ def _lbfgs_work(p: Int) -> Int:
 # ------------------------------------------------------------ class weights
 
 
-def _xl_class_prep(model: PythonObject, entries: PythonObject, class_weight: PythonObject, classes: PythonObject,
+def _xl_class_prep(model: PythonObject, entries: XLinearOps, class_weight: PythonObject, classes: PythonObject,
                    codes: PythonObject, sw_addr: Int, weighted: Bool, rows: Bool,
                    context: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
     """`_class_prep(est, class_weight, classes, codes, sample_weight,
@@ -549,14 +568,14 @@ def _xl_class_prep(model: PythonObject, entries: PythonObject, class_weight: Pyt
     else:
         raise Error("mojolearn: class_weight must be None, 'balanced' or a dict")
     var out = admitted_vector(n, "<f4", context) if rows else PythonObject(None)
-    var largest = py_call_typed(entries["x_linear_class_prep"], PythonObject(labels_address(codes)), PythonObject(sw_addr),
-                                PythonObject(labels_address(cw)),
-                                Python.list(PythonObject(n), PythonObject(k), PythonObject(1 if balanced else 0),
-                                            PythonObject(1 if (balanced and weighted and sw_addr != 0) else 0)),
-                                PythonObject(0 if out is None else labels_address(out)))
+    var largest = _xl_call(entries, XL_OP_CLASS_PREP,
+                           [labels_address(codes), sw_addr, labels_address(cw), 0 if out is None else labels_address(out)],
+                           [n, k, 1 if balanced else 0, 1 if (balanced and weighted and sw_addr != 0) else 0],
+                           List[Float64]())
+    _ = codes  # keep the Python object alive through the native call above
     _ = cw  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    return (cw, out, _int(largest))
+    return (cw, out, largest)
 
 
 # ------------------------------------------------------------------- SGD
@@ -597,7 +616,7 @@ def _xl_sgd_auto_sum(batch_size: PythonObject, loss: PythonObject, learning_rate
             and not py_contains(Python.tuple("pa1", "pa2"), learning_rate))
 
 
-def _xl_sgd(model: PythonObject, fields: PythonObject, entries: PythonObject, x: AdmittedX, y_keep: PythonObject,
+def _xl_sgd(model: PythonObject, fields: PythonObject, entries: XLinearOps, x: AdmittedX, y_keep: PythonObject,
             y_addr: Int,
             n_classes: Int, loss_code: Int, penalty: PythonObject, lr: PythonObject, alpha: PythonObject,
             l1_ratio: PythonObject, eta0: PythonObject, power_t: PythonObject, epsilon: PythonObject,
@@ -670,7 +689,7 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: PythonObject, x:
     ip.append(has_cw)
     ip.append(batch)
     ip.append(1 if batch_sum else 0)
-    var out = _xl_run(entries, ALGO_SGD, x.address, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_SGD, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       problems * d + problems + 2, problems * (n + d + 1), problems * n, context)
     _ = yy  # keep the Python object alive through the native call above
     var n_out = problems * d + problems + 2
@@ -851,40 +870,26 @@ def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, cont
     var entries = _xl_entries(fields, context)
     var x = _xl_matrix(source, _name(model), context)
     _xl_width(x, fields, model)
-    var k = len(fields["intercept_"])
     var n = x.rows
     var link = LINK_IDENTITY if lrcv else LINK_SIGMOID
     var rows_mode = _ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA
-    # ne2-g-linear (N362): decision and row link in one crossing when the
-    # binding has `x_linear_decision_rows` (the same two kernels' words).
-    var fused = py_get(entries, "x_linear_decision_rows")
-    if fused is not None:
-        var block = _xl_block(fields["coef_"], fields["intercept_"], context)
-        var wb = block[0]
-        var kb = block[1]
-        var res = admitted_array(Python.tuple(n, 2 if kb == 1 else kb), "<f4", context)
-        var dims = Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(kb), PythonObject(link),
-                               PythonObject(rows_mode))
-        var word = _xl_status(x, dims, context)
-        _ = py_call_typed(fused, PythonObject(x.address), PythonObject(labels_address(wb)),
-                          dims, PythonObject(labels_address(res)))
-        _xl_status_refuse(word, model)
-        _ = wb  # keep the Python object alive through the native call above
-        _ = res  # keep the Python object alive through the native call above
-        _ = wb^
-        _ = x^
-        return res
-    var scores = _xl_decision(model, x, fields["coef_"], fields["intercept_"], link, lrcv, entries, context)
-    var out = admitted_array(Python.tuple(n, 2 if k == 1 else k), "<f4", context)
-    if n > 0:
-        _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA),
-                          PythonObject(labels_address(scores)), PythonObject(labels_address(out)),
-                          Python.list(PythonObject(n), PythonObject(k)))
-        _ = out  # keep the Python object alive through the native call above
-        _ = scores  # keep the Python object alive through the native call above
-    _ = scores^
+    # ne2-g-linear (N362): decision and row link in one call (XL_OP_DECISION_ROWS,
+    # the same two kernels' words). Both x_linear bindings publish it, so the
+    # former two-call path (decision, then `py2mojo_rows`) is deleted.
+    var block = _xl_block(fields["coef_"], fields["intercept_"], context)
+    var wb = block[0]
+    var kb = block[1]
+    var res = admitted_array(Python.tuple(n, 2 if kb == 1 else kb), "<f4", context)
+    var status = _xl_status(x, context)
+    var word = status[0]
+    _ = _xl_call(entries, XL_OP_DECISION_ROWS, [x.address, labels_address(wb), labels_address(res)],
+                 [n, x.cols, kb, link, rows_mode, status[1]], List[Float64]())
+    _xl_status_refuse(word, model)
+    _ = wb  # keep the Python object alive through the native call above
+    _ = res  # keep the Python object alive through the native call above
+    _ = wb^
     _ = x^
-    return out
+    return res
 
 
 def xl_classifier_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -945,7 +950,7 @@ def xl_fit_glm(model: PythonObject, args: PythonObject, context: PythonObject) r
     var yy = _xl_with_weights(y, args[2], n, has_sw, context)
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, link, has_sw]
     var fp: List[Float64] = [power, _float(fields["alpha"]), _float(fields["tol"])]
-    var out = _xl_run(entries, ALGO_GLM, x.address, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_GLM, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       d + 3, 3 * n + m * m + 3 * m, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1013,7 +1018,7 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     var yy = _xl_with_weights(y, args[2], n, has_sw, context)
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if intercept else 0, has_sw]
     var fp: List[Float64] = [_float(epsilon), _float(fields["alpha"]), _float(fields["tol"])]
-    var out = _xl_run(entries, ALGO_HUBER, x.address, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_HUBER, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       d + 4 + p, _lbfgs_work(p) + n, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1035,35 +1040,18 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     var thr = _float(scale) * _float(epsilon)
     var flags = admitted_vector(n, "<u1", context)
     var flag_address = labels_address(flags)
-    var fused = py_get(entries, "x_linear_decision_huber_out")
-    if fused is not None:
-        # The prediction and |y - pred| > thr in one device session.
-        var block = _xl_block(fields["coef_"], fields["intercept_"], context)
-        var wb = block[0]
-        _ = py_call_typed(fused, PythonObject(x.address), PythonObject(labels_address(wb)),
-                          Python.list(PythonObject(n), PythonObject(d), PythonObject(link), PythonObject(y.address),
-                                      PythonObject(thr)),
-                          PythonObject(flag_address))
-        _ = wb  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native call above
-        _ = flags  # keep the Python object alive through the native call above
-        py_setitem(fields, "outliers_", _xl_huber_mask(flags, flag_address, n))
-        _ = wb^
-        _ = flags^
-        _ = x^
-        _ = y^
-        _ = yy^
-        return model
-    var pred = _xl_decision(model, x, fields["coef_"], fields["intercept_"], link, True, entries, context)
-    # |y - pred| > thr in the binding (core/py2mojo_rows.mojo ROWS_HUBER_OUT)
-    _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_HUBER_OUT), PythonObject(y.address),
-                      PythonObject(flag_address),
-                      Python.list(PythonObject(n), PythonObject(1), PythonObject(labels_address(pred)), PythonObject(thr)))
+    # The prediction and |y - pred| > thr in one device session
+    # (XL_OP_HUBER_OUT). Both x_linear bindings publish it, so the former
+    # two-call path (decision, then `py2mojo_rows` ROWS_HUBER_OUT) is deleted.
+    var block = _xl_block(fields["coef_"], fields["intercept_"], context)
+    var wb = block[0]
+    _ = _xl_call(entries, XL_OP_HUBER_OUT, [x.address, labels_address(wb), y.address, flag_address],
+                 [n, d, link], [thr])
+    _ = wb  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = flags  # keep the Python object alive through the native call above
-    _ = pred  # keep the Python object alive through the native call above
     py_setitem(fields, "outliers_", _xl_huber_mask(flags, flag_address, n))
-    _ = pred^
+    _ = wb^
     _ = flags^
     _ = x^
     _ = y^
@@ -1099,7 +1087,7 @@ def xl_fit_bayes(model: PythonObject, args: PythonObject, context: PythonObject)
     var fp: List[Float64] = [_float(fields["tol"]), _float(fields["alpha_1"]), _float(fields["alpha_2"]),
                              _float(fields["lambda_1"]), _float(fields["lambda_2"]),
                              _xl_or(fields["alpha_init"], -1.0), _xl_or(fields["lambda_init"], -1.0)]
-    var out = _xl_run(entries, ALGO_BAYES, x.address, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_BAYES, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       d + 4, 3 * d * d + 5 * d + n, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1136,7 +1124,7 @@ def xl_fit_ard(model: PythonObject, args: PythonObject, context: PythonObject) r
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0]
     var fp: List[Float64] = [_float(fields["tol"]), _float(fields["alpha_1"]), _float(fields["alpha_2"]),
                              _float(fields["lambda_1"]), _float(fields["lambda_2"]), _float(fields["threshold_lambda"])]
-    var out = _xl_run(entries, ALGO_ARD, x.address, n * d, n, d, y.address, y.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_ARD, x.address, n * d, n, d, y.address, y.rows, ip, fp,
                       2 * d + 4, 3 * d * d + 4 * d + n, 2 * d, context)
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1182,7 +1170,7 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     var ip: List[Int] = [_int(max_iter), 1 if _truth(fields["fit_intercept"]) else 0, 1 if lasso else 0,
                          1 if _truth(_attr(model, "positive", PythonObject(False))) else 0]
     var fp: List[Float64] = [alpha_min]
-    var out = _xl_run(entries, ALGO_LARS, x.address, n * d, n, d, y.address, y.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_LARS, x.address, n * d, n, d, y.address, y.rows, ip, fp,
                       2 * d + 4, 2 * d * d + 8 * d, 2 * d, context)
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1233,7 +1221,7 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, has_sw]
     var fp: List[Float64] = [_float(q), _float(fields["alpha"]), _float(py_call(_op().truediv, tol, PythonObject(100.0))),
                              _float(tol), 0.0 if labels_env("MOJOLEARN_XQ_ABS_BALANCE", "") == "1" else 1.0]
-    var out = _xl_run(entries, ALGO_QUANTILE, x.address, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_QUANTILE, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
                       d + 3, m * m + 3 * m + 4 * n + 3 * d, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1367,7 +1355,7 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
     var yy = _xl_with_weights(y, sample_weight, n, has_sw, context)
     var ip: List[Int] = [T, 1 if _truth(fields["fit_intercept"]) else 0, 1, has_sw, 1]
     var fp: List[Float64] = [_float(alpha)]
-    var out = _xl_run_x(model, entries, ALGO_RIDGE, x, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run_x(model, entries, ALGO_RIDGE, x, yy.address, yy.rows, ip, fp,
                         T * d + T + 2 + 1 + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
@@ -1396,7 +1384,7 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
 # -------------------------------------------------------------- isotonic
 
 
-def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonObject, x: AdmittedX,
+def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: XLinearOps, x: AdmittedX,
                      y_source: PythonObject, sample_weight: PythonObject, context: PythonObject) raises:
     """IsotonicRegression.fit over the column already read: the binding
     sorts the positive-weight rows by (x, y, row) and pools them."""
@@ -1406,8 +1394,7 @@ def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonO
     var rising = False
     if _eq(increasing, PythonObject("auto")):
         # the sign of Spearman's rho, exact, in the binding
-        var sign = _int(py_call_typed(entries["x_linear_spearman_sign"], PythonObject(x.address), PythonObject(y.address),
-                                      PythonObject(n)))
+        var sign = _xl_call(entries, XL_OP_SPEARMAN, [x.address, y.address], [n], List[Float64]())
         _ = y  # keep the Python object alive through the native call above
         rising = sign >= 0
         _ = y  # keep the Python object alive through the native call above
@@ -1420,7 +1407,7 @@ def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonO
     var y_max = fields["y_max"]
     var ip: List[Int] = [1 if rising else 0, 0 if y_min is None else 1, 0 if y_max is None else 1, has_w]
     var fp: List[Float64] = [_xl_or(y_min, 0.0), _xl_or(y_max, 0.0)]
-    var out = _xl_run(entries, ALGO_ISOTONIC, x.address, n, n, 1, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+    var out = _xl_run(entries, ALGO_ISOTONIC, x.address, n, n, 1, yy.address, yy.rows, ip, fp,
                       3 + 2 * n, 6 * n, 3 * n, context)
     _ = yy  # keep the Python object alive through the native call above
     var k = _xl_count(out, 0)
@@ -1443,7 +1430,7 @@ def _xl_isotonic_check(fields: PythonObject) raises:
         raise Error("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
 
 
-def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: PythonObject, t: AdmittedX,
+def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: XLinearOps, t: AdmittedX,
                            context: PythonObject) raises -> PythonObject:
     """IsotonicRegression.transform over the column already read: the
     thresholds as two byte copies, the interp1d-linear predict on the
@@ -1461,7 +1448,7 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: P
     var ip: List[Int] = [k, oob]
     var fp: List[Float64] = [_float(fields["X_min_"]), _float(fields["X_max_"])]
     var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.address, n, n, 1, labels_address(thr), Int(py=thr.size),
-                      _xl_ints(ip), _xl_reals(fp), n + 1 if raise_oob else n, 1, 1, context)
+                      ip, fp, n + 1 if raise_oob else n, 1, 1, context)
     _ = thr  # keep the Python object alive through the native call above
     _ = yt  # keep the Python object alive through the native call above
     _ = xt  # keep the Python object alive through the native call above
@@ -1922,7 +1909,7 @@ def _xl_parts(addrs: List[Int], counts: List[Int], context: PythonObject) raises
 # ------------------------------------------------------------------ RidgeCV
 
 
-def _xl_ridge(model: PythonObject, entries: PythonObject, x_addr: Int, n: Int, d: Int, y: AdmittedX,
+def _xl_ridge(model: PythonObject, entries: XLinearOps, x_addr: Int, n: Int, d: Int, y: AdmittedX,
               alphas: List[Float64], sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_ridge_run(est, a, n, d, Y, 1, alphas, sample_weight)`: one target,
     the alphas' Gram solves; refused when X'X + alpha I does not factor even
@@ -1931,7 +1918,7 @@ def _xl_ridge(model: PythonObject, entries: PythonObject, x_addr: Int, n: Int, d
     var has_sw = 0
     var yy = _xl_with_weights(y, sample_weight, n, has_sw, context)
     var ip: List[Int] = [1, 1 if _truth(py_fields(model)["fit_intercept"]) else 0, A, has_sw]
-    var out = _xl_run(entries, ALGO_RIDGE, x_addr, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(alphas),
+    var out = _xl_run(entries, ALGO_RIDGE, x_addr, n * d, n, d, yy.address, yy.rows, ip, alphas,
                       d + 1 + 2 + A + 1, 3 * d * d + 3 * d + 1 + d + 2 * n, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     if _xl_word(out, d + 1 + 2 + A) == 2.0:
@@ -2021,9 +2008,9 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
             raise Error("cv!=None and store_cv_results=True are incompatible")
         var n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // folds + 1)
         var ip: List[Int] = [folds, 1 if _truth(fields["fit_intercept"]) else 0, A]
-        var scores = _xl_run(entries, ALGO_RIDGE_KFOLD, x.address, n * d, n, d, y.address, y.rows, _xl_ints(ip),
-                             _xl_reals(alphas), A, n_fw, 1, context)
-        var best = _int(py_call_typed(entries["x_linear_best_alpha"], PythonObject(labels_address(scores)), PythonObject(A)))
+        var scores = _xl_run(entries, ALGO_RIDGE_KFOLD, x.address, n * d, n, d, y.address, y.rows, ip,
+                             alphas, A, n_fw, 1, context)
+        var best = _xl_call(entries, XL_OP_BEST_ALPHA, [labels_address(scores)], [A], List[Float64]())
         _ = scores  # keep the Python object alive through the native call above
         if best < 0:
             raise Error("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
@@ -2240,8 +2227,8 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
             fp.append(Float64(py=values[i]))
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, grid, folds, L,
                          1 if explicit else 0, 1 if _truth(fields["positive"]) else 0, weighted]
-    var out = _xl_run(entries, ALGO_ENETCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), _xl_ints(ip),
-                      _xl_reals(fp), d + 4 + L * grid + L * grid * folds, d * d + 4 * d + 3 + grid * (d + 2), 1, context)
+    var out = _xl_run(entries, ALGO_ENETCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), ip,
+                      fp, d + 4 + L * grid + L * grid * folds, d * d + 4 * d + 3 + grid * (d + 2), 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
@@ -2429,8 +2416,8 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     fp.append(_float(fields["tol"]))
     for i in range(nc):  # driver-loop: over the Cs grid
         fp.append(Cs[i])
-    var out = _xl_run(entries, ALGO_LOGCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), _xl_ints(ip),
-                      _xl_reals(fp), kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5, context)
+    var out = _xl_run(entries, ALGO_LOGCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), ip,
+                      fp, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", labels.classes)
