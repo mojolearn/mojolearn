@@ -10,11 +10,18 @@
 # typed entry. The caller (bindings/kit_call.mojo) releases the GIL around
 # these, as the doors did.
 from x_decomp.api import ew_run, gemm_run, sqdist_run, move_run, idn_flags_run, tsqr_r_run, ols_tsqr_r_run, order_f_run, svd_run, rank_above_run, geqrf_run, orgqr_run
-from x_decomp.cells import F32Ptr
+from x_decomp.api import (
+    rand_run, lu_solve_run, eigh_run, lasso_rows_run, lars_rows_run, omp_rows_run, lu_aux_run, absmax_sign_run,
+    select_smallest_run, argmin_all_run,
+)
+from x_decomp.select_ops import reduce_run
+from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.descriptor_schema import (
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE, xd_dim,
     XD_FLAGS, XD_TSQR_R, XD_OLS_TSQR_R, XD_ORDER, XD_SVD, XD_RANK, XD_ORTH_DIAG, XD_GEQRF, XD_ORGQR,
+    XD_RAND, XD_LU, XD_LU_SOLVE, XD_EIGH, XD_LASSO_ROWS, XD_LARS_ROWS, XD_OMP_ROWS, XD_LU_AUX, XD_ABSMAX_SIGN,
+    XD_REDUCE, XD_SELECT_SMALLEST, XD_ARGMIN_ALL,
 )
 
 
@@ -25,6 +32,13 @@ def xd_f32(address: Int) raises -> F32Ptr:
     return F32Ptr(unsafe_from_address=address)
 
 
+def xd_i32(address: Int) raises -> I32Ptr:
+    """`_i` of the doors: a host int32 buffer, never null."""
+    if address == 0:
+        raise Error("x_decomp: null int32 buffer address")
+    return I32Ptr(unsafe_from_address=address)
+
+
 def xd_float(floats: Int, i: Int) raises -> Float64:
     if floats == 0:
         raise Error("x_decomp native ABI: null float span")
@@ -32,7 +46,9 @@ def xd_float(floats: Int, i: Int) raises -> Float64:
 
 
 def xd_is_address_op(op: Int) -> Bool:
-    return (op >= XD_EW and op <= XD_MOVE) or op == XD_FLAGS or op == XD_TSQR_R or op == XD_OLS_TSQR_R or op == XD_ORDER or op == XD_SVD or op == XD_RANK or op == XD_ORTH_DIAG or op == XD_GEQRF or op == XD_ORGQR
+    return ((op >= XD_EW and op <= XD_MOVE) or op == XD_FLAGS or op == XD_TSQR_R or op == XD_OLS_TSQR_R or op == XD_ORDER
+            or op == XD_SVD or op == XD_RANK or op == XD_ORTH_DIAG or op == XD_GEQRF or op == XD_ORGQR
+            or (op >= XD_RAND and op <= XD_ARGMIN_ALL))
 
 
 def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) raises -> Int:
@@ -91,4 +107,54 @@ def xd_address_op[E: Exec](op: Int, a: List[Int], p: List[Int], floats: Int) rai
     if op == XD_ORGQR:
         orgqr_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_dim(p[0]), xd_dim(p[1]), xd_dim(p[2]), xd_dim(p[3]))
         return p[3]
+    # lane calltable-prep-decomp (2026-11-11): the kit's remaining host doors.
+    if op == XD_RAND:
+        # rand_py: p = [count, seed, stream, kind]
+        var count = xd_dim(p[0])
+        rand_run[E](xd_f32(a[0]), count, p[1], p[2], p[3])
+        return count
+    if op == XD_LU:
+        var n = xd_dim(p[0])
+        E.lu(xd_f32(a[0]), xd_i32(a[1]), xd_f32(a[2]), n)
+        return n
+    if op == XD_LU_SOLVE:
+        var n = xd_dim(p[0])
+        lu_solve_run[E](xd_f32(a[0]), xd_i32(a[1]), xd_f32(a[2]), n, xd_dim(p[1]), xd_dim(p[2]))
+        return n
+    if op == XD_EIGH:
+        var n = xd_dim(p[0])
+        eigh_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), n, xd_dim(p[1]))
+        return n
+    if op == XD_LASSO_ROWS:
+        # lasso_rows_py: alpha and tol rounded once to float32
+        var n = xd_dim(p[0])
+        lasso_rows_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f32(a[3]), n, xd_dim(p[1]), xd_dim(p[2]),
+                          p[3] != 0, Float32(xd_float(floats, 0)), Float32(xd_float(floats, 1)))
+        return n
+    if op == XD_LARS_ROWS:
+        var n = xd_dim(p[0])
+        lars_rows_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f32(a[3]), n, xd_dim(p[1]), xd_dim(p[2]),
+                         xd_dim(p[3]))
+        return n
+    if op == XD_OMP_ROWS:
+        var n = xd_dim(p[0])
+        omp_rows_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f32(a[3]), n, xd_dim(p[1]), xd_dim(p[2]))
+        return n
+    if op == XD_LU_AUX:
+        var n = xd_dim(p[0])
+        lu_aux_run[E](xd_f32(a[0]), xd_i32(a[1]), xd_f32(a[2]), xd_f32(a[3]), xd_f32(a[4]), xd_f32(a[5]), n,
+                      xd_dim(p[1]))
+        return n
+    if op == XD_ABSMAX_SIGN:
+        return absmax_sign_run[E](xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[0]), xd_dim(p[1]), p[2] != 0)
+    if op == XD_REDUCE:
+        reduce_run(xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[0]), p[1])
+        return 1
+    if op == XD_SELECT_SMALLEST:
+        var h = xd_dim(p[1])
+        select_smallest_run(a[0], xd_dim(p[0]), h, a[1], a[2])
+        return h
+    if op == XD_ARGMIN_ALL:
+        # argmin_all_py: the count unchecked, as the door passed it
+        return argmin_all_run(a[0], p[0], a[1])
     raise Error("x_decomp native ABI: not a host-address operation " + String(op))
