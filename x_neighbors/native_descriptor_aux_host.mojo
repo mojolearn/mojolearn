@@ -16,10 +16,11 @@ comptime XN_AUX_NC_FUSED = True
 comptime XN_AUX_LP_DENSE = True
 
 
+# Capability bit 7 retains the existing NearestCentroid Float64 probability switch.
 def xn_aux_capabilities() -> Int:
     return (0 | (Int(XN_OCSVM_DEV_INIT) << 1) | (Int(XN_UNIT_DEV) << 2)
             | (Int(XN_IDN_SKETCH_CTR) << 3) | (Int(XN_AUX_OCSVM_LABELS) << 4)
-            | (Int(XN_AUX_NC_FUSED) << 5) | (Int(XN_AUX_LP_DENSE) << 6))
+            | (Int(XN_AUX_NC_FUSED) << 5) | (Int(XN_AUX_LP_DENSE) << 6) | (Int(NC_PROBA64) << 7))
 
 
 def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
