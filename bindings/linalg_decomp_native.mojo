@@ -24,7 +24,11 @@ from bindings.classical_validate import classical_view
 from core.decomp_native_impl import decomp_piv_valid
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
-    decomp_input, decomp_freeze_array, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD, XD_SUB, XD_SQ, XD_SELECT, XD_RECIP,
+    decomp_input, decomp_freeze_array, decomp_entries_call, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD, XD_SUB,
+    XD_SQ, XD_SELECT, XD_RECIP,
+)
+from x_decomp.descriptor_schema import (
+    XD_S_FLAGS, XD_RANDOMIZED_SVD, XD_DEV_LU_SOLVE, XD_LU_GESV, XD_DEV_LU_FACTOR, XD_TSQR_R, XD_LU_SOLVE,
 )
 
 
@@ -50,8 +54,9 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
     # 2026-11-08 by lane a3, restored 2026-11-09 by lane
     # r1-restore-measured-winners): M's finite test runs on its device copy
     # inside the one call, not as a host pass over M here.
-    var flag_entry = py_get(entries, "x_decomp_s_flags")
-    var devscan = flag_entry is not None and (Int(py=py_call(flag_entry)) & 1) != 0
+    # The route word comes from the image's table (XD_S_FLAGS; the host
+    # image answers 0, as a binding without `x_decomp_s_flags` read).
+    var devscan = (decomp_entries_call(entries, XD_S_FLAGS, List[Int](), List[Int](), List[Float64](), False) & 1) != 0
     var array = decomp_input(args[0], "M", context, defer_finite=devscan)
     var rows = Int(py=array.shape[0])
     var cols = Int(py=array.shape[1])
@@ -71,17 +76,16 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
     if not (1 <= kc and kc <= min(rows, cols)):
         raise Error("n_components must be in [1, min(n_samples, n_features)]")
     var seed = decomp_seed_word(decomp_seed(args[7]))
-    if py_get(entries, "x_decomp_randomized_svd") is None:
-        raise Error("NotImplementedError: mojolearn randomized_svd: this build of _mojolearn_x_decomp does not export "
-                    + "x_decomp_randomized_svd; rebuild it with bindings/build_x_decomp.sh")
     var output = context["output_context"]
     var u = classical_typed(Python.tuple(rows, kc), "<f4", output)
     var s = classical_typed(Python.tuple(kc), "<f4", output)
     var vt = classical_typed(Python.tuple(kc, cols), "<f4", output)
-    _ = py_call(entries["x_decomp_randomized_svd"], classical_address(array), classical_address(u),
-                classical_address(s), classical_address(vt),
-                Python.list(rows, cols, kc, oversamples, iterations, Int(auto_iterations), Int(transpose),
-                            Int(Bool(py=args[6])), seed, Int(devscan)))
+    # XD_RANDOMIZED_SVD (was the Python entry x_decomp_randomized_svd)
+    var addresses: List[Int] = [Int(py=classical_address(array)), Int(py=classical_address(u)),
+                                Int(py=classical_address(s)), Int(py=classical_address(vt))]
+    var params: List[Int] = [rows, cols, kc, oversamples, iterations, Int(auto_iterations), Int(transpose),
+                             Int(Bool(py=args[6])), seed, Int(devscan)]
+    _ = decomp_entries_call(entries, XD_RANDOMIZED_SVD, addresses, params, List[Float64](), True)
     _ = array  # keep the Python object alive through the native call above
     return Python.tuple(u, s, vt)
 
@@ -162,8 +166,11 @@ def _resident_solve(mut kit: DecompKit, handles: List[Int], n: Int, b: PythonObj
             raise Error("b has " + String(rows) + " rows, the factorization has " + String(n))
         nrhs = Int(py=array.shape[1])
     var out = _typed(Python.tuple(n) if vec else Python.tuple(n, nrhs), "<f4", "f", 4, context)
-    _ = py_call(kit.entries["x_decomp_dev_lu_solve"], handles[1], handles[2], handles[0], classical_address(array),
-                out._addr, Python.list(n, nrhs, 1 if refine else 0))
+    # XD_DEV_LU_SOLVE (was the Python entry x_decomp_dev_lu_solve)
+    var addresses: List[Int] = [Int(py=classical_address(array)), Int(py=out._addr)]
+    _ = kit.xd(XD_DEV_LU_SOLVE, addresses, [handles[1], handles[2], handles[0], n, nrhs, 1 if refine else 0],
+               List[Float64](), True)
+    _ = array  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -186,13 +193,9 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
                 raise Error("b has " + String(kit.nrows(bm)) + " rows, the factorization has " + String(n))
             var x = kit.copy_host(bm)
             var info = kit.zeros(1, 1)
-            var aa = kit.address(a)
-            _ = a  # keep the Python object alive through the native call above
-            _ = py_call(kit.entries["x_decomp_lu_gesv"], aa, kit.address(x), kit.address(info),
-                        Python.list(n, kit.ncols(bm)))
-            _ = info  # keep the Python object alive through the native call above
-            _ = x  # keep the Python object alive through the native call above
-            _ = a  # keep the Python object alive through the native call above
+            # XD_LU_GESV (was the Python entry x_decomp_lu_gesv)
+            var addresses: List[Int] = [kit.at(a), kit.at(x), kit.at(info)]
+            _ = kit.xd(XD_LU_GESV, addresses, [n, kit.ncols(bm)], List[Float64](), True)
             kit.wrote_host(x)
             var singular = Int(kit.word(info))
             if singular != 0:
@@ -217,9 +220,12 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             lu_array = _typed(Python.tuple(n, n), "<f4", "f", 4, context)
             piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
             var info = _typed(Python.tuple(1), "<f4", "f", 4, context)
-            var rc = decomp_int(py_call(kit.entries["x_decomp_dev_lu_factor"], classical_address(array), lu_array._addr,
-                                        piv_array._addr, info._addr, kit.matrices[da].device,
-                                        kit.matrices[dlu].device, kit.matrices[dp].device, Python.list(n)))
+            # XD_DEV_LU_FACTOR (was the Python entry x_decomp_dev_lu_factor)
+            var addresses: List[Int] = [Int(py=classical_address(array)), Int(py=lu_array._addr),
+                                        Int(py=piv_array._addr), Int(py=info._addr)]
+            var rc = kit.xd(XD_DEV_LU_FACTOR, addresses,
+                            [kit.matrices[da].device, kit.matrices[dlu].device, kit.matrices[dp].device, n],
+                            List[Float64](), True)
             _ = array  # keep the Python object alive through the native call above
             _ = info  # keep the Python object alive through the native call above
             if rc < 0:
@@ -358,8 +364,10 @@ def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             # `_tsqr_lstsq_core`: the blocked TSQR of [a | b], the SVD of its small R.
             var n = nn + nrhs
             var ra = kit.zeros(n, n)
-            _ = py_call(kit.entries["x_decomp_tsqr_r"], classical_address(a_array), classical_address(b_array),
-                        kit.address(ra), Python.list(m, nn, nrhs, 0))
+            # XD_TSQR_R (was the Python entry x_decomp_tsqr_r)
+            var addresses: List[Int] = [Int(py=classical_address(a_array)), Int(py=classical_address(b_array)),
+                                        kit.at(ra)]
+            _ = kit.xd(XD_TSQR_R, addresses, [m, nn, nrhs, 0], List[Float64](), True)
             _ = b_array  # keep the Python object alive through the native call above
             _ = a_array  # keep the Python object alive through the native call above
             _ = ra  # keep the Python object alive through the native call above
@@ -417,14 +425,16 @@ def _decomp_module(mode_value: PythonObject, context: PythonObject) raises -> Py
     return context["decomp_modules"][name]
 
 
-def _device_buffer(module: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+def _device_buffer(kit: DecompKit, module: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
     # `_DevBuf(raw, count)`: a pooled device buffer id, returned to the pool
-    # when the holder dies; the holder is assembled from its slots.
+    # when the holder dies; the holder is assembled from its slots. The id
+    # comes from the image's table (XD_DEV_ALLOC; was a Python call of the
+    # module's x_decomp_dev_alloc): the same pool the holder frees into.
     var bi = native_loaded_module("builtins")
     var holder = py_call(bi.object.__new__, context["lu_device_buffer"])
     py_setattr(holder, "b", module)
     py_setattr(holder, "n", PythonObject(count))
-    py_setattr(holder, "id", py_call(module.x_decomp_dev_alloc, max(count, 1)))
+    py_setattr(holder, "id", PythonObject(kit.dev_alloc(max(count, 1))))
     return holder
 
 
@@ -455,14 +465,17 @@ def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonOb
             if n != Int(py=array.shape[1]):
                 raise Error("expected a square matrix, got " + String(n) + " x " + String(Int(py=array.shape[1])))
             var module = _decomp_module(args[1], context)
-            var da = _device_buffer(module, n * n, context)
-            var dlu = _device_buffer(module, n * n, context)
-            var dp = _device_buffer(module, n, context)
+            var da = _device_buffer(kit, module, n * n, context)
+            var dlu = _device_buffer(kit, module, n * n, context)
+            var dp = _device_buffer(kit, module, n, context)
             var lu_array = _typed(Python.tuple(n, n), "<f4", "f", 4, context)
             var piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
             var info = _typed(Python.tuple(1), "<f4", "f", 4, context)
-            var rc = decomp_int(py_call(kit.entries["x_decomp_dev_lu_factor"], classical_address(array), lu_array._addr,
-                                        piv_array._addr, info._addr, da.id, dlu.id, dp.id, Python.list(n)))
+            # XD_DEV_LU_FACTOR (was the Python entry x_decomp_dev_lu_factor)
+            var addresses: List[Int] = [Int(py=classical_address(array)), Int(py=lu_array._addr),
+                                        Int(py=piv_array._addr), Int(py=info._addr)]
+            var rc = kit.xd(XD_DEV_LU_FACTOR, addresses, [Int(py=da.id), Int(py=dlu.id), Int(py=dp.id), n],
+                            List[Float64](), True)
             _ = array  # keep the Python object alive through the native call above
             _ = info  # keep the Python object alive through the native call above
             if rc < 0:
@@ -516,10 +529,10 @@ def _lu_solve_trans(mut kit: DecompKit, lu: Int, piv: PythonObject, b: Int, tran
     if trans == 0:
         return kit.lu_solve(lu, piv, b)
     var out = kit.copy_host(b)
-    var al = kit.address(lu)
-    var ao = kit.address(out)
-    _ = py_call(kit.entries["x_decomp_lu_solve"], al, py_call(piv.buffer_info)[0], ao,
-                Python.list(kit.nrows(lu), kit.ncols(b), trans))
+    # XD_LU_SOLVE with the trans word (was the Python entry x_decomp_lu_solve)
+    var addresses: List[Int] = [kit.at(lu), Int(py=py_call(piv.buffer_info)[0]), kit.at(out)]
+    _ = kit.xd(XD_LU_SOLVE, addresses, [kit.nrows(lu), kit.ncols(b), trans], List[Float64](), True)
+    _ = piv  # keep the Python object alive through the native call above
     kit.wrote_host(out)
     return out
 
