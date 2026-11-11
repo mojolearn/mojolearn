@@ -37,3 +37,14 @@ def forest_params_py(params: PythonObject) raises -> ForestFitArgs:
     var bad = List[UInt8]()
     gbdt_fit_params_py(params, ints, floats, bad)
     return ForestFitArgs(0, 0, ints^, floats^, bad^, -1)
+
+
+def forest_fit_request_py(x: Int, y: Int, params: PythonObject, criterion: PythonObject) raises -> ForestFitArgs:
+    """The forest door's request: X and y addresses it already holds, its
+    params list (UNPACK) and the criterion (None for the ET fits)."""
+    var ints = List[Int]()
+    var floats = List[Float64]()
+    var bad = List[UInt8]()
+    gbdt_fit_params_py(params, ints, floats, bad)
+    var crit = -1 if criterion is None else Int(py=criterion)
+    return ForestFitArgs(x, y, ints^, floats^, bad^, crit)
