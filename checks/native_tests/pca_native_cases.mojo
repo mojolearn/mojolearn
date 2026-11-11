@@ -303,8 +303,10 @@ def planted_query(driver: PCANativeDriver) raises:
     var source: List[Float32] = [1, -2, 3, 2, 0, 5, -1, -3, 7, 4, 2, -4]
     var original = source.copy()
     var state = PCATestState(4, 3, 2)
-    write_guarded(state.components, List[Float32](1, 0, 0, 0, 1, 0))
-    write_guarded(state.mean, List[Float32](1, -2, 3))
+    var component_values: List[Float32] = [1, 0, 0, 0, 1, 0]
+    write_guarded(state.components, component_values)
+    var mean_values: List[Float32] = [1, -2, 3]
+    write_guarded(state.mean, mean_values)
     var components = state.components.copy()
     var mean = state.mean.copy()
     var request = state.query_request(Int(source.unsafe_ptr()), Int(state.projected.unsafe_ptr()) + 4,
@@ -356,8 +358,10 @@ def fixture(driver: PCANativeDriver, unit: Int, host: Bool) raises:
             var answer = driver.fit(state.fit_request(Int(source.unsafe_ptr()), 4, 3, 2,
                 False, 0, False, False, PCAFoldStore()))
             require(answer.finite != 0 and answer.in_range == 0, "PCA deferred fit finite status")
-            write_guarded(state.components, List[Float32](1, 0, 0, 0, 1, 0))
-            write_guarded(state.mean, List[Float32](1, -2, 3))
+            var component_values: List[Float32] = [1, 0, 0, 0, 1, 0]
+            write_guarded(state.components, component_values)
+            var mean_values: List[Float32] = [1, -2, 3]
+            write_guarded(state.mean, mean_values)
             var status = driver.query(state.query_request(Int(source.unsafe_ptr()), Int(state.projected.unsafe_ptr()) + 4,
                 4, 3, 2, 4, False, PCAFoldStore()))
             require(status.finite != 0 and status.in_range == 0, "PCA deferred query finite status")
