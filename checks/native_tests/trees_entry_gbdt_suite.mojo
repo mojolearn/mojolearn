@@ -15,13 +15,15 @@ publication, then the probe publishes under the cpu key.
 The cases are independent units and run across the native host worker
 pool. Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.trees_entry_table import TreesEntryKey
-from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome, GBDT_ARG_NO_INT, GBDT_ARG_NO_FLOAT
+from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome, GBDT_ARG_NO_INT, GBDT_ARG_NO_FLOAT, GBDT_ENTRY_ABI, XG_OP_COUNT
 from gbdt.gbdt_entry import GbdtImage, gbdt_entry_dispatch, gbdt_entry_publish
-from gbdt.fit_calls import xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
+from core.gbdt_entry_table import gbdt_table_entry
+from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
 
 comptime TREES_GBDT_CASES = 5
 
@@ -71,7 +73,7 @@ def _args(var strs: List[String], var ints: List[Int], var floats: List[Float64]
 
 
 def case(unit: Int) raises:
-    var key = _key()
+    var key = xg_ref(_key())
     if unit == 0:
         require(xg_row_major(key), "row-major capability lost")
         require(xg_numeric_mode(key) == Int(GLOBAL_NUMERIC_MODE), "tier differs")
@@ -117,13 +119,29 @@ def case(unit: Int) raises:
         require("params[0] must be an integer" in String(problem), String(problem))
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = xg_ref(_key())
+    var second = xg_ref(_key())
+    require(entry_ref_same(first, second), "gbdt: a second resolution returned another entry")
+    try:
+        _ = gbdt_table_entry(_key(), 0, String(GBDT_ENTRY_ABI), XG_OP_COUNT + 1)
+        raise Error("gbdt: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "gbdt: unexpected refusal: " + String(problem))
+
+
 def run_checks() raises:
     try:
-        _ = xg_numeric_mode(_key())
+        _ = xg_numeric_mode(xg_ref(_key()))
         raise Error("an unpublished gbdt table did not refuse")
     except problem:
         require("provider is not published" in String(problem), String(problem))
     gbdt_entry_publish["MojolearnGbdtEntryOwnerProbeV1"]("cpu", _probe_entry)
+    ref_resolution()
     var failures = List[Int](length=TREES_GBDT_CASES, fill=0)
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
