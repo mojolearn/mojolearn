@@ -481,42 +481,6 @@ _PSHAP_DELTA = 32
 # Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
 
 
-def _trees_fast_tier(est):
-    """True when `est` runs on the FAST tier (its own `numeric_mode`, else
-    the process default)."""
-    from . import _backend
-    mode = getattr(est, "numeric_mode", None)
-    mode = _backend.default_mode() if mode is None else str(mode).strip().lower()
-    return mode == "fast"
-
-
-def _trees_switch(est, bit):
-    """True when `est` runs on the FAST tier and its x_trees binding was
-    built with the define `bit` stands for (`x_trees_fast_switches`)."""
-    if not _trees_fast_tier(est):
-        return False
-    query = getattr(est._bind(), "x_trees_fast_switches", None)
-    return callable(query) and (int(query()) & bit) != 0
-
-
-def _trees_build_switch(est, bit):
-    """True when `est`'s x_trees binding was built with the define `bit`
-    stands for, on whichever tier that define belongs to
-    (`x_trees_fast_switches`)."""
-    query = getattr(est._bind(), "x_trees_fast_switches", None)
-    return callable(query) and (int(query()) & bit) != 0
-
-
-def _trees_py2mojo(est):
-    """True when `est`'s x_trees binding runs the wrapper glue (cv folds,
-    OneVsRest targets, MultiOutputClassifier columns, binary (1 - p, p)
-    rows) itself: `x_trees_py2mojo`, 1 in every build unless `-D
-    MOJOLEARN_PY2MOJO_trees_OFF` (lane apple-fast-py2mojo-trees, the A/B
-    arm A that restores main's Python row loops)."""
-    query = getattr(est._bind(), "x_trees_py2mojo", None)
-    return callable(query) and int(query()) != 0
-
-
 class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
@@ -589,11 +553,6 @@ class _TreesEnsembleBase(NumericModeMixin):
         self._bind().x_trees_argmax_rows(addr_ro(acc, name="scores"), addr(out, name="argmax"), [n, k])
         return out
 
-    def _codes_of(self, labels_out, classes):
-        """Map an estimator's predicted labels (its classes_ are our codes)
-        to int32 codes."""
-        return as_i32_c(labels_out, ndim=1, name="predicted codes")[0]
-
 
 # ------------------------------------------------------------------ Bagging
 # Reference: scikit-learn `sklearn/ensemble/_bagging.py` (BaseBagging.fit
@@ -638,10 +597,6 @@ class _BaggingBase(_TreesEnsembleBase):
     @estimators_.setter
     def estimators_(self, value):
         return _TREES(self, _OP.trees_bagging_members_set, (value,), _TREES_CONTEXT)
-
-    def _slice_members(self):
-        """The batched forest's trees as fitted member estimators."""
-        return _TREES(self, _OP.trees_bagging_members_slice, (), _TREES_CONTEXT)
 
 class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     """A bagging ensemble of classifiers.
