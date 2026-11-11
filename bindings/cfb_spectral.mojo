@@ -32,7 +32,7 @@ from bindings.family_common import (
 from bindings.cluster_native import _reference_queries
 from core.spectral_assignment_api import SpectralAssignmentRequest
 from bindings.spectral_assignment_boundary import spectral_assignment_run, spectral_assignment_pack
-from bindings.spectral_affinity_boundary import spectral_rbf_run
+from bindings.spectral_affinity_boundary import SpectralAffinityRoom, spectral_rbf_run
 from core.spectral_preparation_api import (
     SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest, SpectralAffinityStatus, SpectralCOOStorage,
 )
@@ -248,22 +248,27 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
 
 
 def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: PythonObject) raises -> _Coo:
-    """`_coo_triples(_DenseCOO(m))`: the dense float32 matrix through the
-    base binding's `v != 0.0` scan, row major, then the sparse arm's
-    checks."""
     var n_r = Int(py=m.shape[0])
     var n_c = Int(py=m.shape[1])
+    var address = Int(py=classical_address(m)) if n_r * n_c else 0
+    var result = _dense_coo_span(address, n_r, n_c, who, base, context)
+    _ = m
+    return result^
+
+
+def _dense_coo_span(address: Int, n_r: Int, n_c: Int, who: String,
+                    base: PythonObject, context: PythonObject) raises -> _Coo:
+    """The existing row-major count/fill path over an owned native span."""
     var nnz = 0
     var connection: Optional[SpectralPreparationConnection] = None
     if n_r * n_c:
         connection = SpectralPreparationConnection(base, context)
-        nnz = spectral_coo_count_run(connection.value(), SpectralCOOCountRequest(Int(py=classical_address(m)), n_r * n_c, False))
+        nnz = spectral_coo_count_run(connection.value(), SpectralCOOCountRequest(address, n_r * n_c, False))
     var room = _Coo(n_r, nnz)
     if nnz:
-        var request = SpectralCOOFillRequest(Int(py=classical_address(m)),
+        var request = SpectralCOOFillRequest(address,
             room.row_address(), room.column_address(), room.value_address(), n_r, n_c, nnz, False)
         var wrote = spectral_coo_fill_run(connection.value(), request)
-        _ = m
         _ = room
         if wrote != nnz:
             raise Error("RuntimeError: mojolearn: nonzero_f32_fill wrote " + String(wrote) + " of "
@@ -297,18 +302,19 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
     return a
 
 
-def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, context: PythonObject) raises -> PythonObject:
+def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, context: PythonObject,
+                  public_storage: Bool = True) raises -> SpectralAffinityRoom:
     """The existing sqdist → scale → exp cells, with native scratch/handles."""
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var affinity = family_array(Python.tuple(n, n), "<f4", context)
+    var affinity = SpectralAffinityRoom(n, public_storage, context)
     spectral_rbf_run(xdecomp, x, affinity, n, d, gamma)
-    return affinity
+    return affinity^
 
 
 def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, base: PythonObject,
                    context: PythonObject, native_options: Bool = False, neighbors: Int = 0,
-                   automatic_neighbors: Bool = False) raises -> PythonObject:
+                   automatic_neighbors: Bool = False, public_storage: Bool = True) raises -> SpectralAffinityRoom:
     """`SpectralEmbedding._precomputed_knn_affinity`: scikit-learn's
     `kneighbors_graph(mode='connectivity')` of a precomputed distance matrix,
     symmetrized 0.5 (C + C^T), by the base binding's `knn_affinity_f32`.
@@ -339,11 +345,11 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
         if Int(py=dense.shape[1]) != n:
             raise Error("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
     var k = (max(n // 10, 1) if automatic_neighbors else neighbors) if native_options else _resolved_neighbors(fields, n, clustering)
-    var a = family_array(Python.tuple(n, n), "<f4", context)
+    var a = SpectralAffinityRoom(n, public_storage, context)
     if n == 0:
         if fields is not None:
-            py_setitem(fields, "affinity_matrix_", a)
-        return a
+            py_setitem(fields, "affinity_matrix_", a.public_array)
+        return a^
     var status = SpectralAffinityStatus()
     var sp = dense is None
     var connection = SpectralPreparationConnection(base, context)
@@ -351,14 +357,14 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
         Int(py=classical_address(rows)) if sp and nnz else 0,
         Int(py=classical_address(cols)) if sp and nnz else 0,
         Int(py=classical_address(vals)) if sp and nnz else 0,
-        Int(py=classical_address(a)), status.address(), n, k, nnz, sp)
+        a.address(), status.address(), n, k, nnz, sp)
     spectral_knn_run(connection, request)
     _ = dense  # keep the Python object alive through the native call above
     _ = rows  # keep the Python object alive through the native call above
     _ = cols  # keep the Python object alive through the native call above
     _ = vals  # keep the Python object alive through the native call above
-    _ = status  # keep the Python object alive through the native call above
-    _ = a  # keep the Python object alive through the native call above
+    _ = status  # retain native status storage through the call
+    _ = a  # retain the public or native affinity owner through the call
     var code = Int(status.words[0])
     var bad_row = Int(status.words[1])
     var stored = Int(status.words[2])
@@ -369,8 +375,8 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
         raise Error("mojolearn SpectralEmbedding: row " + String(bad_row) + " of the precomputed graph has "
                     + String(stored) + " stored distances, fewer than n_neighbors=" + String(k))
     if fields is not None:
-        py_setitem(fields, "affinity_matrix_", a)
-    return a
+        py_setitem(fields, "affinity_matrix_", a.public_array)
+    return a^
 
 
 def _resolved_neighbors(fields: PythonObject, n: Int, clustering: Bool) raises -> Int:
@@ -587,12 +593,13 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     elif affinity == "rbf":
         var x = _x_decomp_input(source, context)
         var aff = _rbf_affinity(x, Float64(py=family_field(fields, "_gamma")), routes.decomp, context)
-        py_setitem(fields, "affinity_matrix_", aff)
+        py_setitem(fields, "affinity_matrix_", aff.public_array)
         py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
-        dense = aff
+        dense = aff.public_array
         from_matrix = True
     elif affinity == "precomputed_nearest_neighbors":
-        dense = _knn_affinity(fields, source, True, routes.base, context)
+        var affinity_room = _knn_affinity(fields, source, True, routes.base, context)
+        dense = affinity_room.public_array
         from_matrix = True
     var labels = PythonObject(None)
     var embedding = PythonObject(None)
@@ -961,9 +968,11 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
         # after the same option/route checks. Exact sparse inputs stay allowed.
         classical_admit_value(source, context)
     var dense = PythonObject(None)
+    var generated: Optional[SpectralAffinityRoom] = None
     var from_matrix = False
     if affinity == "precomputed_nearest_neighbors":
-        dense = _knn_affinity(fields, source, False, routes.base, context, True, config.neighbors, config.automatic_neighbors)
+        generated = _knn_affinity(fields, source, False, routes.base, context, True,
+            config.neighbors, config.automatic_neighbors, fields is not None)
         from_matrix = True
     if affinity == "precomputed" and use_dense and not _is_sparse(source):
         var shape = _shape_of(source)
@@ -978,35 +987,38 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
         var gamma = config.gamma_for(d)
         if fields is not None:
             py_setitem(fields, "gamma_", PythonObject(gamma))
-        var aff = _rbf_affinity(x, gamma, routes.decomp, context)
+        generated = _rbf_affinity(x, gamma, routes.decomp, context, fields is not None)
         if fields is not None:
-            py_setitem(fields, "affinity_matrix_", aff)
+            py_setitem(fields, "affinity_matrix_", generated.value().public_array)
         if fields is not None:
             py_setitem(fields, "n_features_in_", PythonObject(d))
-        dense = aff
         from_matrix = True
     var tolerance = config.tolerance
     var seed = config.seed
     var embedding = PythonObject(None)
     var n_out: Int
-    if use_dense and dense is not None:
-        var n = Int(py=dense.shape[0])
+    if use_dense and (dense is not None or generated):
+        var n = generated.value().rows if generated else Int(py=dense.shape[0])
         _se_check_shape(k, n, n_lanczos)
         if fields is not None:
             py_setitem(fields, "n_neighbors_", PythonObject(config.neighbors_for(n)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
+        var address = generated.value().address() if generated else Int(py=classical_address(dense))
         var request = SpectralEmbeddingRequest(
-            SpectralInput(Int(py=classical_address(dense)), 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
+            SpectralInput(address, 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
             Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, 0,
                 norm_laplacian, drop_first, seed, tolerance))
         n_out = spectral_embedding_run(connection.value(), request)
         _ = embedding
         _ = dense
+        _ = generated
         _sc_refusal(n_out, "SpectralEmbedding")
     elif graph_affinity:
         var coo: _Coo
         if from_matrix:
-            coo = _dense_coo(dense, "SpectralEmbedding", routes.base, context)
+            coo = _dense_coo_span(generated.value().address(), generated.value().rows,
+                generated.value().rows, "SpectralEmbedding", routes.base, context)
+            _ = generated
         else:
             coo = _coo_triples(source, "SpectralEmbedding", routes.base, context)
         var n = coo.n
@@ -1138,7 +1150,8 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
         return PythonObject(None)
     if operation == "family_cfb_se_knn_affinity":
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
-        return _knn_affinity(py_fields(model), source, False, base, context)
+        var result = _knn_affinity(py_fields(model), source, False, base, context)
+        return result.public_array
     if operation == "family_cfb_coo_triples":
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
         var coo = _coo_triples(args[0], String(py=args[1]), base, context, True)
