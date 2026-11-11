@@ -1,7 +1,7 @@
 {
   "base": "ed7d3711a61c84aa3fe293c846b9f967b6a4f9ad",
   "family": "OneClassSVM",
-  "status": "additive native storage/API authored; public path not switched; no compilation/execution",
+  "status": "seven inventoried family roles source implemented; compilation/runtime pending; boundary/cache debt explicitly retained",
   "roles": [
     {
       "family": "OneClassSVM",
@@ -12,8 +12,13 @@
         "text": "def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,"
       },
       "after_plan": "typed existing x_neighbors/x_decomp requests",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "core/ocsvm_plan.mojo",
+        "line": 208,
+        "text": "def oc_kernel_product"
+      }
     },
     {
       "family": "OneClassSVM",
@@ -24,8 +29,13 @@
         "text": "var prow = family_array(Python.tuple(PythonObject(n)), \"<i4\", context)"
       },
       "after_plan": "native compaction owner",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "core/ocsvm_plan.mojo",
+        "line": 91,
+        "text": "struct OcWeights"
+      }
     },
     {
       "family": "OneClassSVM",
@@ -36,8 +46,13 @@
         "text": "def _kernel(binding: PythonObject, a: PythonObject, b: PythonObject, code: Int, gamma: Float64, coef0: Float64,"
       },
       "after_plan": "native matrix owner; same kernel",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "core/ocsvm_plan.mojo",
+        "line": 28,
+        "text": "struct OcMatrix"
+      }
     },
     {
       "family": "OneClassSVM",
@@ -48,8 +63,13 @@
         "text": "var alpha = family_array(Python.tuple(PythonObject(m)), \"<f4\", context)"
       },
       "after_plan": "native solver state",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "core/ocsvm_plan.mojo",
+        "line": 134,
+        "text": "struct OcFitState"
+      }
     },
     {
       "family": "OneClassSVM",
@@ -60,8 +80,13 @@
         "text": "var addresses = Python.list(_a(xw), _a(cv), _a(alpha), _a(info), _a(iters))"
       },
       "after_plan": "typed same solver request",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "core/ocsvm_resident_api.mojo",
+        "line": 12,
+        "text": "struct OcResidentRequest"
+      }
     },
     {
       "family": "OneClassSVM",
@@ -72,8 +97,13 @@
         "text": "var s = family_array(Python.tuple(PythonObject(nq)), \"<f4\", context)"
       },
       "after_plan": "native score owner until requested public PACK",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "core/ocsvm_plan.mojo",
+        "line": 247,
+        "text": "struct OcQueryState"
+      }
     },
     {
       "family": "OneClassSVM",
@@ -84,8 +114,13 @@
         "text": "var lab = family_array(Python.tuple(PythonObject(nq)), \"<i4\", context)"
       },
       "after_plan": "native code owner; same fused/default routes",
-      "status": "pending",
-      "scope": "remaining"
+      "status": "source switched; compilation/runtime pending",
+      "scope": "remaining",
+      "after": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 360,
+        "text": "def _ocsvm_predict"
+      }
     }
   ],
   "role_count": 7,
@@ -144,6 +179,43 @@
       "OcResidentDriver"
     ],
     "kernel_calls": "same op_ocsvm_x; default numerical implementations unchanged",
-    "public_switch": "pending"
-  }
+    "public_switch": "fit/score_samples/decision/predict/fit_predict source connected; GIL-release image/storage pins retained"
+  },
+  "aggregate_count": "seven family inventory roles; distinct aggregate addition pending independent review, because fixed XnDriver transport reuses previous NC/LOF schema; coefficient weak-cache tuple not claimed eliminated",
+  "remaining_boundaries": [
+    "public attribute Arrays and mandatory input/provider pins",
+    "gp_svm_records OneClass coefficient weak-cache tuple/layout record deliberately retained; not one of these seven roles",
+    "existing shared lifecycle/public data admission and serialization",
+    "GIL-held CPython scalar/type/namespace admission, including exact ndarray item C accessor for primitive scalar object-array owner chains"
+  ],
+  "removed": [
+    "private Python parameter/address/result lists",
+    "xn_admit_arguments private copied argument list for OneClass only",
+    "private Python Gram/positive compaction/solver/query/decision/label Arrays",
+    "_op/_dims/_take_rows/_take_cols/_kernel/_i32_of/_ocsvm_decision_of legacy private helpers",
+    "Array.tolist/int-map/array.array support-index conversion path",
+    "operator module lookup/eq callable transport",
+    "Python kernel-name tuple",
+    "compiled-Python numeric-mode/resident dispatch in OneClass; existing native routes retained"
+  ],
+  "tests": {
+    "cpu_suite": "checks.native_tests.ocsvm_native_cpu_suite.run_checks",
+    "cpu_cases": 12,
+    "gpu_suite": "checks.native_tests.ocsvm_native_gpu_suite.run_checks",
+    "gpu_cases_default": 22,
+    "gpu_cases_flag_off": 12,
+    "gpu_skip_if_flag_off": 10,
+    "boundary_definitions": 9,
+    "boundary_cases": 14,
+    "status": "authored/uncompiled/unrun; original Python retained",
+    "oracles": "closed-form two-point dual/rho; independent parallel Float64 kernels/KKT on original150x6/40x6 inputs"
+  },
+  "source_evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/ocsvm/switch-source-conservation.json",
+  "build_roots": [
+    "_mojolearn_x_neighbors",
+    "_mojolearn_x_neighbors_host",
+    "_mojolearn_native_classical_family_host",
+    "_mojolearn_runtime_family_host"
+  ],
+  "upgrade": "new core files use Mojo1.2 Array; root owns remaining consolidated SDK migration; no workaround or compatibility alias"
 }
