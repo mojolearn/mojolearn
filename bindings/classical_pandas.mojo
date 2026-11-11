@@ -210,6 +210,31 @@ def classical_admit_value(mut mods: NativeModules, value: PythonObject, context:
     _classical_admit(mods, seq, kinds, value, context, depth)
 
 
+def classical_admit_value(values: List[PythonObject], context: PythonObject, depth: Int = 0) raises:
+    """The existing exact-list leaf policy over already captured native pins.
+
+    Metadata admission holds the GIL and preserves refusal order; the shared
+    module/type plan is prepared once for the complete vector, not per label.
+    """
+    if depth > 64:
+        raise Error("TypeError: classical input nesting exceeds the supported depth")
+    var mods = NativeModules()
+    var seq = _cached_value_types(mods, context)
+    var kinds = _ClassicalAdmitTypes(seq)
+    var int_word = _admitted_word(kinds.int_type, seq)
+    var float_word = _admitted_word(kinds.float_type, seq)
+    var bool_word = _admitted_word(kinds.bool_type, seq)
+    var str_word = _admitted_word(kinds.str_type, seq)
+    var none_word = _admitted_word(kinds.none_type, seq)
+    for k in range(len(values)):  # driver-loop: over captured boundary label identities
+        var raw = values[k]._obj_ptr
+        var word = p3_type_word(raw)
+        if word == int_word or word == float_word or word == bool_word or word == str_word or word == none_word:
+            continue
+        _classical_admit(mods, seq, kinds, values[k], context, depth + 1)
+    _ = values
+
+
 def classical_admit_fields(fields: PythonObject, names: PythonObject, context: PythonObject) raises:
     """`sequential_admit_value` of every connected metadata field the model
     holds, with one module handle and one set of admission type vectors for

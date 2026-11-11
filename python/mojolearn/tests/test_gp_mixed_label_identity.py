@@ -26,3 +26,17 @@ def test_mixed_scalar_classes_retain_first_original_objects(labels):
         model = GaussianProcessClassifier(max_iter_predict=3).fit(x, labels)
     assert len(model.classes_) == len(expected)
     assert all(actual is original for actual, original in zip(model.classes_, expected))
+
+
+@pytest.mark.parametrize("labels", [
+    [np.str_("b"), np.str_("a"), np.str_("b"), np.str_("c"), np.str_("a"), np.str_("c")],
+    ["b\ud800", "a\ud800", "b\ud800", "c\ud800", "a\ud800", "c\ud800"],
+])
+def test_nested_text_labels_keep_native_text_routes_and_class_identity(labels):
+    expected = sorted(dict.fromkeys(labels))
+    nested = [tuple(labels[:2]), [labels[2], (labels[3], labels[4])], labels[5]]
+    x = np.array([[-3, 0], [-2, 1], [-1, -1], [1, 1], [2, -1], [3, 0]], dtype=np.float32)
+    with reference_training():
+        model = GaussianProcessClassifier(max_iter_predict=3).fit(x, nested)
+    assert len(model.classes_) == len(expected)
+    assert all(actual is original for actual, original in zip(model.classes_, expected))

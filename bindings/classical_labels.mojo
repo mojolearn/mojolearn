@@ -52,7 +52,8 @@ from bindings.label_integer_storage import _ndarray_buffer_address
 from bindings.label_input_sources import (
     labels_list_scalar_kind, labels_series_values, labels_text_storage,
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
-from bindings.str_labels_native import StrTable, _read, _sorted
+from bindings.str_labels_native import StrTable, _read, _sorted, _read_source
+from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from bindings.cpython_table import cpython_table
 from bindings.class_weight_boundary import class_weight_admit_dictionary
 from bindings.class_weight_rows_boundary import class_weight_rows_admitted
@@ -69,7 +70,8 @@ from bindings.admitted_input import (
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.p3_labels_metrics_native import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
-    p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
+    p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR,
+    _p3_text_codes_source, _p3_text_classes_source)
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -425,10 +427,7 @@ def _label_list(var y: PythonObject, context: PythonObject) raises -> PythonObje
     return py_call(native_buffer_view(y).tolist)
 
 
-def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_labels.flatten_labels`: a flat Python list of the label objects,
-    nested lists and tuples flattened depth first."""
-    var b = labels_builtins()
+def _flatten_label_source(var y: PythonObject, context: PythonObject, b: PythonObject) raises -> PythonObject:
     y = classifier_label_list(y, context)
     var item = y
     var cls = py_type(y)
@@ -437,16 +436,41 @@ def _flatten_labels(var y: PythonObject, context: PythonObject) raises -> Python
         cls = py_type(item)
     if cls is b.str or cls is b.bytes:
         raise Error("mojolearn: y must be a sequence of labels")
-    var out = Python.list()
+    return item
+
+
+def _flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Public Python-list output of the shared depth-first label walk."""
+    var b = labels_builtins()
+    var item = _flatten_label_source(y, context, b)
+    var result = Python.list()
     var kinds = LabelTypeKinds()
-    # Exact container class words are stable throughout this recursive walk;
-    # capture them once, not per node/leaf.
-    _flatten_into(item, out, Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), context, kinds)
+    _flatten_into(item, result, Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), context, kinds)
     _ = kinds^
-    return out
+    return result
+
+
+def _flatten_label_pins(y: PythonObject, context: PythonObject) raises -> List[PythonObject]:
+    """Private GP consumers keep only native pins for admitted scalar labels."""
+    var b = labels_builtins()
+    var item = _flatten_label_source(y, context, b)
+    var result = List[PythonObject]()
+    var kinds = LabelTypeKinds()
+    _flatten_into_source[True](item, PythonObject(None), result,
+                              Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), context, kinds)
+    _ = item
+    _ = kinds^
+    return result^
 
 
 def _flatten_into(item: PythonObject, out_list: PythonObject, list_word: Int, tuple_word: Int,
+                  context: PythonObject, mut kinds: LabelTypeKinds, depth: Int = 0) raises:
+    var pins = List[PythonObject]()
+    _flatten_into_source[False](item, out_list, pins, list_word, tuple_word, context, kinds, depth)
+
+
+def _flatten_into_source[native: Bool](item: PythonObject, out_list: PythonObject,
+                  mut pins: List[PythonObject], list_word: Int, tuple_word: Int,
                   context: PythonObject, mut kinds: LabelTypeKinds, depth: Int = 0) raises:
     # p3-labels-metrics: items are read borrowed from the exact container's C
     # storage and their classes compared by pointer; a container holding no
@@ -468,22 +492,33 @@ def _flatten_into(item: PythonObject, out_list: PythonObject, list_word: Int, tu
         if not nested:
             for k in range(n):  # driver-loop: exact native container slots, one memoized class admission per label
                 _ = kinds.admit_raw(p3_item(item, k, is_tuple), context)
-            _ = py_call(out_list.extend, item)
+            comptime if native:
+                for k in range(n):  # driver-loop: retain already-admitted public scalar identities
+                    pins.append(PythonObject(from_borrowed=p3_item(item, k, is_tuple)))
+            else:
+                _ = py_call(out_list.extend, item)
+            _ = item
             return
         ref cpy = Python().cpython()
         for k in range(n):  # driver-loop: exact native container slots, never subclass iteration/indexing hooks
             var raw = p3_item(item, k, is_tuple)
             var child = p3_type_word(raw)
             if child == list_word or child == tuple_word:
-                _flatten_into(PythonObject(from_borrowed=raw), out_list, list_word, tuple_word, context, kinds, depth + 1)
+                _flatten_into_source[native](PythonObject(from_borrowed=raw), out_list, pins, list_word, tuple_word, context, kinds, depth + 1)
             else:
                 _ = kinds.admit_raw(raw, context)
-                if Int(cpython_table()[].PyList_Append(out_list._obj_ptr, raw)) != 0:
-                    raise cpy.unsafe_get_error()
+                comptime if native:
+                    pins.append(PythonObject(from_borrowed=raw))
+                else:
+                    if Int(cpython_table()[].PyList_Append(out_list._obj_ptr, raw)) != 0:
+                        raise cpy.unsafe_get_error()
         _ = item
         return
     _ = kinds.admit(item, context)
-    _ = py_call(out_list.append, item)
+    comptime if native:
+        pins.append(item)
+    else:
+        _ = py_call(out_list.append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
@@ -788,6 +823,15 @@ def _text_buffer_labels_into[S: _TextCodeStorage](y: PythonObject, context: Pyth
 
 
 def _text_list_labels_into[S: _TextCodeStorage](flat: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
+    var pins = List[PythonObject]()
+    return _text_list_labels_source[S, False](flat, pins, context)
+
+
+def _text_list_labels_into[S: _TextCodeStorage](flat: List[PythonObject], context: PythonObject) raises -> Optional[_TextLabels[S]]:
+    return _text_list_labels_source[S, True](PythonObject(None), flat, context)
+
+
+def _text_list_labels_source[S: _TextCodeStorage, native: Bool](flat: PythonObject, pins: List[PythonObject], context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """A flat list of admitted str labels (exact str or NumPy's str scalar,
     the only text kinds the flatten admits) encoded by the native str-label
     reader: code points read once per label through the C API, ordered by
@@ -795,25 +839,25 @@ def _text_list_labels_into[S: _TextCodeStorage](flat: PythonObject, context: Pyt
     of its run, as `dict.fromkeys` keeps the first. Same classes and codes
     as the ORDER RULE; None when a label is not a str (numbers and mixed
     lists keep the ORDER RULE's own refusals and encodings)."""
-    var n = len(flat)
+    var n = label_source_count[native](flat, pins)
     if n == 0:
         return None
     # p3-labels-metrics: hash to the k distinct labels by their UTF-8 bytes,
     # sort only the k classes (bindings/p3_labels_metrics_native.mojo): the
     # same classes (first label of each), order and codes. A str with no
     # UTF-8 form takes the code-point path below.
-    var fast = p3_text_codes(flat, True)
+    var fast = _p3_text_codes_source[native](flat, pins, True)
     if fast.status == P3_TEXT_NOT_STR:
         return None
     if fast.status == P3_TEXT_OK:
         var values = List[Int32]()
         swap(values, fast.codes)
         var codes = S.from_values(values^, context)
-        var classes = p3_text_classes(flat, fast.first)
+        var classes = _p3_text_classes_source[native](flat, pins, fast.first)
         return _TextLabels[S](classes, codes^, n)
 
     var table = StrTable()
-    if not _read(flat, table):
+    if not _read_source[native](flat, pins, table):
         return None
     var order = _sorted(table, n)
     var classes = Python.list()
@@ -824,8 +868,10 @@ def _text_list_labels_into[S: _TextCodeStorage](flat: PythonObject, context: Pyt
         var i = order[t]
         if t == 0 or table.compare(order[t - 1], i) != 0:
             current += 1
-            _ = py_call(classes.append, flat[i])
+            _ = py_call(classes.append, label_source_value[native](flat, pins, i))
         out[i] = Int32(current)
+    _ = flat
+    _ = pins
     _ = codes  # keep the Python object alive through the native writes above
     return _TextLabels[S](classes, codes^, n)
 

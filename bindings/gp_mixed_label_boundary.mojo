@@ -80,10 +80,10 @@ def gp_scalar_hash(value: PythonObject) raises -> Int:
     return result
 
 
-def gp_mixed_classes(labels: PythonObject) raises -> PythonObject:
+def gp_mixed_classes(labels: List[PythonObject]) raises -> PythonObject:
     var first = GPScalarIndex()
     for i in range(len(labels)):  # driver-loop: over admitted scalar identity pins
-        first.put(PythonObject(from_borrowed=borrowed_item(labels, i, False)), i)
+        first.put(labels[i], i)
     ref cpy = Python().cpython()
     var api = cpython_table()
     var raw = api[].PyList_New(len(first.values))
@@ -110,11 +110,11 @@ def gp_mixed_index(classes: PythonObject) raises -> GPScalarIndex:
     return result^
 
 
-def gp_mixed_codes(index: GPScalarIndex, labels: PythonObject, address: Int) raises:
+def gp_mixed_codes(index: GPScalarIndex, labels: List[PythonObject], address: Int) raises:
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
     # Re-query the sorted index instead of remapping the first deduplication:
     # mixed NumPy scalar equality need not be transitive under promotion.
     for i in range(len(labels)):  # driver-loop: over admitted scalar identity pins
-        dst[i] = Int32(index.code(PythonObject(from_borrowed=borrowed_item(labels, i, False))))
+        dst[i] = Int32(index.code(labels[i]))
     _ = index
     _ = labels

@@ -26,6 +26,7 @@
 # label_integer_storage.mojo are unchanged. Callers still admit the container
 # itself (`classical_admit_value`) first, exactly as before.
 from std.python import Python, PythonObject
+from bindings.label_sequence_source import label_source_count, label_source_raw
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
@@ -41,6 +42,15 @@ comptime LABELS_LIST_FLOAT = 4
 
 
 def labels_list_scalar_kind(value: PythonObject) raises -> Int:
+    var pins = List[PythonObject]()
+    return _labels_list_scalar_kind_source[False](value, pins)
+
+
+def labels_list_scalar_kind(value: List[PythonObject]) raises -> Int:
+    return _labels_list_scalar_kind_source[True](PythonObject(None), value)
+
+
+def _labels_list_scalar_kind_source[native: Bool](value: PythonObject, pins: List[PythonObject]) raises -> Int:
     """LABELS_LIST_INT when `value` is an exact nonempty list or tuple whose
     every item is exactly an int, LABELS_LIST_FLOAT when every item is
     exactly a float, LABELS_LIST_BOOL when every item is exactly a bool;
@@ -48,13 +58,15 @@ def labels_list_scalar_kind(value: PythonObject) raises -> Int:
     object). Items are read borrowed from the container's C storage and their
     classes compared by pointer, stopping at the first other item."""
     var b = native_loaded_module("builtins")
-    var cls = py_type(value)
-    var list_type = b.list
-    var tuple_type = b.tuple
-    var is_tuple = cls is tuple_type
-    if cls is not list_type and not is_tuple:
-        return LABELS_LIST_OTHER
-    var n = len(value)
+    var is_tuple = False
+    comptime if not native:
+        var cls = py_type(value)
+        var list_type = b.list
+        var tuple_type = b.tuple
+        is_tuple = cls is tuple_type
+        if cls is not list_type and not is_tuple:
+            return LABELS_LIST_OTHER
+    var n = label_source_count[native](value, pins)
     if n == 0:
         return LABELS_LIST_OTHER
     ref cpy = Python().cpython()
@@ -65,7 +77,7 @@ def labels_list_scalar_kind(value: PythonObject) raises -> Int:
     for i in range(n):  # driver-loop: exact list/tuple item classes by pointer, one C read per label
         # p3-labels-metrics: the item read through the process-wide table
         # (PyList_GetItem / PyTuple_GetItem were resolved by name per call).
-        var raw = p3_item(value, i, is_tuple)
+        var raw = label_source_raw[native](value, pins, i, is_tuple)
         var item_type = cpy.PyObject_Type(raw)
         var item_kind = LABELS_LIST_OTHER
         if item_type == int_type._obj_ptr:
@@ -79,6 +91,7 @@ def labels_list_scalar_kind(value: PythonObject) raises -> Int:
             kind = LABELS_LIST_OTHER
             break
         kind = item_kind
+    _ = pins
     _ = value  # keep the container alive through the borrowed item reads above
     _ = int_type
     _ = float_type

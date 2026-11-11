@@ -24,6 +24,7 @@
 # The C entries come from the one CPython table, bindings/cpython_table.mojo
 # (this module's own table moved there, lane ne1-e-table, 2026-11-06).
 from std.python import Python, PythonObject
+from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
@@ -169,6 +170,15 @@ def _p3_hash(a: Int, la: Int) -> UInt64:
 
 
 def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
+    var pins = List[PythonObject]()
+    return _p3_utf8_read_source[False](labels, pins, n, text, any_str)
+
+
+def p3_utf8_read(labels: List[PythonObject], n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
+    return _p3_utf8_read_source[True](PythonObject(None), labels, n, text, any_str)
+
+
+def _p3_utf8_read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
     """The UTF-8 views of the n labels of an exact list. P3_TEXT_NOT_STR at
     the first label that is not a str (`any_str`: a str subclass counts, as
     the code-point reader takes it; else exactly str); P3_TEXT_FALLBACK when
@@ -180,7 +190,7 @@ def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) 
     var size_ptr = size.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()
     for i in range(n):  # driver-loop: one borrowed read and one C call per label, no Python call
-        var raw = p3_item(labels, i, False)
+        var raw = label_source_raw[native](labels, pins, i)
         var cls = cpy.PyObject_Type(raw)
         var ok = Int(cls) == str_word
         if not ok and any_str:
@@ -195,6 +205,7 @@ def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) 
         text.addr.append(address)
         text.size.append(size[0])
     _ = size^
+    _ = pins
     _ = labels  # the list owns every str whose bytes were read above
     return P3_TEXT_OK
 
@@ -284,14 +295,23 @@ def p3_sort_distinct(text: P3Utf8, rows: List[Int]) -> List[Int]:
 
 
 def p3_text_codes(labels: PythonObject, any_str: Bool = True) raises -> P3TextCodes:
+    var pins = List[PythonObject]()
+    return _p3_text_codes_source[False](labels, pins, any_str)
+
+
+def p3_text_codes(labels: List[PythonObject], any_str: Bool = True) raises -> P3TextCodes:
+    return _p3_text_codes_source[True](PythonObject(None), labels, any_str)
+
+
+def _p3_text_codes_source[native: Bool](labels: PythonObject, pins: List[PythonObject], any_str: Bool = True) raises -> P3TextCodes:
     """`sorted(dict.fromkeys(labels))` and each label's dense code for an
     exact nonempty list of str labels, by hash then a sort of the k
     distinct labels only (see the file header)."""
-    var n = len(labels)
+    var n = label_source_count[native](labels, pins)
     if n == 0:
         return P3TextCodes(P3_TEXT_NOT_STR)
     var text = P3Utf8(n)
-    var status = p3_utf8_read(labels, n, text, any_str)
+    var status = _p3_utf8_read_source[native](labels, pins, n, text, any_str)
     if status != P3_TEXT_OK:
         return P3TextCodes(status)
     var seen = P3TextSet(n)
@@ -309,11 +329,21 @@ def p3_text_codes(labels: PythonObject, any_str: Bool = True) raises -> P3TextCo
     out.codes = List[Int32](capacity=n)
     for i in range(n):  # driver-loop: native code write per label
         out.codes.append(rank[Int(ids[i])])
+    _ = pins
     _ = labels  # the list owns the str bytes read above
     return out^
 
 
 def p3_text_classes(labels: PythonObject, first: List[Int]) raises -> PythonObject:
+    var pins = List[PythonObject]()
+    return _p3_text_classes_source[False](labels, pins, first)
+
+
+def p3_text_classes(labels: List[PythonObject], first: List[Int]) raises -> PythonObject:
+    return _p3_text_classes_source[True](PythonObject(None), labels, first)
+
+
+def _p3_text_classes_source[native: Bool](labels: PythonObject, pins: List[PythonObject], first: List[Int]) raises -> PythonObject:
     """The class list: `labels[first[c]]` for each class, built presized."""
     ref cpy = Python().cpython()
     var t = cpython_table()
@@ -323,7 +353,8 @@ def p3_text_classes(labels: PythonObject, first: List[Int]) raises -> PythonObje
         raise cpy.unsafe_get_error()
     var result = PythonObject(from_owned=out)
     for c in range(k):  # driver-loop: over the k classes
-        _ = t[].PyList_SetItem(result._obj_ptr, c, cpy.Py_NewRef(p3_item(labels, first[c], False)))
+        _ = t[].PyList_SetItem(result._obj_ptr, c, cpy.Py_NewRef(label_source_raw[native](labels, pins, first[c])))
+    _ = pins
     _ = labels
     return result
 

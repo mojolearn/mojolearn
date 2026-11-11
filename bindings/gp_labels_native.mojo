@@ -25,7 +25,7 @@ from bindings.label_integer_storage import labels_float_storage, _ndarray_buffer
 from core.gp_label_gather_impl import label_float_gather_f64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_labels import (
-    _flatten_labels,
+    _flatten_label_pins,
     ClassicalLabels, NativeTextLabels, _TextCodeStorage, _TextLabels, _PythonTextCodes, _NativeTextCodes,
     _text_buffer_labels_into, _text_list_labels_into,
 )
@@ -160,7 +160,7 @@ def _gp_float_storage_labels[S: _TextCodeStorage](y: PythonObject, base: PythonO
     return result^
 
 
-def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
+def _gp_list_labels[S: _TextCodeStorage](flat: List[PythonObject], base: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     if len(flat) == 0:
         return None
     var kind = labels_list_scalar_kind(flat)
@@ -175,7 +175,7 @@ def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject,
     return result^
 
 
-def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: PythonObject) raises -> _TextLabels[S]:
+def _gp_sorted_classes[S: _TextCodeStorage](labels: List[PythonObject], context: PythonObject) raises -> _TextLabels[S]:
     """First equal label retained; native keys where their order is equivalent."""
     var b = native_loaded_module("builtins")
     if len(labels) == 0:
@@ -253,7 +253,7 @@ def gp_encode_labels_into[S: _TextCodeStorage](y: PythonObject, base: PythonObje
         # a local copy first, as trees_public_score.mojo:352 (pass 2, C7)
         return text.take()
     var source = gp_label_list(y, context) if py_type(y) is context["array_class"] else y
-    var flat = _flatten_labels(source, context)
+    var flat = _flatten_label_pins(source, context)
     classical_admit_value(flat, context)
     fast = _gp_list_labels[S](flat, base, context)
     if fast:
