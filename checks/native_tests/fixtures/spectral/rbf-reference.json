@@ -1,0 +1,37 @@
+{
+  "status": "supplementary independent reference preparation only; no native execution",
+  "input": "embedding150-input.f32",
+  "input_sha256": "5428ca6c0adb04c3013bdd0747413323142b21106313f58ea0c2b551a3708fbc",
+  "shape": [
+    150,
+    2
+  ],
+  "formula": "exp(-gamma * sum((Float64(X_i)-Float64(X_j))**2)), rounded once to Float32",
+  "gammas": "Embedding default1/features=0.5 and Clustering default1.0 for the original150x2 input.",
+  "artifacts": [
+    {
+      "file": "rbf150-half-reference.f32",
+      "gamma": 0.5,
+      "bytes": 90000,
+      "sha256": "400de693bfa97406ed84ca503edbded6067a71e785563b79f51afa513dd29103"
+    },
+    {
+      "file": "rbf150-one-reference.f32",
+      "gamma": 1.0,
+      "bytes": 90000,
+      "sha256": "0affbc3fb1b5c8b656e803b7df83e66e7251360545be64b3c2e68d56853a87be"
+    }
+  ],
+  "workers": 10,
+  "independent_jobs": 20,
+  "numpy": "2.5.2",
+  "native_tolerance": {
+    "atol": 2e-06,
+    "rtol": 2e-05
+  },
+  "tolerance_note": "Supplementary bound allows binary32 squared-distance/exp rounding relative to the independent binary64 formula. It changes no original test tolerance.",
+  "limits": [
+    "No existing Python numerical RBF assertion was identified in the audited Spectral files; no deletion is claimed.",
+    "No fitted labels/eigenbasis or release hash is generated."
+  ]
+}

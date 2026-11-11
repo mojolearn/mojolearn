@@ -1,0 +1,43 @@
+{
+  "family": "Spectral alternative assignment native execution",
+  "status": "CPU2/GPU2 authored, uncompiled and unrun",
+  "dependencies": ["4084fbbe82", "764e2ad158", "f0201aa23b", "71cd5c0138", "07dd5500e4", "bcc32168f4"],
+  "entries": {
+    "cpu": "checks/native_tests/spectral_assignment_cpu.mojo",
+    "gpu": "checks/native_tests/spectral_assignment_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.spectral_assignment_cpu_suite.run_checks",
+    "gpu": "checks.native_tests.spectral_assignment_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "cpu": 2,
+    "gpu": 2,
+    "methods": {"discretize": 0, "cluster_qr": 1},
+    "workload": "Original180x3 default_rng(7) Float32 input, three60-row normal blobs at0/4/8 with sigma0.4.",
+    "fit_settings": {"clusters": 3, "components": 3, "neighbors": 10, "initializations": 10, "seed": 1, "tolerance": 0.00001},
+    "assignment_settings": {"count": 540, "rows": 180, "components": 3, "seed": 1, "restarts": 30, "iterations": 20},
+    "assertions": "180 native labels, label-permutation-invariant three-component partition, labels in0..2, nonnegative native iteration metadata, source/output guards. Moved result labels remain owned after fit inputs and descriptor output room are destroyed."
+  },
+  "original": "python/mojolearn/tests/test_x_cluster_twice.py embedded child, lines55-58",
+  "oracle": {
+    "kind": "Supplementary independent input-graph certificate; no fitted-output oracle or solver copy",
+    "file": "checks/native_tests/fixtures/spectral/assignment-partition-reference.json",
+    "source": "checks/native_tests/fixtures/spectral/assignment_partition_reference.py",
+    "independent_jobs": 6,
+    "workers": 10,
+    "minimum_cross_edge_squared_distance_margin": 25.85080743321564,
+    "scope": "All three60-row groups are connected and isolated for ten neighbors both including and excluding self. Component labels may be permuted."
+  },
+  "parallel_plan": "Two independent CPU graphs use host_parallelize; label assertions use parallel rows. GPU graphs run in order on the physical GPU; existing fit and assignment kernels remain parallel. Shared-context concurrency failure remains separate.",
+  "compile_flags": {
+    "all": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+    "cpu": ["-D MOJOLEARN_COLUMN_CPU=1"]
+  },
+  "python_retained": "The original subprocess timeout and second-invocation lifetime/repeatability controller remains unchanged. These native mathematical/state checks do not replace that Python process/loader seam and are not counted as deleted Python definitions.",
+  "source_evidence": "E/pca-native-tests/spectral-assignment-static.json",
+  "reference_preparation_log": "E/pca-native-tests/spectral-assignment-reference-preparation.log",
+  "product_or_kernel_changes": 0,
+  "python_deletions": 0,
+  "runtime_identity_performance_claim": false
+}
