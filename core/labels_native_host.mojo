@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Existing host label kernels with native scalar requests and results."""
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.hotpath_impl import HpStat, cast_elements, encode_labels, reduce_stat, gather_i32, threshold_labels_i64
+from core.hotpath_impl import HpStat, cast_elements, encode_labels, reduce_stat, gather_i32
+from core.hotpath_impl_rows import threshold_labels_i64
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from core.host_helpers_impl import (
     all_finite_f32, all_finite_f64, argmax_rows_f32, argmax_rows_f64, gather_i64, gather_f64,

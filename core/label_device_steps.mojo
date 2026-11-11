@@ -9,8 +9,9 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hotpath_impl import (
     HOTPATH_SABOTAGE, HpStat, HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE,
-    cast_elements, reduce_stat, gather_i32, threshold_labels_i64,
+    cast_elements, reduce_stat, gather_i32,
 )
+from core.hotpath_impl_rows import threshold_labels_i64
 from core.hotpath_device import (
     HPD_MAX_N, HPD_F32, HPD_F64, HPD_I32, HPD_I64, HPD_U32, HPD_U8,
     device_gather_i32, device_isum, device_all_integral, device_reduce_arg, device_cast_elements,

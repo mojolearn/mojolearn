@@ -304,7 +304,7 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
         svc_int(svc_field(fields, "lbfgs_memory")), fi != 0, pn != 0,
         loss, strengths[0], strengths[1], tol, 0.1 * tol)
     var request = LinearSvcFitRequest(Int(py=classical_address(x)),
-        Int(py=classical_address(codes)), sw.state.address, options)
+        Int(py=classical_address(codes)), sw.state.address, options.copy())
     linear_svc_run_fit(connection, request, plan)
     _ = x
     _ = codes
