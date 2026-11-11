@@ -1,34 +1,34 @@
 {
   "baseline": "eee8fa67b4",
-  "status": "before-source inventory; all roles pending implementation",
+  "status": "OPTICS four transport roles migrated in source; HDBSCAN roles pending; no compilation/runtime",
   "roles": [
     {
       "id": 1,
       "family": "OPTICS",
       "role": "metric code/pair tuple",
       "before": "bindings/cluster_fit_a_native.mojo:499",
-      "after": "pending"
+      "after": "core/optics_fit_api.mojo::OpticsMetric"
     },
     {
       "id": 2,
       "family": "OPTICS",
       "role": "fit integer option list",
       "before": "bindings/cluster_fit_a_native.mojo:581",
-      "after": "pending"
+      "after": "core/optics_fit_api.mojo::OpticsFitRequest"
     },
     {
       "id": 3,
       "family": "OPTICS",
       "role": "fit floating option list",
       "before": "bindings/cluster_fit_a_native.mojo:584",
-      "after": "pending"
+      "after": "core/optics_fit_api.mojo::OpticsFitRequest"
     },
     {
       "id": 4,
       "family": "OPTICS",
       "role": "nested fit result envelope",
       "before": "bindings/cluster_fit_a_native.mojo:585",
-      "after": "pending"
+      "after": "core/optics_fit_api.mojo::OpticsFitResultSlot"
     },
     {
       "id": 5,
@@ -131,7 +131,7 @@
   ],
   "scope_counts": {
     "candidate_distinct_roles": 18,
-    "completed": 0,
+    "completed": 4,
     "new_runtime_instance_count": "not inferred"
   },
   "public_calls": {
@@ -160,5 +160,11 @@
     "python/mojolearn/tests/test_hdbscan_host_lifetime.py (large host ownership workload retained; no development identity run)"
   ],
   "compiled": false,
-  "executed": false
+  "executed": false,
+  "optics_removed": [
+    "cluster_native.xc_call_floats (sole caller converted)",
+    "OPTICS metric Python tuple",
+    "OPTICS integer/float option lists and nested result envelope"
+  ],
+  "optics_retained_boundary": "Existing exact input/scalar admission and _optics_size parameter coercion stay at UNPACK; all numerical work uses unchanged OPTICS entry. Native options arithmetic cleanup is reviewed separately from this transport chunk."
 }
