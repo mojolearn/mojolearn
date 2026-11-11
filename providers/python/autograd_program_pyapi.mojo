@@ -84,7 +84,7 @@ def _array_input_buffer(a: PythonObject, what: String, mut out_src: CastIn, mut 
     if kind < 0 or nd > 8:
         return False
     var count = 1
-    for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
+    for k in range(nd):  # driver-loop: over rank metadata (at most eight axes); small-loop(nd: input tensor rank): shape metadata, not array elements
         count *= dims_in[k]
     if count == 0:
         return False
@@ -96,7 +96,7 @@ def _array_input_buffer(a: PythonObject, what: String, mut out_src: CastIn, mut 
         dims.append(dims_in[0])
         dims.append(1)
     else:
-        for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
+        for k in range(nd):  # driver-loop: over rank metadata (at most eight axes); small-loop(nd: input tensor rank): shape metadata, not array elements
             dims.append(dims_in[k])
     var sh = ShapeN.of(dims)
     var s0 = sh.cols() * itemsize
@@ -109,7 +109,7 @@ def _array_input_buffer(a: PythonObject, what: String, mut out_src: CastIn, mut 
     elif nd > 2:
         # C-contiguous (NumPy's flag rule: axes of length 1 are skipped)
         var want = itemsize
-        for r in range(nd):  # small-loop(nd: input tensor rank): stride metadata, not array elements
+        for r in range(nd):  # driver-loop: over rank metadata (at most eight axes); small-loop(nd: input tensor rank): stride metadata, not array elements
             var k = nd - 1 - r
             if dims_in[k] != 1 and steps[k] != want:
                 return False
@@ -142,7 +142,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
         dims.append(Int(py=shape[0]))
         dims.append(1)
     else:
-        for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
+        for k in range(nd):  # driver-loop: over rank metadata (at most eight axes); small-loop(nd: input tensor rank): shape metadata, not array elements
             dims.append(Int(py=shape[k]))
     var sh = ShapeN.of(dims)
     var size = Int(py=a.itemsize)
@@ -554,7 +554,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
             # Exact native sequences/arrays only; an Array is unwrapped before
             # len/index so its Python convenience methods never run here.
             var selected_values = program_native_input(parameters)
-            for k in range(len(selected_values)):  # small-loop(selected_values: selected parameter handles): argument parsing, no data
+            for k in range(len(selected_values)):  # driver-loop: over selected model parameters; small-loop(selected_values: selected parameter handles): argument parsing, no data
                 selected.append(_integer(selected_values[k], "parameter", 1))
     var params = program_fit_parameters[E, KIND](Int(py=sid), Int(py=pid), otherwise_id, explicit, selected)
     var owners = program_inputs(p, arrays, True)
@@ -600,7 +600,7 @@ def _imported_repr(value: PythonObject) raises -> String:
 
 def _imported_tuple(dims: List[Int]) raises -> PythonObject:
     var out = Python.list()
-    for k in range(len(dims)):  # small-loop(dims: a value's rank, at most eight): shape metadata, never array elements
+    for k in range(len(dims)):  # driver-loop: over rank metadata (at most eight axes); small-loop(dims: a value's rank, at most eight): shape metadata, never array elements
         _ = py_call(out.append, PythonObject(dims[k]))
     return py_call(native_loaded_module("builtins").tuple, out)
 
@@ -609,9 +609,9 @@ def _imported_session_dims(dims: List[Int]) -> List[Int]:
     # importers/_table.session_shape: a session tensor has at least two axes,
     # a scalar is (1, 1) and a [n] vector (1, n).
     var out = List[Int]()
-    for _ in range(2 - len(dims)):  # small-loop(2: the padded leading axes): at most two shape entries
+    for _ in range(2 - len(dims)):  # driver-loop: over rank metadata (at most eight axes); small-loop(2: the padded leading axes): at most two shape entries
         out.append(1)
-    for k in range(len(dims)):  # small-loop(dims: rank, at most eight): shape metadata, never array elements
+    for k in range(len(dims)):  # driver-loop: over rank metadata (at most eight axes); small-loop(dims: rank, at most eight): shape metadata, never array elements
         out.append(dims[k])
     return out^
 
@@ -629,7 +629,7 @@ def _imported_capture_input(value: PythonObject, integer: Bool, mut dims: List[I
         var rank = len(shape)
         if rank > 8:
             raise Error("ValueError: tensor rank must be at most 8")
-        for k in range(rank):  # small-loop(rank: admitted ndarray axes): at most eight shape entries
+        for k in range(rank):  # driver-loop: over rank metadata (at most eight axes); small-loop(rank: admitted ndarray axes): at most eight shape entries
             dims.append(Int(py=shape[k]))
         var sh = ShapeN.of(_imported_session_dims(dims))
         if sh.count() == 0:
@@ -705,7 +705,7 @@ def ops_imported_run_py(
         var item = _imported_capture_input(given[k], plan.program.in_kinds[k] == PROGRAM_IN_IDS, got)
         var want = declared[k][1]
         var same = len(got) == len(want)
-        for j in range(min(len(got), len(want))):  # small-loop(want: declared input rank): at most eight shape entries
+        for j in range(min(len(got), len(want))):  # driver-loop: over rank metadata (at most eight axes); small-loop(want: declared input rank): at most eight shape entries
             same = same and got[j] == Int(py=want[j])
         if not same:
             raise Error("ValueError: input " + _imported_repr(declared[k][0]) + " must have the shape "
@@ -722,7 +722,7 @@ def ops_imported_run_py(
         var want = List[Int]()
         var shape = py_call(b.tuple, outputs[k][1])
         var count = 1
-        for j in range(len(shape)):  # small-loop(shape: a declared output's rank): shape metadata, never array elements
+        for j in range(len(shape)):  # driver-loop: over rank metadata (at most eight axes); small-loop(shape: a declared output's rank): shape metadata, never array elements
             want.append(Int(py=shape[j]))
             count *= want[j]
         if count != r.outputs[k].shape.count():

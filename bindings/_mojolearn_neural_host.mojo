@@ -167,7 +167,7 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(addrs)) != n:
         raise Error(what + ": expected " + String(n) + " addresses, got " + String(Int(py=len(addrs))))
     var out = List[Int](capacity=n)
-    for i in range(n):  # small-loop(address argument words, a fixed count per entry point)
+    for i in range(n):  # driver-loop: over argument words (fixed count, not data); small-loop(address argument words, a fixed count per entry point)
         var a = _index(addrs[i])
         if a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -187,7 +187,7 @@ def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raise
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=n + BLOCK_OPTION_ADDRS)
-    for i in range(got):  # small-loop(address argument words plus the fixed options tail)
+    for i in range(got):  # driver-loop: over argument words (fixed count, not data); small-loop(address argument words plus the fixed options tail)
         var a = _index(addrs[i])
         if i < n and i != gate_slot and a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -206,7 +206,7 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=got)
-    for i in range(got):  # small-loop(scalar argument words plus the fixed options tail)
+    for i in range(got):  # driver-loop: over argument words (fixed count, not data); small-loop(scalar argument words plus the fixed options tail)
         out.append(_index(params[i]))
     return out^
 
@@ -302,12 +302,12 @@ def transformer_forward_fresh_binding(
     var opts = BlockOptions.from_params(p, 8)
     # Into `transformer_forward`'s 13 + 11 layout (slots 10 and 11 unused).
     var a = List[Int]()
-    for i in range(10):  # small-loop(fixed address-word layout)
+    for i in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
     a.append(0)
     a.append(0)
     a.append(a0[10])
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(fixed options-tail address words)
+    for i in range(BLOCK_OPTION_ADDRS):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed options-tail address words)
         a.append(a0[11 + i])
     var b = p[0]
     var l = p[1]
@@ -453,7 +453,7 @@ def _shape3(params: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(params)) != n:
         raise Error(what + ": expected " + String(n) + " parameters, got " + String(Int(py=len(params))))
     var out = List[Int](capacity=3)
-    for i in range(3):  # small-loop(the three shape argument words)
+    for i in range(3):  # driver-loop: over argument words (fixed count, not data); small-loop(the three shape argument words)
         out.append(_index(params[i]))
     if out[0] < 1 or out[1] < 1 or out[2] < 1:
         raise Error(what + ": B, L and d_model must be positive")
@@ -558,11 +558,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
         raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
     var a0 = _addrs(addrs, 15, String("mamba3_forward_fresh"))
     var a = List[Int]()
-    for i in range(10):  # small-loop(fixed address-word layout)
+    for i in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
-    for _ in range(10):  # small-loop(fixed address-word layout)
+    for _ in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(0)
-    for i in range(10, 15):  # small-loop(fixed address-word layout)
+    for i in range(10, 15):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
     var b = _index(params[0])
     var l = _index(params[1])

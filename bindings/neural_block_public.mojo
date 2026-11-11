@@ -17,6 +17,8 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_identity_key import NativeIdentityKey
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_fields, prepared_key_same
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
+from bindings.boundary_read import buffer_view, view_int_at, read_exact_int_item
+from core.boundary_layout import BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_BOOL
 from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -131,7 +133,7 @@ def _neural_table_reserved(entry: EntryRef, handle: Int, reserve: Int, release: 
     var no_floats: Array[Float64, 0] = []
     var words = List[Int](capacity=1 + len(ints))
     words.append(handle)
-    for i in range(len(ints)):  # small-loop(session operation scalar words)
+    for i in range(len(ints)):  # driver-loop: over argument words (fixed per operation, not data); small-loop(session operation scalar words)
         words.append(ints[i])
     _ = entry_ref_call(entry, reserve, none, slot, no_floats)
     var result = 0
@@ -591,7 +593,7 @@ def _neural_state_capture(mut mods: NativeModules, owner: NativeBlockExecution, 
     # p3-neural-blocks).
     if class_record(mods, _NEURAL_STATE_HOOKS_SLOT, cls) is None:
         var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, cls)
-        for i in range(len(ancestry)):  # small-loop(passive state access protocol)
+        for i in range(len(ancestry)):  # driver-loop: over the state class MRO (class structure, not data); small-loop(passive state access protocol)
             var row = _class_fields(mods, ancestry[i])
             if py_contains(row, "__getattr__"):
                 raise Error("TypeError: neural state attribute hooks are not supported")
@@ -763,7 +765,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                     for i in range(len(optional)):  # driver-loop: admit optional transformer weight slots once
                         addresses.append(_addr(optional[i], keep))
                     var options = fields["_opts_tail"]
-                    for i in range(len(options)):  # small-loop(block options integer span)
+                    for i in range(len(options)):  # driver-loop: over the fixed block-options tail (argument words, not data); small-loop(block options integer span)
                         params.append(Int(py=options[i]))
                 # The forward image's table entry (core/neural_entry_table.mojo):
                 # op 2 on the block's session, op 4 ephemeral. The former Python
@@ -809,7 +811,6 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
 
 def _neural_lengths(mut mods: NativeModules, value: PythonObject, b: Int, l: Int, context: PythonObject) raises -> List[Int]:
     var bi = mods.module("builtins")
-    var values = value
     if py_type(value) is context["array_class"]:
         var captured = neural_array_snapshot(mods, value, context)
         if len(captured.shape) != 1:
@@ -819,33 +820,52 @@ def _neural_lengths(mut mods: NativeModules, value: PythonObject, b: Int, l: Int
         var code = String(captured.dtype)
         if code != "<i4" and code != "<i1" and code != "<u2":
             raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
-        var result = List[Int]()
+        var result = List[Int](length=b, fill=0)
         var address = Int(py=captured._addr)
-        for i in range(b):  # small-loop(native integer length words from retained storage)
+        # Native reads of the retained storage (no CPython call per row).
+        for i in range(b):
             var n = Int(Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=address)[i]) if code == "<i4" else (
                 Int(Pointer[Int8, ImmUntrackedOrigin](unsafe_from_address=address)[i]) if code == "<i1" else
                 Int(Pointer[UInt16, ImmUntrackedOrigin](unsafe_from_address=address)[i]))
             if n < 1 or n > l:
                 raise Error("neural block: lengths must be in [1, L]")
-            result.append(n)
+            result[i] = n
         _ = captured^
         return result^
     elif py_type(value) is not bi.list and py_type(value) is not bi.tuple:
+        # One buffer export (the former memoryview + one boxed index read
+        # per batch row, lane loops-neural 2026-11-11), then native reads
+        # through the view's stride. A float or bool format refuses with the
+        # text the per-row `int` check raised.
         admit_native_buffer_exporter(value)
-        values = py_call(bi.memoryview, value)
-        if Int(py=values.ndim) != 1:
+        var view = buffer_view(value)
+        if view.ndim != 1:
             raise Error("neural block: lengths must be one-dimensional")
-    if len(values) != b:
-        raise Error("neural block: one length is required per batch row")
-    var result = List[Int]()
-    for i in range(b):  # small-loop(one length argument word per batch row)
-        var v = values[i]
-        if py_type(v) is not bi.int:
+        if view.shape[0] != b:
+            raise Error("neural block: one length is required per batch row")
+        if b > 0 and (view.kind == BOUNDARY_KIND_FLOAT or view.kind == BOUNDARY_KIND_BOOL):
             raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
-        var n = Int(py=v)
+        var viewed = List[Int](length=b, fill=0)
+        for i in range(b):
+            var n = view_int_at(view, i)
+            if n < 1 or n > l:
+                raise Error("neural block: lengths must be in [1, L]")
+            viewed[i] = n
+        view.release()
+        return viewed^
+    if len(value) != b:
+        raise Error("neural block: one length is required per batch row")
+    # An exact list or tuple of Python ints: one borrowed slot read and one
+    # PyLong_AsLongLong per batch row (no boxed index, no item reference,
+    # no `__getitem__`); a Python list has no buffer to read once.
+    var is_tuple = py_type(value) is bi.tuple
+    var result = List[Int](length=b, fill=0)
+    for i in range(b):
+        var n = read_exact_int_item(value, i, is_tuple,
+            "TypeError: neural block lengths entries must be integers, not bool or float")
         if n < 1 or n > l:
             raise Error("neural block: lengths must be in [1, L]")
-        result.append(n)
+        result[i] = n
     return result^
 
 
@@ -1032,7 +1052,7 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
 def _neural_int_words(values: PythonObject) raises -> List[Int]:
     # Internal boundary vectors already contain admitted scalar/address words.
     var result = List[Int]()
-    for i in range(len(values)):  # small-loop(public operation descriptor words)
+    for i in range(len(values)):  # driver-loop: over address and parameter argument words (fixed per operation, not data); small-loop(public operation descriptor words)
         result.append(Int(py=values[i]))
     return result^
 
@@ -1136,7 +1156,7 @@ def _neural_snapshot_matches(mut mods: NativeModules, key: PythonObject, block: 
     var offset = 0
     if not native.matches_identity(py_type(block), offset) or not native.matches_identity(context, offset):
         return False
-    for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+    for name in _neural_snapshot_names():  # driver-loop: over the fixed snapshot field names (model structure, not data); small-loop(snapshot input field names)
         if not native.matches_identity(PythonObject(py_contains(live, name)), offset) or not native.matches(py_get(live, name), offset, 1):
             return False
     return native.complete(offset) and native.arrays_match(mods, context)
@@ -1163,7 +1183,7 @@ def neural_block_snapshot_prepared(mut mods: NativeModules, block: PythonObject,
         var native = NativeIdentityKey(mods)
         native.add_identity(py_type(block))
         native.add_identity(context)
-        for name in _neural_snapshot_names():  # small-loop(snapshot input field names)
+        for name in _neural_snapshot_names():  # driver-loop: over the fixed snapshot field names (model structure, not data); small-loop(snapshot input field names)
             native.add_identity(PythonObject(py_contains(live, name)))
             native.add(py_get(live, name), 1)
         native.watch_arrays(mods, context)

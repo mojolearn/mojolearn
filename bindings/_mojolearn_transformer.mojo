@@ -322,7 +322,7 @@ def _read_params(params: PythonObject, base: Int, what: String) raises -> List[I
             + String(n)
         )
     var p = List[Int]()
-    for i in range(n):  # small-loop(n: block scalar params, base plus the 17 option tail): validated count of launch parameters, not data
+    for i in range(n):  # driver-loop: over argument words (validated fixed count, not data); small-loop(n: block scalar params, base plus the 17 option tail): validated count of launch parameters, not data
         p.append(Int(py=params[i]))
     return p^
 
@@ -348,7 +348,7 @@ def _read_addrs_tail(
             + String(n)
         )
     var a = List[Int]()
-    for i in range(n):  # small-loop(n: block buffer addresses, base plus the 11 option tail): validated count of tensor addresses, not data
+    for i in range(n):  # driver-loop: over argument words (validated fixed count, not data); small-loop(n: block buffer addresses, base plus the 11 option tail): validated count of tensor addresses, not data
         a.append(Int(py=addrs[i]))
     while len(a) < base + BLOCK_OPTION_ADDRS:  # small-loop(BLOCK_OPTION_ADDRS: pads the absent option tail with zero addresses): argument words, not data
         a.append(0)
@@ -440,7 +440,7 @@ def transformer_session_backward_binding(
             " window)"
         )
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+    for i in range(21):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error(
@@ -567,7 +567,7 @@ def transformer_session_forward_int15_binding(
     if len(params) != INT15_ENTRY_PARAMS:
         raise Error(what + ": params must contain " + String(INT15_ENTRY_PARAMS) + " values, got " + String(len(params)))
     var a = List[Int]()
-    for i in range(len(addrs)):  # small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
+    for i in range(len(addrs)):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
         a.append(Int(py=addrs[i]))
     _check_base_addrs(a, [0, 1, 2, 10, 11, 12], what)
     _ = a  # keep the Python object alive through the native call above
@@ -634,12 +634,12 @@ def transformer_forward_fresh_binding(
     # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
     # two absent cache slots, y, then the tail.
     var a = List[Int]()
-    for i in range(10):  # small-loop(10: fixed buffer-address list of this entry): argument words, not data
+    for i in range(10):  # driver-loop: over argument words (validated fixed count, not data); small-loop(10: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
     a.append(0)
     a.append(raw[10])
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+    for i in range(BLOCK_OPTION_ADDRS):  # driver-loop: over argument words (validated fixed count, not data); small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
     _ = a  # keep the Python object alive through the native call above
@@ -847,10 +847,10 @@ def transformer_decode_session_open_binding(
     var raw = _read_addrs_tail(addrs, 11, what)
     var a = List[Int]()
     a.append(0)
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+    for i in range(11):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+    for i in range(BLOCK_OPTION_ADDRS):  # driver-loop: over argument words (validated fixed count, not data); small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
     _ = a  # keep the Python object alive through the native call above
@@ -908,15 +908,15 @@ def transformer_decode_session_open_int15_binding(
     if owner[].is_open():
         raise Error("transformer decode session: already open; close it first")
     var raw = List[Int]()
-    for i in range(len(addrs)):  # small-loop(addrs: validated decode tensor addresses, 11 plus 11 plus 21): reads pointer list, not data
+    for i in range(len(addrs)):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: validated decode tensor addresses, 11 plus 11 plus 21): reads pointer list, not data
         raw.append(Int(py=addrs[i]))
     # into `transformer_forward`'s 13 + 11 layout, then the 21 planes
     var a = List[Int]()
     a.append(0)
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+    for i in range(11):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
-    for i in range(BLOCK_OPTION_ADDRS + 21):  # small-loop(BLOCK_OPTION_ADDRS: 11 option addresses plus 21 planes): reorders pointer list, not data
+    for i in range(BLOCK_OPTION_ADDRS + 21):  # driver-loop: over argument words (validated fixed count, not data); small-loop(BLOCK_OPTION_ADDRS: 11 option addresses plus 21 planes): reorders pointer list, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 10, 11], what)
     _ = a  # keep the Python object alive through the native call above
@@ -963,10 +963,10 @@ def transformer_decode_session_open_step_op_binding(
     var raw = _read_addrs_tail(addrs, 11, what)
     var a = List[Int]()
     a.append(0)
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+    for i in range(11):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+    for i in range(BLOCK_OPTION_ADDRS):  # driver-loop: over argument words (validated fixed count, not data); small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
     var p = _read_params(params, 9, what)
@@ -1192,7 +1192,7 @@ def transformer_backward_binding(
             " window)"
         )
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+    for i in range(21):  # driver-loop: over argument words (validated fixed count, not data); small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error(
