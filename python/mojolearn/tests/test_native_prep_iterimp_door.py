@@ -39,7 +39,7 @@ def test_public_methods_are_one_native_call():
 # ---------------------------------------------------------------- the former Python route (oracle)
 try:
     import mojolearn as ml
-    from mojolearn._expansion_prep import (
+    from mojolearn.tests._prep_prog_oracle import (
         Array, SimpleImputer, _Prog, _x2d, _cs, _mode, _seed_words, _NONE, _II_CH, as_f32_c)
 except Exception:  # no built bindings: only the source check above runs
     ml = None

@@ -24,9 +24,10 @@ def _load():
     """mojolearn and the names the oracle below uses (needs the bindings)."""
     import mojolearn as ml
     from mojolearn import _expansion_prep as ep
+    from mojolearn.tests import _prep_prog_oracle as oracle
     g = globals()
     for name in _ORACLE_NAMES:  # the oracle reads these module globals
-        g[name] = getattr(ep, name)
+        g[name] = getattr(oracle, name)
     return ml, ep
 
 
@@ -321,6 +322,18 @@ def test_pure_former_helpers_gone():
     defs = _defs(_tree())
     for name in ("_mutual_info", "_mi_discrete_mask", "_plus1", "_gather", "_stage_importance_keys",
                  "_key_words", "_mask_list", "RFE._clone"):
+        assert name not in defs, name
+
+
+def test_program_builder_left_the_package():
+    """The Python program builder and its staging helpers are the test oracle
+    (tests/_prep_prog_oracle.py); the package keeps only the record class the
+    native runner fills."""
+    defs = _defs(_tree())
+    assert not [name for name in defs if name.startswith("_Prog.")]
+    for name in ("_take", "_codes", "_category_block", "_fit_categories", "_fit_categories_cls2", "_native_folds",
+                 "_stage_folds", "_refuse_folds", "_cs", "_cls", "_col_stats", "_class_stats", "_x2d",
+                 "_label_buffer", "_label_chunk", "_class_words", "_seed_words", "_r3"):
         assert name not in defs, name
 
 
