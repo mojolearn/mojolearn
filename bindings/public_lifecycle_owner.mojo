@@ -12,6 +12,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.native_type_module import native_type_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
@@ -90,7 +91,7 @@ def _check_x_values(model: PythonObject, source: PythonObject, sparse_ok: Bool,
         shape = array_slot_once(source, "shape", context)
         kind = _x_kind(source, context)
     else:
-        var module = cls.__module__
+        var module = native_type_module(cls)
         if (not sparse_ok and py_type(module) is native_loaded_module("builtins").str
                 and Bool(py=py_call(module.startswith, "scipy.sparse"))):
             raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to "
