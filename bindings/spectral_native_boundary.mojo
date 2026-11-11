@@ -14,6 +14,20 @@ from providers.python.neural_descriptor_pyapi import (
 )
 
 
+@fieldwise_init
+struct SpectralRoutePins(Movable):
+    var metrics: PythonObject
+    var decomp: PythonObject
+    var base: PythonObject
+    var cluster: PythonObject
+
+
+@fieldwise_init
+struct SpectralPredictionPins(Movable):
+    var labels: PythonObject
+    var embedding: PythonObject
+
+
 struct SpectralConnection(Movable):
     var provider: PythonObject
     var driver: SpectralDriver

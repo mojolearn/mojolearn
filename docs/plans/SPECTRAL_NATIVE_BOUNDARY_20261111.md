@@ -235,3 +235,18 @@ The ABI/constructors already frozen remain unchanged; native tests may use the
 new `SpectralCOOStorage` as the production output owner. No lane execution.
 Remaining work is boundary/lifecycle metadata and internal routing tuples,
 not numerical Python execution in these fitted descriptor plans.
+
+## Typed internal route/output pin envelopes
+
+`SpectralRoutePins` holds the four import-time provider pins in a Mojo struct;
+fit/embedding no longer construct or index an internal routed Python tuple.
+Prepared input passes as a separate admitted source parameter. Archive predict
+uses a native source index instead of rebuilding its public argument tuple.
+`SpectralPredictionPins` retains labels/embedding until the operation packs the
+actual public result; plain predict does not create an intermediate Python pair.
+The public embedding pair and COO tuple remain unchanged at PACK.
+
+No numerical source or copy changed. Source audit:
+`E/spectral-native-owner/route-pins-source-audit.json`. Normalized scalar instance
+metadata, the standalone convenience operation's temporary model and shared
+admission metadata remain pending; this does not claim all Python imports gone.
