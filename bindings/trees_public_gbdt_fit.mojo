@@ -37,7 +37,12 @@ from bindings.admitted_input import (
 from bindings.classical_arrays import classical_address, classical_c_order
 # TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.trees_public_gbdt import gbdt_table, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.gbdt_fit_boundary import gbdt_fit_params_py, gbdt_fit_strs_py
+from std.memory import unsafe_memcpy
+from core.trees_entry_table import TreesEntryKey
+from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
+from gbdt.fit_calls import xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
 from bindings.trees_boost_constructor_native import tree_constructor_storage
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
@@ -812,6 +817,27 @@ def _f64_array(values: PythonObject, context: PythonObject) raises -> PythonObje
     return classical_wrap_array(store, Python.tuple(len(store)), "<f8", "C", context)
 
 
+def _f64_curve(values: List[Float64], context: PythonObject) raises -> PythonObject:
+    """`_f64_array` of a native curve (PACK): one array, one copy."""
+    if len(values) == 0:
+        return _f64_array(Python.list(), context)
+    var out = admitted_vector(len(values), "<f8", context)
+    unsafe_memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
+                  src=values.unsafe_ptr(), count=len(values))
+    return out
+
+
+def _gk(table: PythonObject) raises -> TreesEntryKey:
+    """The gbdt table key of the image this tier connected (the bridge
+    records it at import as `gbdt_native_key`): the fit, its probes and the
+    model dimension run through that image's published native entry
+    (gbdt/fit_calls.mojo), not through its Python entries."""
+    var key = py_get(table, PythonObject("gbdt_native_key"))
+    if key is None:
+        raise Error("ImportError: mojolearn: the gbdt binding publishes no native entry table")
+    return TreesEntryKey(Int(py=key[0]), Int(py=key[1]))
+
+
 # -------------------------------------------------------------------- fit
 
 
@@ -835,13 +861,12 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var table = gbdt_table(fields, context)
     var cat = _field(fields, model, "cat_features")
     var hot = _field(fields, model, "one_hot_features")
+    var gkey = _gk(table)
     var row_major_ok = False
-    var probe = trees_entry(table, "gbdt_fit_row_major_available")
-    if probe is not None:
-        try:
-            row_major_ok = Int(py=py_call_typed(b.int, py_call_typed(probe))) != 0
-        except:
-            row_major_ok = False
+    try:
+        row_major_ok = xg_row_major(gkey)
+    except:
+        row_major_ok = False
     var x: AdmittedX
     if not _truthy(cat) and not _truthy(hot) and row_major_ok:
         x = trees_forest_x(X, "X", context)
@@ -1013,33 +1038,38 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "boosting_type_", PythonObject(boosting))
     var ex_addr = x.address if held is None else Int(py=held[1])
     var ey_addr = ya.address if held is None else Int(py=held[3])
-    var name = String("gbdt_fit_rowmajor") if x.c_order else String("gbdt_fit")
-    var entry = trees_need(table, name, "mojolearn: this gbdt binding has no " + name, "AttributeError")
-    var call = Python.list(PythonObject(x.address), PythonObject(ya.address), PythonObject(w_addr),
-                           PythonObject(trees_address(flags_holder)), PythonObject(ex_addr), PythonObject(ey_addr),
-                           params, strs)
+    # UNPACK of the params and strs lists once; the fit runs natively in the
+    # connected gbdt image (gbdt/fit_calls.mojo), the row-major entry when X
+    # is C-order (refused by name by an image without it).
+    var p_ints = List[Int]()
+    var p_floats = List[Float64]()
+    var p_bad = List[UInt8]()
+    gbdt_fit_params_py(params, p_ints, p_floats, p_bad)
+    var fit_args = GbdtFitArgs(x.address, ya.address, w_addr, trees_address(flags_holder), ex_addr, ey_addr,
+                               p_ints^, p_floats^, p_bad^, gbdt_fit_strs_py(strs))
+    var outcome = xg_fit(gkey, x.c_order, fit_args)
+    _ = fit_args^
     _ = flags_holder  # keep the Python object alive through the native call above
     _ = group_holder  # keep the Python object alive through the native call above
-    var out = trees_call(entry, call)
-    _ = flags_holder  # keep the Python object alive through the native call above
     _ = weights^
     _ = held^
     _ = group_holder^
     _ = pair_holders^
-    var text = out[0]
+    # PACK of the native outcome
+    var text = PythonObject(outcome.text)
     py_setitem(fields, "model_", text)
-    py_setitem(fields, "bias_", PythonObject(_bias_of(String(py_call(b.str, text)))))
-    py_setitem(fields, "best_iteration_", py_call_typed(b.int, out[1]))
-    py_setitem(fields, "stopped_early_", PythonObject(_truthy(out[2])))
-    py_setitem(fields, "loss_curve_", _f64_array(out[3], context))
-    py_setitem(fields, "test_loss_curve_", _f64_array(out[4], context) if n_eval_rows else PythonObject(None))
+    py_setitem(fields, "bias_", PythonObject(_bias_of(outcome.text)))
+    py_setitem(fields, "best_iteration_", PythonObject(outcome.best_iteration))
+    py_setitem(fields, "stopped_early_", PythonObject(outcome.stopped_early))
+    py_setitem(fields, "loss_curve_", _f64_curve(outcome.learn, context))
+    py_setitem(fields, "test_loss_curve_", _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
     py_setitem(fields, "n_features_in_", PythonObject(n_features))
     var dim = PythonObject(None)
-    if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
-        dim = py_call_typed(b.int, host_archive_gbdt_state(py_call(b.str, text), context)["dim"])
+    if gkey.vendor == 0 and gbdt_has_ctr(text):
+        # the host image (vendor word 0 is "cpu", core/gbdt_entry_table.mojo)
+        dim = py_call_typed(b.int, host_archive_gbdt_state(text, context)["dim"])
     else:
-        dim = py_call_typed(trees_need(table, "gbdt_model_dim", "mojolearn: this gbdt binding has no gbdt_model_dim",
-                                       "AttributeError"), text)
+        dim = PythonObject(xg_model_dim(gkey, outcome.text))
     py_setitem(fields, "approx_dim_", dim)
     if _eq(loss, "MultiClass"):
         py_setitem(fields, "n_classes_", dim + PythonObject(1))
@@ -1606,8 +1636,7 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     var learner_fields = py_fields(learner)
     py_setitem(learner_fields, "numeric_mode", PythonObject(mode))
     var table = gbdt_table(learner_fields, context)
-    var code = Int(py=py_call_typed(trees_need(table, "gbdt_numeric_mode", "mojolearn: this gbdt binding has no gbdt_numeric_mode",
-                                               "AttributeError")))
+    var code = xg_numeric_mode(_gk(table))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
     _ = gbdt_fit(learner, Python.tuple(X, y, sample_weight, eval_set, PythonObject(None), PythonObject(None),
