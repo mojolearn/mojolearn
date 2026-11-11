@@ -81,6 +81,25 @@ def _entries(module):
     return table
 
 
+#: The trees entry table's vendor words (core/trees_entry_table.mojo), the
+#: mapping xtrees/glue_runs.mojo::x_trees_glue_vendor applies at publication.
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def _native_key(table):
+    # glue: once at import, the connected x_trees image's (tier, vendor) key,
+    # which its native callers read instead of looking entries up by name
+    # (lane calltable-trees). An image without one leaves the key absent and
+    # its native callers refuse.
+    try:
+        mode = int(table["x_trees_numeric_mode"]())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(table["x_trees_vendor"]()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        table["x_trees_native_key"] = (mode, vendor)
+
+
 def _bindings():
     # glue: connect each tree binding of both numeric modes once at import
     from . import _backend
@@ -93,6 +112,8 @@ def _bindings():
                 per_mode[name] = _entries(_backend.binding(name, mode))
             except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
                 per_mode[name] = _refusal(error)
+            if name == "_mojolearn_x_trees" and isinstance(per_mode[name], dict):
+                _native_key(per_mode[name])
         connected[mode] = per_mode
     return connected
 

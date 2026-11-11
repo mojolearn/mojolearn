@@ -10,6 +10,7 @@ from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from xtrees.glue_runs import publish_x_trees_glue
 from providers.python.xtrees_api_pyapi import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
@@ -265,6 +266,10 @@ def build__mojolearn_x_trees() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
         register(m)
+        # Native publication of the same glue runs (core/trees_entry_table.mojo);
+        # the Python entries above remain for the unconverted Python callers
+        # (python/mojolearn/_expansion_trees.py) and the boundary tests.
+        publish_x_trees_glue(COMPILED_VENDOR)
         m.def_function[tree_shap_prepare_retain_binding]("x_trees_tree_shap_prepare_retain")
         m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
         m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")

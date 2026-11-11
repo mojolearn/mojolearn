@@ -14,6 +14,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from xtrees.glue_runs import publish_x_trees_glue
 from providers.python.xtrees_api_pyapi import register, tree_shap_cache_create_args, tree_shap_cache_values_args
 from xtrees import shap_host as shap_cpu
 from xtrees.shap_host import shap_prepare, tree_shap_values
@@ -231,6 +232,10 @@ def build__mojolearn_x_trees_host() -> PythonObject:
         m.def_function[x_trees_host_vendor_binding]("x_trees_vendor")
         # Every GPU-binding name, from the one registration both bindings call.
         register(m)
+        # Native publication of the same glue runs (core/trees_entry_table.mojo);
+        # the Python entries above remain for the unconverted Python callers
+        # (python/mojolearn/_expansion_trees.py) and the boundary tests.
+        publish_x_trees_glue("cpu")
         m.def_function[tree_shap_cache_create_binding]("x_trees_tree_shap_cache_create")
         m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
         m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
