@@ -147,7 +147,7 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int
     var args = NmfArgs(options.beta, update_h, max_iter, tol, regs.l1w, regs.l1h, regs.l2w, regs.l2h, shuffle, seed)
     var request = NMFFitRequest(admitted.address, w_address if w_address >= 0 else h_output,
         h_address if h_address >= 0 else h_output, w_output, h_output,
-        n, d, nc, init, options.solver, args, not admitted.finite)
+        n, d, nc, init, options.solver, args^, not admitted.finite)
     var result = nmf_run_fit(connection, request)
     # Re-admit model namespace keys after the GIL release, before publishing
     # fit attributes. Exact-key mutation stamps make unchanged queries cheap.
@@ -156,7 +156,7 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int
         admitted_finite_refuse(result.finite, "NMF")
     _ = w_scratch^
     _ = h_scratch^
-    return NMFPackedFit(w, h, nc, result)
+    return NMFPackedFit(w, h, nc, result^)
 
 
 def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: PythonObject, h_given: PythonObject,

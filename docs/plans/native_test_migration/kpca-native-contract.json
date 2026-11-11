@@ -1,0 +1,20 @@
+{
+  "suite": "kpca_contract",
+  "fixtures": 20,
+  "dependency": "c613f33133",
+  "execution": "uncompiled and unrun; root bundle owed",
+  "coverage": {
+    "0": "metadata op/result slots",
+    "1-8": "all resident/lanczos/remove-zero flag combinations and six distinct addresses/dimensions/Float64 scalar",
+    "9": "typed request copy independence",
+    "10-16": "unknown/metadata/eigen malformed envelopes; each wrong address/integer/scalar count",
+    "17": "native provider error propagation",
+    "18": "actual host-neighbor metadata and refusal to execute another image eigensolver",
+    "19": "missing result with heap-owned error buffer"
+  },
+  "parallel": "host_parallelize over all cases",
+  "lifetime": "No fake address is dereferenced. Descriptor results owned by native fixed-call heap storage; missing-result error owner is in a List; backing lists pinned on refusals.",
+  "product_changes": [],
+  "python_removed": [],
+  "limits": "Wire oracle implements no numerical operation; actual centering/eigen/query tests follow. No build/test/box/timing/identity execution."
+}

@@ -3,9 +3,9 @@
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from core.nearest_centroid_plan import nc_uniform, nc_narrow_priors, nc_normalize_priors, nc_class_offsets, nc_power_steps
+from core.nearest_centroid_plan import NcLabelCodes, nc_uniform, nc_narrow_priors, nc_normalize_priors, nc_class_offsets, nc_power_steps
 
-comptime NC_PLAN_FIXTURES = 20
+comptime NC_PLAN_FIXTURES = 22
 
 
 def require(ok: Bool, message: String) raises:
@@ -96,6 +96,18 @@ def refusal_case(unit: Int) raises:
     require(refused, "prior refusal order/message changed: expected " + expected + ", got " + actual)
 
 
+def code_shape_refusal_case(unit: Int) raises:
+    var rows: Int = -1 if unit == 0 else 9223372036854775807 // 4 + 1
+    var expected = String("ValueError: negative dimensions are not allowed") if unit == 0 else String("ValueError: array byte count exceeds native storage")
+    var refused = False
+    try:
+        var codes = NcLabelCodes(rows)
+        _ = codes^
+    except error:
+        refused = String(error) == expected
+    require(refused, "native code owner changed shape refusal")
+
+
 def run_checks() raises:
     var failures = List[Int](length=NC_PLAN_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
@@ -105,8 +117,10 @@ def run_checks() raises:
                 offsets_case(unit)
             elif unit < 16:
                 prior_case(unit - 8)
-            else:
+            elif unit < 20:
                 refusal_case(unit - 16)
+            else:
+                code_shape_refusal_case(unit - 20)
         except error:
             fp[unit] = 1
             print("FAIL nearest_centroid_plan fixture", unit, String(error))

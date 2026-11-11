@@ -1,9 +1,9 @@
 Mojolearn NMF native test lane (2026-11-10)
 
-Dependency9d39093e14 adds typed API/provider. Generic provider Self.E/D/RES/X
-repair7a4a338545 is adopted; local adoption commits are history, not picks.
+Dependency 9d39093e14 adds typed API/provider. Generic provider Self.E/D/RES/X
+repair 7a4a338545 is adopted; local adoption commits are history, not picks.
 
-First chunk:28 native wire/regularization/state fixtures
+First chunk: 28 native wire/regularization/state fixtures
   nmf_contract_suite.run_checks(), standalone nmf_contract.mojo and pixi task.
   Distinct fields cover five input/output addresses, typed NmfArgs Float64
   options, Boolean combinations, returned integer/Float64 spans, inverse
@@ -18,8 +18,49 @@ RUN OWED
   mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/nmf_contract.mojo
   These NMF fixtures have not compiled or executed. Source/TOML/JSON and
   whitespace checks only. No lane compiler/tests/boxes/timing/identity runs.
-  Actual CPU/GPU numerical provider fixtures and forthcoming options/scratch
-  state coverage follow; existing Python admission/clone seams remain.
+  Subsequent chunks below add actual provider and options/scratch coverage;
+  all NMF execution remains owed. Python admission/clone seams remain.
 
 No kernel/default/experimental define changes. Nothing removed: this is new
 coverage of new typed API/state, not a replacement for Python boundaries.
+
+Second chunk: 20 typed options/rank-two shape/owned scratch fixtures.
+  Dependency bb172e710e. Empty dimensions, negative/count/byte overflow,
+  complete initialized Float32 storage and move-only owner lifetime.
+  check-native-nmf-state; nmf_state_suite.run_checks(). Uncompiled/unrun.
+  No Python tests removed: these are new internal state contracts.
+
+Third chunk: 20 CPU + 20 GPU actual NMF provider fixtures.
+  nmf_native_{cpu,gpu}_suite.run_checks(), standalone wrappers and pixi tasks.
+  Original public input 6x3, rank 2, max_iter 3, seed 7, tol 1e-4.
+  All five initialization modes x CD/MU, fixed-H CD/MU, custom MU beta 1/0,
+  NaN, negative, unsupported CD beta and Int32 dimension refusal. Native
+  inverse writes every NMFScratch word and sees changed native components.
+  Independent Float64 matrix product and defining beta-divergence equations;
+  2e-4 relative/absolute bounds, zero/custom-one objective improvement,
+  nonnegative/finite factors, immutable source/initial factors, output guards.
+  No solver copied into the oracle; no product kernel/default changes.
+  Dependencies 9d39093e14 + 7a4a338545 + bb172e710e.
+  CPU independent graphs parallel; GPU graphs ordered on one physical GPU
+  because shared DeviceContext submissions cannot overlap. GPU kernels and
+  oracle cells remain parallel. Every owner pinned through raw-address use.
+
+Separately scoped ordered NC numerical-only wrapper:
+  nearest_centroid_numeric_gpu_suite.run_checks(): existing fixture units
+  0..7 plus empty_case units 0..2. Original data/assertions unchanged.
+  Dependency 9b23755391 (root b0d28426b8), existing NC suite not edited.
+  Bundle with NMF GPU to avoid an extra compile. The existing parallel NC
+  suite and device concurrency suite still retain their recorded Metal
+  failures; this wrapper cannot establish concurrent submission safety.
+
+RUN OWED for these new suites only (no lane execution):
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/nmf_native_cpu.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/nmf_native_gpu.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/nearest_centroid_numeric_gpu.mojo
+  Static AST/TOML/JSON/whitespace checks and source review only.
+
+Deletion split: none in this NMF chunk. The four Python files containing NMF
+exercise public storage/admission/parameter/sklearn seams; retain them.
+The existing public inverse numeric assertion proves rebound Python storage
+is read and cannot be replaced by native-only storage coverage.
+No performance or cross-vendor identity claim. No A/B define or box job.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The former Python paths of LocalOutlierFactor, NearestCentroid and
-KNNImputer (python/mojolearn/_expansion_neighbors.py before lane
+"""The remaining former Python paths of NearestCentroid and KNNImputer
+(python/mojolearn/_expansion_neighbors.py before lane
 native-neighbors-20261024 made each public method one native call), frozen
 as subclasses so the tests compare the native door with them bit for bit.
 Test-only oracle; never imported by the package."""
@@ -8,185 +8,12 @@ import os
 
 from mojolearn import _portable_math as math
 from mojolearn._array import Array
-from mojolearn._buffer import addr, addr_ro, empty, zeros
+from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn._lazy_out import _empty_out
-# No available_if: the native attribute owner of the product base class
-# serves only its own connected descriptors, so a subclass descriptor is
-# refused ("Python attribute descriptor requires a native owner"); the
-# oracle methods guard novelty in their bodies instead.
 from mojolearn._expansion_neighbors import (
-    LocalOutlierFactor, NearestCentroid, KNNImputer, _f32, _i32, _f32_scalar, _p2m_sort_rows,
-    _class_array, _argmax_labels, _accuracy, _U_IDENTITY, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
+    NearestCentroid, KNNImputer, _f32, _i32, _f32_scalar,
+    _class_array, _argmax_labels, _accuracy, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
 )
-
-
-class LegacyLocalOutlierFactor(LocalOutlierFactor):
-    def _check_params(self):
-        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
-            raise NotImplementedError(
-                f"LocalOutlierFactor: metric={self.metric!r} (p={self.p!r}) is not implemented; "
-                "euclidean (or minkowski with p=2) only")
-        if self.metric_params:
-            raise NotImplementedError("LocalOutlierFactor: metric_params is not implemented")
-        if self.contamination != "auto" and not (0.0 < float(self.contamination) <= 0.5):
-            raise ValueError("contamination must be 'auto' or in (0, 0.5]")
-        if int(self.n_neighbors) < 1:
-            raise ValueError("n_neighbors must be >= 1")
-
-    def fit(self, X, y=None):
-        """Fit the model on the training data.
-
-        Parameters
-        ----------
-        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
-            Training data; at least 2 samples. Sparse input is densified.
-        y : None
-            Ignored.
-
-        Returns
-        -------
-        self : LocalOutlierFactor
-            The fitted estimator.
-        """
-        self._check_params()
-        X = _f32(X)
-        n, d = X.shape
-        if n < 2:
-            # scikit-learn's check_array wording (ensure_min_samples=2)
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
-        k = min(int(self.n_neighbors), n - 1)
-        dist, idx = self._knn(X, X, k, True)
-        lrd = _empty_out((n,), "<f4")
-        self._op("lof_lrd", [(dist, 0), (idx, 0), (dist, 0), (lrd, 1)], (k, n, n))
-        score = _empty_out((n,), "<f4")
-        self._op("lof_score", [(idx, 0), (lrd, 0), (lrd, 0), (score, 1)], (k, n, n))
-        self._fit_X, self._fit_dist, self._lrd = X, dist, lrd
-        self.n_neighbors_ = k
-        self.n_features_in_ = d
-        self.n_samples_fit_ = n
-        self.negative_outlier_factor_ = score
-        if self.contamination == "auto":
-            self.offset_ = -1.5
-        else:
-            q = 100.0 * float(self.contamination)
-            self.offset_ = _f32_scalar(self._sorted_percentile(score, q))
-        return self
-
-    def _sorted_percentile(self, score, q):
-        """numpy.percentile (method 'linear') of score with the sort on the device (`p2m_row_sort`
-        over one row: ascending by value, ties by position, as `sorted`);
-        only the two order statistics it reads come back to Python."""
-        n = score.shape[0]
-        srt = _p2m_sort_rows(self, _i32([0, n], "indptr"), zeros((n,), "<i4"), score)[1]
-        pos = (q / 100.0) * (n - 1)
-        lo = math.floor(pos)
-        hi = min(lo + 1, n - 1)
-        t = pos - lo
-        a, b = srt[lo], srt[hi]
-        diff = b - a
-        return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
-
-    # Plain method: the body refuses novelty=True itself (see the check below).
-    def fit_predict(self, X, y=None):
-        """Fit the model and label the training samples.
-
-        Available only with ``novelty=False``; otherwise raises
-        ``AttributeError``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : None
-            Ignored.
-
-        Returns
-        -------
-        labels : Array of shape (n_samples,), int64
-            -1 for outliers, 1 for inliers.
-        """
-        if self.novelty:
-            raise AttributeError("fit_predict is not available when novelty=True; use predict on new data")
-        self.fit(X)
-        off = self.offset_
-        score = self.negative_outlier_factor_
-        lab = empty((score.size,), "<i4")
-        if score.size:
-            self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
-        return lab.astype("<i8")
-
-    def _novelty(self, what):
-        if not self.novelty:
-            raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
-
-    # Plain method: self._novelty refuses novelty=False itself.
-    def score_samples(self, X):
-        """Negative local outlier factor of new samples.
-
-        Available only with ``novelty=True``; otherwise raises
-        ``AttributeError``. Lower scores are more abnormal.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_queries, n_features)
-            New samples.
-
-        Returns
-        -------
-        scores : Array of shape (n_queries,), float64
-        """
-        self._novelty("score_samples")
-        Q = _f32(X)
-        k, nf = self.n_neighbors_, self.n_samples_fit_
-        dist, idx = self._knn(Q, self._fit_X, k, False)
-        nq = Q.shape[0]
-        lrd = _empty_out((nq,), "<f4")
-        self._op("lof_lrd", [(dist, 0), (idx, 0), (self._fit_dist, 0), (lrd, 1)], (k, nq, nf))
-        score = _empty_out((nq,), "<f4")
-        self._op("lof_score", [(idx, 0), (self._lrd, 0), (lrd, 0), (score, 1)], (k, nq, nf))
-        return score
-
-    # Plain method: self._novelty refuses novelty=False itself.
-    def decision_function(self, X):
-        """Shifted outlier score of new samples: ``score_samples(X) - offset_``.
-
-        Available only with ``novelty=True``. Negative values are outliers.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_queries, n_features)
-            New samples.
-
-        Returns
-        -------
-        scores : Array of shape (n_queries,), float64
-        """
-        self._novelty("decision_function")
-        return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
-
-    # Plain method: self._novelty refuses novelty=False itself.
-    def predict(self, X):
-        """Label new samples as inliers or outliers.
-
-        Available only with ``novelty=True``; otherwise raises
-        ``AttributeError``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_queries, n_features)
-            New samples.
-
-        Returns
-        -------
-        labels : Array of shape (n_queries,), int64
-            -1 for outliers, 1 for inliers.
-        """
-        self._novelty("predict")
-        dec = self.decision_function(X)
-        lab = empty((dec.size,), "<i4")
-        if dec.size:
-            self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
-        return lab.astype("<i8")
 
 
 class LegacyNearestCentroid(NearestCentroid):

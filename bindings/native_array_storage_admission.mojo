@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, native_mapping_string_keys
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.p3_array_arena_records import (
     P3_NATIVE_ARRAY_STORAGE_LAYOUT, P3_DICT_ARRAY_STORAGE,
@@ -98,4 +99,14 @@ def array_storage_address(value: PythonObject) raises -> PythonObject:
     # full slot inventory, independent of mutable Python class attributes.
     var module = native_loaded_module("mojolearn._array")
     var context = py_get(py_fields(module), "_ARRAY_CONTEXT")
+    # Module admission pins the context object, not the keys inside its
+    # mutable dictionary. Admit those before a keyed read can compare a
+    # colliding foreign key. The shared mutation stamp avoids a repeated walk.
+    var b = native_loaded_module("builtins")
+    if py_type(context) is not b.dict:
+        raise Error("TypeError: Array native address context requires an exact dictionary")
+    if not dict_keys_admitted(context):
+        if not native_namespace_string_keys(context._obj_ptr, b.str):
+            raise Error("TypeError: Array native address context requires native string keys")
+        dict_keys_admit(context)
     return array_storage_address(value, context["array_class"], context["from_buffer_slots"])

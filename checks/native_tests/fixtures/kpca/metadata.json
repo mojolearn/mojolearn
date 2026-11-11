@@ -1,0 +1,795 @@
+{
+  "source": "test_x_neighbors_sanity.py::_data/test_kernel_pca/test_kernel_pca_options",
+  "train_shape": [
+    80,
+    6
+  ],
+  "query_shape": [
+    20,
+    6
+  ],
+  "seeds": [
+    0,
+    3
+  ],
+  "first_five_rows_scale": 6,
+  "components": 3,
+  "degree": 3,
+  "coef0": 1.0,
+  "default_gamma": 0.16666666666666666,
+  "precomputed_gamma": 0.2,
+  "small_analytic": {
+    "positive2": {
+      "global_mean": 2.25,
+      "eigenvalues": [
+        0.5,
+        0.0
+      ]
+    },
+    "signed2": {
+      "global_mean": 0.25,
+      "eigenvalues": [
+        4.5,
+        0.0
+      ]
+    },
+    "zero2": {
+      "global_mean": 0.0,
+      "eigenvalues": [
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "numpy": "2.5.2",
+  "workers": 10,
+  "oracle": "Independent Float64 NumPy kernel definitions, global mean centering and eigh; analytic tiny eigenvalues. No product/legacy code execution.",
+  "generator_sha256": "627277b000d9a6d37aebc93f01e2842ae9e5fe2c56c9c77a8af93bcfab64f8f6",
+  "files": [
+    {
+      "file": "rbf-source.f32",
+      "shape": [
+        80,
+        6
+      ],
+      "sha256": "245d1e5ae43da229b2b05e67f926784faa3bba88be295a35c94374c860b72937"
+    },
+    {
+      "file": "rbf-query.f32",
+      "shape": [
+        20,
+        6
+      ],
+      "sha256": "da2c5112c2d821750426c05f1a80782efdd55b86fff53eafb3d7fe3d72496d4f"
+    },
+    {
+      "file": "rbf-kernel.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "a5d2ac5178b86f54be99444efae966b76fea9ab958442e3ffe2ebc17d1ee5395"
+    },
+    {
+      "file": "rbf-query-kernel.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "c56ee70854377a5a3239370b120674e164e64c54f486148a58786d0aa456b36c"
+    },
+    {
+      "file": "rbf-columns.f64",
+      "shape": [
+        80
+      ],
+      "sha256": "b3ae62437a01de13c6eb2f1e3ba73ccbaa50acef6e92720ff9f5fded26667848"
+    },
+    {
+      "file": "rbf-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "54f6547d8657bce92440a8241b476d73534b58aa09fd43c83629ba886aa4716c"
+    },
+    {
+      "file": "rbf-centered.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "9c3f9ba43055d7e5d0d7d8d6a125bf52746f9cb4b7f07cddfcc39660bac6ee07"
+    },
+    {
+      "file": "rbf-query-centered.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "e1ed453cd6072664156b72760a47781bf048268ea2142745d0ce84fc15b605ed"
+    },
+    {
+      "file": "rbf-values.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "07a6ee15ff080ef70700e084a7b77df88e8027bc9d2ce1d905a6634180d2d816"
+    },
+    {
+      "file": "rbf-vectors.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "f72bb570f9be6400429b9727d314d4458d68ef8ea284a8d1af2998eec28a0998"
+    },
+    {
+      "file": "rbf-fit-scores.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "59a7831df01f9dd241d384202d003214ee1347939687cd9a0b8f105a0ae69321"
+    },
+    {
+      "file": "rbf-query-scores.f64",
+      "shape": [
+        20,
+        3
+      ],
+      "sha256": "9f68a0022605afc8ebbea49ba83bddce37b60fb1d6f3a178cc46c27d05f57ecd"
+    },
+    {
+      "file": "linear-source.f32",
+      "shape": [
+        80,
+        6
+      ],
+      "sha256": "245d1e5ae43da229b2b05e67f926784faa3bba88be295a35c94374c860b72937"
+    },
+    {
+      "file": "linear-query.f32",
+      "shape": [
+        20,
+        6
+      ],
+      "sha256": "da2c5112c2d821750426c05f1a80782efdd55b86fff53eafb3d7fe3d72496d4f"
+    },
+    {
+      "file": "linear-kernel.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "22c2bb81a9d7cb6538e0443c591597b7e559f52e9b9394e9aeaeaaa6778db511"
+    },
+    {
+      "file": "linear-query-kernel.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "1fe332cce0a0654da1538a7452bebbbccacf011fd96487ae899c2a72ee2fd340"
+    },
+    {
+      "file": "linear-columns.f64",
+      "shape": [
+        80
+      ],
+      "sha256": "a9ae690edddcbf16f22d5279bb1a830ff37588d6f68882a1ad7a33930d497ab8"
+    },
+    {
+      "file": "linear-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "dd3d92494c1bf5246536c715b27e019bf9be1d89612dbcc2cae3df5ca01e4541"
+    },
+    {
+      "file": "linear-centered.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "bcf83d985ad159062ff2590255eeca6d160e1814e78081fa89d7c364b5074d41"
+    },
+    {
+      "file": "linear-query-centered.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "fe3c9a1442b9b287e092e34c09ccd27567d7e2950b24cf336b41ed68dea2a3bf"
+    },
+    {
+      "file": "linear-values.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "1438b62985c1a158640ab64bca8eac42de406e808848fe6fff548d60b0efdc3a"
+    },
+    {
+      "file": "linear-vectors.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "7fadf0db4ebcb1948a27a2fd6ba06562921b2493405e25a498614c49ad00bd24"
+    },
+    {
+      "file": "linear-fit-scores.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "f0db36d3122fff24708cb0fd62909fb47a57b11a512a1b0ac34f1bdc5fa80463"
+    },
+    {
+      "file": "linear-query-scores.f64",
+      "shape": [
+        20,
+        3
+      ],
+      "sha256": "2fd0f46e39c5d3c6ce6ea8499f536f529cb0b29e3a7fd193bd6dae94102c5e41"
+    },
+    {
+      "file": "poly-source.f32",
+      "shape": [
+        80,
+        6
+      ],
+      "sha256": "245d1e5ae43da229b2b05e67f926784faa3bba88be295a35c94374c860b72937"
+    },
+    {
+      "file": "poly-query.f32",
+      "shape": [
+        20,
+        6
+      ],
+      "sha256": "da2c5112c2d821750426c05f1a80782efdd55b86fff53eafb3d7fe3d72496d4f"
+    },
+    {
+      "file": "poly-kernel.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "3419f2f9c042349a7b51c1e022ade388c4aaeeb2afe0a6ddb822bb9e1748c8b8"
+    },
+    {
+      "file": "poly-query-kernel.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "309d1f3d45054be6389c18b4ae1c714f042659802a06474f04dd389130e62def"
+    },
+    {
+      "file": "poly-columns.f64",
+      "shape": [
+        80
+      ],
+      "sha256": "33fd6e3506775177356c158f7b232470db3b781904e1031c46b4db5d1c45be92"
+    },
+    {
+      "file": "poly-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "56bfec12b2aa64275dfbfb9cc3ce3e0104c79717aaf7edac1d696730444ba9df"
+    },
+    {
+      "file": "poly-centered.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "c8657d5d8624344f7789b30aa7ada417d359419673c018d7e4ef27dd86fa52db"
+    },
+    {
+      "file": "poly-query-centered.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "8acf4038e99b5d31af25c840a40064cd1aee1bb7578d42a990f2b9158642232b"
+    },
+    {
+      "file": "poly-values.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "68b18a6a6c2e28194e391801c36722746a15beeb2dc3770b45162e0a0194a4a7"
+    },
+    {
+      "file": "poly-vectors.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "ff5898cb22867f42bd9258ce6e89ef70d74dad55e511f6ea6749756abe8dc5df"
+    },
+    {
+      "file": "poly-fit-scores.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "bd4730b48210b2a427aff9a0dac2f82018e814c8d8d9dbd073211354b0f21090"
+    },
+    {
+      "file": "poly-query-scores.f64",
+      "shape": [
+        20,
+        3
+      ],
+      "sha256": "a27b67a9592813485dad47e2b419063528718f33705ae732477fbc7873a5ff34"
+    },
+    {
+      "file": "cosine-source.f32",
+      "shape": [
+        80,
+        6
+      ],
+      "sha256": "245d1e5ae43da229b2b05e67f926784faa3bba88be295a35c94374c860b72937"
+    },
+    {
+      "file": "cosine-query.f32",
+      "shape": [
+        20,
+        6
+      ],
+      "sha256": "da2c5112c2d821750426c05f1a80782efdd55b86fff53eafb3d7fe3d72496d4f"
+    },
+    {
+      "file": "cosine-kernel.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "42081f85ef9de19c3881a63887666c9882efcd4c875b28c9ba7cc2aa35357a10"
+    },
+    {
+      "file": "cosine-query-kernel.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "a2b2a98e3e8c99fb1ada79e2981d2a9614d016234c0ffecdca8c12f07000db06"
+    },
+    {
+      "file": "cosine-columns.f64",
+      "shape": [
+        80
+      ],
+      "sha256": "e0f22cb7e738debfa9ee72e18f6f885ec0ce44db70f0e4958794e5a2f9a15597"
+    },
+    {
+      "file": "cosine-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "7a5a51381731d8518f6062d4055a98998be453212ee43e6e56a03c75a59ab516"
+    },
+    {
+      "file": "cosine-centered.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "3e4ec299bd8293fe702c110ed6c8fcb3a087189a20f938249ce100952f5f37a5"
+    },
+    {
+      "file": "cosine-query-centered.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "5aedc87a26db80e028c8df624976e3b9227fef25657b0162719b4ded9e260465"
+    },
+    {
+      "file": "cosine-values.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "e25e11267f34163127cfb36b295759185897179ad54532e3e771b3c1316cb6b1"
+    },
+    {
+      "file": "cosine-vectors.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "897e770aa47b9c7505752374baa583415ed0c7b015b150e1e57a928a1f9239e0"
+    },
+    {
+      "file": "cosine-fit-scores.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "aef7bb2a795996ed29989c7bfc1b65df4f4488680762afd0574d86bf6c058b18"
+    },
+    {
+      "file": "cosine-query-scores.f64",
+      "shape": [
+        20,
+        3
+      ],
+      "sha256": "d89269d1028126ec3c2164f1bf68b95c785cf5f7b6ecc2dacb51780232c71be8"
+    },
+    {
+      "file": "rbf02-source.f32",
+      "shape": [
+        80,
+        6
+      ],
+      "sha256": "245d1e5ae43da229b2b05e67f926784faa3bba88be295a35c94374c860b72937"
+    },
+    {
+      "file": "rbf02-query.f32",
+      "shape": [
+        20,
+        6
+      ],
+      "sha256": "da2c5112c2d821750426c05f1a80782efdd55b86fff53eafb3d7fe3d72496d4f"
+    },
+    {
+      "file": "rbf02-kernel.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "6d8159fa083c5d259a03ee736e39d05a4f3342a2669963243b6bca425ba0fe03"
+    },
+    {
+      "file": "rbf02-query-kernel.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "120e8a1daee348bcda865279e7336573bc1d287adaaa7f3cef9c8b289837ddbb"
+    },
+    {
+      "file": "rbf02-columns.f64",
+      "shape": [
+        80
+      ],
+      "sha256": "3662116207435c5e0a829634ab51ef01c5c3ddabd7d19913af86d75a49650372"
+    },
+    {
+      "file": "rbf02-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "2d574cda97309d9f3e03fc6438d27e602127c6282e1414d48663e016ee5a793b"
+    },
+    {
+      "file": "rbf02-centered.f64",
+      "shape": [
+        80,
+        80
+      ],
+      "sha256": "df33ef3fc86197287665f7aa5702ac4c52f0cac36fd96fb341e0b26bf1e9b36b"
+    },
+    {
+      "file": "rbf02-query-centered.f64",
+      "shape": [
+        20,
+        80
+      ],
+      "sha256": "2e03a21f6399db3387fc937b1e39e568889b17a65b3ae45fece3f1492c7f5290"
+    },
+    {
+      "file": "rbf02-values.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "cc66f673b31e04c7df54c173df5120212f47a5cd034a5064860ec91abfd21475"
+    },
+    {
+      "file": "rbf02-vectors.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "653e65bc059dc736e58528887ce008e123ff7216f84efdc01dd0556f663ebff2"
+    },
+    {
+      "file": "rbf02-fit-scores.f64",
+      "shape": [
+        80,
+        3
+      ],
+      "sha256": "43321a609a4b301140eb792936400627356bdfaaf2ffee19302c5151f0054dfc"
+    },
+    {
+      "file": "rbf02-query-scores.f64",
+      "shape": [
+        20,
+        3
+      ],
+      "sha256": "a3b1d3adafeeabc65c21b8a81c11fb5c3fbffbc5324dfbef077a57f4be6b53d4"
+    },
+    {
+      "file": "positive2-source.f32",
+      "shape": [
+        2,
+        1
+      ],
+      "sha256": "b9c80b5adeca450753a16950c3cc655d271f7bef7a485bc83f112b72fef21d37"
+    },
+    {
+      "file": "positive2-query.f32",
+      "shape": [
+        2,
+        1
+      ],
+      "sha256": "acbbba5779bd83c4c36e51b610a9aaf6a28ee8699b9cd8fa6b8531595067310b"
+    },
+    {
+      "file": "positive2-kernel.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "26acd8a00aa82e9d4309c37fc4b55a4535713df00183d869ee438d145cc3195e"
+    },
+    {
+      "file": "positive2-query-kernel.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "6fa42a8a3592019dc5d0366e5a3b76efe87ac6b310b479b45679c907f6c1ffce"
+    },
+    {
+      "file": "positive2-columns.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "5035255a2937e8e842cd1dacdbb60b2524baa511a801677eb179cf3e892b6ea6"
+    },
+    {
+      "file": "positive2-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "a3e247ec83d3cca7577dc8f88278fa35f8cd048b7b13c75e597f0e452582e00c"
+    },
+    {
+      "file": "positive2-centered.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "24adb32d8eedcb47b79c64077958a9791e657481fc30f92fa5f7b8270d12cffe"
+    },
+    {
+      "file": "positive2-query-centered.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "407aed9b71ac4afd6becbc6ed4417ed004f83a1f7d9015ab264792aa7e886737"
+    },
+    {
+      "file": "positive2-values.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "898cbf30b93f86082996bca1fad83351f2040d030832bf45ff79f0720efa0fba"
+    },
+    {
+      "file": "positive2-vectors.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "127c9f22213bd25bdf4d59080d6ec79357bb20de20f68bf6d255dcfdc3d059ec"
+    },
+    {
+      "file": "positive2-fit-scores.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "c8d274b8886eb80d2979fcc7f2908cd3fe1b0e09bac21db5be909d645823c060"
+    },
+    {
+      "file": "positive2-query-scores.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "3b24b714e250eabe236b9a52cb9b841ea6e93ced5276a9fbe5dc2f377db7714c"
+    },
+    {
+      "file": "signed2-source.f32",
+      "shape": [
+        2,
+        1
+      ],
+      "sha256": "29f16f743de29d3d29fb51bb15c62b3592bdfcf27c18836a90e16e2b1063b01b"
+    },
+    {
+      "file": "signed2-query.f32",
+      "shape": [
+        2,
+        1
+      ],
+      "sha256": "acbbba5779bd83c4c36e51b610a9aaf6a28ee8699b9cd8fa6b8531595067310b"
+    },
+    {
+      "file": "signed2-kernel.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "0aed943c85b58f689c92a123df734cfe1e7640b21167cb311e8cb7da58f212d0"
+    },
+    {
+      "file": "signed2-query-kernel.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "f956eb98140a812868852a600a8b0cd6bc3152eb881ac4298ba32be699eb0b7c"
+    },
+    {
+      "file": "signed2-columns.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "b75ba3b875def5d2f34361fcc7cbea9b45aa3f9ef590f96ad71c90a955800533"
+    },
+    {
+      "file": "signed2-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "272f78036db6721f7cf7444315e5f6360426d14c3d446d6ae8a89ef70d134002"
+    },
+    {
+      "file": "signed2-centered.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "649b9bf907d4c855d044b1310dd787507b1e43bf0c79465dd59e36ee873144e2"
+    },
+    {
+      "file": "signed2-query-centered.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "ed9722659d4243f5d3fd9e2647f88d2bfcee5bbbb16cba53c51724e5b600cc52"
+    },
+    {
+      "file": "signed2-values.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "787923055d981d44fc9834ca000dfa9f9ec48aef51728af07b788d9a1be4274d"
+    },
+    {
+      "file": "signed2-vectors.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "82f23eee5957b150c3248e5cffdcf7e1314c1da778fea91b7d8e51c0e800f2c1"
+    },
+    {
+      "file": "signed2-fit-scores.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "d4978b637578374ff16aed53bf77f86205863426ec4e130e7b80d41970b14d17"
+    },
+    {
+      "file": "signed2-query-scores.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "3a2891f1707dd8b7783013f9911289a3186faba6e77b31ea383e59c56531c59e"
+    },
+    {
+      "file": "zero2-source.f32",
+      "shape": [
+        2,
+        1
+      ],
+      "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+    },
+    {
+      "file": "zero2-query.f32",
+      "shape": [
+        2,
+        1
+      ],
+      "sha256": "acbbba5779bd83c4c36e51b610a9aaf6a28ee8699b9cd8fa6b8531595067310b"
+    },
+    {
+      "file": "zero2-kernel.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    },
+    {
+      "file": "zero2-query-kernel.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    },
+    {
+      "file": "zero2-columns.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb"
+    },
+    {
+      "file": "zero2-total.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+    },
+    {
+      "file": "zero2-centered.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    },
+    {
+      "file": "zero2-query-centered.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    },
+    {
+      "file": "zero2-values.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "374708fff7719dd5979ec875d56cd2286f6d3cf7ec317a3b25632aab28ec37bb"
+    },
+    {
+      "file": "zero2-vectors.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "7b38b86d9a7e623764dc234b5d8aa67afbf388f139b4dc5a266ed0b4b7a258ea"
+    },
+    {
+      "file": "zero2-fit-scores.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    },
+    {
+      "file": "zero2-query-scores.f64",
+      "shape": [
+        2,
+        2
+      ],
+      "sha256": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+    }
+  ],
+  "execution": "Preparation only; not compilation/runtime/identity/performance evidence."
+}

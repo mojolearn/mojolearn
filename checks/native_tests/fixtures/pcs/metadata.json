@@ -1,0 +1,23 @@
+{
+  "origin": "test_x_neighbors_sanity.py::_data/test_polynomial_count_sketch",
+  "shape": [
+    60,
+    6
+  ],
+  "seed": 0,
+  "first_five_rows_scale": 6,
+  "parameters": {
+    "degree": 3,
+    "gamma": 0.5,
+    "coef0": 1,
+    "components": 32,
+    "draw_seed": 7
+  },
+  "rtol": 0.001,
+  "atol": 0.001,
+  "numpy": "2.5.2",
+  "sha256": "f2829d2082c898c5ff19de0236dbed545ef5a9bc64af7b3d4038dac2ea1933ae",
+  "generator_sha256": "ffc8d59e764cc4953deb844767a65b581e182f0b2bb728e1cbf45acc723c074e",
+  "oracle": "Native Float64 exhaustive feature-monomial expansion conditioned on actual drawn hashes; no count sketches or convolution recurrence.",
+  "execution": "Input preparation only; no Mojolearn import, compile, test, timing or identity execution."
+}

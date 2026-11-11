@@ -1,0 +1,22 @@
+{
+  "family": "KernelDensity",
+  "entry": "checks/native_tests/kde_state.mojo",
+  "suite": "kde_state_suite.run_checks",
+  "fixtures": 30,
+  "dependencies": [
+    "f052c4918c",
+    "78be03c73b"
+  ],
+  "execution": "authored; uncompiled/unrun; root bundle owed",
+  "coverage": {
+    "0-12": "complete exact cache key fields, Float64 distinctions lost by Float32, signed zeros/NaN equality, embedded NUL/non-BMP native strings, independent copies",
+    "13-18": "valid handle0 and >2^53 integer handles, invalid-1, owner/provider/key mismatch, matching does not consume",
+    "19-22": "take exactly once, invalidation, no mutation of other state, move retains driver/identity",
+    "23-29": "complete metadata length/word comparison, empty words, owned copy independence and move"
+  },
+  "lifetime": "Pure state has no destructor callback. Fake handles never reach real release/query/prepare. Driver mock permits mode metadata only.",
+  "parallel": "Independent cases use host_parallelize.",
+  "python_removed": 0,
+  "product_changes": false,
+  "limitations": "State metadata coverage only, not actual resident buffer/registry/workspace behavior; numerical and owning-lease fixtures follow."
+}
