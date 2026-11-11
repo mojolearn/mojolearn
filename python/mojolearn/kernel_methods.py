@@ -98,15 +98,6 @@ _NEEDS_GAMMA = frozenset({KERNEL_POLYNOMIAL, KERNEL_RBF, KERNEL_SIGMOID, KERNEL_
 _native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_codes=dict(_MODE_CODE))
 
 
-def _real(v, name, where):
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        raise TypeError(
-            f"mojolearn {where}: {name} must be a real number, got "
-            f"{type(v).__name__}"
-        )
-    return float(v)
-
-
 class _KernelMethodBase(NumericModeMixin):
     _BINDING = "_mojolearn_kernel_methods"
     _WHERE = "kernel method"
