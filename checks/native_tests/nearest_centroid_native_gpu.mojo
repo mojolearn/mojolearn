@@ -4,4 +4,4 @@ from x_neighbors.native_descriptor_device import xn_native_v1
 
 
 def main() raises:
-    run_checks[xn_native_v1]()
+    run_checks(xn_native_v1)

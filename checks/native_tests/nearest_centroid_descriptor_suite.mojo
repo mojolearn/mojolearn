@@ -12,7 +12,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from checks.native_tests.nearest_centroid_plan_suite import require
 
 
-def fixture[Entry: NativeDescriptorCall](unit: Int) raises:
+def fixture(entry: NativeDescriptorCall, unit: Int) raises:
     var euclidean = unit % 2 == 0
     var split = (unit // 2) % 2 != 0
     var threshold = 0.0 if unit < 4 else 0.3
@@ -22,7 +22,7 @@ def fixture[Entry: NativeDescriptorCall](unit: Int) raises:
     var stats = List[Float32](length=2, fill=0)
     var centers = List[Float32](length=4, fill=0)
     var deviations = List[Float32](length=4, fill=0)
-    var driver = NcDriver(Entry)
+    var driver = NcDriver(entry)
     var plan = NcFitPlan(8, 2, 2, euclidean, split)
     require(len(plan.centroids) == 0 and len(plan.dataset_centroid) == 0, "centroid scratch allocated before priors")
     plan.count(driver, Int(labels.unsafe_ptr()))
@@ -72,7 +72,7 @@ def fixture[Entry: NativeDescriptorCall](unit: Int) raises:
     _ = plan^
 
 
-def empty_case[Entry: NativeDescriptorCall](unit: Int) raises:
+def empty_case(entry: NativeDescriptorCall, unit: Int) raises:
     var words = List[Float32](length=4, fill=1)
     var codes = List[Int32](length=1, fill=-1)
     var empty = List[Float32]()
@@ -81,7 +81,7 @@ def empty_case[Entry: NativeDescriptorCall](unit: Int) raises:
     # Input addresses remain non-null, as an empty NumPy view may be; the
     # private empty output scratch must retain the old descriptor refusal.
     var request = NcQueryPlan(address, address, address, address, 0, 2, 2)
-    var driver = NcDriver(Entry)
+    var driver = NcDriver(entry)
     var refused = False
     try:
         if unit == 0:
@@ -96,15 +96,15 @@ def empty_case[Entry: NativeDescriptorCall](unit: Int) raises:
     _ = words^
 
 
-def run_checks[Entry: NativeDescriptorCall]() raises:
+def run_checks(entry: NativeDescriptorCall) raises:
     var failures = List[Int](length=11, fill=0)
     var fp = failures.unsafe_ptr()
-    def run(unit: Int) {imm fp}:
+    def run(unit: Int) {imm fp, imm entry}:
         try:
             if unit < 8:
-                fixture[Entry](unit)
+                fixture(entry, unit)
             else:
-                empty_case[Entry](unit - 8)
+                empty_case(entry, unit - 8)
         except error:
             fp[unit] = 1
             print("FAIL nearest_centroid_native fixture", unit, String(error))
