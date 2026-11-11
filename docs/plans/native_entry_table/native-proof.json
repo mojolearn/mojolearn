@@ -1,0 +1,41 @@
+{
+  "status": "authored; root compilation and execution pending",
+  "source_only": true,
+  "contract_cpu": {
+    "suite": "checks.native_tests.entry_table_contract_suite",
+    "cases": 20,
+    "parallel": "host_parallelize across 20 independent fixtures; first-publication and registry stress each have 16 independent units"
+  },
+  "gpu_contract_cases": 0,
+  "public_boundary": {
+    "file": "python/mojolearn/tests/test_linear_entry_table_boundary.py",
+    "definitions": 9,
+    "cases": 22,
+    "conditional_other_tier_cases": 2
+  },
+  "cross_image": {
+    "provider": "checks/native_tests/entry_table_image_provider.mojo",
+    "consumer": "checks/native_tests/entry_table_image_consumer.mojo",
+    "compile": "Root builds each separately with standard optimized --emit shared-lib, CPU column and identical flags. Do not combine the modules into one image.",
+    "controller": "Root-owned; use exact C Int=int64 and UInt64=uint64 signatures and retain both loaded images.",
+    "steps": [
+      "Load both images; provider state(37, &generation) returns index >= 0.",
+      "Before publication consumer query(index, generation, 3) returns -700 (missing table).",
+      "provider publish() returns 0; repeat publish() returns 0.",
+      "consumer query(index, generation, 3) returns 3703 via provider-only compiled body.",
+      "consumer hold(index, generation) returns 0; provider release(index, generation) returns 0.",
+      "consumer query(index, generation, 3) returns -700 (stale handle); held(4) returns 3704 (native owning lease).",
+      "provider state(91, &new_generation) reuses isolated index with a changed generation; new query(..., 5) returns 9105 while held(6) remains 3706.",
+      "schema_refusal() returns 1; release new handle, drop held lease; held(0) returns -700.",
+      "Separate fresh process: publish then layout_abort(); require nonzero process exit and SharedSlot mixed-binary diagnostic, not a returned success. Preserve full stderr."
+    ],
+    "concurrency": "Dependent lifecycle sequence is ordered; independent controls may run in separate processes. This proves no GPU shared-context concurrency.",
+    "runtime_result": null
+  },
+  "ownership_limits": "Generic ImageState owns its native list. LinearModelState only borrows buffer descriptors; the explicit-buffer-pin contract fixture retains coef/X/dst owners through replacement/release and native execution. A linear handle alone does not retain a Python exporter.",
+  "production_counters": false,
+  "python_tests_removed": 0,
+  "numerical_oracles_changed": 0,
+  "identity_run": false,
+  "performance_claim": false
+}

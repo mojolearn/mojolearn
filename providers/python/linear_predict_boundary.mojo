@@ -5,6 +5,7 @@ Inputs and outputs stay pinned here. RUN receives only buffer addresses,
 native dimensions/scalars, and the compiled descriptor endpoint.
 """
 from std.python import Python, PythonObject
+from std.memory import ArcPointer
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get
 from bindings.classical_arrays import classical_array, classical_address
@@ -12,7 +13,7 @@ from bindings.classical_validate import classical_check_x_snapshot, classical_es
 from bindings.admitted_input import admit_x
 from bindings.sequential_description import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
-from providers.python.linear_state_boundary import LinearStateOwner, linear_state_owner, linear_state_snapshot, linear_state_refresh
+from providers.python.linear_state_boundary import LinearStateOwner, linear_state_owner, linear_state_refresh
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
 from providers.python.linear_entry_boundary import linear_entry_connection
 
@@ -22,8 +23,10 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var fields = sequential_fields(model)
     var owner = linear_state_owner(model)
     var state = LinearModelState()
+    var prior = Optional[ArcPointer[LinearModelState]]()
     if owner is not None:
-        state = linear_state_snapshot(owner)
+        prior = LINEAR_STATES.acquire(owner.downcast_value_ptr[LinearStateOwner]()[].handle)
+        state = prior.value()[].copy()
     var coefficient_source = py_get(fields, "coef_")
     state.has_coef = coefficient_source is not None
     linear_state_require_coef(state)
@@ -44,9 +47,8 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     state.coef = Int(py=classical_address(coef))
     state.intercept = Float64(py=intercept_source)
     var dst = classical_array(rows, 0, context, wide)
-    owner = linear_state_refresh(model, owner, state, coef)
-    var handle = owner.downcast_value_ptr[LinearStateOwner]()[].handle.copy()
-    var lease = LINEAR_STATES.acquire(handle)
+    var native_call = linear_state_refresh(model, owner, state, coef, prior)
+    var lease = native_call.lease.copy()
     var connection = linear_entry_connection(entries)
     var key = connection.key.copy()
     var destination = Int(py=classical_address(dst))
@@ -64,6 +66,8 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
         _ = connection
         _ = owner
         _ = lease
+        _ = native_call
+        _ = prior
     return dst
 
 

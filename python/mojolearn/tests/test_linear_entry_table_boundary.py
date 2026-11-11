@@ -124,3 +124,39 @@ def test_handle_refresh_preserves_public_coefficient_replacement(cls):
     expected = (x @ model.coef_ + np.float32(0.5)).astype("f8")
     actual = entry(model, "predict_public", (x,), context)
     np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.parametrize("position", ["mode", "vendor"])
+def test_import_connector_refuses_python_metadata_before_callbacks(position):
+    from mojolearn import _backend
+    from mojolearn.tokenizer import _binding
+
+    module = _backend.binding("_mojolearn_estimators")
+    mode_entry = module.estimators_numeric_mode
+    vendor_entry = module.estimators_vendor
+    calls = []
+
+    def forbidden():
+        calls.append(position)
+        raise AssertionError("metadata callback executed")
+
+    if position == "mode":
+        mode_entry = forbidden
+    else:
+        vendor_entry = forbidden
+    with pytest.raises(TypeError, match="compiled metadata"):
+        _binding()._module.linear_entry_connection_v1(
+            0, mode_entry, vendor_entry, module.linear_fit_native_api_v1)
+    assert calls == []
+
+
+def test_import_connector_checks_compiled_owner_before_calling_metadata():
+    from mojolearn import _backend
+    from mojolearn.tokenizer import _binding
+
+    module = _backend.binding("_mojolearn_estimators")
+    # len is a real compiled builtin, but belongs to another exact module.
+    # Calling it without arguments would produce a different TypeError.
+    with pytest.raises(TypeError, match="share its compiled factory image"):
+        _binding()._module.linear_entry_connection_v1(
+            0, len, module.estimators_vendor, module.linear_fit_native_api_v1)
