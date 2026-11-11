@@ -20,7 +20,6 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_handle, neural_descriptor_info, neural_descriptor_construct, neural_descriptor_entry
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_is_array, classical_wrap_array, classical_dtype_str
 from core.cast_in import CAST_KIND_SIGNED
 from bindings.classical_attributes import classical_connect_numpy
@@ -48,6 +47,8 @@ from bindings.byte_perf_helpers import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
+from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
+from bindings.byte_lm_session_owner import ByteLmSessionOwner, byte_lm_session_owner_new
 from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_ABSENT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX,
     BG_CONFIG_PROFILE, BG_ATTENTION_ARM, BG_MEMORY_PROFILE, BG_STEP_GLUE_ARM,
@@ -215,16 +216,6 @@ def _mode(mut mods: NativeModules, context: PythonObject) raises -> PythonObject
     return mode
 
 
-def _entry(binding: PythonObject, name: String, required: Bool = True) raises -> PythonObject:
-    # CPU and GPU now expose real compiled modules with the same provider
-    # table. A Python proxy is no longer a valid runtime binding.
-    return neural_descriptor_entry(binding, name, required)
-
-
-def _has(binding: PythonObject, name: String) raises -> Bool:
-    return _entry(binding, name, False) is not None
-
-
 def _native_key(mode: PythonObject, context: PythonObject) raises -> ByteLmEntryKey:
     """The trainer table key (core/byte_lm_entry_table.mojo) of the image
     this tier connected: the first admitted vendor (the import context's
@@ -310,33 +301,6 @@ def _load(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises 
     return snapshot[0]
 
 
-def _provider(fields: PythonObject, binding: PythonObject) raises -> PythonObject:
-    # The resident session's provider: it admits the Python-owned session of
-    # this exact image and runs its native operations. Every byte LM image
-    # carries it; the `provider is None` Python-entry fallbacks are deleted
-    # (lane calltable-byte-lm).
-    var factory = _entry(binding, "byte_lm_trainer_api_v1", False)
-    if factory is None:
-        raise Error("ImportError: Byte-LM binding lacks the native trainer table; rebuild bindings/build_byte_lm.sh")
-    var provider = neural_descriptor_reuse(py_get(fields, "_native_provider"), factory,
-        "mojolearn.training.byte_lm.v1", 13)
-    py_setitem(fields, "_native_provider", provider)
-    return provider
-
-
-def _session_handle(fields: PythonObject, binding: PythonObject, provider: PythonObject) raises -> Int:
-    var session = fields["_native_session"]
-    var factory = _entry(binding, "byte_lm_native_session_handle_v1")
-    if py_get(fields, "_provider_session") is session and py_get(fields, "_provider_handle_factory") is factory and py_get(fields, "_provider_handle_owner") is provider:
-        return Int(py=fields["_provider_handle"])
-    var handle = neural_descriptor_handle(provider, factory, session)
-    py_setitem(fields, "_provider_session", session)
-    py_setitem(fields, "_provider_handle_factory", factory)
-    py_setitem(fields, "_provider_handle_owner", provider)
-    py_setitem(fields, "_provider_handle", handle)
-    return handle
-
-
 def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0,
                  length: Int = 0, release: Bool = False) raises -> Tuple[List[Int], List[Float64]]:
     var cfg = state["config"]
@@ -357,42 +321,48 @@ def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0
     return (ints^, floats^)
 
 
-def _native_execute(fields: PythonObject, binding: PythonObject, provider: PythonObject,
-                    operation: Int, addresses: PythonObject, shape: _Shape, state: PythonObject,
+def _session_call(session: PythonObject, operation: Int, addresses: List[Int], ints: List[Int],
+                  floats: List[Float64], release_gil: Bool = True) raises -> Int:
+    """One trainer operation on the resident session `session` (its
+    `ByteLmSessionOwner`) through the image's session entry
+    (core/byte_lm_entry_table_sessions.mojo): no provider object, handle
+    factory or Python entry lookup (lane byte-lm-sessions-native).
+    `addresses` are the descriptors after the session word. Computation
+    releases the GIL as the provider route did; callers that ran with it
+    held keep `release_gil=False`."""
+    var native = session.downcast_value_ptr[ByteLmSessionOwner]()
+    var key = native[].key()
+    var handle = native[].handle()
+    var result = 0
+    if release_gil:
+        with GILReleased(Python()):
+            result = byte_lm_resident_run(key, handle, operation, addresses, ints, floats)
+    else:
+        result = byte_lm_resident_run(key, handle, operation, addresses, ints, floats)
+    _ = session  # the owner (and so the handle) is live through the synchronous native call
+    return result
+
+
+def _native_execute(fields: PythonObject, operation: Int, addresses: List[Int], shape: _Shape, state: PythonObject,
                     train: Bool, batch: Int = 0, length: Int = 0, release: Bool = False) raises -> Int:
-    var session = fields["_native_session"]
-    var a = List[Int]()
-    a.append(_session_handle(fields, binding, provider))
-    for i in range(len(addresses)):  # small-loop(the admitted operation buffer descriptors)
-        a.append(Int(py=addresses[i]))
     var plan = _native_plan(shape, state, train, batch, length, release)
-    var result = neural_descriptor_execute(provider, operation, a, plan[0], plan[1])
-    _ = session  # owner is live through the synchronous native call
-    _ = binding
-    return result
+    return _session_call(fields["_native_session"], operation, addresses, plan[0], plan[1])
 
 
-def _native_execute_words(fields: PythonObject, binding: PythonObject, provider: PythonObject,
-                          operation: Int, addresses: List[Int], shape: _Shape, state: PythonObject,
-                          train: Bool, batch: Int = 0, length: Int = 0, release: Bool = False) raises -> Int:
-    """`_native_execute` for descriptors already held as native words."""
-    var session = fields["_native_session"]
-    var a = List[Int]()
-    a.append(_session_handle(fields, binding, provider))
-    for i in range(len(addresses)):  # small-loop(the admitted operation buffer descriptors)
-        a.append(addresses[i])
-    var plan = _native_plan(shape, state, train, batch, length, release)
-    var result = neural_descriptor_execute(provider, operation, a, plan[0], plan[1])
-    _ = session  # owner is live through the synchronous native call
-    _ = binding
-    return result
+def _session_ensure(fields: PythonObject) raises:
+    """The resident session of the admitted table key, created on first use
+    (a handle only: no device work until the first call admits the state)."""
+    if fields["_native_session"] is None:
+        py_setitem(fields, "_native_session", byte_lm_session_owner_new(_key(fields)))
+        py_setitem(fields, "_session_open", False)
+        py_setitem(fields, "_grad_step", -1)
 
 
 def _table_execute(key: ByteLmEntryKey, operation: Int, addresses: List[Int], ints: List[Int],
                    floats: List[Float64], release_gil: Bool = True) raises -> Int:
     """One trainer operation through the image's table entry (no Python
     provider object): computation releases the GIL as the provider did;
-    session finalization keeps it (`neural_descriptor_execute`'s rule)."""
+    session finalization keeps it."""
     var result = 0
     if release_gil:
         with GILReleased(Python()):
@@ -404,12 +374,8 @@ def _table_execute(key: ByteLmEntryKey, operation: Int, addresses: List[Int], in
 
 def _forget(mut mods: NativeModules, fields: PythonObject, context: PythonObject) raises:
     """`_forget_session`."""
-    py_setitem(fields, "_provider_session", PythonObject(None))
-    py_setitem(fields, "_provider_handle_owner", PythonObject(None))
-    py_setitem(fields, "_provider_handle_factory", PythonObject(None))
-    py_setitem(fields, "_provider_handle", 0)
+    # Dropping the owner releases the session handle (its native finalizer).
     py_setitem(fields, "_native_session", PythonObject(None))
-    py_setitem(fields, "_session_binding", PythonObject(None))
     py_setitem(fields, "_session_open", False)
     var pool = py_call(_b(mods).object.__new__, context["byte_lm_logits_pool"])
     var pool_fields = py_fields(pool)
@@ -427,22 +393,17 @@ def _mark_lost(fields: PythonObject) raises:
 def _export_release(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject, release: Bool = True) raises -> PythonObject:
     """`_export_state_impl(release=True)`."""
     var state = fields["_state"]
-    var binding = fields["_session_binding"]
     var n = shape.n_total()
     var out_p = _f32(n, context)
     var out_m = _f32(n, context)
     var out_v = _f32(n, context)
     var out_flags = _i32(shape.n_tensors(), context)
     var completed = state["completed_steps"]
-    var addresses = Python.list(classical_address(state["flags"]), classical_address(out_p), classical_address(out_m),
-                                classical_address(out_v), classical_address(out_flags))
-    _ = out_m  # keep the Python object alive through the native call above
-    _ = out_p  # keep the Python object alive through the native call above
-    _ = out_flags  # keep the Python object alive through the native call above
-    _ = out_v  # keep the Python object alive through the native call above
-    var provider = _provider(fields, binding)
+    var addresses: List[Int] = [Int(py=classical_address(state["flags"])), Int(py=classical_address(out_p)),
+                                Int(py=classical_address(out_m)), Int(py=classical_address(out_v)),
+                                Int(py=classical_address(out_flags))]
     mods.released()
-    var returned = PythonObject(_native_execute(fields, binding, provider, 3, addresses, shape, state, False, release=release))
+    var returned = PythonObject(_native_execute(fields, 3, addresses, shape, state, False, release=release))
     mods.released()
     _ = out_flags  # keep the Python object alive through the native call above
     _ = out_v  # keep the Python object alive through the native call above
@@ -475,14 +436,10 @@ def _suspend(mut mods: NativeModules, fields: PythonObject, shape: _Shape, conte
         _forget(mods, fields, context)
         return
     var session = fields["_native_session"]
-    var binding = fields["_session_binding"]
-    var provider = _provider(fields, binding) if session is not None else PythonObject(None)
-    mods.released()
-    var handle = _session_handle(fields, binding, provider) if session is not None else 0
-    mods.released()
     _forget(mods, fields, context)
     if session is not None:
-        _ = neural_descriptor_execute(provider, 4, [handle], List[Int](), List[Float64]())
+        # close (operation 4), then the owner's last reference drops here
+        _ = _session_call(session, 4, List[Int](), List[Int](), List[Float64]())
         mods.released()
         _ = session
 
@@ -514,13 +471,11 @@ def _binding(mut mods: NativeModules, fields: PythonObject, shape: _Shape, conte
     return binding
 
 
-def _is_resident(fields: PythonObject, binding: PythonObject, context: PythonObject) raises -> Bool:
+def _is_resident(fields: PythonObject) raises -> Bool:
+    """AUTO (`resident=None`): resident when the admitted image publishes
+    its session entry (the former probe of six Python entry names)."""
     if fields["_resident"] is None:
-        var names = context["byte_lm_session_entries"]
-        var all_there = True
-        for i in range(len(names)):  # small-loop(the session entry names)
-            all_there = all_there and _has(binding, String(py=names[i]))
-        py_setitem(fields, "_resident", all_there)
+        py_setitem(fields, "_resident", byte_lm_sessions_published(_key(fields)))
     return Bool(py=fields["_resident"])
 
 
@@ -551,17 +506,14 @@ def _after_failure(mut mods: NativeModules, fields: PythonObject) raises:
     """`_after_native_failure`: the native call's verdict read back."""
     py_setitem(fields, "_grad_step", -1)
     var session = fields["_native_session"]
-    var binding = fields["_session_binding"]
     if session is None or fields["_lost_at"] is not None:
         return
     var is_open = Bool(py=fields["_session_open"])
     var usable = False
     var completed = PythonObject(None)
     try:
-        var provider = _provider(fields, binding)
-        mods.released()
         var info = List[Int](length=4, fill=0)
-        _ = neural_descriptor_execute(provider, 5, [_session_handle(fields, binding, provider), Int(info.unsafe_ptr())], List[Int](), List[Float64]())
+        _ = _session_call(session, 5, [Int(info.unsafe_ptr())], List[Int](), List[Float64]())
         mods.released()
         is_open = info[3] != 0
         usable = info[2] != 0
@@ -588,35 +540,19 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
     if lost is not None:
         raise Error("RuntimeError: Byte-LM session lost at step " + _text(mods, lost[0]) + "; last exported state is step "
                     + _text(mods, lost[1]))
-    # The session entries of one binding object never change; check them
-    # once per admitted binding, not on every step.
-    if py_get(fields, "_session_entries_binding") is not binding:
-        var names = context["byte_lm_session_entries"]
-        var missing = String("")
-        for i in range(len(names)):  # small-loop(the session entry names)
-            if not _has(binding, String(py=names[i])):
-                missing += (", " if missing != "" else "") + String(py=names[i])
-        if missing != "":
-            raise Error("ImportError: Byte-LM binding lacks owned sessions (" + missing + "); rebuild bindings/build_byte_lm.sh")
-        py_setitem(fields, "_session_entries_binding", binding)
+    if fields["_native_session"] is None and not byte_lm_sessions_published(_key(fields)):
+        raise Error("ImportError: Byte-LM binding lacks owned sessions (its native session entry); rebuild bindings/build_byte_lm.sh")
     var state = fields["_state"]
     var completed = Int(py=state["completed_steps"])
     if train and completed + n_steps > _MAX_STEP:
         raise Error("ValueError: Byte-LM native call step counter is exhausted")
-    var provider = _provider(fields, binding)
+    _session_ensure(fields)
     mods.released()
-    if fields["_native_session"] is None:
-        py_setitem(fields, "_native_session", neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create")))
-        mods.released()
-        py_setitem(fields, "_session_binding", binding)
-        py_setitem(fields, "_session_open", False)
-        py_setitem(fields, "_grad_step", -1)
     var full = train and String(py=fields["_step_result"]) == "full"
     var out_loss = _f32(n_steps, context)
     var out_flags = _i32(shape.n_tensors(), context) if train else PythonObject(None)
     var grads = _gradient_outputs(mods, shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
-    # The operation's buffer descriptors as native words (plan row N104): no
-    # Python list is built for the provider route.
+    # The operation's buffer descriptors as native words (plan row N104).
     var a = List[Int]()
     a.append(Int(py=classical_address(tokens)))
     a.append(Int(py=classical_address(state["flags"])))
@@ -636,8 +572,7 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
     var returned = PythonObject(None)
     try:
         # batch slot (p[14]) = the call's step count (operation 1)
-        returned = PythonObject(_native_execute_words(fields, binding, provider, 1, a, shape, state, train,
-                                                      n_steps))
+        returned = PythonObject(_native_execute(fields, 1, a, shape, state, train, n_steps))
         mods.released()
         _ = out_flags  # keep the Python object alive through the native call above
         _ = out_loss  # keep the Python object alive through the native call above
@@ -646,7 +581,7 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
         if n_steps > 1 and out_flags is not None:
             # a column that commits step by step (the host column) may
             # stand past `completed`; the device column commits none
-            _steps_reconcile(mods, fields, binding, provider, out_flags, completed, n_steps)
+            _steps_reconcile(mods, fields, out_flags, completed, n_steps)
         else:
             _after_failure(mods, fields)
         raise error^
@@ -1072,14 +1007,10 @@ def byte_lm_load_state(mut mods: NativeModules, trainer: PythonObject, args: Pyt
         var replacement = _validated_state(mods, args[0], context)
         _ = _mode(mods, context)
         var session = fields["_native_session"]
-        var binding = fields["_session_binding"]
-        var provider = _provider(fields, binding) if session is not None else PythonObject(None)
-        mods.released()
-        var handle = _session_handle(fields, binding, provider) if session is not None else 0
-        mods.released()
         _forget(mods, fields, context)
         if session is not None:
-            _ = neural_descriptor_execute(provider, 4, [handle], List[Int](), List[Float64]())
+            # close (operation 4), then the owner's last reference drops here
+            _ = _session_call(session, 4, List[Int](), List[Int](), List[Float64]())
             mods.released()
             _ = session
         py_setitem(fields, "_state", replacement)
@@ -1169,7 +1100,7 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
         var tokens = _ids(mods, args[0], shape, context)
         var binding = _binding(mods, fields, shape, context)
         try:
-            if _is_resident(fields, binding, context):
+            if _is_resident(fields):
                 result = _run_resident(mods, fields, tokens, shape, binding, context, train)
             else:
                 result = _run_stateless(mods, fields, tokens, shape, binding, context, train)
@@ -1257,16 +1188,15 @@ def _ids_batch(stack: PythonObject, k: Int, shape: _Shape, context: PythonObject
     return out
 
 
-def _steps_reconcile(mut mods: NativeModules, fields: PythonObject, binding: PythonObject, provider: PythonObject,
-                     out_flags: PythonObject, completed: Int, n_steps: Int) raises:
+def _steps_reconcile(mut mods: NativeModules, fields: PythonObject, out_flags: PythonObject, completed: Int,
+                     n_steps: Int) raises:
     """After a failed multi-step call: the steps the session reports as
     committed (it rolled the failed step back) are committed here too, with
     the flags the native call wrote after the last of them; then the usual
     failure verdict (`_after_failure`)."""
     try:
         var info = List[Int](length=4, fill=0)
-        _ = neural_descriptor_execute(provider, 5, [_session_handle(fields, binding, provider), Int(info.unsafe_ptr())],
-                                      List[Int](), List[Float64]())
+        _ = _session_call(fields["_native_session"], 5, [Int(info.unsafe_ptr())], List[Int](), List[Float64]())
         mods.released()
         var done = info[0]
         if info[3] != 0 and info[2] != 0 and done > completed and done <= completed + n_steps:
@@ -1289,7 +1219,7 @@ def _run_steps(mut mods: NativeModules, fields: PythonObject, stack: PythonObjec
     (`resident=False`) is one whole-state native call per step by design
     (the state crosses the boundary every step), so it keeps one call per
     batch."""
-    if _is_resident(fields, binding, context):
+    if _is_resident(fields):
         return _run_resident(mods, fields, stack, shape, binding, context, True, n_steps, True)
     var losses = _f32(n_steps, context)
     var loss_out = _F32P(unsafe_from_address=Int(py=classical_address(losses)))
@@ -1490,7 +1420,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
         var batch = admitted[1]
         var length = admitted[2]
         var binding = _binding(mods, fields, shape, context)
-        var resident = _is_resident(fields, binding, context)
+        var resident = _is_resident(fields)
         # The greedy pick runs on the device for a ragged batch too (plan row
         # N091): operation 6 takes the row lengths as a seventh descriptor.
         var direct_next = next_bytes and resident
@@ -1508,22 +1438,17 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             var lost = fields["_lost_at"]
             if lost is not None:
                 raise Error("RuntimeError: Byte-LM session lost at step " + _text(mods, lost[0]) + "; last exported state is step " + _text(mods, lost[1]))
-            var provider = _provider(fields, binding)
+            _session_ensure(fields)
             mods.released()
-            if fields["_native_session"] is None:
-                py_setitem(fields, "_native_session", neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create")))
-                mods.released()
-                py_setitem(fields, "_session_binding", binding)
-                py_setitem(fields, "_session_open", False)
-                py_setitem(fields, "_grad_step", -1)
             var state = fields["_state"]
-            var addresses = Python.list(classical_address(tokens), PythonObject(output_address), classical_address(state["flags"]))
+            var addresses: List[Int] = [Int(py=classical_address(tokens)), output_address, Int(py=classical_address(state["flags"]))]
+            var is_open = Bool(py=fields["_session_open"])
             for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three session admission buffers)
-                _ = py_call(addresses.append, 0 if Bool(py=fields["_session_open"]) else Int(py=classical_address(state[key])))
+                addresses.append(0 if is_open else Int(py=classical_address(state[key])))
             if row_lengths is not None:
-                _ = py_call(addresses.append, classical_address(row_lengths))
+                addresses.append(Int(py=classical_address(row_lengths)))
             try:
-                written = _native_execute(fields, binding, provider, 6 if direct_next else 2, addresses, shape, state, False, batch, length)
+                written = _native_execute(fields, 6 if direct_next else 2, addresses, shape, state, False, batch, length)
                 mods.released()
             except problem:
                 mods.released()
@@ -1681,7 +1606,7 @@ def _runtime_metadata(mut mods: NativeModules, fields: PythonObject, shape: _Sha
     py_setitem(result, "schema", "small-byte-lm.run-metadata.v1")
     py_setitem(result, "qualification", "authored/unqualified")
     py_setitem(result, "profile", state["profile"])
-    py_setitem(result, "device_state_lifetime", "resident" if _is_resident(fields, binding, context) else "call")
+    py_setitem(result, "device_state_lifetime", "resident" if _is_resident(fields) else "call")
     py_setitem(result, "step_result", fields["_step_result"])
     py_setitem(result, "last_export_step", fields["_last_export_step"])
     py_setitem(result, "config", py_call(_b(mods).dict, state["config"]))
@@ -1695,14 +1620,9 @@ def _runtime_metadata(mut mods: NativeModules, fields: PythonObject, shape: _Sha
 def _attention_stage_report(mut mods: NativeModules, fields: PythonObject, shape: _Shape) raises -> PythonObject:
     if not Bool(py=fields["_session_open"]) or fields["_native_session"] is None:
         return PythonObject(None)
-    var binding = fields["_session_binding"]
-    var provider = _provider(fields, binding)
-    mods.released()
     var info = List[Int]()
-    var handle = _session_handle(fields, binding, provider)
-    mods.released()
     var values = List[Int](length=17 + 5 * shape.layers(), fill=0)
-    var size = neural_descriptor_execute(provider, 11, [handle, Int(values.unsafe_ptr())],
+    var size = _session_call(fields["_native_session"], 11, [Int(values.unsafe_ptr())],
         [len(values)], List[Float64](), False)
     mods.released()
     for i in range(size):  # driver-loop: over completed native stage metadata
@@ -1826,14 +1746,12 @@ def byte_lm_consume(mut mods: NativeModules, trainer: PythonObject, operation: S
                 raise Error("RuntimeError: Byte-LM has no gradient to export: no step has completed since open, restore, import or rollback")
             var named = Bool(py=args[0])
             var grads = _gradient_outputs(mods, shape, named, context)
-            var addresses = Python.list(classical_address(grads[0]))
+            var addresses: List[Int] = [Int(py=classical_address(grads[0]))]
             var keys = py_call(_b(mods).list, grads[1])
             for i in range(len(keys)):  # driver-loop: named parameter gradient descriptors
-                _ = py_call(addresses.append, classical_address(grads[1][keys[i]]))
-            var binding = fields["_session_binding"]
-            var provider = _provider(fields, binding)
+                addresses.append(Int(py=classical_address(grads[1][keys[i]])))
             mods.released()
-            var returned = _native_execute(fields, binding, provider, 10, addresses, shape, state, False)
+            var returned = _native_execute(fields, 10, addresses, shape, state, False)
             mods.released()
             if returned != completed:
                 raise Error("RuntimeError: Byte-LM gradient export returned a different step")
@@ -1873,9 +1791,6 @@ def byte_lm_trainer_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return byte_lm_logits(mods, call[0], call[2], call[3], operation == "next_bytes").steal_data()
         if operation == "attention_stage_report" or operation == "parameter_registry" or operation == "run_metadata" or operation == "export_state" or operation == "export_gradients" or operation == "close" or operation == "parameters" or operation == "step" or operation == "data_schedule":
             return byte_lm_consume(mods, call[0], operation, call[2], call[3]).steal_data()
-        if operation == "native_provider_info":
-            var fields = py_fields(call[0])
-            return neural_descriptor_info(fields["_native_provider"]).steal_data()
         raise Error("RuntimeError: unknown byte LM trainer operation " + operation)
     except error:
         if io_error.pending:
