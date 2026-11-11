@@ -18,10 +18,6 @@ from sequence.ops_impl import (
     PROPHET_FAST_MIN_N,
     adafactor_core,
     adafactor_step_impl,
-    croston_forecast_impl,
-    croston_impl,
-    ets_impl,
-    garch_impl,
     lamb_bias,
     lamb_core,
     lamb_table,
@@ -33,14 +29,9 @@ from sequence.ops_impl import (
     moe_forward_run_impl,
     opt_slots,
     opt_step_impl,
-    prophet_fit_impl,
-    prophet_predict_impl,
-    prophet_predict_days_impl,
     rnn_fit_impl,
     rnn_predict_impl,
     stl_impl,
-    theta_impl,
-    theta_forecast_impl,
     var_fit_impl,
     var_forecast_impl,
 )
@@ -135,51 +126,6 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
 def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """The Python door of `layer_norm_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(layer_norm_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
-
-
-def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `theta_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(theta_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
-
-
-def theta_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `theta_forecast_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(theta_forecast_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `croston_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(croston_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def croston_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `croston_forecast_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(croston_forecast_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `ets_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(ets_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
-
-
-def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `garch_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(garch_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `prophet_fit_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(prophet_fit_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
-
-
-def prophet_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `prophet_predict_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(prophet_predict_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def prophet_predict_days_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `prophet_predict_days_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(prophet_predict_days_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:

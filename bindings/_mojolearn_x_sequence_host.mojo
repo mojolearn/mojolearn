@@ -44,7 +44,7 @@ from providers.python.sequence_opt_public_host_pyapi import (
     seq_optimizer_close_host_py,
 )
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from sequence.xseq_glue_host import publish_x_sequence_host
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_control_pyapi import ops_program_control_py
 from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
@@ -77,7 +77,7 @@ from providers.python.autograd_graph_metadata_pyapi import graph_record_c
 from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, theta_forecast_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, prophet_predict_days_py, moe_forward_py
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from providers.python.sequence_pyapi import moe_backward_py
 from core.shared_slot import SharedSlot
 
@@ -568,69 +568,6 @@ def layer_norm_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) 
     return layer_norm_py(ex, addrs, ip, fp)
 
 
-def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return theta_py(ex, addrs, ip, fp)
-
-
-def theta_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """`theta`'s forecast from its own fitted info rows, no fit (lane
-    ne1-a-decomp-tsa, N031): addrs = [y, info, forecast out], ip = [B, n, h,
-    season_length]."""
-    var ex = HostExec()
-    return theta_forecast_py(ex, addrs, ip)
-
-
-def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return croston_py(ex, addrs, ip)
-
-
-def croston_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return croston_forecast_py(ex, addrs, ip)
-
-
-def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return ets_py(ex, addrs, ip, fp)
-
-
-def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return garch_py(ex, addrs, ip)
-
-
-def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return prophet_days_py(addrs, ip)
-
-
-def prophet_features_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return prophet_features_py(ex, addrs, ip, fp)
-
-
-def prophet_changepoints_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return prophet_changepoints_py(addrs, ip, fp)
-
-
-def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return prophet_fit_py(ex, addrs, ip, fp)
-
-
-def prophet_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return prophet_predict_py(ex, addrs, ip)
-
-
-def prophet_predict_days_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """`prophet_features` then `prophet_predict` in one call, the features
-    kept on the executor (lane ne1-a-decomp-tsa, N032)."""
-    var ex = HostExec()
-    return prophet_predict_days_py(ex, addrs, ip, fp)
-
-
 def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return moe_forward_py(ex, addrs, ip)
@@ -686,6 +623,10 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence_host")
+        # The forecaster operations and the whole-model entry, published in the
+        # sequence table (core/xseq_entry_table.mojo) for the sequence owner
+        # (bindings/xseq_*_native.mojo); their former Python entries are gone.
+        publish_x_sequence_host()
         m.def_function[host_numeric_mode_binding]("x_sequence_host_numeric_mode")
         m.def_function[host_vendor_binding]("x_sequence_host_vendor")
         m.def_function[host_column_binding]("x_sequence_host_column")
@@ -779,18 +720,6 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[layer_norm_binding]("layer_norm")
-        m.def_function[theta_binding]("theta")
-        m.def_function[theta_forecast_binding]("theta_forecast")
-        m.def_function[croston_binding]("croston")
-        m.def_function[croston_forecast_binding]("croston_forecast")
-        m.def_function[ets_binding]("ets")
-        m.def_function[garch_binding]("garch")
-        m.def_function[prophet_days_binding]("prophet_days")
-        m.def_function[prophet_features_binding]("prophet_features")
-        m.def_function[prophet_changepoints_binding]("prophet_changepoints")
-        m.def_function[prophet_fit_binding]("prophet_fit")
-        m.def_function[prophet_predict_binding]("prophet_predict")
-        m.def_function[prophet_predict_days_binding]("prophet_predict_days")
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
