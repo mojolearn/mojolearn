@@ -12,7 +12,8 @@ released their device state on collection. It holds no Python object and no
 device state of its own.
 """
 from core.causal_lm_entry_table import CausalEntryKey
-from core.causal_lm_entry_table_sessions import causal_sessions_call, CAUSAL_SESSION_DECODE_CLOSE
+from core.entry_table import EntryRef
+from core.causal_lm_entry_table_sessions import causal_sessions_ref, causal_sessions_call, CAUSAL_SESSION_DECODE_CLOSE
 
 
 struct CausalSessionHandles(Movable, Writable):
@@ -26,8 +27,13 @@ struct CausalSessionHandles(Movable, Writable):
     """The operation that closes `primary` (LM_CLOSE or PROGRAM_RELEASE)."""
     var layers: List[Int]
     """One decode session handle word per Transformer layer, in order."""
+    var entry: EntryRef
+    """The session entry of `family`, resolved once at construction (lane
+    entry-table-zero-alloc): every layer step and close calls through it."""
 
-    def __init__(out self, key: CausalEntryKey, family: Int, primary: Int, primary_close: Int):
+    def __init__(out self, key: CausalEntryKey, family: Int, primary: Int, primary_close: Int) raises:
+        var entry = causal_sessions_ref(family, key)
+        self.entry = entry
         self.mode = key.mode
         self.vendor = key.vendor
         self.family = family
@@ -43,12 +49,12 @@ struct CausalSessionHandles(Movable, Writable):
         (the former Python close order). A refused close (a busy session)
         raises and keeps that handle and the ones after it."""
         if self.primary != 0:
-            _ = causal_sessions_call(self.family, self.key(), self.primary_close, List[Int](), [self.primary], List[Float64]())
+            _ = causal_sessions_call(self.entry, self.primary_close, List[Int](), [self.primary], List[Float64]())
             self.primary = 0
         var closed = 0
         try:
             for i in range(len(self.layers)):  # driver-loop: over layer decode sessions
-                _ = causal_sessions_call(self.family, self.key(), CAUSAL_SESSION_DECODE_CLOSE, List[Int](),
+                _ = causal_sessions_call(self.entry, CAUSAL_SESSION_DECODE_CLOSE, List[Int](),
                     [self.layers[i]], List[Float64]())
                 closed += 1
         finally:
