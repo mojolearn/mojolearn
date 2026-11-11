@@ -373,15 +373,6 @@ class SmallMLPTrainer:
         return _NATIVE('from_checkpoint', (cls, path))
 
 
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:  # glue: checkpoint json key pairs
-        if key in result:
-            raise ValueError('Duplicate checkpoint key')
-        result[key] = value
-    return result
-
-
 def _encode_array(value):
     """The on-disk tensor descriptor, BYTE-IDENTICAL to the NumPy spelling
     (DEVIATION 2427). `np.asarray(value, dtype='<f4', order='C').tobytes()`
