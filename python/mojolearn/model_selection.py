@@ -560,10 +560,6 @@ def _arange_rows(start, n):
 _MSEL_NATIVE = True
 
 
-def _msel_native():
-    return True  # lane cgr4-py-compute: the MOJOLEARN_MSEL_BEFORE route switch is deleted
-
-
 _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
 
 #: bytes.translate table flipping a 0/1 mask
