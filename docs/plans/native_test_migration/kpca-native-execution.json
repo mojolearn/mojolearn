@@ -1,0 +1,113 @@
+{
+  "family": "KernelPCA",
+  "status": "authored; native compilation and execution owed",
+  "product_dependencies": [
+    "c613f33133",
+    "2c3a36c216",
+    "b234379d5a",
+    "6d7be8a166"
+  ],
+  "reference_commit": "8fb56a8da65db41e665db0594d9a36ae3674ee4f",
+  "already_accepted_pure_fixtures": 58,
+  "new_fixtures": {
+    "cpu": 15,
+    "gpu": 16,
+    "cpu_actual_numerical_graphs": 12,
+    "gpu_actual_numerical_graphs": 13,
+    "common_metadata": 1,
+    "common_exact_refusals": 2
+  },
+  "entries": {
+    "cpu": "checks/native_tests/kpca_native_cpu.mojo",
+    "gpu": "checks/native_tests/kpca_native_gpu.mojo"
+  },
+  "flags": {
+    "both": [
+      "MOJOLEARN_NUMERIC_IDENTICAL=1"
+    ],
+    "cpu_additional": [
+      "MOJOLEARN_COLUMN_CPU=1"
+    ]
+  },
+  "unit_map": {
+    "0": "actual owning-provider metadata",
+    "1": "original RBF 80x6 dense",
+    "2": "original linear 80x6 dense",
+    "3": "original polynomial 80x6 dense",
+    "4": "original cosine 80x6 dense",
+    "5": "original options gamma .2 raw 80x6",
+    "6": "original options gamma .2 precomputed 80x80",
+    "7": "analytic positive 2x1 mean 2.25, eigenvalues .5/0",
+    "8": "analytic signed 2x1 mean .25, eigenvalues 4.5/0",
+    "9": "signed remove_zero keeps one",
+    "10": "signed requested=-1 keeps one",
+    "11": "explicit native Lanczos RBF 80x6 backend route",
+    "12": "null centered pointer exact refusal",
+    "13": "dimension overflow exact refusal",
+    "14": "all-zero 2x1 removes all eigenvectors",
+    "15": "GPU-only explicit native resident RBF/Lanczos 80x6 backend route"
+  },
+  "original_settings": {
+    "train": [
+      80,
+      6
+    ],
+    "query": [
+      20,
+      6
+    ],
+    "seeds": [
+      0,
+      3
+    ],
+    "first_five_rows_scale": 6,
+    "components": 3,
+    "degree": 3,
+    "coef0": 1,
+    "gamma": "1/6, except explicit .2 options cases",
+    "eigen_rtol": 0.001,
+    "eigen_atol": 0,
+    "absolute_scores_rtol": 0.002,
+    "absolute_scores_atol": 0.002
+  },
+  "additional_internal_bounds": {
+    "large_centered": {
+      "rtol": 2e-05,
+      "atol": 0.002
+    },
+    "large_means": {
+      "rtol": 2e-05,
+      "atol": 2e-05
+    },
+    "tiny_centered_and_means": "exact dyadic values, rtol=atol=0",
+    "tiny_eigenvalues": {
+      "rtol": 0.001,
+      "atol": 1e-06
+    }
+  },
+  "oracles": "Independent NumPy Float64 kernels/global means/eigh; exact small dyadic means/centered matrices/eigenvalues. No Mojolearn or legacy execution used to generate references.",
+  "lifetimes": "Every borrowed source, output, scratch and prepared owner remains named through its last raw-address use, including finally paths. Scalar global mean has one payload word and two guards.",
+  "scheduling": {
+    "cpu": "independent graphs and oracle words use host_parallelize",
+    "gpu": "one graph at a time on one physical GPU/shared contexts; kernels and oracle words remain parallel",
+    "concurrency": "Existing MAX/Metal shared-context concurrency failures remain failed separately."
+  },
+  "migration": {
+    "python_file": "python/mojolearn/tests/test_x_neighbors_sanity.py",
+    "definition": "test_kernel_pca_options",
+    "numerical_assertions_removed": 0,
+    "replacement": "raw and precomputed eigenvalues independently checked against the same mathematical oracle; public array shape remains in Python",
+    "retained": "All four external sklearn eigen/fit/query checks, public feature names, array ownership, refusal and interop tests; no Python controller merely renamed.",
+    "numerical_assertions_pending_removal": 1,
+    "cleanup_condition": "Root compiles and runs actual replacement KPCA fixtures before deleting the existing Python numerical assertion.",
+    "pending_cleanup_patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/kpca-native-python-cleanup.patch"
+  },
+  "product_changes": false,
+  "algorithm_changes": false,
+  "performance_evidence": false,
+  "identity_campaign": false,
+  "run_owed": [
+    "CPU 15 new fixtures",
+    "GPU 16 new fixtures"
+  ]
+}
