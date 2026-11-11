@@ -29,8 +29,7 @@ import weakref
 
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes, full, zeros
-from ._buffer import memory_at
+from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin, available_if
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
@@ -1593,51 +1592,6 @@ _native_trees_bridge.register_boost(RandomTreesEmbedding, "rte")
 
 
 # ------------------------------------------------------ wrappers: helpers
-
-
-class _FoldRows(list):
-    """The [(train rows, test rows)] of `_trees_native_folds`: int32 views into
-    the one buffer the device filled, kept alive here."""
-    __slots__ = ("_owner",)
-
-
-# The device fold law (sklearn's unshuffled StratifiedKFold / KFold) the
-# meta-estimator owner launches (bindings/trees_public_meta.mojo
-# `_native_folds`), kept here as the reference its test reads.
-def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
-    """`_trees_splits` for an int cv with the fold assignment and the fold
-    row lists made on the device (xtrees/folds_device.mojo through
-    `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
-    sklearn's unshuffled StratifiedKFold / KFold law; the host column runs
-    the same law in Mojo (lane cgr4-py-compute), every tier
-    (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
-    Array in [0, n_classes) (stratified) or None (KFold). The lists are
-    zero-copy int32 views into one downloaded buffer: fold i's rows outside
-    it, ascending, then inside it, ascending."""
-    b = est._bind()
-    counts = empty((n_splits + 1,), "<i4")
-    rows = empty((n_splits * n,), "<i4")
-    if codes is not None:
-        c32 = as_i32_c(codes, ndim=1, name="codes")[0]
-        k = int(n_classes)
-    else:
-        c32, k = counts, 0
-    status = int(b.x_trees_device_folds(addr_ro(c32, name="codes"), addr(rows, name="rows"),
-                                        addr(counts, name="counts"), [n, n_splits, k]))
-    if status == 1:
-        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
-    if status != 0:
-        raise ValueError("y codes outside [0, n_classes)")
-    cnt = [int(v) for v in counts.tolist()[:n_splits]]  # glue: fold sizes and offsets over n_splits folds
-    used = max([i for i in range(n_splits) if cnt[i] > 0] or [0]) + 1  # glue: fold sizes and offsets over n_splits folds
-    out = _FoldRows()
-    out._owner = rows
-    for i in range(used):  # glue: fold sizes and offsets over n_splits folds
-        base = rows._addr + 4 * i * n
-        tr = memory_at(base, 4 * (n - cnt[i]), writable=False).cast("i")
-        te = memory_at(base + 4 * (n - cnt[i]), 4 * cnt[i], writable=False).cast("i")
-        out.append((tr, te))
-    return out
 
 
 class _FitTransformMixin:
