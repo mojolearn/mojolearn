@@ -78,22 +78,40 @@ def _gp_key_value(mut key: GPKernelKey, value: PythonObject, depth: Int) raises:
         key.pin(cls)
 
 
+def gp_key_fields(mut key: GPKernelKey, fields: PythonObject, skip: List[String]) raises:
+    # Shared admitted field capture for packed kernels and fitted GP state.
+    # Preserve insertion order, the depth-four value walk and skipped-name rule.
+    var b = native_loaded_module("builtins")
+    var items = py_call(b.list, py_call(fields.items))
+    var count = 0
+    for i in range(len(items)):  # driver-loop: captured public field metadata
+        var name = items[i][0]
+        if py_type(name) is b.str:
+            var text = String(name)
+            var skipped = False
+            for j in range(len(skip)):  # small-loop(call-written field names)
+                if skip[j] == text:
+                    skipped = True
+                    break
+            if skipped:
+                continue
+        key.pin(name)
+        _gp_key_value(key, items[i][1], 0)
+        count += 1
+    key.count(count)
+
+
 def _gp_key(context: PythonObject, nodes: List[PythonObject]) raises -> GPKernelKey:
     var key = GPKernelKey()
     key.pin(context)
     key.pin(context["family_gp_kernel_nodes"])
     key.count(len(nodes))
     var mods = NativeModules()
-    var b = native_loaded_module("builtins")
     for i in range(len(nodes)):  # driver-loop: each distinct kernel object's mutable state
         var node = nodes[i]
         key.pin(node)
         key.pin(py_type(node))
-        var items = py_call(b.list, py_call(_fields(mods, node).items))
-        for j in range(len(items)):  # driver-loop: same shallow field-key walk as the retired key list
-            key.pin(items[j][0])
-            _gp_key_value(key, items[j][1], 0)
-        key.count(len(items))
+        gp_key_fields(key, _fields(mods, node), List[String]())
     return key^
 
 

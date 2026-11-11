@@ -306,3 +306,16 @@ their current scalar comparison path: no new Float64 comparison approximation
 is introduced. This is a partial removal of general ordering metadata, not a
 claim that all GP label containers or all Python imports are gone. No new
 numerical kernel or replacement sort/hash algorithm was added.
+
+The fitted GP admission record now owns its keys, node/class pin collections,
+content stamp and generation in `GPPreparedState`. It reuses the native
+`GPKernelKey` identity/value comparison and the same field-depth capture as the
+packed-kernel cache. The separate Python fitted-state tuple, boxed key/count
+list, node/class lists and stamped tuple/context-key list are removed. Residual
+scalar/array/class admission and class watcher checks remain in their original
+order. Weak prepared-registry storage still controls lifetime; the prepared
+owner is registered only for allocation and is not accepted as a model field.
+The native content fast path retains the original eligibility and model-field
+identity test. Public references are pins, not algorithm state or claimed
+removals. Shared transient dictionary/class admission snapshots and mixed real/
+NumPy label ordering remain explicit boundary work. No numerical files changed.
