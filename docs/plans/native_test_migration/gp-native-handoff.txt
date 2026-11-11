@@ -84,3 +84,10 @@ Final additive coverage checkpoint, 2026-11-11:
   Whole-campaign semantic/boxed-export inventory is incomplete at
   E/pca-native-tests/migration-inventory/checkpoint.json. Structural old-name
   absences are not promoted to numerical definitions removed.
+
+Final label follow-up:
+  gp_label_owner_suite.run_checks now28 total (12 code owners +16 table cases),
+  including2 actual host-v2 gathers from moved native tables. Dependencies
+  be2ab982b5 andde371e5d37. No public label test removed.
+  Combined root wrapper expectation216CPU/56GPU (root's prior143/30 plus
+  owner32, normalization13/26, labels28). All authored checks await root.

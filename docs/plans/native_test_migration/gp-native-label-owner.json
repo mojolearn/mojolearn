@@ -1,11 +1,11 @@
 {
   "family": "GP native encoded label owner",
-  "status": "12 authored native fixtures; uncompiled/unrun",
+  "status": "28 authored native fixtures; uncompiled/unrun",
   "dependency": "be2ab982b5",
   "entry": "checks/native_tests/gp_label_owner.mojo",
   "suite": "checks/native_tests/gp_label_owner_suite.mojo",
   "coverage": {
-    "fixtures": 12,
+    "fixtures": 28,
     "zero_initialized_extents": [
       0,
       1,
@@ -21,17 +21,25 @@
       -1,
       -9223372036854775807
     ],
-    "empty_copy_move": true
+    "empty_copy_move": true,
+    "table_fixtures": 16,
+    "table_split": {
+      "empty_and_positive_extents_all_kinds": 6,
+      "exact_word_allocation_move_and_disable": 4,
+      "invalid_kind_count": 4,
+      "actual_host_gather_from_moved_table": 2
+    },
+    "table_gather_oracle": "Five fixed native class words, code order[4,0,4,2,1,3], six literal expected output words and two guard words. Int64 includes2^53+1/min/max; Float64 includes signedzero/nextafter1/NaNpayload/infinity; tests native word transport, not public class admission."
   },
   "parallel_plan": "Each fixture owns its independent state; host_parallelize distributes fixtures across available cores. No borrowed struct-field pointer is captured.",
   "limits": [
-    "Tests storage identity/lifetime, not public class-object identities or label ordering.",
-    "Public label tests remain; shared labels native correctness suites retained.",
-    "Pilot decode owner API still pending and is not claimed here."
+    "Storage/lifetime and actual native gather contracts do not replace public class-object identity/interoperability/admission tests.",
+    "Other label ordering/class union numerical suites remain unchanged.",
+    "No compiler/runtime result from this lane."
   ],
   "files": {
     "checks/native_tests/gp_label_owner.mojo": "6f661b653c5bef8031cee0410a9bf8671f8c4ce566d59e53921a465bc3e20ad0",
-    "checks/native_tests/gp_label_owner_suite.mojo": "1f73873cfe03d5c3f9e881fd21467832863655c012c760aaba6e9261a86b31a9"
+    "checks/native_tests/gp_label_owner_suite.mojo": "82c491f9bc166a189dcc442041789714a59956f3a64c55396155273ce2db2ef9"
   },
   "compile_flags": [
     "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
@@ -39,5 +47,10 @@
   ],
   "python_deleted": 0,
   "product_or_kernel_changes": 0,
-  "identity_performance_or_runtime_claim": false
+  "identity_performance_or_runtime_claim": false,
+  "dependencies": {
+    "codes": "be2ab982b5",
+    "table": "de371e5d37",
+    "actual_host_label_descriptor": "be2ab982b5"
+  }
 }
