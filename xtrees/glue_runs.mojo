@@ -19,7 +19,6 @@ operation code, no data work.
 from gbdt.trees_identical_switches import T30_ADABOOST
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE
-from checks.vendor import COMPILED_VENDOR
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -1197,26 +1196,33 @@ comptime _GLUE_OWNER_NAME = "MojolearnXTreesGlueOwnerV1"
 comptime XTREES_GLUE_OWNER = SharedSlot[XTreesGlueOwner, _GLUE_OWNER_NAME]
 
 
-def x_trees_glue_vendor() -> Int:
-    """This image's vendor word of the trees table key: 0 the host column,
-    1 Metal, 2 CUDA, 3 HIP (the bridge reads `x_trees_vendor` the same way)."""
-    comptime if TARGET_COLUMN == COLUMN_CPU:
+def x_trees_glue_vendor(vendor: StaticString) -> Int:
+    """The vendor word of the trees table key for the vendor string an
+    x_trees binding reports as `x_trees_vendor` ("cpu" for the host binding,
+    `COMPILED_VENDOR` for the GPU one): 0 cpu, 1 metal, 2 cuda, 3 hip, else
+    -1. The trees bridge applies the same mapping to the same string."""
+    if vendor == "cpu":
         return 0
-    elif COMPILED_VENDOR == "metal":
+    if vendor == "metal":
         return 1
-    elif COMPILED_VENDOR == "cuda":
+    if vendor == "cuda":
         return 2
-    elif COMPILED_VENDOR == "hip":
+    if vendor == "hip":
         return 3
-    else:
-        return -1
+    return -1
 
 
-def publish_x_trees_glue() raises:
+def publish_x_trees_glue(vendor: StaticString) raises:
     """Publish this image's glue entry at module init (both x_trees
-    bindings). A repeated init publishes the same pointer; a second image
-    with the same key and another pointer refuses (core/entry_table.mojo)."""
+    bindings, each with the vendor string it exports as `x_trees_vendor`).
+    A build with no GPU vendor ("none") publishes nothing: its callers
+    refuse with the table's "provider is not published". A repeated init
+    publishes the same pointer; a second image with the same key and another
+    pointer refuses (core/entry_table.mojo)."""
+    var word = x_trees_glue_vendor(vendor)
+    if word < 0:
+        return
     var owner = XTREES_GLUE_OWNER.get_or_create_ptr()
-    var key = TreesEntryKey(Int(GLOBAL_NUMERIC_MODE), x_trees_glue_vendor())
+    var key = TreesEntryKey(Int(GLOBAL_NUMERIC_MODE), word)
     trees_table_publish[TREES_TABLE_X_TREES](key, Int(owner),
         [String(XT_GLUE_ABI)], [XT_OP_COUNT], [x_trees_glue_v1])

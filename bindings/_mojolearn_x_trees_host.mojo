@@ -235,7 +235,7 @@ def build__mojolearn_x_trees_host() -> PythonObject:
         # Native publication of the same glue runs (core/trees_entry_table.mojo);
         # the Python entries above remain for the unconverted Python callers
         # (python/mojolearn/_expansion_trees.py) and the boundary tests.
-        publish_x_trees_glue()
+        publish_x_trees_glue("cpu")
         m.def_function[tree_shap_cache_create_binding]("x_trees_tree_shap_cache_create")
         m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
         m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
