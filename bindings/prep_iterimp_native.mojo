@@ -13,6 +13,7 @@
 # estimator's connected native plan (bindings/prep_native_estimator.mojo); its
 # Python fit, predict, get_params or constructor is never called.
 from std.math import isfinite
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -143,11 +144,11 @@ def _floats_from(value: PythonObject) raises -> List[Float64]:
     var words = user_objects_call(Python.tuple("floats", value))
     var n = len(words)
     var src = F64P(unsafe_from_address=Int(py=py_call(words.buffer_info)[0]))
-    var out = List[Float64]()
-    _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: the user estimator's answer, read once
-        out.append(src[i])
-        _ = words  # keep the Python object alive through the native call above
+    # One native copy of the float64 words (no per-entry append).
+    var out = List[Float64](length=n, fill=0.0)
+    if n > 0:
+        unsafe_memcpy(dest=F64P(unsafe_from_address=Int(out.unsafe_ptr())), src=src, count=n)
+    _ = words  # keep the Python object alive through the native copy above
     return out^
 
 
@@ -167,14 +168,15 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
             var t = classical_dtype_str(view, context)
             var size = Int(py=view.shape[0]) if Int(py=view.ndim) == 1 else 0
             if Int(py=view.ndim) == 1 and (t == "<f4" or t == "<f8") and size > 0:
-                var out = List[Float64]()
+                var out = List[Float64](length=size, fill=0.0)
                 var step = Int(py=view.strides[0])
                 var addr = Int(py=classical_address(view))
-                for i in range(size):  # cpu-route: the user estimator's predictions, widened once
-                    if t == "<f4":
-                        out.append(Float64(F32P(unsafe_from_address=addr + i * step)[0]))
+                var wide = t == "<f8"
+                for i in range(size):  # driver-loop: typed widening of the native prediction buffer (no CPython call)
+                    if wide:
+                        out[i] = F64P(unsafe_from_address=addr + i * step)[0]
                     else:
-                        out.append(F64P(unsafe_from_address=addr + i * step)[0])
+                        out[i] = Float64(F32P(unsafe_from_address=addr + i * step)[0])
                 _ = view  # keep the Python object alive through the reads above
                 return out^
     var listed = py_call(v.tolist) if Bool(py=py_call(b.hasattr, v, "tolist")) else v
@@ -484,10 +486,11 @@ def _truncnorm(mus: PythonObject, sig: PythonObject, lo: Float64, hi: Float64, m
                                        Python.tuple(lo, hi), state, py_call(out.buffer_info)[0])
     rng = (UInt64(Int(py=hi_lo[0])) << 32) | UInt64(Int(py=hi_lo[1]))
     var src = F64P(unsafe_from_address=Int(py=py_call(out.buffer_info)[0]))
-    var vals = List[Float64]()
-    for i in range(k):  # cpu-route: read the completed posterior result
-        vals.append(src[i])
-        _ = out
+    # One native copy of the completed posterior draws.
+    var vals = List[Float64](length=k, fill=0.0)
+    if k > 0:
+        unsafe_memcpy(dest=F64P(unsafe_from_address=Int(vals.unsafe_ptr())), src=src, count=k)
+    _ = out  # keep the draw store alive through the native copy above
     _ = mb
     _ = sb
     return vals^
