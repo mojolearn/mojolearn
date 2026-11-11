@@ -1,0 +1,61 @@
+{
+  "status": "authored; native compilation and execution owed to root",
+  "product_dependencies": ["76bba34249", "6f5afa90c8"],
+  "affected_binding_roots": [
+    "bindings/_mojolearn_runtime_classical_host.mojo",
+    "bindings/_mojolearn_runtime_family_host.mojo",
+    "bindings/_mojolearn_runtime_linear_host.mojo",
+    "bindings/_mojolearn_runtime_trees_host.mojo"
+  ],
+  "base": "5f7d3aaf722ce04a8f24c12f0b8650fe72728775",
+  "cpu_suite": "checks/native_tests/gpr_score_cpu_suite.mojo",
+  "gpu_suite": "checks/native_tests/gpr_score_gpu_suite.mojo",
+  "cpu_cases": 17,
+  "gpu_cases": 10,
+  "pure_cases": 7,
+  "actual_provider_cases_per_column": 10,
+  "original_python_numerical_candidate": {
+    "path": "python/mojolearn/tests/test_estimator_score_p2.py",
+    "definition": "test_regressor_score_is_r2_of_its_predictions_and_refuses_short_y",
+    "parameter": "GaussianProcessRegressor",
+    "rows": 60,
+    "features": 4,
+    "data_seed": 1,
+    "kernel": "ConstantKernel(1.0, fixed) * RBF(1.0, fixed)",
+    "alpha": 0.00000095367431640625,
+    "optimizer": null,
+    "normalize_y": false,
+    "original_abs_tolerance": 0.001,
+    "native_units": [8, 9],
+    "oracle": "Independent NumPy float64 covariance/solve/R2 on the exact original saved inputs; source and provenance in fixtures/gp/gpr-score-reference.json",
+    "cleanup": "pending equivalent root acceptance; original Python definition and parameter row remain unchanged"
+  },
+  "supplementary_cases": {
+    "actual_units_0_1": "Analytic numerator 9/4, denominator 35/4, score 26/35; ranges disabled/enabled",
+    "actual_units_2_3": "Exact constant target and prediction: score 1; ranges disabled/enabled",
+    "actual_units_4_5": "Constant target with nonzero residual: score 0; ranges disabled/enabled",
+    "actual_units_6_7": "Float32-rounded target mean at 2**24+1: numerator 4, denominator 4, score 0; ranges disabled/enabled",
+    "ownership": "Analytic programs outlive destroyed and mutated source owners, then move without changing arena address",
+    "pure_unit_0": "Empty/positive native storage initialization and whole-owner allocation identity",
+    "pure_units_1_5": "Target NaN/Inf, prediction NaN/Inf and target-first refusal precedence",
+    "pure_unit_6": "Zero span and adjacent host input-range coalescing with owned copy independence"
+  },
+  "routing": {
+    "host": "Actual GPHostKernels and metrics_program_host_v1; ranges flag falls back by actual host capability",
+    "device": "Actual GPDeviceKernels, existing pointer fit and resident mean-only query when advertised, explicit lease cleanup, metrics_program_device_v1 range/full-output routes",
+    "cpu_schedule": "All 17 independent cases use host_parallelize and its full shared host pool",
+    "gpu_schedule": "10 graphs ordered on one physical GPU, kernels remain parallel; no shared-context concurrency claim"
+  },
+  "retained_python_seams": [
+    "Public score call, Python scalar packing and short-y shape refusal",
+    "Shared estimator score helper still serves all other estimator parameters",
+    "Callback/protocol admission and public buffer ownership tests"
+  ],
+  "deletions": {"python_test_definitions": 0, "python_parameterized_cases": 0, "product_files": 0},
+  "compile_defines": {"both": ["MOJOLEARN_NUMERIC_IDENTICAL=1"], "cpu_additional": ["MOJOLEARN_COLUMN_CPU=1"]},
+  "compiled": false,
+  "executed": false,
+  "installed_boundary_runtime": false,
+  "performance_measured": false,
+  "cross_device_identity": false
+}

@@ -588,7 +588,7 @@ def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     var repeated_xi = Float64(py=_float(_attr(model, "xi")))
     var connection = optics_fit_connection(binding)
     var request = OpticsFitRequest(variants_span(x), n, d, ms, mcs,
-        0 if is_xi else 1, predecessor_correction, code,
+        0 if is_xi else 1, predecessor_correction, code.copy(),
         Float64(py=max_eps), repeated_xi, Float64(py=eps))
     var result = OpticsFitResultSlot()
     try:
@@ -792,7 +792,7 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         Float64(py=staged_alpha), Float64(py=staged_epsilon))
     var request = HdbscanFitRequest(VariantsSpan(source_address, n * d),
         VariantsSpan(label_address, n), VariantsSpan(core_address, n),
-        VariantsSpan(probability_address, n), options)
+        VariantsSpan(probability_address, n), options.copy())
     if connection.host:
         plan.capture_host_source(request)
     var n_clusters = 0

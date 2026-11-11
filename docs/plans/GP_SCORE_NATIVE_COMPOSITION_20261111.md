@@ -1,0 +1,170 @@
+# Native Gaussian process score composition
+
+This tranche follows the completed Spectral producers and does not modify a
+frozen integration build. Baseline source is `9d6fb29702`. Complete before
+sources and route/ownership findings are saved under
+`~/mojolearn-evidence/python-mojo-migration-20261110/gp-score-native-owner/`.
+
+GPR score currently predicts into a private public-format Array, builds a
+private prediction-argument tuple and metrics tuple, then constructs the
+existing `_Reg` R² program. GPC likewise builds prediction arguments, decodes
+public-format class values and passes them into accuracy. Required class
+identity and actual boundary pins are excluded from removal counts.
+
+## Additive native R² interface
+
+`MetricR2Sums` exposes the existing Float64 numerator/denominator result.
+`linear_r2_execute` executes the same `LinearR2Layout` stage words and output
+ranges while accepting native input-range records. `linear_r2_sums` retains
+the former linear connection checks, target copy and range switch, and
+`linear_r2_finish` retains its existing denominator-zero policy unchanged.
+No numerical stage or kernel has been replaced.
+
+`core/gp_native_score.mojo` adds native prediction/scalar storage, the same
+R² program arena/input ranges and GP's distinct policy: a constant target
+scores1 only when its residual is exactly0, otherwise0. Its input preparation
+preserves adjacent host-range coalescing and admits existing resident source
+handles without reading the host words for those inputs. The target mean is
+still rounded to Float32 by the existing `reg_epi` stage; sums remain Float64.
+
+This additive chunk has not switched either public score implementation and
+therefore claims zero removed Python roles. The initial generic-runner trace raised a possible resident-scope route.
+The complete import/export trace subsequently established that metrics store
+entries were already tombstoned and were never captured by the live metrics
+connection. The correction is saved beside the original evidence in
+`live-resident-path-correction.json`; no deleted export or cache mechanism is
+restored. GP prediction resident/fold routes remain live and unchanged.
+
+All compilation, native correctness, installed public tests, performance and
+cross-device identity are pending and owned by the root orchestrator. No
+lane build/test/timing/box action was performed.
+
+
+## GPR public score composition
+
+Mean prediction now returns a native storage/pin envelope shared by public
+prediction and score. Public prediction keeps its existing exporter-backed
+Array and standard-deviation/clamp publication. Score selects a native mean
+buffer and calls that same prediction body directly, without a private Python
+argument tuple or packed prediction Array.
+
+After the same truth-shape and metrics-availability refusals, the target is
+admitted/cast as before. Native score preparation performs the same forced
+metric target and prediction snapshots, in that order, through the existing
+parallel `admitted_convert` and finite scan. It then copies the same three
+inputs into the same R² arena and executes the existing ranges/out descriptor.
+The shared import-time metrics connection captures the already-exported native
+program factory. It pins that factory's exact provider image through RUN.
+No metric-store exports, cache owners or generic cache helpers were added.
+
+Removed private roles include the GPR prediction-argument tuple, public-format
+mean intermediate, metrics argument tuple, two metric snapshot Arrays, scalar
+Array and completed arena Python store. Other shared metric builders keep their
+existing paths; this is not a whole-metrics migration. GPC score composition is
+still pending. Compile/runtime/performance evidence remains pending.
+
+## GPC typed prediction result (composition remains staged)
+
+GPC public prediction and score now call one `_gpc_prediction_codes` body
+with explicit boundary inputs. `GPCPredictionCodes` holds the existing Int64
+codes and the required public class pin. Score's private prediction-argument
+tuple is removed. Both callers still use the existing class decode helper;
+the score's decoded public-format intermediate and metrics composition remain
+pending. This extraction preserves all-entry, binary and multiclass fallback
+routes, the existing widening/gathers and class lookup timing after prediction.
+It adds one private request role to the seven GPR score roles, without counting
+class pins or the already-native code buffer again.
+
+## Additive GPC native COUNT program
+
+`GPCAccuracyProgram` owns the existing `label_accuracy_plan(rows, classes,
+False)` arena. It preserves both int32 input copies, original stage order and
+the full complement of input/scratch download ranges (including the existing
+group/count outputs), then reads the same COUNT fraction words. It does not
+replace the classifier's count pipeline with a match-reduction shortcut.
+The provider descriptor and range switch are the existing metrics program
+interface. Public GPC score still waits for exact label admission/decode
+composition; this additive owner adds no removal count by itself.
+
+## Shared scalar-pin and integer-view admission
+
+The existing score-key UNPACK now also accepts a native `List[PythonObject]`
+of admitted class pins, using the same scalar C-API normalization loop. Its
+existing Python list/tuple entry remains a wrapper over that same body.
+The metrics integer-store view admission is factored into `MetricIntegerView`;
+legacy `mc_int_store` retains its original Array storage and conversion,
+while the GP composition can choose native storage after identical admission.
+The source owner is explicitly retained after the conversion on both success
+and refusal. This does not change the host integer encoder or introduce the
+different device-label encoder used elsewhere. No `classical_labels` algorithm
+was modified. Native key and COUNT composition remains unfinished at this point.
+
+The score input helper also accepts retained scalar pins directly. The existing
+`gp_label_input` exact-type/overflow walk is shared by its Python sequence and
+native pin-list callers. The signed metrics encoder moved unchanged into
+`core.labels_score_encode`; the existing metrics caller imports its old local
+name as an alias. Both paths retain the same `host_unique_inverse_cast` call.
+These are source-only additive dependencies; no lane compilation or execution.
+
+GPC score now decodes into `GPDecodedScoreLabels`: numeric words use the
+existing base label gather, while the object route shares the public decode
+slot walk and retains original class identities in a native pin list. Public
+`predict` still packs its original Array/list output. Prediction decode occurs
+before truth shape checks; truth multilabel refusal, prediction admission,
+truth encoding and prediction encoding retain their former order. Unused
+object classes do not enter metric type admission. Numeric float class tables
+still decode as Float64 and are refused by classification metrics after truth.
+
+`GPScoreLabelCodes` keeps the existing signed host encoder for every Int64-fit
+input. Shared native text/arbitrary-integer key indexing replaces private
+Python class sets/dictionaries and sorted metadata. The existing metrics
+`mexp_gather_i32` remaps each vector onto the sorted union; the unchanged COUNT
+plan then uses the same input copies and full output ranges. The GP prediction
+resident/fold paths and all numerical kernel bodies are unchanged. Class pins,
+key-byte owners, raw integer conversion sources and program spans are explicitly
+retained past their last raw-pointer read. General truth flattening and scalar
+admission still use the shared boundary's Python metadata; this is remaining
+debt, not a whole-family Python-free claim.
+
+The new Python file contains only public class rebinding, unseen-label and
+error-order seams. Existing tests are retained. Native score fixtures are owned
+by the test lane and are pending; no compilation, runtime, timing or identity
+execution occurred in this producer lane.
+
+Frozen source handoff: `4256e469ae255410c9d6b09a885f14c687b95f8e`.
+The independently collectable score producers are `76bba34249`, `6f5afa90c8`,
+`b8acfbcfdb`, `b9b0edfe7f`, `4d8e2c64b3`, `6ed4b3b075`, and `4256e469ae`.
+The intervening `0ef98ae676` is only the GP public-class parameter compile
+repair, already collected separately by the orchestrator; do not replay it as
+part of this tranche.
+
+The bounded source audit is
+`~/mojolearn-evidence/python-mojo-migration-20261110/python-object-typed-gp-score-composition.json`.
+It records 15 distinct removed private roles: seven GPR rows plus eight GPC
+rows, with all 30 before/after source anchors present. Integer input snapshots
+and arena storage are shared roles and are not counted again for GPC. Actual
+class scalar identities and image/source lifetime pins are excluded. Five
+native roots reach 36 local sources with zero Python imports. The audited
+Gaussian-process/metrics numerical sources and shared label encoder, gather,
+COUNT and R² program bodies are unchanged. This is a source report, not a
+runtime or performance result.
+
+The supported build closure walker identifies these affected binding roots:
+
+- `_mojolearn_runtime_byte_trainer_host`
+- `_mojolearn_runtime_classical_host`
+- `_mojolearn_runtime_decomp_host`
+- `_mojolearn_runtime_family_host`
+- `_mojolearn_runtime_linear_host`
+- `_mojolearn_runtime_manifold_host`
+- `_mojolearn_runtime_model_selection_host`
+- `_mojolearn_runtime_parallel_host`
+- `_mojolearn_runtime_prep_host`
+- `_mojolearn_runtime_trees_host`
+- `_mojolearn_runtime_xseq_host`
+
+The import-time `_native_arena_prog.py` change captures the already exported
+metrics program factory. No provider ABI or tombstoned store/free export is
+added. Native score fixtures belong to the test lane; the 5 new Python boundary
+definitions expand to 11 cases and remain unrun. All existing numerical tests
+remain in place. No A/B switch, measurement, identity run or box job was added.

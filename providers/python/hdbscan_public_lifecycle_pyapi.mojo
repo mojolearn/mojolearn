@@ -181,7 +181,7 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var pd = PythonObject(None)
     if held is not None:
         var cached = held.downcast_value_ptr[HdbscanQueryRecord]()
-        connection = Optional(HdbscanQueryConnection(cached[].provider, cached[].driver, cached[].host))
+        connection = Optional(HdbscanQueryConnection(cached[].provider, cached[].driver.copy(), cached[].host))
         raw = cached[].raw
         core = cached[].core_distances
         labels = cached[].labels
@@ -192,7 +192,7 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
         children = cached[].children
         indices = cached[].indices
         offsets = cached[].offsets
-        var counts = cached[].dimensions
+        var counts = cached[].dimensions.copy()
         rows = counts.rows
         columns = counts.features
         edges = counts.edges
@@ -280,7 +280,7 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
         var buffers = HdbscanQueryBuffers(training_span, core_span, label_span, absent,
             lambda_span, death_span, selected_span, child_span, absent, absent,
             query_span, output_span, probability_span)
-        hdbscan_query_run(connection.value(), HdbscanQueryRequest(dims, buffers, nq, 0, batch), HDBSCAN_QUERY_APPROXIMATE)
+        hdbscan_query_run(connection.value(), HdbscanQueryRequest(dims.copy(), buffers.copy(), nq, 0, batch), HDBSCAN_QUERY_APPROXIMATE)
         if held is None:
             _record(model, slot, key, binding, connection.value(), raw, core, labels, parents, lambdas, deaths, clusters, children,
                     indices, offsets, rows, columns, edges, condensed, exemplars, selected, neighbors)
@@ -319,7 +319,7 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var buffers = HdbscanQueryBuffers(training_span, core_span, label_span, parent_span,
         lambda_span, death_span, selected_span, child_span, exemplar_span, offset_span,
         query_span, output_span, VariantsSpan(0, 0))
-    hdbscan_query_run(connection.value(), HdbscanQueryRequest(dims, buffers, nq, 0, batch),
+    hdbscan_query_run(connection.value(), HdbscanQueryRequest(dims.copy(), buffers.copy(), nq, 0, batch),
         HDBSCAN_QUERY_ALL_POINTS if all_points else HDBSCAN_QUERY_MEMBERSHIP)
     if held is None:
         _record(model, slot, key, binding, connection.value(), raw, core, labels, parents, lambdas, deaths, clusters, children,
@@ -347,9 +347,9 @@ def _record(model: PythonObject, slot: String, key: PythonObject, binding: Pytho
             edges: Int, condensed: Int, exemplars: Int, selected: Int, neighbors: Int) raises:
     """Same weak-key/provider cache with typed counts, driver and named pins."""
     var dims = HdbscanQueryDimensions(rows, columns, edges, condensed, exemplars, selected, neighbors)
-    var record = HdbscanQueryRecord(binding, connection.provider, connection.driver, connection.host,
-        dims, raw, core, labels, parents, lambdas, deaths, clusters, children, indices, offsets)
-    cluster_record_put(slot, model, key, PythonObject(record^))
+    var record = HdbscanQueryRecord(binding, connection.provider, connection.driver.copy(), connection.host,
+        dims.copy(), raw, core, labels, parents, lambdas, deaths, clusters, children, indices, offsets)
+    cluster_record_put(slot, model, key, PythonObject(alloc=record^))
 
 
 def hdbscan_public_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:

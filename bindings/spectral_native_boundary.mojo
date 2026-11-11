@@ -79,7 +79,7 @@ struct SpectralStatePins(Copyable, Movable):
 def spectral_fit_run(connection: SpectralConnection, request: SpectralFitRequest) raises -> Int:
     var columns: Int
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             columns = connection.driver.fit(request)
     finally:
         _ = connection.provider
@@ -89,7 +89,7 @@ def spectral_fit_run(connection: SpectralConnection, request: SpectralFitRequest
 def spectral_embedding_run(connection: SpectralConnection, request: SpectralEmbeddingRequest) raises -> Int:
     var columns: Int
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             columns = connection.driver.embed(request)
     finally:
         _ = connection.provider
@@ -98,7 +98,7 @@ def spectral_embedding_run(connection: SpectralConnection, request: SpectralEmbe
 
 def spectral_query_run(connection: SpectralConnection, request: SpectralQueryRequest) raises:
     try:
-        with GILReleased():
+        with GILReleased(Python()):
             _ = connection.driver.query(request)
     finally:
         _ = connection.provider

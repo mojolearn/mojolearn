@@ -1,6 +1,6 @@
 {
   "family": "Spectral dense preparation",
-  "status": "CPU14/GPU8 authored, uncompiled and unrun",
+  "status": "Native CPU14/Apple GPU8 accepted in wave18; numerical Python duplicates removed; public boundary coverage separate",
   "dependency": "71cd5c0138: actual Spectral preparation API/host/device providers over unchanged core dense COO/kNN kernels",
   "entries": {
     "cpu": "checks/native_tests/spectral_dense_cpu.mojo",
@@ -44,7 +44,7 @@
       "-D MOJOLEARN_COLUMN_CPU=1"
     ]
   },
-  "cleanup": "All original Python tests remain until root accepts native execution. Keep sparse public refusal, public packing and fit-time validation seams when numerical duplicates are removed.",
+  "cleanup": "Accepted numerical duplicates removed; all other Python test functions retained with identical AST.",
   "evidence": [
     "E/pca-native-tests/spectral-reference-preparation.log",
     "E/pca-native-tests/spectral-reference-source-check.json",
@@ -54,8 +54,10 @@
   ],
   "preserved_preparation_failures": "First static byte-check command used missing python (exit127), second system python3 lacked NumPy (exit1); successful third command used existing project Python. Both original logs retained; no native attempt occurred.",
   "product_or_kernel_changes": 0,
-  "python_deletions": 0,
+  "python_deletions": 2,
   "runtime_identity_performance_claim": false,
   "typed_driver_followup": "Original unrun CPU14/GPU8 fixtures now invoke SpectralPreparationDriver.count/fill/knn; original matrix/reference bytes, assertions and fixture counts unchanged. Device uses the actual provider image context.",
-  "local_adoption_not_producer": "093de0a9c62d89aa6473fb8380ad83477c50bb7e"
+  "local_adoption_not_producer": "093de0a9c62d89aa6473fb8380ad83477c50bb7e",
+  "root_acceptance": "~/mojolearn-evidence/python-mojo-migration-20261110/native-wave18-accepted-results.json",
+  "source_closure_reuse": "~/mojolearn-evidence/python-mojo-migration-20261110/wave18-accepted-python-cleanup-source-reuse.json"
 }

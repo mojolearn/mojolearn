@@ -49,7 +49,7 @@ def hdbscan_fit_dispatch[K: HdbscanFitBackend](operation: Int,
                 _word(pp, 8), _word(pp, 9) != 0, floats[0], floats[1])
             var request = HdbscanFitRequest(VariantsSpan(_word(aa, 0), _word(pp, 0)),
                 VariantsSpan(_word(aa, 1), o.rows), VariantsSpan(_word(aa, 2), o.rows),
-                VariantsSpan(_word(aa, 3), o.rows), o)
+                VariantsSpan(_word(aa, 3), o.rows), o.copy())
             var state = MutPointer[HdbscanFitState, MutUntrackedOrigin](unsafe_from_address=_word(aa, 4))
             if len(state[].info) != (5 if o.prediction_data else 4):
                 raise Error("HDBSCAN fit ABI: info owner does not match prediction-data mode")

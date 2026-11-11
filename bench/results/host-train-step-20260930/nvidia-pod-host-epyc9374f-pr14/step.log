@@ -1,6 +1,0 @@
-15053 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x390f80000000, nodemask=2)
-15053 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3274c0000000, nodemask=1)
-15053 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327500000000, nodemask=1)
-15053 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327540000000, nodemask=1)
-rows 1443.5 ms/step, serial 2552.3 ms/step, ratio 1.77x, losses [9.011438369750977, 9.011005401611328, 9.010663032531738, 9.010851860046387]
-BYTE_LM_HOST_STEP_CHECK PASS

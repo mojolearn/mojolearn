@@ -51,7 +51,7 @@ struct HdbscanQueryRequest(Copyable, Movable):
     var batch: Int
 
     def validate(self, operation: Int) raises:
-        var d = self.dimensions
+        var d = self.dimensions.copy()
         if operation == HDBSCAN_QUERY_APPROXIMATE:
             if d.rows < 2 or d.features < 1 or d.edges < 1 or d.condensed < 1 or d.clusters < 0 or self.query_rows < 1:
                 raise Error("hdbscan_approximate_predict: shape refused by name (m=" + String(d.rows)
@@ -98,7 +98,7 @@ struct HdbscanQueryState(Movable):
     var query: List[Float32]
 
     def __init__(out self, request: HdbscanQueryRequest, operation: Int, host: Bool):
-        self.request = request
+        self.request = request.copy()
         self.operation = operation
         self.host = host
         self.training = List[Float32]()
@@ -116,9 +116,9 @@ struct HdbscanQueryState(Movable):
     def capture(mut self) raises:
         # Each branch retains its old copies versus borrowed pointers, in
         # the old order. Caller holds the GIL for this UNPACK snapshot stage.
-        var r = self.request
-        var d = r.dimensions
-        var b = r.buffers
+        var r = self.request.copy()
+        var d = r.dimensions.copy()
+        var b = r.buffers.copy()
         r.validate(self.operation)
         var approximate = self.operation == HDBSCAN_QUERY_APPROXIMATE
         var all_points = self.operation == HDBSCAN_QUERY_ALL_POINTS

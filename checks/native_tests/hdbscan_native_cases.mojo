@@ -69,7 +69,7 @@ def fixture(fit_driver: HdbscanFitDriver, query_driver: HdbscanQueryDriver, unit
     var options = HdbscanFitOptions(n, d, 2, 8 if wide else 2, 0, False,
         1 if unit == 2 else 0, 1, want_tree, 1, 0)
     var request = HdbscanFitRequest(VariantsSpan(Int(xp), n * d),
-        VariantsSpan(Int(lp), n), VariantsSpan(Int(cp), n), VariantsSpan(Int(pp), n), options)
+        VariantsSpan(Int(lp), n), VariantsSpan(Int(cp), n), VariantsSpan(Int(pp), n), options.copy())
     var fit = HdbscanFitPlan(want_tree)
     if unit == 7:
         # Deliberately wrong info layout is refused before source capture or
@@ -156,7 +156,7 @@ def fixture(fit_driver: HdbscanFitDriver, query_driver: HdbscanQueryDriver, unit
             nq = n - 2
         if operation != HDBSCAN_QUERY_APPROXIMATE:
             buffers.output = VariantsSpan(Int(output_membership.unsafe_ptr()), nq * clusters)
-        var query_request = HdbscanQueryRequest(dimensions, buffers, nq, row_start, 3)
+        var query_request = HdbscanQueryRequest(dimensions.copy(), buffers.copy(), nq, row_start, 3)
         var plan = HdbscanQueryPlan(query_request, operation, host)
         require(query_driver.run(plan) == nq, "query returns consumed row count")
         if operation == HDBSCAN_QUERY_APPROXIMATE:

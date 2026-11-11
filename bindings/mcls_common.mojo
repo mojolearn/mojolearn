@@ -41,8 +41,7 @@ from bindings.family_common import (
 )
 from core.host_finite_scan import host_all_finite_f32
 from core.admitted_ids import admitted_ids_i64, admitted_narrow_i32
-from core.cast_in import CastIn, CAST_KIND_SIGNED
-from core.label_cast import host_unique_inverse_cast
+from core.labels_score_encode import score_encode_signed as mc_encode_signed
 from core.metrics_exp_impl import mexp_gather_i32
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_native import _reg_weights
@@ -361,47 +360,51 @@ def _view_kind(dtype: String) raises -> Int:
     return 0
 
 
-def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(store, n)`: an `array.array('q')` of the integer labels of a 1-D
-    integer buffer or Array, or None when the value is not one (the label
-    input step then reads it)."""
-    var b = mc_b()
+@fieldwise_init
+struct MetricIntegerView(Movable):
+    var view: PythonObject
+    var count: Int
+    var item: Int
+    var stride: Int
+    var signed: Bool
+
+
+def mc_integer_view(values: PythonObject, context: PythonObject) raises -> Optional[MetricIntegerView]:
+    """The existing integer-store admission; storage choice follows it."""
     var view: PythonObject
     try:
         view = classical_view(values, context, "y")
     except:
-        return PythonObject(None)
+        return None
     if Int(py=view.ndim) != 1:
-        return PythonObject(None)
+        return None
     var kind = _view_kind(classical_dtype_str(view, context))
     if kind == 0:
-        return PythonObject(None)
+        return None
     var count = Int(py=view.shape[0])
     if count < 1:
-        return PythonObject(None)
+        return None
     var item = Int(py=view.itemsize)
     var stride = Int(py=view.strides[0])
-    # One zeroed int64 store (it was a bytes object copied into an array).
+    return MetricIntegerView(view, count, item, stride, kind == 1)
+
+
+def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Legacy Array store wrapper over the shared admitted view."""
+    var input = mc_integer_view(values, context)
+    if not input:
+        return PythonObject(None)
+    var count = input.value().count
+    # Keep the existing zeroed Int64 store and native conversion route.
     var store = native_array_zeros(String("q"), count)
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
-    if not admitted_ids_i64(Int(py=classical_address(view)), stride, 0, count, 1, item, kind == 1, False, dst):
+    var admitted = admitted_ids_i64(Int(py=classical_address(input.value().view)), input.value().stride,
+        0, count, 1, input.value().item, input.value().signed, False, dst)
+    _ = input  # retain the source owner through success and refusal
+    _ = store
+    if not admitted:
         return PythonObject(None)
-    _ = view^
     return Python.tuple(store, PythonObject(count))
-
-
-def mc_encode_signed(addr: Int, item: Int, count: Int, classes_addr: Int, codes_addr: Int) raises -> Int:
-    """The ORDER RULE over `count` signed little-endian integer labels of
-    `item` bytes (contiguous): the sorted distinct values written to
-    `classes_addr` (items of the same width) and one dense int32 code per
-    row; returns k. The host label encoder called natively: no Python call
-    into the base binding's `prepare_targets` entry, the same classes and
-    codes (exact integers)."""
-    var src = CastIn(addr, CAST_KIND_SIGNED, item, count, 1, item, item)
-    var k = host_unique_inverse_cast(src, 1, classes_addr, codes_addr)
-    if k < 0:
-        raise Error("RuntimeError: prepare_targets refused integer labels")
-    return k
 
 
 def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:

@@ -6,6 +6,7 @@
 # are staged boundary dependencies, migrated in the following chunk.
 from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest, GP_CAP_GRADIENT, GP_CAP_OPTIMIZE, GP_CAP_SAMPLE, GP_CAP_THETA, GP_CAP_COVARIANCE
 from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
+from bindings.gp_score_boundary import GPRPredictionRoom, gpr_score_result
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word, gp_require
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -29,7 +30,6 @@ from bindings.family_common import (
 )
 from bindings.gp_normalization_boundary import GPNormalizationConnection, gp_normalization_run
 from core.gp_native_normalization import GPRNormalizeRequest
-from bindings.metrics_reg_native import _reg_new, _reg_run, _arena_double, _RE_DIV
 from bindings.gp_common_native import gp_fit_owned
 from bindings.gp_common_native import (
     gp_extension, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
@@ -394,18 +394,28 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
                     + "or return_cov can be requested (scikit-learn's rule)")
     if return_cov:
         return _gpr_predict_cov(model, args, context)
+    var result = _gpr_predict_result(model, fields, args[0], args[1], return_std, False, context)
+    if return_std:
+        return Python.tuple(result.mean, result.stddev)
+    return result.mean
+
+
+def _gpr_predict_result(model: PythonObject, fields: PythonObject,
+                        binding: PythonObject, source: PythonObject, return_std: Bool,
+                        private_mean: Bool, context: PythonObject) raises -> GPRPredictionRoom:
+    """One existing query route; score can retain its mean in native storage."""
     _gpr_fitted(fields, "call fit() first (the unfitted-prior arm of sklearn's predict is not implemented)")
-    var ext = _gpr_ext(model, args[0], context)
+    var ext = _gpr_ext(model, binding, context)
     var connection = GPConnection(ext)
     var caps = connection.capabilities
     var resident = (caps & 4) == 4
-    var gq = _gpr_query(fields, args[1], context, resident)
+    var gq = _gpr_query(fields, source, context, resident)
     var q = gq.q
     var n_star = gq.rows
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
-    var mean = family_array(Python.tuple(n_star), "<f4", context)
+    var mean = GPRPredictionRoom(n_star, private_mean, context)
     # The variance, std and clamp outputs exist only for return_std (lane
     # p3-svm-gp-kernel, row 628): every binding leaves their addresses
     # untouched when return_std is 0, so a mean-only predict passes 0.
@@ -451,7 +461,7 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     # (+ lease: gpr_predict_resident_binding)
     var kernel = gp_kernel_view(arrays)
     var request = GPRQueryRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
-        Int(py=classical_address(dual)), Int(py=gp_query_address(gq)), Int(py=classical_address(mean)),
+        Int(py=classical_address(dual)), Int(py=gp_query_address(gq)), mean.mean_address(),
         var_address, std_address, clamped_address, n_train, Int(py=fields["n_features_in_"]), n_star,
         kernel^, Int(py=fields["info_"]), return_std, normalization.enabled, normalization.stddev,
         normalization.mean, route, lease, gq.store.base_id if gq.store.active() else -1,
@@ -481,8 +491,8 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         _ = clamped  # keep the Python object alive through the native call above
         _ = std  # keep the Python object alive through the native call above
         _ = mean  # keep the Python object alive through the native call above
-        return Python.tuple(mean, std)
-    return mean
+        mean.stddev = std
+    return mean^
 
 
 def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -684,41 +694,25 @@ def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     mean rounded to float32 on the device, both sums of squares binary64);
     1.0 for a constant target predicted exactly, else 0.0 when SS_tot is 0.
     args = (binding, X, y)."""
-    var pred = _gpr_predict(model, Python.tuple(args[0], args[1], PythonObject(False), PythonObject(False)), context)
-    var n = Int(py=pred.shape[0])
+    classical_connect_numpy(context)
+    var fields = py_fields(model)
+    var pred = _gpr_predict_result(model, fields, args[0], args[1], False, True, context)
+    var n = pred.rows
     var view = classical_view(args[2], context, "y")
     if Int(py=view.ndim) != 1 or Int(py=view.shape[0]) != n:
         raise Error(String(_GPR) + ": y must be 1-D with one "
                     + "entry per row of X, got shape " + family_shape_repr(view) + " against "
                     + String(n) + " predictions")
-    if not py_contains(context, PythonObject("family_metrics_ops")):
+    if not py_contains(context, PythonObject("family_metrics_prog_context")):
         raise Error("ImportError: mojolearn GaussianProcessRegressor.score needs the metrics owner (mojolearn._expansion_metrics)")
     # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
     # row 629): y is not viewed and converted a second time.
     var t = admit_family(view, 1, "y", context).array
     _ = view^
-    var r = _reg_new(Python.tuple(t, pred, PythonObject(None)), PythonObject("uniform_average"), "score", True, context)
-    var sq = Int(py=context["family_metrics_terms"]["sq"])
-    r.program(0.0, context)
-    var y_off = r.y_off
-    var p_off = r.p_off
-    var y_sums = r.sums(y_off)
-    var y_mean = r.fin32(y_sums, _RE_DIV)
-    var res_terms = r.term(sq, y_off, p_off, False)
-    var res_sums = r.sums(res_terms)
-    var num = r.fin(res_sums, 0)
-    var tot_terms = r.term(sq, y_off, y_mean, True)
-    var tot_sums = r.sums(tot_terms)
-    var den = r.fin(tot_sums, 0)
-    _ = r.prog.want(num, 2)
-    _ = r.prog.want(den, 2)
-    var arena = _reg_run(r.prog, PythonObject(None), context)
-    var ss_res = _arena_double(arena, num)
-    var ss_tot = _arena_double(arena, den)
-    _ = t^
-    if ss_tot == 0.0:
-        return PythonObject(Float64(1.0) if ss_res == 0.0 else Float64(0.0))
-    return PythonObject(Float64(1.0) - ss_res / ss_tot)
+    var result = gpr_score_result(pred.score.value(), t, context)
+    _ = pred
+    _ = t
+    return PythonObject(result)
 
 
 def gp_regressor_operation(model: PythonObject, operation: String, args: PythonObject,
