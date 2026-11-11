@@ -1627,7 +1627,11 @@ def build__mojolearn_byte_lm() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm")
-        module.def_function[byte_lm_arithmetic_suffix_binding]("byte_lm_arithmetic_suffix")
+        # The native trainer door (bindings/byte_lm_trainer_native.mojo) reads
+        # the metadata, arm read-backs, stateless step and stateless logits
+        # through the trainer table published below (lane calltable-byte-lm).
+        # These Python entries remain only for unconverted callers: the Python
+        # session methods of python/mojolearn/_byte_lm_impl.py, tools and tests.
         module.def_function[byte_lm_numeric_mode_binding]("byte_lm_numeric_mode")
         module.def_function[byte_lm_vendor_binding]("byte_lm_vendor")
         module.def_function[byte_lm_profile_binding]("byte_lm_profile")
