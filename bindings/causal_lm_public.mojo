@@ -60,6 +60,13 @@ from bindings.neural_block_admission import neural_record_fields, neural_native_
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot, model_dict, model_plain
 from bindings.causal_operation_owner import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
 from core.shared_slot import SharedSlot
+from core.causal_lm_entry_table import (
+    CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_tables_admit,
+    CAUSAL_TABLE_LINALG, CAUSAL_TABLE_PRIMITIVES, CAUSAL_TABLE_BLOCK, CAUSAL_TABLE_MAMBA,
+    CAUSAL_LIN_GEMM_INT15, CAUSAL_LIN_QUANTIZE_INT15, CAUSAL_PRIM_EMBED_FORWARD, CAUSAL_PRIM_NORM_FORWARD,
+    CAUSAL_PRIM_LINEAR_FORWARD, CAUSAL_BLOCK_HOST_FORWARD, CAUSAL_BLOCK_HOST_FORWARD_INT15,
+    CAUSAL_MAMBA1_FORWARD, CAUSAL_MAMBA1_DECODE, CAUSAL_MAMBA2_FORWARD, CAUSAL_MAMBA2_DECODE,
+)
 
 
 struct CausalPublicConnection(Defaultable, Movable):
@@ -191,6 +198,26 @@ def _native_has_entry(mut mods: NativeModules, entries: PythonObject, name: Stri
     return py_contains(_native_entry_fields(mods, entries), name)
 
 
+def causal_entry_key(entries: PythonObject) raises -> CausalEntryKey:
+    # UNPACK: the admitted (tier, vendor) words a route's connection dict
+    # (`_model_bindings`) or a model's entry dict (`causal_lm_admit_binding`)
+    # carries for the CausalLM entry table (core/causal_lm_entry_table.mojo).
+    return CausalEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"]))
+
+
+def _causal_table_call[family: Int](key: CausalEntryKey, operation: Int, addresses: List[Int],
+    ints: List[Int], floats: List[Float64]) raises -> Int:
+    # One descriptor call into a sibling image through the CausalLM entry
+    # table: plain words, no CPython call. The GIL is released around the
+    # numerical work as the former Python entries and provider calls released
+    # it; a caller holding a NativeModules cache resets it afterwards
+    # (mods.released()), as it did after those calls.
+    var result = 0
+    with GILReleased(Python()):
+        result = causal_entry_call[family](key, operation, addresses, ints, floats)
+    return result
+
+
 def _native_function(mut mods: NativeModules, module: PythonObject, name: String) raises -> PythonObject:
     var entry = py_get(_native_entry_fields(mods, module), name)
     var bi = mods.module("builtins")
@@ -245,10 +272,18 @@ def causal_lm_admit_binding(mut mods: NativeModules,
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
     py_setattr(model, "_native_vendor", PythonObject(vendor))
     py_setattr(model, "_native_numeric_mode", PythonObject(mode))
+    # The CausalLM entry table key (core/causal_lm_entry_table.mojo). The
+    # embedding, norm and head projections, the int15 head, every CPU
+    # Transformer layer and every Mamba layer call their image's descriptor
+    # entry by it; the former Python entry lookups of embedding_forward,
+    # rms_norm_forward, linear_forward, quantize_int15, gemm_int15,
+    # transformer_forward_int15 (CPU) and the Mamba forward/decode are gone.
+    var key = CausalEntryKey(mode, causal_entry_vendor(vendor))
+    py_setitem(entries, "entry_mode", PythonObject(key.mode))
+    py_setitem(entries, "entry_vendor", PythonObject(key.vendor))
+    causal_tables_admit(key, CAUSAL_TABLE_BLOCK if kind == "transformer" else (CAUSAL_TABLE_MAMBA if kind == "mamba1" or kind == "mamba2" else -1), int15_binding is not None)
     var local_blocks = py_get(_standalone_record_fields(mods, model), "_native_block_fields")
     py_setitem(entries, "weight_names", local_blocks[0]["_neural_weight_names"] if local_blocks is not None else neural_block_weight_names(mods, model._blocks[0]))
-    for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
-        py_setitem(entries, name, _native_function(mods, primitives, name))
     if kind == "transformer":
         py_setitem(entries, "forward", _native_function(mods, block_binding, "transformer_forward"))
         py_setitem(entries, "decode", _native_function(mods, block_binding, "transformer_decode_step"))
@@ -260,14 +295,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
             py_setitem(entries, "create", _native_function(mods, block_binding, "transformer_session_create"))
             py_setitem(entries, "forward_session", _native_function(mods, block_binding, "transformer_session_forward"))
             py_setitem(entries, "block_binding", block_binding)
-        if model._head_int15 is not None:
-            if _native_has_entry(mods, block_binding, "transformer_session_forward_int15"):
-                py_setitem(entries, "create", _native_function(mods, block_binding, "transformer_session_create"))
-                py_setitem(entries, "forward15", _native_function(mods, block_binding, "transformer_session_forward_int15"))
-            else:
-                py_setitem(entries, "forward15_host", _native_function(mods, block_binding, "transformer_forward_int15"))
-            py_setitem(entries, "quantize15", _native_function(mods, int15_binding, "quantize_int15"))
-            py_setitem(entries, "gemm15", _native_function(mods, int15_binding, "gemm_int15"))
+        if model._head_int15 is not None and _native_has_entry(mods, block_binding, "transformer_session_forward_int15"):
+            py_setitem(entries, "create", _native_function(mods, block_binding, "transformer_session_create"))
+            py_setitem(entries, "forward15", _native_function(mods, block_binding, "transformer_session_forward_int15"))
         # Preserve the existing resident GPU route for fixed-length greedy
         # generation. No performance default changes with this migration.
         if _native_has_entry(mods, block_binding, "causal_lm_session_run"):
@@ -286,16 +316,13 @@ def causal_lm_admit_binding(mut mods: NativeModules,
                 py_setitem(entries, "transformer_decode_session_open_int15", _native_function(mods, block_binding, "transformer_decode_session_open_int15"))
                 py_setitem(entries, "causal_lm_session_open_int15", _native_function(mods, block_binding, "causal_lm_session_open_int15"))
     elif kind == "mamba1":
-        py_setitem(entries, "forward", _native_function(mods, block_binding, "mamba1_forward"))
-        py_setitem(entries, "decode", _native_function(mods, block_binding, "mamba1_decode_step"))
         var profile = 1
         if _native_has_entry(mods, block_binding, "mamba1_profile"):
             profile = Int(py=_native_function(mods, block_binding, "mamba1_profile")())
             mods.released()
         py_setitem(entries, "mamba1_profile", PythonObject(profile))
     elif kind == "mamba2":
-        py_setitem(entries, "forward", _native_function(mods, block_binding, "mamba2_forward"))
-        py_setitem(entries, "decode", _native_function(mods, block_binding, "mamba2_decode_step"))
+        pass
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
     # Lane x45c: the decode program door (every GPU kind).
@@ -851,9 +878,14 @@ def _causal_layer_run_bound(mut mods: NativeModules,
         a_words[11] = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
         var native_provider = py_get(e, "native_session_provider")
         var block_provider = py_get(e, "native_block_operations")
-        if Bool(py=e["cpu"]) and block_provider is not None:
-            py_setattr(st, "cached_tokens", PythonObject(neural_descriptor_execute(block_provider,
-                34 if head_profile else 33, a_words, p_words, [])))
+        if Bool(py=e["cpu"]):
+            # Every CPU layer, every tier: the neural host image's block entry
+            # through the CausalLM entry table (op 34 under fixed15_v1, else
+            # 33). The former Python-entry arms (transformer_forward,
+            # transformer_decode_step at L = 1, transformer_forward_int15) ran
+            # the same _run_forward with the same words.
+            py_setattr(st, "cached_tokens", PythonObject(_causal_table_call[CAUSAL_TABLE_BLOCK](causal_entry_key(e),
+                CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words, [])))
             mods.released()
         elif device15 and block_provider is not None:
             if blk["_native_session"] is None:
@@ -893,9 +925,6 @@ def _causal_layer_run_bound(mut mods: NativeModules,
                     mods.released()
                     causal_block_cache_set(mods, blk, "_session_binding", e["block_binding"])
                 py_setattr(st, "cached_tokens", py_call(e["forward15"], blk["_native_session"], addresses, params))
-                mods.released()
-            elif head_profile:
-                py_setattr(st, "cached_tokens", py_call(e["forward15_host"], addresses, params))
                 mods.released()
             elif py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
                 if blk["_native_session"] is None:
@@ -938,13 +967,13 @@ def _causal_layer_run_bound(mut mods: NativeModules,
                 m_addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
                 _ = y  # keep the Python object alive through the native call above
                 m_params.append(Int(py=st.absolute_position))
-            var native = py_get(e, "native_mamba")
-            if native is not None and profile == 1:
-                _ = neural_descriptor_execute(native, 1 if step else 0, m_addresses, m_params, [])
-                mods.released()
-            else:
-                _ = py_call(e["decode" if step else "forward"], py_ints(m_addresses), py_ints(m_params))
-                mods.released()
+            # The Mamba image's state entry through the CausalLM entry table:
+            # one route for every tier and profile (the provider-capsule and
+            # Python-entry arms ran this same mamba_state operation; both
+            # refuse the 17-word affine profile by the same arity rule).
+            _ = _causal_table_call[CAUSAL_TABLE_MAMBA](causal_entry_key(e),
+                CAUSAL_MAMBA1_DECODE if step else CAUSAL_MAMBA1_FORWARD, m_addresses, m_params, [])
+            mods.released()
             _ = y  # keep the Python object alive through the native call above
             py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
         else:
@@ -965,16 +994,10 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
             var m_params: List[Int] = [b, d, Int(py=st.buffered_tokens)] if step else [b, l, d, Int(py=st.buffered_tokens)]
-            var native = py_get(e, "native_mamba")
-            if native is not None:
-                py_setattr(st, "buffered_tokens", PythonObject(neural_descriptor_execute(native, 3 if step else 2,
-                    m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
-                mods.released()
-            else:
-                params = py_ints(m_params)
-                _ = py_call(params.extend, Python.list(PythonObject(layer.words.dt_low), PythonObject(layer.words.dt_high)))
-                py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], py_ints(m_addresses), params))
-                mods.released()
+            py_setattr(st, "buffered_tokens", PythonObject(_causal_table_call[CAUSAL_TABLE_MAMBA](causal_entry_key(e),
+                CAUSAL_MAMBA2_DECODE if step else CAUSAL_MAMBA2_FORWARD,
+                m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
+            mods.released()
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
             causal_block_cache_set(mods, blk, "h_last_", last)
@@ -993,21 +1016,21 @@ def causal_model_embedding(model: PythonObject, ids: PythonObject) raises -> Pyt
     var v = Int(py=model.vocab_size)
     var e = model._native_entries
     var weights = GenerationWeightSnapshot(Python.list(model._embed))
-    return _causal_model_embedding_prepared(e, py_get(e, "native_primitives"), d, v, b, l, flat, weights, ids)
+    return _causal_model_embedding_prepared(e, d, v, b, l, flat, weights, ids)
 
 
 def _causal_model_embedding_prepared(
-    e: PythonObject, native: PythonObject, d: Int, v: Int, b: Int, l: Int, flat: Bool,
+    e: PythonObject, d: Int, v: Int, b: Int, l: Int, flat: Bool,
     weights: GenerationWeightSnapshot, ids: PythonObject,
 ) raises -> PythonObject:
     var keep = List[PythonObject]()
     var x = generation_array([b, l, d])
     var weights_at = weights.resolve(keep)
     var a: List[Int] = [_addr(x, keep), weights_at[0], _addr(ids, keep)]
-    if native is not None:
-        _ = neural_descriptor_execute(native, 0, a, [b * l, v, d], [])
-    else:
-        _ = py_call(e["embedding_forward"], py_ints(a), py_ints([b * l, v, d]))
+    # The primitives image's entry through the CausalLM entry table: one
+    # route for every tier (the provider-capsule and Python-entry arms that
+    # stood here ran this same operation 0).
+    _ = _causal_table_call[CAUSAL_TABLE_PRIMITIVES](causal_entry_key(e), CAUSAL_PRIM_EMBED_FORWARD, a, [b * l, v, d], [])
     _ = x  # keep the Python object alive through the native call above
     if flat:
         _causal_array_guard()
@@ -1050,37 +1073,34 @@ def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b
     var keep = List[PythonObject]()
     var weights_at = head.weights.resolve(keep)
     var hn = x
-    var native = head.native
+    # The primitives and linalg images' entries through the CausalLM entry
+    # table (core/causal_lm_entry_table.mojo); the same operations the former
+    # provider-capsule and Python-entry arms ran, with the same words.
+    var key = causal_entry_key(e)
     if head.normalize:
         hn = generation_array([b, l, d])
         var a: List[Int] = [_addr(hn, keep), _addr(x, keep), weights_at[0]]
-        if native is not None:
-            _ = neural_descriptor_execute(native, 2, a, [b * l, d], [head.norm_eps])
-        else:
-            var np = py_ints([b * l, d])
-            _ = py_call(np.append, PythonObject(head.norm_eps))
-            _ = py_call(e["rms_norm_forward"], py_ints(a), np)
+        _ = _causal_table_call[CAUSAL_TABLE_PRIMITIVES](key, CAUSAL_PRIM_NORM_FORWARD, a, [b * l, d], [head.norm_eps])
         _ = hn  # keep the Python object alive through the native call above
     var out = _causal_logits_output(b, l, v, output)
     if not head.packed:
         var a: List[Int] = [_addr(out, keep), _addr(hn, keep), weights_at[1]]
-        if native is not None:
-            _ = neural_descriptor_execute(native, 4, a, [b * l, v, d], [])
-        else:
-            _ = py_call(e["linear_forward"], py_ints(a), py_ints([b * l, v, d]))
+        _ = _causal_table_call[CAUSAL_TABLE_PRIMITIVES](key, CAUSAL_PRIM_LINEAR_FORWARD, a, [b * l, v, d], [])
         _ = out  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
     else:
         var hi = generation_array([b * l, d], "b")
         var lo = generation_array([b * l, d], "b")
         var ex = generation_array([b * l], "i")
-        _ = py_call(e["quantize15"], py_ints([_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)]), py_ints([b * l, d]))
+        _ = _causal_table_call[CAUSAL_TABLE_LINALG](key, CAUSAL_LIN_QUANTIZE_INT15,
+            [_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)], [b * l, d], [])
         _ = ex  # keep the Python object alive through the native call above
         _ = lo  # keep the Python object alive through the native call above
         _ = hi  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
-        e["gemm15"](py_ints([_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
-            weights_at[2], weights_at[3], weights_at[4]]), py_ints([b * l, v, d]))
+        _ = _causal_table_call[CAUSAL_TABLE_LINALG](key, CAUSAL_LIN_GEMM_INT15,
+            [_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
+             weights_at[2], weights_at[3], weights_at[4]], [b * l, v, d], [])
         _ = ex  # keep the Python object alive through the native call above
         _ = lo  # keep the Python object alive through the native call above
         _ = hi  # keep the Python object alive through the native call above
@@ -1685,7 +1705,7 @@ def _run_prepared(mut mods: NativeModules, model: PythonObject, ids: PythonObjec
 
 def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot, ids: PythonObject, state: PythonObject,
                   b: Int, l: Int, output: PythonObject) raises -> PythonObject:
-    var x = _causal_model_embedding_prepared(snapshot.entries, snapshot.native, snapshot.width, snapshot.vocab,
+    var x = _causal_model_embedding_prepared(snapshot.entries, snapshot.width, snapshot.vocab,
                                             b, l, False, snapshot.embedding, ids)
     mods.released()
     for i in range(len(snapshot.layers)):  # driver-loop: over retained native layer descriptions
