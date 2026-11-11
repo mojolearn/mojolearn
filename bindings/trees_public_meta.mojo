@@ -598,7 +598,7 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
     var seen_addr = trees_address(seen)
     var bkey = base_helpers_key(context["trees_helpers"])
-    for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair
+    for pair in pairs:  # driver-loop: over the cv folds (one (train, test) index-array pair each, read natively per fold)
         var both = py_call(b.tuple, pair)
         if len(both) != 2:
             raise Error("each cv split must be a (train, test) pair")
@@ -2247,7 +2247,7 @@ def _fit_params_weight(fit_params: PythonObject) raises -> PythonObject:
     """`fit(X, y, **fit_params)`: only `sample_weight` is a fit parameter."""
     var b = trees_builtins()
     var keys = py_call(b.list, fit_params)
-    for i in range(len(keys)):  # small-loop(keyword arguments): the caller's fit parameters
+    for i in range(len(keys)):  # driver-loop: over fixed call structure, small-loop(keyword arguments): the caller's fit parameters
         if String(keys[i]) != "sample_weight":
             raise Error("TypeError: fit() got an unexpected keyword argument '" + String(keys[i]) + "'")
     return py_get(fit_params, PythonObject("sample_weight"))
@@ -2311,7 +2311,7 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
                 or operation == "trees_meta_transform" or operation == "trees_meta_score"):
             var prepared = _staged_input(model, kind, args[0], context)
             var call = Python.list(prepared[0])
-            for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+            for i in range(1, len(args)):  # driver-loop: over fixed call structure, small-loop(args): the call's remaining positional arguments
                 _ = py_call(call.append, args[i])
             try:
                 result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)

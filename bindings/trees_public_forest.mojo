@@ -429,7 +429,7 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
                              "min_weight_fraction_leaf", "max_features", "max_leaf_nodes",
                              "min_impurity_decrease", "bootstrap", "oob_score", "random_state",
                              "warm_start", "class_weight", "ccp_alpha", "max_samples", "monotonic_cst")
-    for i in range(len(names)):  # small-loop(names): the sixteen fixed configuration names
+    for i in range(len(names)):  # driver-loop: over fixed call structure, small-loop(names): the sixteen fixed configuration names
         var name = names[i]
         if String(name) == "class_weight" and not classifier:
             py_setitem(cfg, name, PythonObject(None))
@@ -459,7 +459,7 @@ def forest_refresh(model: PythonObject, kind: String, context: PythonObject) rai
     var fields = py_fields(model)
     var keep = Python.dict()
     var kept = Python.tuple("_parent_callback_ctx", "_mojolearn_fitting")
-    for i in range(2):  # small-loop(kept): the two bookkeeping field names
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(kept): the two bookkeeping field names
         if py_contains(fields, kept[i]):
             py_setitem(keep, kept[i], fields[kept[i]])
     _ = py_call(fields.clear)
@@ -558,7 +558,7 @@ def forest_export_handle(key: EntryRef, handle: Int, selection: String,
             forest_export_verdict_check(xf_export_verify(key, handle, dst))
         _ = arrays  # the five Arrays own the addresses the calls above wrote
         var meta = Python.list()
-        for k in range(len(sizes.meta)):  # small-loop(meta: at most eight export metadata words): PACK
+        for k in range(len(sizes.meta)):  # driver-loop: over fixed call structure, small-loop(meta: at most eight export metadata words): PACK
             _ = py_call(meta.append, PythonObject(sizes.meta[k]))
         _ = py_call(arrays.append, meta)
         xf_export_release(key, handle)
@@ -799,7 +799,7 @@ def _rf_fit_notices(meta: PythonObject, context: PythonObject) raises:
     if len(meta) < 3:
         return
     var codes = forest_fit_notice_codes(Int(py=meta[2]))
-    for i in range(len(codes)):  # small-loop(codes): at most the three fit notice bits (PACK)
+    for i in range(len(codes)):  # driver-loop: over fixed call structure, small-loop(codes): at most the three fit notice bits (PACK)
         classical_warning(rf_notice_text(codes[i]), trees_builtins().UserWarning, context,
                           metric_warning_location(2), "UserWarning")
 
@@ -843,7 +843,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     elif class_weight is not None:
         weights = trees_class_rows_only(class_weight, labels, xtrees, context)
     var names = Python.tuple("oob_decision_function_", "oob_score_", "feature_importances_")
-    for i in range(3):  # small-loop(names): the three requested-output attribute names
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     var y_addr = trees_address(labels.codes)
     var cfg = fields["_cfg"]
@@ -940,7 +940,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
     var code = Int(py=cfg["criterion"])
     _check_regression_target(y32, code, fields["criterion"], "rf", context)
     var names = Python.tuple("oob_prediction_", "oob_score_", "feature_importances_")
-    for i in range(3):  # small-loop(names): the three requested-output attribute names
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three requested-output attribute names
         _ = py_call(fields.pop, names[i], PythonObject(None))
     if sample_weight is not None:
         if tree_start is not None or _truthy(cfg["oob_score"]) or importances:
@@ -1106,7 +1106,7 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     py_setitem(settings, "max_features", PythonObject(1.0) if max_features is None else max_features)
     var copied = Python.tuple("max_depth", "min_samples_split", "min_samples_leaf", "max_leaf_nodes",
                               "min_impurity_decrease", "criterion", "min_weight_fraction_leaf")
-    for i in range(len(copied)):  # small-loop(copied): the seven settings the inner tree takes as given
+    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the seven settings the inner tree takes as given
         py_setitem(settings, copied[i], fields[copied[i]])
     py_setitem(settings, "random_state", PythonObject(0) if seed is None else seed)
     py_setitem(settings, "numeric_mode", fields["numeric_mode"])
@@ -1121,7 +1121,7 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
     py_setitem(fields, "_random_inner", inner)
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",
                              "n_features_in_")
-    for i in range(len(names)):  # small-loop(names): the fitted attributes the tree shares with its inner forest
+    for i in range(len(names)):  # driver-loop: over fixed call structure, small-loop(names): the fitted attributes the tree shares with its inner forest
         py_setitem(fields, names[i], inner_fields[names[i]])
     if py_contains(inner_fields, "classes_"):
         py_setitem(fields, "classes_", inner_fields["classes_"])

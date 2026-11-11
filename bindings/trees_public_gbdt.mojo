@@ -102,7 +102,7 @@ def gbdt_has_ctr(text: PythonObject) raises -> Bool:
     if py_type(text) is b.str:
         # Searched in place (lane perf-sweep-trees, 2026-11-05): the model
         # text can be megabytes, and every predict used to copy it whole.
-        for i in range(3):  # small-loop(names): the three fixed record names
+        for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three fixed record names
             if py_contains(text, PythonObject("\n" + names[i] + " ")):
                 return True
             if Bool(py=py_call(text.startswith, PythonObject(names[i] + " "))):
@@ -513,7 +513,7 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
     var b = trees_builtins()
     var names: List[String] = ["n_estimators", "max_depth", "border_count"]
     var upper: List[Int] = [2147483647, 8, 255]
-    for i in range(3):  # small-loop(names): the three integer settings
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three integer settings
         var value = _field(fields, model, names[i])
         var ok = not _is_bool(value) and _isinstance(value, context["trees_integral_type"])
         if ok:
@@ -521,7 +521,7 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
         if not ok:
             raise Error("mojolearn: " + names[i] + " must be an integer in 1.." + String(upper[i]))
     var reals: List[String] = ["learning_rate", "l2_leaf_reg"]
-    for i in range(2):  # small-loop(reals): the two real settings
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(reals): the two real settings
         var value = _field(fields, model, reals[i])
         var positive = i == 0
         var ok = not _is_bool(value) and _isinstance(value, context["trees_real_type"])
@@ -543,7 +543,7 @@ def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
     var b = trees_builtins()
     var names: List[String] = ["n_estimators", "max_depth", "border_count"]
     var upper: List[Int] = [2147483647, 8, 255]
-    for i in range(3):  # small-loop(names): the three integer settings
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three integer settings
         var value = settings[i]
         var ok = not _is_bool(value) and _isinstance(value, context["trees_integral_type"])
         if ok:
@@ -551,7 +551,7 @@ def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
         if not ok:
             raise Error("mojolearn: " + names[i] + " must be an integer in 1.." + String(upper[i]))
     var reals: List[String] = ["learning_rate", "l2_leaf_reg"]
-    for i in range(2):  # small-loop(reals): the two real settings
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(reals): the two real settings
         var value = settings[3 + i]
         var positive = i == 0
         var ok = not _is_bool(value) and _isinstance(value, context["trees_real_type"])

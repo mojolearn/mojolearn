@@ -314,7 +314,7 @@ def _padded_tail(params: PythonObject) raises -> PythonObject:
     var out = py_call(b.list, params)
     var defaults = Python.list(PythonObject(-1.0), PythonObject(-1.0), PythonObject(1.0))
     var have = len(params) - fixed
-    for i in range(have, 3):  # small-loop(defaults): at most three tail defaults
+    for i in range(have, 3):  # driver-loop: over fixed call structure, small-loop(defaults): at most three tail defaults
         _ = py_call(out.append, defaults[i])
     return out
 
@@ -704,7 +704,7 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
     _ = out  # keep the Python object alive through the native call above
     var lists = Python.tuple(cat, hot)
     var names: List[String] = ["cat_features", "one_hot_features"]
-    for which in range(2):  # small-loop(lists): the two feature-list arguments
+    for which in range(2):  # driver-loop: over fixed call structure, small-loop(lists): the two feature-list arguments
         var values = lists[which]
         if not _truthy(values):
             continue
@@ -1293,7 +1293,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
                     + "read only by Ordered boosting (dynamic_boosting.h:115-223); "
                     + "with boosting_type='Plain' they would be accepted and ignored")
     var perm_names: List[String] = ["permutation_count", "ctr_estimation_permutation_id"]
-    for i in range(2):  # small-loop(perm_names): the two permutation arguments
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(perm_names): the two permutation arguments
         var value = kw[perm_names[i]]
         if value is None:
             continue
@@ -1623,7 +1623,7 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     py_setitem(fields, "n_features_in_", learner_fields["n_features_in_"])
     py_setitem(fields, "model_", learner_fields["model_"])
     var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
-    for i in range(len(copied)):  # small-loop(copied): the five learner attributes
+    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
         py_setitem(fields, copied[i], learner_fields[copied[i]])
     return model
 
@@ -1656,7 +1656,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
         _ = table  # keep the Python object alive through the native call above
         for i in range(len(eval_kind[1])):  # driver-loop: over the eval set's distinct labels
             var at = -1
-            for j in range(len(classes)):  # small-loop(classes): the two training classes
+            for j in range(len(classes)):  # driver-loop: over fixed call structure, small-loop(classes): the two training classes
                 if Bool(py=classes[j] == eval_kind[1][i]):
                     at = j
             if at < 0:
