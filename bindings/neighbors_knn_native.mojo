@@ -29,8 +29,6 @@
 # x_neighbors for fit. Explicit bindings remain supported for native drivers.
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.math import isfinite
-from std.memory import unsafe_memcpy
 from core.hotpath_impl import HpStat
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -49,8 +47,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
-    family_field, family_snapshot_min,
+    family_repr, family_str, family_is_str, family_isinstance, family_call, family_array, family_field,
 )
 from bindings.classical_labels import (
     labels_cast, labels_reduce_stat, labels_prepare_targets,
@@ -60,27 +57,22 @@ from bindings.classical_labels import (
 from bindings.admitted_input import admit_c_view, admitted_dtype, admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows, door_rows_store, door_rows_refuse, DoorRowsStore
-from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_finite_status
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from core.shared_slot import SharedSlot
+# RUN (typed, no Python): the checks, refusal wording, host scans and copies.
+from neighbors.neighbors_knn_run import (
+    KNN_DIST_LP, KNN_DIST_JS, KNN_CODE_F32, KNN_CODE_F64, KNN_CODE_I64, KNN_REDUCE_MIN, KNN_REDUCE_MAX,
+    KNN_REDUCE_INTEGRAL, knn_refuse_rbc_vote, knn_refuse_distance_inner_product, knn_refuse_algorithm,
+    knn_refuse_metric_name, knn_refuse_metric_unimplemented, knn_refuse_metric_unknown, knn_refuse_inert_p,
+    knn_minkowski_status, knn_refuse_minkowski, knn_check_metric_input, knn_metric_reads_host_queries,
+    knn_refuse_callable_weights, knn_refuse_weights, knn_weights_code, knn_check_y_rank, knn_check_y_rows,
+    knn_check_y_ndim, knn_int32_low_fits, knn_check_int32_labels, knn_float_format, knn_labels_finite,
+    knn_labels_skip_integral, knn_finite_status, knn_check_width, knn_proba_rows, knn_copy_proba_block,
+)
 
-#: cuVS `DistanceType` values the refusals and the input check read
-#: (python/mojolearn/neighbors.py `_DIST_LP_UNEXPANDED`, `_DIST_JENSEN_SHANNON`).
-comptime _DIST_LP = 9
-comptime _DIST_JS = 15
-#: cuVS `DistanceType.CosineExpanded`: its zero-row refusal reads host query rows.
-comptime _DIST_COSINE = 2
-comptime _FLT_MIN = 1.1754943508222875e-38
-#: `_array._NATIVE_CODE` and `_REDUCE_*` of the core helper `reduce_stat`.
-comptime _CODE_F32 = 0
-comptime _CODE_F64 = 1
-comptime _CODE_I32 = 2
-comptime _CODE_I64 = 3
-comptime _REDUCE_MIN = 0
-comptime _REDUCE_MAX = 1
-comptime _REDUCE_INTEGRAL = 4
+#: The metric words, label codes and refusals: neighbors/neighbors_knn_run.mojo.
 
 
 # ------------------------------------------------------------------ Python glue
@@ -410,14 +402,12 @@ def knn_device_tests(binding: PythonObject) raises -> Bool:
 def knn_host_finite(model: PythonObject, x: ArrayMetadata) raises:
     """The CPU column's (and RBC's) finite test of a borrowed X: one
     parallel SIMD scan (core/host_finite_scan.mojo)."""
-    # parallel: host_finite_status splits the words across the host's cores
-    admitted_finite_refuse(Int(host_finite_status(x.source.addr, x.count)), _class_name(model))
+    admitted_finite_refuse(knn_finite_status(x.source.addr, x.count), _class_name(model))
 
 
 def knn_host_finite_at(model: PythonObject, address: Int, count: Int) raises:
     """`knn_host_finite` of `count` float32 words at a host address."""
-    # parallel: host_finite_status splits the words across the host's cores
-    admitted_finite_refuse(Int(host_finite_status(address, count)), _class_name(model))
+    admitted_finite_refuse(knn_finite_status(address, count), _class_name(model))
 
 
 def knn_with_status(dist: PythonObject, status: List[Int32]) raises -> PythonObject:
@@ -505,9 +495,7 @@ def _refuse_inert_p(cls_name: String, metric: PythonObject, p: PythonObject) rai
             var failure = stash_python_error()
             raise failure^
     if not is_default:
-        raise Error("mojolearn " + cls_name + ": p is read only by metric='minkowski' "
-                    + "(or 'lp'); metric=" + family_repr(metric) + " never reads it, so p=" + family_repr(p)
-                    + " would change nothing. Leave p at its default (2) or ask for metric='minkowski'.")
+        knn_refuse_inert_p(cls_name, family_repr(metric), family_repr(p))
 
 
 def knn_resolve_metric(cls_name: String, metric: PythonObject, p: PythonObject,
@@ -516,37 +504,27 @@ def knn_resolve_metric(cls_name: String, metric: PythonObject, p: PythonObject,
     metric_arg)` for the brute-force table, or the same refusal, by name and
     in the same order."""
     var b = _b()
-    var head = "mojolearn " + cls_name + ": "
     if not family_is_str(metric):
-        raise Error(head + "metric must be a name, got " + family_repr(metric) + ". "
-                    + "A callable metric is not implemented: it would have to run inside a GPU kernel.")
+        knn_refuse_metric_name(cls_name, family_repr(metric))
     var key = family_call(py_call(b.getattr, metric, PythonObject("lower")))
     var table = context["host_archive_neighbor_metrics"]
     var value = 0
     if py_contains(table, key):
         value = Int(py=table[key])
     elif py_contains(context["host_archive_unsupported_metrics"], key):
-        raise Error(head + "metric=" + family_repr(metric) + " is in cuML's "
-                    + "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
-                    + "(neighbors/NOT_IMPLEMENTED.tsv). Implemented: "
-                    + String(py_call(PythonObject(", ").join, py_call(b.sorted, table))))
+        knn_refuse_metric_unimplemented(cls_name, family_repr(metric),
+                                        String(py_call(PythonObject(", ").join, py_call(b.sorted, table))))
     else:
-        raise Error(head + "unknown metric " + family_repr(metric) + ". Implemented: "
-                    + String(py_call(PythonObject(", ").join, py_call(b.sorted, table))))
-    if value != _DIST_LP:
+        knn_refuse_metric_unknown(cls_name, family_repr(metric),
+                                  String(py_call(PythonObject(", ").join, py_call(b.sorted, table))))
+    if value != KNN_DIST_LP:
         _refuse_inert_p(cls_name, metric, p)
     var arg = Float64(2.0)
-    if value == _DIST_LP:
+    if value == KNN_DIST_LP:
         arg = Float64(py=family_call(b.float, p))
-        # `not (arg > 0.0) or arg != arg or arg == float("inf")`
-        if not (arg > 0.0) or arg != arg or (arg > 0.0 and not isfinite(arg)):
-            raise Error(head + "metric='minkowski' needs a finite "
-                        + "p > 0, got " + family_repr(p) + ". p = 0 makes 1/p infinite, p < 0 is not "
-                        + "a metric, and p = infinity is metric='chebyshev'.")
-        if arg < _FLT_MIN:
-            raise Error(head + "metric='minkowski' p=" + family_repr(p) + " is "
-                        + "subnormal in float32; the flush policy differs by vendor "
-                        + "so this cannot be one arithmetic (DEVIATION 552)")
+        var status = knn_minkowski_status(arg)
+        if status != 0:
+            knn_refuse_minkowski(cls_name, status, family_repr(p))
     return Python.tuple(PythonObject(value), PythonObject(arg))
 
 
@@ -557,18 +535,11 @@ def knn_resolve_weights(cls_name: String, weights: PythonObject) raises -> Int:
     if weights is None:
         return 0
     if _truth(family_call(b.callable, weights)):
-        raise Error("mojolearn " + cls_name + ": weights=<callable> is NOT IMPLEMENTED. "
-                    + "scikit-learn calls it on the distance matrix in Python; the "
-                    + "vote here runs in a GPU kernel and there is no portable way "
-                    + "to lift a Python function into one. Use 'uniform' or "
-                    + "'distance'.")
-    var table = Python.dict()
-    py_setitem(table, "uniform", PythonObject(0))
-    py_setitem(table, "distance", PythonObject(1))
-    if not family_is_str(weights) or not py_contains(table, weights):
-        raise Error("mojolearn " + cls_name + ": weights=" + family_repr(weights) + " is not a "
-                    + "weighting; use 'uniform' or 'distance'")
-    return Int(py=table[weights])
+        knn_refuse_callable_weights(cls_name)
+    var code = knn_weights_code(String(py=weights)) if family_is_str(weights) else -1
+    if code < 0:
+        knn_refuse_weights(cls_name, family_repr(weights))
+    return code
 
 
 def _is_knn(model: PythonObject, context: PythonObject) raises -> Bool:
@@ -583,45 +554,19 @@ def _check_refusals(model: PythonObject, context: PythonObject) raises:
     var cls_name = _class_name(model)
     var knn = _is_knn(model, context)
     if _eq(family_field(fields, "algorithm"), PythonObject("rbc")) and knn:
-        raise Error("mojolearn " + cls_name + ": algorithm='rbc' is "
-                    + "refused. The ball cover's k-NN query is wired into "
-                    + "NearestNeighbors.kneighbors only; this class runs cuML's "
-                    + "knn_classify / knn_regress, which perform their own "
-                    + "brute-force search inside one call and have no seam to "
-                    + "hand an index to. Accepting 'rbc' here would be accepting "
-                    + "a parameter that changes nothing. Use "
-                    + "NearestNeighbors(algorithm='rbc').kneighbors and vote on "
-                    + "the result, or leave this at 'brute'.")
+        knn_refuse_rbc_vote(cls_name)
     var metric = family_field(fields, "metric")
     if (_eq(py_get(fields, PythonObject("weights"), PythonObject(None)), PythonObject("distance"))
             and family_is_str(metric)
             and _eq(family_call(py_call(_b().getattr, metric, PythonObject("lower"))), PythonObject("inner_product"))):
-        raise Error("mojolearn " + cls_name + ": weights='distance' is refused "
-                    + "with metric='inner_product': it weighs a neighbour by 1 / d, "
-                    + "and an inner product is a similarity (larger is nearer, and "
-                    + "it can be zero or negative), not a distance")
+        knn_refuse_distance_inner_product(cls_name)
     var algorithm = family_field(fields, "algorithm")
     if _eq(algorithm, PythonObject("rbc")):
         _ = host_archive_rbc_metric_object(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
     elif py_contains(Python.tuple(PythonObject("brute"), PythonObject("auto")), algorithm):
         _ = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
     else:
-        raise Error("mojolearn NearestNeighbors: algorithm=" + family_repr(algorithm) + " is "
-                    + "refused. Three are accepted: 'brute' (exact brute force), "
-                    + "'auto' (which means 'brute' here), and 'rbc' (exact k-NN "
-                    + "over a RANDOM BALL COVER, an index). "
-                    + "'kd_tree' and 'ball_tree' are refused, and it is an "
-                    + "ENGINEERING refusal rather than an attribution one: a "
-                    + "kd-tree query is a per-query stack walk with "
-                    + "data-dependent branching and divergent memory access, "
-                    + "which is the shape a GPU is worst at, and above roughly "
-                    + "15 dimensions the pruning bound stops firing and it "
-                    + "degenerates to a full scan, so it would lose to 'brute' "
-                    + "on exactly the workloads it claims to help. If what you "
-                    + "want is an index instead of a full scan, that is 'rbc': "
-                    + "it is EXACT, not approximate, it has no per-query stack, "
-                    + "and it is the same structure RadiusNeighbors uses "
-                    + "(neighbors/impl/ball_cover/knn.mojo).")
+        knn_refuse_algorithm(family_repr(algorithm))
     if knn:
         _ = knn_resolve_weights(cls_name, family_field(fields, "weights"))
 
@@ -672,16 +617,14 @@ def _knn_immutable_word(b: PythonObject, value: PythonObject) raises -> Bool:
 def _check_metric_input(cls_name: String, value: Int, x: ArrayMetadata) raises:
     # The same captured shape/address/owner is used for validation and the
     # subsequent call. The minimum is native, with no Python reduction door.
-    if value == _DIST_JS and x.count > 0 and Float64(family_snapshot_min(x)) < 0.0:
-        raise Error("mojolearn " + cls_name + ": metric='jensenshannon' needs X >= 0 "
-                    + "(it takes logarithms of the coordinates)")
+    knn_check_metric_input(cls_name, value, x.source.addr, x.count)
 
 
 def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: PythonObject) raises:
     # Existing native shard workers supply their prepared array, not the
     # public operation snapshot. Keep that internal ABI while their owner
     # migrates; plain operations above consume the retained snapshot directly.
-    if value == _DIST_JS:
+    if value == KNN_DIST_JS:
         var snapshot = admit_family_meta(x, 2, "X", context)
         _check_metric_input(cls_name, value, snapshot)
 
@@ -738,11 +681,9 @@ def _y_shape(y: PythonObject, fields: PythonObject, context: PythonObject) raise
     when it has a length and `()` otherwise, as `_buffer.shape_of` did."""
     classical_admit_value(y, context)
     var shape = List[Int]() if y is None else labels_shape_of(y, context)
-    if len(shape) != 1 and len(shape) != 2:
-        raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
-    var n_fit = family_field(fields, "n_samples_fit_")
-    if _ne(PythonObject(shape[0]), n_fit):
-        raise Error("mojolearn: y has " + String(shape[0]) + " rows, X has " + family_str(n_fit))
+    knn_check_y_rank(len(shape))
+    # n_samples_fit_ is the exact int `_nn_fit` stored in this same call.
+    knn_check_y_rows(shape[0], Int(py=family_field(fields, "n_samples_fit_")))
     return shape^
 
 
@@ -767,8 +708,7 @@ def _is_float_buffer(y: PythonObject, context: PythonObject) raises -> Bool:
             fmt = String(native_buffer_view(y).format)
         except:
             return False  # no buffer export: a frame-like shape, or nothing
-    var f = String(py_call(PythonObject(fmt).lstrip, PythonObject("@=<>!|")))
-    return f == "f" or f == "d" or f == "e" or f == "g" or f == "f2" or f == "f4" or f == "f8"
+    return knn_float_format(fmt)
 
 
 def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
@@ -784,26 +724,22 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
     var typestr = admitted_dtype(view, context)
     var n = Int(py=view.size)
     var addr = Int(py=classical_address(view))
-    if typestr == "<f4" or typestr == "<f8":
-        var finite = (host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr), n)
-                      if typestr == "<f8" else
-                      host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n))
-        if n > 0 and not finite:
-            return False
+    if (typestr == "<f4" or typestr == "<f8") and not knn_labels_finite(addr, n, typestr == "<f8"):
+        return False
     var big = 0
     for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
         if Int(py=view.shape[k]) > big:
             big = Int(py=view.shape[k])
-    if (typestr != "<f4" and typestr != "<f8") or n == 0 or n != big:
+    if knn_labels_skip_integral(typestr, n, big):
         return True
     var classes_store = family_array(Python.tuple(n), "<f8", context)
     var codes = family_array(Python.tuple(n), "<i4", context)
-    var n_distinct = labels_prepare_targets(context, addr, _CODE_F32 if typestr == "<f4" else _CODE_F64, n,
+    var n_distinct = labels_prepare_targets(context, addr, KNN_CODE_F32 if typestr == "<f4" else KNN_CODE_F64, n,
                                             Int(py=classical_address(classes_store)), Int(py=classical_address(codes)),
                                             0, 0, 0)
     _ = view  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
-    var integral = _reduce(Int(py=classical_address(classes_store)), _CODE_F64, n_distinct, _REDUCE_INTEGRAL, context).i != 0
+    var integral = _reduce(Int(py=classical_address(classes_store)), KNN_CODE_F64, n_distinct, KNN_REDUCE_INTEGRAL, context).i != 0
     _ = classes_store  # keep the Python object alive through the native call above
     return integral
 
@@ -847,8 +783,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # `as_i64_c(y, ndim=len(shape), name="y")`: the labels as int64 in the
     # view's storage order (the input itself when it already is int64).
     var view = admit_c_view(y, "y", context)
-    if Int(py=view.ndim) != len(shape):
-        raise Error("mojolearn: y must be " + String(len(shape)) + "-D, got " + String(Int(py=view.ndim)) + "-D")
+    knn_check_y_ndim(Int(py=view.ndim), len(shape))
     var count = Int(py=view.size)
     var y_typestr = admitted_dtype(view, context)
     var wide = PythonObject(None)
@@ -859,16 +794,15 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
         _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
-    var low = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MIN, context).i
+    var low = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MIN, context).i
     _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     var high = 0
-    if low >= -(1 << 31):
-        high = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MAX, context).i
+    if knn_int32_low_fits(low):
+        high = _reduce(wide_addr, KNN_CODE_I64, count, KNN_REDUCE_MAX, context).i
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
-    if low < -(1 << 31) or high > (1 << 31) - 1:
-        raise Error("mojolearn: y does not fit int32")
+    knn_check_int32_labels(low, high)
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
     py_setitem(fields, "outputs_2d_", PythonObject(len(shape) == 2 and shape[1] != 1))
@@ -915,11 +849,8 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var fields = py_fields(model)
     var target = admit_family_meta(args[2], -1, "y", context)
     var shape = target.shape.copy()
-    if len(shape) != 1 and len(shape) != 2:
-        raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
-    var n_fit = Int(py=family_field(fields, "n_samples_fit_"))
-    if shape[0] != n_fit:
-        raise Error("mojolearn: y has " + String(shape[0]) + " rows, X has " + String(n_fit))
+    knn_check_y_rank(len(shape))
+    knn_check_y_rows(shape[0], Int(py=family_field(fields, "n_samples_fit_")))
     var ya = target.keep
     var n = shape[0]
     var n_out = 1 if len(shape) == 1 else shape[1]
@@ -962,8 +893,7 @@ def _queries(model: PythonObject, x_source: PythonObject, mut dist: PythonObject
 def _query_checks(fields: PythonObject, columns: Int) raises:
     """The prediction preamble's width and k checks."""
     var features = family_field(fields, "n_features_in_")
-    if columns != Int(py=features):
-        raise Error("mojolearn: X has " + String(columns) + " features, index has " + family_str(features))
+    knn_check_width(columns, Int(py=features))
     var k = family_field(fields, "n_neighbors")
     var n_fit = family_field(fields, "n_samples_fit_")
     if _lt(k, PythonObject(1)) or _gt(k, n_fit):
@@ -994,7 +924,7 @@ def _knn_fold(model: PythonObject, binding: PythonObject, x_source: PythonObject
         raise Error("mojolearn: call fit before predict")
     var resolved = _dist_params(model, context)
     var metric = Int(py=resolved[0])
-    if metric == _DIST_JS or metric == _DIST_COSINE:
+    if knn_metric_reads_host_queries(metric):
         return DoorRowsStore.none()
     var store = door_rows_store(x_source, context)
     if not store.active():
@@ -1171,15 +1101,14 @@ def _clf_predict_proba(model: PythonObject, binding: PythonObject, x_source: Pyt
     var total = 0
     for i in range(len(n_classes)):  # driver-loop: over class counts per output column
         total += Int(py=n_classes[i])
-    var nq = Int(py=proba.shape[0]) // total
+    var nq = knn_proba_rows(Int(py=proba.shape[0]), total)
     var out = Python.list()
     var off = 0
     var src = Int(py=classical_address(proba))
     for i in range(len(n_classes)):  # driver-loop: over probability block slices per output
         var count = Int(py=n_classes[i])
         var block = family_array(Python.tuple(nq, count), "<f4", context)
-        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(block))),
-               src=FAMILY_F32P(unsafe_from_address=src + 4 * off), count=nq * count)
+        knn_copy_proba_block(Int(py=classical_address(block)), src, off, nq, count)
         _ = block  # keep the Python object alive through the native call above
         _ = proba  # keep the Python object alive through the native call above
         _ = py_call(out.append, block)
