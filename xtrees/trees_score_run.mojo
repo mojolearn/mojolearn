@@ -176,10 +176,10 @@ def score_accuracy_plan(n: Int, classes: Int, weighted: Bool) raises -> Accuracy
     return AccuracyPlan(prog^, out, weighted)
 
 
-def score_accuracy_answer(base: Int, out: Int, weighted: Bool) raises -> Float64:
-    """The fraction the COUNT epilogue wrote at arena word `out` (base: the
+def score_accuracy_answer(base: Int, word: Int, weighted: Bool) raises -> Float64:
+    """The fraction the COUNT epilogue wrote at arena word `word` (base: the
     arena's address); a zero weight total raises ZeroDivisionError as the
     division did."""
-    if weighted and Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=base + 4 * out)[0]) != 0:
+    if weighted and Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=base + 4 * word)[0]) != 0:
         raise Error("ZeroDivisionError: float division by zero")
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=base + 4 * (out + 8))[0]
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=base + 4 * (word + 8))[0]
