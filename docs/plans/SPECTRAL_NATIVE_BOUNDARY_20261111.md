@@ -292,3 +292,16 @@ It does not claim the complete family is Python-free.
 Complete audit: `E/python-object-typed-spectral-family.json`; native closure and
 hashes: `E/spectral-native-owner/native-run-closure.json`. Baseline caller source
 764e2ad158, producer ad7259567e. No compile or test was run by this lane.
+
+## Four further boundary collection roles at 56b35b89b8
+
+The unsupported-option value list, replacement-field names, lifecycle scalar
+schema and lifecycle buffer schema now use native Lists. Value pins and
+one exact Python key per lookup stay at the boundary. Their order and refusal
+sequence are unchanged. Four additional before/after rows are recorded in
+`E/python-object-typed-spectral-boundary-tail.json`, with zero missing anchors;
+the immutable preceding18-role audit is preserved. This yields22 audited
+Spectral roles across the two disjoint tranches, subject to the same bounded
+minimum and shared-schema exclusions. No kernel/RUN source changed, and no
+compile, runtime or performance result is claimed. Remaining temporary-model,
+archive scalar and shared metadata work is still explicit.
