@@ -21,6 +21,7 @@ from bindings.classical_labels import _flatten_labels, labels_shape_of
 from bindings.label_integer_storage import labels_integer_storage
 from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage
 from bindings.gp_label_snapshot_native import gp_label_list
+from bindings.gp_argument_pins import GPArgumentPins
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_label_list
@@ -36,7 +37,7 @@ from bindings.gp_svm_records import gpsvm_no_fit_callbacks
 from bindings.gp_svm_gp_state import gp_state_forget, gp_state_admitted, gp_state_remember, gp_x_mark, gp_x_release
 from bindings.optimizer_public_words import stash_python_error
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
+from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi import _refusal
 
@@ -211,8 +212,8 @@ def _gp_finished(value: PythonObject, context: PythonObject) raises -> PythonObj
     return result
 
 
-def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, args: PythonObject,
-                         context: PythonObject) raises -> PythonObject:
+def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, var args: GPArgumentPins,
+                         context: PythonObject) raises -> GPArgumentPins:
     # `call`: the door's admission record (modules, fields, the resolved
     # binding), so the binding is resolved once per public call (N219).
     var b = call.builtins()
@@ -220,7 +221,9 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
     var plan = _plan(call.modules, model, fields, metadata)
     var route = String(plan["route"])
     if route != "host" and route != "host_gp":
-        return estimator_arguments(call, model, "_mojolearn_gp", args, context)
+        if len(args) > 0 and args[0] is None:
+            args.binding(estimator_binding(call, model, "_mojolearn_gp", context))
+        return args^
     # cpu-route: inherited methods of explicit HostGaussianProcess* classes
     # retain their import-connected host route, even in a GPU installation.
     # This is never a fallback from a GPU estimator or process-selected mode.
@@ -252,10 +255,8 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
     var live_reader = neural_descriptor_entry(live, String(reader.__name__))
     if py_get(connected, "mode") is not None and Int(py=py_call(live_reader)) != 1:
         raise Error("RuntimeError: GP host binding must report identical mode")
-    var prepared = Python.list(live)
-    for i in range(1, len(args)):  # driver-loop: fixed inherited public argument envelope
-        _ = py_call(prepared.append, args[i])
-    return py_call(b.tuple, prepared)
+    args.binding(live)
+    return args^
 
 def _gp_query_operation(operation: String) -> Bool:
     """The public queries whose owner admits X through gp_query (lane a7a):
@@ -289,7 +290,7 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     call.admit_fields(fields)
     var name = classical_estimator_name(model)
     var source = args[x_index] if guarded else PythonObject(None)
-    var values = py_call(call.builtins().list, args)
+    var values = GPArgumentPins(args)
     var rows = 0
     var columns = 0
     var input_copied = False
@@ -313,7 +314,7 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
                 # the owner resolves its store ids; no host words exist)
                 admitted_x = fx.array
                 deferred = True
-                py_setitem(values, x_index, fx.array)
+                values.set(x_index, fx.array)
         else:
             var ax = admit_x_unrecorded(source, name, context, defer_finite=query)
             admitted_x = ax.array
@@ -321,11 +322,11 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
             input_copied = not (ax.array is source)
             rows = ax.rows
             columns = ax.cols
-            py_setitem(values, x_index, ax.array)
+            values.set(x_index, ax.array)
         if not nested:
             if fitting:
                 var target = _gp_classifier_target(args[x_index + 1], rows, name, context) if classifier else classical_check_y(args[x_index + 1], rows, name, context)
-                py_setitem(values, x_index + 1, target)
+                values.set(x_index + 1, target)
             else:
                 var width = py_get(fields, "n_features_in_")
                 if py_type(width) is py_type(PythonObject(0)):
@@ -344,12 +345,10 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     # The X / y admissions above may run in GIL release windows and take no
     # record: re-admit the record's modules before resolving the bindings.
     call.released()
-    var prepared = _gp_public_arguments(call, model, fields, values, context)
+    var prepared = _gp_public_arguments(call, model, fields, values^, context)
     if double_binding and prepared[1] is None:
         var base = estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)
-        values = py_call(call.builtins().list, prepared)
-        py_setitem(values, 1, base)
-        prepared = py_call(call.builtins().tuple, values)
+        prepared.set(1, base)
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
