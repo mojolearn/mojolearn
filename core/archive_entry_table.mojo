@@ -167,9 +167,7 @@ def archive_ref(family: Int, key: ParallelEntryKey) raises -> EntryRef:
 def archive_resident_export(entry: EntryRef, handle: Int, dst: Int, count: Int) raises -> Int:
     """Copy `count` words of the resolved image's resident index `handle` into
     the host buffer at `dst` (kept alive by the caller): one indirect call."""
-    var addrs: List[Int] = [dst]
-    var ints: List[Int] = [handle, count]
-    var result = entry_ref_call(entry, AX_EXPORT, Int(addrs.unsafe_ptr()), 1, Int(ints.unsafe_ptr()), 2, 0, 0)
-    _ = addrs
-    _ = ints
-    return result
+    var addrs: Array[Int, 1] = [dst]
+    var ints: Array[Int, 2] = [handle, count]
+    var floats: Array[Float64, 0] = []
+    return entry_ref_call(entry, AX_EXPORT, addrs, ints, floats)

@@ -246,30 +246,36 @@ def _parallel_call(entry: EntryRef, operation: Int, addrs: List[Int], ints: List
     return result
 
 
+def _parallel_call[NA: Int, NP: Int](entry: EntryRef, operation: Int, addrs: Array[Int, NA],
+                                     ints: Array[Int, NP]) raises -> Int:
+    var floats: Array[Float64, 0] = []
+    return entry_ref_call(entry, operation, addrs, ints, floats)
+
+
 def parallel_fold_pair_f32(entry: EntryRef, dst: Int, src: Int, count: Int) raises -> Int:
-    var addrs: List[Int] = [dst, src]
-    var ints: List[Int] = [count]
+    var addrs: Array[Int, 2] = [dst, src]
+    var ints: Array[Int, 1] = [count]
     return _parallel_call(entry, PB_FOLD_PAIR_F32, addrs, ints)
 
 
 def parallel_rebase_offsets_i32(entry: EntryRef, raw: Int, n_raw: Int, lens: Int, parts: Int,
                                 n_out: Int, dst: Int) raises -> Int:
-    var addrs: List[Int] = [raw, lens, dst]
-    var ints: List[Int] = [n_raw, parts, n_out]
+    var addrs: Array[Int, 3] = [raw, lens, dst]
+    var ints: Array[Int, 3] = [n_raw, parts, n_out]
     return _parallel_call(entry, PB_REBASE_OFFSETS, addrs, ints)
 
 
 def parallel_topk_merge_f32(entry: EntryRef, table: Int, shards: Int, queries: Int, k: Int,
                             out_dist: Int, out_idx: Int) raises -> Int:
-    var addrs: List[Int] = [table, out_dist, out_idx]
-    var ints: List[Int] = [shards, queries, k]
+    var addrs: Array[Int, 3] = [table, out_dist, out_idx]
+    var ints: Array[Int, 3] = [shards, queries, k]
     return _parallel_call(entry, PB_TOPK_MERGE_F32, addrs, ints)
 
 
 def parallel_ivf_shard_plan(entry: EntryRef, ind: Int, offs: Int, soff: Int, local_ids: Int, id_map: Int,
                             n: Int, n_lists: Int, shards: Int) raises -> Int:
-    var addrs: List[Int] = [ind, offs, soff, local_ids, id_map]
-    var ints: List[Int] = [n, n_lists, shards]
+    var addrs: Array[Int, 5] = [ind, offs, soff, local_ids, id_map]
+    var ints: Array[Int, 3] = [n, n_lists, shards]
     return _parallel_call(entry, PI_SHARD_PLAN, addrs, ints)
 
 
@@ -279,6 +285,6 @@ def parallel_ivf_merge_shards(entry: EntryRef, addrs: List[Int], ints: List[Int]
 
 
 def parallel_ivf_finalize(entry: EntryRef, distances: Int, count: Int, metric: Int) raises -> Int:
-    var addrs: List[Int] = [distances]
-    var ints: List[Int] = [count, metric]
+    var addrs: Array[Int, 1] = [distances]
+    var ints: Array[Int, 2] = [count, metric]
     return _parallel_call(entry, PI_FINALIZE, addrs, ints)
