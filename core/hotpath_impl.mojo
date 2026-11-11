@@ -3,7 +3,7 @@
 """Typed kernels of the shared host helpers (`bindings/hotpath_helpers.mojo`).
 
 The Python door stays in `bindings/hotpath_helpers.mojo`: it unpacks
-PythonObject arguments, calls one typed function here and converts the
+Python object arguments, calls one typed function here and converts the
 result back. Everything that computes (casts, comparisons, counts, folds,
 draws) lives here with no Python import, word for word as it was in the
 binding (lane thin-core, 2026-10-21: a pure move, no bit change).

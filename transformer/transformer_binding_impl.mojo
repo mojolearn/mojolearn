@@ -3,7 +3,7 @@
 """Typed side of the transformer block binding (`bindings/_mojolearn_transformer.mojo`).
 
 Everything here takes typed values (Ints, addresses, lists, handles) and
-imports no Python. The binding unpacks its PythonObject arguments, calls
+imports no Python. The binding unpacks its Python object arguments, calls
 one entry below, and packs the result. Moved word for word from the
 binding (thin-shell lane, 2026-10-21): same operations, same order.
 """
@@ -782,7 +782,7 @@ def _transformer_run[discard_cache: Bool = False](
     opts: BlockOptions,
 ) raises -> Int:
     """The GIL-free half of the two entry points: everything after the
-    `PythonObject`s have been read. Builds the device weights, uploads
+    Python objects have been read. Builds the device weights, uploads
     the caller's cache state, runs THE certified entry point once, and
     writes the output and the post-call state back into the caller's
     buffers. Returns the post-call `cached_tokens` (DEVIATION 795(ii):

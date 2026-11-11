@@ -5,7 +5,7 @@
 # binding's `x_decomp_ew` etc. are `ew_py[DevExec]`), x_decomp/descriptor_host.mojo
 # on HostExec. Each branch is the body of the matching door in
 # providers/python/x_decomp_api_pyapi.mojo (`ew_py`, `gemm_py`, `colsum_py`,
-# `rowsum_py`, `sqdist_py`, `move_py`) on typed words instead of PythonObjects:
+# `rowsum_py`, `sqdist_py`, `move_py`) on typed words instead of Python objects:
 # the same dimension checks, the same float32 rounding of the scalar, the same
 # typed entry. The caller (bindings/kit_call.mojo) releases the GIL around
 # these, as the doors did.

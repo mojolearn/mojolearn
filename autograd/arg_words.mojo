@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed argument words for the autograd kernel entries. The Python doors
-# (autograd/*_pyapi.mojo) convert PythonObject arguments into Ints and
+# (autograd/*_pyapi.mojo) convert Python object arguments into Ints and
 # Float64s once; these checks then run here, in the order the entries
 # used to run them, with the same messages. No data is touched.
 from sequence.ops import FP

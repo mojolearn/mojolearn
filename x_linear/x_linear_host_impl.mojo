@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Typed host entries of `bindings/_mojolearn_x_linear_host.mojo`.
 
-The binding unpacks PythonObject arguments and calls one function here; the
+The binding unpacks Python object arguments and calls one function here; the
 input checks, target preparation, fit dispatch and decision loops live here
 with no Python import, moved word for word (lane thin-core, 2026-10-21: a
 pure move, no bit change)."""
