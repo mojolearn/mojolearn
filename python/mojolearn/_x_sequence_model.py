@@ -36,12 +36,6 @@ _CLASS_DTYPE = {(0, 1): "u1", (0, 2): "u2", (0, 4): "u4", (0, 8): "u8",
                 (2, 2): "f2", (2, 4): "f4", (2, 8): "f8", (3, 1): "?"}
 
 
-def _positive(value, name, low=1):
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < low:
-        raise ValueError(f"{name} must be an integer >= {low}")
-    return int(value)
-
-
 class Sequential:
     """A feed-forward model built layer by layer and trained on the GPU.
 
@@ -140,16 +134,8 @@ class Sequential:
         """
         return _SEQUENTIAL_ENTRY(self, "add", (kind, args, kwargs), _SEQUENTIAL_CONTEXT)
 
-    def _append(self, code, a0=0, a1=0, f=0.0, args=None):
-        # one layer: (code, arg0, arg1, float argument, the six integer
-        # arguments of a version-2 description record)
-        return _SEQUENTIAL_ENTRY(self, "append", (code, a0, a1, f, args), _SEQUENTIAL_CONTEXT)
-
     def _linear(self, units, bias=True):
         return _SEQUENTIAL_ENTRY(self, "add", ("linear", (units, bias), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
-
-    def _layer_norm(self, eps=1e-5):
-        return _SEQUENTIAL_ENTRY(self, "add", ("layer_norm", (eps,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def _residual(self, source=-1):
         return _SEQUENTIAL_ENTRY(self, "add", ("residual", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
