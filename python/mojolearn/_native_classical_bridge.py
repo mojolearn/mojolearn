@@ -93,9 +93,9 @@ def _numpy_free_context():
     import sys
     from array import array
     from . import _backend
-    from ._array import Array, SUPPORTED_DTYPES
+    from ._array import Array, SUPPORTED_DTYPES, _ARRAY_CONTEXT
     array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "_store", "_base", "_pin", "_addr", "_readonly", "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")}  # glue: retain native slot descriptors once at package import
-    array_storage_slots = {name: vars(Array)[name] for name in ("_store", "_mv", "_addr", "_readonly", "shape", "dtype", "order")}  # glue: fixed native storage layout retained at package import
+    array_storage_slots = _ARRAY_CONTEXT["from_buffer_slots"]  # glue: reuse the complete native storage descriptor inventory retained at import
     return {
         "array_storage_slots": array_storage_slots, "array_storage_dtypes": SUPPORTED_DTYPES,
         "mapping_types": (dict, OrderedDict, defaultdict), "defaultdict_class": defaultdict,

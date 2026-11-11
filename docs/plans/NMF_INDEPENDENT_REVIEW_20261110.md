@@ -62,6 +62,10 @@ Four inherited transitive callback findings were identified:
    above. Root assigned the common output-owner repair to this lane for the
    following snapshot; the active product freeze remains immutable.
 
+The subsequent repair of finding 4 is recorded separately in
+[Shared Array output storage admission](ARRAY_OUTPUT_STORAGE_ADMISSION_20261110.md).
+The original finding and source evidence above are retained.
+
 The three completed callback repairs add three definitions / 16 cases. Static
 closure analysis inspected 89 product roots and identifies 32 platform records
 across 16 physical groups because the real defects are in common admission
