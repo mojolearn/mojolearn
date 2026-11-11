@@ -637,7 +637,7 @@ Do not patch these in Python. Each family is one lane: move the work into the na
 | family | Mojo door that should own it | functions | Python lines | est. Mojo lines |
 |---|---|---:|---:|---:|
 | neural-lm | bindings/_mojolearn_byte_lm*.mojo, _mojolearn_transformer*.mojo, _mojolearn_training*.mojo, _mojolearn_tokenizer_host.mojo | 31 | 728 | ~1092 |
-| runtime-boundary | bindings/backend_public_native.mojo, array_native.mojo, native_array_*.mojo, native_buffer_*.mojo | 32 | 693 | ~1039 |
+| runtime-boundary (done, lane pyout-runtime-boundary) | bindings/array_native.mojo, host_density_hash_native.mojo | 0 | 0 | - |
 | decomp-linalg | bindings/decomp_native.mojo, decomp_kit_native.mojo, linalg_decomp_native.mojo | 21 | 335 | ~502 |
 | metrics | bindings/metrics_*_native.mojo | 7 | 133 | ~199 |
 | cnn | bindings/_mojolearn_x_cnn*.mojo | 6 | 98 | ~147 |
@@ -688,44 +688,27 @@ Door: bindings/_mojolearn_byte_lm*.mojo, _mojolearn_transformer*.mojo, _mojolear
 | `models/config.py:442` | `_plan_mamba2` | 31 | loop with arithmetic | import-time or internal helper (no public root found statically) |
 | `tokenizer.py:106` | `_native` | 12 | loop with arithmetic | import-time or internal helper (no public root found statically) |
 
-### runtime-boundary (693 lines)
+### runtime-boundary (693 lines; 0 left after lane pyout-runtime-boundary)
 
-Door: bindings/backend_public_native.mojo, array_native.mojo, native_array_*.mojo, native_buffer_*.mojo
+Lane `pyout-runtime-boundary` (2026-11-11) cleared all 32 rows. Package (`python/mojolearn` outside `tests/`): 116,934 lines before, 116,300 after.
 
-| file:line | function | lines | why | reached by (public operation) |
-|---|---|---:|---|---|
-| `_array.py:143` | `_c_strides` | 7 | loop with arithmetic | GaussianMixture.__init__,gpu_plugins.required_sets,host_surface.inference_lanes |
-| `_array.py:152` | `_f_strides` | 7 | loop with arithmetic | GaussianMixture.__init__,gpu_plugins.required_sets,host_surface.inference_lanes |
-| `_array.py:161` | `_prod` | 5 | loop with arithmetic | GaussianMixture.__init__,gpu_plugins.required_sets,host_surface.inference_lanes |
-| `_array.py:409` | `Array._both_orders` | 4 | loop with value functions (sorted/sum/min/max/math/tolist) | parallel_classical.bootstrap,resample.bootstrap,Session.run |
-| `_bufcheck.py:127` | `nelems` | 5 | loop with arithmetic | linalg_fast.matmul_fused |
-| `_buffer.py:172` | `Buf._fill` | 31 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_buffer.py:252` | `_contiguity` | 28 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_buffer.py:414` | `_materialize` | 116 | loop with value functions (sorted/sum/min/max/math/tolist) | linalg_fast.matmul_fused,parallel_classical.bootstrap,resample.bootstrap |
-| `_buffer.py:1142` | `InitStream.child_seed` | 8 | arithmetic on values | import-time or internal helper (no public root found statically) |
-| `_classical_host.py:162` | `_HostBound.model_sha256` | 9 | loop with value functions (sorted/sum/min/max/math/tolist) | import-time or internal helper (no public root found statically) |
-| `_classical_host.py:1334` | `_host_archive_forest_metadata` | 25 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_labels.py:423` | `finite_integer_codes` | 33 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_lazy_out.py:25` | `_empty_out` | 12 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_mode.py:554` | `ParamsMixin._get_param_names` | 12 | loop with value functions (sorted/sum/min/max/math/tolist) | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:86` | `isclose` | 11 | value functions (sorted/sum/min/max/math) | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:99` | `comb` | 11 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:175` | `_scaled_integer` | 27 | arithmetic on values | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:277` | `_pow_bound` | 13 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:294` | `powi` | 36 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:381` | `_horner` | 6 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:389` | `erfc` | 44 | arithmetic on values | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:438` | `normal_cdf` | 6 | arithmetic on values | import-time or internal helper (no public root found statically) |
-| `_portable_math.py:446` | `normal_inv_cdf` | 69 | arithmetic on values | import-time or internal helper (no public root found statically) |
-| `_ragged.py:77` | `_lengths_array` | 27 | loop with value functions (sorted/sum/min/max/math/tolist) | import-time or internal helper (no public root found statically) |
-| `_ragged.py:112` | `_row_bytes` | 5 | arithmetic on values | import-time or internal helper (no public root found statically) |
-| `_serialize.py:73` | `_header` | 14 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_serialize.py:89` | `_parse_header` | 29 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_serialize.py:123` | `_utf32` | 6 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_serialize.py:183` | `_describe_list` | 18 | loop with value functions (sorted/sum/min/max/math/tolist) | import-time or internal helper (no public root found statically) |
-| `_serialize.py:233` | `decode_npy` | 43 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_serialize.py:278` | `_nest_text` | 11 | loop with arithmetic | import-time or internal helper (no public root found statically) |
-| `_serialize.py:294` | `write_npz` | 15 | loop with value functions (sorted/sum/min/max/math/tolist) | import-time or internal helper (no public root found statically) |
+Moved into Mojo (Python deleted):
+
+- `_array._c_strides`, `_f_strides`, `_prod`, `Array._both_orders`, along with their siblings `_check_shape`, `_new_store`, `_strided_copy`, `_reorder`, `Array._set_meta`, `_init_owned` and `_row_view`. `bindings/array_native.mojo` gained the `owned`, `from_flat`, `full`, `frombytes`, `view_of`, `as_c`, `as_order` and `has_order` operations. `Array._owned`, `_from_flat`, `_view_of`, `_as_c`, `_as_order`, `_has_order`, `_buffer.full` and `_buffer.frombytes` are each one native call now. The Python definitions remain only as test oracles in `tests/_array_reference.py`.
+- `_classical_host._HostBound.model_sha256` is now the native `host_bound_hash` operation (`bindings/host_density_hash_native.mojo`, routed by `classical_door_routes.mojo` and `classical_trees_door.mojo`).
+- `_bufcheck.nelems`: its one caller tests `0 in pb.shape` instead.
+
+Deleted as product-dead (the native twins are what the product already ran):
+
+- `_portable_math.isclose`, `comb`, `_scaled_integer`, `_pow_bound`, `powi`, `_horner`, `erfc`, `normal_cdf`, `normal_inv_cdf`, plus `frexp`, `ldexp`, `_cut`, `powr`, `nsum`, `exp_array`. The native twins are `bindings/normal_dist_helpers.mojo`, `jl_native.mojo` and `array_helpers.mojo`. The erfc mpmath table and the quantile checks moved to `checks/native_tests/portable_math_suite.mojo`.
+- `_buffer.InitStream` (with `child_seed`). Fits draw their init through the native `XseqStream`; the race tool and the MLP curve test keep their own restatement.
+- `_labels.finite_integer_codes`. The GBDT fit's `_codes` in `trees_public_gbdt_fit.mojo` computes the codes natively.
+
+Reclassified (the static test flagged them; they carry no data arithmetic):
+
+- (a) UNPACK/PACK admission over rank-sized metadata or distinct Python types: `_buffer.Buf._fill`, `_contiguity`, `_materialize`, `_ragged._lengths_array`, `_row_bytes`, `_lazy_out._empty_out` and `_mode.ParamsMixin._get_param_names`. These are boundary-migration work, not product work.
+- (b) `_classical_host._host_archive_forest_metadata`: import-time class tables.
+- (c) `_serialize._header`, `_parse_header`, `_utf32`, `_describe_list`, `decode_npy`, `_nest_text` and `write_npz`. No product module imports `_serialize` any more: `decomposition._saved_mode`, `_restore_mode`, `_check_saved_by`, `linear_model._saved_mode` and five unused imports were deleted, and save and load are native. Tests and tools import it explicitly. Whether to move it out of the wheel with the other (c) modules is an orchestrator decision.
 
 ### decomp-linalg (335 lines)
 

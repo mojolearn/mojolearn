@@ -45,24 +45,14 @@ python/mojolearn/_arima_impl.py	654	ARIMA.load	19	b	connect/load at import	0	0	0
 python/mojolearn/_arima_impl.py	674	ARIMA.__repr__	2	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_arima_impl.py	678	_archive_members	24	a	shell/admission	0	0	2	0	0	
 python/mojolearn/_array.py	103	normalize_dtype	27	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_array.py	143	_c_strides	7	e	loop with arithmetic	1	0	1	0	0	GaussianMixture.__init__,gpu_plugins.required_sets,host_surface.inference_lanes
-python/mojolearn/_array.py	152	_f_strides	7	e	loop with arithmetic	1	0	1	0	0	GaussianMixture.__init__,gpu_plugins.required_sets,host_surface.inference_lanes
-python/mojolearn/_array.py	161	_prod	5	e	loop with arithmetic	1	0	1	0	0	GaussianMixture.__init__,gpu_plugins.required_sets,host_surface.inference_lanes
-python/mojolearn/_array.py	168	_check_shape	8	a	shell/admission (loops=2)	1	1	0	0	0	
-python/mojolearn/_array.py	178	_new_store	5	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_array.py	185	_to_py_values	6	a	shell/admission	0	0	0	0	1	
-python/mojolearn/_array.py	193	_strided_copy	13	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_array.py	208	_reorder	11	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	228	_ArrayInterface.__init__	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	292	Array.__init__	2	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_array.py	296	Array._init_owned	11	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_array.py	308	Array._set_meta	17	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_array.py	327	Array._owned	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	332	Array._view_of	12	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	346	Array.from_buffer	22	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	370	Array.from_list	20	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	392	Array._from_flat	15	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_array.py	409	Array._both_orders	4	e	loop with value functions (sorted/sum/min/max/math/tolist)	0	1	0	0	1	parallel_classical.bootstrap,resample.bootstrap,Session.run
 python/mojolearn/_array.py	414	Array._has_order	2	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	417	Array.__array__	13	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	431	Array._flat	5	a	shell/admission	0	0	0	0	0	
@@ -75,7 +65,6 @@ python/mojolearn/_array.py	480	Array.copy	3	a	shell/admission	0	0	0	0	0
 python/mojolearn/_array.py	484	Array.astype	17	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	502	Array.reshape	14	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	517	Array.ravel	3	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_array.py	521	Array._row_view	14	c	only tests or tools call it (kept in place)	0	0	4	0	0	
 python/mojolearn/_array.py	538	Array.min	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	542	Array.max	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_array.py	546	Array.sum	3	a	shell/admission	0	0	0	0	0	
@@ -174,7 +163,6 @@ python/mojolearn/_bufcheck.py	96	is_native_f32	2	a	shell/admission	0	0	0	0	0
 python/mojolearn/_bufcheck.py	100	is_integer	2	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_bufcheck.py	104	is_int32	4	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_bufcheck.py	110	dtype_name	15	a	shell/admission	0	0	2	0	0	
-python/mojolearn/_bufcheck.py	127	nelems	5	e	loop with arithmetic	1	0	1	0	0	linalg_fast.matmul_fused
 python/mojolearn/_bufcheck.py	134	memcopy	5	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_bufcheck.py	141	memzero	4	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_bufcheck.py	147	le_bytes	14	a	shell/admission	0	0	0	0	0	
@@ -182,14 +170,14 @@ python/mojolearn/_bufcheck.py	163	flat_view	12	a	shell/admission	0	0	0	0	0
 python/mojolearn/_bufcheck.py	177	strided_rows	19	a	shell/admission	0	0	3	0	0	
 python/mojolearn/_buffer.py	102	memory_at	7	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	124	Buf.__init__	47	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_buffer.py	172	Buf._fill	31	e	loop with arithmetic	1	2	1	0	1	
+python/mojolearn/_buffer.py	172	Buf._fill	31	a	UNPACK: reads a Python buffer export's rank-sized shape/strides words (no data)	1	2	1	0	1	
 python/mojolearn/_buffer.py	204	Buf._from_array	18	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	223	Buf.release	9	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	233	Buf.__enter__	2	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	236	Buf.__exit__	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	240	Buf.__del__	5	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	246	Buf.__repr__	4	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_buffer.py	252	_contiguity	28	e	loop with arithmetic	3	0	4	0	0	
+python/mojolearn/_buffer.py	252	_contiguity	28	a	UNPACK: NumPy's contiguity rule over the export's rank-sized stride words (no data)	3	0	4	0	0	
 python/mojolearn/_buffer.py	288	typestr_of	39	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	329	_iter_format	8	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	342	view	6	a	shell/admission	0	0	0	0	0	
@@ -197,7 +185,7 @@ python/mojolearn/_buffer.py	350	addr	12	a	shell/admission	0	0	0	0	0
 python/mojolearn/_buffer.py	364	addr_ro	6	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	372	flat_bytes	13	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	393	_device_array_kind	19	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_buffer.py	414	_materialize	116	e	loop with value functions (sorted/sum/min/max/math/tolist)	0	6	0	0	3	linalg_fast.matmul_fused,parallel_classical.bootstrap,resample.bootstrap
+python/mojolearn/_buffer.py	414	_materialize	116	a	UNPACK: admits the user's Python object; sorted() runs over the distinct leaf TYPES for the refusal text, element work is native	0	6	0	0	3	
 python/mojolearn/_buffer.py	532	_materialize_buffer	58	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_buffer.py	592	materialize_f32_lists	17	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	611	_same_dtype_store	22	a	shell/admission	0	0	0	0	0	
@@ -230,11 +218,6 @@ python/mojolearn/_buffer.py	973	_native_optional	21	a	shell/admission	0	0	0	0	0
 python/mojolearn/_buffer.py	996	_native	47	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	1061	_host_native	27	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_buffer.py	1090	as_index_i64	11	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_buffer.py	1111	InitStream.__init__	6	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_buffer.py	1118	InitStream.fill_uniform	7	a	shell/admission	0	0	1	0	0	
-python/mojolearn/_buffer.py	1126	InitStream.fill_normal	8	a	shell/admission	0	0	1	0	0	
-python/mojolearn/_buffer.py	1135	InitStream.uniform	6	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_buffer.py	1142	InitStream.child_seed	8	e	arithmetic on values	0	0	6	0	0	
 python/mojolearn/_byte_lm_checkpoint.py	15	save	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_byte_lm_checkpoint.py	20	load	3	b	connect/load at import	0	0	0	0	0	
 python/mojolearn/_byte_lm_config.py	78	ByteLanguageModelConfig.__init__	5	a	shell/admission	0	0	0	0	0	
@@ -381,7 +364,6 @@ python/mojolearn/_classical_host.py	122	binary_path	4	a	shell/admission	0	0	0	0	
 python/mojolearn/_classical_host.py	128	binary_paths	3	a	shell/admission (loops=1)	0	1	0	0	0	
 python/mojolearn/_classical_host.py	143	_HostBound._bind	15	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_classical_host.py	159	_HostBound.vendor_used	2	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_classical_host.py	162	_HostBound.model_sha256	9	e	loop with value functions (sorted/sum/min/max/math/tolist)	1	0	0	0	1	
 python/mojolearn/_classical_host.py	176	HostLinearRegression.vendor_used	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_classical_host.py	180	HostLinearRegression.model_sha256	4	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_classical_host.py	189	HostRidge.vendor_used	3	a	shell/admission	0	0	0	0	0	
@@ -441,7 +423,7 @@ python/mojolearn/_classical_host.py	1184	HostRBFSampler.transform	18	a	shell/adm
 python/mojolearn/_classical_host.py	1266	_merge_expansion_doors	25	a	shell/admission (loops=3)	3	0	0	0	0	
 python/mojolearn/_classical_host.py	1296	_host_fit_helpers	11	a	shell/admission (loops=1)	1	0	0	0	0	
 python/mojolearn/_classical_host.py	1318	_host_archive_cleanup_entries	14	a	shell/admission (loops=1)	1	0	0	0	0	
-python/mojolearn/_classical_host.py	1334	_host_archive_forest_metadata	25	e	loop with arithmetic	1	2	1	0	0	
+python/mojolearn/_classical_host.py	1334	_host_archive_forest_metadata	25	b	import-time wiring: fixed saved-forest class tables connected once	1	2	1	0	0	
 python/mojolearn/_classical_host.py	1365	host_model	5	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_classical_host.py	1411	_connect_host_inference	91	b	connect/load at import	3	1	0	0	0	
 python/mojolearn/_classical_host.py	1513	_host_archive_prediction_bindings	26	a	shell/admission	0	0	0	0	0	
@@ -554,7 +536,6 @@ python/mojolearn/_expansion_cluster.py	1118	BayesianGaussianMixture.score_sample
 python/mojolearn/_expansion_cluster.py	1138	BayesianGaussianMixture.score	21	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_expansion_cnn.py	32	_np	4	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_expansion_cnn.py	38	_f32	7	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_expansion_cnn.py	47	_rng	4	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_expansion_cnn.py	58	_Layer._binding	17	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_expansion_cnn.py	77	_mixed	5	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_expansion_cnn.py	97	_idn	8	a	shell/admission	0	0	0	0	0	
@@ -1712,9 +1693,8 @@ python/mojolearn/_labels.py	332	ClassLabels.__getitem__	17	a	shell/admission	0	0
 python/mojolearn/_labels.py	357	classes_from_member	17	a	shell/admission (loops=5)	0	5	0	0	0	
 python/mojolearn/_labels.py	376	argmax_rows	24	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_labels.py	402	threshold_codes	19	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_labels.py	423	finite_integer_codes	33	e	loop with arithmetic	0	1	1	0	1	
 python/mojolearn/_labels.py	458	unique_inverse	35	a	shell/admission	0	0	0	0	1	
-python/mojolearn/_lazy_out.py	25	_empty_out	12	e	loop with arithmetic	1	1	3	0	0	
+python/mojolearn/_lazy_out.py	25	_empty_out	12	a	PACK: output allocation placement (opt-in anonymous map); byte size of the output, no data	1	1	3	0	0	
 python/mojolearn/_linalg_impl.py	139	_load	18	b	connect/load at import	0	0	0	0	0	
 python/mojolearn/_linalg_impl.py	159	numeric_mode	18	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_linalg_impl.py	179	profile	17	a	shell/admission	0	0	0	0	0	
@@ -1927,7 +1907,7 @@ python/mojolearn/_mode.py	474	SklearnTagsMixin.__sklearn_is_fitted__	2	a	shell/a
 python/mojolearn/_mode.py	482	ClassifierScoreMixin.score	22	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_mode.py	510	RegressorScoreMixin.score	24	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_mode.py	549	ParamsMixin.__init_subclass__	3	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_mode.py	554	ParamsMixin._get_param_names	12	e	loop with value functions (sorted/sum/min/max/math/tolist)	0	1	0	0	1	
+python/mojolearn/_mode.py	554	ParamsMixin._get_param_names	12	a	scikit-learn parameter-name protocol over the constructor signature (class metadata, no data)	0	1	0	0	1	
 python/mojolearn/_mode.py	567	ParamsMixin.get_params	2	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_mode.py	570	ParamsMixin.set_params	18	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_mode.py	590	_connect_application_params	7	b	connect/load at import	0	0	0	0	0	
@@ -2184,9 +2164,6 @@ python/mojolearn/_portable_math.py	64	isfinite	4	a	shell/admission	0	0	1	0	0
 python/mojolearn/_portable_math.py	70	isinf	4	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_portable_math.py	76	isnan	4	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_portable_math.py	82	copysign	2	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_portable_math.py	86	isclose	11	e	value functions (sorted/sum/min/max/math)	0	0	3	0	3	
-python/mojolearn/_portable_math.py	99	comb	11	e	loop with arithmetic	1	0	6	0	1	
-python/mojolearn/_portable_math.py	112	frexp	7	a	shell/admission	0	0	2	0	1	
 python/mojolearn/_portable_math.py	121	sqrt	5	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_portable_math.py	128	log	6	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_portable_math.py	136	log2	5	a	shell/admission	0	0	0	0	0	
@@ -2194,22 +2171,10 @@ python/mojolearn/_portable_math.py	143	exp	6	a	shell/admission	0	0	0	0	0
 python/mojolearn/_portable_math.py	151	floor	8	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_portable_math.py	161	ceil	8	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_portable_math.py	171	prod	2	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_portable_math.py	175	_scaled_integer	27	e	arithmetic on values	0	0	13	0	3	
-python/mojolearn/_portable_math.py	204	ldexp	7	a	shell/admission	0	0	2	0	0	
 python/mojolearn/_portable_math.py	213	fsum	15	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_portable_math.py	230	exp_array	15	a	shell/admission	0	0	1	0	0	
-python/mojolearn/_portable_math.py	247	nsum	16	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_portable_math.py	265	_cut	10	a	shell/admission	0	0	3	0	0	
-python/mojolearn/_portable_math.py	277	_pow_bound	13	e	loop with arithmetic	1	0	5	0	0	
-python/mojolearn/_portable_math.py	294	powi	36	e	loop with arithmetic	1	0	9	0	1	
-python/mojolearn/_portable_math.py	335	powr	15	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_portable_math.py	381	_horner	6	e	loop with arithmetic	1	0	2	0	0	
-python/mojolearn/_portable_math.py	389	erfc	44	e	arithmetic on values	0	0	34	0	2	
-python/mojolearn/_portable_math.py	438	normal_cdf	6	e	arithmetic on values	0	0	4	0	0	
-python/mojolearn/_portable_math.py	446	normal_inv_cdf	69	e	arithmetic on values	0	0	97	0	1	
-python/mojolearn/_ragged.py	77	_lengths_array	27	e	loop with value functions (sorted/sum/min/max/math/tolist)	0	1	0	0	1	
+python/mojolearn/_ragged.py	77	_lengths_array	27	a	UNPACK: admits the user's lengths sequence; sorted() over distinct Python types for the refusal text; range check native	0	1	0	0	1	
 python/mojolearn/_ragged.py	106	lengths_for	4	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_ragged.py	112	_row_bytes	5	e	arithmetic on values	0	0	4	0	0	
+python/mojolearn/_ragged.py	112	_row_bytes	5	a	UNPACK: two layout integers of a C-contiguous (B, L, ...) block (no data)	0	0	4	0	0	
 python/mojolearn/_ragged.py	119	_lens	2	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_ragged.py	123	padded_copy	13	a	shell/admission (loops=1)	0	1	0	0	0	
 python/mojolearn/_ragged.py	138	zero_padding	10	a	shell/admission	0	0	0	0	0	
@@ -2261,17 +2226,17 @@ python/mojolearn/_samba_impl.py	560	SambaDecodeSession.__exit__	3	a	shell/admiss
 python/mojolearn/_samba_impl.py	564	SambaDecodeSession.__del__	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_samba_impl.py	568	SambaDecodeSession.__repr__	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_sample_weight.py	21	check_sample_weight	51	a	shell/admission	0	0	0	0	0	
-python/mojolearn/_serialize.py	73	_header	14	e	loop with arithmetic	0	1	9	0	0	
-python/mojolearn/_serialize.py	89	_parse_header	29	e	loop with arithmetic	0	1	2	0	0	
-python/mojolearn/_serialize.py	123	_utf32	6	e	loop with arithmetic	1	0	4	0	0	
+python/mojolearn/_serialize.py	73	_header	14	c	tool/test npz codec: no product module imports _serialize (save/load are native)	0	1	9	0	0	
+python/mojolearn/_serialize.py	89	_parse_header	29	c	tool/test npz codec: no product module imports _serialize (save/load are native)	0	1	2	0	0	
+python/mojolearn/_serialize.py	123	_utf32	6	c	tool/test npz codec: no product module imports _serialize (save/load are native)	1	0	4	0	0	
 python/mojolearn/_serialize.py	131	_describe	50	a	shell/admission	0	0	0	0	2	
-python/mojolearn/_serialize.py	183	_describe_list	18	e	loop with value functions (sorted/sum/min/max/math/tolist)	0	9	0	0	4	
+python/mojolearn/_serialize.py	183	_describe_list	18	c	tool/test npz codec: no product module imports _serialize (save/load are native)	0	9	0	0	4	
 python/mojolearn/_serialize.py	203	encode_npy	6	a	shell/admission	0	0	1	0	0	
 python/mojolearn/_serialize.py	211	write_npy	7	a	shell/admission	0	0	0	0	0	
 python/mojolearn/_serialize.py	223	_itemsize_of	8	a	shell/admission	0	0	1	0	0	
-python/mojolearn/_serialize.py	233	decode_npy	43	e	loop with arithmetic	0	3	10	0	0	
-python/mojolearn/_serialize.py	278	_nest_text	11	e	loop with arithmetic	1	1	4	0	0	
-python/mojolearn/_serialize.py	294	write_npz	15	e	loop with value functions (sorted/sum/min/max/math/tolist)	1	0	0	0	1	
+python/mojolearn/_serialize.py	233	decode_npy	43	c	tool/test npz codec: no product module imports _serialize (save/load are native)	0	3	10	0	0	
+python/mojolearn/_serialize.py	278	_nest_text	11	c	tool/test npz codec: no product module imports _serialize (save/load are native)	1	1	4	0	0	
+python/mojolearn/_serialize.py	294	write_npz	15	c	tool/test npz codec: no product module imports _serialize (save/load are native)	1	0	0	0	1	
 python/mojolearn/_serialize.py	311	read_npz	19	a	shell/admission (loops=1)	1	0	0	0	0	
 python/mojolearn/_serialize.py	332	peek_npz	15	a	shell/admission (loops=1)	1	0	0	0	0	
 python/mojolearn/_serialize.py	349	_first	12	a	shell/admission (loops=1)	1	0	0	0	0	
@@ -3085,9 +3050,6 @@ python/mojolearn/cross_vendor.py	148	Worker._connect	2	b	connect/load at import	
 python/mojolearn/cross_vendor.py	151	Worker.run	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/cross_vendor.py	155	Worker.drain_events	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/cross_vendor.py	161	main	2	a	shell/admission	0	0	0	0	0	
-python/mojolearn/decomposition.py	23	_saved_mode	9	c	only tests or tools call it (kept in place)	0	0	0	0	0	
-python/mojolearn/decomposition.py	34	_restore_mode	5	c	only tests or tools call it (kept in place)	0	0	0	0	0	
-python/mojolearn/decomposition.py	41	_check_saved_by	8	c	only tests or tools call it (kept in place)	0	1	0	0	0	
 python/mojolearn/decomposition.py	202	PCA.__init__	16	a	shell/admission	0	0	0	0	0	
 python/mojolearn/decomposition.py	219	PCA.fit	24	a	shell/admission	0	0	0	0	0	
 python/mojolearn/decomposition.py	244	PCA.transform	21	a	shell/admission	0	0	0	0	0	
@@ -3304,7 +3266,6 @@ python/mojolearn/language_model.py	51	__getattr__	7	a	shell/admission	0	0	0	0	0
 python/mojolearn/language_model.py	60	__dir__	2	a	shell/admission	0	0	0	0	1	
 python/mojolearn/linalg_fast.py	23	has_fused	3	a	shell/admission	0	0	0	0	0	
 python/mojolearn/linalg_fast.py	28	matmul_fused	83	a	shell/admission	0	0	0	0	0	
-python/mojolearn/linear_model.py	51	_saved_mode	9	c	only tests or tools call it (kept in place)	0	0	0	0	0	
 python/mojolearn/linear_model.py	68	_round_f32	6	c	only tests or tools call it (kept in place)	0	0	0	0	0	
 python/mojolearn/linear_model.py	81	_labels_1d	9	c	only tests or tools call it (kept in place)	0	0	0	0	0	
 python/mojolearn/linear_model.py	99	_flatten	6	a	shell/admission	0	0	0	0	0	
