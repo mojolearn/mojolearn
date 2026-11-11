@@ -190,6 +190,7 @@ check-native-agglo-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN
 check-native-agglo-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_native_gpu.mojo"
 check-native-dbscan-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_contract.mojo"
 check-native-dbscan-options = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_options.mojo"
+check-native-dbscan-door-run = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_door_run.mojo"
 check-native-dbscan-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/dbscan_native_cpu.mojo"
 check-native-dbscan-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_native_gpu.mojo"
 check-native-dbscan-ownership-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_ownership_gpu.mojo"
