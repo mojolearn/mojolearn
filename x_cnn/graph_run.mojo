@@ -287,10 +287,15 @@ def graph_run_graph_op_m(key: XcnnEntryKey, a: Int, b: Int, aux: Int, dst: Int, 
 
 
 def graph_run_gcn_backward(key: XcnnEntryKey, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, bias: Bool,
-                           resident_grad: Bool, ones_dev: Int) raises:
-    """GCNConv's backward tape (13 address words, autograd/rules_graph.mojo)."""
-    _ = xcnn_run_call(key, XC_GCN_BACKWARD_T, addrs,
-                      [n, d, f, nnz, 1 if bias else 0, 1 if resident_grad else 0, ones_dev])
+                           resident_grad: Bool, ones_dev: Int, host_form: Bool) raises:
+    """GCNConv's backward tape (13 address words): the resident form
+    (autograd/rules_graph.mojo, seven integers) or the host form (eight
+    integers, the residency words zero)."""
+    if host_form:
+        _ = xcnn_run_call(key, XC_GCN_BACKWARD_T, addrs, [n, d, f, nnz, 1 if bias else 0, 0, 0, 0])
+    else:
+        _ = xcnn_run_call(key, XC_GCN_BACKWARD_T, addrs,
+                          [n, d, f, nnz, 1 if bias else 0, 1 if resident_grad else 0, ones_dev])
 
 
 def graph_run_sage_backward(key: XcnnEntryKey, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, kind: Int,
