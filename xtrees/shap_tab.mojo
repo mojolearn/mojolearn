@@ -118,7 +118,7 @@ def shap_tab_row_unit[ACC: Int](
             if ftz(x[unsafe_offset=xr + Int(colid[unsafe_offset=g])]) <= ftz(quesval[unsafe_offset=g]):
                 dec = dec | (UInt64(1) << UInt64(rk))
             rk += 1
-    var acc = InlineArray[Float32, max(ACC, 1)](fill=Float32(0.0))
+    var acc = Array[Float32, max(ACC, 1)](fill=Float32(0.0))
     comptime if ACC == 0:
         for s in range(slots):
             for j in range(k):

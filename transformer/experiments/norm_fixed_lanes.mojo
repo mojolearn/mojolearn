@@ -72,7 +72,7 @@ def nfl_cell(rows: Int) -> Tuple[Int, Int, Bool]:
 
 
 @always_inline
-def _tree(mut s: InlineArray[Float32, NFL_LANES]) -> Float32:
+def _tree(mut s: Array[Float32, NFL_LANES]) -> Float32:
     """The slots' pairwise tree, serially (sequence/fold32.mojo `tree32`)."""
     comptime for e in range(5):
         comptime off = NFL_LANES >> (e + 1)
@@ -88,7 +88,7 @@ def nfl_dot(
     """sum a[abase + j] b[bbase + j], j < width, as the fixed 32-lane fold:
     slot j % 32 runs `ftz(fma(ftz(a_j), ftz(b_j), acc))` ascending from +0.0,
     then the tree. One thread; the same bits as `nfl_cell_dot`."""
-    var p = InlineArray[Float32, NFL_LANES](fill=Float32(0.0))
+    var p = Array[Float32, NFL_LANES](fill=Float32(0.0))
     var k = 0
     while k < width:  # device-loop: the fold's 32-wide strides over one row
         var n = min(NFL_LANES, width - k)
@@ -101,7 +101,7 @@ def nfl_dot(
 
 def nfl_sum(x: MutPointer[Float32, MutAnyOrigin], base: Int, width: Int) -> Float32:
     """sum x[base + j] as the fixed fold (slot op `ftz(acc + ftz(x_j))`)."""
-    var p = InlineArray[Float32, NFL_LANES](fill=Float32(0.0))
+    var p = Array[Float32, NFL_LANES](fill=Float32(0.0))
     var k = 0
     while k < width:  # device-loop: the fold's 32-wide strides over one row
         var n = min(NFL_LANES, width - k)
@@ -116,7 +116,7 @@ def nfl_square(
 ) -> Float32:
     """sum (x[base + j] - mean)^2 as the fixed fold: slot op
     `d = ftz(ftz(x_j) - mean); acc = ftz(fma(d, d, acc))`."""
-    var p = InlineArray[Float32, NFL_LANES](fill=Float32(0.0))
+    var p = Array[Float32, NFL_LANES](fill=Float32(0.0))
     var k = 0
     while k < width:  # device-loop: the fold's 32-wide strides over one row
         var n = min(NFL_LANES, width - k)

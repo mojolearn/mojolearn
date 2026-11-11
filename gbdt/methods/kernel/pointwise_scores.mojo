@@ -1374,7 +1374,7 @@ def gather_histograms_by_leaves_kernel[
     var helper = PointwisePartOffsetsHelper(UInt32(grid_dim.y))
 
     if feature_id < bin_feature_count:
-        var leaf_vals = InlineArray[Float32, hist_count](fill=Float32(0.0))
+        var leaf_vals = Array[Float32, hist_count](fill=Float32(0.0))
 
         comptime for hist_id in range(hist_count):
             var src = (

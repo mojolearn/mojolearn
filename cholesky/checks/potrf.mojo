@@ -1026,7 +1026,7 @@ def chol_syrk_sub_lower_amma_kernel(
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True
     var windows = (k + KB - 1) // KB
     var ra = _amma_gload[BM, KB, NT](xa, k, 1, m0, m, 0, min(KB, k), tid, False)
@@ -1056,8 +1056,8 @@ def chol_syrk_sub_lower_amma_kernel(
             exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
-                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
                     af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):
@@ -1202,7 +1202,7 @@ def chol_left_update_amma_kernel[BN: Int, GUARD: Bool = False](
             if i < n and j < j0 + w:
                 c[2 * q + e] = a[i * n + j]
     for p in range(Int(p_lo_in), np):
-        var acc = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+        var acc = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
         var exact_ok = True
         comptime for wi in range(NB // KB):
             var kk = p * NB + wi * KB

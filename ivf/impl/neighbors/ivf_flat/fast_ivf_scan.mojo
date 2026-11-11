@@ -93,8 +93,8 @@ def fast_ivf_scan_kernel[KM: Int, DM: Int = FIVF_DIM_TILE](
     barrier()
     if not active:
         return
-    var td = InlineArray[Float32, KM](fill=Float32.MAX)
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32.MAX)
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     var n_probes = Int(n_probes_in)
     for p in range(n_probes):
         var l = Int(probe_idx[q * n_probes + p])

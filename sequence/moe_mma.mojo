@@ -114,10 +114,10 @@ def _mm_block_map(poff: FP, En: Int, nq: Int, b: Int) -> Tuple[Int, Int]:
 
 
 @always_inline
-def _mm_gload[N: Int](src: FP, rows: InlineArray[Int, N], k0: Int, K: Int, tid: Int) -> InlineArray[Float32, N]:
+def _mm_gload[N: Int](src: FP, rows: Array[Int, N], k0: Int, K: Int, tid: Int) -> Array[Float32, N]:
     """Thread tid's words of a slab: item j is row (tid + NT j) // KB, column
     k0 + (tid + NT j) % KB of `src` (row offsets in `rows`, -1 = a zero row)."""
-    var out = InlineArray[Float32, N](fill=Float32(0.0))
+    var out = Array[Float32, N](fill=Float32(0.0))
     comptime for j in range(N):
         var q = tid + MM_NT * j
         var r = q // MM_KB
@@ -162,20 +162,20 @@ def moe_hidden_mma_kernel(
     var at = stack_allocation[MM_KB * MM_AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var gt = stack_allocation[BN * MM_BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var ut = stack_allocation[BN * MM_BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var xrow = InlineArray[Int, NX](fill=-1)
+    var xrow = Array[Int, NX](fill=-1)
     comptime for j in range(NX):
         var rp = p0 + (tid + MM_NT * j) // MM_KB
         if rp < p1:
             xrow[j] = (Int(order.unsafe_load(rp)) // k) * D
-    var grow = InlineArray[Int, NW](fill=-1)
-    var urow = InlineArray[Int, NW](fill=-1)
+    var grow = Array[Int, NW](fill=-1)
+    var urow = Array[Int, NW](fill=-1)
     comptime for j in range(NW):
         var f = q0 + (tid + MM_NT * j) // MM_KB
         if f < F:
             grow[j] = (e * 2 * F + f) * D
             urow[j] = (e * 2 * F + F + f) * D
-    var accg = InlineArray[_M64, MM_FM * FN](fill=_M64(0))
-    var accu = InlineArray[_M64, MM_FM * FN](fill=_M64(0))
+    var accg = Array[_M64, MM_FM * FN](fill=_M64(0))
+    var accu = Array[_M64, MM_FM * FN](fill=_M64(0))
     var xv = _mm_gload[NX](x, xrow, 0, D, tid)
     var gv = _mm_gload[NW](gu, grow, 0, D, tid)
     var uv = _mm_gload[NW](gu, urow, 0, D, tid)
@@ -196,7 +196,7 @@ def moe_hidden_mma_kernel(
         # Tried: MOE_FAST_MMA_PF's early slab load (hidden kernel).
         # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
         comptime for p8 in range(MM_KB // 8):
-            var af = InlineArray[_M64, MM_FM](fill=_M64(0))
+            var af = Array[_M64, MM_FM](fill=_M64(0))
             comptime for fm in range(MM_FM):
                 af[fm] = _mm_load_t(at + (8 * p8) * MM_AST + (sgm * MM_FM + fm) * 8, MM_AST)
             comptime for fq in range(FN):
@@ -257,17 +257,17 @@ def moe_out_mma_kernel(
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[MM_KB * MM_AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wt = stack_allocation[BN * MM_BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var hrow = InlineArray[Int, NX](fill=-1)
+    var hrow = Array[Int, NX](fill=-1)
     comptime for j in range(NX):
         var rp = p0 + (tid + MM_NT * j) // MM_KB
         if rp < p1:
             hrow[j] = Int(order.unsafe_load(rp)) * F
-    var wrow = InlineArray[Int, NW](fill=-1)
+    var wrow = Array[Int, NW](fill=-1)
     comptime for j in range(NW):
         var d = q0 + (tid + MM_NT * j) // MM_KB
         if d < D:
             wrow[j] = (e * D + d) * F
-    var acc = InlineArray[_M64, MM_FM * FN](fill=_M64(0))
+    var acc = Array[_M64, MM_FM * FN](fill=_M64(0))
     var hv = _mm_gload[NX](h, hrow, 0, F, tid)
     var wv = _mm_gload[NW](dn, wrow, 0, F, tid)
     var f0 = 0
@@ -286,7 +286,7 @@ def moe_out_mma_kernel(
         # Tried: MOE_FAST_MMA_PF's early slab load (out kernel).
         # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
         comptime for p8 in range(MM_KB // 8):
-            var af = InlineArray[_M64, MM_FM](fill=_M64(0))
+            var af = Array[_M64, MM_FM](fill=_M64(0))
             comptime for fm in range(MM_FM):
                 af[fm] = _mm_load_t(at + (8 * p8) * MM_AST + (sgm * MM_FM + fm) * 8, MM_AST)
             comptime for fq in range(FN):

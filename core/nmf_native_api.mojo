@@ -137,24 +137,24 @@ struct NMFNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: NMFFitRequest) raises -> NMFFitResult:
         var words = List[Int](length=2, fill=0)
         var error = List[Float64](length=1, fill=0.0)
-        var a: InlineArray[Int, 7] = [r.source, r.w_initial, r.h_initial, r.w_output, r.h_output,
+        var a: Array[Int, 7] = [r.source, r.w_initial, r.h_initial, r.w_output, r.h_output,
             Int(words.unsafe_ptr()), Int(error.unsafe_ptr())]
-        var p: InlineArray[Int, 10] = [r.rows, r.features, r.components, r.initialization, r.solver,
+        var p: Array[Int, 10] = [r.rows, r.features, r.components, r.initialization, r.solver,
             Int(r.args.update_h), r.args.max_iter, Int(r.args.shuffle), r.args.seed, Int(r.test_finite)]
-        var f: InlineArray[Float64, 6] = [r.args.beta, r.args.tol, r.args.l1w, r.args.l1h, r.args.l2w, r.args.l2h]
+        var f: Array[Float64, 6] = [r.args.beta, r.args.tol, r.args.l1w, r.args.l1h, r.args.l2w, r.args.l2h]
         _ = native_descriptor_call_fixed(self.entry, NMF_FIT, a, p, f)
         return NMFFitResult(words[0], error[0], words[1])
 
     def inverse(self, r: NMFInverseRequest) raises:
-        var a: InlineArray[Int, 3] = [r.source, r.components, r.dst]
-        var p: InlineArray[Int, 3] = [r.rows, r.features, r.count]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.source, r.components, r.dst]
+        var p: Array[Int, 3] = [r.rows, r.features, r.count]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, NMF_INVERSE, a, p, f)

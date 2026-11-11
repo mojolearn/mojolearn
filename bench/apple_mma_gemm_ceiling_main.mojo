@@ -75,7 +75,7 @@ def mma_gemm_kernel[SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int](
     var n0 = (Int(block_idx.x) % nbn) * BN
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_M64, FM * FN](fill=_M64(0))
+    var acc = Array[_M64, FM * FN](fill=_M64(0))
     for k0 in range(0, kk, KB):
         # Stage A^T: at[p][i] = A[m0 + i][k0 + p]; B: bt[j][p] = B[n0 + j][k0 + p].
         comptime for s in range((BM * KB + NT - 1) // NT):
@@ -102,8 +102,8 @@ def mma_gemm_kernel[SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int](
                 bt[j * BST + p] = v
         barrier()
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
-            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
+            var bf = Array[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
                 # M[r][c] = at[(8 p8 + c) * AST + i0 + r] = A[i0 + r][k0 + 8 p8 + c]
                 af[fm] = _sg_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)

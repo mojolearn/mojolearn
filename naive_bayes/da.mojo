@@ -240,7 +240,7 @@ def qda_dec_unit(t: Int, f: FP, q: IP):
         comptime assert W == 2 or W == 4 or W == 8, "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT must be 2, 4 or 8"
         var norm = Float32(0)
         for r0 in range(0, d, W):
-            var acc = InlineArray[Float32, W](fill=Float32(0))
+            var acc = Array[Float32, W](fill=Float32(0))
             for c in range(d):
                 var centered = sub(ld(f, p(q, 0) + i * d + c), ld(f, p(q, 3) + k * d + c))
                 comptime for lane in range(W):

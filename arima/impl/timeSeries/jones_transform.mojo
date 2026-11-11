@@ -141,8 +141,8 @@ def jones_transform_kernel(
         return
     var parameter = Int(parameter_in)
     var is_ar = is_in_ar(is_ar_in)
-    var tmp = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
-    var mine = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
+    var tmp = Array[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
+    var mine = Array[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
     for i in range(parameter):
         var v = ftz(params.unsafe_load(model * parameter + i))
         tmp[i] = v

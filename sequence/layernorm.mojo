@@ -97,7 +97,7 @@ def _rw_fold_sum(x: FP, base: Int, D: Int) -> Float32:
     """sum of x[base + c], c < D, as the 32-lane fold (LN_ROW_WARP): slot j
     adds c = j, j + 32, ... ascending from +0.0, then `tree32` (the device
     cell computes exactly these adds: `coop_rw_total`, sequence/coop.mojo)."""
-    var p = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+    var p = Array[Float32, FOLD_L](fill=Float32(0.0))
     var k = 0
     while k < D:
         var m = min(LN_RW_LANES, D - k)
@@ -111,7 +111,7 @@ def _rw_fold_sum(x: FP, base: Int, D: Int) -> Float32:
 def _rw_fold_sq(x: FP, base: Int, D: Int, mean: Float32) -> Float32:
     """sum of (x[base + c] - mean)^2 as the 32-lane fold: slot j's chain is
     fma3(d, d, acc) over c = j, j + 32, ... from +0.0, then `tree32`."""
-    var p = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+    var p = Array[Float32, FOLD_L](fill=Float32(0.0))
     var k = 0
     while k < D:
         var m = min(LN_RW_LANES, D - k)
@@ -157,8 +157,8 @@ def _rw_fold_bwd(a: Args, base: Int, D: Int, mean: Float32, rstd: Float32) -> Tu
     """(sum g, sum g xhat) of a backward-x row as the 32-lane fold: lane j
     runs add(sg, g) and fma3(g, xh, sgx) over c = j, j + 32, ... from +0.0,
     then one `tree32` per sum."""
-    var pg = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
-    var pgx = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+    var pg = Array[Float32, FOLD_L](fill=Float32(0.0))
+    var pgx = Array[Float32, FOLD_L](fill=Float32(0.0))
     var k = 0
     while k < D:
         var m = min(LN_RW_LANES, D - k)

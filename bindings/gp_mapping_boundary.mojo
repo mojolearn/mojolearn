@@ -24,8 +24,8 @@ def gp_mapping_snapshot[Values: Bool = True, Keys: Bool = True](value: PythonObj
     if py_type(value) is not native_loaded_module("builtins").dict:
         raise Error("TypeError: GP metadata capture requires an exact native dictionary")
     var result = GPMappingSnapshot()
-    var cursor = InlineArray[Int, 1](fill=0)
-    var items = InlineArray[PyObjectPtr, 2](fill=PyObjectPtr())
+    var cursor = Array[Int, 1](fill=0)
+    var items = Array[PyObjectPtr, 2](fill=PyObjectPtr())
     var api = cpython_table()
     while api[].PyDict_Next(value._obj_ptr, Int(cursor.unsafe_ptr()),
                            Int(items.unsafe_ptr()), Int(items.unsafe_ptr() + 1)):

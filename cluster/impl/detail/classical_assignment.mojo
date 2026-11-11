@@ -20,10 +20,10 @@ def classical_assign_group(
     var first = group * ASSIGN_ROWS
     if first >= n:
         return
-    var best = InlineArray[Float32,ASSIGN_ROWS](fill=Float32.MAX)
-    var ids = InlineArray[UInt32,ASSIGN_ROWS](fill=UInt32.MAX)
+    var best = Array[Float32,ASSIGN_ROWS](fill=Float32.MAX)
+    var ids = Array[UInt32,ASSIGN_ROWS](fill=UInt32.MAX)
     for center in range(k):
-        var sums = InlineArray[Float32,ASSIGN_ROWS](fill=Float32(0))
+        var sums = Array[Float32,ASSIGN_ROWS](fill=Float32(0))
         for f in range(d):
             var cv = ftz(c[center*d+f])
             comptime for r in range(ASSIGN_ROWS):

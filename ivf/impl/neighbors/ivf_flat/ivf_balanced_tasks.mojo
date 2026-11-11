@@ -63,9 +63,9 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
         end=min(start+TASK_ROWS,total)
     var lane=Int(lane_id())
     var dim=Int(dim_in)
-    var tk=InlineArray[UInt32,KM](fill=UInt32.MAX)
-    var td=InlineArray[Float32,KM](fill=Float32(0))
-    var ti=InlineArray[UInt32,KM](fill=UInt32.MAX)
+    var tk=Array[UInt32,KM](fill=UInt32.MAX)
+    var td=Array[Float32,KM](fill=Float32(0))
+    var ti=Array[UInt32,KM](fill=UInt32.MAX)
     var pos=start+lane
     while pos<end:
         var address=pos
@@ -128,9 +128,9 @@ def _merge_tasks[KM:Int](pd: MutPointer[Float32,MutAnyOrigin],pi: MutPointer[UIn
     var q=Int(block_idx.x)*256+Int(thread_idx.x)
     if q>=Int(nq):
         return
-    var tk=InlineArray[UInt32,KM](fill=UInt32.MAX)
-    var td=InlineArray[Float32,KM](fill=Float32(0))
-    var ti=InlineArray[UInt32,KM](fill=UInt32.MAX)
+    var tk=Array[UInt32,KM](fill=UInt32.MAX)
+    var td=Array[Float32,KM](fill=Float32(0))
+    var ti=Array[UInt32,KM](fill=UInt32.MAX)
     for task in range(Int(off[q*Int(np)]),Int(off[(q+1)*Int(np)])):
         for r in range(KM):
             var id=pi[task*KM+r]

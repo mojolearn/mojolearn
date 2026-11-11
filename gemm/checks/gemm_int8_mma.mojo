@@ -396,7 +396,7 @@ def _nvidia_warp_tile_reuse(
     run. Same Int32 sums, same epilogue."""
     var g = lane >> 2
     var t = lane & 3
-    var acc = InlineArray[SIMD[DType.int32, 4], 8](fill=SIMD[DType.int32, 4](0))
+    var acc = Array[SIMD[DType.int32, 4], 8](fill=SIMD[DType.int32, 4](0))
     # fragments of step kt: a[i][0..3] for A row-tile i, b[j][0..1] for B group j
     var ka = t * 4
     var a00 = _pack4(qa, row0 + g, ka, m, k, aligned)

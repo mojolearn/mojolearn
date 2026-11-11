@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from std.collections import InlineArray
+from std.collections import Array
 from core.tree_math import tree_log
 from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
 from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
@@ -1975,7 +1975,7 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
     )
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    var parent_terms = InlineArray[Float32,32](fill=Float32(0))
+    var parent_terms = Array[Float32,32](fill=Float32(0))
     comptime if T06 and not WEIGHTED:
         if entropy and n_classes <= 32:
             var node = idx

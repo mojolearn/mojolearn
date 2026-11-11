@@ -167,7 +167,7 @@ def afn_m2_mma_kernel[
     var bt = stack_allocation[
         BN * BST, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var acc = InlineArray[_M64, FN](fill=_M64(0))
+    var acc = Array[_M64, FN](fill=_M64(0))
 
     for k0 in range(0, k_total, KB):
         # ---- stage A^T: at[p][i] = A[i0 + i][k0 + p], flushed.

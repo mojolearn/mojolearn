@@ -92,7 +92,7 @@ def _logistic_compare_value(value: PythonObject, operation: String, right: Strin
         # Do not convert a huge positive C to float before the old strength
         # stage: penalty=None never needs that conversion. The overflow sign
         # is sufficient for the only comparisons here, against zero and one.
-        var overflow = InlineArray[Int32, 1](fill=0)
+        var overflow = Array[Int32, 1](fill=0)
         var integer = cpython_table()[].PyLong_AsLongLongAndOverflow(value._obj_ptr,
             Int(overflow.unsafe_ptr()))
         if cpython_table()[].PyErr_Occurred():

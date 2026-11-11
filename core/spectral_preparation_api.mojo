@@ -160,21 +160,21 @@ struct SpectralPreparationDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def count(self, r: SpectralCOOCountRequest) raises -> Int:
-        var a: InlineArray[Int, 1] = [r.source]
-        var p: InlineArray[Int, 1] = [r.count]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 1] = [r.source]
+        var p: Array[Int, 1] = [r.count]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, 1 if r.wide else 0, a, p, f)
 
     def fill(self, r: SpectralCOOFillRequest) raises -> Int:
-        var a: InlineArray[Int, 4] = [r.source, r.row_output, r.column_output, r.value_output]
-        var p: InlineArray[Int, 3] = [r.rows, r.columns, r.capacity]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 4] = [r.source, r.row_output, r.column_output, r.value_output]
+        var p: Array[Int, 3] = [r.rows, r.columns, r.capacity]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, 3 if r.wide else 2, a, p, f)
 
     def knn(self, r: SpectralKNNRequest) raises:
-        var a: InlineArray[Int, 6] = [r.dense, r.row_indices, r.column_indices, r.values, r.affinity, r.status]
-        var p: InlineArray[Int, 4] = [r.rows, r.neighbors, r.nonzeros, Int(r.sparse)]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 6] = [r.dense, r.row_indices, r.column_indices, r.values, r.affinity, r.status]
+        var p: Array[Int, 4] = [r.rows, r.neighbors, r.nonzeros, Int(r.sparse)]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, 4, a, p, f)
 
 

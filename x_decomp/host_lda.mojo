@@ -93,7 +93,7 @@ def lda_doc_row_host(
         var tb0 = 0
         while tb0 < kp:
             var nb = min(TB, (kp - tb0) // W)
-            var acc = InlineArray[V, TB](fill=V(0))
+            var acc = Array[V, TB](fill=V(0))
             for j in range(nnz):
                 var rv = V(_ftz1(r[j]))
                 var row = EWt.unsafe_offset(nz[j] * kp + tb0)

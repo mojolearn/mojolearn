@@ -244,8 +244,8 @@ def implicit_wgrad_leaf_kernel(
         barrier()
         if cnt == NI12_KS:
             comptime for i in range(NI12_KS):
-                var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
-                var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                var av = Array[Float32, NI12_RC](fill=Float32(0.0))
+                var bv = Array[Float32, NI12_RC](fill=Float32(0.0))
                 comptime for c in range(NI12_RC):
                     av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
                     bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
@@ -254,8 +254,8 @@ def implicit_wgrad_leaf_kernel(
                         acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
         else:
             for i in range(cnt):
-                var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
-                var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                var av = Array[Float32, NI12_RC](fill=Float32(0.0))
+                var bv = Array[Float32, NI12_RC](fill=Float32(0.0))
                 comptime for c in range(NI12_RC):
                     av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
                     bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]

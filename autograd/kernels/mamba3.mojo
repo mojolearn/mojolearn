@@ -502,7 +502,7 @@ def mamba3_s16_qk_regs2_kernel(
         vtok[n] = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
         dytok[n] = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
     barrier()
-    var kq = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var kq = Array[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
     comptime for j in range(M3_S16_QK_MAXQ):
         if j < inner:
             var kv = ftz(k.unsafe_load(((bb * l + chunk * qs + j) * nh + h) * M3_D_STATE + n))
@@ -582,8 +582,8 @@ def mamba3_s16_qk_regs_kernel(
         vtok[n] = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
         dytok[n] = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
     barrier()
-    var kl = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
-    var ql = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var kl = Array[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var ql = Array[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
     comptime for j in range(M3_S16_QK_MAXQ):
         if j < inner:
             var tj = chunk * qs + j
@@ -672,7 +672,7 @@ def mamba3_s16_qk_regs2h_kernel(
     if n < M3_HEADDIM:
         vtok[n] = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
         dytok[n] = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
-    var kq = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var kq = Array[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
     var dq = Float32(0.0); var dk = Float32(0.0)
     for half in range(2):
         var p0 = half * M3_S16_QK_PH
@@ -757,8 +757,8 @@ def mamba3_s16_qk_regsh_kernel(
     if n < M3_HEADDIM:
         vtok[n] = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
         dytok[n] = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
-    var kl = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
-    var ql = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var kl = Array[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var ql = Array[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
     var dq = Float32(0.0); var dk = Float32(0.0)
     for half in range(2):
         var p0 = half * M3_S16_QK_PH
@@ -2517,12 +2517,12 @@ def mamba3_s17_tail_pipe_kernel(
                     cts[2*e+1]=ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de))
                 barrier()
                 if n==0:
-                    var cur=InlineArray[Float32,2*G](fill=Float32(0))
+                    var cur=Array[Float32,2*G](fill=Float32(0))
                     comptime for i in range(G):
                         var pr=cts.unsafe_load[width=2,alignment=8](2*i)
                         cur[2*i]=pr[0];cur[2*i+1]=pr[1]
                     for g in range(GROUPS):
-                        var nxt=InlineArray[Float32,2*G](fill=Float32(0))
+                        var nxt=Array[Float32,2*G](fill=Float32(0))
                         if g+1<GROUPS:
                             comptime for i in range(G):
                                 var pr=cts.unsafe_load[width=2,alignment=8](2*((g+1)*G+i))
@@ -2545,12 +2545,12 @@ def mamba3_s17_tail_pipe_kernel(
             cts[2*e+1]=ftz(identical_mul(hs,el))
         barrier()
         if n==0:
-            var cur=InlineArray[Float32,2*G](fill=Float32(0))
+            var cur=Array[Float32,2*G](fill=Float32(0))
             comptime for i in range(G):
                 var pr=cts.unsafe_load[width=2,alignment=8](2*i)
                 cur[2*i]=pr[0];cur[2*i+1]=pr[1]
             for g in range(GROUPS):
-                var nxt=InlineArray[Float32,2*G](fill=Float32(0))
+                var nxt=Array[Float32,2*G](fill=Float32(0))
                 if g+1<GROUPS:
                     comptime for i in range(G):
                         var pr=cts.unsafe_load[width=2,alignment=8](2*((g+1)*G+i))

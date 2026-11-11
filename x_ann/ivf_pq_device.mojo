@@ -128,7 +128,7 @@ def assign_staged_kernel(
     barrier()
     if i >= Int(n):
         return
-    var rv = InlineArray[Float32, ASSIGN_LEN_MAX](fill=Float32(0.0))
+    var rv = Array[Float32, ASSIGN_LEN_MAX](fill=Float32(0.0))
     var off = i * Int(rot_dim) + j * pl
     for u in range(pl):
         rv[u] = ftz(r.unsafe_load(off + u))

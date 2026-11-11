@@ -67,7 +67,7 @@ def fused_update_f_kernel[KPAD: Int, RBF: Bool](
     var tda = stack_allocation[
         ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var xr = InlineArray[Float32, KPAD](fill=0.0)
+    var xr = Array[Float32, KPAD](fill=0.0)
     var ni = Float32(0.0)
     if active:
         comptime for c in range(KPAD):

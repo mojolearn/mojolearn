@@ -56,7 +56,7 @@ def cs_partial_kernel(x: F32P, part: I64P, rows_: Int64, cols_: Int64, rb_: Int6
     var blk = tid // cols
     var r0 = blk * rb
     var r1 = min(r0 + rb, rows)
-    var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+    var acc = Array[Int64, CS_WORDS](fill=Int64(0))
     for r in range(r0, r1):
         exact_add(acc, x.unsafe_load(r * cols + c))
     var o = tid * CS_WORDS
@@ -97,7 +97,7 @@ def cs_fold_kernel(part: I64P, dst: U64P, nrb_: Int64, cols_: Int64):
             tot[L] = sh[0]
         barrier()
     if t == 0:
-        var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+        var acc = Array[Int64, CS_WORDS](fill=Int64(0))
         for L in range(CS_WORDS):
             acc[L] = tot[L]
         dst.unsafe_store(c, exact_finish(acc))
@@ -288,7 +288,7 @@ def cs_pair_partial_kernel(x: F32P, y: F32P, part: I64P, rows_: Int64, cols_: In
         return
     var c = tid % (cols + 1)
     var lo = (tid // (cols + 1)) * rb
-    var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+    var acc = Array[Int64, CS_WORDS](fill=Int64(0))
     for r in range(lo, min(lo + rb, rows)):
         var v = y.unsafe_load(r) if c == cols else x.unsafe_load(r * cols + c)
         exact_add(acc, v)

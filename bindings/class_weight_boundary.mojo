@@ -20,8 +20,8 @@ comptime CLASS_WEIGHT_TREES = 2
 def class_weight_admit_dictionary[Values: Bool = True](value: PythonObject, context: PythonObject) raises:
     # PyDict_Next reads the admitted native dict storage. Admit keys/values before any
     # class hashing or numeric conversion, retaining the original refusal order.
-    var cursor = InlineArray[Int, 1](fill=0)
-    var items = InlineArray[PyObjectPtr, 2](fill=PyObjectPtr())
+    var cursor = Array[Int, 1](fill=0)
+    var items = Array[PyObjectPtr, 2](fill=PyObjectPtr())
     var api = cpython_table()
     while api[].PyDict_Next(value._obj_ptr, Int(cursor.unsafe_ptr()),
                            Int(items.unsafe_ptr()), Int(items.unsafe_ptr() + 1)):

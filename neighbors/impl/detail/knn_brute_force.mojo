@@ -274,8 +274,8 @@ def certified_knn_reach_clear() raises:
         var p=_CERTIFIED_REACH.get_or_create_ptr()
         p[].calls=0; p[].queries=0; p[].fallback=0
 
-def certified_knn_reach_read() raises -> InlineArray[Int,3]:
-    var values=InlineArray[Int,3](fill=0)
+def certified_knn_reach_read() raises -> Array[Int,3]:
+    var values=Array[Int,3](fill=0)
     # NEVER RUN — PENDING MEASUREMENT
     comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
         var p=_CERTIFIED_REACH.get_or_create_ptr()

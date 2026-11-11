@@ -326,20 +326,20 @@ def identical_gemm_int15_apple_dev_kernel[
     var qd = lane // 4
     var frow = (qd & 4) + ((lane // 2) % 4)
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
-    var hh_total = InlineArray[Int32, NC](fill=Int32(0))
-    var mid_total = InlineArray[Int32, NC](fill=Int32(0))
-    var ll_total = InlineArray[Int32, NC](fill=Int32(0))
-    var run_l = InlineArray[Int32, NC](fill=Int32(0))
-    var hh_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var mid_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var ll_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var hh_total = Array[Int32, NC](fill=Int32(0))
+    var mid_total = Array[Int32, NC](fill=Int32(0))
+    var ll_total = Array[Int32, NC](fill=Int32(0))
+    var run_l = Array[Int32, NC](fill=Int32(0))
+    var hh_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var mid_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var ll_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var units = kp // 8
     for u in range(units):
         var k0 = u * 8
-        var a0f = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-        var a1f = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-        var b0f = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
-        var b1f = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+        var a0f = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+        var a1f = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+        var b0f = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
+        var b1f = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
         comptime for fm in range(FM):
             var off = k0 * mp + m0 + (sgm * FM + fm) * 8
             a0f[fm] = _dev_load_t(a0 + off, mp)

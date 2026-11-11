@@ -319,10 +319,10 @@ def identical_gemm_int15_apple_kernel[
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bth = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var btl = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var hi_total = InlineArray[Int64, NC](fill=Int64(0))
-    var lo_total = InlineArray[Int64, NC](fill=Int64(0))
-    var hi_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var lo_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var hi_total = Array[Int64, NC](fill=Int64(0))
+    var lo_total = Array[Int64, NC](fill=Int64(0))
+    var hi_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var lo_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var windows = (k + KB - 1) // KB
     var step = 0
     for w in range(windows):
@@ -332,9 +332,9 @@ def identical_gemm_int15_apple_kernel[
         _stage_right[BN, KB, NT, BST](btl, bl, n0, n, k0, k, tid)
         barrier()
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var bhf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
-            var blf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var bhf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var blf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):
@@ -431,9 +431,9 @@ def identical_gemm_int15_apple4_kernel[
     var hh_total = SIMD[DType.int32, NC](0)
     var mid_total = SIMD[DType.int32, NC](0)
     var ll_total = SIMD[DType.int32, NC](0)
-    var hh_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var mid_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var ll_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var hh_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var mid_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var ll_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var windows = (k + KB - 1) // KB
     for w in range(windows):
         var k0 = w * KB
@@ -443,10 +443,10 @@ def identical_gemm_int15_apple4_kernel[
         _stage_right[BN, KB, NT, BST](btl, bl, n0, n, k0, k, tid)
         barrier()
         comptime for p8 in range(KB // 8):
-            var ahf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var alf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var bhf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
-            var blf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var ahf = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var alf = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var bhf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var blf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
             comptime for fm in range(FM):
                 ahf[fm] = _amma_load_t(ath + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 alf[fm] = _amma_load_t(atl + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)

@@ -118,7 +118,7 @@ def nm_steps[O: Objective, CAP: Int = 9](
     var xr = xo + n
     var xe = xr + n
     var xt = xe + n
-    var order = InlineArray[Int, CAP](fill=0)
+    var order = Array[Int, CAP](fill=0)
     # FIXED POINT (Apple speed, 2026-09-28): the loop's whole state is the
     # simplex and its values. An iteration that leaves both bit for bit as
     # it found them (a stalled simplex whose shrink rounds back onto itself)

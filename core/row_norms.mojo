@@ -156,12 +156,12 @@ def thread_row_norm_kernel(
     if row >= Int(n_rows_in):
         return
     var d = Int(n_cols_in)
-    var lanes = InlineArray[Float32, 32](fill=Float32(0.0))
+    var lanes = Array[Float32, 32](fill=Float32(0.0))
     comptime for j in range(32):
         if j < d:
             var v = ftz(a.unsafe_load(row * d + j))
             lanes[j] = ftz(identical_mul_add(v, v, Float32(0.0)))
-    var w = InlineArray[Float32, 16](fill=Float32(0.0))
+    var w = Array[Float32, 16](fill=Float32(0.0))
     comptime for t in range(16):
         w[t] = lanes[t] + lanes[t + 16]
     comptime for k in range(4):

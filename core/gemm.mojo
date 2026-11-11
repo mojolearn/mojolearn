@@ -158,7 +158,7 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
     var ys = stack_allocation[
         TN * GNT_KT, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var acc = InlineArray[Float32, RM * RN](fill=Float32(0.0))
+    var acc = Array[Float32, RM * RN](fill=Float32(0.0))
     var p0 = 0
     while p0 < k:
         var kt = min(GNT_KT, k - p0)
@@ -178,8 +178,8 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
             t += THREADS
         barrier()
         for pp in range(kt):
-            var a = InlineArray[Float32, RM](fill=Float32(0.0))
-            var b = InlineArray[Float32, RN](fill=Float32(0.0))
+            var a = Array[Float32, RM](fill=Float32(0.0))
+            var b = Array[Float32, RN](fill=Float32(0.0))
             comptime for rr in range(RM):
                 a[rr] = xs[(ty_ * RM + rr) * GNT_KT + pp]
             comptime for cc in range(RN):
@@ -251,7 +251,7 @@ def apple_gemm_nt_mma_kernel(
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True
     var windows = (k + KB - 1) // KB
     var ra = _amma_gload[BM, KB, NT](x, k, 1, m0, m, 0, min(KB, k), tid, False)
@@ -281,8 +281,8 @@ def apple_gemm_nt_mma_kernel(
             exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
-                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
                     af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):

@@ -33,7 +33,7 @@ comptime LOG_2PI = Float32(1.8378770664093453)
 
 
 @always_inline
-def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray[Float32, RD_MAX], mut out_v: InlineArray[Float32, RD_MAX]):
+def _mv(n: Int, alpha: Float32, a: Array[Float32, RD2_MAX], v: Array[Float32, RD_MAX], mut out_v: Array[Float32, RD_MAX]):
     """`batched_kalman._mv` in FAST arithmetic (column-major `a`)."""
     for i in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
         var acc = Float32(0.0)
@@ -43,7 +43,7 @@ def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray
 
 
 @always_inline
-def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MAX], bT: Bool, mut out_v: InlineArray[Float32, RD2_MAX]):
+def _mm(n: Int, a: Array[Float32, RD2_MAX], b: Array[Float32, RD2_MAX], bT: Bool, mut out_v: Array[Float32, RD2_MAX]):
     """`batched_kalman._mm` in FAST arithmetic."""
     for i in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
         for j in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
@@ -55,7 +55,7 @@ def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MA
 
 
 @always_inline
-def _numerical_stability(n: Int, mut a: InlineArray[Float32, RD2_MAX]):
+def _numerical_stability(n: Int, mut a: Array[Float32, RD2_MAX]):
     """`A = 0.5 (A + A')`, `A_ii = |A_ii|`."""
     for i in range(n - 1):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
         for j in range(i + 1, n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
@@ -107,15 +107,15 @@ def fk_converge_kernel[RD_C: Int](
     comptime rd2 = rd * rd
     var nobs = Int(nobs_in)
     var n_diff = Int(n_diff_in)
-    var l_RQR = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_T = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_Z = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
-    var l_P = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_alpha = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
-    var l_K = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
-    var l_tmp = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_TP = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_v = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var l_RQR = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_T = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_Z = Array[Float32, RD_MAX](fill=Float32(0.0))
+    var l_P = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_alpha = Array[Float32, RD_MAX](fill=Float32(0.0))
+    var l_K = Array[Float32, RD_MAX](fill=Float32(0.0))
+    var l_tmp = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_TP = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_v = Array[Float32, RD_MAX](fill=Float32(0.0))
     var b_rd = bid * rd
     var b_rd2 = bid * rd2
     for i in range(rd2):
@@ -234,14 +234,14 @@ comptime FK_ST = FK_OFF_F + 8
 
 @always_inline
 def _steady_step[rd: Int](
-    mut a: InlineArray[Float32, RD_MAX],
+    mut a: Array[Float32, RD_MAX],
     s: MutPointer[Float32, MutAnyOrigin],
     yeff: Float32,
     mu: Float32,
     n_diff: Int,
 ):
     """`a = L a + K yeff + mu e_{n_diff}`, L column-major."""
-    var na = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var na = Array[Float32, RD_MAX](fill=Float32(0.0))
     comptime for i in range(rd):
         var acc = s[FK_OFF_K + i] * yeff
         comptime for j in range(rd):
@@ -282,7 +282,7 @@ def fk_chunk_local_kernel[RD_C: Int](
     var s = st + b * FK_ST
     var mu = d_mu[b] if intercept_in != 0 else Float32(0.0)
     var n_diff = Int(n_diff_in)
-    var a = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var a = Array[Float32, RD_MAX](fill=Float32(0.0))
     for t in range(t0, t1):
         var y = ys[b * nobs + t]
         if has_exog_in != 0:
@@ -313,12 +313,12 @@ def fk_chunk_scan_kernel[RD_C: Int](
     comptime rd = RD_C
     var s = st + b * FK_ST
     # M = L^FK_CHUNK, by repeated squaring (FK_CHUNK is a power of two)
-    var M = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
+    var M = Array[Float32, RD2_MAX](fill=Float32(0.0))
     for i in range(rd * rd):
         M[i] = s[FK_OFF_L + i]
     var sq = FK_CHUNK
     while sq > 1:
-        var N = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
+        var N = Array[Float32, RD2_MAX](fill=Float32(0.0))
         for i in range(rd):
             for j in range(rd):
                 var acc = Float32(0.0)
@@ -328,7 +328,7 @@ def fk_chunk_scan_kernel[RD_C: Int](
         M = N^
         sq //= 2
     var n_chunks = Int(n_chunks_in)
-    var cur = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var cur = Array[Float32, RD_MAX](fill=Float32(0.0))
     for i in range(rd):
         cur[i] = s[i]
     for c in range(n_chunks):
@@ -337,7 +337,7 @@ def fk_chunk_scan_kernel[RD_C: Int](
             break
         for i in range(rd):
             starts[g * RD_MAX + i] = cur[i]
-        var nx = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+        var nx = Array[Float32, RD_MAX](fill=Float32(0.0))
         for i in range(rd):
             var acc = ends[g * RD_MAX + i]
             for j in range(rd):
@@ -387,11 +387,11 @@ def fk_chunk_final_kernel[RD_C: Int](
     var inv_F = Float32(1.0) / F
     var mu = d_mu[b] if intercept_in != 0 else Float32(0.0)
     var n_diff = Int(n_diff_in)
-    var lz = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var lz = Array[Float32, RD_MAX](fill=Float32(0.0))
     if n_diff > 0:
         for i in range(rd):
             lz[i] = Z[b * rd + i]
-    var a = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var a = Array[Float32, RD_MAX](fill=Float32(0.0))
     for i in range(rd):
         a[i] = starts[g * RD_MAX + i]
     var acc = Float32(0.0)
@@ -451,7 +451,7 @@ def fk_finish_kernel[RD_C: Int](
     var sum_logF = s[FK_OFF_F + 1]
     var sum_v2F = s[FK_OFF_F + 2]
     var n_ll = Int(s[FK_OFF_F + 3])
-    var a = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var a = Array[Float32, RD_MAX](fill=Float32(0.0))
     if t_c < nobs:
         var n_steady = nobs - t_c
         for c in range(n_chunks):
@@ -472,7 +472,7 @@ def fk_finish_kernel[RD_C: Int](
     d_info[b] = Int32(Int(s[FK_OFF_F + 4]))
     var mu = d_mu[b] if intercept_in != 0 else Float32(0.0)
     var fc_steps = Int(fc_steps_in)
-    var lz = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var lz = Array[Float32, RD_MAX](fill=Float32(0.0))
     if n_diff > 0:
         for i in range(rd):
             lz[i] = Z[b * rd + i]
@@ -487,7 +487,7 @@ def fk_finish_kernel[RD_C: Int](
             for i in range(rd):
                 pred += a[i] * lz[i]
         d_fc[b_fc + it] = pred
-        var na = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+        var na = Array[Float32, RD_MAX](fill=Float32(0.0))
         for i in range(rd):
             var acc = Float32(0.0)
             for j in range(rd):

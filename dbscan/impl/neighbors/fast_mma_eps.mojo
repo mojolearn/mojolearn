@@ -191,7 +191,7 @@ def fast_mma_eps_kernel[D: Int, A: Int, B: Int](
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var q0 = (Int(block_idx.x) * ME_SG + sg) * 8 * A
 
-    var qf = InlineArray[_M64, A * KS](fill=_M64(0))
+    var qf = Array[_M64, A * KS](fill=_M64(0))
     var qn = SIMD[DType.float32, A](0)
     comptime for a in range(A):
         var q = q0 + 8 * a + frow
@@ -240,7 +240,7 @@ def fast_mma_eps_kernel[D: Int, A: Int, B: Int](
                 v = xc[(nb + r) * k + c]
             pf[u] = v
         for cb in range(ME_T // RB):
-            var xf = InlineArray[_M64, B * KS](fill=_M64(0))
+            var xf = Array[_M64, B * KS](fill=_M64(0))
             comptime for b in range(B):
                 comptime for kk in range(KS):
                     xf[b * KS + kk] = _sg_load_t(

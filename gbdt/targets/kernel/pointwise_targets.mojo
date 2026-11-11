@@ -878,7 +878,7 @@ def deterministic_sum_lanes_kernel[
     var tid = Int(thread_idx.x)
     var count = Int(count_in)
 
-    var acc = InlineArray[Float32, lanes](fill=Float32(0.0))
+    var acc = Array[Float32, lanes](fill=Float32(0.0))
     var i = tid
     while i < count:
 

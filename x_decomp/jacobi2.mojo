@@ -93,7 +93,7 @@ def dev_barrier():
 
 
 @always_inline
-def _halve16(w0: InlineArray[Float32, 16]) -> Float32:
+def _halve16(w0: Array[Float32, 16]) -> Float32:
     """The rest of `two_phase_halving_sum[32]`'s tree once its first level
     `w[t] = red[t] + red[t + 16]` (t < 16) is formed: `w[t] + w[t + S]` for
     S = 8, 4, 2, 1."""
@@ -216,12 +216,12 @@ def jacobi_eigh2_kernel[U: Int = J2_U](
 
                 var k0 = tid
                 while k0 < n:
-                    var akp = InlineArray[Float32, U](fill=Float32(0.0))
-                    var akq = InlineArray[Float32, U](fill=Float32(0.0))
-                    var apk = InlineArray[Float32, U](fill=Float32(0.0))
-                    var aqk = InlineArray[Float32, U](fill=Float32(0.0))
-                    var vkp = InlineArray[Float32, U](fill=Float32(0.0))
-                    var vkq = InlineArray[Float32, U](fill=Float32(0.0))
+                    var akp = Array[Float32, U](fill=Float32(0.0))
+                    var akq = Array[Float32, U](fill=Float32(0.0))
+                    var apk = Array[Float32, U](fill=Float32(0.0))
+                    var aqk = Array[Float32, U](fill=Float32(0.0))
+                    var vkp = Array[Float32, U](fill=Float32(0.0))
+                    var vkq = Array[Float32, U](fill=Float32(0.0))
                     comptime for u in range(U):
                         var k = k0 + u * J2_TPB
                         if k < n:
@@ -339,7 +339,7 @@ def one_sided_svd2_kernel(
             slab[S2_R + tid] = lq
             slab[2 * S2_R + tid] = lpq
         barrier()
-        var w = InlineArray[Float32, 16](fill=Float32(0.0))
+        var w = Array[Float32, 16](fill=Float32(0.0))
         comptime for t in range(16):
             w[t] = slab[t] + slab[t + 16]
         app = _halve16(w)
@@ -386,10 +386,10 @@ def one_sided_svd2_kernel(
                     var lpq = Float32(0.0)
                     var i0 = tid
                     while i0 < n:
-                        var xp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                        var xq = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                        var yp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                        var yq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                        var xp = Array[Float32, J2_U](fill=Float32(0.0))
+                        var xq = Array[Float32, J2_U](fill=Float32(0.0))
+                        var yp = Array[Float32, J2_U](fill=Float32(0.0))
+                        var yq = Array[Float32, J2_U](fill=Float32(0.0))
                         comptime for u in range(J2_U):
                             var i = i0 + u * S2_R
                             if i < n:
@@ -429,8 +429,8 @@ def one_sided_svd2_kernel(
                 elif rotate:
                     var i0 = tid - S2_R
                     while i0 < n:
-                        var vp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                        var vq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                        var vp = Array[Float32, J2_U](fill=Float32(0.0))
+                        var vq = Array[Float32, J2_U](fill=Float32(0.0))
                         comptime for u in range(J2_U):
                             var i = i0 + u * S2_V
                             if i < n:
@@ -443,7 +443,7 @@ def one_sided_svd2_kernel(
                                 vt.unsafe_store(q * n + i, _rot_add(s, vp[u], c, vq[u]))
                         i0 += J2_U * S2_V
                 barrier()
-                var w = InlineArray[Float32, 16](fill=Float32(0.0))
+                var w = Array[Float32, 16](fill=Float32(0.0))
                 comptime for t in range(16):
                     w[t] = slab[base + t] + slab[base + t + 16]
                 app = _halve16(w)
@@ -474,7 +474,7 @@ def one_sided_svd2_kernel(
             slab[base + tid] = acc
         barrier()
         if tid == 0:
-            var w = InlineArray[Float32, 16](fill=Float32(0.0))
+            var w = Array[Float32, 16](fill=Float32(0.0))
             comptime for t in range(16):
                 w[t] = slab[base + t] + slab[base + t + 16]
             s_out.unsafe_store(j, ftz(identical_sqrt(_halve16(w))))
@@ -558,7 +558,7 @@ def one_sided_svd2_chunk_kernel(
             slab[S2_R + tid] = lq
             slab[2 * S2_R + tid] = lpq
         barrier()
-        var w = InlineArray[Float32, 16](fill=Float32(0.0))
+        var w = Array[Float32, 16](fill=Float32(0.0))
         comptime for t in range(16):
             w[t] = slab[t] + slab[t + 16]
         app = _halve16(w)
@@ -601,10 +601,10 @@ def one_sided_svd2_chunk_kernel(
             var lpq = Float32(0.0)
             var i0 = tid
             while i0 < n:
-                var xp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                var xq = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                var yp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                var yq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                var xp = Array[Float32, J2_U](fill=Float32(0.0))
+                var xq = Array[Float32, J2_U](fill=Float32(0.0))
+                var yp = Array[Float32, J2_U](fill=Float32(0.0))
+                var yq = Array[Float32, J2_U](fill=Float32(0.0))
                 comptime for u in range(J2_U):
                     var i = i0 + u * S2_R
                     if i < n:
@@ -644,8 +644,8 @@ def one_sided_svd2_chunk_kernel(
         elif rotate:
             var i0 = tid - S2_R
             while i0 < n:
-                var vp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                var vq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                var vp = Array[Float32, J2_U](fill=Float32(0.0))
+                var vq = Array[Float32, J2_U](fill=Float32(0.0))
                 comptime for u in range(J2_U):
                     var i = i0 + u * S2_V
                     if i < n:
@@ -658,7 +658,7 @@ def one_sided_svd2_chunk_kernel(
                         vt.unsafe_store(q * n + i, _rot_add(s, vp[u], c, vq[u]))
                 i0 += J2_U * S2_V
         barrier()
-        var w = InlineArray[Float32, 16](fill=Float32(0.0))
+        var w = Array[Float32, 16](fill=Float32(0.0))
         comptime for t in range(16):
             w[t] = slab[base + t] + slab[base + t + 16]
         app = _halve16(w)
@@ -706,7 +706,7 @@ def one_sided_svd2_finish_kernel(
             slab[base + tid] = acc
         barrier()
         if tid == 0:
-            var w = InlineArray[Float32, 16](fill=Float32(0.0))
+            var w = Array[Float32, 16](fill=Float32(0.0))
             comptime for t in range(16):
                 w[t] = slab[base + t] + slab[base + t + 16]
             s_out.unsafe_store(j, ftz(identical_sqrt(_halve16(w))))

@@ -203,7 +203,7 @@ struct HostGroveForest(Movable):
         # T34 uses the same pure Mojo chunk graph as every GPU column.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
         comptime if T34_CHUNK_FOLD:
-            var chunk = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+            var chunk = Array[Float32, FOREST_CHUNK](fill=Float32(0))
             for c in range(outputs):
                 var total = Float32(0)
                 var first = 0

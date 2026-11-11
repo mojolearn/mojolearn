@@ -470,16 +470,16 @@ def identical_gemm_int8_mma_amd_direct_kernel[
         # The lane's steps inside a window: `8 KU` of them from here.
         var kq = (lane >> 4) * (INT8_AMD_LANE_BYTES * KU)
         var i4 = (lane >> 4) * 4
-        var acc = InlineArray[SIMD[DType.int32, 4], NACC](fill=SIMD[DType.int32, 4](0))
+        var acc = Array[SIMD[DType.int32, 4], NACC](fill=SIMD[DType.int32, 4](0))
         for kt in range(0, k, TURN):
             # ---- every load of the turn, before its first unit step. A
             # window wholly beyond `k` and a unit tile wholly beyond `m` or
             # `n` are not read (uniform across the wave): their fragments
             # stay the zero code and their unit steps are skipped below.
-            var afr = InlineArray[SIMD[DType.int64, KU], FM * KW](
+            var afr = Array[SIMD[DType.int64, KU], FM * KW](
                 fill=SIMD[DType.int64, KU](0)
             )
-            var bfr = InlineArray[SIMD[DType.int64, KU], FN * KW](
+            var bfr = Array[SIMD[DType.int64, KU], FN * KW](
                 fill=SIMD[DType.int64, KU](0)
             )
             comptime for w in range(KW):
@@ -721,16 +721,16 @@ def identical_gemm_int8_pieces_amd_direct_kernel[
         var kq = (lane >> 4) * (INT8_AMD_LANE_BYTES * KU)
         var i4 = (lane >> 4) * 4
         # Three accumulators per unit tile: HH, HL + LH, LL.
-        var acc = InlineArray[SIMD[DType.int32, 4], 3 * NACC](
+        var acc = Array[SIMD[DType.int32, 4], 3 * NACC](
             fill=SIMD[DType.int32, 4](0)
         )
         for kt in range(0, k, TURN):
             # Per window and unit tile: the high plane's words, then the
             # low plane's.
-            var afr = InlineArray[SIMD[DType.int64, KU], 2 * FM * KW](
+            var afr = Array[SIMD[DType.int64, KU], 2 * FM * KW](
                 fill=SIMD[DType.int64, KU](0)
             )
-            var bfr = InlineArray[SIMD[DType.int64, KU], 2 * FN * KW](
+            var bfr = Array[SIMD[DType.int64, KU], 2 * FN * KW](
                 fill=SIMD[DType.int64, KU](0)
             )
             comptime for w in range(KW):

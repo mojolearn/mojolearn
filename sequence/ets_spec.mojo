@@ -66,7 +66,7 @@ struct EtsEv(ImplicitlyCopyable, Movable):
     var phi: Float32
 
     @always_inline
-    def unpack(self, c: InlineArray[Float32, EK]) -> Tuple[Float32, Float32, Float32, Float32, Float32]:
+    def unpack(self, c: Array[Float32, EK]) -> Tuple[Float32, Float32, Float32, Float32, Float32]:
         """(alpha, beta, phi, l0, b0), EtsObj.unpack's order (gamma is
         never free without a season)."""
         var j = 0
@@ -87,7 +87,7 @@ struct EtsEv(ImplicitlyCopyable, Movable):
         return (a, b, p, l0, b0)
 
     @always_inline
-    def ev(self, c: InlineArray[Float32, EK]) -> Float32:
+    def ev(self, c: Array[Float32, EK]) -> Float32:
         var u = self.unpack(c)
         var r = ets_lik(self.y, self.n, self.err, self.trend, SEAS_N, 1, self.ring,
                         u[0], u[1], Float32(0.0), u[2], u[3], u[4])
@@ -101,7 +101,7 @@ def _clamp(v: Float32, lo: Float32, hi: Float32) -> Float32:
 
 
 @always_inline
-def _put(mut arr: InlineArray[Float32, ES], i: Int, v: Float32) -> Bool:
+def _put(mut arr: Array[Float32, ES], i: Int, v: Float32) -> Bool:
     var old = bitcast[DType.uint32](arr[i])
     var w = ftz(v)
     arr[i] = w
@@ -109,7 +109,7 @@ def _put(mut arr: InlineArray[Float32, ES], i: Int, v: Float32) -> Bool:
 
 
 @always_inline
-def _putf(mut arr: InlineArray[Float32, EK + 1], i: Int, v: Float32) -> Bool:
+def _putf(mut arr: Array[Float32, EK + 1], i: Int, v: Float32) -> Bool:
     var old = bitcast[DType.uint32](arr[i])
     var w = ftz(v)
     arr[i] = w
@@ -117,8 +117,8 @@ def _putf(mut arr: InlineArray[Float32, EK + 1], i: Int, v: Float32) -> Bool:
 
 
 @always_inline
-def _vertex(S: InlineArray[Float32, ES], r: Int, k: Int) -> InlineArray[Float32, EK]:
-    var c = InlineArray[Float32, EK](fill=Float32(0.0))
+def _vertex(S: Array[Float32, ES], r: Int, k: Int) -> Array[Float32, EK]:
+    var c = Array[Float32, EK](fill=Float32(0.0))
     for j in range(k):
         c[j] = S[r * k + j]
     return c^
@@ -126,15 +126,15 @@ def _vertex(S: InlineArray[Float32, ES], r: Int, k: Int) -> InlineArray[Float32,
 
 @always_inline
 def nm_spec_ets(
-    ev: EtsEv, mut x: InlineArray[Float32, EK], lo: InlineArray[Float32, EK], hi: InlineArray[Float32, EK],
+    ev: EtsEv, mut x: Array[Float32, EK], lo: Array[Float32, EK], hi: Array[Float32, EK],
     k: Int, lane: Int, init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32,
 ) -> Int:
     """`nelder_mead` (sequence/nm.mojo; k <= EK, IDENTICAL: no stall rule,
     no snapshot) with the candidates of each step evaluated across lanes;
     x receives the best vertex; returns the iteration count. Every lane
     calls it and every lane returns the same words."""
-    var S = InlineArray[Float32, ES](fill=Float32(0.0))
-    var F = InlineArray[Float32, EK + 1](fill=Float32(0.0))
+    var S = Array[Float32, ES](fill=Float32(0.0))
+    var F = Array[Float32, EK + 1](fill=Float32(0.0))
     # nm_start: the clamped start in every row, the diagonal perturbed
     for i in range(k + 1):
         for j in range(k):
@@ -156,12 +156,12 @@ def nm_spec_ets(
     var gamma = add(Float32(1.0), ftz(identical_div(Float32(2.0), nf)))
     var rho = sub(Float32(0.75), ftz(identical_div(Float32(1.0), mul(Float32(2.0), nf))))
     var sigma = sub(Float32(1.0), ftz(identical_div(Float32(1.0), nf)))
-    var xo = InlineArray[Float32, EK](fill=Float32(0.0))
-    var xr = InlineArray[Float32, EK](fill=Float32(0.0))
-    var xe = InlineArray[Float32, EK](fill=Float32(0.0))
-    var xc = InlineArray[Float32, EK](fill=Float32(0.0))
-    var xi = InlineArray[Float32, EK](fill=Float32(0.0))
-    var order = InlineArray[Int, EK + 1](fill=0)
+    var xo = Array[Float32, EK](fill=Float32(0.0))
+    var xr = Array[Float32, EK](fill=Float32(0.0))
+    var xe = Array[Float32, EK](fill=Float32(0.0))
+    var xc = Array[Float32, EK](fill=Float32(0.0))
+    var xi = Array[Float32, EK](fill=Float32(0.0))
+    var order = Array[Int, EK + 1](fill=0)
     var changed = True
     var it = 0
     var best = 0
@@ -210,7 +210,7 @@ def nm_spec_ets(
             xc[j] = ftz(_clamp(fma3(rho, sub(xr[j], o), o), lo[j], hi[j]))
             xi[j] = ftz(_clamp(sub(o, mul(rho, sub(xr[j], o))), lo[j], hi[j]))
         # nm_steps compares the raw candidate values with the stored (ftz) ones
-        var cand = InlineArray[Float32, EK](fill=Float32(0.0))
+        var cand = Array[Float32, EK](fill=Float32(0.0))
         for j in range(k):
             if role == 1:
                 cand[j] = xe[j]
@@ -315,9 +315,9 @@ def op_ets_spec(t: Int, lane: Int, a: Args):
     var ob = trend and not fb
     var op = damped and not fp
     # op_ets stores x/lo/hi through st (ftz); the registers hold the same words
-    var x = InlineArray[Float32, EK](fill=Float32(0.0))
-    var lo = InlineArray[Float32, EK](fill=Float32(0.0))
-    var hi = InlineArray[Float32, EK](fill=Float32(0.0))
+    var x = Array[Float32, EK](fill=Float32(0.0))
+    var lo = Array[Float32, EK](fill=Float32(0.0))
+    var hi = Array[Float32, EK](fill=Float32(0.0))
     var k = 0
     if oa:
         x[k] = ftz(alpha)

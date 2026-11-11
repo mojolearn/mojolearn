@@ -65,9 +65,9 @@ def ils_div(a: Float32, b: Float32) -> Float32:
 
 @always_inline
 def ils_givens_row(
-    mut r: InlineArray[Float32, ILS_R2],
-    mut qb: InlineArray[Float32, ILS_MAX_COLS],
-    mut a: InlineArray[Float32, ILS_MAX_COLS],
+    mut r: Array[Float32, ILS_R2],
+    mut qb: Array[Float32, ILS_MAX_COLS],
+    mut a: Array[Float32, ILS_MAX_COLS],
     b_in: Float32,
     n: Int,
 ):
@@ -97,10 +97,10 @@ def ils_givens_row(
 
 @always_inline
 def ils_solve(
-    r: InlineArray[Float32, ILS_R2],
-    qb: InlineArray[Float32, ILS_MAX_COLS],
+    r: Array[Float32, ILS_R2],
+    qb: Array[Float32, ILS_MAX_COLS],
     n: Int,
-    mut x: InlineArray[Float32, ILS_MAX_COLS],
+    mut x: Array[Float32, ILS_MAX_COLS],
 ) -> Int32:
     """The rank test and the back-substitution of the merged triangle:
     returns 0 with the solution in `x`, or j + 1 for the first column whose

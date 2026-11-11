@@ -99,54 +99,54 @@ struct KPCANeighborDriver(Copyable, Movable):
 
     def kernel(self, source: Int, other: Int, dst: Int, rows: Int, cols: Int, features: Int,
                options: KPCAKernelOptions) raises:
-        var a: InlineArray[Int, 3] = [source, other, dst]
-        var p: InlineArray[Int, 5] = [rows, cols, features, options.kind, options.degree]
-        var f: InlineArray[Float64, 2] = [Float64(Float32(options.gamma)), Float64(Float32(options.coef0))]
+        var a: Array[Int, 3] = [source, other, dst]
+        var p: Array[Int, 5] = [rows, cols, features, options.kind, options.degree]
+        var f: Array[Float64, 2] = [Float64(Float32(options.gamma)), Float64(Float32(options.coef0))]
         _ = self.native.run("kernel", a, p, f)
 
     def colsum(self, source: Int, dst: Int, rows: Int, cols: Int) raises:
-        var a: InlineArray[Int, 2] = [source, dst]
-        var p: InlineArray[Int, 2] = [rows, cols]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [source, dst]
+        var p: Array[Int, 2] = [rows, cols]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("colsum", a, p, f)
 
     def rowsum(self, source: Int, dst: Int, rows: Int, cols: Int) raises:
-        var a: InlineArray[Int, 2] = [source, dst]
-        var p: InlineArray[Int, 2] = [rows, cols]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [source, dst]
+        var p: Array[Int, 2] = [rows, cols]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("rowsum", a, p, f)
 
     def divide(self, source: Int, dst: Int, count: Int, divisor: Float64) raises:
-        var a: InlineArray[Int, 2] = [source, dst]
-        var p: InlineArray[Int, 1] = [count]
-        var f: InlineArray[Float64, 1] = [divisor]
+        var a: Array[Int, 2] = [source, dst]
+        var p: Array[Int, 1] = [count]
+        var f: Array[Float64, 1] = [divisor]
         _ = self.native.run("scale_div", a, p, f)
 
     def center(self, source: Int, columns: Int, rows_mean: Int, total: Int, dst: Int,
                rows: Int, cols: Int) raises:
-        var a: InlineArray[Int, 5] = [source, columns, rows_mean, total, dst]
-        var p: InlineArray[Int, 2] = [rows, cols]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 5] = [source, columns, rows_mean, total, dst]
+        var p: Array[Int, 2] = [rows, cols]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("kpca_center", a, p, f)
 
     def alpha(self, r: KPCAAlphaRequest) raises:
-        var a: InlineArray[Int, 3] = [r.vectors, r.values, r.dst]
-        var p: InlineArray[Int, 3] = [r.rows, r.count, Int(r.divide)]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.vectors, r.values, r.dst]
+        var p: Array[Int, 3] = [r.rows, r.count, Int(r.divide)]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("kpca_alpha_scale", a, p, f)
 
     def matmul(self, left: Int, right: Int, dst: Int, rows: Int, width: Int, cols: Int) raises:
-        var a: InlineArray[Int, 3] = [left, right, dst]
-        var p: InlineArray[Int, 3] = [rows, width, cols]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [left, right, dst]
+        var p: Array[Int, 3] = [rows, width, cols]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("matmul", a, p, f)
 
     def fused_query(self, r: KPCAQueryRequest) raises:
         var pre = r.options.kind == KPCA_PRECOMPUTED
-        var a: InlineArray[Int, 6] = [r.source, r.source if pre else r.fitted,
+        var a: Array[Int, 6] = [r.source, r.source if pre else r.fitted,
             r.columns, r.total, r.alphas, r.dst]
-        var p: InlineArray[Int, 6] = [r.rows, r.fitted_rows, r.features, r.count, r.options.kind, r.options.degree]
-        var f: InlineArray[Float64, 3] = [0.0 if pre else Float64(Float32(r.options.gamma)),
+        var p: Array[Int, 6] = [r.rows, r.fitted_rows, r.features, r.count, r.options.kind, r.options.degree]
+        var f: Array[Float64, 3] = [0.0 if pre else Float64(Float32(r.options.gamma)),
             0.0 if pre else Float64(Float32(r.options.coef0)), Float64(r.fitted_rows)]
         _ = self.native.run("kpca_transform", a, p, f)
 
@@ -187,9 +187,9 @@ def kpca_fit_global_mean(driver: KPCANeighborDriver, decomp: NativeDescriptorCal
     # blocked x_decomp reduction, not Xn's single-row serial item fold;
     # the final Xn divide retains its original Float32 divisor rounding.
     var summed = KPCAScratch(1, 1)
-    var a: InlineArray[Int, 2] = [columns, summed.address()]
-    var p: InlineArray[Int, 2] = [rows, 1]
-    var f: InlineArray[Float64, 0] = []
+    var a: Array[Int, 2] = [columns, summed.address()]
+    var p: Array[Int, 2] = [rows, 1]
+    var f: Array[Float64, 0] = []
     _ = native_descriptor_call_fixed(decomp, XD_COLSUM, a, p, f)
     driver.divide(summed.address(), total, 1, Float64(rows))
     _ = summed

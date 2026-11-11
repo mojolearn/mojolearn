@@ -93,10 +93,10 @@ def classical_projection_kernel[FUSED: Bool](dst: MutPointer[Float32, MutAnyOrig
     if first >= n:
         return
     var leaf = contract_leaf_size(d)
-    var levels = InlineArray[Float32, 44](fill=Float32(0))
+    var levels = Array[Float32, 44](fill=Float32(0))
     var occupied = UInt32(0)
     for part in range(leaf_count(d, leaf)):
-        var acc = InlineArray[Float32, 4](fill=Float32(0))
+        var acc = Array[Float32, 4](fill=Float32(0))
         for f in range(leaf_begin(part, leaf), leaf_end(part, leaf, d)):
             var weight = ftz(w.unsafe_load(f * q + col))
             comptime for row in range(4):

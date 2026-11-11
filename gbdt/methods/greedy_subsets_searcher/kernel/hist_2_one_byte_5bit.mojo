@@ -70,11 +70,11 @@ def hist2_slice_offset_5(tid: Int) -> Int:
 def hist2_add_points_5[
     n: Int, dt: DType
 ](
-    ci: InlineArray[UInt32, n],
-    s1: InlineArray[Float32, n],
-    s2: InlineArray[Float32, n],
-    q1: InlineArray[Int32, n],
-    q2: InlineArray[Int32, n],
+    ci: Array[UInt32, n],
+    s1: Array[Float32, n],
+    s2: Array[Float32, n],
+    q1: Array[Int32, n],
+    q2: Array[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
@@ -101,10 +101,10 @@ def hist2_add_points_5[
 
     # stat1[k] = flag ? s2[k] : s1[k];  stat2[k] = flag ? s1[k] : s2[k];
     # The pre-quantized pair rides the same swap.
-    var stat1 = InlineArray[Float32, n](fill=Float32(0.0))
-    var stat2 = InlineArray[Float32, n](fill=Float32(0.0))
-    var qstat1 = InlineArray[Int32, n](fill=Int32(0))
-    var qstat2 = InlineArray[Int32, n](fill=Int32(0))
+    var stat1 = Array[Float32, n](fill=Float32(0.0))
+    var stat2 = Array[Float32, n](fill=Float32(0.0))
+    var qstat1 = Array[Int32, n](fill=Int32(0))
+    var qstat2 = Array[Int32, n](fill=Int32(0))
 
     @__parameter
     for k in range(n):
@@ -123,8 +123,8 @@ def hist2_add_points_5[
     for i in range(4):
         var f = (2 * i + tid) & 6
 
-        var offsets = InlineArray[Int, n](fill=0)
-        var keep = InlineArray[Bool, n](fill=False)
+        var offsets = Array[Int, n](fill=0)
+        var keep = Array[Bool, n](fill=False)
 
         @__parameter
         for k in range(n):

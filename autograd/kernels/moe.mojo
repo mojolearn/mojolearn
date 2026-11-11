@@ -97,7 +97,7 @@ def moe_bwd_cell(a: FP, sa: Int, b: FP, sb: Int, n: Int) -> Float32:
     cell word for word)."""
     var leaf = contract_leaf_size(n)
     var p_count = leaf_count(n, leaf)
-    var stack = InlineArray[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
+    var stack = Array[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
     var occ = 0
     for t in range(p_count):
         var pb = t * leaf
@@ -123,7 +123,7 @@ def moe_bwd_segment_cell[SCALE: Bool](
     tok * b_tok], tok = p // k."""
     var leaf = contract_leaf_size(n)
     var p_count = leaf_count(n, leaf)
-    var stack = InlineArray[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
+    var stack = Array[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
     var occ = 0
     for t in range(p_count):
         var pb = t * leaf

@@ -595,9 +595,9 @@ def hw_estimate_series(
     var l0 = _f(_mad(Float32(-f), start_trend, start_level) * sc)
     var b0 = _f(start_trend * sc)
 
-    var sses = InlineArray[Float32, HW_EST_STARTS](fill=Float32(0.0))
-    var its = InlineArray[Int, HW_EST_STARTS](fill=0)
-    var crs = InlineArray[Int, HW_EST_STARTS](fill=0)
+    var sses = Array[Float32, HW_EST_STARTS](fill=Float32(0.0))
+    var its = Array[Int, HW_EST_STARTS](fill=0)
+    var crs = Array[Int, HW_EST_STARTS](fill=0)
     for k in range(HW_EST_STARTS):
         var th = cand.unsafe_offset(k * d)
         for j in range(d):

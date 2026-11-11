@@ -160,7 +160,7 @@ comptime TS_SMEM2_OK = (
 @always_inline
 def _fold_sh(sh: _SH, base: Int, stride: Int) -> Float32:
     """`ts_fold` of sh[base + g * stride], g = 0 .. TS_P - 1."""
-    var p = InlineArray[Float32, TS_P](fill=Float32(0.0))
+    var p = Array[Float32, TS_P](fill=Float32(0.0))
     comptime for gg in range(TS_P):
         p[gg] = sh[base + gg * stride]
     return ts_fold(p)
@@ -176,7 +176,7 @@ def _wy_chunk_kern[transpose: Bool](
     product with column c0 + l, folds reflector g's, and updates its rows."""
     var c = c0 + l
     var live = c < c_hi
-    var acc = InlineArray[Float32, TS_NB](fill=Float32(0.0))
+    var acc = Array[Float32, TS_NB](fill=Float32(0.0))
     if live:
         var i = ts_first_row(j0 + 1, g)
         while i < mb:
@@ -229,7 +229,7 @@ def _wy_chunk_kern2[transpose: Bool](
     chains, folds and fma orders are the host's, statement for statement."""
     var c = c0 + l
     var live = c < c_hi
-    var acc = InlineArray[Float32, TS_W2](fill=Float32(0.0))
+    var acc = Array[Float32, TS_W2](fill=Float32(0.0))
     if live:
         var i = ts_first_row(j0 + 1, g)
         while i < mb:
@@ -261,7 +261,7 @@ def _wy_chunk_kern2[transpose: Bool](
         r += TS_P
     barrier()
     if live:
-        var wr = InlineArray[Float32, TS_W2](fill=Float32(0.0))
+        var wr = Array[Float32, TS_W2](fill=Float32(0.0))
         comptime for p in range(TS_W2):
             if p < pw:
                 wr[p] = wsh[p * TS_NB + l]
@@ -575,7 +575,7 @@ def ts_pair_t_kernel(
         # G = Ya^T Yb: column l of Yb (unit at row j0b + l, the stored tail
         # below), chain g over rows i > j0b + l
         var live = l < pwb
-        var acc = InlineArray[Float32, TS_NB](fill=Float32(0.0))
+        var acc = Array[Float32, TS_NB](fill=Float32(0.0))
         if live:
             var i = ts_first_row(j0b + l + 1, g)
             while i < mb:

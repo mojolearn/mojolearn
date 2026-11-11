@@ -238,7 +238,7 @@ def _cc_gather_y_kernel(f: FP, pl: WP, u: UP, q: IP, yb: Int32, total: Int32):
 # ------------------------------------------------------------------ mi_cc: the searches
 @always_inline
 def _offer(u: UP, AX: Int, ASX: Int, AY: Int, ASY: Int, r: Int, xi: Float32, sxi: Float32, yi: Float32,
-           syi: Float32, k: Int, mut bp: InlineArray[Float32, MAX_K], mut bs: InlineArray[Float32, MAX_K]):
+           syi: Float32, k: Int, mut bp: Array[Float32, MAX_K], mut bs: Array[Float32, MAX_K]):
     """`mi_cc_unit`'s pair of candidate r (the joint Chebyshev distance as a
     (primary, secondary) pair) offered to the k best."""
     var xr = _fx(u, AX + r)
@@ -346,8 +346,8 @@ def _rlo(u: UP, xb: Int, lo: Int, hi: Int) -> Int:
 
 
 def _cc_run_ties(u: UP, AX: Int, ASX: Int, AY: Int, ASY: Int, r0: Int, r1: Int, xi: Float32, sxi: Float32,
-                 yi: Float32, syi: Float32, k: Int, mut bp: InlineArray[Float32, MAX_K],
-                 mut bs: InlineArray[Float32, MAX_K]):
+                 yi: Float32, syi: Float32, k: Int, mut bp: Array[Float32, MAX_K],
+                 mut bs: Array[Float32, MAX_K]):
     """Offer the members of x-run [r0, r1) (in y order) whose |dy| does not
     exceed the current k-th primary: every member's pair has primary
     max(dx, dy) >= dy, and dy is monotone away from yi's position."""
@@ -376,8 +376,8 @@ def _cc_run_ties(u: UP, AX: Int, ASX: Int, AY: Int, ASY: Int, r0: Int, r1: Int, 
 
 
 def _cc_knn_ties(u: UP, AX: Int, ASX: Int, AY: Int, ASY: Int, n: Int, pos: Int, xi: Float32, sxi: Float32,
-                 yi: Float32, syi: Float32, k: Int, mut bp: InlineArray[Float32, MAX_K],
-                 mut bs: InlineArray[Float32, MAX_K]):
+                 yi: Float32, syi: Float32, k: Int, mut bp: Array[Float32, MAX_K],
+                 mut bs: Array[Float32, MAX_K]):
     """The k smallest pairs of the point at sorted position `pos` in the
     (key(x), key(y), key(sx)) order. A: the own (x, y) stretch outward in sx
     (pairs (0, dsec >= sxd): stop once (0, sxd) cannot enter). B: the rest of
@@ -481,8 +481,8 @@ def _cc_point_kernel[TIES: Bool, RANK: Bool](f: FP, u: UP, pl: WP, q: IP, big_n:
     var sxi = _fx(u, ASX + pos)
     var yi = _fx(u, AY + pos)
     var syi = _fx(u, ASY + pos)
-    var bp = InlineArray[Float32, MAX_K](fill=BIG)
-    var bs = InlineArray[Float32, MAX_K](fill=BIG)
+    var bp = Array[Float32, MAX_K](fill=BIG)
+    var bs = Array[Float32, MAX_K](fill=BIG)
     comptime if TIES:
         _cc_knn_ties(u, AX, ASX, AY, ASY, n, pos, xi, sxi, yi, syi, k, bp, bs)
     else:
@@ -636,8 +636,8 @@ def _cd_point_rank_kernel(f: FP, u: UP, pl: WP, q: IP, big_n: Int32, total: Int3
     var start = U + 5 * n
     var b = Int(u[start + li])
     var e = Int(u[start + li + 1])
-    var bp = InlineArray[Float32, MAX_K](fill=BIG)
-    var bs = InlineArray[Float32, MAX_K](fill=BIG)
+    var bp = Array[Float32, MAX_K](fill=BIG)
+    var bs = Array[Float32, MAX_K](fill=BIG)
     var pi = Int(u[U + 2 * n + i])
     var g0 = _run_lo(u, bx, b, pi + 1)
     var g1 = _run_hi(u, bx, pi, e)

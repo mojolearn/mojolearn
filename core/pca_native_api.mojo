@@ -184,27 +184,27 @@ struct PCANativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: PCAFitRequest) raises -> PCAFitResult:
         var words = List[Int64](length=4, fill=0)
-        var a: InlineArray[Int, 8] = [r.source, r.components, r.mean, r.variance, r.ratio,
+        var a: Array[Int, 8] = [r.source, r.components, r.mean, r.variance, r.ratio,
             r.singular, r.projection, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 15] = [r.rows, r.features, r.count, Int(r.dense), r.keep_mode,
+        var p: Array[Int, 15] = [r.rows, r.features, r.count, Int(r.dense), r.keep_mode,
             Int(r.whiten), Int(r.randomized), r.oversamples, r.iterations, Int(r.auto_iterations),
             r.seed, Int(r.test_finite), r.fold.base, r.fold.rows, r.fold.indices]
-        var f: InlineArray[Float64, 1] = [r.fraction]
+        var f: Array[Float64, 1] = [r.fraction]
         _ = native_descriptor_call_fixed(self.entry, PCA_FIT, a, p, f)
         return PCAFitResult(Int(words[0]), bitcast[DType.float64](words[1]), Int(words[2]), Int(words[3]))
 
     def query(self, r: PCAQueryRequest) raises -> PCAQueryResult:
         var words = List[Int64](length=2, fill=0)
-        var a: InlineArray[Int, 6] = [r.source, r.mean, r.components, r.singular, r.dst, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 9] = [r.rows, r.features, r.count, r.fit_rows, Int(r.inverse),
+        var a: Array[Int, 6] = [r.source, r.mean, r.components, r.singular, r.dst, Int(words.unsafe_ptr())]
+        var p: Array[Int, 9] = [r.rows, r.features, r.count, r.fit_rows, Int(r.inverse),
             Int(r.whiten), r.fold.base, r.fold.rows, r.fold.indices]
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, PCA_QUERY, a, p, f)
         return PCAQueryResult(Int(words[0]), Int(words[1]))

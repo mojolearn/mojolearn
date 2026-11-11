@@ -94,7 +94,7 @@ comptime IIG_ROWS = 512
 #: positions per block of the blocked order `BLT` (a multiple of TREE_W)
 comptime TEB = 4096
 
-comptime LTLanes = InlineArray[Float32, TREE_W]
+comptime LTLanes = Array[Float32, TREE_W]
 
 
 @always_inline

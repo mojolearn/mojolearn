@@ -128,7 +128,7 @@ def mcd_bmma_kernel[SPLIT: Bool](
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[NPG * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[NPG * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
     var a_ofast = a_si == 1 and a_sp != 1
     var b_ofast = b_sj == 1 and b_sp != 1
     var kb = 0
@@ -160,8 +160,8 @@ def mcd_bmma_kernel[SPLIT: Bool](
                 ra = _afn_gload[BM, KB, NT, DType.float32](a, a_si, a_sp, m0, m, k1, min(KB, ke - k1), tid, a_ofast)
                 rb = _afn_gload[BN, KB, NT, DType.float32](b, b_sj, b_sp, n0, n, k1, min(KB, ke - k1), tid, b_ofast)
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
-            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
+            var bf = Array[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _afn_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):

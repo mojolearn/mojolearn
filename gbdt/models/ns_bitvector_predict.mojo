@@ -158,7 +158,7 @@ def _bv_rows_kernel[W: Int](
         var base = Int(meta.unsafe_load(4 * t))
         var val_at = Int(meta.unsafe_load(4 * t + 1))
         var n = Int(meta.unsafe_load(4 * t + 2))
-        var m = InlineArray[UInt64, W](fill=~UInt64(0))
+        var m = Array[UInt64, W](fill=~UInt64(0))
         var last_off = UInt32(0xFFFFFFFF)
         var word = UInt32(0)
         var have = False

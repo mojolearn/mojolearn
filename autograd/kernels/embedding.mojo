@@ -317,7 +317,7 @@ def emb_backward_touched_vector4_kernel(
     if r != lo:
         return
     var hi = Int(run_begin[v + 1])
-    var acc = InlineArray[Float32, 4](fill=Float32(0.0))
+    var acc = Array[Float32, 4](fill=Float32(0.0))
     comptime for lane in range(4):
         if first_feature + lane < width:
             acc[lane] = dw[v * width + first_feature + lane]

@@ -224,7 +224,7 @@ def chol_strip_trsm_kernel(
     if row >= n_trail:
         return
     var base = (j0 + CS_NB + row) * n + j0
-    var y = InlineArray[Float32, CS_NB](fill=Float32(0.0))
+    var y = Array[Float32, CS_NB](fill=Float32(0.0))
     comptime for c in range(CS_NB):
         var t = ftz(a[base + c])
         comptime for k in range(c):
@@ -274,15 +274,15 @@ def chol_strip_update_kernel[GUARD: Bool](
     var wmin = stack_allocation[
         16, Scalar[DType.uint32], address_space = AddressSpace.SHARED
     ]()
-    var c = InlineArray[Float32, 16](fill=Float32(0.0))
+    var c = Array[Float32, 16](fill=Float32(0.0))
     comptime for ii in range(4):
         comptime for jj in range(4):
             var i = r0 + ty + 16 * ii
             var j = c0 + tx + 16 * jj
             if i < n and j < col_end and j <= i:
                 c[ii * 4 + jj] = a[i * n + j]
-    var ra = InlineArray[Float32, 8](fill=Float32(0.0))
-    var rb = InlineArray[Float32, 8](fill=Float32(0.0))
+    var ra = Array[Float32, 8](fill=Float32(0.0))
+    var rb = Array[Float32, 8](fill=Float32(0.0))
     comptime for q in range(8):
         var m = lm + 8 * q
         ra[q] = a[(r0 + m) * n + p_lo * CS_NB + lk] if r0 + m < n else Float32(0.0)
@@ -321,11 +321,11 @@ def chol_strip_update_kernel[GUARD: Bool](
                 bea = wmin[s] if wmin[s] < bea else bea
                 beb = wmin[8 + s] if wmin[8 + s] < beb else beb
             admitted = (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
-        var acc = InlineArray[Float32, 16](fill=Float32(0.0))
+        var acc = Array[Float32, 16](fill=Float32(0.0))
         if admitted:
             comptime for k in range(CS_NB):
-                var av = InlineArray[Float32, 4](fill=Float32(0.0))
-                var bv = InlineArray[Float32, 4](fill=Float32(0.0))
+                var av = Array[Float32, 4](fill=Float32(0.0))
+                var bv = Array[Float32, 4](fill=Float32(0.0))
                 comptime for ii in range(4):
                     av[ii] = As[k * CS_ST + ty + 16 * ii]
                     bv[ii] = Bs[k * CS_ST + tx + 16 * ii]
@@ -334,8 +334,8 @@ def chol_strip_update_kernel[GUARD: Bool](
                         acc[ii * 4 + jj] = _cs_bare_step(av[ii], bv[jj], acc[ii * 4 + jj])
         else:
             comptime for k in range(CS_NB):
-                var av = InlineArray[Float32, 4](fill=Float32(0.0))
-                var bv = InlineArray[Float32, 4](fill=Float32(0.0))
+                var av = Array[Float32, 4](fill=Float32(0.0))
+                var bv = Array[Float32, 4](fill=Float32(0.0))
                 comptime for ii in range(4):
                     av[ii] = As[k * CS_ST + ty + 16 * ii]
                     bv[ii] = Bs[k * CS_ST + tx + 16 * ii]

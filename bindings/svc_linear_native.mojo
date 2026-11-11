@@ -80,12 +80,12 @@ def _linear_check_common(model: PythonObject, fields: PythonObject) raises:
             raise Error("mojolearn " + name + ": " + names[i] + " must be a positive integer, got " + family_str(value))
 
 
-def _linear_strengths_values(fields: PythonObject) raises -> InlineArray[Float64, 2]:
+def _linear_strengths_values(fields: PythonObject) raises -> Array[Float64, 2]:
     var inv_c = 1.0 / svc_float(svc_field(fields, "C"))
     if String(svc_field(fields, "penalty")) == "l1":
-        var values: InlineArray[Float64, 2] = [inv_c, 0.0]
+        var values: Array[Float64, 2] = [inv_c, 0.0]
         return values^
-    var values: InlineArray[Float64, 2] = [0.0, inv_c]
+    var values: Array[Float64, 2] = [0.0, inv_c]
     return values^
 
 

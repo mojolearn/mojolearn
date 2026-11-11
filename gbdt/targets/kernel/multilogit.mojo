@@ -217,22 +217,22 @@ def multilogit_val_and_first_der_kernel[
 
     var tmp_score = Float32(0.0)
 
-    var class_approx = InlineArray[Float32, elements_per_thread](
+    var class_approx = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
-    var target_class = InlineArray[Int32, elements_per_thread](
+    var target_class = Array[Int32, elements_per_thread](
         fill=Int32(0)
     )
-    var sum_exp = InlineArray[Float32, elements_per_thread](
+    var sum_exp = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
-    var weight = InlineArray[Float32, elements_per_thread](
+    var weight = Array[Float32, elements_per_thread](
         fill=Float32(1.0)
     )
-    var max_approx = InlineArray[Float32, elements_per_thread](
+    var max_approx = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
-    var load_index = InlineArray[Int, elements_per_thread](fill=0)
+    var load_index = Array[Int, elements_per_thread](fill=0)
 
     # their first `#pragma unroll` block (`:33-56`)
     @__parameter
@@ -403,13 +403,13 @@ def multilogit_second_der_row_kernel[
         + Int(thread_idx.x)
     )
 
-    var sum_exp = InlineArray[Float32, elements_per_thread](
+    var sum_exp = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
-    var weight = InlineArray[Float32, elements_per_thread](
+    var weight = Array[Float32, elements_per_thread](
         fill=Float32(1.0)
     )
-    var max_approx = InlineArray[Float32, elements_per_thread](
+    var max_approx = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
 
@@ -822,13 +822,13 @@ def one_vs_all_val_and_first_der_kernel[
     )
 
     var tmp_score = Float32(0.0)
-    var target_class = InlineArray[Int32, elements_per_thread](
+    var target_class = Array[Int32, elements_per_thread](
         fill=Int32(0)
     )
-    var weight = InlineArray[Float32, elements_per_thread](
+    var weight = Array[Float32, elements_per_thread](
         fill=Float32(1.0)
     )
-    var load_index = InlineArray[Int, elements_per_thread](fill=0)
+    var load_index = Array[Int, elements_per_thread](fill=0)
     var mag_der = Float32(0.0)
     var mag_weight = Float32(0.0)
 
@@ -861,7 +861,7 @@ def one_vs_all_val_and_first_der_kernel[
     # their class loop (`:638-660`). NOTE the loop order: class OUTSIDE,
     # document inside, which is theirs and keeps each plane's stores
     # contiguous.
-    var max_abs = InlineArray[Float32, elements_per_thread](
+    var max_abs = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
     for clazz in range(num_classes):
@@ -961,7 +961,7 @@ def one_vs_all_second_der_kernel[
         Int(block_idx.x) * MULTILOGIT_BLOCK_SIZE * elements_per_thread
         + Int(thread_idx.x)
     )
-    var weight = InlineArray[Float32, elements_per_thread](
+    var weight = Array[Float32, elements_per_thread](
         fill=Float32(1.0)
     )
 
@@ -1149,10 +1149,10 @@ def multi_rmse_val_and_first_der_kernel[
     )
 
     var sum_dim_errors = Float32(0.0)
-    var weight = InlineArray[Float32, elements_per_thread](
+    var weight = Array[Float32, elements_per_thread](
         fill=Float32(1.0)
     )
-    var load_index = InlineArray[Int, elements_per_thread](fill=0)
+    var load_index = Array[Int, elements_per_thread](fill=0)
     var mag_der = Float32(0.0)
     var mag_weight = Float32(0.0)
 
@@ -1177,7 +1177,7 @@ def multi_rmse_val_and_first_der_kernel[
     comptime plane_base = 1 if search else 0
 
     # their dimension loop (`:505-523`): dimension OUTSIDE, document inside
-    var max_abs = InlineArray[Float32, elements_per_thread](
+    var max_abs = Array[Float32, elements_per_thread](
         fill=Float32(0.0)
     )
     for dim in range(target_count):

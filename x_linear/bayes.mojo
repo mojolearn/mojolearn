@@ -788,9 +788,9 @@ def ard_update(fw: FP, res: FP, iw: IP, d: Int, nf: Float32, dk: Int, sse: Float
 
 
 @always_inline
-def ard_layout(d: Int) -> InlineArray[Int, 8]:
+def ard_layout(d: Int) -> Array[Int, 8]:
     """fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d | sse scratch n."""
-    var o = InlineArray[Int, 8](fill=0)
+    var o = Array[Int, 8](fill=0)
     o[0] = 0
     o[1] = d
     o[2] = d + d * d

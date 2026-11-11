@@ -39,9 +39,9 @@ def spectral_rbf_run(binding: PythonObject, source: PythonObject, destination: S
     var provider = neural_descriptor_connect_once(binding, "x_decomp_native_api_v1",
         String(XD_ABI_NAME), XD_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
-    var a: InlineArray[Int, 0] = []
-    var p: InlineArray[Int, 0] = []
-    var f: InlineArray[Float64, 0] = []
+    var a: Array[Int, 0] = []
+    var p: Array[Int, 0] = []
+    var f: Array[Float64, 0] = []
     var capabilities = native_descriptor_call_fixed(entry, XD_CAPABILITIES, a, p, f)
     var request = SpectralRBFRequest(Int(py=classical_address(source)),
         destination.address(), rows, features, gamma,

@@ -1025,8 +1025,8 @@ def identical_gemm_leaf_kernel(
         var p = bounds[0]
         var pe = bounds[1]
         while p + LEAF_PREFETCH <= pe:
-            var av = InlineArray[Float32, LEAF_PREFETCH](fill=Float32(0))
-            var bv = InlineArray[Float32, LEAF_PREFETCH](fill=Float32(0))
+            var av = Array[Float32, LEAF_PREFETCH](fill=Float32(0))
+            var bv = Array[Float32, LEAF_PREFETCH](fill=Float32(0))
             comptime for u in range(LEAF_PREFETCH):
                 av[u] = a.unsafe_load(a_row + (p + u) * a_sp)
                 bv[u] = b.unsafe_load((p + u) * b_sp + b_col)
@@ -5372,7 +5372,7 @@ def identical_gemm_apple_mma_kernel[
     var wmin = stack_allocation[NPG * 2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var fl = stack_allocation[FS * NC, Scalar[DType.float32]]()
     var occ = 0
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier window of this leaf was admitted
     var wpl = leaf // KB
     if p_count == 1:
@@ -5437,8 +5437,8 @@ def identical_gemm_apple_mma_kernel[
             exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
-                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
                     af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):

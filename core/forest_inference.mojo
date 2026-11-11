@@ -1210,7 +1210,7 @@ def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # devic
 ) -> Float32:
     var total = Float32(0)
     comptime if T34_CHUNK_FOLD:
-        var chunk = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+        var chunk = Array[Float32, FOREST_CHUNK](fill=Float32(0))
         var first = 0
         while first < trees:
             for i in range(FOREST_CHUNK):
@@ -1221,7 +1221,7 @@ def forest_prediction_value[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](  # devic
             total = forest_add(total, forest_chunk_sum(chunk))
             first += FOREST_CHUNK
     elif GROVE:
-        var sums = InlineArray[Float32, 32](fill=Float32(0))
+        var sums = Array[Float32, 32](fill=Float32(0))
         for lane in range(32):
             var tree = lane
             while tree < trees:
@@ -1278,7 +1278,7 @@ def forest_leaf_ids_kernel[RF_INPUT: Bool, PACKED: Bool](
 def _forest_leaf_value[GROVE: Bool](ids: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],  # device-helper: one row's leaf fold inside the leaf kernels
                                    row: Int, k: Int, nt: Int, channel: Int) -> Float32:
     var total = Float32(0)
-    var sums = InlineArray[Float32, 32](fill=Float32(0))
+    var sums = Array[Float32, 32](fill=Float32(0))
     comptime if T34_CHUNK_FOLD:
         var first = 0
         while first < nt:

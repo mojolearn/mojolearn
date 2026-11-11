@@ -209,7 +209,7 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
     var resident = ipca_resident(connection)
     var ids = IPCAStateIds()
     var dummy = room.outputs().components
-    var addresses: InlineArray[Int, 4] = [dummy, dummy, dummy, dummy]
+    var addresses: Array[Int, 4] = [dummy, dummy, dummy, dummy]
     if seen > 0:
         var components = admit_f32(_attr(model, fields, "components_"), 2, "components_", context)
         previous_count = components.rows

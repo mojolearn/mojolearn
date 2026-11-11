@@ -74,9 +74,9 @@ struct AggloSolverDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def fit(self, r: AggloSolverRequest) raises -> Int:
-        var a: InlineArray[Int, 4] = [r.source, r.children, r.labels, r.info]
-        var p: InlineArray[Int, 5] = [r.rows, r.features, r.clusters, r.metric, Int(r.use_knn)]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 4] = [r.source, r.children, r.labels, r.info]
+        var p: Array[Int, 5] = [r.rows, r.features, r.clusters, r.metric, Int(r.use_knn)]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, HIERARCHY_SOLVER_LINKAGE, a, p, f)
 
 
@@ -85,10 +85,10 @@ struct AggloClusterDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def fit(self, r: AggloClusterRequest) raises:
-        var a: InlineArray[Int, 6] = [r.source, r.connectivity, r.children, r.labels, r.distances, r.scalars]
-        var p: InlineArray[Int, 11] = [r.source_count, r.connectivity_count, r.rows, r.features,
+        var a: Array[Int, 6] = [r.source, r.connectivity, r.children, r.labels, r.distances, r.scalars]
+        var p: Array[Int, 11] = [r.source_count, r.connectivity_count, r.rows, r.features,
             r.linkage, r.metric, r.edges, r.merges, r.edge_mode, r.cut, Int(r.use_threshold)]
-        var f: InlineArray[Float64, 2] = [r.minkowski, r.threshold]
+        var f: Array[Float64, 2] = [r.minkowski, r.threshold]
         _ = native_descriptor_call_fixed(self.entry, HIERARCHY_CLUSTER_FIT, a, p, f)
 
 
@@ -97,9 +97,9 @@ struct AggloZeroRowsDriver(Copyable, Movable):
     var native: XnDriver
 
     def run(self, r: AggloZeroRowsRequest) raises:
-        var a: InlineArray[Int, 2] = [r.source, r.flags]
-        var p: InlineArray[Int, 2] = [r.rows, r.features]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.source, r.flags]
+        var p: Array[Int, 2] = [r.rows, r.features]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("row_all_zero", a, p, f)
 
 

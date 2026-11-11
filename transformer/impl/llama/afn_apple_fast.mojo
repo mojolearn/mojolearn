@@ -662,7 +662,7 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
         sta[tid] = Float32(1.0)
     barrier()
     var fr = sg // (AFN_FL_NSG // AFN_FL_NFR)
-    var qf = InlineArray[_M64, HD // 8](fill=_M64(0))
+    var qf = Array[_M64, HD // 8](fill=_M64(0))
     comptime for p8 in range(HD // 8):
         qf[p8] = _sg_load_t(vT + (8 * p8) * QST + fr * 8, QST)
     barrier()
@@ -673,7 +673,7 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
     var q8 = tid % 8
     var t_s = t0 + r_s % TQG
     var rng = _row_lo_hi(t_s, pos0, key_lo, window, s)
-    var cacc = InlineArray[_M64, AFN_FL_CPS](fill=_M64(0))
+    var cacc = Array[_M64, AFN_FL_CPS](fill=_M64(0))
     comptime SPAN = AFN_FL_NSG // AFN_FL_NFR  # simdgroups sharing one row fragment
 
     for kb in range(kb_lo, kb_hi + 1):
@@ -1045,8 +1045,8 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
             rs[tid] = r
         barrier()
 
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
-    var acc2 = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
+    var acc2 = Array[_M64, NF](fill=_M64(0))
     var windows = k // KB
     for w in range(windows):
         var k0 = w * KB
@@ -1088,7 +1088,7 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
                 (bt2 + j * BST + p4).store[alignment=16](z4)
         barrier()
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _sg_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):

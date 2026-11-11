@@ -48,7 +48,7 @@ def score_power(lg: Float32, nonneg: Bool, lam: Float32, method: Int) -> Tuple[F
 
 
 @always_inline
-def score_merge(mut a: InlineArray[FF, 6], b: InlineArray[FF, 6]):
+def score_merge(mut a: Array[FF, 6], b: Array[FF, 6]):
     if b[0].hi == Float32(0):
         return
     if a[0].hi == Float32(0):
@@ -77,7 +77,7 @@ def score_tile(f: FP, pp: FP, q: IP, rows: Int32, tpb: Int32):
     if f[S + 7] != Float32(0):
         return
     var chunk = Int(block_idx.x)
-    var a = InlineArray[FF, 6](fill=ff_of(Float32(0)))
+    var a = Array[FF, 6](fill=ff_of(Float32(0)))
     var lam = f[p(q, 7) + c]
     for i in range(chunk * Int(rows), min((chunk + 1) * Int(rows), p(q, 1))):
         var x = f[p(q, 0) + i * d + c]
@@ -117,9 +117,9 @@ def score_finish(f: FP, pp: FP, q: IP, chunks: Int32):
     if f[S + 7] != Float32(0):
         return
     var sh = stack_allocation[SCORE_TGR * SCORE_WORDS, Float32, address_space=AddressSpace.SHARED]()
-    var a = InlineArray[FF, 6](fill=ff_of(Float32(0)))
+    var a = Array[FF, 6](fill=ff_of(Float32(0)))
     for j in range(tid, Int(chunks), SCORE_TGR):
-        var b = InlineArray[FF, 6](fill=ff_of(Float32(0)))
+        var b = Array[FF, 6](fill=ff_of(Float32(0)))
         var o = (j * p(q, 2) + c) * SCORE_WORDS
         for k in range(6):
             b[k] = FF(pp[o + 2 * k], pp[o + 2 * k + 1])
@@ -131,7 +131,7 @@ def score_finish(f: FP, pp: FP, q: IP, chunks: Int32):
     var w = SCORE_TGR // 2
     while w > 0:
         if tid < w:
-            var b = InlineArray[FF, 6](fill=ff_of(Float32(0)))
+            var b = Array[FF, 6](fill=ff_of(Float32(0)))
             for k in range(6):
                 var o = (tid + w) * SCORE_WORDS + 2 * k
                 b[k] = FF(sh[o], sh[o + 1])

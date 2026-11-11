@@ -53,7 +53,7 @@ def matmul_host_row(i: Int, f: FP, q: IP):
         var w = nc - j0
         if w > MM_BLOCK:
             w = MM_BLOCK
-        var acc = InlineArray[Float32, MM_BLOCK](fill=Float32(0))
+        var acc = Array[Float32, MM_BLOCK](fill=Float32(0))
         for l in range(K):
             var a = ld(f, A + l * sa1)
             var brow = B + l * sb0 + j0 * sb1
@@ -169,7 +169,7 @@ def qda_dec_host_unit(t: Int, f: FP, q: IP):
     var K = p(q, 6)
     var i = t // K
     var k = t % K
-    var s = InlineArray[Float32, QDA_MAX_D](fill=Float32(0))
+    var s = Array[Float32, QDA_MAX_D](fill=Float32(0))
     var xrow = p(q, 0) + i * d
     var mk = p(q, 3) + k * d
     var R = p(q, 4) + k * d * d

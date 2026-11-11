@@ -419,7 +419,7 @@ def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int
     barrier()
     # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (the compensated rank-2 tile update) deleted 2026-11-08 by 27c5e3aff3; code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
-    var acc = InlineArray[Float32, 4](fill=Float32(0.0))
+    var acc = Array[Float32, 4](fill=Float32(0.0))
     comptime for q in range(TD_NB):
         comptime for ra in range(2):
             var vr = svr[(ty + 16 * ra) * TD_NBP + q]
@@ -533,7 +533,7 @@ def td_bt_s_kernel(
     var ib = k + 1 + sy * chunk
     var ie = min(n, ib + chunk)
     var sy_t = stack_allocation[8 * TD_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[Float32, TD_NB](fill=Float32(0.0))
+    var acc = Array[Float32, TD_NB](fill=Float32(0.0))
     var i0 = ib
     while i0 < ie:
         var rr = tid // TD_NB
@@ -567,7 +567,7 @@ def td_bt_t_kernel(sp: F32Ptr, tf: F32Ptr, s2: F32Ptr, n_in: Int32):
         tsh[tid + TD_TPB * s] = tf.unsafe_load(tid + TD_TPB * s)
     barrier()
     if c < n:
-        var sv = InlineArray[Float32, TD_NB](fill=Float32(0.0))
+        var sv = Array[Float32, TD_NB](fill=Float32(0.0))
         for sy in range(TD_KSPLIT):
             comptime for q in range(TD_NB):
                 sv[q] += sp.unsafe_load((sy * TD_NB + q) * n + c)
@@ -595,7 +595,7 @@ def td_bt_z_kernel(a: F32Ptr, z: F32Ptr, s2: F32Ptr, n_in: Int32, k_in: Int32, c
         sy_t[idx] = _td_y(a, n, k, cnt, i0 + rr, q)
     barrier()
     if c < n:
-        var sv = InlineArray[Float32, TD_NB](fill=Float32(0.0))
+        var sv = Array[Float32, TD_NB](fill=Float32(0.0))
         comptime for q in range(TD_NB):
             sv[q] = s2.unsafe_load(q * n + c)
         comptime for r in range(16):

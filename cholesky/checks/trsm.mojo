@@ -533,8 +533,8 @@ def trsm_lower_multi_rhs4_kernel(
         var kc = min(32, n - k0)
         var base = tid
         while base < n:
-            var tv = InlineArray[SIMD[DType.float32, RB], G](fill=SIMD[DType.float32, RB](0.0))
-            var live = InlineArray[Bool, G](fill=False)
+            var tv = Array[SIMD[DType.float32, RB], G](fill=SIMD[DType.float32, RB](0.0))
+            var live = Array[Bool, G](fill=False)
             comptime for g in range(G):
                 var i = base + g * NT
                 if i < n and i >= k0 + 32:

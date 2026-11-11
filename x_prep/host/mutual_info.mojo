@@ -133,7 +133,7 @@ def _count_within(a: _Sorted, lo: Int, hi: Int, xi: Float32, si: Float32, rp: Fl
 
 
 @always_inline
-def _insert(mut bp: InlineArray[Float32, MAX_K], mut bs: InlineArray[Float32, MAX_K], kk: Int,
+def _insert(mut bp: Array[Float32, MAX_K], mut bs: Array[Float32, MAX_K], kk: Int,
             dp: Float32, dsec: Float32):
     """The units' insertion of one candidate into the kk smallest pairs."""
     if _less(dp, dsec, bp[kk - 1], bs[kk - 1]):
@@ -228,8 +228,8 @@ def _cd_column(f: FP, n: Int, zb: Int, zs: Int, sb: Int, lb: Int, ls: Int, cb: I
         var si = ss[i]
         var b = start[li]
         var e = start[li + 1]
-        var bp = InlineArray[Float32, MAX_K](fill=BIG)
-        var bs = InlineArray[Float32, MAX_K](fill=BIG)
+        var bp = Array[Float32, MAX_K](fill=BIG)
+        var bs = Array[Float32, MAX_K](fill=BIG)
         var L = pos[i] - 1
         var R = pos[i] + 1
         var taken = 0
@@ -328,8 +328,8 @@ def _cc_column(f: FP, q: IP, c: Int, ys: _Sorted, ysx: List[Float32], yss: List[
         var sxi = sx[i]
         var yi = ysx[i]
         var syi = yss[i]
-        var bp = InlineArray[Float32, MAX_K](fill=BIG)
-        var bs = InlineArray[Float32, MAX_K](fill=BIG)
+        var bp = Array[Float32, MAX_K](fill=BIG)
+        var bs = Array[Float32, MAX_K](fill=BIG)
         var L = pos[i] - 1
         var R = pos[i] + 1
         var goL = L >= 0

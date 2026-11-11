@@ -103,8 +103,8 @@ def _vpart[kind: Int](a: FP, ia: Int, b: FP, ib: Int, p: Int, d: Int, stride: In
 
 def _vfold_serial[kind: Int, op: Int](a: FP, ia: Int, b: FP, ib: Int, p: Int, d: Int, stride: Int) -> Float32:
     """One thread: the aligned tree over the chunk partials (binary counter)."""
-    var vals = InlineArray[Float32, VSTACK](fill=Float32(0))
-    var lvls = InlineArray[Int, VSTACK](fill=0)
+    var vals = Array[Float32, VSTACK](fill=Float32(0))
+    var lvls = Array[Int, VSTACK](fill=0)
     var top = 0
     var m = vchunks(p)
     for c in range(m):

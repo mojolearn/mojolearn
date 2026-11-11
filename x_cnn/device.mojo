@@ -308,7 +308,7 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
     var h0 = oh * _gp(p, CP_SH) - _gp(p, CP_PH)
     var w0 = ow * _gp(p, CP_SW) - _gp(p, CP_PW)
     var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
-    var a = InlineArray[Float32, DC_MAXK](fill=Float32(0))
+    var a = Array[Float32, DC_MAXK](fill=Float32(0))
     var q = 0
     for c in range(C):
         for kh in range(KH):
@@ -471,8 +471,8 @@ def implicit_conv_kernel(
             barrier()
             if cnt == NI12_KS:
                 comptime for i in range(NI12_KS):
-                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
-                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var av = Array[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = Array[Float32, NI12_RC](fill=Float32(0.0))
                     comptime for c in range(NI12_RC):
                         av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
                         bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
@@ -481,8 +481,8 @@ def implicit_conv_kernel(
                             acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
             else:
                 for i in range(cnt):
-                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
-                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var av = Array[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = Array[Float32, NI12_RC](fill=Float32(0.0))
                     comptime for c in range(NI12_RC):
                         av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
                         bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]

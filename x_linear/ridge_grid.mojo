@@ -51,9 +51,9 @@ def _gid() -> Int:
 
 
 @always_inline
-def _ridge_off(d: Int, t_n: Int) -> InlineArray[Int, 6]:
+def _ridge_off(d: Int, t_n: Int) -> Array[Int, 6]:
     """fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T."""
-    var o = InlineArray[Int, 6](fill=0)
+    var o = Array[Int, 6](fill=0)
     o[0] = 0
     o[1] = d
     o[2] = d + d * d

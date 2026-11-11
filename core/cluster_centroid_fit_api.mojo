@@ -79,23 +79,23 @@ struct CentroidFitDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def mode(self) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, CENTROID_FIT_MODE, a, p, f)
 
     def meanshift(self, r: MeanShiftFitRequest, mut result: CentroidFitResultSlot) raises:
-        var a: InlineArray[Int, 3] = [r.source.address, r.seeds.address, result.address()]
-        var p: InlineArray[Int, 9] = [r.source.count, r.seeds.count, r.rows, r.features,
+        var a: Array[Int, 3] = [r.source.address, r.seeds.address, result.address()]
+        var p: Array[Int, 9] = [r.source.count, r.seeds.count, r.rows, r.features,
             r.seed_rows, Int(r.cluster_all), r.max_iter, Int(r.bin_seeding), r.min_bin_freq]
-        var f: InlineArray[Float64, 1] = [r.bandwidth]
+        var f: Array[Float64, 1] = [r.bandwidth]
         _ = native_descriptor_call_fixed(self.entry, CENTROID_FIT_MEANSHIFT, a, p, f)
         _ = result
 
     def affinity(self, r: AffinityFitRequest, mut result: CentroidFitResultSlot) raises:
-        var a: InlineArray[Int, 3] = [r.source.address, r.preference.address, result.address()]
-        var p: InlineArray[Int, 9] = [r.source.count, r.preference.count, r.rows, r.features,
+        var a: Array[Int, 3] = [r.source.address, r.preference.address, result.address()]
+        var p: Array[Int, 9] = [r.source.count, r.preference.count, r.rows, r.features,
             Int(r.precomputed), r.preference_mode, r.max_iter, r.convergence_iter, r.seed]
-        var f: InlineArray[Float64, 2] = [r.damping, r.scalar_preference]
+        var f: Array[Float64, 2] = [r.damping, r.scalar_preference]
         _ = native_descriptor_call_fixed(self.entry, CENTROID_FIT_AFFINITY, a, p, f)
         _ = result

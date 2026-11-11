@@ -588,7 +588,7 @@ def _gram_splitk_partial_body[
     var acc = SIMD[DType.float32, CELLS](0.0)
     # DEVIATION 2711, arm 1 only: one scalar per cell, never a lane. Dead
     # under arm 0 and removed by the compiler there.
-    var accs = InlineArray[Float32, CELLS](fill=Float32(0.0))
+    var accs = Array[Float32, CELLS](fill=Float32(0.0))
 
     # FLOOR KNOB (SCOREBOARD_2026-08-19 item 5, first knob). When the block's
     # thread count is an exact multiple of m AND the register-tile arm

@@ -461,7 +461,7 @@ def _warp_fold(slab: UnsafePointer[Float32, MutUntrackedOrigin, address_space=Ad
     if lane < 16:
         slab[lane] = slab[lane] + slab[lane + 16]
     barrier()
-    var w = InlineArray[Float32, 16](fill=Float32(0.0))
+    var w = Array[Float32, 16](fill=Float32(0.0))
     comptime for t in range(16):
         w[t] = slab[t]
     comptime for k in range(4):

@@ -204,43 +204,43 @@ struct SpectralDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: SpectralFitRequest) raises -> Int:
-        var a: InlineArray[Int, 10] = [r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values, r.labels, r.embedding, r.state.eigenvalues, r.state.eigenvectors, r.state.diagonal, r.state.centroids]
-        var p: InlineArray[Int, 10] = [r.input.route, r.input.rows, r.input.features, r.input.nonzeros, r.options.clusters, r.options.components, r.options.initializations, r.options.neighbors, r.options.seed, Int(r.options.keep_state)]
-        var f: InlineArray[Float64, 1] = [r.options.tolerance]
+        var a: Array[Int, 10] = [r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values, r.labels, r.embedding, r.state.eigenvalues, r.state.eigenvectors, r.state.diagonal, r.state.centroids]
+        var p: Array[Int, 10] = [r.input.route, r.input.rows, r.input.features, r.input.nonzeros, r.options.clusters, r.options.components, r.options.initializations, r.options.neighbors, r.options.seed, Int(r.options.keep_state)]
+        var f: Array[Float64, 1] = [r.options.tolerance]
         return native_descriptor_call_fixed(self.entry, SPECTRAL_FIT, a, p, f)
 
     def embed(self, r: SpectralEmbeddingRequest) raises -> Int:
-        var a: InlineArray[Int, 5] = [r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values, r.embedding]
-        var p: InlineArray[Int, 10] = [r.input.route, r.input.rows, r.input.features, r.input.nonzeros, r.options.lanczos_components, r.options.output_components, r.options.neighbors, Int(r.options.normalize_laplacian), Int(r.options.drop_first), r.options.seed]
-        var f: InlineArray[Float64, 1] = [r.options.tolerance]
+        var a: Array[Int, 5] = [r.input.source, r.input.graph_rows, r.input.graph_columns, r.input.graph_values, r.embedding]
+        var p: Array[Int, 10] = [r.input.route, r.input.rows, r.input.features, r.input.nonzeros, r.options.lanczos_components, r.options.output_components, r.options.neighbors, Int(r.options.normalize_laplacian), Int(r.options.drop_first), r.options.seed]
+        var f: Array[Float64, 1] = [r.options.tolerance]
         return native_descriptor_call_fixed(self.entry, SPECTRAL_EMBED, a, p, f)
 
     def query(self, r: SpectralQueryRequest) raises -> Int:
-        var a: InlineArray[Int, 8] = [r.source, r.training, r.state.eigenvalues, r.state.eigenvectors, r.state.diagonal, r.state.centroids, r.labels, r.embedding]
-        var p: InlineArray[Int, 7] = [r.shape.training_rows, r.shape.rows, r.shape.features, r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 8] = [r.source, r.training, r.state.eigenvalues, r.state.eigenvectors, r.state.diagonal, r.state.centroids, r.labels, r.embedding]
+        var p: Array[Int, 7] = [r.shape.training_rows, r.shape.rows, r.shape.features, r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, SPECTRAL_QUERY, a, p, f)
 
     def prepare(self, r: SpectralPrepareRequest) raises -> Int:
-        var a: InlineArray[Int, 5] = [r.training, r.state.eigenvalues, r.state.eigenvectors, r.state.diagonal, r.state.centroids]
-        var p: InlineArray[Int, 7] = [r.shape.training_rows, r.shape.rows, r.shape.features, r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 5] = [r.training, r.state.eigenvalues, r.state.eigenvectors, r.state.diagonal, r.state.centroids]
+        var p: Array[Int, 7] = [r.shape.training_rows, r.shape.rows, r.shape.features, r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, SPECTRAL_PREPARE, a, p, f)
 
     def query_resident(self, r: SpectralResidentQueryRequest) raises -> Int:
-        var a: InlineArray[Int, 3] = [r.source, r.labels, r.embedding]
-        var p: InlineArray[Int, 8] = [r.handle, r.shape.training_rows, r.shape.rows, r.shape.features, r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.source, r.labels, r.embedding]
+        var p: Array[Int, 8] = [r.handle, r.shape.training_rows, r.shape.rows, r.shape.features, r.shape.components, r.shape.clusters, r.shape.neighbors, r.shape.affinity]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, SPECTRAL_QUERY_RESIDENT, a, p, f)
 
     def release(self, handle: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [handle]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, SPECTRAL_RELEASE, a, p, f)

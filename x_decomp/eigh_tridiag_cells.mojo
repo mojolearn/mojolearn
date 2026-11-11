@@ -428,7 +428,7 @@ def td_tfac_item(gm: F32Ptr, tau: F32Ptr, tf: F32Ptr, n_in: Int, panel: Int, r: 
     var k = panel * TD_NB
     var cnt = min(TD_NB, Int(n_in) - 1 - k)
     var offset = panel * TD_NB * TD_NB
-    var row = InlineArray[Float32, TD_NB](fill=Float32(0.0))
+    var row = Array[Float32, TD_NB](fill=Float32(0.0))
     for i in range(TD_NB):
         if i < cnt:
             var ti = tau.unsafe_load(k + i)

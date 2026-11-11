@@ -16,7 +16,7 @@ comptime FOLD_L = 32
 
 
 @always_inline
-def tree32(mut s: InlineArray[Float32, FOLD_L]) -> Float32:
+def tree32(mut s: Array[Float32, FOLD_L]) -> Float32:
     """The slots' pairwise tree, serially (every column's statements)."""
     comptime for e in range(5):
         comptime off = FOLD_L >> (e + 1)
