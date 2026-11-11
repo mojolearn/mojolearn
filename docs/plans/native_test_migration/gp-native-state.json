@@ -1,0 +1,27 @@
+{
+  "family": "Gaussian process native storage",
+  "status": "32 authored standalone fixtures; no compilation or execution by lane",
+  "entry": "checks/native_tests/gp_state.mojo",
+  "suite": "checks/native_tests/gp_state_suite.mojo",
+  "producer_dependency": "7f5f0bf795",
+  "local_dependency_adoption": "e48735da53 (do not collect the adoption; use producer dependency)",
+  "coverage": {
+    "0-4": "Empty/constant/ARD kernel storage; zero logical scales retain one unused owned word; independent deep copy; allocation-preserving move",
+    "5": "Fit scalar named-result order, initialization, binary64 precision and signed zero",
+    "6-9": "Gradient scratch zero/one/seven/seventeen parameter extents and binary64 storage",
+    "10-13": "Optimizer scratch parameter/run extents, empty placeholders and independent arrays",
+    "14-17": "OVR tables zero/one/three/seven members, three-word per-member owned scalar spans and separate writes",
+    "18-21": "Empty/nonempty native metadata copies, exact Int words above2^53, binary64 signed zero/infinity/NaN payload and source mutation independence",
+    "22-27": "Negative count and null nonempty metadata spans refuse before dereference",
+    "28-29": "Query result and kernel-view copies retain all exact native pointer/status words",
+    "30-31": "Fit scratch and OVR member moves preserve allocation/interior-address identity and values"
+  },
+  "parallel_plan": "All32 independent fixtures use host_parallelize with host policy. Small OVR member metadata traversal is explicitly marked as metadata driver work. No GPU operations or unsafe origin-erasing closure captures.",
+  "compile_flags": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+  "runtime_owed": "Root compiles and executes this suite in a coherent native bundle. Actual GP host/device/inference-provider and normalization coverage is separate and remains pending.",
+  "python_removed": 0,
+  "product_changes": 0,
+  "kernel_changes": 0,
+  "identity_or_performance_claim": "None; no development identity/timing run",
+  "removals": "Nothing identified in this additive storage tranche; original numerical Python coverage stays until actual native replacements pass."
+}
