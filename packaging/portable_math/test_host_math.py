@@ -137,25 +137,6 @@ def test_affected_python_surfaces():
         assert _max_features_fraction('log2', n) == math.log2(max(2, n))/n
 
 
-def test_gp_theta_float32_policy():
-    from mojolearn import _backend
-    binding = _backend.binding('_mojolearn_gp', 'identical')
-    # DEVIATION 2880 (gaussian_process/host/gp_theta.mojo) specifies
-    # ftz(identical_exp(ftz(Float32(theta)))). It is a float32 polynomial,
-    # not cast(owned.exp(theta)), which evaluates a different float64 polynomial.
-    # Check the public precision/FTZ contract and independent exp accuracy here;
-    # the supported GP verifier separately requires exact cross-vendor bits.
-    theta = [i/32 for i in range(-2048, 2049)]
-    actual = binding.gp_theta_params(theta)
-    word = lambda x: struct.unpack('<I', struct.pack('<f', x))[0]
-    assert len(actual) == len(theta)
-    for x, value in zip(theta, actual):
-        assert math.isfinite(value) and value > 0
-        assert abs(word(value) - word(math.exp(x))) <= 2, (x, value, math.exp(x))
-    for direction in (-math.inf, math.inf):
-        nearby = binding.gp_theta_params([math.nextafter(x, direction) for x in theta])
-        assert list(map(word, nearby)) == list(map(word, actual))
-    assert list(binding.gp_theta_params([-100., -90., -88., 0.])) == [0., 0., 0., 1.]
 
 
 def test_schedule_scaling_avoids_float_power():

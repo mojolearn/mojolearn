@@ -1,6 +1,6 @@
 {
   "family": "GP theta Float32 precision and FTZ",
-  "status": "CPU2/GPU2 authored, uncompiled and unrun",
+  "status": "Native CPU2/Apple GPU2 accepted in wave18; numerical Python duplicates removed; public boundary coverage separate",
   "dependency": {
     "native_api": "7f5f0bf795",
     "descriptor_factory": "5f8a2d28a9",
@@ -83,6 +83,9 @@
   "source_evidence": "E/pca-native-tests/gp-theta-static.json",
   "product_or_kernel_changes": 0,
   "benchmark_or_timing_changes": 0,
-  "python_deletions": 0,
-  "runtime_identity_performance_claim": false
+  "python_deletions": 1,
+  "runtime_identity_performance_claim": false,
+  "root_acceptance": "~/mojolearn-evidence/python-mojo-migration-20261110/native-wave18-accepted-results.json",
+  "source_closure_reuse": "~/mojolearn-evidence/python-mojo-migration-20261110/wave18-accepted-python-cleanup-source-reuse.json",
+  "cleanup": "Accepted numerical duplicates removed; all other Python test functions retained with identical AST."
 }
