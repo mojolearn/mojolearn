@@ -16,11 +16,12 @@ The cases are independent units: on the host column they run across the
 native host worker pool; on a device column they run one after another.
 Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.linear_entry_table import LinearEntryKey, linear_table_publish, linear_table_entry, LINEAR_TABLE_DECOMP
-from core.decomp_entry_table import decomp_table_call
+from core.decomp_entry_table import decomp_ref, decomp_table_call
 from x_decomp.descriptor_host import x_decomp_host_v1, X_DECOMP_HOST_API
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_OPERATION_COUNT, XD_RAND, XD_LU, XD_LU_SOLVE, XD_EIGH, XD_LASSO_ROWS, XD_LARS_ROWS,
@@ -58,7 +59,7 @@ def _refuses(problem: Error, text: String) raises:
 
 
 def _call(op: Int, addresses: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
-    return decomp_table_call(_key(), op, addresses, ints, floats)
+    return decomp_table_call(decomp_ref(_key()), op, addresses, ints, floats)
 
 
 def precondition_unpublished() raises:
@@ -77,7 +78,23 @@ def publish_host() raises:
         [String(XD_ABI_NAME)], [XD_OPERATION_COUNT], [x_decomp_host_v1])
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = decomp_ref(_key())
+    var second = decomp_ref(_key())
+    require(entry_ref_same(first, second), "x_decomp: a second resolution returned another entry")
+    try:
+        _ = linear_table_entry[LINEAR_TABLE_DECOMP](_key(), 0, String(XD_ABI_NAME), XD_OPERATION_COUNT + 1)
+        raise Error("x_decomp: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "x_decomp: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     try:
         _ = linear_table_entry[LINEAR_TABLE_DECOMP](_key(), 0, String("mojolearn.x_decomp.other.v1"), XD_OPERATION_COUNT)
         raise Error("a mismatched schema did not refuse")
