@@ -31,13 +31,6 @@ def xd_dart(dart: EntryRef, op: Int, addrs: List[Int], ints: List[Int], floats: 
     return entry_ref_call(dart, op, addrs, ints, floats)
 
 
-def _floats(ints: List[Int]) -> List[Float64]:
-    var out = List[Float64](capacity=len(ints))
-    for i in range(len(ints)):  # small-loop(the call's few integer parameters)
-        out.append(Float64(ints[i]))
-    return out^
-
-
 def xd_caps(dart: EntryRef) raises -> Int:
     """XD_CAP_ROUND | XD_CAP_RESIDENT bits of the image."""
     return entry_ref_call(dart, XD_CAPS, 0, 0, 0, 0, 0, 0)
@@ -45,9 +38,10 @@ def xd_caps(dart: EntryRef) raises -> Int:
 
 def xd_open(dart: EntryRef, x: Int, y: Int, inits: Int, n: Int, d: Int, k: Int, kind: Int, n_iters: Int,
             node_cap: Int) raises -> Int:
-    var addrs: List[Int] = [x, y, inits]
-    var ints: List[Int] = [n, d, k, kind, n_iters, node_cap]
-    return xd_dart(dart, XD_OPEN, addrs, ints, _floats(ints))
+    var addrs: Array[Int, 3] = [x, y, inits]
+    var ints: Array[Int, 6] = [n, d, k, kind, n_iters, node_cap]
+    var floats: Array[Float64, 6] = [Float64(n), Float64(d), Float64(k), Float64(kind), Float64(n_iters), Float64(node_cap)]
+    return entry_ref_call(dart, XD_OPEN, addrs, ints, floats)
 
 
 def xd_step(dart: EntryRef, handle: Int, coef: Int, thr: Int, flags: Int, bad: Int, t: Int, drop_seed: Int,
@@ -106,33 +100,38 @@ def xd_add(dart: EntryRef, handle: Int, colid: Int, quesval: Int, left: Int, val
 
 
 def xd_close(dart: EntryRef, handle: Int, bad: Int) raises -> Int:
-    var addrs: List[Int] = [bad]
-    var ints: List[Int] = [handle]
-    return xd_dart(dart, XD_CLOSE, addrs, ints, _floats(ints))
+    var addrs: Array[Int, 1] = [bad]
+    var ints: Array[Int, 1] = [handle]
+    var floats: Array[Float64, 1] = [Float64(handle)]
+    return entry_ref_call(dart, XD_CLOSE, addrs, ints, floats)
 
 
 def xd_predict(dart: EntryRef, x: Int, dst: Int, colids: Int, quesvals: Int, lefts: Int, leaf_values: Int,
                sizes: Int, coefs: Int, inits: Int, n: Int, d: Int, k: Int, n_trees: Int) raises -> Int:
-    var addrs: List[Int] = [x, dst, colids, quesvals, lefts, leaf_values, sizes, coefs, inits]
-    var ints: List[Int] = [n, d, k, n_trees]
-    return xd_dart(dart, XD_PREDICT, addrs, ints, _floats(ints))
+    var addrs: Array[Int, 9] = [x, dst, colids, quesvals, lefts, leaf_values, sizes, coefs, inits]
+    var ints: Array[Int, 4] = [n, d, k, n_trees]
+    var floats: Array[Float64, 4] = [Float64(n), Float64(d), Float64(k), Float64(n_trees)]
+    return entry_ref_call(dart, XD_PREDICT, addrs, ints, floats)
 
 
 def xd_forest_prepare(dart: EntryRef, colids: Int, quesvals: Int, lefts: Int, leaf_values: Int, sizes: Int,
                       coefs: Int, inits: Int, out2: Int, d: Int, k: Int, n_trees: Int) raises -> Int:
     """Writes [handle, device bytes] to out2; returns the handle."""
-    var addrs: List[Int] = [colids, quesvals, lefts, leaf_values, sizes, coefs, inits, out2]
-    var ints: List[Int] = [d, k, n_trees]
-    return xd_dart(dart, XD_FOREST_PREPARE, addrs, ints, _floats(ints))
+    var addrs: Array[Int, 8] = [colids, quesvals, lefts, leaf_values, sizes, coefs, inits, out2]
+    var ints: Array[Int, 3] = [d, k, n_trees]
+    var floats: Array[Float64, 3] = [Float64(d), Float64(k), Float64(n_trees)]
+    return entry_ref_call(dart, XD_FOREST_PREPARE, addrs, ints, floats)
 
 
 def xd_forest_predict(dart: EntryRef, handle: Int, x: Int, dst: Int, n: Int, d: Int, k: Int) raises -> Int:
-    var addrs: List[Int] = [x, dst]
-    var ints: List[Int] = [handle, n, d, k]
-    return xd_dart(dart, XD_FOREST_PREDICT, addrs, ints, _floats(ints))
+    var addrs: Array[Int, 2] = [x, dst]
+    var ints: Array[Int, 4] = [handle, n, d, k]
+    var floats: Array[Float64, 4] = [Float64(handle), Float64(n), Float64(d), Float64(k)]
+    return entry_ref_call(dart, XD_FOREST_PREDICT, addrs, ints, floats)
 
 
 def xd_forest_release(dart: EntryRef, handle: Int) raises -> Int:
-    var addrs = List[Int]()
-    var ints: List[Int] = [handle]
-    return xd_dart(dart, XD_FOREST_RELEASE, addrs, ints, _floats(ints))
+    var addrs: Array[Int, 0] = []
+    var ints: Array[Int, 1] = [handle]
+    var floats: Array[Float64, 1] = [Float64(handle)]
+    return entry_ref_call(dart, XD_FOREST_RELEASE, addrs, ints, floats)
