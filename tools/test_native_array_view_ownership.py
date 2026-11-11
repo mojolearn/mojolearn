@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Source connection and ownership invariants; native lifetime probes are separate."""
-import ast
 from pathlib import Path
 import unittest
 
@@ -16,23 +15,6 @@ class NativeArrayViewOwnership(unittest.TestCase):
         public = (ROOT / 'bindings/public_attributes_native.mojo').read_text()
         self.assertIn('from bindings.native_array_view import native_array_ndarray_view as _array_view', public)
         self.assertNotIn('def _array_view(', public)
-
-    def test_both_context_builders_pin_complete_native_storage_metadata(self):
-        expected = {'_store', '_mv', '_addr', '_readonly', 'shape', 'dtype', 'order'}
-        for name in ('_native_classical_bridge.py', '_x_sequence_model.py'):
-            tree = ast.parse((ROOT / 'python/mojolearn' / name).read_text())
-            declaration = next(n for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                               and any(isinstance(t, ast.Name) and t.id == 'array_storage_slots' for t in n.targets))
-            self.assertEqual(ast.literal_eval(declaration.value.generators[0].iter),
-                             ('_store', '_mv', '_addr', '_readonly', 'shape', 'dtype', 'order'))
-            self.assertEqual(set(ast.literal_eval(declaration.value.generators[0].iter)), expected)
-            self.assertEqual(ast.unparse(declaration.value.value), 'vars(Array)[name]')
-            dictionaries = [n for n in ast.walk(tree) if isinstance(n, ast.Dict)
-                            and any(isinstance(k, ast.Constant) and k.value == 'array_storage_slots' for k in n.keys)]
-            self.assertEqual(len(dictionaries), 1)
-            values = {k.value: ast.unparse(v) for k, v in zip(dictionaries[0].keys, dictionaries[0].values) if isinstance(k, ast.Constant)}
-            self.assertEqual(values['array_storage_slots'], 'array_storage_slots')
-            self.assertEqual(values['array_storage_dtypes'], 'SUPPORTED_DTYPES')
 
     def test_retained_owner_and_mapped_slice_checks_precede_export(self):
         source = (ROOT / 'bindings/native_array_view.mojo').read_text()

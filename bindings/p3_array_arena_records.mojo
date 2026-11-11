@@ -44,11 +44,12 @@ comptime P3_CACHE_LAYOUT = 3          # x_prep_native_owner._cache_layout
 comptime P3_ROWS_LAYOUT = 4           # DeviceRows class (x_prep_native_inputs / arena_rows_native)
 comptime P3_RESIDENT_NATIVE = 5       # arena_resident_native class admission
 comptime P3_CACHE_KEY_LAYOUT = 6      # arena_cache_get.arena_cache_key model class
-comptime P3_FROM_BUFFER_LAYOUT = 7    # array_from_buffer_native class slots
+# Kind 7 retired: the former from-buffer-only check did not stamp slot values.
 comptime P3_ARRAY_DOOR_LAYOUT = 8     # array_native._admit
 comptime P3_STATS_LAYOUT = 9          # arena_cache_stats class walks
 comptime P3_ROWS_EXACT_LAYOUT = 10    # x_prep_native_inputs._rows_fields (exact DeviceRows class)
 comptime P3_SETATTR_LAYOUT = 11       # arena_cache_upload._counter_next setter hooks
+comptime P3_NATIVE_ARRAY_STORAGE_LAYOUT = 12  # shared native Array storage/slot admission
 
 
 # Storage (lane ne1-e-records, 2026-11-06): the layout admissions live in
@@ -179,6 +180,7 @@ comptime P3_DICT_BINDING_IDS = 2        # x_prep scope caches: (int, str) keys
 comptime P3_DICT_INT_IDS = 3            # model-selection resident entries: int keys
 comptime P3_DICT_STR_INT = 4            # numpy sctypeDict: str or int keys
 comptime P3_DICT_CACHE_KEYS = 5         # DeviceCache entries: arena_cache_stats._admit_entry_keys
+comptime P3_DICT_ARRAY_STORAGE = 6      # complete native Array member descriptor inventory
 
 
 struct P3DictRecords(Defaultable, Movable):
