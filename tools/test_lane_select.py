@@ -3421,30 +3421,37 @@ def test_a_mojo_module_level_hunk_keeps_every_lane_that_compiles_the_file():
         sel["reasons"][path]
 
 
-def test_a_lane_whose_export_mapping_is_unknown_keeps_the_whole_file_rule():
+def test_a_lane_whose_export_mapping_is_unknown_keeps_the_whole_file_rule(monkeypatch):
     """A lane with no recorded binding contributions, or one that reaches the
     file through a binding whose exports it does not call, is kept."""
-    path = "x_decomp/chi2.mojo"
-    old = lane_select._read(path)
-    new = _insert_after_signature(old, "def chi2_quantile(", "    var _lane_select_probe = 0\n")
-    _, rev = _lane_sets()
-    base = set(_mojo_select(path, new)["lanes"])
-    dropped = sorted(rev[path] - base)
-    assert len(dropped) >= 2, "the edit dropped too few lanes to test the fallback"
-    unknown, opaque = dropped[0], dropped[1]
-    calls = lane_select._LANE_SEED_CALLS
-    saved = {n: calls[n] for n in (unknown, opaque)}
-    try:
-        del calls[unknown]
-        calls[opaque] = [(src, True, (), files) for src, _, _, files in saved[opaque]]
-        sel = _mojo_select(path, new)
-    finally:
-        calls.update(saved)
-    got = set(sel["lanes"])
-    assert {unknown, opaque} <= got, sorted({unknown, opaque} - got)
-    assert "no recorded binding contributions" in sel["chains"][unknown][0], sel["chains"][unknown]
-    assert "calls no export" in sel["chains"][opaque][0], sel["chains"][opaque]
-    assert got - {unknown, opaque} == base, "the fallback changed other lanes' answers"
+    # A synthetic caller graph tests this fallback independently of whether
+    # today's shared native owners leave any real chi2 callers narrowable.
+    # Include a proved caller and a proved non-caller as positive/negative
+    # controls; unknown and opaque contributions must retain the file.
+    path = "selector_fixture/ops.mojo"
+    old = "def changed() -> Int:\n    return 1\n"
+    new = old.replace("return 1", "return 2")
+    monkeypatch.setitem(lane_select._read.cache, path, new)
+    monkeypatch.setitem(lane_select._GIT_SHOW, f"{_FAKE_REF}:{path}", old)
+    monkeypatch.setattr(lane_select, "_LANE_DEVICE_CALLS", None)
+    monkeypatch.setattr(lane_select, "_LANE_SEED_CALLS", {
+        "caller": [("fixture.mojo", False, ("changed",), {path})],
+        "noncaller": [("fixture.mojo", False, ("unrelated",), {path})],
+        "opaque": [("fixture.mojo", True, (), {path})],
+    })
+
+    class Graph:
+        def closure(self, src, export, operations=None):
+            return {("t", path, "changed"): None} if export == "changed" else {}
+
+    result = lane_select.mojo_edit_lanes(_FAKE_REF, path,
+        {"caller", "noncaller", "unknown", "opaque"}, Graph())
+    assert result is not None
+    _, selected, chains, kept = result
+    assert selected == {"caller", "unknown", "opaque"}
+    assert kept == {"unknown", "opaque"}
+    assert "no recorded binding contributions" in chains["unknown"][0]
+    assert "calls no export" in chains["opaque"][0]
 
 
 # --------------------------------------------------------------------------
