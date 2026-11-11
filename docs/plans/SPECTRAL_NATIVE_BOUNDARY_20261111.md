@@ -265,3 +265,30 @@ Seven new hook-refusal cases bring the boundary file to five definitions and
 11 expanded cases. All are authored, unrun. This repairs inherited boundary
 behavior; it changes no supported numerical option, kernel, route or copy.
 Evidence: `E/spectral-native-owner/standalone-admission-source-audit.json`.
+
+## Bounded tranche accounting at ad7259567e
+
+The before/after audit records **18 distinct private roles** for the shared
+SpectralClustering/SpectralEmbedding implementation: two options, four requests,
+four boundary containers, one native handle collection, and seven scratch
+buffers. Every row has both source anchors. This is a bounded minimum of
+schemas/roles, not runtime allocations, a percentage, or a struct count.
+The 36 new core struct declarations are recorded separately. Shared Cres and
+ClusterOut transport roles already counted for variants add zero here.
+
+The 13 native RUN roots have a union of **275 local source files and zero
+Python-support imports**. Numerical source directories/helpers compared against
+the pre-switch caller snapshot have no changes. These are source findings only:
+all target compilation, installed public runtime behavior, performance and
+cross-vendor identity remain separate root-owned evidence.
+
+Required Python pins remain for actual public Arrays/options, borrowed/native
+input owners, compiled provider images, public tuple results and archive fields.
+The audit explicitly leaves the standalone temporary model, normalized scalar
+instance metadata consumed by the archive schema, fixed validation/admission
+collections, and the unreviewed shared admission/sparse metadata tail pending.
+It does not claim the complete family is Python-free.
+
+Complete audit: `E/python-object-typed-spectral-family.json`; native closure and
+hashes: `E/spectral-native-owner/native-run-closure.json`. Baseline caller source
+764e2ad158, producer ad7259567e. No compile or test was run by this lane.
