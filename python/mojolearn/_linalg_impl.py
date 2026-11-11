@@ -89,7 +89,7 @@ import sys
 
 from . import _backend
 from ._buffer import addr, addr_ro, as_f32_c, as_i8_c, as_i32_c, as_u16_c, empty
-from ._bufcheck import dtype_name, is_native_f32, nelems, probe
+from ._bufcheck import dtype_name, is_native_f32, probe
 
 #: The profile family and the version, kept apart because the VERSION is the
 #: part the contract makes load-bearing: "a bit-identity claim with no version
@@ -271,7 +271,7 @@ def _operand(x, name):
             f"{pb.shape}. A vector product is OP_NT at n == 1 (contract 0.1); "
             f"pass it as a 2-D array of shape (n, k) or (k, 1)."
         )
-    if nelems(pb.shape) == 0:
+    if 0 in pb.shape:  # no elements: a zero dimension (rank 2, checked above)
         raise ValueError(
             f"mojolearn.linalg: {name} has shape {pb.shape} and no elements. "
             "Contract section 8 does specify the degenerate shapes (k == 0 "

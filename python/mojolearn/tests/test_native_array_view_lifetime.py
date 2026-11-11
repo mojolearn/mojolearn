@@ -51,7 +51,7 @@ def test_ridge_row_view_keeps_offset_and_owner():
     storage = np.array([[1, 2], [3, 4]], dtype='f4')
     reference = weakref.ref(storage)
     array = Array.from_buffer(storage)
-    row = array._row_view(1, (2,), 2)
+    row = list(array)[1]  # row 1: the native zero-copy row view (iteration)
     model = object.__new__(Ridge)
     object.__getattribute__(model, '__dict__')['coef_'] = row
     output = read_native(model, 'coef_')
