@@ -691,6 +691,19 @@
         "pca_whitening_gpu": 3
       },
       "repair": "Root replaced two mixed Int32/Int SVC permutation comparisons with one typed expected index; assertions unchanged. Original R1 failure retained."
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_decompositions.py",
+      "decision": "split-migrated",
+      "python_numerical_definitions_removed": 2,
+      "python_boundary_oracle_definitions_retained": 18,
+      "native_fixtures_per_executor": 5,
+      "executors": [
+        "CPU linalg entry bodies / HostExec.eigh",
+        "GPU linalg entry bodies / DevExec.eigh"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Uncompiled/unrun; see linalg-numerical-handoff.txt and linalg-numerical.json."
     }
   ],
   "reviewed_files": 51,

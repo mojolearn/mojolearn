@@ -1,0 +1,48 @@
+{
+  "source": "test_linalg_decompositions.py at e53128fe7f9206abe748dbe32052a81ed864ef3c",
+  "numpy": "2.5.3",
+  "seed": 5,
+  "generator_sha256": "c4a97c8782949931ba5f7205290d337ddb5e67587a9a51768921e4637aa9d459",
+  "files": [
+    {
+      "file": "qr-48x5.f32",
+      "shape": [
+        48,
+        5
+      ],
+      "sha256": "0ae71621241d5ed2254e0604c130001da8c4cbad747b0a9b365948dba737e838"
+    },
+    {
+      "file": "qr-16x4.f32",
+      "shape": [
+        16,
+        4
+      ],
+      "sha256": "844da3caac3681469e10e7e50da469795795b3d8512742e1d93f509633bbef3d"
+    },
+    {
+      "file": "rank-48x3.f32",
+      "shape": [
+        48,
+        3
+      ],
+      "sha256": "739425bd77ca127b8cbe82b74585a6dfc1a9cb0c2c5a501e0ae4c51a3cd7493b"
+    },
+    {
+      "file": "constant-64x10.f32",
+      "shape": [
+        64,
+        10
+      ],
+      "sha256": "a81e6526b2e5b510ee7dfc4a95b622109e972988f0f401986fed882ac635c350"
+    },
+    {
+      "file": "constant-64x10-singular.f64",
+      "shape": [
+        10
+      ],
+      "sha256": "f3cbd5963c5b382c70401ce20659269562acd51cc8a98be2c66acb4b5dc948ff"
+    }
+  ],
+  "limits": "Independent input/reference generation only; no Mojolearn execution, timing or identity evidence."
+}
