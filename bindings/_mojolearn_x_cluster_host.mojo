@@ -22,6 +22,20 @@ from x_cluster.out import ClusterOut
 from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 
 
+from core.shared_slot import SharedSlot
+from core.spectral_assignment_api import SpectralAssignmentAPI
+from core.spectral_assignment_host import SpectralAssignmentHost
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
+
+comptime _SPECTRAL_ASSIGN_SLOT = "MojolearnSpectralAssignHostIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralAssignHostFastV1"
+comptime SPECTRAL_ASSIGN_API = SharedSlot[SpectralAssignmentAPI[SpectralAssignmentHost], _SPECTRAL_ASSIGN_SLOT]
+
+
+def spectral_assign_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_ASSIGN_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
     var api = HIERARCHY_CLUSTER_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -100,6 +114,7 @@ def build__mojolearn_x_cluster_host() -> PythonObject:
         m.def_function[hierarchy_cluster_native_api_v1_binding]("hierarchy_cluster_native_api_v1")
         m.def_function[kmeans_variants_native_api_v1_binding]("kmeans_variants_native_api_v1")
         m.def_function[cluster_centroid_fit_native_api_v1_binding]("cluster_centroid_fit_native_api_v1")
+        m.def_function[spectral_assign_native_api_v1_binding]("spectral_assign_native_api_v1")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[vendor_binding]("x_cluster_vendor")
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.
