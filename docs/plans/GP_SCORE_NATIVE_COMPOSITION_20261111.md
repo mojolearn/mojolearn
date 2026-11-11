@@ -62,3 +62,15 @@ mean intermediate, metrics argument tuple, two metric snapshot Arrays, scalar
 Array and completed arena Python store. Other shared metric builders keep their
 existing paths; this is not a whole-metrics migration. GPC score composition is
 still pending. Compile/runtime/performance evidence remains pending.
+
+## GPC typed prediction result (composition remains staged)
+
+GPC public prediction and score now call one `_gpc_prediction_codes` body
+with explicit boundary inputs. `GPCPredictionCodes` holds the existing Int64
+codes and the required public class pin. Score's private prediction-argument
+tuple is removed. Both callers still use the existing class decode helper;
+the score's decoded public-format intermediate and metrics composition remain
+pending. This extraction preserves all-entry, binary and multiclass fallback
+routes, the existing widening/gathers and class lookup timing after prediction.
+It adds one private request role to the seven GPR score roles, without counting
+class pins or the already-native code buffer again.

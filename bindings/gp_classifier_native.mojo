@@ -14,6 +14,7 @@ from core.gp_native_api import GPCFitRequest, GPCFitAllRequest, GPCQueryRequest,
 from core.native_label_codes import NativeLabelCodes
 from core.gp_native_storage import GPCQueryScratch
 from core.gp_native_storage import GPCMemberTables, GPCQueryTables
+from bindings.gp_score_boundary import GPCPredictionCodes
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from std.python import Python, PythonObject
@@ -572,12 +573,19 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
 
 
 def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`predict(X)`; args = (binding, base binding, X)."""
+    """Public prediction packing; arguments are (binding, base binding, X)."""
+    var result = _gpc_prediction_codes(model, args[0], args[2], context)
+    return gp_decode_labels(model, result.classes, result.codes, args[1], context)
+
+
+def _gpc_prediction_codes(model: PythonObject, binding: PythonObject,
+                          source: PythonObject, context: PythonObject) raises -> GPCPredictionCodes:
+    """The existing prediction routes with typed codes and retained class pins."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
-    var ext = _gpc_ext(model, args[0], context)
+    var ext = _gpc_ext(model, binding, context)
     var all_entry = (gp_caps(ext) & 1) == 1
-    var gq = _gpc_query(fields, args[2], context, all_entry)
+    var gq = _gpc_query(fields, source, context, all_entry)
     var q = gq.q
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
@@ -600,8 +608,7 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
         _ = codes32  # keep the Python object alive through the native call above
         _ = codes32^
-    # The class table is built once per class list of this model.
-    return gp_decode_labels(model, fields["classes_"], codes, args[1], context)
+    return GPCPredictionCodes(codes^, fields["classes_"])
 
 
 def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -654,7 +661,8 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
     if operation == "family_gp_gpc_score":
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
-        var pred = _gpc_predict(model, Python.tuple(args[0], args[1], args[2]), context)
+        var prediction = _gpc_prediction_codes(model, args[0], args[2], context)
+        var pred = gp_decode_labels(model, prediction.classes, prediction.codes, args[1], context)
         var shape = mc_shape_of(args[3], context)  # admits y once; the accuracy pair reuses it
         var n_truth = 0
         if Int(py=py_call(native_loaded_module("builtins").len, shape)) > 0:
