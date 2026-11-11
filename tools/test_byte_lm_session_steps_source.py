@@ -84,7 +84,9 @@ def test_ragged_next_bytes_picks_on_the_device_and_natively_on_the_host():
     assert 'owner[].next_rows(' in host
     native = _read('bindings/byte_lm_trainer_native.mojo')
     body = native.split('def byte_lm_logits(')[1].split('def _registry(')[0]
-    assert 'args[1] is None or provider is not None' in body
+    # every byte LM image carries the trainer table (lane calltable-byte-lm)
+    assert 'var direct_next = next_bytes and resident' in body
+    assert 'provider is None' not in body and 'py_call_typed' not in body
 
 
 def test_pool_and_offload_exports_write_into_the_caller():
