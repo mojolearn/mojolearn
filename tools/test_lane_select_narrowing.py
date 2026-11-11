@@ -1044,11 +1044,10 @@ def test_a_helper_another_file_names_is_not_counted_out():
     assert got is not None and "through" in got[1], got
 
 
-def test_the_real_feature_names_gate_and_the_pandas_free_process_hold():
-    """THE REAL TREE (finding 1): `classifier_public_lifecycle.mojo:_feature_names`
-    opens with the gate, the identity process holds no pandas object, so an
-    edit past the gate is counted out; an edit to `classifier_after_fit`, which
-    every lifecycle runs, is not."""
+def test_the_real_feature_names_gate_keeps_lanes_without_a_process_proof():
+    """The real gate is recognized, but computed package imports (including
+    _backend.py's f-string import_module calls) prevent a process-wide absence
+    proof. Keep both gated-body and ordinary lifecycle changes selected."""
     path = "bindings/classifier_public_lifecycle.mojo"
     text = ls._read(path)
     units = ls._mojo_units(text)
@@ -1057,14 +1056,14 @@ def test_the_real_feature_names_gate_and_the_pandas_free_process_hold():
     ls._PANDAS_FREE.clear()
     try:
         free, why = ls.pandas_free_identity_process()
-        assert free, why
+        assert not free and why, "computed package imports must not prove pandas absence"
         msg = '"TypeError: native pandas column axes are unavailable"'
         assert text.count(msg) == 1
         post = text.replace(msg, '"TypeError: native pandas column axes are missing"')
         changed, _ = ls.mojo_changed_definitions(text, post)
         assert changed == {("t", "_feature_names")}, changed
         gated, why = ls.pandas_gated_units(path, text, post, changed)
-        assert gated == {("t", "_feature_names")}, why
+        assert gated == set(), why
         anchor = '    py_setitem(fields, "_mojolearn_fitted", True)\n'
         assert text.count(anchor) == 1
         after = text.replace(anchor, anchor + '    py_setitem(fields, "_probe", True)\n')
@@ -1085,6 +1084,69 @@ def test_pandas_free_process_refuses_a_harness_or_mojo_pandas_name():
                       ('var m = Python.import_module("builtins")  # pandas in a comment\n', False)):
         with _Seeded({probe: (text, text)}):
             assert (ls._pandas_free_mojo(probe) is not None) is bad, text
+
+
+def test_pandas_mojo_import_proof_checks_the_argument_not_other_literals():
+    probe = "ns_gate/computed_import.mojo"
+    refused = (
+        'var m = Python.import_module("pan" + "das")\n',
+        'var m = Python.import_module(names["selected"])\n',
+        'var m = Python.import_module(name); print("builtins")\n',
+        'var m = Python.import_module(\n    names["selected"]\n)\n',
+        'var m = cpy.PyImport_ImportModule(name + "")\n',
+        'var loader = Python.import_module\n',
+        'var loader = table["PyImport_ImportModule"]\n',
+        'var m = Python.import_module("pan\\u0064as")\n',
+        'var m = Python.import_module(".child")\n',
+    )
+    for text in refused:
+        with _Seeded({probe: (text, text)}):
+            assert ls._pandas_free_mojo(probe) is not None, text
+    for text in ('var m = Python.import_module("builtins")\n',
+                 'var m = Python.import_module(\n    "numpy"\n)\n'):
+        with _Seeded({probe: (text, text)}):
+            assert ls._pandas_free_mojo(probe) is None, text
+
+
+def test_pandas_python_import_proof_refuses_computed_or_indirect_names():
+    probe = "ns_gate/computed_import.py"
+    refused = (
+        'import importlib\nm = importlib.import_module("pan" + "das")\n',
+        'import importlib\nm = importlib.import_module(names["selected"])\n',
+        'm = __import__(name)\n',
+        'from importlib import import_module as load\nm = load(name)\n',
+        'from importlib import import_module as load\nloader = load\n',
+        'import importlib\nloader = importlib.import_module\n',
+        'import importlib\nloader = getattr(importlib, "import_module")\n',
+        'import importlib as il\nloader = getattr(il, method)\n',
+        'import builtins as bi\nloader = bi.__dict__[method]\n',
+        'import importlib\nm = importlib.import_module(".child", package)\n',
+    )
+    for text in refused:
+        with _Seeded({probe: (text, text)}):
+            assert ls._pandas_free_python(probe) is not None, text
+    for text in ('import importlib\nm = importlib.import_module("numpy")\n',
+                 'from importlib import import_module as load\nm = load("numpy")\n'):
+        with _Seeded({probe: (text, text)}):
+            assert ls._pandas_free_python(probe) is None, text
+
+
+def test_pandas_gate_refuses_parameter_and_local_shadowing():
+    bodies = []
+    for name in ("_pd_class", "py_type"):
+        bodies.extend((
+            _GATED.replace("context: PythonObject)", "context: PythonObject, " + name + ": PythonObject)"),
+            _GATED.replace("    var columns", "    var " + name + ' = context["factory"]\n    var columns'),
+            _GATED.replace("    var columns", "    alias " + name + " = other_factory\n    var columns"),
+            _GATED.replace("    var columns", "    (temporary, " + name + ") = factories\n    var columns"),
+        ))
+    bodies.append(_GATED.replace("def names_of(", "def names_of[py_type: AnyType]("))
+    for before in bodies:
+        assert ls._pandas_gate(before) is None, before
+        after = before.replace("var columns = source.columns", "var columns = source.columns.copy()")
+        got = _gated_lanes(_gate_file(before, _AFTER), _gate_file(after, _AFTER))
+        assert got[1] == {"through", "kept"}, (before, got)
+        assert not any("pandas-gated" in label for label in got[0]), got
 
 if __name__ == "__main__":
     failed = 0

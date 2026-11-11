@@ -4024,33 +4024,87 @@ MOJO_GATED_WHY = {}
 
 
 def _pandas_free_python(rel):
-    """None when the CODE of Python file `rel` names no pandas-family token,
-    else the reason. A file that does not parse names everything."""
+    """None for token-free code with locally known import module names,
+    else the reason. Unparsed code or computed imports cannot prove absence."""
     try:
         tree = ast.parse(_read(rel))
     except (OSError, SyntaxError, ValueError):
         return f"{rel} cannot be read as Python"
-    m = _PANDAS_TOKENS_RE.search(ast.unparse(_strip_docstrings(tree)))
-    return f"{rel} names `{m.group(1)}` in code" if m else None
+    tree = _strip_docstrings(tree)
+    m = _PANDAS_TOKENS_RE.search(ast.unparse(tree))
+    if m:
+        return f"{rel} names `{m.group(1)}` in code"
+    # A missing token is not proof about a computed import name. Include
+    # imported aliases, and refuse an importer passed around as a value:
+    # the eventual module argument is then outside this local proof.
+    loaders = {"__import__", "import_module"}
+    loader_modules = {"importlib", "builtins", "__builtins__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            loaders.update(alias.asname or alias.name for alias in node.names
+                           if alias.name in {"__import__", "import_module"})
+        elif isinstance(node, ast.Import):
+            loader_modules.update(alias.asname or alias.name for alias in node.names
+                                  if alias.name in {"importlib", "builtins"})
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr" \
+                and len(node.args) >= 2:
+            name = node.args[1]
+            reflected_loader = isinstance(name, ast.Constant) and name.value in {"__import__", "import_module"}
+            unknown_loader_member = isinstance(node.args[0], ast.Name) and node.args[0].id in loader_modules \
+                and not (isinstance(name, ast.Constant) and isinstance(name.value, str))
+            if reflected_loader or unknown_loader_member:
+                return f"{rel} reflects an importer with an unknown module name at line {node.lineno}"
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
+                and node.value.attr == "__dict__" and isinstance(node.value.value, ast.Name) \
+                and node.value.value.id in loader_modules:
+            return f"{rel} indexes an importer module dictionary at line {node.lineno}"
+        importer = (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in loaders) or (
+            isinstance(node, ast.Attribute) and node.attr in {"__import__", "import_module"})
+        if not importer:
+            continue
+        call = parents.get(node)
+        if not isinstance(call, ast.Call) or call.func is not node or not call.args or not (
+                isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str)):
+            return f"{rel} has an importer with an unknown module name at line {node.lineno}"
+        if call.args[0].value.startswith("."):
+            return f"{rel} imports a relative module with an unproved package at line {node.lineno}"
+    return None
 
 
 def _pandas_free_mojo(rel):
-    """None when Mojo file `rel` imports no module by a name a pandas-family
-    token could be, else the reason. An import call with no string literal on
-    its line (a computed name) counts as one."""
+    """None when each Mojo importer has a literal non-pandas module argument.
+    An unrelated literal on an import line does not establish that argument."""
     try:
         code = _mojo_code_text(_read(rel))
     except OSError:
         return None                          # listed but absent: nothing compiles it
-    for line in code.splitlines():
-        if not _MOJO_DYNAMIC_IMPORT_RE.search(line):
+    for literal in _MOJO_STRING_RE.finditer(code):
+        try:
+            value = ast.literal_eval(literal.group(0))
+        except (SyntaxError, ValueError):
             continue
-        literals = _MOJO_STRING_RE.findall(line)
-        if not literals:
-            return f"{rel} imports a module by a computed name: {line.strip()[:120]}"
-        for lit in literals:
-            if _PANDAS_TOKENS_RE.search(lit):
-                return f"{rel} imports `{lit}`"
+        if _MOJO_DYNAMIC_IMPORT_RE.fullmatch(value):
+            return f"{rel} names an indirect importer `{value}` with no proved module argument"
+    # Locate importer identifiers outside strings, then inspect their actual
+    # first argument. Another literal on the same line proves nothing about
+    # a subscript, concatenation, alias or indirect importer call.
+    names = _MOJO_STRING_RE.sub(lambda match: " " * len(match.group(0)), code)
+    for match in _MOJO_DYNAMIC_IMPORT_RE.finditer(names):
+        tail = code[match.end():].lstrip()
+        argument = tail[1:].lstrip() if tail.startswith("(") else ""
+        literal = _MOJO_STRING_RE.match(argument)
+        if literal is None or not argument[literal.end():].lstrip().startswith((",", ")")):
+            return f"{rel} imports a module by an unknown or computed name near `{match.group(0)}`"
+        try:
+            module = ast.literal_eval(literal.group(0))
+        except (SyntaxError, ValueError):
+            return f"{rel} has an unproved module string near `{match.group(0)}`"
+        if module.startswith("."):
+            return f"{rel} imports a relative module with an unproved package"
+        if _PANDAS_TOKENS_RE.search(module):
+            return f"{rel} imports `{module}`"
     return None
 
 
@@ -4112,6 +4166,22 @@ def _pandas_gate(text):
     if not header[-1].rstrip().endswith(":"):
         return None
     rest = pairs[k:]
+    # Module imports do not establish the binding of a formal/comptime
+    # parameter or a local name. Refuse all such shadowing conservatively;
+    # there is no need to guess Mojo's scope/lifetime for a later assignment.
+    trusted = set(_PANDAS_GATE_IMPORTS)
+    if trusted & set(_MOJO_IDENT_RE.findall("\n".join(header))):
+        return None
+    for line, _ in rest:
+        declaration = re.search(r"\b(?:var|ref|alias|comptime|param|for|with|def|fn|except)\s+([^:=\n]+)", line)
+        if declaration and trusted & set(_MOJO_IDENT_RE.findall(declaration.group(1))):
+            return None
+        if re.match(r"\s*(?:from\b.*\bimport\b|import\b)", line) and (
+                trusted & set(_MOJO_IDENT_RE.findall(line))):
+            return None
+        assignment = re.match(r"\s*([^=\n]+)=(?!=)", line)
+        if assignment and trusted & set(_MOJO_IDENT_RE.findall(assignment.group(1))):
+            return None
     starts = [ln for ln, cont in rest if not cont and ln.strip()]
     if not starts:
         return None
