@@ -6,7 +6,8 @@ from core.linear_svc_native_api import (
     LINEAR_SVC_NATIVE_ABI, LINEAR_SVC_NATIVE_COUNT, LinearSvcDriver,
     LinearSvcFitRequest, LinearSvcFitPlan, LinearSvcWeightsState,
 )
-from core.logistic_native_api import QnQueryRequest
+from core.logistic_native_api import QnQueryRequest, QnFitRequest
+from core.qn_single_fit import QnSingleFitPlan
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
@@ -51,3 +52,20 @@ def linear_svc_run_query(connection: LinearSvcConnection, operation: Int,
             connection.driver.qn().query(operation, request)
     finally:
         _ = connection
+
+
+@fieldwise_init
+struct LinearSvrFitResult(Movable):
+    # Fitted public storage is retained at PACK; metadata is native.
+    var weights: PythonObject
+    var state: QnSingleFitPlan
+
+
+def linear_svr_run_fit(connection: LinearSvcConnection, request: QnFitRequest,
+    mut plan: QnSingleFitPlan) raises:
+    try:
+        with GILReleased(Python()):
+            plan.run(connection.driver.qn(), request)
+    finally:
+        _ = connection
+        _ = plan
