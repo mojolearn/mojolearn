@@ -6,17 +6,16 @@ COO scans shared by both public images are host metadata operations and are
 covered once by spectral_dense_cpu, not counted again as GPU execution.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.neural_context import process_ctx
-from core.dense_coo_device import knn_affinity_f32_device
+from core.spectral_preparation_api import SpectralPreparationDriver, SpectralKNNRequest, spectral_preparation_native_v1
+from core.spectral_preparation_device import SpectralPreparationDevice
 from checks.native_tests.spectral_dense_cases import SPECTRAL_AFFINITY_FIXTURES, SpectralDenseCalls, affinity_case, require
 
 
 struct DeviceSpectralDense(SpectralDenseCalls):
     @staticmethod
     def affinity(source: Int, rows: Int, neighbors: Int, dst: Int, status: Int) raises:
-        var ctx = process_ctx["MojolearnSpectralDenseNativeCheckV1"]()
-        knn_affinity_f32_device(ctx, source, 0, 0, 0, 0, False, rows, neighbors, dst, status)
-        _ = ctx^
+        var driver = SpectralPreparationDriver(spectral_preparation_native_v1[SpectralPreparationDevice])
+        driver.knn(SpectralKNNRequest(source, 0, 0, 0, dst, status, rows, neighbors, 0, False))
 
 
 def run_checks() raises:

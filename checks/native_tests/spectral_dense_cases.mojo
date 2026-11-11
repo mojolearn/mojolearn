@@ -7,7 +7,7 @@ unchanged. Native owners remain live through every borrowed pointer use.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from core.dense_coo import nonzero_f32_count, nonzero_f32_fill, F32P, I32P
+from core.spectral_preparation_api import SpectralPreparationDriver, SpectralCOOCountRequest, SpectralCOOFillRequest
 
 comptime SPECTRAL_COO_FIXTURES = 6
 comptime SPECTRAL_AFFINITY_FIXTURES = 8
@@ -68,7 +68,7 @@ def unchanged(values: List[Float32], words: List[UInt32]) raises:
     _ = words
 
 
-def coo_case(unit: Int) raises:
+def coo_case(driver: SpectralPreparationDriver, unit: Int) raises:
     var n = 17 + unit
     var counts: List[Int] = [196, 232, 244, 283, 315, 340]
     var count = counts[unit]
@@ -83,12 +83,10 @@ def coo_case(unit: Int) raises:
     var values = List[Float32](length=count + 2, fill=SPECTRAL_DENSE_GUARD)
     try:
         var address = Int(source.unsafe_ptr())
-        require(nonzero_f32_count(F32P(unsafe_from_address=address), n * n) == count,
+        require(driver.count(SpectralCOOCountRequest(address, n * n, False)) == count,
             "Spectral original Float32 nonzero count")
-        require(nonzero_f32_fill(F32P(unsafe_from_address=address), n, n,
-            I32P(unsafe_from_address=Int(rows.unsafe_ptr() + 1)),
-            I32P(unsafe_from_address=Int(columns.unsafe_ptr() + 1)),
-            F32P(unsafe_from_address=Int(values.unsafe_ptr() + 1)), count) == count,
+        require(driver.fill(SpectralCOOFillRequest(address, Int(rows.unsafe_ptr() + 1),
+            Int(columns.unsafe_ptr() + 1), Int(values.unsafe_ptr() + 1), n, n, count, False)) == count,
             "Spectral original Float32 fill count")
         var failures = List[Int](length=count, fill=0)
         var fp = failures.unsafe_ptr()
