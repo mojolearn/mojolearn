@@ -29,6 +29,7 @@ from core.abs_sum_blocked import device_any_index_out_of_range
 from x_ann.tsne_device import tsne_fit_device
 from providers.python.x_ann_resident_pyapi import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
 from providers.python.x_ann_resident_pyapi import x_ann_index_export_codes_binding
+from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
 from x_ann.ivf_pq_device import IvfPqDevice, ivf_pq_build_device_resident
@@ -505,6 +506,11 @@ def build__mojolearn_x_ann() -> PythonObject:
             m.def_function[x_ann_index_export_codes_binding]("x_ann_index_export_codes")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
-        return m.finalize()
+        var published_module = m.finalize()
+        comptime if IVF_PQ_RESIDENT_FIT:
+            # The archive export table: the archive writer saves a resident
+            # IVF-PQ index's codes through this entry natively.
+            publish_archive_x_ann()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_ann: ", e))
