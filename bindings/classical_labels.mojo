@@ -23,7 +23,7 @@ from bindings.native_array_storage import native_array_from_bytes, native_array_
 from bindings.native_loaded_module import native_loaded_module
 from std.math import isfinite
 from core.native_array_layout import NativeArrayLayout
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from core.native_label_codes import NativeLabelCodes
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -720,7 +720,7 @@ struct _PythonTextCodes(Copyable, Movable, _TextCodeStorage):
     @staticmethod
     def from_values(var values: List[Int32], context: PythonObject) raises -> Self:
         var result = Self(len(values), context)
-        memcpy(dest=_I32P(unsafe_from_address=result.address()), src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=_I32P(unsafe_from_address=result.address()), src=values.unsafe_ptr(), count=len(values))
         _ = values
         return result^
 
@@ -1740,7 +1740,7 @@ def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
     var count = w.rows * w.cols
     var out = admitted_vector(count, "<f4", context)
     # `array` owns the admitted storage; it need not itself export bytes.
-    memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
+    unsafe_memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
            src=_F32P(unsafe_from_address=w.address), count=count)
     _ = w  # retain the source export until the copy finishes
     return out

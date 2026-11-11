@@ -162,38 +162,38 @@ struct KMeansNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: KMeansFitRequest) raises -> KMeansFitResult:
         var words = List[Int64](length=6, fill=0)
-        var a: InlineArray[Int, 6] = [r.source, r.centers, r.labels, r.weights, r.distances, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 13] = [r.rows, r.features, r.clusters, r.weight_count, r.max_iter,
+        var a: Array[Int, 6] = [r.source, r.centers, r.labels, r.weights, r.distances, Int(words.unsafe_ptr())]
+        var p: Array[Int, 13] = [r.rows, r.features, r.clusters, r.weight_count, r.max_iter,
             r.seed, r.n_init, r.init, r.metric, Int(r.test_finite), r.fold.base, r.fold.rows, r.fold.indices]
-        var f: InlineArray[Float64, 2] = [r.tolerance, r.oversampling]
+        var f: Array[Float64, 2] = [r.tolerance, r.oversampling]
         _ = native_descriptor_call_fixed(self.entry, KMEANS_FIT, a, p, f)
         return KMeansFitResult(bitcast[DType.float64](words[0]), Int(words[1]),
             bitcast[DType.float64](words[2]), bitcast[DType.float64](words[3]), Int(words[4]), Int(words[5]))
 
     def query(self, r: KMeansQueryRequest) raises -> KMeansQueryResult:
         var words = List[Int64](length=2, fill=0)
-        var a: InlineArray[Int, 4] = [r.source, r.centers, r.dst, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 10] = [r.rows, r.features, r.clusters, r.metric, Int(r.test_finite),
+        var a: Array[Int, 4] = [r.source, r.centers, r.dst, Int(words.unsafe_ptr())]
+        var p: Array[Int, 10] = [r.rows, r.features, r.clusters, r.metric, Int(r.test_finite),
             Int(r.transform), r.handle, r.fold.base, r.fold.rows, r.fold.indices]
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, KMEANS_QUERY, a, p, f)
         return KMeansQueryResult(Int(words[0]), Int(words[1]))
 
     def prepare(self, centers: Int, clusters: Int, features: Int) raises -> Int:
-        var a: InlineArray[Int, 1] = [centers]
-        var p: InlineArray[Int, 2] = [clusters, features]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 1] = [centers]
+        var p: Array[Int, 2] = [clusters, features]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, KMEANS_PREPARE, a, p, f)
 
     def release(self, handle: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [handle]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, KMEANS_RELEASE, a, p, f)

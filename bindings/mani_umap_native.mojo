@@ -10,7 +10,7 @@
 # `umap_fit_transform_ex` / `umap_transform` with the argument lists they
 # always took and stores the fitted attributes the saved-model schema reads.
 # The same entries on the same operands: the bits do not move.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
@@ -96,7 +96,7 @@ def _umap_copy(shape: PythonObject, address: Int, count: Int, context: PythonObj
     """An owned float32 copy using already-captured shape/address/count."""
     var output = family_array(shape, "<f4", context)
     if count > 0:
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(output))),
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(output))),
                src=FAMILY_F32P(unsafe_from_address=address), count=count)
     return output
 

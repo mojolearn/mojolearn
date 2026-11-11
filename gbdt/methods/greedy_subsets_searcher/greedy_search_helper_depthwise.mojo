@@ -4,7 +4,7 @@
 
 from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from gbdt.apple_fast_tree_experiments import AFT_N01, AFT_N02
 
@@ -52,7 +52,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     WINNER_STATUS_DEFINED,
     leaf_winner_fold_kernel,
 )
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from checks.soft_f64 import (
     sf64_add,
     sf64_div,
@@ -677,7 +677,7 @@ def _upload_id_slots(
         return
     sort(slots)
     for slot in slots:
-        memcpy(
+        unsafe_memcpy(
             dest=h_arena.unsafe_offset(slot * max_leaves),
             src=host[slot],
             count=max_leaves,
@@ -4168,24 +4168,24 @@ def fit_non_symmetric_tree[
                 var h_nstats = ctx.enqueue_create_host_buffer[DType.float32](
                     max(n_nstats, 1)
                 )
-                memcpy(
+                unsafe_memcpy(
                     dest=h_slot_off.unsafe_ptr(),
                     src=lg_slot_off.unsafe_ptr(),
                     count=num_leaves + 1,
                 )
                 if n_slots > 0:
-                    memcpy(
+                    unsafe_memcpy(
                         dest=h_slots.unsafe_ptr(),
                         src=lg_slots.unsafe_ptr(),
                         count=n_slots,
                     )
-                memcpy(
+                unsafe_memcpy(
                     dest=h_kept.unsafe_ptr(),
                     src=lg_kept_node.unsafe_ptr(),
                     count=num_leaves,
                 )
                 if n_nstats > 0:
-                    memcpy(
+                    unsafe_memcpy(
                         dest=h_nstats.unsafe_ptr(),
                         src=lg_node_stats.unsafe_ptr(),
                         count=n_nstats,

@@ -26,7 +26,7 @@ memory (TILE words, 4 KB), the longer strides one global pass each. No
 arithmetic, only comparisons and moves of words, so there is no reduction
 order to keep: the result is the heapsort's, bit for bit, by construction.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext

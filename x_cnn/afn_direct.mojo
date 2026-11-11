@@ -25,7 +25,7 @@ block's no-pool forward skips its ReLU launch. The im2col words are still
 written to `cols` when the backward will read them (`save_cols`), from
 the same staged values.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -108,7 +108,7 @@ def afn_conv_tiled_kernel(
     var rl = tid % AT_TR
     var grp = tid // AT_TR
     var kk = tid % AT_KC
-    var acc = InlineArray[Float32, AT_PER](fill=Float32(0))
+    var acc = Array[Float32, AT_PER](fill=Float32(0))
     for k0 in range(0, ckk, AT_KC):
         # the weight tile: AT_TO x AT_KC words, four per thread
         comptime for j in range(AT_TO * AT_KC // AT_TPB):

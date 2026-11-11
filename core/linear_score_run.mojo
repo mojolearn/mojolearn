@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native R² program ownership and prediction directly into its arena."""
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from core.hostptr import f32_ptr
 from core.linear_boundary_run import linear_predict_run
@@ -64,7 +64,7 @@ def linear_r2_sums(entry: NativeDescriptorCall, layout: LinearR2Layout, address:
         raise Error("RuntimeError: score vendor differs from selected execution")
     if native_descriptor_call(entry, MP_MODE, [], [], []) != mode:
         raise Error("RuntimeError: score mode differs from process default")
-    memcpy(dest=f32_ptr(address) + layout.y, src=f32_ptr(target), count=rows)
+    unsafe_memcpy(dest=f32_ptr(address) + layout.y, src=f32_ptr(target), count=rows)
     var inputs: List[Int32] = [0, Int32(2 * rows + 1), -1]
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"
     return linear_r2_execute(entry, layout, address, inputs, ranges)
@@ -99,7 +99,7 @@ def linear_r2_run(metrics: NativeDescriptorCall, prediction: Int, rows: Int,
     var arena = List[Float32](length=layout.program.size, fill=0.0)
     var address = Int(arena.unsafe_ptr())
     try:
-        memcpy(dest=f32_ptr(address) + layout.p, src=f32_ptr(prediction), count=rows)
+        unsafe_memcpy(dest=f32_ptr(address) + layout.p, src=f32_ptr(prediction), count=rows)
         return linear_r2_finish(metrics, layout, address, rows, target, vendor, mode)
     finally:
         _ = layout

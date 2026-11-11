@@ -5,7 +5,7 @@
 # replay and result packing are owned here. MPS retains its supported host-copy
 # route; no integer is reinterpreted as a Metal buffer. Host inputs use their
 # admitted native Torch addresses directly, without NumPy conversion.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -159,7 +159,7 @@ def _torch_run_host(
             count *= Int(py=info[1][j])
         if count != result.outputs[k].shape.count():
             raise Error("ValueError: Torch program output shape differs from the captured graph")
-        memcpy(dest=FP(unsafe_from_address=Int(py=info[0])), src=result.outputs[k].data.unsafe_ptr(), count=count)
+        unsafe_memcpy(dest=FP(unsafe_from_address=Int(py=info[0])), src=result.outputs[k].data.unsafe_ptr(), count=count)
     _ = inputs  # retain every admitted host Tensor through replay
     _ = outputs
 

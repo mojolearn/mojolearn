@@ -22,7 +22,7 @@ is `identical_div`, so the four columns agree bit for bit. The old order (a
 sequential row-order chain) moved with this change on every column at once.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import isfinite
 from core.pinned_reduce import halving_block_sum
 from checks.numerics import identical_div, identical_mul

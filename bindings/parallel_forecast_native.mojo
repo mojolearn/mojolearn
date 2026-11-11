@@ -14,7 +14,7 @@ native `predict` (bindings/tsa_arima_native.mojo, tsa_hw_native.mojo), and
 each shard's block is placed at its own offset in range order. The same
 compiled entries on the same words, so no bit moves.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -102,7 +102,7 @@ def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObj
     """`source[lo:hi]` of a C-ordered (rows, width) float32 Array, a copy."""
     var out = tsa_array("f", "<f4", Python.tuple(hi - lo, width), (hi - lo) * width, 4, context)
     if (hi - lo) * width > 0:
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                # The source address is in bytes; advance the typed pointer in
                # Float32 elements so every shard starts at its own series.
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source))) + lo * width,
@@ -162,7 +162,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
         var value = parts[r]
         if not Bool(py=py_call(b.tuple, value.shape) == Python.tuple(hi - lo, width)) or not Bool(py=value.dtype == "<f4"):
             raise Error("ValueError: ARIMA worker returned an invalid prediction shape or dtype")
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))) + lo * width,
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))) + lo * width,
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
                count=(hi - lo) * width)
         _ = result  # keep the Python object alive through the native call above
@@ -263,7 +263,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     if batch == 1:
         return result
     var block = tsa_array("f", "<f4", Python.tuple(width, batch), width * batch, 4, context)
-    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(block))),
+    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(block))),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
            count=width * batch)
     _ = block  # keep the Python object alive through the native call above
@@ -412,7 +412,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
             _ = shard_comps  # keep the Python object alive through the native call above
         for i in range(4):  # small-loop(the four per-series statistics)
             var value = part[stat_names[i]]
-            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(stats)))
+            unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(stats)))
                    + i * batch + lo,
                    src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
                    count=w)
@@ -420,9 +420,9 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
             _ = value  # keep the Python object alive through the native call above
         var iters = part["n_iter_"]
         var criteria = part["criterion_"]
-        memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags))) + lo,
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags))) + lo,
                src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(iters))), count=w)
-        memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags)))
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags)))
                + batch + lo,
                src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(criteria))),
                count=w)

@@ -17,7 +17,7 @@ every target's dot product and intercept, written row-major (n x m).
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.xtdz_coalesced import column_mean_launch, xty_launch

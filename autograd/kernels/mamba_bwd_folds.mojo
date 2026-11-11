@@ -36,7 +36,7 @@ upstream changes in later steps.
 Generator-friendly: plain cell kernels, no shared memory, no atomics, no float
 crossing a thread except through the global partials a later launch reads.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 
 from checks.numerics import (

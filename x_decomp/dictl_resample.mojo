@@ -29,7 +29,7 @@ The words are the host column's (`x_decomp/dictl.mojo::resample_atom`):
 a resampled row also writes its sum of squares into part[0] and zeros
 part[1:nblk], so that update's norm kernel folds the resampled row.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace

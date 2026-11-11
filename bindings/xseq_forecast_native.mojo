@@ -11,7 +11,7 @@ attributes or the forecast dict. The stored-forecast reuse of theta and ETS
 (a repeated `predict` on the same fitted series returns the stored arrays)
 is kept as it was.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -149,7 +149,7 @@ def _cache_copy(value: PythonObject, context: PythonObject) raises -> PythonObje
     var captured = _stored_buffer(value, "forecast cache", 2, context)
     var result = xseq_zeros(Python.tuple(captured.shape[0], captured.shape[1]), context)
     if captured.count:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(result))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(result))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=captured.address), count=captured.count * 4)
     _ = captured
     return result

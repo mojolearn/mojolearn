@@ -297,8 +297,8 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 
 from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
 from cholesky.checks.chol_fast_tall import CHOL_FAST_TALL, CTL_NB, chol_fast_tall_panel
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.primitives.block import prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
@@ -1026,7 +1026,7 @@ def chol_syrk_sub_lower_amma_kernel(
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True
     var windows = (k + KB - 1) // KB
     var ra = _amma_gload[BM, KB, NT](xa, k, 1, m0, m, 0, min(KB, k), tid, False)
@@ -1056,8 +1056,8 @@ def chol_syrk_sub_lower_amma_kernel(
             exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
-                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
                     af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):
@@ -1202,7 +1202,7 @@ def chol_left_update_amma_kernel[BN: Int, GUARD: Bool = False](
             if i < n and j < j0 + w:
                 c[2 * q + e] = a[i * n + j]
     for p in range(Int(p_lo_in), np):
-        var acc = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+        var acc = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
         var exact_ok = True
         comptime for wi in range(NB // KB):
             var kk = p * NB + wi * KB

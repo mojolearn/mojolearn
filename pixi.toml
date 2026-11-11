@@ -24,13 +24,12 @@ version = "0.1.0a1"
 # yet, so nothing ever reported the failure. Read its jobs as UNVALIDATED
 # rather than as passing.
 #
-# Pins match what the sibling environment actually resolved to and what every
-# recorded result was therefore produced under, `mojo list` on 2026-08-19:
-# mojo 1.0.0, max 26.5.0. They are not aspirational.
+# One toolchain across development and release builds. Historical evidence keeps
+# its original compiler version; upgrading does not qualify earlier binaries.
 
 [dependencies]
-mojo = ">=1.0.0,<2"
-max = ">=26.5.0,<27"
+mojo = "==1.2.0"
+max = "==26.7.0"
 
 [tasks]
 # Native reverse-mode AD correctness and existing/autograd MLP regression.

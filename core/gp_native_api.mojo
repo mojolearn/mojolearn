@@ -434,22 +434,22 @@ struct GPDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def gpr_fit(self, r: GPRFitRequest) raises -> Int:
-        var a: InlineArray[Int, 9] = [r.source, r.targets, r.factor, r.dual, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
-        var p: InlineArray[Int, 5] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, Int(r.pointer_route)]
-        var f: InlineArray[Float64, 1] = [r.alpha]
+        var a: Array[Int, 9] = [r.source, r.targets, r.factor, r.dual, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
+        var p: Array[Int, 5] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, Int(r.pointer_route)]
+        var f: Array[Float64, 1] = [r.alpha]
         return native_descriptor_call_fixed(self.entry, GP_GPR_FIT, a, p, f)
 
     def gpr_query(self, r: GPRQueryRequest) raises -> GPQueryResult:
         var words = List[Int](length=2, fill=0)
-        var a: InlineArray[Int, 13] = [r.training, r.factor, r.dual, r.source, r.mean, r.variance, r.stddev, r.clamped, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 13] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.info, Int(r.want_std), Int(r.normalize), r.route, r.lease, r.fold_base, r.fold_rows, r.fold_index]
-        var f: InlineArray[Float64, 2] = [r.y_std, r.y_mean]
+        var a: Array[Int, 13] = [r.training, r.factor, r.dual, r.source, r.mean, r.variance, r.stddev, r.clamped, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, Int(words.unsafe_ptr())]
+        var p: Array[Int, 13] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.info, Int(r.want_std), Int(r.normalize), r.route, r.lease, r.fold_base, r.fold_rows, r.fold_index]
+        var f: Array[Float64, 2] = [r.y_std, r.y_mean]
         try:
             var value = native_descriptor_call_fixed(self.entry, GP_GPR_QUERY, a, p, f)
             return GPQueryResult(value, words[0], words[1])
@@ -457,52 +457,52 @@ struct GPDriver(Copyable, Movable):
             _ = words
 
     def gpr_covariance(self, r: GPRCovarianceRequest) raises -> Int:
-        var a: InlineArray[Int, 10] = [r.training, r.factor, r.dual, r.source, r.mean, r.covariance, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
-        var p: InlineArray[Int, 7] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.info, Int(r.normalize)]
-        var f: InlineArray[Float64, 2] = [r.y_std, r.y_mean]
+        var a: Array[Int, 10] = [r.training, r.factor, r.dual, r.source, r.mean, r.covariance, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
+        var p: Array[Int, 7] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.info, Int(r.normalize)]
+        var f: Array[Float64, 2] = [r.y_std, r.y_mean]
         return native_descriptor_call_fixed(self.entry, GP_GPR_COVARIANCE, a, p, f)
 
     def gpr_sample(self, r: GPRSampleRequest) raises -> Int:
-        var a: InlineArray[Int, 9] = [r.training, r.factor, r.dual, r.source, r.dst, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
-        var p: InlineArray[Int, 10] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.info, r.samples, r.seed_low, r.seed_high, Int(r.normalize)]
-        var f: InlineArray[Float64, 2] = [r.y_std, r.y_mean]
+        var a: Array[Int, 9] = [r.training, r.factor, r.dual, r.source, r.dst, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
+        var p: Array[Int, 10] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.info, r.samples, r.seed_low, r.seed_high, Int(r.normalize)]
+        var f: Array[Float64, 2] = [r.y_std, r.y_mean]
         return native_descriptor_call_fixed(self.entry, GP_GPR_SAMPLE, a, p, f)
 
     def gpr_gradient(self, r: GPRGradientRequest) raises -> Int:
-        var a: InlineArray[Int, 9] = [r.source, r.targets, r.free_flags, r.gradient, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
-        var p: InlineArray[Int, 4] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count]
-        var f: InlineArray[Float64, 1] = [r.alpha]
+        var a: Array[Int, 9] = [r.source, r.targets, r.free_flags, r.gradient, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
+        var p: Array[Int, 4] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count]
+        var f: Array[Float64, 1] = [r.alpha]
         return native_descriptor_call_fixed(self.entry, GP_GPR_GRADIENT, a, p, f)
 
     def gpr_optimize(self, r: GPROptimizeRequest) raises -> Int:
-        var a: InlineArray[Int, 11] = [r.source, r.targets, r.free_flags, r.bounds, r.theta, r.values, r.runs, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
-        var p: InlineArray[Int, 7] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, r.restarts, r.seed_low, r.seed_high]
-        var f: InlineArray[Float64, 1] = [r.alpha]
+        var a: Array[Int, 11] = [r.source, r.targets, r.free_flags, r.bounds, r.theta, r.values, r.runs, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
+        var p: Array[Int, 7] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, r.restarts, r.seed_low, r.seed_high]
+        var f: Array[Float64, 1] = [r.alpha]
         return native_descriptor_call_fixed(self.entry, GP_GPR_OPTIMIZE, a, p, f)
 
     def gpc_fit(self, r: GPCFitRequest) raises -> Int:
-        var a: InlineArray[Int, 11] = [r.source, r.targets, r.factor, r.pi, r.wsr, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, r.target_output]
-        var p: InlineArray[Int, 7] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, r.max_iterations, Int(r.coded_targets), r.column]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 11] = [r.source, r.targets, r.factor, r.pi, r.wsr, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, r.target_output]
+        var p: Array[Int, 7] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, r.max_iterations, Int(r.coded_targets), r.column]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, GP_GPC_FIT, a, p, f)
 
     def gpc_fit_all(self, r: GPCFitAllRequest) raises -> Int:
-        var a: InlineArray[Int, 12] = [r.source, r.codes, r.columns, r.targets, r.factors, r.pis, r.wsrs, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
-        var p: InlineArray[Int, 6] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, r.max_iterations, r.members]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 12] = [r.source, r.codes, r.columns, r.targets, r.factors, r.pis, r.wsrs, r.scalars, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales]
+        var p: Array[Int, 6] = [r.rows, r.features, r.kernel.nodes, r.kernel.scale_count, r.max_iterations, r.members]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, GP_GPC_FIT_ALL, a, p, f)
 
     def gpc_query(self, r: GPCQueryRequest) raises -> Int:
-        var a: InlineArray[Int, 14] = [r.training, r.targets, r.pi, r.wsr, r.factor, r.source, r.mean, r.variance, r.probability, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, r.dst]
-        var p: InlineArray[Int, 7] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, Int(r.want_probability), r.output_kind]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 14] = [r.training, r.targets, r.pi, r.wsr, r.factor, r.source, r.mean, r.variance, r.probability, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, r.dst]
+        var p: Array[Int, 7] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, Int(r.want_probability), r.output_kind]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, GP_GPC_QUERY, a, p, f)
 
     def gpc_query_all(self, r: GPCQueryAllRequest) raises -> GPQueryResult:
         var words = List[Int](length=2, fill=0)
-        var a: InlineArray[Int, 12] = [r.training, r.source, r.dst, r.targets, r.pis, r.wsrs, r.factors, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 11] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.output_kind, r.members, r.lease, r.fold_base, r.fold_rows, r.fold_index]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 12] = [r.training, r.source, r.dst, r.targets, r.pis, r.wsrs, r.factors, r.kernel.kinds, r.kernel.parameters, r.kernel.lengths, r.kernel.scales, Int(words.unsafe_ptr())]
+        var p: Array[Int, 11] = [r.training_rows, r.features, r.rows, r.kernel.nodes, r.kernel.scale_count, r.output_kind, r.members, r.lease, r.fold_base, r.fold_rows, r.fold_index]
+        var f: Array[Float64, 0] = []
         try:
             var value = native_descriptor_call_fixed(self.entry, GP_GPC_QUERY_ALL, a, p, f)
             return GPQueryResult(value, words[0], words[1])
@@ -510,22 +510,22 @@ struct GPDriver(Copyable, Movable):
             _ = words
 
     def gpc_combine(self, r: GPCCombineRequest) raises -> Int:
-        var a: InlineArray[Int, 3] = [r.columns, r.probabilities, r.codes]
-        var p: InlineArray[Int, 2] = [r.rows, r.members]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.columns, r.probabilities, r.codes]
+        var p: Array[Int, 2] = [r.rows, r.members]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, GP_GPC_COMBINE, a, p, f)
 
     def theta(self, r: GPThetaRequest) raises -> Int:
-        var a: InlineArray[Int, 2] = [r.source, r.dst]
-        var p: InlineArray[Int, 1] = [r.count]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.source, r.dst]
+        var p: Array[Int, 1] = [r.count]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, GP_THETA, a, p, f)
 
     def lease_open(self) raises -> Int:
         return self.metadata(GP_LEASE_OPEN)
 
     def lease_close(self, lease: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [lease]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [lease]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, GP_LEASE_CLOSE, a, p, f)

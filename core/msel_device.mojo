@@ -25,7 +25,7 @@ set by any thread that sees an out-of-range index.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -442,7 +442,7 @@ def _split_side_kernel(
         else:
             var side = 1 if i < Int(n_test) else 0
             table.unsafe_store(g, Int32(side))
-            _ = Atomic[DType.int32].fetch_add(sums + side, Int32(counts.unsafe_load(g)))
+            _ = Atomic[Int32].fetch_add(sums + side, Int32(counts.unsafe_load(g)))
         i += step
 
 
@@ -515,7 +515,7 @@ def _group_perm_fold_kernel(
             status.unsafe_store(0, Int32(1))
         else:
             dst.unsafe_store(g, Int32(f))
-            _ = Atomic[DType.int32].fetch_add(sizes + f, Int32(counts.unsafe_load(g)))
+            _ = Atomic[Int32].fetch_add(sizes + f, Int32(counts.unsafe_load(g)))
         j += step
 
 

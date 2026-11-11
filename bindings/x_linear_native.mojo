@@ -18,7 +18,7 @@
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
 from std.ffi import c_int, c_long
 from std.math import isinf
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -257,7 +257,7 @@ def _xl_slice(out_buf: PythonObject, offset: Int, count: Int, shape: PythonObjec
     Python list was nested): one byte copy of the float32 words."""
     var array = admitted_array(shape, "<f4", context)
     if count > 0:
-        memcpy(dest=_F32P(unsafe_from_address=labels_address(array)),
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=labels_address(array)),
                src=_F32P(unsafe_from_address=labels_address(out_buf)) + offset, count=count)
         _ = array  # keep the Python object alive through the native call above
     return array
@@ -270,10 +270,10 @@ def _xl_join(first: Int, first_count: Int, second: Int, second_count: Int, conte
     var o = _F32P(unsafe_from_address=labels_address(out))
     _ = out  # keep the Python object alive through the native call above
     if first_count > 0:
-        memcpy(dest=o, src=_F32P(unsafe_from_address=first), count=first_count)
+        unsafe_memcpy(dest=o, src=_F32P(unsafe_from_address=first), count=first_count)
         _ = out  # keep the Python object alive through the native call above
     if second_count > 0:
-        memcpy(dest=o + first_count, src=_F32P(unsafe_from_address=second), count=second_count)
+        unsafe_memcpy(dest=o + first_count, src=_F32P(unsafe_from_address=second), count=second_count)
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -361,10 +361,10 @@ def _xl_block(coef: PythonObject, intercept: PythonObject, context: PythonObject
     var bp = _F32P(unsafe_from_address=b.address)
     _ = b  # keep the Python object alive through the native call above
     for j in range(k):  # driver-loop: over the fitted classes' coefficient rows (model structure)
-        memcpy(dest=o + j * (d + 1), src=cp + j * d, count=d)
+        unsafe_memcpy(dest=o + j * (d + 1), src=cp + j * d, count=d)
         _ = out  # keep the Python object alive through the native call above
         _ = c  # keep the Python object alive through the native call above
-        memcpy(dest=o + j * (d + 1) + d, src=bp + j, count=1)
+        unsafe_memcpy(dest=o + j * (d + 1) + d, src=bp + j, count=1)
         _ = out  # keep the Python object alive through the native call above
         _ = b  # keep the Python object alive through the native call above
     _ = c^
@@ -1913,7 +1913,7 @@ def _xl_parts(addrs: List[Int], counts: List[Int], context: PythonObject) raises
     var at = 0
     for i in range(len(counts)):  # driver-loop: over the target vector's parts
         if counts[i] > 0:
-            memcpy(dest=o + at, src=_F32P(unsafe_from_address=addrs[i]), count=counts[i])
+            unsafe_memcpy(dest=o + at, src=_F32P(unsafe_from_address=addrs[i]), count=counts[i])
             _ = out  # keep the Python object alive through the native call above
         at += counts[i]
     return out

@@ -14,7 +14,7 @@ from bindings.cpython_table import cpython_table
 comptime _TPFLAGS_LIST_SUBCLASS = UInt64(1) << 25  # Py_TPFLAGS_LIST_SUBCLASS
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.memory import alloc, memcpy, memset_zero
+from std.memory import alloc, unsafe_memcpy, unsafe_memset_zero
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cnn.ops import NN14_BOUNDED_IM2COL
@@ -658,7 +658,7 @@ def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_add
         var y = adaptive_pool_impl(src, idx, prm, kind, idx_out)
         copy_f32(y.unsafe_ptr(), po, n_write)
         if kind == 2:
-            memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
+            unsafe_memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
             _ = len(idx_out)
     return PythonObject(n_write)
 
@@ -755,7 +755,7 @@ def x_cnn_host_sabotage_binding() raises -> PythonObject:
 def res_alloc_binding(n: PythonObject) raises -> PythonObject:
     var nn = Int(py=n)
     var p = alloc[Float32](nn if nn > 0 else 1)
-    memset_zero(p, nn if nn > 0 else 1)
+    unsafe_memset_zero(p, nn if nn > 0 else 1)
     return PythonObject(Int(p))
 
 
@@ -768,7 +768,7 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
     """n 4-byte words (float32 or int32) from a host array into the resident array."""
     var nn = Int(py=n)
     if nn > 0:
-        memcpy(dest=f32_ptr(Int(py=h)), src=f32_ptr(Int(py=src_addr)), count=nn)
+        unsafe_memcpy(dest=f32_ptr(Int(py=h)), src=f32_ptr(Int(py=src_addr)), count=nn)
     return PythonObject(nn)
 
 
@@ -779,7 +779,7 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     var nn = Int(py=n)
     if nn > 0:
-        memcpy(dest=f32_ptr(Int(py=dst_addr)), src=f32_ptr(Int(py=h)), count=nn)
+        unsafe_memcpy(dest=f32_ptr(Int(py=dst_addr)), src=f32_ptr(Int(py=h)), count=nn)
     return PythonObject(nn)
 
 

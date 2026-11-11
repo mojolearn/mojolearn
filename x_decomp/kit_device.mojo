@@ -28,7 +28,7 @@ Host floats a launch reads are held (`hold_f`, `hold_i`) until the next
 sync, so an enqueued upload never reads freed memory."""
 from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
 from experiments.classical_identical_ideas.linear_controls import C23_MCD, C28_BUCKET_SOLVES
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

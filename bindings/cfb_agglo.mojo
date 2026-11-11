@@ -3,7 +3,7 @@
 # binding selection, preparation and finished results. Solver linkage and the
 # general x_cluster route and shared resident references use typed native
 # descriptors. Public storage/image owners remain explicit boundary pins.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
@@ -198,7 +198,7 @@ def _fit_copy(snapshot: ArrayMetadata, context: PythonObject) raises -> PythonOb
     if snapshot.copied:
         return snapshot.keep
     var result = agglo_array(snapshot.shape, "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
            src=FAMILY_F32P(unsafe_from_address=snapshot.source.addr), count=snapshot.count)
     return result
 

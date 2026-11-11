@@ -145,7 +145,7 @@ and `_safe_solve`, `:26-44`:
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.time import perf_counter_ns
 from std.os import getenv

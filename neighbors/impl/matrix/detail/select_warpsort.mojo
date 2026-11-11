@@ -252,8 +252,8 @@ That is what makes `buf_len_` warp-uniform, which is what makes the
 `kDummy`. Change this bound and the kernel hangs.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.primitives.warp import lane_id, shuffle_xor
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.primitives.warp import lane_id, shuffle_xor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -279,7 +279,7 @@ def is_ordered[ascending: Bool](left: UInt32, right: UInt32) -> Bool:
     docstring.
     """
 
-    @parameter
+    @__parameter
     if ascending:
         return left < right
     else:
@@ -297,7 +297,7 @@ def dummy_key[ascending: Bool]() -> UInt32:
     (`util/cudart_utils.hpp:404-418`).
     """
 
-    @parameter
+    @__parameter
     if ascending:
         return UInt32(0xFFFFFFFF)
     else:
@@ -363,7 +363,7 @@ def bitonic_merge[
     halves of opposite order.
     """
 
-    @parameter
+    @__parameter
     if SIZE > 1:
         # Their in-register phase, `:185-201`. One level of compare-exchange
         # at stride `SIZE/2` over this block, then the two half-blocks. Inner
@@ -371,7 +371,7 @@ def bitonic_merge[
         # though the pairs are disjoint and cannot see each other.
         comptime STRIDE = SIZE // 2
 
-        @parameter
+        @__parameter
         for t in range(STRIDE):
             var key = keys[BASE + STRIDE - 1 - t]
             var other = keys[BASE + SIZE - 1 - t]
@@ -428,7 +428,7 @@ def bitonic_sort[
 ):
     """`bitonic<Size>::sort_impl`, `bitonic_sort.cuh:220-236`."""
 
-    @parameter
+    @__parameter
     if SIZE == 1:
         # `:225-229`. Note `lane & width` is the ASCENDING flag and is
         # per-lane, while `width` -- which is both the loop variable and the
@@ -514,7 +514,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         makes a single `bitonic.merge` enough to restore the queue.
         """
 
-        @parameter
+        @__parameter
         for j in range(Self.arr_len):
             var key = self.val_arr[j]
             var other = self.val_buf[j]
@@ -533,7 +533,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         # force the buffers spill into the local memory. Theirs, `:620-621`,
         # and it is doubly true here: a runtime `SIMD` element index is not
         # a register access at all.
-        @parameter
+        @__parameter
         for i in range(Self.arr_len):
             if i == self.buf_len:
                 self.val_buf[i] = val
@@ -546,7 +546,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
             )
             self.merge_in()
 
-            @parameter
+            @__parameter
             for i in range(Self.arr_len):
                 self.val_buf[i] = dummy_key[Self.ascending]()
             self.buf_len = 0
@@ -597,7 +597,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
                 Self.warp_width - 1
             )
 
-            @parameter
+            @__parameter
             for t in range(Self.arr_len):
                 if idx < self.k:
                     var value = in_val.unsafe_load(idx)
@@ -643,7 +643,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         """
         var idx = Int(lane_id()) & (Self.warp_width - 1)
 
-        @parameter
+        @__parameter
         for i in range(Self.arr_len):
             if idx < self.k:
                 out_val.unsafe_store(idx, self.val_arr[i])
@@ -662,7 +662,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         """
         var idx = Int(lane_id()) & (Self.warp_width - 1)
 
-        @parameter
+        @__parameter
         for i in range(Self.arr_len):
             if idx < self.k:
                 out_val.unsafe_store(idx, twiddle_out(self.val_arr[i]))

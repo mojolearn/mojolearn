@@ -10,7 +10,7 @@ training program with addresses into these buffers; nothing here imports
 Python.
 """
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.shared_slot import SharedSlot
 
 comptime MLP_TOTAL = 195
@@ -157,24 +157,24 @@ def mlp_store_release(handle: Int) raises -> Bool:
 def mlp_copy_tensor_out(state: MlpState, index: Int, dst_addr: Int):
     """Parameter tensor `index` into a row-major float32 buffer."""
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    memcpy(dest=dst, src=state.params.unsafe_ptr() + mlp_offset(index), count=mlp_size(index))
+    unsafe_memcpy(dest=dst, src=state.params.unsafe_ptr() + mlp_offset(index), count=mlp_size(index))
 
 
 def mlp_copy_tensor_in(mut state: MlpState, index: Int, src_addr: Int):
     var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
-    memcpy(dest=state.params.unsafe_ptr() + mlp_offset(index), src=src, count=mlp_size(index))
+    unsafe_memcpy(dest=state.params.unsafe_ptr() + mlp_offset(index), src=src, count=mlp_size(index))
 
 
 def mlp_copy_f32(src_addr: Int, dst_addr: Int, n: Int):
     var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def mlp_copy_i32(src_addr: Int, dst_addr: Int, n: Int):
     var src = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def mlp_require_finite(addr: Int, n: Int, label: String) raises:

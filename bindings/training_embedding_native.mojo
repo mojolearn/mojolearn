@@ -11,7 +11,7 @@ from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView
 from training.optimizer_input_plan import optimizer_contiguous_address
 from providers.python.array_layout_boundary import native_shape_pack
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.optimizer_device_native import shape_count
 from bindings.training_rms_native import rms_host_view
 from bindings.training_scalar_native import training_scalar_number
@@ -203,7 +203,7 @@ def embedding_int_list(value: PythonObject) raises -> PythonObject:
                 return PythonObject(None)
     var count = len(codes)
     var out = new_array([count], "<i4")
-    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
            src=codes.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), count=count)
     # The untracked-origin source pointer does not extend `codes`' lifetime:
     # without this keep-alive the list's buffer can be freed (ASAP

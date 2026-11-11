@@ -29,9 +29,9 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
-from std.memory import bitcast, memcmp
+from std.memory import bitcast, unsafe_memcmp
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module

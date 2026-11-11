@@ -27,7 +27,7 @@ cross-entropy op's convention); a code that names no vocabulary entry (the
 trainer's -100 targets) contributes `log(denominator)`, as the trainer's
 chunked head always did.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
 from checks.numerics import ftz, identical_div, identical_mul

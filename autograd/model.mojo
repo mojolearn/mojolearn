@@ -10,7 +10,7 @@ the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
 and AMD. Host loops run over layers, batches and epochs only.
 """
 from std.sys.compile import is_defined
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
@@ -1237,7 +1237,7 @@ def model_fit_state[E: Exec](
     ex.download(Mio, s1, np_)
     ex.download(Vio, s2, np_)
     if resume and start > 0:
-        memcpy(dest=curve, src=curve_prev, count=start)
+        unsafe_memcpy(dest=curve, src=curve_prev, count=start)
     ex.download(curve + start, dcurve, n_iter)
     St[FS_VALID] = 1
     St[FS_EPOCH] = Int64(start + n_iter)

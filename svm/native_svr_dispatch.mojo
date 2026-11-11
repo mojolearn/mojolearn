@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed SVR transport to unchanged numerical owners; same packed scalar schema.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr as _f32_ptr, f64_ptr as _f64_ptr, i32_ptr as _i32_ptr, read_f32, copy_f32
 from svm.estimator import SvrFitOutputs, svr_fit_host_borrowed, svr_predict_host
 from core.device_query_x import QueryFold
@@ -55,7 +55,7 @@ def native_svr_fit(a: List[Int], params: List[Int], floats: List[Float64]) raise
     if res.finite_word != 0:
         raise Error("Input X contains NaN or infinity (SVR).")
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
+    unsafe_memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))

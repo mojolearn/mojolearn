@@ -24,7 +24,7 @@
 # Python handlers.
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
@@ -151,7 +151,7 @@ def _kde_copy(value: PythonObject, context: PythonObject) raises -> PythonObject
     for axis in range(len(value.shape)):  # driver-loop: admitted array rank
         shape.append(Int(py=value.shape[axis]))
     var result = kde_array(shape, context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
     _ = result  # keep the Python object alive through the native call above
     _ = value  # keep the Python object alive through the native call above

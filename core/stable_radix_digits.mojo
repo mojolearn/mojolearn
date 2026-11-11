@@ -6,7 +6,7 @@ stable (UInt32 key, original position) order. Digit width and tile size
 control shared memory footprint, independently of dataset/board dimensions.
 Native compile and device qualification pending.
 """
-from std.gpu import block_idx,thread_idx
+from max.gpu import block_idx,thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer,DeviceContext
 from max.gpu.memory import AddressSpace

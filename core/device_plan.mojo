@@ -276,7 +276,7 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
     _words(table[].counts)[slot] = Int64(count)
     _words(table[].masks)[slot] = Int64(families)
     _words(table[].depths)[slot] = Int64(1)
-    _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(1))
+    _ = Atomic[Int64].fetch_add(_words(table[].active), Int64(1))
     _log_plan(devices)
 
 
@@ -293,7 +293,7 @@ def device_plan_exit() raises:
     _words(table[].depths)[slot] = Int64(0)
     _words(table[].counts)[slot] = Int64(0)
     _words(table[].masks)[slot] = Int64(0)
-    _ = Atomic[DType.int64].fetch_add(_words(table[].active), Int64(-1))
+    _ = Atomic[Int64].fetch_add(_words(table[].active), Int64(-1))
     Atomic.store[ordering=Ordering.RELEASE](_words(table[].owners) + slot, Int64(0))
 
 

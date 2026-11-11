@@ -64,8 +64,8 @@ land in -- the same on Apple, NVIDIA and AMD. There are no lane intrinsics in
 this file.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (

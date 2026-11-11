@@ -1010,7 +1010,7 @@ def _bn_blk_total(c: Int, part: FP, NB: Int) -> Float32:
         # NB is bounded by the Int32 parameter domain. A 32-level register
         # stack carries odd tails without zero padding; no scratch mutation
         # occurs, so concurrent channels cannot affect one another.
-        var stack = InlineArray[Float32, 32](fill=Float32(0))
+        var stack = Array[Float32, 32](fill=Float32(0))
         var occ = 0
         for b in range(NB):
             var value = ftz(part.unsafe_load(c * NB + b))
@@ -1167,8 +1167,8 @@ def bn_gs_lane[MODE: Int](t: Int, lane: Int, x: FP, g: FP, aux: FP, p: IP) -> Tu
 def _bn_gs_chunk_host[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float32, Float32]:
     """The host twin of the device chunk block: the same lane sums and the
     same halving tree, in registers."""
-    var v0 = InlineArray[Float32, BN_GS_LANES](fill=Float32(0))
-    var v1 = InlineArray[Float32, BN_GS_LANES](fill=Float32(0))
+    var v0 = Array[Float32, BN_GS_LANES](fill=Float32(0))
+    var v1 = Array[Float32, BN_GS_LANES](fill=Float32(0))
     for l in range(BN_GS_LANES):
         var r = bn_gs_lane[MODE](t, l, x, g, aux, p)
         v0[l] = r[0]

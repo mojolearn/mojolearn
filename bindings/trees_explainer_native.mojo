@@ -2,7 +2,7 @@
 # Whole TreeExplainer operations. Existing xtrees SHAP/spread kernels own all
 # numerical work; this owner admits inputs, captures their metadata/storage,
 # prepares the flat forest and owns cache release without Python finalizers.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_attr import py_attr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -117,7 +117,7 @@ def _snapshot(source: PythonObject, dtype: String, rank: Int, name: String,
         raw = admitted_array(shape, admitted_dtype(view, context), context)
         var dst = _U8(unsafe_from_address=trees_address(raw))
         if Int(py=view.size) > 0:
-            memcpy(dest=dst, src=_U8(unsafe_from_address=Int(py=classical_address(view))),
+            unsafe_memcpy(dest=dst, src=_U8(unsafe_from_address=Int(py=classical_address(view))),
                    count=Int(py=view.size) * Int(py=view.itemsize))
         py_setitem(snapshots, identity, Python.tuple(source, raw, owners))
         _ = owners
@@ -188,7 +188,7 @@ def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, des
         if admitted_dtype(view, context) == dtype and Int(py=view.itemsize) == 4 and classical_c_order(view, context):
             if Int(py=view.shape[0]) != size:
                 raise Error("ValueError: DART node buffers differ from tree offsets")
-            memcpy(dest=dst, src=_U8(unsafe_from_address=Int(py=classical_address(view))), count=size * 4)
+            unsafe_memcpy(dest=dst, src=_U8(unsafe_from_address=Int(py=classical_address(view))), count=size * 4)
             _ = view
             _ = owners
             _ = dest
@@ -198,7 +198,7 @@ def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, des
     var part = _snapshot(source, dtype, 1, name, context, snapshots)
     if Int(py=part.shape[0]) != size:
         raise Error("ValueError: DART node buffers differ from tree offsets")
-    memcpy(dest=dst, src=_U8(unsafe_from_address=trees_address(part)), count=size * 4)
+    unsafe_memcpy(dest=dst, src=_U8(unsafe_from_address=trees_address(part)), count=size * 4)
     _ = part
     _ = dest
 

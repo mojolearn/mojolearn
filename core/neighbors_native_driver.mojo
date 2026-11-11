@@ -10,6 +10,6 @@ struct XnDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def run[NA: Int, NP: Int, NF: Int](self, name: String,
-        a: InlineArray[Int, NA], p: InlineArray[Int, NP], f: InlineArray[Float64, NF],
+        a: Array[Int, NA], p: Array[Int, NP], f: Array[Float64, NF],
     ) raises -> Int:
         return native_descriptor_call_fixed(self.entry, xn_operation_id(name), a, p, f)

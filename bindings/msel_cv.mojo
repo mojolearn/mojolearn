@@ -10,7 +10,7 @@
 # its fit / score / predict and a scorer are the caller's objects, called
 # as the Python called them. Same helpers, same arguments, same order: the
 # folds, the gathered rows and every score are unchanged.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
@@ -1023,9 +1023,9 @@ def _rows_outside(arr: PythonObject, a: Int, b: Int, context: PythonObject) rais
     var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=arr._addr))
     var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
     _ = out  # keep the Python object alive through the native call above
-    memcpy(dest=dst, src=src, count=a * per * item)
+    unsafe_memcpy(dest=dst, src=src, count=a * per * item)
     _ = out  # keep the Python object alive through the native call above
-    memcpy(dest=dst + a * per * item, src=src + b * per * item, count=(n - b) * per * item)
+    unsafe_memcpy(dest=dst + a * per * item, src=src + b * per * item, count=(n - b) * per * item)
     _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -1299,7 +1299,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
         var t = folds[f][1]
         var size = Int(py=t.size)
         if size > 0:
-            memcpy(dest=msel_p64(held) + at, src=msel_p64(t), count=size)
+            unsafe_memcpy(dest=msel_p64(held) + at, src=msel_p64(t), count=size)
             _ = t  # keep the Python object alive through the native call above
             _ = held  # keep the Python object alive through the native call above
         at += size

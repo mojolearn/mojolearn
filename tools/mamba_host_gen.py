@@ -101,7 +101,7 @@ IMPORT_MAP = {
     "gemm.checks.gemm_identical": SHIM,
     "gemm.neural_dispatch": SHIM,
     "mamba.impl.ops.neural_gradient_profile": "mamba.impl.ops.neural_gradient_profile",
-    "std.gpu": None,
+    "max.gpu": None,
     "max.gpu.memory": None,
     "max.gpu.sync": None,
 }

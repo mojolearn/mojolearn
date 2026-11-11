@@ -46,10 +46,10 @@ from experiments.classical_identical_ideas.graph_controls import C44_SAMPLING_DE
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -281,8 +281,8 @@ def umap_identical_epoch_kernel_rt(
     var key = SIMD[DType.uint32, 2](
         UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
     )
-    var x = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
-    var acc = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var x = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var acc = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
     for c in range(C):
         x[c] = source.unsafe_load(v * C + c)
     var begin = Int(row_offsets.unsafe_load(v))
@@ -293,7 +293,7 @@ def umap_identical_epoch_kernel_rt(
         if Int(next_f * s) <= Int(epoch_f * s):
             continue
         var u = Int(tails.unsafe_load(e))
-        var delta = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+        var delta = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
         var d2 = Float32(0.0)
         for c in range(C):
             delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
@@ -337,7 +337,7 @@ def umap_identical_epoch_kernel_rt(
             var other = Int(draw[lane] % n_u)
             if other == v:
                 continue
-            var nd = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+            var nd = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
             var n2 = Float32(0.0)
             for c in range(C):
                 nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))
@@ -433,8 +433,8 @@ def _c44_epoch_kernel(
     var key = SIMD[DType.uint32, 2](
         UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
     )
-    var x = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
-    var acc = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var x = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var acc = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
     for c in range(C):
         x[c] = source.unsafe_load(v * C + c)
     var begin = Int(row_offsets.unsafe_load(v))
@@ -444,7 +444,7 @@ def _c44_epoch_kernel(
         if samples[e*(rate+1)] == UInt32(0):
             continue
         var u = Int(tails.unsafe_load(e))
-        var delta = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+        var delta = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
         var d2 = Float32(0.0)
         for c in range(C):
             delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
@@ -476,7 +476,7 @@ def _c44_epoch_kernel(
             var other = Int(samples[e*(rate+1)+j+1])
             if other == v:
                 continue
-            var nd = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+            var nd = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
             var n2 = Float32(0.0)
             for c in range(C):
                 nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))
@@ -683,7 +683,7 @@ def _umap_epochs_download(
         ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
     var out = List[Float32](length=n_values, fill=Float32(0.0))
-    memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
     _ = host_out^
     _ = samples^
     return out^
@@ -965,7 +965,7 @@ def _uc_upload_initial(ctx: DeviceContext, initial: List[Float32]) raises -> Dev
     var n_init = len(initial)
     var h = ctx.enqueue_create_host_buffer[DType.float32](n_init)
     ctx.synchronize()
-    memcpy(dest=h.unsafe_ptr(), src=initial.unsafe_ptr(), count=n_init)
+    unsafe_memcpy(dest=h.unsafe_ptr(), src=initial.unsafe_ptr(), count=n_init)
     var first = ctx.enqueue_create_buffer[DType.float32](n_init)
     ctx.enqueue_copy(dst_buf=first, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
@@ -1003,10 +1003,10 @@ def umap_sparse_graph_to_device(
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cap)
     var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
     ctx.synchronize()
-    memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    unsafe_memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
     if nnz > 0:
-        memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
-        memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
     var g_off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
     var g_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var g_idx = ctx.enqueue_create_buffer[DType.uint32](cap)
@@ -1128,7 +1128,7 @@ def umap_dense_graph_to_device(
     var first = _uc_upload_initial(ctx, initial)
     var h_w = ctx.enqueue_create_host_buffer[DType.float32](nn)
     ctx.synchronize()
-    memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
+    unsafe_memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
     var g_w = ctx.enqueue_create_buffer[DType.float32](nn)
     var counts = ctx.enqueue_create_buffer[DType.int32](n)
     var codes = ctx.enqueue_create_buffer[DType.int32](n)
@@ -1286,10 +1286,10 @@ def umap_positive_coo_device(
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cap)
     var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
     ctx.synchronize()
-    memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    unsafe_memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
     if nnz > 0:
-        memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
-        memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
     var g_off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
     var g_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var g_idx = ctx.enqueue_create_buffer[DType.uint32](cap)
@@ -1387,7 +1387,7 @@ def umap_dense_positive_coo_device(
     var nn = n * n
     var h_w = ctx.enqueue_create_host_buffer[DType.float32](nn)
     ctx.synchronize()
-    memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
+    unsafe_memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
     var g_w = ctx.enqueue_create_buffer[DType.float32](nn)
     var counts = ctx.enqueue_create_buffer[DType.int32](n)
     var codes = ctx.enqueue_create_buffer[DType.int32](n)

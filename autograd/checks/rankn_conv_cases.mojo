@@ -66,7 +66,7 @@ def _f32(v: List[Float64]) -> List[Float32]:
 
 
 def _sh(dims: List[Int]) -> ShapeN:
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     for k in range(len(dims)):  # small-loop(len(dims): tensor rank, at most 4 here)
         d[k] = dims[k]
     return ShapeN(len(dims), d)

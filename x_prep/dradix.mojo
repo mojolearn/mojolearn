@@ -28,7 +28,7 @@ Measured on the M4 (request 1790626651574): the bitonic sort of 16 columns
 of 1M rows is 0.44 to 0.48 s (41 passes over the block), the largest FAST
 phase of every estimator that sorts.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

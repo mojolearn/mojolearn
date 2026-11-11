@@ -59,7 +59,7 @@ from x_neighbors.device_ops import BLOCK, _grid, skew_transform_kernel, skew_wei
 from x_neighbors.items import FP, U_LOG
 from x_neighbors.items import IP
 from x_neighbors.kfeat_rng import kfeat_pcs_draw_item, kfeat_schi2_draw_item
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.shared_slot import SharedSlot
 
 

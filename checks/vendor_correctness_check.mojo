@@ -45,21 +45,21 @@ from nn.argsort import argsort
 from linalg.matmul import matmul
 from linalg.gemv import gemv_gpu
 from nn.topk import top_k
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.sync import barrier
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.primitives.block import max as block_max
 from max.gpu.primitives.block import min as block_min
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
-from std.gpu.primitives.warp import (
+from max.gpu.primitives.warp import (
     lane_group_min,
     shuffle_idx,
     shuffle_xor,
     vote,
 )
-from std.gpu.primitives.warp import prefix_sum as warp_prefix_sum
-from std.gpu.primitives.warp import sum as warp_sum
-from std.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import prefix_sum as warp_prefix_sum
+from max.gpu.primitives.warp import sum as warp_sum
+from max.gpu.primitives.id import lane_id
 from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from std.utils import IndexList
 from nn.toppminp_gpu import DoubleBuffer, run_radix_sort_pairs_gpu

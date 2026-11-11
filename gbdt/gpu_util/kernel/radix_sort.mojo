@@ -77,9 +77,9 @@ differs in THEIR code: `SortWithoutCub` scans a flag array while
 the same `cub::DeviceScan::ExclusiveSum` over a different input iterator.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.primitives.block import prefix_sum
 
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
@@ -418,7 +418,7 @@ struct DeviceFloatSorter(Movable):
             # the device already untwiddled the keys: one bulk host copy
             var hp = self.host.unsafe_ptr()
             var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
-            memcpy(dest=vbits, src=hp, count=n)
+            unsafe_memcpy(dest=vbits, src=hp, count=n)
         return values^
 
     def sort(

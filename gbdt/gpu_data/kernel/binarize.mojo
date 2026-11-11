@@ -36,7 +36,7 @@ CatBoost's atomics are portable to us and it would be easy to assume
 otherwise.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -165,12 +165,12 @@ def binarize_float_feature_kernel(
         shared_borders[tid] = borders.unsafe_load(tid + 1)
     barrier()
 
-    var index = InlineArray[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
-    var feature_values = InlineArray[Float32, BINARIZE_DOCS_PER_THREAD](
+    var index = Array[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
+    var feature_values = Array[Float32, BINARIZE_DOCS_PER_THREAD](
         fill=Float32(0.0)
     )
 
-    @parameter
+    @__parameter
     for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
@@ -179,13 +179,13 @@ def binarize_float_feature_kernel(
     for border in range(borders_count):
         var border_value = shared_borders[border]
 
-        @parameter
+        @__parameter
         for j in range(BINARIZE_DOCS_PER_THREAD):
             # bit-pattern compare, not the float `>`: see `exact_f32_gt`
             if exact_f32_gt(feature_values[j], border_value):
                 index[j] += 1
 
-    @parameter
+    @__parameter
     for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
@@ -288,7 +288,7 @@ def pack_cindex_words_kernel(
             j += PACK_BLOCK
     barrier()
     var i = Int(block_idx.x) * PACK_BLOCK * PACK_DOCS + tid
-    var word = InlineArray[UInt32, PACK_DOCS](fill=0)
+    var word = Array[UInt32, PACK_DOCS](fill=0)
     for e in range(ne):
         var cnt = Int(sh_meta[e])
         var off = Int(sh_meta[PACK_MAX_ENTRIES + e])
@@ -296,10 +296,10 @@ def pack_cindex_words_kernel(
         var shift = sh_meta[3 * PACK_MAX_ENTRIES + e]
         var mask = sh_meta[4 * PACK_MAX_ENTRIES + e]
         var sub = sh_sub[e]
-        var vals = InlineArray[Float32, PACK_DOCS](fill=Float32(0.0))
-        var bins = InlineArray[UInt32, PACK_DOCS](fill=0)
+        var vals = Array[Float32, PACK_DOCS](fill=Float32(0.0))
+        var bins = Array[UInt32, PACK_DOCS](fill=0)
 
-        @parameter
+        @__parameter
         for j in range(PACK_DOCS):
             var idx = i + j * PACK_BLOCK
             if idx < n:
@@ -310,18 +310,18 @@ def pack_cindex_words_kernel(
         for b in range(cnt):
             var bv = sh_vals[off + b]
 
-            @parameter
+            @__parameter
             for j in range(PACK_DOCS):
                 # bit-pattern compare, as `binarize_float_feature_kernel`
                 # (`exact_f32_gt`: Metal flushes subnormal compare operands)
                 if exact_f32_gt(vals[j], bv):
                     bins[j] += 1
 
-        @parameter
+        @__parameter
         for j in range(PACK_DOCS):
             word[j] |= (bins[j] & mask) << shift
 
-    @parameter
+    @__parameter
     for j in range(PACK_DOCS):
         var idx = i + j * PACK_BLOCK
         if idx < n:
@@ -360,7 +360,7 @@ def transpose_rows_to_columns_kernel(
     while rt < n_row_tiles:
         var r0 = rt * TR_TILE
 
-        @parameter
+        @__parameter
         for k in range(TR_TILE // TR_ROWS_PER_PASS):
             var lr = ty + k * TR_ROWS_PER_PASS
             var r = r0 + lr
@@ -369,7 +369,7 @@ def transpose_rows_to_columns_kernel(
                 tile[lr * (TR_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
         barrier()
 
-        @parameter
+        @__parameter
         for k in range(TR_TILE // TR_ROWS_PER_PASS):
             var lc = ty + k * TR_ROWS_PER_PASS
             var c = c0 + lc

@@ -41,7 +41,7 @@
 #   -D MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.
 # None of the three keys on a shape beyond the stated cost and alignment
 # rules; every rule covers neighbouring shapes alike.
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext

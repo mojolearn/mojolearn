@@ -9,7 +9,7 @@ from bindings.cpython_table import cpython_table
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.native_array_view import native_array_ndarray_view
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from sequence.ops import FP
 from autograd.rankn import ShapeN
 from autograd.program_io import HostArray
@@ -200,7 +200,7 @@ def host_array_py(h: HostArray) raises -> PythonObject:
     var storage = made[0]
     var address = made[1]
     if count > 0:
-        memcpy(dest=FP(unsafe_from_address=address), src=h.data.unsafe_ptr(), count=count)
+        unsafe_memcpy(dest=FP(unsafe_from_address=address), src=h.data.unsafe_ptr(), count=count)
     # The C ndarray constructor retains storage as .base (the bytes written above).
     # int32 words (lane x1: token ids and integer state) are the same bytes.
     return py_call(state[].ndarray, dims, dtype=PythonObject("int32" if h.int_words else "float32"), buffer=storage)

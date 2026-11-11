@@ -192,7 +192,7 @@ def knn_rows_host(x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P):
             var rows = min(R, n - i0)
             var jb = 0
             while jb < n_pad:
-                var acc = InlineArray[SIMD[DType.float32, W], R](fill=SIMD[DType.float32, W](0.0))
+                var acc = Array[SIMD[DType.float32, W], R](fill=SIMD[DType.float32, W](0.0))
                 for c in range(d):
                     var b = tp.load[width=W](c * n_pad + jb)
                     comptime for r in range(R):

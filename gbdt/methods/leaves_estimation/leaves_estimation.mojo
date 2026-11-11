@@ -63,7 +63,7 @@ shift on the host after the walker; the host oracle
 (`gbdt/host/gbdt_oracle_losses.mojo`) restates it.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -437,8 +437,8 @@ def multiclass_one_step_kernel(
         if sf64_lt(weight, min_leaf_weight_bits):
             keep = False
 
-    var sol = InlineArray[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
-    var sigma = InlineArray[
+    var sol = Array[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
+    var sigma = Array[
         UInt64, MC_ONE_STEP_MAX_CLASSES * MC_ONE_STEP_MAX_CLASSES
     ](fill=UInt64(0))
 

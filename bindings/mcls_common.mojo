@@ -18,7 +18,7 @@
 #   outputs, run by the shared runner (bindings/arena_prog_native.mojo
 #   `_metrics_run`, the one native call `_run` made); the result words read
 #   back from the arena as `prog.ints` / `prog.words` read them.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
@@ -797,7 +797,7 @@ def mc_arena_f64_array(arena: MetricArenaOwner, off: Int, count: Int, shape: Pyt
     """`Array._owned(prog.words(off, 2 * count, "d"), shape, "<f8")`."""
     var out = family_array(shape, "<f8", context)
     if count > 0:
-        memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
                src=FAMILY_F64P(unsafe_from_address=arena.base + 4 * off), count=count)
         _ = out  # keep both owners alive through the native copy above
         _ = arena.store
@@ -809,7 +809,7 @@ def mc_arena_i64_array(arena: MetricArenaOwner, off: Int, count: Int, shape: Pyt
     """`Array._owned(prog.words(off, 2 * count, "q"), shape, "<i8")`."""
     var out = family_array(shape, "<i8", context)
     if count > 0:
-        memcpy(dest=FAMILY_I64P(unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=FAMILY_I64P(unsafe_from_address=Int(py=classical_address(out))),
                src=FAMILY_I64P(unsafe_from_address=arena.base + 4 * off), count=count)
         _ = out  # keep both owners alive through the native copy above
         _ = arena.store

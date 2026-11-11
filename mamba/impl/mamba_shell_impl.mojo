@@ -8,7 +8,7 @@ touches Python: every entry takes buffer addresses, Ints and typed sessions.
 """
 
 from core.hostptr import f32_ptr, read_f32, copy_f32
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined, get_defined_int
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
@@ -126,7 +126,7 @@ def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
 def _m3_write_f32(addr: Int, values: List[Float32]) raises:
     var p = _f32_ptr(addr)
     if len(values) > 0:
-        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def _m3_upload_addr[wait: Bool = True](ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
@@ -151,7 +151,7 @@ def _m3_upload_addr[wait: Bool = True](ctx: DeviceContext, addr: Int, n: Int) ra
         var host = ctx.enqueue_create_host_buffer[DType.float32](count)
         ctx.synchronize()
         if n > 0:
-            memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+            unsafe_memcpy(dest=host.unsafe_ptr(), src=src, count=n)
         else:
             host.unsafe_ptr().unsafe_store(0, Float32(0.0))
         mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
@@ -186,7 +186,7 @@ def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuff
             ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
         ctx.synchronize()
         if n > 0:
-            memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
         _ = host^
 
 
@@ -729,7 +729,7 @@ def _m3_weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]
     for s in range(9):
         var n = lens[s]
         if n > 0:
-            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
+            unsafe_memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
         off += n
     return out^
 

@@ -1572,7 +1572,7 @@ def attn_value_sum_lanes(
     # passes of four vectors; each lane's chain is the same statements in
     # the same order.
     if hd == 64:
-        var accs = InlineArray[GhrF, ATTN_VALUE_64](fill=GhrF(0.0))
+        var accs = Array[GhrF, ATTN_VALUE_64](fill=GhrF(0.0))
         for j in range(s):
             var wv = GhrF(ftz(wp.unsafe_load(wbase + j)))
             var row = vbase + j * hd

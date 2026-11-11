@@ -96,13 +96,13 @@ struct KPCANativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def eigen(self, r: KPCAEigenRequest) raises -> Int:
-        var a: InlineArray[Int, 6] = [r.centered, r.source, r.values, r.vectors, r.columns, r.total]
-        var p: InlineArray[Int, 6] = [Int(r.resident), r.rows, r.features, r.requested, Int(r.lanczos), Int(r.remove_zero)]
-        var f: InlineArray[Float64, 1] = [r.gamma]
+        var a: Array[Int, 6] = [r.centered, r.source, r.values, r.vectors, r.columns, r.total]
+        var p: Array[Int, 6] = [Int(r.resident), r.rows, r.features, r.requested, Int(r.lanczos), Int(r.remove_zero)]
+        var f: Array[Float64, 1] = [r.gamma]
         return native_descriptor_call_fixed(self.entry, KPCA_EIGEN, a, p, f)

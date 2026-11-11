@@ -81,7 +81,7 @@ the one implemented (NOT_IMPLEMENTED.tsv). Its contents are a pure function of t
 series, never of the block.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from holtwinters.impl.internal.hw_utils import (

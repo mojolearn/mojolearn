@@ -23,7 +23,7 @@ host loop's order), and gathers of X (column-major), labels and weights at
 those ids. One Int (the kept count) is read back. Exact: no arithmetic on
 any value, only copies.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.device_scan import SCAN_TPB

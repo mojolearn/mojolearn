@@ -7,7 +7,7 @@ boundary in `bindings/_mojolearn_mamba_host.mojo` calls. Nothing here
 touches Python: every entry takes buffer addresses, Ints and typed sessions.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.os import abort
 
@@ -56,7 +56,7 @@ def _write(addr: Int, values: List[Float32], n: Int) raises:
             + String(n)
         )
     if n > 0:
-        memcpy(dest=f32_ptr(addr), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=f32_ptr(addr), src=values.unsafe_ptr(), count=n)
 
 
 # ===========================================================================

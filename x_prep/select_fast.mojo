@@ -42,7 +42,7 @@ the sums: pairwise instead of row order, never less accurate.
                                threadgroup memory per tile (K <= KT
                                classes), then the class means.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

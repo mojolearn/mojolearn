@@ -98,7 +98,7 @@ keeps resident at once (the spin waits need that).
 
 from std.atomic import Atomic, Ordering
 from experiments.classical_identical_ideas.linear_controls import C21_EXTREMA
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from std.math import inf, max
 from std.sys.compile import is_defined

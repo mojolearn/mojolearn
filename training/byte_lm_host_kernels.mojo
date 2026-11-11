@@ -811,7 +811,7 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
         comptime if not BYTE_LM_VSUM_HD_GENERIC_OFF:
             var dv0 = 0
             while dv0 + VALUE_SUM_64 * HOST_FW <= hbody:
-                var pacc = InlineArray[F32V, VALUE_SUM_64](fill=F32V(0.0))
+                var pacc = Array[F32V, VALUE_SUM_64](fill=F32V(0.0))
                 for j in range(count):
                     var wp = F32V(awp.unsafe_load(wrow + j))
                     var vrowp = j * hd + dv0
@@ -836,7 +836,7 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
                 dv0 += 1
             continue
         if hd == 64:
-            var accs = InlineArray[F32V, VALUE_SUM_64](fill=F32V(0.0))
+            var accs = Array[F32V, VALUE_SUM_64](fill=F32V(0.0))
             for j in range(count):
                 var w64 = F32V(awp.unsafe_load(wrow + j))
                 var vrow64 = j * hd

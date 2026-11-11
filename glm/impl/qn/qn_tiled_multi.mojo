@@ -18,7 +18,7 @@ c]`; it never reads another column. So a column shard that packs columns
 `qntm_tiled_into(.., width, C)` stores, in its cells `c + C * (j - first)`,
 the words the one-device call stores in cells `c + C * j`.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz

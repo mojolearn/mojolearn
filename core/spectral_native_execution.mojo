@@ -5,7 +5,7 @@ The backend selects the established image's numerical functions. All loads,
 output room guards and copies are the existing binding work; this module adds
 no solver, numerical data loop, transfer or algorithm selection threshold.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from core.spectral_native_api import (
     SpectralInput, SpectralStateView, SpectralFitRequest, SpectralEmbeddingRequest,
@@ -66,10 +66,10 @@ def spectral_write_state(state: SpectralPredictionState, view: SpectralStateView
     var eigenvectors = f32_ptr(view.eigenvectors)
     var diagonal = f32_ptr(view.diagonal)
     var centroids = f32_ptr(view.centroids)
-    memcpy(dest=eigenvalues, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    memcpy(dest=eigenvectors, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    memcpy(dest=diagonal, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    memcpy(dest=centroids, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
+    unsafe_memcpy(dest=eigenvalues, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
+    unsafe_memcpy(dest=eigenvectors, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
+    unsafe_memcpy(dest=diagonal, src=state.diag.unsafe_ptr(), count=len(state.diag))
+    unsafe_memcpy(dest=centroids, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
 
 
 def spectral_read_state(view: SpectralStateView, shape: SpectralQueryShape) raises -> SpectralPredictionState:
@@ -88,8 +88,8 @@ def spectral_write_fit(request: SpectralFitRequest, result: SpectralFitResult) r
     if request.options.keep_state:
         spectral_write_state(result.state, request.state, request.input.rows,
                              request.options.components, request.options.clusters)
-    memcpy(dest=i32_ptr(request.labels), src=result.labels.unsafe_ptr(), count=request.input.rows)
-    memcpy(dest=f32_ptr(request.embedding), src=result.embedding.unsafe_ptr(), count=len(result.embedding))
+    unsafe_memcpy(dest=i32_ptr(request.labels), src=result.labels.unsafe_ptr(), count=request.input.rows)
+    unsafe_memcpy(dest=f32_ptr(request.embedding), src=result.embedding.unsafe_ptr(), count=len(result.embedding))
     _ = result
     return result.columns
 
@@ -100,7 +100,7 @@ def spectral_write_embedding(request: SpectralEmbeddingRequest,
         return result.columns
     spectral_guard_embedding(result.embedding, request.input.rows, result.columns,
                              request.options.output_components)
-    memcpy(dest=f32_ptr(request.embedding), src=result.embedding.unsafe_ptr(), count=len(result.embedding))
+    unsafe_memcpy(dest=f32_ptr(request.embedding), src=result.embedding.unsafe_ptr(), count=len(result.embedding))
     _ = result
     return result.columns
 
@@ -109,8 +109,8 @@ def spectral_write_prediction(result: SpectralPrediction, labels: Int, embedding
                               shape: SpectralQueryShape, check_output: Bool) raises:
     if check_output and (len(result.labels) != shape.rows or len(result.embedding) != shape.rows * shape.components):
         raise Error("spectral_predict: the kernel returned the wrong number of outputs")
-    memcpy(dest=i32_ptr(labels), src=result.labels.unsafe_ptr(), count=shape.rows)
-    memcpy(dest=f32_ptr(embedding), src=result.embedding.unsafe_ptr(), count=shape.rows * shape.components)
+    unsafe_memcpy(dest=i32_ptr(labels), src=result.labels.unsafe_ptr(), count=shape.rows)
+    unsafe_memcpy(dest=f32_ptr(embedding), src=result.embedding.unsafe_ptr(), count=shape.rows * shape.components)
     _ = result
 
 

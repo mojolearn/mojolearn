@@ -105,7 +105,7 @@ sentence true.
 
 from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -878,9 +878,9 @@ def cd_fused_step_kernel(
         my_end = n
     var acc = Float32(0.0)
     # the window's operands, loaded one window ahead of their use
-    var rv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
-    var pv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
-    var cv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var rv = Array[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var pv = Array[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var cv = Array[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
     var w = 0
     comptime for u in range(CD_FUSED_PER_THREAD):
         var e = tid + u * CD_FUSED_TPB

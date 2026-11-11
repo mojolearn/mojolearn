@@ -17,7 +17,7 @@ Python row loop computed, so every vendor and the host agree word for word.
 A NaN p gives the quieted NaN operand (x86 and ARM `1.0 - nan`).
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import SF64_ONE, sf64_sub
 from xtrees.ops_device import OPS_TPB, _blocks, _ctx
 

@@ -8,7 +8,7 @@ The native owner must validate permutation completeness/uniqueness and admit
 all shard completion before this component. No unordered floating collective.
 Source-only, default OFF; public distributed training integration remains owed.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz

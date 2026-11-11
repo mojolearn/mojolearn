@@ -22,7 +22,7 @@ below) when the page fits; the per-value kernels otherwise. (The
 `MOJOLEARN_X_LINEAR_ENETCV_GRID` / `_STAGED` A/B switches were deleted,
 cpu-gpu-cleanup c-linear.)
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.atomic import Atomic
 from max.gpu.sync import barrier
 from std.memory import stack_allocation

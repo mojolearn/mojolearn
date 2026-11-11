@@ -7,7 +7,7 @@ of a CPU-only install and as the bytes the device must match. The element
 casts are the same `core/msel_convert.mojo` functions the kernels call.
 """
 
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 from core.msel_convert import (
     MSEL_I64,
@@ -60,7 +60,7 @@ struct MselHostStore(Defaultable, Movable):
         if n < 1 or src_addr == 0:
             raise Error("msel store: put needs at least one byte at a non-null address")
         var buf = List[UInt8](length=n, fill=0)
-        memcpy(dest=buf.unsafe_ptr(), src=_U8(unsafe_from_address=src_addr), count=n)
+        unsafe_memcpy(dest=buf.unsafe_ptr(), src=_U8(unsafe_from_address=src_addr), count=n)
         return self._insert(buf^, n)
 
     def alloc(mut self, n: Int) raises -> Int:
@@ -77,7 +77,7 @@ struct MselHostStore(Defaultable, Movable):
         if n > 0:
             if dst_addr == 0:
                 raise Error("msel store: read into a null address")
-            memcpy(dest=_U8(unsafe_from_address=dst_addr), src=self.ptr(id, n), count=n)
+            unsafe_memcpy(dest=_U8(unsafe_from_address=dst_addr), src=self.ptr(id, n), count=n)
 
     def free(mut self, id: Int) raises:
         self.check(id, 0)
@@ -106,7 +106,7 @@ def host_take_rows(
     var dst = _U8(unsafe_from_address=dst_addr)
     for r in range(n_idx):
         var s = Int(idx.unsafe_load(r))
-        memcpy(dest=dst + r * row_bytes, src=src + s * row_bytes, count=row_bytes)
+        unsafe_memcpy(dest=dst + r * row_bytes, src=src + s * row_bytes, count=row_bytes)
     return True
 
 

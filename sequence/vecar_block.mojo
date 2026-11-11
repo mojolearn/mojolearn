@@ -23,7 +23,7 @@ through `ftz`), the same order, the same `sub`/`mul`/`div`/`fma3`; the
 words written are the same, so the device and the host column agree.
 Shapes past VAR_SMEM words take the one-thread ops (DeviceExec.launch).
 """
-from std.gpu import block_dim, thread_idx
+from max.gpu import block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

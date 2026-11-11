@@ -258,7 +258,7 @@ def corpus_hash_bytes(data: PythonObject) raises -> PythonObject:
     if py_type(data) is bi.bytes:
         address = cpython_table()[].PyBytes_AsString(data._obj_ptr)
     else:
-        address = Int(cpy.lib.get_function[UnsafePointer[Int8, MutExternalOrigin]]("PyByteArray_AsString")(data._obj_ptr))
+        address = Int(cpy.lib.get_function[UnsafePointer[Int8, MutUntrackedOrigin]]("PyByteArray_AsString")(data._obj_ptr))
     var digest = sha256_hex_addr(address, len(data))
     _ = data
     return PythonObject(digest)

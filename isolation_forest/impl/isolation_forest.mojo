@@ -57,13 +57,13 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 """
 
 from std.math import fma, log2
-from std.memory import bitcast, memcpy, stack_allocation
+from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -734,7 +734,7 @@ def read_f32(
     ctx.synchronize()
     # one bulk copy into the returned List (no host pass)
     var out = List[Float32](length=n, fill=Float32(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -747,7 +747,7 @@ def read_i32(
     ctx.synchronize()
     # one bulk copy into the returned List (no host pass)
     var out = List[Int32](length=n, fill=Int32(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -760,7 +760,7 @@ def read_i64(
     ctx.synchronize()
     # one bulk copy into the returned List (no host pass)
     var out = List[Int64](length=n, fill=Int64(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 

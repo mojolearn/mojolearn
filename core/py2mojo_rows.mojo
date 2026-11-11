@@ -29,7 +29,7 @@ Python line did, in its order, so the outputs keep their bits:
       Python comprehension over the rows.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

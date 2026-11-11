@@ -41,7 +41,7 @@ fit_intercept, shuffle, tol=None (no objective / no early stop), no sample
 weights, max_iter n > K, and every column's mean within SGDOC_CENTER_TOL of
 its standard deviation (`sgdoc_centered`, two grid kernels and one word home;
 a constant column must be exactly 0)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.atomic import Atomic
 from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, ld, st, fabs, fsqrt
@@ -92,7 +92,7 @@ def sgdoc_mom_flag_kernel(part: FP, n: Int32, d: Int32, g: Int32, flag: IP):
         var sd = fsqrt(var_) if var_ > Float32(0) else Float32(0)
         var finite = s == s and s2 == s2 and fabs(s) < Float32(3.0e38) and fabs(s2) < Float32(3.0e38)
         if not finite or fabs(mu) > SGDOC_CENTER_TOL * sd:
-            _ = Atomic[DType.int32].fetch_add(flag, Int32(1))
+            _ = Atomic[Int32].fetch_add(flag, Int32(1))
 
 
 def sgdoc_centered(ctx: DeviceContext, x: FP, n: Int, d: Int) raises -> Bool:

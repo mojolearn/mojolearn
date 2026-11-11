@@ -29,7 +29,7 @@ sampler's first Python caller.
 
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import copy_f32, list_f32, list_i32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
@@ -569,7 +569,7 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+        unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         bt.stop_host("bind_host_copy", t_s)
         t_s = bt.start()
         # cpu-gpu-cleanup t-forest: X goes to the device as the caller's
@@ -669,12 +669,12 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # rows/labels/reductions. The forest owns state through this bulk copy.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
         var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
-        memcpy(dest=oob_out,src=forest.oob_decision_function_.unsafe_ptr(),count=len(forest.oob_decision_function_))
+        unsafe_memcpy(dest=oob_out,src=forest.oob_decision_function_.unsafe_ptr(),count=len(forest.oob_decision_function_))
         MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
     if importance_addr != 0:
         if len(forest.feature_importances_) != n_cols:
             raise Error("RF feature importance output does not match feature count")
-        memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
+        unsafe_memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
     var t_x = bt.start()
     comptime if EXPORT:
         var export_trees = forest.trees^
@@ -1089,7 +1089,7 @@ def rf_regressor_fit_session_rows_binding(
         var hrows = ctx.enqueue_create_host_buffer[CLT](n_rows)
         var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
         ctx.synchronize()
-        memcpy(dest=hrows.unsafe_ptr(), src=rp, count=n_rows)
+        unsafe_memcpy(dest=hrows.unsafe_ptr(), src=rp, count=n_rows)
         copy_f32(yp, hy.unsafe_ptr(), n_rows)
         var drows = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=drows, src_ptr=hrows.unsafe_ptr())
@@ -1232,7 +1232,7 @@ def _rf_weighted_session_fit(
         )
         var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
         ctx.synchronize()
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+        unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
@@ -1827,12 +1827,12 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # rows/labels/reductions. The forest owns state through this bulk copy.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
         var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
-        memcpy(dest=oob_out,src=forest.oob_prediction_.unsafe_ptr(),count=len(forest.oob_prediction_))
+        unsafe_memcpy(dest=oob_out,src=forest.oob_prediction_.unsafe_ptr(),count=len(forest.oob_prediction_))
         MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
     if importance_addr != 0:
         if len(forest.feature_importances_) != n_cols:
             raise Error("RF feature importance output does not match feature count")
-        memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
+        unsafe_memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
     var t_x = bt.start()
     comptime if EXPORT:
         var export_trees = forest.trees^

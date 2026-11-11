@@ -7,7 +7,7 @@
 # shape: `train_steps` is ONE Program.fit and a refused call commits none of
 # its steps; logits and next bytes keep byte_lm_host_execution's forward.
 from std.math import isfinite
-from std.memory import memcpy, memcmp, bitcast
+from std.memory import unsafe_memcpy, unsafe_memcmp, bitcast
 from core.hostptr import read_f32, read_i32, f32_ptr, i32_ptr
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_io import all_finite_f32_scan
@@ -77,11 +77,11 @@ def host_optimizer(words: List[Int], scalars: List[Float64]) raises -> List[Floa
 
 
 def host_copy_f32(address: Int, values: List[Float32]) raises:
-    memcpy(dest=f32_ptr(address), src=values.unsafe_ptr(), count=len(values))
+    unsafe_memcpy(dest=f32_ptr(address), src=values.unsafe_ptr(), count=len(values))
 
 
 def host_copy_i32(address: Int, values: List[Int32]) raises:
-    memcpy(dest=i32_ptr(address), src=values.unsafe_ptr(), count=len(values))
+    unsafe_memcpy(dest=i32_ptr(address), src=values.unsafe_ptr(), count=len(values))
 
 
 def host_scatter(flat: Int, named: List[Int], cfg: ByteConfig) raises:
@@ -90,7 +90,7 @@ def host_scatter(flat: Int, named: List[Int], cfg: ByteConfig) raises:
     var offset = 0
     for i in range(len(named)):  # driver-loop: over named parameter tensor spans
         var count = cfg.param_count(i)
-        memcpy(dest=f32_ptr(named[i]), src=f32_ptr(flat) + offset, count=count)
+        unsafe_memcpy(dest=f32_ptr(named[i]), src=f32_ptr(flat) + offset, count=count)
         offset += count
 
 
@@ -213,7 +213,7 @@ struct ByteHostSession(Movable, Writable):
         for i in range(len(opt)):  # driver-loop: over admitted optimizer settings
             if opt[i] != self.optimizer[i]:
                 raise Error("byte LM: resident optimizer mismatch")
-        if memcmp(self.flags.unsafe_ptr(), i32_ptr(flags), len(self.flags)) != 0:
+        if unsafe_memcmp(self.flags.unsafe_ptr(), i32_ptr(flags), len(self.flags)) != 0:
             raise Error("byte LM: resident momentum flags mismatch")
 
     def clear_shadow(mut self):

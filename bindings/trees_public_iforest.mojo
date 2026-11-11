@@ -26,7 +26,7 @@
 # read-back); `fit_predict` is ONE `iforest_run` (fit a fresh forest and
 # predict X with it) instead of the fit's one-row run and a second run for
 # predict, and X is converted and handed over once.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_typed_call import py_call_typed

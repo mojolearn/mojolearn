@@ -8,7 +8,7 @@ word as they were in the binding (lane thin-core, 2026-10-21: a pure move,
 no bit change).
 """
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import (
@@ -99,7 +99,7 @@ def gather_rows_bytes(
     if not invalid:
         for r in range(no):
             var index = Int(idx.unsafe_load(r))
-            memcpy(dest=dst + r * width, src=src + index * width, count=width)
+            unsafe_memcpy(dest=dst + r * width, src=src + index * width, count=width)
     return invalid
 
 

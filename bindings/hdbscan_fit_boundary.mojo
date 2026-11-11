@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """HDBSCAN fit provider admission and public prediction-buffer packing."""
 from std.python import Python, PythonObject
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hdbscan_fit_api import HDBSCAN_FIT_ABI, HDBSCAN_FIT_COUNT, HDBSCAN_FIT_HOST, HdbscanFitDriver
 from core.kmeans_variants_api import VariantsSpan
 from providers.python.neural_descriptor_pyapi import (
@@ -33,7 +33,7 @@ def hdbscan_pack_head(address: Int, count: Int, typestr: String, context: Python
     # The caller pins the native scratch owner until this synchronous copy ends.
     var result = family_array(Python.tuple(count), typestr, context)
     if count:
-        memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(result))),
+        unsafe_memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(result))),
             src=FAMILY_I32P(unsafe_from_address=address), count=count)
         _ = result
     return result

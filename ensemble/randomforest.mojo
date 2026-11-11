@@ -9,7 +9,7 @@ from ensemble.rf_notices import (
 )
 from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES, T15
 from std.math import fma
-from std.gpu import block_dim, block_idx, global_idx, thread_idx
+from max.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys import size_of
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
@@ -53,7 +53,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
 from core.device_liveness import assert_device_alive
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from ensemble.importance_device import ImportanceStore
 from ensemble.oob_device import (
     OOB_STATS,
@@ -1878,7 +1878,7 @@ def compute_oob_score[
     oob_predictions = List[Float64](
         length=n_rows * num_outputs, fill=Float64(0.0)
     )
-    memcpy(
+    unsafe_memcpy(
         dest=oob_predictions.unsafe_ptr().bitcast[UInt64](),
         src=h_acc.unsafe_ptr(),
         count=n_rows * num_outputs,

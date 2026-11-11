@@ -36,7 +36,7 @@ centred series in threadgroup memory and runs every stage of
 Stages 1-3 fold the same partials in the same order as the eight-launch
 path; under FAST the block fold is the library's, as there.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

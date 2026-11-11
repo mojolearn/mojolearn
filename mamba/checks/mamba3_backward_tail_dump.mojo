@@ -6,7 +6,7 @@ from std.os import getenv
 
 from max.gpu.host import DeviceContext
 from checks.numerics import numeric_mode_name
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from mamba.impl.ops.mamba3_siso import m3_angle_rate
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

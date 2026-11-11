@@ -23,7 +23,7 @@ converted again on the calling thread to raise). Moved here from the binding
 (lane a3-admit-decomp-prep-metrics, audit R10: it was a serial element walk).
 """
 from std.math import isinf
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from core.admitted_input import admitted_raw_word
 from core.cast_in import cast_f32_bits, f16_to_f32_bits, CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
 from core.host_parallel import host_parallelize
@@ -197,7 +197,7 @@ def admitted_convert(
             var lo = t * run_chunk
             var hi = min(lo + run_chunk, runs)
             for r in range(lo, hi):  # admitted input: this task's contiguous runs
-                memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
+                unsafe_memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
                        src=LIN_BP(unsafe_from_address=src + _lin_offset(r * run, shape_ptr, stride_ptr, rank)),
                        count=run * item)
 

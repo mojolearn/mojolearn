@@ -91,7 +91,7 @@ from experiments.classical_identical_ideas.stats_controls import C60_LAG4
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -239,9 +239,9 @@ def s2B_accumulation_kernel(
             return
         var sample = (task%groups)*4
         var base = series*n+sample
-        var xv = InlineArray[Float32, 4](fill=Float32(0))
-        var lagv = InlineArray[Float32, 4](fill=Float32(0))
-        var acc = InlineArray[Float32, 4](fill=Float32(0))
+        var xv = Array[Float32, 4](fill=Float32(0))
+        var lagv = Array[Float32, 4](fill=Float32(0))
+        var acc = Array[Float32, 4](fill=Float32(0))
         comptime for lane in range(4):
             if sample+lane < n:
                 xv[lane] = ftz(data[base+lane])

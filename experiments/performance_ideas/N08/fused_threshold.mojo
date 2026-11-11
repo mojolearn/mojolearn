@@ -7,7 +7,7 @@ scan preserves ascending row/column ordering with no floating atomics. The
 research adapter retains one integer decision per pair, so dense-graph memory
 and scan traffic are explicit costs and cannot be hidden in kernel timing.
 """
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceContext,DeviceBuffer
 from neighbors.impl.ball_cover.common import eps_dist_sq
 from neighbors.impl.ball_cover.scan import rbc_exclusive_scan_launch

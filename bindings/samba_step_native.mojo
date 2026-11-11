@@ -17,7 +17,7 @@ from core.samba_optimizer_plan import SambaOptimizerPlan
 from training.optimizer_public_common import OptHyper
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.generator_state_native import generator_next
@@ -306,7 +306,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
             for which in range(2):  # driver-loop: over input and target buffer slices
                 var source = ids if which == 0 else y
                 var output = xpart if which == 0 else ypart
-                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr)),
+                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr)),
                        src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr)) + k * rows * length * 4,
                        count=rows * length * 4)
                 _ = output  # keep the Python object alive through the native call above
@@ -321,7 +321,7 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
                 raise Error("Samba: gradient registry is incomplete")
             for j in range(len(gradients)):  # driver-loop: over the ordered parameter gradients
                 var value = gradients[j]
-                memcpy(dest=gradient_ptr + (k * n + Int(py=fields["offsets"][j])) * 4,
+                unsafe_memcpy(dest=gradient_ptr + (k * n + Int(py=fields["offsets"][j])) * 4,
                        src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=Int(py=value.nbytes))
                 _ = stacked  # keep the Python object alive through the native call above
                 _ = value  # keep the Python object alive through the native call above

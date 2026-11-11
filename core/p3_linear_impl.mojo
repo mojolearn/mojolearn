@@ -10,7 +10,7 @@ the Apple GPU has no float64) then writes them, and one download lands the
 binary64 words straight in the caller's output. No host loop over rows.
 """
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from core.gemm import gemv_n
 from checks.soft_f64 import sf64_from_f32
 from glm.estimator import _add_scalar_kernel

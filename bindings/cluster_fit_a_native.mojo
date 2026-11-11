@@ -15,7 +15,7 @@
 # which uploads X once per fit. Same entries, same operands, same order: the
 # bits do not move.
 from std.math import isinf
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
@@ -824,7 +824,7 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         var raw = x
         if not copied:
             raw = family_array(Python.tuple(n, d), "<f4", context)
-            memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(raw))),
+            unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(raw))),
                 src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=n * d)
             _ = raw
             _ = x

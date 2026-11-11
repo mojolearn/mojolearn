@@ -471,7 +471,7 @@ def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
     var pc = IP(unsafe_from_address=Int(pcl.unsafe_ptr()))
     for b in range(nb):
         ocsvm_rho_part_item(b, g, alpha, cv, pf, pc, n)
-    var info = InlineArray[Float32, 1](fill=Float32(0))
+    var info = Array[Float32, 1](fill=Float32(0))
     var ip = FP(unsafe_from_address=Int(info.unsafe_ptr()))
     var stride = 1
     while True:
@@ -658,7 +658,7 @@ def xn_tree_slot(part: FP, s: Int, nb: Int) -> Float32:
 def xn_tree_fold(part: FP, nb: Int) -> Float32:
     """The tree fold on one thread (the host column; the device's
     `xn_tree_fold_kernel` runs the same steps across a block)."""
-    var sl = InlineArray[Float32, XN_TREE](fill=Float32(0))
+    var sl = Array[Float32, XN_TREE](fill=Float32(0))
     for s in range(XN_TREE):
         sl[s] = xn_tree_slot(part, s, nb)
     var h = XN_TREE // 2

@@ -12,7 +12,7 @@ def classical_dot(a: CFP, b: CFP, a0: Int, b0: Int, sa: Int, sb: Int, k: Int) ->
     """GEMM v1 leaves and adjacent balanced tree, streamed in 11 words."""
     var leaf = contract_leaf_size(k)
     var count = leaf_count(k, leaf)
-    var levels = InlineArray[Float32, 11](fill=Float32(0))
+    var levels = Array[Float32, 11](fill=Float32(0))
     var occupied = UInt32(0)
     for t in range(count):
         var acc = Float32(0)

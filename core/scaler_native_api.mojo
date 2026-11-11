@@ -58,21 +58,21 @@ struct ScalerDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: ScalerFitRequest) raises -> Int:
-        var a: InlineArray[Int, 2] = [r.source, r.dst]
-        var p: InlineArray[Int, 5] = [r.rows, r.features, Int(r.with_mean), Int(r.with_std), Int(r.direct)]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.source, r.dst]
+        var p: Array[Int, 5] = [r.rows, r.features, Int(r.with_mean), Int(r.with_std), Int(r.direct)]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, 2, a, p, f)
 
     def transform(self, r: ScalerTransformRequest) raises -> Int:
-        var a: InlineArray[Int, 4] = [r.source, r.mean, r.scale, r.dst]
-        var p: InlineArray[Int, 6] = [r.rows, r.features, Int(r.inverse), Int(r.with_mean), Int(r.with_std), Int(r.direct)]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 4] = [r.source, r.mean, r.scale, r.dst]
+        var p: Array[Int, 6] = [r.rows, r.features, Int(r.inverse), Int(r.with_mean), Int(r.with_std), Int(r.direct)]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, 3, a, p, f)
 
 @fieldwise_init
@@ -80,15 +80,15 @@ struct PrepProgramDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def mode(self) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, 0, a, p, f)
 
     def run(self, r: PrepProgramRequest) raises:
-        var a: InlineArray[Int, 2] = [r.arena, r.program]
-        var p: InlineArray[Int, 2] = [r.words, r.stages]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.arena, r.program]
+        var p: Array[Int, 2] = [r.words, r.stages]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, 1, a, p, f)
 
 

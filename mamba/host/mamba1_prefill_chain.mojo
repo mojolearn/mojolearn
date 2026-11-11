@@ -9,7 +9,7 @@ this file (lane del-mamba, 2026-10-19: the device copy of this walk is
 tombstoned in autograd/kernels/mamba1_prefill.mojo).
 """
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx

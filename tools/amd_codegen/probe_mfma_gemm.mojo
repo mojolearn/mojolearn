@@ -7,7 +7,7 @@
 # Sections start with `### <name>`; tools/amd_codegen/mfma_census.py counts
 # the instructions of each.
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
+from max.gpu.host import get_gpu_target
 from gemm.checks.gemm_identical import *
 from gemm.checks.gemm_identical import TARGET_COLUMN, lib_smem_pages_for
 

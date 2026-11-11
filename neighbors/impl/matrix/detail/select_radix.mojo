@@ -113,7 +113,7 @@ It is theirs: `select_radix.cuh:1002,1016,1035` in
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace

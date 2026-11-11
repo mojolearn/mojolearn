@@ -19,7 +19,7 @@ d x d solve per row) and the error folds on the lead. Here:
   * the fit at the chosen alpha on one block team (`t_ridge_solve_best`).
 The float-float refit (status 1) stays x_linear/device.mojo's `_ridge_ff_grid`.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, fa, fd, ld, st, i2f, copy, chol_solve
 from x_linear.tops import fold_parts, fold_blocks, FOLD_BLOCK, t_cholesky, upper_cell
@@ -51,9 +51,9 @@ def _gid() -> Int:
 
 
 @always_inline
-def _ridge_off(d: Int, t_n: Int) -> InlineArray[Int, 6]:
+def _ridge_off(d: Int, t_n: Int) -> Array[Int, 6]:
     """fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T."""
-    var o = InlineArray[Int, 6](fill=0)
+    var o = Array[Int, 6](fill=0)
     o[0] = 0
     o[1] = d
     o[2] = d + d * d

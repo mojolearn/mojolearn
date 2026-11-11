@@ -57,7 +57,7 @@ their bits -- stated in the README as such.
 ============================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 

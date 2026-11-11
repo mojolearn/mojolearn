@@ -31,7 +31,7 @@ The gate is `gemm/checks/gemm_int15_heads_check.mojo` (`pixi run
 check-gemm-int15-heads`, with the value, epilogue and exponent arms).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gemm.checks.gemm_int15 import INT15_TPB

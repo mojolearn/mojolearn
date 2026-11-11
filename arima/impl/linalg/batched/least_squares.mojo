@@ -130,7 +130,7 @@ def householder_qr_solve(
     times the largest). On a non-zero return `b` is NOT a solution and the
     caller must not read it.
     """
-    var rdiag = InlineArray[Float32, LS_MAX_COLS](fill=Float32(0.0))
+    var rdiag = Array[Float32, LS_MAX_COLS](fill=Float32(0.0))
     for j in range(n):
         # column norm of A[j:m, j], serial ascending
         var sigma = Float32(0.0)

@@ -92,7 +92,7 @@ mechanism, brief sections 15 and 18), and never a DEVIATION 2598 kernel.
 come through the kernel matrix.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
@@ -6213,8 +6213,8 @@ def _dkdv_tiled_pf_amma[HD: Int](
     if q1[1] < q0[0]:
         tb_hi = tb_lo - 1
     var kvbase = (bb * nkv + kvh) * s * HD
-    var dka = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
-    var dva = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+    var dka = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+    var dva = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
     var hit = False
     for hh in range(n_rep):
         var h = kvh * n_rep + hh
@@ -9131,7 +9131,7 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         return
 
     # Pass 3: the context chain.
-    var cacc = InlineArray[_AMMA_M64, CPS](fill=_AMMA_M64(0))
+    var cacc = Array[_AMMA_M64, CPS](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier block of this chain admitted
     for kb in range(kb_lo, kb_hi + 1):
         var ev = UInt32(0xFF)

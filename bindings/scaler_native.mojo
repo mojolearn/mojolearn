@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # StandardScaler.fit owns admission, buffers, route selection, launches and
 # fitted-state publication here. The existing statistics kernels are unchanged.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -20,7 +20,7 @@ from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.prep_entry_cache import prep_mode_checked
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _ptr(value: PythonObject) raises -> F32P:
@@ -68,7 +68,7 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
 
 def _copy_row(source: F32P, count: Int, context: PythonObject) raises -> PythonObject:
     var out = classical_typed(Python.tuple(count), "<f4", context["output_context"])
-    memcpy(dest=_ptr(out), src=source, count=count)
+    unsafe_memcpy(dest=_ptr(out), src=source, count=count)
     return out
 
 
@@ -188,9 +188,9 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
             raise Error("x_prep: the program exceeds the native Int32 indexing bound")
         var arena = List[Float32](length=size, fill=0)
         var arena_ptr = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-        memcpy(dest=arena.unsafe_ptr(), src=xp, count=n*d)
+        unsafe_memcpy(dest=arena.unsafe_ptr(), src=xp, count=n*d)
         if weighted:
-            memcpy(dest=arena.unsafe_ptr() + wo, src=_ptr(weight), count=n)
+            unsafe_memcpy(dest=arena.unsafe_ptr() + wo, src=_ptr(weight), count=n)
         var program = List[Int32]()
         _stage(program, 1, d, 0, n, d, st)
         _stage(program, 101, d, 0, n, d, wo, out)

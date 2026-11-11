@@ -10,7 +10,7 @@ checks/soft_f64 is correctly rounded, so the words are the host detector's).
 The host twin is `OverfittingDetector` itself: the same operations in the same
 order (its `exp` is `sf64_exp`).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

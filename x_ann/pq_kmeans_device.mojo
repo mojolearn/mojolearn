@@ -24,7 +24,7 @@ subspace in every launch. The order of every sum is fixed, so the result
 is the same on every run. FAST bits move against the old codebooks
 (another seeding, another sum order): paired recall check."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -106,7 +106,7 @@ def pqk_assign_kernel(
     if s >= Int(n_train):
         return
     var row = (s * Int(n)) // Int(n_train)
-    var rv = InlineArray[Float32, PQK_LEN_MAX](fill=Float32(0.0))
+    var rv = Array[Float32, PQK_LEN_MAX](fill=Float32(0.0))
     var off = row * Int(rot_dim) + j * pl
     for u in range(pl):
         rv[u] = ftz(r.unsafe_load(off + u))
@@ -161,7 +161,7 @@ def pqk_partial_kernel(
     barrier()
     if t >= nc:
         return
-    var sum = InlineArray[Float32, PQK_LEN_MAX](fill=Float32(0.0))
+    var sum = Array[Float32, PQK_LEN_MAX](fill=Float32(0.0))
     var cnt = 0
     for rr in range(sn):
         if Int(lab[rr]) == t:
@@ -187,7 +187,7 @@ def pqk_update_kernel(count: Int32, pq_len: Int32, n_codes: Int32, nb: Int32, ps
         var nc = Int(n_codes)
         var c = e % nc
         var j = e // nc
-        var sum = InlineArray[Float32, PQK_LEN_MAX](fill=Float32(0.0))
+        var sum = Array[Float32, PQK_LEN_MAX](fill=Float32(0.0))
         var cnt = 0
         for b in range(Int(nb)):
             var o = (j * Int(nb) + b) * nc + c

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete PCA fit/fit_transform owner. Only this native operation orchestrates
 # admission, scalar snapshots, native solvers and publication of finished state.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.sequential_admission import sequential_admit_value
@@ -32,7 +32,7 @@ struct PCAFitOutput(Copyable, Movable):
 
     def prefix(self, rows: Int, cols: Int, context: PythonObject) raises -> Self:
         var result = Self(rows, cols, context)
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=result.address),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=result.address),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=self.address),
                count=rows * (cols if cols else 1) * 4)
         _ = self.keep  # retain the original output owner through the native copy
@@ -207,7 +207,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
             var cropped = sequential_array(Python.tuple(rows, keep), context["float32"], context)
             var cropped_address = Int(py=sequential_address(cropped))
             if keep > 0:
-                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
+                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
                        src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=projection_address),
                        count=rows * keep * 4)
             _ = projection  # retain the original allocation through RUN and the prefix copy

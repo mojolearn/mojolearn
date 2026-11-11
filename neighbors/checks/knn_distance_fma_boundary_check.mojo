@@ -6,7 +6,7 @@ fma.rn.ftz instead produces zero, so this is a necessary gate even when all
 ordinary distance fixtures agree (their epilogues can hide tiny differences).
 """
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from neighbors.checks.pinned_distance_tile import _rt_load, _rt_step

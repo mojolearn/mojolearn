@@ -49,7 +49,7 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          and 788.6 -> 896.3 ms (+13.7%). KEEP as the FAST default for
          quality.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

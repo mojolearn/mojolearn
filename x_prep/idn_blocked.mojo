@@ -38,7 +38,7 @@ memory, the halving widths of `lt_tree`); every group returns as a whole
 before its first barrier, or not at all. Scratch words: te_global 2 * units
 * (n / TEB); te_enc 2 * d * T * n (`te_blocked_scratch_words`).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

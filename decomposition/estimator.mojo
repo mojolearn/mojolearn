@@ -33,7 +33,7 @@ decomposition lane's file; left for that lane.
 
 from max.gpu.host import DeviceContext
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import ftz, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

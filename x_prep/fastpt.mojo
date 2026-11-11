@@ -33,7 +33,7 @@ Chan's formula. FAST promises quality, not bits: Welford + Chan is never
 less accurate than the serial two-pass fold. IDENTICAL never compiles a
 call to this file (x_prep/device.mojo gates every launch).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -205,9 +205,9 @@ def pt_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, method: Int32, L
     var chunk = Int(block_idx.x)
     var row0 = chunk * Int(rows)
     var row1 = min(row0 + Int(rows), Int(n))
-    var lam = InlineArray[Float32, PT_MAXM](fill=Float32(0))
-    var mean = InlineArray[Float32, PT_MAXM](fill=Float32(0))
-    var m2 = InlineArray[Float32, PT_MAXM](fill=Float32(0))
+    var lam = Array[Float32, PT_MAXM](fill=Float32(0))
+    var mean = Array[Float32, PT_MAXM](fill=Float32(0))
+    var m2 = Array[Float32, PT_MAXM](fill=Float32(0))
     var lb = Int(LAMS) + c * Int(lstride)
     for j in range(m):
         lam[j] = f[lb + j]

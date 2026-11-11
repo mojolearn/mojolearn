@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Common private descriptor ABI over existing SVC solver/predict owners.
 # No estimator-specific provider, Python dependency or new numerical route.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
@@ -54,7 +54,7 @@ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) 
         if result.finite_word != 0:
             raise Error("Input X contains NaN or infinity (SVC).")
         copy_f32(result.dual_coefs.unsafe_ptr(), dp, result.n_support)
-        memcpy(dest=sip, src=result.support_idx.unsafe_ptr(), count=result.n_support)
+        unsafe_memcpy(dest=sip, src=result.support_idx.unsafe_ptr(), count=result.n_support)
         copy_f32(result.support_matrix.unsafe_ptr(), smp, result.n_support * d)
         var info = ip
         info[0] = Float64(result.b)

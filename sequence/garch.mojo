@@ -207,7 +207,7 @@ def garch_nll(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32,
     comptime if GARCH_FOLD32:
         # the team's order (fit_team.mojo garch_nll_team): slot t mod 32
         # ascending, then the pairwise tree
-        var sl = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+        var sl = Array[Float32, FOLD_L](fill=Float32(0.0))
         for t in range(n):
             var v = ld(s2, t)
             var x = ld(r, t)

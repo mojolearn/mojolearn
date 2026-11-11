@@ -12,7 +12,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from providers.python.operation_lock_pyapi import operation_lock_create
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_array_snapshot, generation_address, py_ints
@@ -991,7 +991,7 @@ def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject
                 # balanced calls stopped leaking a reference to it).
                 var whole = value
                 if end > begin:
-                    memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=whole._addr)) + begin * cols, count=(end - begin) * cols)
+                    unsafe_memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=whole._addr)) + begin * cols, count=(end - begin) * cols)
                     _ = whole  # keep the Python object alive through the native call above
                     _ = sliced  # keep the Python object alive through the native call above
                 _ = whole^  # read by address above

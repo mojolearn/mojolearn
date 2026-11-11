@@ -116,8 +116,8 @@ from ivf.impl.neighbors.ivf_flat.ivf_query_device import (
     ivf_query_batches,
 )
 from x_ann.io import download_i32
-from std.gpu import WARP_SIZE
-from std.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
+from max.gpu import WARP_SIZE
+from max.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
 from checks.numerics import ftz as _ivf_ftz, identical_sqrt as _ivf_identical_sqrt
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_PREPARE

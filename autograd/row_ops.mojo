@@ -137,7 +137,7 @@ def row_best_takes(ma: Float32, ia: Int32, mb: Float32, ib: Int32) -> Bool:
 @always_inline
 def row_expsum32(p: FP, base: Int, cols: Int, m: Float32) -> Float32:
     """sum_c exp(p[base + c] - m) in the fold32 order."""
-    var s = InlineArray[Float32, ROW_L](fill=Float32(0.0))
+    var s = Array[Float32, ROW_L](fill=Float32(0.0))
     var k = 0
     while k < cols:
         var n = min(ROW_L, cols - k)
@@ -156,7 +156,7 @@ def row_softmax_fwd(t: Int, a: Args):
     var base = t * cols
     var m = ld(a.p0, base + row_first_max(a.p0, base, cols))
     if a.i0 == 0:
-        var s = InlineArray[Float32, ROW_L](fill=Float32(0.0))
+        var s = Array[Float32, ROW_L](fill=Float32(0.0))
         var k = 0
         while k < cols:
             var n = min(ROW_L, cols - k)
@@ -198,7 +198,7 @@ def row_softmax_vjp(t: Int, a: Args):
     dot product in the fold32 order."""
     var cols = a.i1
     var base = t * cols
-    var s = InlineArray[Float32, ROW_L](fill=Float32(0.0))
+    var s = Array[Float32, ROW_L](fill=Float32(0.0))
     var k = 0
     while k < cols:
         var n = min(ROW_L, cols - k)

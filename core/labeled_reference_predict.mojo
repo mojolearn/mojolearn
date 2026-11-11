@@ -24,7 +24,7 @@ function launches the queries in chunks bounded by
 LABELED_PREDICT_WORK pair features per launch, a launch shape only.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from checks.numerics import ftz

@@ -61,7 +61,7 @@ carrying it must fail every gate in `gemm_lowbit_check.mojo`. A value arm,
 not an order arm: the int8 sum is exact and would fold an order arm away.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 

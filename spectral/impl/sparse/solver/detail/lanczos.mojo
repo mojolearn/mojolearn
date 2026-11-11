@@ -157,8 +157,8 @@ from checks.numerics import identical_mul
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import sum as _fl_warp_sum
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import sum as _fl_warp_sum
 from std.memory import stack_allocation
 from std.math import sqrt as _fl_sqrt
 from std.sys.info import has_accelerator, has_apple_gpu_accelerator

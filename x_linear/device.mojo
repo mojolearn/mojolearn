@@ -16,9 +16,9 @@ exhausts Metal's per-process command queues, and x_cluster/x_neighbors hung
 on the second GPU call of a process). Each entry's buffers are released
 before it returns; the context stays.
 """
-from std.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
-from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
+from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
@@ -3730,7 +3730,7 @@ def glm_sg_kernel(g: FP, step: FP, res: FP, m: Int32, d: Int32, alpha: Float32, 
     var j = _gt()
     if j < Int(m):
         var term = glm_g_item(j, g, step, res, Int(d), alpha, fd(Float32(1), ld(sc, 0)))
-        _ = Atomic[DType.int32].max(gm, Int32(Int(bitcast[DType.uint32](term))))
+        _ = Atomic[Int32].max(gm, Int32(Int(bitcast[DType.uint32](term))))
 
 
 def glm_flag_kernel(gm: IP, sc: FP, tol: Float32):

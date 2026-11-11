@@ -29,7 +29,7 @@ from experiments.classical_identical_ideas.graph_controls import C40_SEED_TILES,
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -124,7 +124,7 @@ def _c40_seed_pair_kernel(
     # (1024 + 2*MSI_T) float32 words; larger rows keep the existing path.
     var chunk = Int(block_idx.x) % Int(nch)
     var first = (Int(block_idx.x) // Int(nch))*2
-    var seed_ids = InlineArray[Int,2](fill=Int(ns))
+    var seed_ids = Array[Int,2](fill=Int(ns))
     comptime for lane in range(2):
         comptime if C40_ACTIVE_SEEDS:
             if first+lane < Int(active[0]):
@@ -142,7 +142,7 @@ def _c40_seed_pair_kernel(
     barrier()
     var count = min(MSI_T,Int(n)-chunk*MSI_T)
     for r in range(tid,count,MSI_TPB):
-        var acc = InlineArray[Float32,2](fill=Float32(0))
+        var acc = Array[Float32,2](fill=Float32(0))
         for f in range(D):
             var value = ftz(x[(chunk*MSI_T+r)*D+f])
             comptime for seed in range(2):

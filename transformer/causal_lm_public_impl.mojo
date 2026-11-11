@@ -4,7 +4,7 @@
 Every loop over batch rows, tokens or bytes lives here, over native pointers
 and lists. The shell only unpacks Python objects and calls these functions.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.generation_policy_impl import generation_pick_row, GenerationSamplingScratch
 
 
@@ -20,8 +20,8 @@ def causal_lm_join_resident(
     generated: MutPointer[Int32, MutUntrackedOrigin], b: Int, l: Int, n: Int,
 ):
     for r in range(b):
-        memcpy(dest=dst + r * (l + n), src=prompt + r * l, count=l)
-        memcpy(dest=dst + r * (l + n) + l, src=generated + r * n, count=n)
+        unsafe_memcpy(dest=dst + r * (l + n), src=prompt + r * l, count=l)
+        unsafe_memcpy(dest=dst + r * (l + n) + l, src=generated + r * n, count=n)
 
 
 def causal_lm_join_continuation(
@@ -29,9 +29,9 @@ def causal_lm_join_continuation(
     tail: MutPointer[Int32, MutUntrackedOrigin], b: Int, l: Int, n: Int,
 ):
     for r in range(b):
-        memcpy(dest=dest + r * (l + n), src=prompt + r * l, count=l)
+        unsafe_memcpy(dest=dest + r * (l + n), src=prompt + r * l, count=l)
         if n > 0:
-            memcpy(dest=dest + r * (l + n) + l, src=tail + r * n, count=n)
+            unsafe_memcpy(dest=dest + r * (l + n) + l, src=tail + r * n, count=n)
 
 
 def causal_lm_pick_step(

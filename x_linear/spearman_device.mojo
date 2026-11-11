@@ -21,7 +21,7 @@ witness-guarded unit (every output is rebuilt from the uploaded x and y):
 One int32 word comes back: the sign.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_linear.ops import FP, IP, ld, ldi, sti

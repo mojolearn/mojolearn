@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Portable complete state of a partitioned captured DAG. Logical placement is
 # retained; physical device IDs are intentionally absent from the file.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.partition_plan import PartitionPlan, GraphBytes
@@ -125,7 +125,7 @@ def partition_from_checkpoint(ck: Checkpoint) raises -> PartitionPlan:
         if (train != 0 and train != 1) or (integer != 0 and integer != 1) or (train != 0 and integer != 0):
             raise Error("partitioned checkpoint has invalid parameter flags")
         var data = List[Float32](length=sh.count(), fill=Float32(0))
-        memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        unsafe_memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
         plan.parameters.append(GraphBytes(sh, data^, integer != 0))
         plan.trainable.append(train != 0)
     plan.schedule()

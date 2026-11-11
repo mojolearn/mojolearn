@@ -45,7 +45,7 @@ NOT TESTED ON A DEVICE — IDENTITY NOT VERIFIED — NOT MEASURED (queued).
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.bit import count_trailing_zeros
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 
 #: The switch. Default off: absent define, incumbent path.
@@ -158,7 +158,7 @@ def _bv_rows_kernel[W: Int](
         var base = Int(meta.unsafe_load(4 * t))
         var val_at = Int(meta.unsafe_load(4 * t + 1))
         var n = Int(meta.unsafe_load(4 * t + 2))
-        var m = InlineArray[UInt64, W](fill=~UInt64(0))
+        var m = Array[UInt64, W](fill=~UInt64(0))
         var last_off = UInt32(0xFFFFFFFF)
         var word = UInt32(0)
         var have = False

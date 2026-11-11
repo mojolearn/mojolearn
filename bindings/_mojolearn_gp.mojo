@@ -100,7 +100,7 @@ from gaussian_process.host.gp_theta import (
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from bindings.py_lists import py_list_f64
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word.
@@ -806,7 +806,7 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         if len(addrs) == 11:
             # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
             var yo = f32_ptr(Int(py=addrs[10]))
-            memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
+            unsafe_memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
             _ = len(y)
     else:
         y = read_f32(Int(py=addrs[1]), max(0, n_train))

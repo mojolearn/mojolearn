@@ -35,7 +35,7 @@ The Python entry points are in `providers/python/svm_impl_svc_epilogue_pyapi.moj
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

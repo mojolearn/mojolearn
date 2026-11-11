@@ -16,7 +16,7 @@ from std.atomic import Atomic
 from std.memory import bitcast
 from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
 from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -555,7 +555,7 @@ def samba_tree_status_kernel(
         var value = ftz(identical_mul_add(Float32(1.0), left, right))
         dst[i] = value
         if (bitcast[DType.uint32](value) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            _ = Atomic[DType.int32].min(status, Int32(e))
+            _ = Atomic[Int32].min(status, Int32(e))
 
 
 def samba_leaf_ids_kernel(ids: MutPointer[Int32, MutAnyOrigin], a: Int32):

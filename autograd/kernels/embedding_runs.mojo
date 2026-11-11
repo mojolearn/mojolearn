@@ -9,7 +9,7 @@ Construction includes copy, device validation and sorting; count that cold cost.
 No compilation, verification or performance evidence has been produced.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -38,7 +38,7 @@ def _nn_ids_copy_validate(dst: _IP, src: _IP, status: _IP, n: Int32, vocab: Int3
         var value = src[i]
         dst[i] = value
         if value < 0 or value >= vocab:
-            _ = Atomic[DType.int32].min(status, Int32(i))
+            _ = Atomic[Int32].min(status, Int32(i))
 
 
 def _nn_ids_error_value(ids: _IP, status: _IP, n: Int32):
@@ -49,7 +49,7 @@ def _nn_ids_error_value(ids: _IP, status: _IP, n: Int32):
 def _nn_ids_compare(left: _IP, right: _IP, status: _IP, n: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n) and left[i] != right[i]:
-        _ = Atomic[DType.int32].min(status, Int32(i))
+        _ = Atomic[Int32].min(status, Int32(i))
 
 
 struct OwnedEmbeddingRuns(Movable):

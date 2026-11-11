@@ -17,7 +17,7 @@
 # map, dict): # cpu-route: Python object labels, the explicit label input step.
 # Both give the sorted distinct classes and the codes into them, which is
 # all the metrics read, so the programs below see the same words.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
@@ -303,7 +303,7 @@ struct MxArena(Copyable, Movable):
         the arena words as a new Array."""
         var result = family_array(shape, typestr, context)
         if words > 0:
-            memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
+            unsafe_memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
                    src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off), count=words)
             _ = result  # keep both owners alive through the native copy above
             _ = self.store

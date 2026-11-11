@@ -4,7 +4,7 @@
 The Python boundary lends admitted buffers and retains their owners. Every
 callee here accepts native values; the measured kernels remain unchanged.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr
 from core.linear_fit_types import (
     LinearFitRequest, LinearFitResult, LF_FLAGS, LF_GRAM, LF_RIDGE_RESIDENT,
@@ -31,8 +31,8 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
         var targets = List[Float32](unsafe_uninit_length=rows * 2 if has_weights else 0)
         var y_address = request.y
         if has_weights:
-            memcpy(dest=targets.unsafe_ptr(), src=f32_ptr(request.y), count=rows)
-            memcpy(dest=targets.unsafe_ptr() + rows, src=f32_ptr(request.weights), count=rows)
+            unsafe_memcpy(dest=targets.unsafe_ptr(), src=f32_ptr(request.y), count=rows)
+            unsafe_memcpy(dest=targets.unsafe_ptr() + rows, src=f32_ptr(request.weights), count=rows)
             y_address = Int(targets.unsafe_ptr())
         var values = List[Float32](length=cols + 5, fill=0.0)
         try:
@@ -41,7 +41,7 @@ def linear_ridge_run(entry: NativeDescriptorCall, weighted_entry: NativeDescript
                 [rows, cols, Int(request.intercept), Int(has_weights)], [request.alpha])
             if values[cols + 4] == Float32(2.0):
                 raise Error("mojolearn Ridge: X'X + alpha I is singular even in float-float; rescale X or use a larger alpha")
-            memcpy(dest=f32_ptr(request.coef), src=values.unsafe_ptr(), count=cols)
+            unsafe_memcpy(dest=f32_ptr(request.coef), src=values.unsafe_ptr(), count=cols)
             if request.intercept:
                 result.intercept = Float64(values[cols])
         finally:

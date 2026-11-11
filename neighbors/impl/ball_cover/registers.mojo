@@ -123,9 +123,9 @@ from experiments.classical_identical_ideas.graph_controls import C32_COUNT_FUSIO
 
 
 from std.bit import count_trailing_zeros, pop_count
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
-from std.gpu.primitives.warp import sum as warp_sum
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+from max.gpu.primitives.warp import sum as warp_sum
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 from neighbors.checks.ball_cover_canonical_order import (
     rbc_canonicalize_row_order,
@@ -889,7 +889,7 @@ def rbc_eps_pass_fill(
     # entry points and both callers byte-for-byte unchanged;
     # `rbc_eps_pass_count` already performs exactly this read. Compiled out
     # entirely under FAST.
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         var h_nnz = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.enqueue_copy(
@@ -1049,7 +1049,7 @@ def rbc_eps_tile_kernel[MODE: Int](
     comptime if MODE == ET_FILL:
         if owner:
             cur = Int(adj_ia.unsafe_load(q0 + tid))
-    var cnt = InlineArray[Int32, ET_RI](fill=Int32(0))
+    var cnt = Array[Int32, ET_RI](fill=Int32(0))
     var L0 = 0
     while L0 < n_landmarks:
         if tid < ET_LB:
@@ -1087,14 +1087,14 @@ def rbc_eps_tile_kernel[MODE: Int](
                         if q0 + qq < nq:
                             bm.unsafe_store((wbase + t) * nq + q0 + qq, UInt64(0))
                 continue
-            var rok = InlineArray[Bool, ET_RI](fill=False)
-            var rcd = InlineArray[Float32, ET_RI](fill=Float32(0.0))
+            var rok = Array[Bool, ET_RI](fill=False)
+            var rcd = Array[Float32, ET_RI](fill=Float32(0.0))
             comptime for rr in range(ET_RI):
                 rok[rr] = lmo_s[l2 * ET_TI + ty + rr * ET_TY] != Int32(0)
                 rcd[rr] = lmd_s[l2 * ET_TI + ty + rr * ET_TY]
             var p0 = 0
             while p0 < rsz:
-                var acc = InlineArray[Float32, ET_RI * ET_RJ](fill=Float32(0.0))
+                var acc = Array[Float32, ET_RI * ET_RJ](fill=Float32(0.0))
                 var k0 = 0
                 while k0 < n_cols:
                     comptime for qd in range(ET_KC * ET_TI // ET_TPB):
@@ -1120,8 +1120,8 @@ def rbc_eps_tile_kernel[MODE: Int](
                     if kmax > ET_KC:
                         kmax = ET_KC
                     for kk in range(kmax):
-                        var av = InlineArray[Float32, ET_RI](fill=Float32(0.0))
-                        var bv = InlineArray[Float32, ET_RJ](fill=Float32(0.0))
+                        var av = Array[Float32, ET_RI](fill=Float32(0.0))
+                        var bv = Array[Float32, ET_RJ](fill=Float32(0.0))
                         comptime for rr in range(ET_RI):
                             av[rr] = a_s[kk * ET_TI + ty + rr * ET_TY]
                         comptime for cc in range(ET_RJ):
@@ -1511,7 +1511,7 @@ def rbc_eps_pass_max_k(
     # (`dbscan/impl/runner.mojo` returns False unconditionally), and
     # the check picks max_k from a prior count. The refusal exists so the hole
     # cannot open silently later.
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         if actual_max > max_k:
             raise Error(

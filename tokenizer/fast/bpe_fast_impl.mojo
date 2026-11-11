@@ -16,7 +16,7 @@ for run ends, then a device hash dedup. The vocabulary emission after the merges
 new token's bytes, the join of its two parts, in merge order) is the trained model's output, sized
 by vocab_size, as the host trainer writes it.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from tokenizer.encoding import BpeTokenizer
 from tokenizer.impl.ranks import parse_rank_table
@@ -116,7 +116,7 @@ def _document(text_address: Int, offs: List[Int], d: Int) raises -> List[UInt8]:
     var m = offs[d + 1] - a
     var doc = List[UInt8](length=m, fill=UInt8(0))
     if m > 0:
-        memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m)
+        unsafe_memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m)
     return doc^
 
 
@@ -258,8 +258,8 @@ def fast_bpe_trained_copy_into(
     where token k - 1's end), so each array is one copy."""
     var arena = _u8_ptr(arena_address)
     var lengths = _i64_ptr(lengths_address)
-    memcpy(dest=arena, src=v.arena.unsafe_ptr(), count=len(v.arena))
-    memcpy(dest=lengths, src=v.length.unsafe_ptr().bitcast[Int64](), count=v.n_tokens())
+    unsafe_memcpy(dest=arena, src=v.arena.unsafe_ptr(), count=len(v.arena))
+    unsafe_memcpy(dest=lengths, src=v.length.unsafe_ptr().bitcast[Int64](), count=v.n_tokens())
     if nm > 0:
-        memcpy(dest=_i64_ptr(left_address), src=v.merge_left.unsafe_ptr().bitcast[Int64](), count=nm)
-        memcpy(dest=_i64_ptr(right_address), src=v.merge_right.unsafe_ptr().bitcast[Int64](), count=nm)
+        unsafe_memcpy(dest=_i64_ptr(left_address), src=v.merge_left.unsafe_ptr().bitcast[Int64](), count=nm)
+        unsafe_memcpy(dest=_i64_ptr(right_address), src=v.merge_right.unsafe_ptr().bitcast[Int64](), count=nm)

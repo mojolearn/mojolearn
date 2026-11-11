@@ -141,7 +141,7 @@ speed one.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import thread_idx, block_idx
+from max.gpu import thread_idx, block_idx
 from std.memory import stack_allocation
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

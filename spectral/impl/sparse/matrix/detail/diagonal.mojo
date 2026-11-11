@@ -13,7 +13,7 @@ refusal of repeated keys guarantees there is never a second) it is a plain
 scatter with no race.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz

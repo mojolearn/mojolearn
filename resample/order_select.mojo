@@ -22,7 +22,7 @@ Shared page: tpb Int32 (at most 1 KB at tpb = 256). No atomics.
 materialize + sort path. The trimmed mean keeps the sort (its pinned fold
 reads every kept rank in order).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace

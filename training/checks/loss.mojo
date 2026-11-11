@@ -88,7 +88,7 @@ ran. There is deliberately no synchronizing form, because a training step
 chains many of these and one wait per stage is the wrong shape.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp, log
 from std.memory import bitcast, stack_allocation
 from std.os import getenv

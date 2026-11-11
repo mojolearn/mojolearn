@@ -59,7 +59,7 @@ invisible gap (CONTRIBUTING.md (Evidence must be able to fail)).
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_div
 

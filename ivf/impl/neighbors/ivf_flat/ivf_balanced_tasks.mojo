@@ -12,8 +12,8 @@ from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DIST
 from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
 # SPDX-License-Identifier: Apache-2.0
 
-from std.gpu import block_idx,thread_idx,lane_id
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx,thread_idx,lane_id
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_FAST
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import WARP_SIZE,_key,_kless
@@ -63,9 +63,9 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
         end=min(start+TASK_ROWS,total)
     var lane=Int(lane_id())
     var dim=Int(dim_in)
-    var tk=InlineArray[UInt32,KM](fill=UInt32.MAX)
-    var td=InlineArray[Float32,KM](fill=Float32(0))
-    var ti=InlineArray[UInt32,KM](fill=UInt32.MAX)
+    var tk=Array[UInt32,KM](fill=UInt32.MAX)
+    var td=Array[Float32,KM](fill=Float32(0))
+    var ti=Array[UInt32,KM](fill=UInt32.MAX)
     var pos=start+lane
     while pos<end:
         var address=pos
@@ -128,9 +128,9 @@ def _merge_tasks[KM:Int](pd: MutPointer[Float32,MutAnyOrigin],pi: MutPointer[UIn
     var q=Int(block_idx.x)*256+Int(thread_idx.x)
     if q>=Int(nq):
         return
-    var tk=InlineArray[UInt32,KM](fill=UInt32.MAX)
-    var td=InlineArray[Float32,KM](fill=Float32(0))
-    var ti=InlineArray[UInt32,KM](fill=UInt32.MAX)
+    var tk=Array[UInt32,KM](fill=UInt32.MAX)
+    var td=Array[Float32,KM](fill=Float32(0))
+    var ti=Array[UInt32,KM](fill=UInt32.MAX)
     for task in range(Int(off[q*Int(np)]),Int(off[(q+1)*Int(np)])):
         for r in range(KM):
             var id=pi[task*KM+r]

@@ -5,7 +5,7 @@
 Python and kept the first k entries whose row passes the filter (an id < 0 is
 padding). Here one thread per query on the device, the same cell in a loop on
 the host column. Output slots past the kept entries are +inf / -1."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import download_f32, download_i32, upload_f32, upload_i32

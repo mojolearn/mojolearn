@@ -59,7 +59,7 @@ A Float64 device arm is not offered; the refusal is by dtype.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 
 #: DEVIATION 994: the widest exogenous design `estimate_x0` regresses. It is

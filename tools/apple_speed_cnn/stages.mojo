@@ -7,7 +7,7 @@ and caches), so the numbers are the shipped step's. Timing only: synthetic
 operands.
 Lines: CNN-STAGE <block> <stage> <ms>."""
 from std.time import perf_counter_ns
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from x_cnn.ops import (

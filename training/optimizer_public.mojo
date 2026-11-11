@@ -26,7 +26,7 @@ the existing entry for that route called with the same arguments it always
 had: the resident step, the resident step with its transfers named (the
 device-parameter step and the device sign flip), or the per-call step. The
 same kernels on the same buffers in the same order: the same bits."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -194,9 +194,9 @@ def resident_download(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int,
     var pool = OPT_POOL.get_or_create_ptr()
     if pool[].on_host[h]:
         if m_addr != 0:
-            memcpy(dest=F32P(unsafe_from_address=m_addr), src=pool[].hm[h].unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=F32P(unsafe_from_address=m_addr), src=pool[].hm[h].unsafe_ptr(), count=n)
         if v_addr != 0:
-            memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].hv[h].unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].hv[h].unsafe_ptr(), count=n)
         return n
     if m_addr != 0:
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=m_addr), src_buf=pool[].m[h])
@@ -213,9 +213,9 @@ def resident_upload(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int, n
     var pool = OPT_POOL.get_or_create_ptr()
     if pool[].on_host[h]:
         if m_addr != 0:
-            memcpy(dest=pool[].hm[h].unsafe_ptr(), src=F32P(unsafe_from_address=m_addr), count=n)
+            unsafe_memcpy(dest=pool[].hm[h].unsafe_ptr(), src=F32P(unsafe_from_address=m_addr), count=n)
         if v_addr != 0:
-            memcpy(dest=pool[].hv[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
+            unsafe_memcpy(dest=pool[].hv[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
         return n
     if m_addr != 0:
         ctx.enqueue_copy(dst_buf=pool[].m[h], src_ptr=F32P(unsafe_from_address=m_addr))

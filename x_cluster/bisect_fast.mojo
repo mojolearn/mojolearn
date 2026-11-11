@@ -29,7 +29,7 @@ only; anything else returns False and the binding takes the copying path.
 FAST promises quality, not bits: the means are float32 chunk sums (the host
 folds float64), so the centered words, and the inertia's order, differ.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer

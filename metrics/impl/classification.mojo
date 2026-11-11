@@ -10,7 +10,7 @@ Final floating arithmetic uses ascending class order and the mode's division
 policy; no metric arithmetic runs on the CPU.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_div

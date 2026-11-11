@@ -177,15 +177,15 @@ struct HdbscanQueryDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def run(self, mut plan: HdbscanQueryPlan) raises -> Int:
-        var a: InlineArray[Int, 1] = [plan.address()]
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 1] = [plan.address()]
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         var answer = native_descriptor_call_fixed(self.entry, plan.storage[0].operation, a, p, f)
         _ = plan
         return answer

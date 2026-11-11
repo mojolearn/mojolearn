@@ -64,7 +64,7 @@ come back, and a hit is spelled with `ce_refuse_targets`'s own message.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -250,9 +250,9 @@ def samba_targets_scan_kernel(
     var t = targets.unsafe_load(i)
     if t == ignore:
         return
-    _ = Atomic[DType.int32].fetch_add(count, Int32(1))
+    _ = Atomic[Int32].fetch_add(count, Int32(1))
     if t < Int32(0) or t >= vocab:
-        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+        _ = Atomic[Int32].min(first_bad, Int32(i))
 
 
 def _admit_targets_device(

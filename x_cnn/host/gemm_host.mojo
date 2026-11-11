@@ -218,7 +218,7 @@ def _leaf_group[V: Int](arow: FP, b: FP, dst: FP, n: Int, jb: Int, p0: Int, p1: 
     """Cells [jb, jb + V * GW) of one output row over leaf [p0, p1): V SIMD
     chains with the flush deferred, and the flush-every-step rerun when a
     raw result was a nonzero subnormal (the argument in the module doc)."""
-    var acc = InlineArray[GV, V](fill=GV(0))
+    var acc = Array[GV, V](fill=GV(0))
     var trk = GU(0xFFFFFFFF)
     for p in range(p0, p1):
         var av = GV(arow.unsafe_load(p))

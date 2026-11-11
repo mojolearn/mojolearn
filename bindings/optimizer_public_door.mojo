@@ -26,7 +26,7 @@ training/optimizer_public_common.mojo (shared, no device code); `OptimizerNative
 names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -911,7 +911,7 @@ def copy_array(source: PythonObject) raises -> PythonObject:
     if not tensor_view(source, v) or not v.c_contig or v.itemsize != 4:
         raise Error("TypeError: optimizer state copy requires a contiguous float32/int32 buffer")
     var result = new_array(v.shape, "<f4" if base_format(v.fmt) == "f" else "<i4")
-    memcpy(dest=BP(unsafe_from_address=Int(py=result._addr)), src=BP(unsafe_from_address=v.addr), count=v.nbytes)
+    unsafe_memcpy(dest=BP(unsafe_from_address=Int(py=result._addr)), src=BP(unsafe_from_address=v.addr), count=v.nbytes)
     return result
 
 

@@ -206,7 +206,7 @@ def ts_first_row(lo: Int, g: Int) -> Int:
     return lo + d
 
 
-def ts_fold(p: InlineArray[Float32, TS_P]) -> Float32:
+def ts_fold(p: Array[Float32, TS_P]) -> Float32:
     """The fold of the TS_P chains: p[t] += p[t + h] for h = 8, 4, 2, 1, each
     sum flushed; p[0]."""
     var w = p.copy()

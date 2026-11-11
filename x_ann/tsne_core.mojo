@@ -436,8 +436,8 @@ def ts_sum_cell(row_z: F32P, n: Int, z: F32P):
     merges right to left), so one thread needs O(log n) words; the device's
     parallel level-by-level form (`x_ann/tsne_device.mojo::
     repulse_split_kernel`) forms the same nodes, so every column agrees."""
-    var sv = InlineArray[Float32, TS_Z_STACK](fill=Float32(0.0))
-    var sl = InlineArray[Int, TS_Z_STACK](fill=0)
+    var sv = Array[Float32, TS_Z_STACK](fill=Float32(0.0))
+    var sl = Array[Int, TS_Z_STACK](fill=0)
     var top = 0
     for i in range(n):
         var v = row_z.unsafe_load(i)

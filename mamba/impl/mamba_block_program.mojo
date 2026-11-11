@@ -416,7 +416,7 @@ def _destroy(p: _ProgramPtr):
         p[].close()
     except:
         pass
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()
 
 
@@ -446,7 +446,7 @@ def _claim(code: Int, b: Int, dm: Int, fs: List[Float32], weights: List[Int]) ra
     _unlock(c)
     var p = alloc[MambaBlockProgram](1)
     try:
-        p.init_pointee_move(MambaBlockProgram(code, b, dm, fs, weights))
+        p.unsafe_write(MambaBlockProgram(code, b, dm, fs, weights))
     except error:
         p.free()
         raise error

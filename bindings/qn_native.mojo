@@ -34,7 +34,7 @@ from bindings.classical_validate import classical_view, classical_check_weights_
 from providers.python.linear_score_boundary import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _QN_AFTER_FIT_SLOT = "qn_no_after_fit_v1"
 comptime _QN_KNOWN_SLOT = "qn_connected_owner_v1"
 

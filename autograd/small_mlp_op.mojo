@@ -41,7 +41,7 @@ A/B: `-D MOJOLEARN_SMALL_MLP_GENERIC_OPS` makes the program capture the
 generic transpose + OPS_LINEAR ops instead (lane x2's form), for the box
 comparison mlp-train-step / mlp-predict.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP

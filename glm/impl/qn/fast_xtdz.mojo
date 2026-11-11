@@ -11,7 +11,7 @@ per-block partials. X is read once per gradient. Same `out[c + C * j]`
 layout; FAST arithmetic (a different summation order).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -84,9 +84,9 @@ def fx_partial_kernel(
     var zs = stack_allocation[
         FX_ROWS * FX_MAX_C, Float32, address_space=AddressSpace.SHARED
     ]()
-    var acc = InlineArray[Float32, FX_CELLS_PER_THREAD](fill=0.0)
-    var jj = InlineArray[Int, FX_CELLS_PER_THREAD](fill=0)
-    var cc = InlineArray[Int, FX_CELLS_PER_THREAD](fill=0)
+    var acc = Array[Float32, FX_CELLS_PER_THREAD](fill=0.0)
+    var jj = Array[Int, FX_CELLS_PER_THREAD](fill=0)
+    var cc = Array[Int, FX_CELLS_PER_THREAD](fill=0)
     comptime for k in range(FX_CELLS_PER_THREAD):
         var cell = t + k * FX_TPB
         jj[k] = cell // C

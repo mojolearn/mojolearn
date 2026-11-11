@@ -19,7 +19,7 @@ host column divides in hardware, the device with `sf64_div` (the Apple GPU
 has no float64), both correctly rounded, so the words agree.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

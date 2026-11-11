@@ -31,7 +31,7 @@ called by one device thread or by the host loop (the host column), so the
 host and both GPU vendors produce the same words. Rows whose fold id is
 outside [0, F) belong to no fold (Python's KFold ids never are).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

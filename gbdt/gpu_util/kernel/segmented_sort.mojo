@@ -80,7 +80,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_SEG_SUMS_BLOCK.patch; record in docs/TOMBSTONES.md.
 from std.memory import bitcast
 from max.gpu.primitives.block import prefix_sum
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 

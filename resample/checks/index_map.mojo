@@ -144,7 +144,7 @@ see `draw_uniform_in`.
 =================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.identity_trace import FNV_OFFSET, FNV_PRIME
 from core.philox import (

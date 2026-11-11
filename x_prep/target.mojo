@@ -426,7 +426,7 @@ def _te_bucket_reg(t: Int, f: FP, n: Int, d: Int, cmax: Int, C: Int, S: Int, R: 
     arena words (lane prep-apple2: consecutive rows of one category made each
     count a load after a store to the same arena word). The same START and
     ROWS words."""
-    var cnt = InlineArray[Int32, TE_REG + 1](fill=Int32(0))
+    var cnt = Array[Int32, TE_REG + 1](fill=Int32(0))
     var full = n - n % RUN
     for i0 in range(0, full, RUN):
         var bc = run_block[RUN](f, C + i0 * d + t, d)

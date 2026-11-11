@@ -27,7 +27,7 @@ from core.admitted_finite_status import enqueue_finite_status
 
 from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel, min_partials_kernel
 from x_decomp.moves import MOVE_FILL0, MOVE_LAST, MOVE_TAKE_ROWS

@@ -85,7 +85,7 @@ build with it moves every infer and proba cell that goes through this
 door and nothing that does not; the identity gate's sabotage column is
 built with it.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from core.forest_experiments import C50_GB_PACKED
 

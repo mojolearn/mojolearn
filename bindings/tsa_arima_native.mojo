@@ -14,7 +14,7 @@ does not establish runtime behavior or within-release bitwise identity.
 A host inference class (`HostARIMA`) reads its loaded forecast host binding
 from the module table.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from x_metrics.epilogue import portable_log_c
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields, NativeModules
@@ -227,7 +227,7 @@ def _copy_block(source: PythonObject, offset: Int, count: Int, code: String, typ
     `offset`, as an Array of `shape` (the Python body's slice or reshape)."""
     var out = tsa_array(code, typestr, shape, count, width, context)
     if count > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)) + width * offset),
                count=count * width)
         _ = out  # keep the Python object alive through the native call above

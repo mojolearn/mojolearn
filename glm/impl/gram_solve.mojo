@@ -47,7 +47,7 @@ glm/host/gram_solve_host.mojo, runs the same cells in the same order:
 `centered_gram_v1_cell` / `centered_cross_v1_cell` (the reference cells the
 leaf kernels reproduce), `chol_serial`, and the same solve statements.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -329,8 +329,8 @@ def gff_leaf_tiled_kernel(x: F32Ptr, y: F32Ptr, mh: F32Ptr, ml: F32Ptr, ph: F32P
     var il = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
     var jh = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
     var jl = stack_allocation[GFF_TILE_ROWS * GFF_TILE, Float32, address_space=AddressSpace.SHARED]()
-    var acc_h = InlineArray[Float32, GFF_TILE_CELLS * GFF_TILE_CELLS](fill=Float32(0))
-    var acc_l = InlineArray[Float32, GFF_TILE_CELLS * GFF_TILE_CELLS](fill=Float32(0))
+    var acc_h = Array[Float32, GFF_TILE_CELLS * GFF_TILE_CELLS](fill=Float32(0))
+    var acc_l = Array[Float32, GFF_TILE_CELLS * GFF_TILE_CELLS](fill=Float32(0))
     var rc = r0
     while rc < r1:
         var rows = r1 - rc

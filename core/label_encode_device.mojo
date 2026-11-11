@@ -20,7 +20,7 @@ The steps are the host twin's, one launch (or one sort) each:
      position writes the class count.
 Integers and bit moves only: the same bytes as the host twin."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.fast_radix_sort import (
     fast_radix_sort_pairs_u32,

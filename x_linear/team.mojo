@@ -24,7 +24,7 @@ been converted still runs on thread 0 alone, with a team of one
 (x_linear/device.mojo), so conversions land one fit at a time.
 """
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
-from std.gpu import thread_idx, block_dim
+from max.gpu import thread_idx, block_dim
 from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.memory import bitcast

@@ -17,7 +17,7 @@ predicted codes become labels in this same call.
 """
 from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from std.math import sqrt
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_identity_key import NativeIdentityKey
@@ -624,7 +624,7 @@ def _mlp_layer_copy(params: PythonObject, offset: Int, shape: PythonObject, coun
     """`flat[offset:offset + count].reshape(shape).copy()`."""
     var out = xseq_zeros(shape, context)
     if count:
-        memcpy(dest=xseq_f32p(out), src=xseq_f32p(params) + offset, count=count)
+        unsafe_memcpy(dest=xseq_f32p(out), src=xseq_f32p(params) + offset, count=count)
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -795,14 +795,14 @@ def _mlp_pack(coefs: PythonObject, intercepts: PythonObject, columns: Int,
         var w = weights_kept[l]
         var count = weight_counts[l]
         if count:
-            memcpy(dest=destination + offset, src=xseq_f32p(w), count=count)
+            unsafe_memcpy(dest=destination + offset, src=xseq_f32p(w), count=count)
             _ = w  # keep the Python object alive through the native call above
             _ = params  # keep the Python object alive through the native call above
         offset += count
         var bias = biases_kept[l]
         count = bias_counts[l]
         if count:
-            memcpy(dest=destination + offset, src=xseq_f32p(bias), count=count)
+            unsafe_memcpy(dest=destination + offset, src=xseq_f32p(bias), count=count)
             _ = bias  # keep the Python object alive through the native call above
             _ = params  # keep the Python object alive through the native call above
         offset += count

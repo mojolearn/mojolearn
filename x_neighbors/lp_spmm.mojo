@@ -9,7 +9,7 @@ so acc is never -0.0: exact against the dense product while x is finite,
 which `lp_nonfinite_kernel` tests every iteration."""
 from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz, identical_mul_add
@@ -36,7 +36,7 @@ def lp_rowcount_kernel(g: FP, n_: Int64, cnt: IP, stats: IP):
             c += 1
     cnt.unsafe_store(i, Int32(c))
     _ = Atomic.fetch_add[ordering = Ordering.RELAXED](stats, Int32(c))
-    _ = Atomic[DType.int32].max(stats + 1, Int32(c))
+    _ = Atomic[Int32].max(stats + 1, Int32(c))
 
 
 def lp_ell_fill_kernel(g: FP, n_: Int64, maxk_: Int64, cols: IP, vals: FP):

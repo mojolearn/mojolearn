@@ -303,7 +303,7 @@ self-neighbour policy decision (cuVS keeps the self edge; scikit-learn's
 rather than guessed at.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

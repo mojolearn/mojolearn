@@ -51,7 +51,7 @@ THE SABOTAGE ARMS.
       (DEVIATION 2908), flips the lowest bit of every code stored here.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

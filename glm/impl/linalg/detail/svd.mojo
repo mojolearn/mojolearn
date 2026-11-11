@@ -43,7 +43,7 @@ absent as in `lstsq.mojo`.
 """
 
 from core.device_zero import enqueue_fill
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale

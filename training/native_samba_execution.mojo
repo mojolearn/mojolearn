@@ -7,7 +7,7 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.samba_count_impl import samba_target_count
 from core.host_helpers_impl import all_finite_f32
 from core.hostptr import f32_ptr, i32_ptr
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 struct NativeSambaLayer(Movable):
@@ -292,8 +292,8 @@ struct NativeSambaModel(Movable):
             if tied:
                 var n = self.vocab * self.width
                 var pair = List[Float32](length=2 * n, fill=0)
-                memcpy(dest=pair.unsafe_ptr(), src=self.embedding_gradient.unsafe_ptr(), count=n)
-                memcpy(dest=pair.unsafe_ptr() + n, src=self.head_gradient.unsafe_ptr(), count=n)
+                unsafe_memcpy(dest=pair.unsafe_ptr(), src=self.embedding_gradient.unsafe_ptr(), count=n)
+                unsafe_memcpy(dest=pair.unsafe_ptr() + n, src=self.head_gradient.unsafe_ptr(), count=n)
                 _ = self.primitive.call(9, [Int(self.embedding_gradient.unsafe_ptr()), Int(pair.unsafe_ptr())], [n, 2, -1], [])
             self.close_tapes()
             return Float64(loss[0])
@@ -323,17 +323,17 @@ struct NativeSambaModel(Movable):
                 self.dropout_words[1] = base_offset + k * self.rows * self.width
             var xpart = List[Int32](length=self.rows, fill=0)
             var ypart = List[Int32](length=self.rows, fill=0)
-            memcpy(dest=xpart.unsafe_ptr(), src=i32_ptr(ids) + k * self.rows, count=self.rows)
-            memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
+            unsafe_memcpy(dest=xpart.unsafe_ptr(), src=i32_ptr(ids) + k * self.rows, count=self.rows)
+            unsafe_memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
             losses[k] = Float32(self.gradients(Int(xpart.unsafe_ptr()), Int(ypart.unsafe_ptr()),
                 total_count, False, tied, fused, chunked))
             if registry_failure.byte_length() != 0:
                 raise Error(registry_failure)
             for j in range(len(kinds)):  # driver-loop: native ordered gradient-registry copies
-                memcpy(dest=stacked.unsafe_ptr() + k * n + offsets[j],
+                unsafe_memcpy(dest=stacked.unsafe_ptr() + k * n + offsets[j],
                     src=f32_ptr(self.gradient_address(kinds[j], layers[j], slots[j])), count=offsets[j + 1] - offsets[j])
         if accumulation == 1:
-            memcpy(dest=f32_ptr(output), src=stacked.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=f32_ptr(output), src=stacked.unsafe_ptr(), count=n)
             return Float64(losses[0])
         _ = self.primitive.call(9, [output, Int(stacked.unsafe_ptr())], [n, accumulation, self.rows * accumulation], [])
         var total = List[Float32](length=1, fill=0)

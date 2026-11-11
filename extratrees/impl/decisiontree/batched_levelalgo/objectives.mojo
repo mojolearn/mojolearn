@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees split scoring: Gini/entropy classification and MSE regression."""
 
-from std.collections import InlineArray
+from std.collections import Array
 from std.math import fma
 
 from checks.numerics import ftz
@@ -540,7 +540,7 @@ struct EntropyObjectiveFunction[dtype: DType](
         hist_total: Pointer[CountBin, ot],
         len: Int32,
         nLeft: Int32,
-        parent_terms: InlineArray[Float32,32],
+        parent_terms: Array[Float32,32],
     ) -> Scalar[Self.dtype]:
         """compute the Entropy (or information gain) for each split."""
         var nRight = len - nLeft

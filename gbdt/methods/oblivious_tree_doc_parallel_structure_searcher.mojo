@@ -87,7 +87,7 @@ bootstrap arrives.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 
 from core.device_plan import DevicePlan, plan_for_single

@@ -28,7 +28,7 @@ resident handles (one, or one per tensor for Adafactor), -1 when closed.
 
 This file is the host-safe half (generic over `Exec`, no device import):
 the CPU host binding serves the optimizers from it alone. No Python here."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from sequence.exec_trait import Exec
 from sequence.ops import FP
@@ -192,7 +192,7 @@ def gather(addrs: List[Int], sizes: List[Int], n: Int) raises -> List[Float32]:
     var off = 0
     for j in range(len(sizes)):
         if sizes[j] > 0:
-            memcpy(dest=dst + off, src=host_fp(addrs[j], "tensor"), count=sizes[j])
+            unsafe_memcpy(dest=dst + off, src=host_fp(addrs[j], "tensor"), count=sizes[j])
         off += sizes[j]
     return buf^
 
@@ -203,7 +203,7 @@ def scatter(buf: List[Float32], addrs: List[Int], sizes: List[Int]) raises:
     var off = 0
     for j in range(len(sizes)):
         if sizes[j] > 0:
-            memcpy(dest=host_fp(addrs[j], "tensor"), src=src + off, count=sizes[j])
+            unsafe_memcpy(dest=host_fp(addrs[j], "tensor"), src=src + off, count=sizes[j])
         off += sizes[j]
 
 
@@ -371,7 +371,7 @@ struct StateCopy(Movable):
 
 def _copy(dst: Int, src: Int, n: Int, what: String) raises:
     if n > 0:
-        memcpy(dest=host_fp(dst, what), src=host_fp(src, what), count=n)
+        unsafe_memcpy(dest=host_fp(dst, what), src=host_fp(src, what), count=n)
 
 
 def export_copy(w: IP64, c: StateCopy) raises -> Int:

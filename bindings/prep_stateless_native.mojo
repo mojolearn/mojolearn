@@ -6,7 +6,7 @@
 # Python `_Prog` built) and runs it through the shared transport
 # (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
 # and runs the one transform program.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -32,8 +32,8 @@ from bindings.prep_normalizer_lifecycle import normalizer_transform
 from bindings.prep_normalizer_fit import normalizer_fit
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
-alias I64P = MutPointer[Int64, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 # x_prep stage codes (_expansion_prep._OPS).
 comptime OP_BINARIZE = 12

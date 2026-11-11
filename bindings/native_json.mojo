@@ -2,7 +2,7 @@
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_address import native_buffer_address
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
@@ -29,7 +29,7 @@ struct NativeJSON(Movable):
         var n = len(self.raw)
         var buf = List[UInt8](unsafe_uninit_length=n)
         if n > 0:
-            memcpy(dest=buf.unsafe_ptr(),
+            unsafe_memcpy(dest=buf.unsafe_ptr(),
                    src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(self.raw)),
                    count=n)
         self.buf = buf^
@@ -163,7 +163,7 @@ struct NativeJSON(Movable):
         # object or bytes copy per number).
         var count = self.at - start
         var digits = List[UInt8](unsafe_uninit_length=count + 1)
-        memcpy(dest=digits.unsafe_ptr(), src=self.buf.unsafe_ptr() + start, count=count)
+        unsafe_memcpy(dest=digits.unsafe_ptr(), src=self.buf.unsafe_ptr() + start, count=count)
         digits[count] = 0
         ref cpy = Python().cpython()
         # Entries resolved once per process (cpython_table), not per number.
@@ -260,7 +260,7 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
     var n = len(bytes)
     var raw = py_call(native_loaded_module("builtins").bytearray, PythonObject(n))
     if n > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(raw)),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(raw)),
                src=bytes.unsafe_ptr(), count=n)
     _ = bytes^
     return native_json_parse(raw)

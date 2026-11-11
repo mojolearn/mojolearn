@@ -12,7 +12,7 @@ The iterations are gated on the device's done word, so the driver enqueues
 SD_CHUNK of them behind ONE read of the four state words (done, n_iter,
 status, argmin); the prep and the greedy start read nothing.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

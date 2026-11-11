@@ -27,7 +27,7 @@ A/B (runtime, one build serves both arms):
 """
 
 from std.atomic import Atomic, Ordering
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -184,7 +184,7 @@ struct GemmHostLease(Movable):
 def _par_copy(dst: F32P, src: F32P, n: Int):
     """One `memcpy(dst, src, n)`: the stage's single host copy (transport, no
     arithmetic, no host threads)."""
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def gemm_up_f32(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[DType.float32], src: F32P, n: Int) raises:

@@ -15,7 +15,7 @@ fit (`bindings/trees_public_iforest.mojo`, 1.8 GB, iforest fit 39.6x with C1)
 were one serial `memcpy` on one host thread. Spans must not overlap; both
 allocations stay alive for the whole call; no pointer is retained.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
@@ -38,7 +38,7 @@ def host_parallel_copy_bytes(dst_addr: Int, src_addr: Int, nbytes: Int):
     # the grain floor of host_predict_threads is stated in.
     var tasks = host_predict_task_count_work(blocks, (nbytes + 3) // 4)
     if tasks <= 1:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_addr),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_addr),
                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=src_addr), count=nbytes)
         return
     var chunk = host_predict_chunk(blocks, tasks) * HOST_COPY_BLOCK_BYTES
@@ -47,7 +47,7 @@ def host_parallel_copy_bytes(dst_addr: Int, src_addr: Int, nbytes: Int):
         var lo = t * chunk
         var hi = min(lo + chunk, nbytes)
         if lo < hi:
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_addr + lo),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst_addr + lo),
                    src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=src_addr + lo), count=hi - lo)
 
     host_parallelize(_span, tasks)

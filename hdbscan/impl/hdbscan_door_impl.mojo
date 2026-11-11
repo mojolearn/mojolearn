@@ -4,7 +4,7 @@
 the fit run and the prediction-data run with their result copies, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change)."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -66,8 +66,8 @@ def hdbscan_fit_door_run(
     )
     ctx.synchronize()
     comptime if IDN_HDB_OUT_MEMCPY:
-        memcpy(dest=lp, src=out.labels.unsafe_ptr(), count=n)
-        memcpy(dest=cp, src=out.core_dists.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=lp, src=out.labels.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=cp, src=out.core_dists.unsafe_ptr(), count=n)
     else:
         for i in range(n):
             lp.unsafe_store(i, out.labels[i])
@@ -86,11 +86,11 @@ def hdbscan_fit_door_run(
             )
         ip.unsafe_store(4, Int32(ne))
         comptime if IDN_HDB_OUT_MEMCPY:
-            memcpy(dest=tpp, src=out.condensed.parents.unsafe_ptr(), count=ne)
-            memcpy(dest=tcp, src=out.condensed.children.unsafe_ptr(), count=ne)
-            memcpy(dest=tlp, src=out.condensed.lambdas.unsafe_ptr(), count=ne)
-            memcpy(dest=tsp, src=out.condensed.sizes.unsafe_ptr(), count=ne)
-            memcpy(dest=invp, src=out.inverse_label_map.unsafe_ptr(), count=out.n_clusters)
+            unsafe_memcpy(dest=tpp, src=out.condensed.parents.unsafe_ptr(), count=ne)
+            unsafe_memcpy(dest=tcp, src=out.condensed.children.unsafe_ptr(), count=ne)
+            unsafe_memcpy(dest=tlp, src=out.condensed.lambdas.unsafe_ptr(), count=ne)
+            unsafe_memcpy(dest=tsp, src=out.condensed.sizes.unsafe_ptr(), count=ne)
+            unsafe_memcpy(dest=invp, src=out.inverse_label_map.unsafe_ptr(), count=out.n_clusters)
         else:
             for e in range(ne):
                 tpp.unsafe_store(e, out.condensed.parents[e])
@@ -101,7 +101,7 @@ def hdbscan_fit_door_run(
                 invp.unsafe_store(c, out.inverse_label_map[c])
     if want_probs:
         comptime if IDN_HDB_OUT_MEMCPY:
-            memcpy(dest=pp, src=out.probabilities.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=pp, src=out.probabilities.unsafe_ptr(), count=n)
         else:
             for i in range(n):
                 pp.unsafe_store(i, out.probabilities[i])

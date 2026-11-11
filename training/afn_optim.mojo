@@ -52,7 +52,7 @@ on every one):
       (vs ~12 launches, 2 vendor matmuls, 5 waits, ~16 buffers and
       a host-built ones vector per call in main).
 """
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import exp, fma, log, max, sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined

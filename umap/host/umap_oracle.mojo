@@ -467,8 +467,8 @@ def host_umap_vertex_rt(
     var epoch_u = UInt32(draw_epoch)
     var n_u = UInt32(n)
     var key = SIMD[DType.uint32, 2](UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF))
-    var x = InlineArray[Float32, 32](fill=Float32(0.0))
-    var acc = InlineArray[Float32, 32](fill=Float32(0.0))
+    var x = Array[Float32, 32](fill=Float32(0.0))
+    var acc = Array[Float32, 32](fill=Float32(0.0))
     for c in range(C):
         x[c] = source[v * C + c]
     var begin = Int(row_offsets[v])
@@ -478,7 +478,7 @@ def host_umap_vertex_rt(
         if Int(next_f * s) <= Int(epoch_f * s):
             continue
         var u = Int(tails[e])
-        var delta = InlineArray[Float32, 32](fill=Float32(0.0))
+        var delta = Array[Float32, 32](fill=Float32(0.0))
         var d2 = Float32(0.0)
         for c in range(C):
             delta[c] = ftz(x[c] - source[u * C + c])
@@ -516,7 +516,7 @@ def host_umap_vertex_rt(
             var other = Int(draw[lane] % n_u)
             if other == v:
                 continue
-            var nd = InlineArray[Float32, 32](fill=Float32(0.0))
+            var nd = Array[Float32, 32](fill=Float32(0.0))
             var n2 = Float32(0.0)
             for c in range(C):
                 nd[c] = ftz(x[c] - source[other * C + c])

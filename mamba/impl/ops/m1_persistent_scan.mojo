@@ -41,7 +41,7 @@ Shared memory is `TOK * CH * DSTATE * 4` bytes (8 KiB at the defaults, 32 KiB
 at the largest legal pair), within every column's 32 KiB floor. No rule reads
 a shape: the block geometry is fixed and the grid covers any (batch, dim, L).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext

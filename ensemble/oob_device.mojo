@@ -37,7 +37,7 @@ Float64 fma chain). Now the device does both and returns two integers
 y and the counts no longer cross the bus.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from checks.soft_f64 import (

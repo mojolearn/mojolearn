@@ -22,7 +22,7 @@ happened here.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import floor
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
@@ -300,7 +300,7 @@ def hist2_smem_add[
     each accumulator.
     """
 
-    @parameter
+    @__parameter
     if dt == DType.int32:
         # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple Mojo
         # default is seq_cst.
@@ -900,7 +900,7 @@ def write_reduces_from_fixed_kernel[
             # cell means a zero histogram cell. It stays True for the
             # binary and half-byte families, whose single-block stores
             # are exact floats in the scratch.
-            @parameter
+            @__parameter
             if read_scratch:
                 val = block_histogram.unsafe_load(src)
 

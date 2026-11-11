@@ -43,7 +43,7 @@ test matrix hiding a permutation (`[[uniform-test-data-hides-permutation]]`).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma
 from std.memory import bitcast
 

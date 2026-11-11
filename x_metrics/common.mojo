@@ -126,7 +126,7 @@ struct PairSum(Movable):
     COUNT of values alone. The error grows with log2(n / LEAF) rather than n,
     which a sequential Float32 fold over a million rows cannot afford, and no
     compensation term is carried (gemm/IDENTICAL_FP32_CONTRACT.md section 1)."""
-    var stack: InlineArray[Float32, STACK]
+    var stack: Array[Float32, STACK]
     var depth: Int
     var count: Int
     var leaf: Float32
@@ -134,7 +134,7 @@ struct PairSum(Movable):
 
     def __init__(out self):
         comptime assert C01_LEAF_LEGAL, "MOJOLEARN_CLASSICAL_C01_LEAF must be 32, 64 or 128"
-        self.stack = InlineArray[Float32, STACK](fill=Float32(0))
+        self.stack = Array[Float32, STACK](fill=Float32(0))
         self.depth = 0
         self.count = 0
         self.leaf = Float32(0)

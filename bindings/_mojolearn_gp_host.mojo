@@ -54,7 +54,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
@@ -378,7 +378,7 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         if len(addrs) == 11:
             # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
             var yo = f32_ptr(Int(py=addrs[10]))
-            memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
+            unsafe_memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
             _ = len(y)
     else:
         y = read_f32(Int(py=addrs[1]), max(0, n_train))
@@ -574,7 +574,7 @@ def cholesky_solve_binding(
     var factor = CholHostFactor(l^, n, info, logdet, nb, jitter)
     with GILReleased(Python()):
         var x = chol_host_solve(factor, b, nrhs)
-        memcpy(dest=xp, src=x.unsafe_ptr(), count=max(0, n * nrhs))
+        unsafe_memcpy(dest=xp, src=x.unsafe_ptr(), count=max(0, n * nrhs))
         _ = x^
     _ = factor^
     _ = b^
