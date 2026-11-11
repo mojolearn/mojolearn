@@ -15,6 +15,26 @@ comptime LINEAR_SVC_FLAGS = 12
 comptime LINEAR_SVC_NATIVE_COUNT = 13
 
 
+struct LinearSvcWeightsState(Movable):
+    var values: List[Float32]
+    var address: Int
+
+    def __init__(out self):
+        self.values = List[Float32]()
+        self.address = 0
+
+
+struct LinearSvcScores(Movable):
+    var values: List[Float32]
+    var rows: Int
+    var targets: Int
+
+    def __init__(out self, rows: Int, targets: Int):
+        self.rows = rows
+        self.targets = targets if targets > 1 else 1
+        self.values = List[Float32](length=rows * self.targets, fill=0)
+
+
 @fieldwise_init
 struct LinearSvcOptions(Copyable, Movable):
     var rows: Int
@@ -114,7 +134,14 @@ independent 0/1 target writes replace the old boundary's scalar data loop.
 def linear_svc_pack(state: LinearSvcFitState, fits: Int, features: Int, intercept: Bool,
     weights_address: Int, coefficients_address: Int, intercept_address: Int) raises:
     """The original public PACK copies, partitioned across independent words."""
-    var source = state.coefficients.unsafe_ptr()
+    _linear_svc_pack_words(state.coefficients, fits, features, intercept,
+        weights_address, coefficients_address, intercept_address)
+    _ = state
+
+
+def _linear_svc_pack_words(values: List[Float32], fits: Int, features: Int, intercept: Bool,
+    weights_address: Int, coefficients_address: Int, intercept_address: Int) raises:
+    var source = values.unsafe_ptr()
     var weights = f32_ptr(weights_address)
     var coefficients = f32_ptr(coefficients_address)
     var intercepts = f32_ptr(intercept_address)
@@ -129,7 +156,7 @@ def linear_svc_pack(state: LinearSvcFitState, fits: Int, features: Int, intercep
         elif intercept:
             intercepts[row] = value
     host_parallelize(pack, fits * width)
-    _ = state
+    _ = values
 
 
 def _word(address: Int, index: Int) -> Int:

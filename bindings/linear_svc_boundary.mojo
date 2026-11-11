@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.linear_svc_native_api import (
     LINEAR_SVC_NATIVE_ABI, LINEAR_SVC_NATIVE_COUNT, LinearSvcDriver,
-    LinearSvcFitRequest, LinearSvcFitPlan,
+    LinearSvcFitRequest, LinearSvcFitPlan, LinearSvcWeightsState,
 )
 from core.logistic_native_api import QnQueryRequest
 from providers.python.neural_descriptor_pyapi import (
@@ -16,6 +16,14 @@ from providers.python.neural_descriptor_pyapi import (
 struct LinearSvcConnection(Movable):
     var provider: PythonObject
     var driver: LinearSvcDriver
+
+
+@fieldwise_init
+struct LinearSvcWeights(Movable):
+    # Python is retained only for admitted input storage. Generated ones,
+    # class rows and multiplication output live in native lists.
+    var input_pin: PythonObject
+    var state: LinearSvcWeightsState
 
 
 def linear_svc_connection(binding: PythonObject) raises -> LinearSvcConnection:
