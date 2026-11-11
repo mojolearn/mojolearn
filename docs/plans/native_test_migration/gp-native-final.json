@@ -102,7 +102,6 @@
   "product_or_kernel_changes": 0,
   "remaining": [
     "Root compile and native execution",
-    "Pilot typed label-owner dependency and any meaningful pure owner fixtures",
     "Prepared Python numerical cleanup remains unapplied until native replacement execution passes",
     "Whole-campaign semantic inventory and legacy boxed GP consumer audit incomplete at E/pca-native-tests/migration-inventory/checkpoint.json"
   ],
@@ -110,5 +109,6 @@
     "runtime": false,
     "cross_vendor_identity": false,
     "performance": false
-  }
+  },
+  "label_owner_companion": "gp-native-label-owner.json"
 }
