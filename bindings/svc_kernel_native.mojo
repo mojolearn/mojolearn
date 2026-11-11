@@ -36,6 +36,8 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.boundary_read import buffer_view
+from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_attributes import _type_mro
@@ -502,6 +504,39 @@ def _i32_array(values: PythonObject, context: PythonObject) raises -> PythonObje
     return classical_wrap_array(store, Python.tuple(PythonObject(len(store))), "<i4", "C", context)
 
 
+def _native_exporter(value: PythonObject) -> Bool:
+    """True for an exact native buffer exporter (ndarray, array.array,
+    bytes, ...): identity reads only, never a buffer hook."""
+    try:
+        admit_native_buffer_exporter(value)
+        return True
+    except:
+        return False
+
+
+def _gather_support_columns(binding: PythonObject, x_addr: Int, n_rows: Int, n_cols: Int, support: PythonObject,
+                            count: Int, context: PythonObject, native: PythonObject) raises -> PythonObject:
+    """`_gather(x, cols=support_)` for kernel='precomputed': the cross-kernel's
+    columns at the support vectors. `count` < 0 takes the index count from
+    `support` itself. A C-order int32 exporter (a fitted ndarray or
+    array('i')) is read in place through ONE buffer view, released after the
+    gather: no per-element read and no packed copy. An int32 Array is used as
+    is; any other sequence is packed once (`_i32_array`), as before."""
+    if not classical_is_array(support, context) and _native_exporter(support):
+        var view = buffer_view(support)
+        if view.ndim == 1 and view.matches("<i4"):
+            var n = count if count >= 0 else view.shape[0]
+            var out = _gather(binding, x_addr, n_rows, n_cols, 0, n_rows, view.address(), n, context, native)
+            view.release()
+            return out
+        view.release()
+    var held = _i32_array(support, context)
+    var n = count if count >= 0 else Int(py=held.shape[0])
+    var out = _gather(binding, x_addr, n_rows, n_cols, 0, n_rows, _addr(held), n, context, native)
+    _ = held  # keep the Python object alive through the native call above
+    return out
+
+
 def _pair_select(binding: PythonObject, codes: PythonObject, ci: Int, cj: Int, c_rows: PythonObject,
                  context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`_svm_impl._pair_select`: (row indices, 0/1 labels, bounds or None, m),
@@ -663,14 +698,11 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
     var query = q
     var query_addr = query_address
     var vectors = sv
-    var held = PythonObject(None)
     var words = PythonObject(None)
     if settings.kernel == 4 and n_support > 0:
         # X is the cross-kernel against the TRAINING rows; the decision
         # reads its columns at the support vectors and no support rows.
-        held = _i32_array(support, context)
-        query = _gather(binding, query_address, n_rows, query_cols, 0, n_rows, _addr(held), n_support, context, native)
-        _ = held  # keep the Python object alive through the native call above
+        query = _gather_support_columns(binding, query_address, n_rows, query_cols, support, n_support, context, native)
         query_addr = _addr(query)
         n_features = n_support
         vectors = dual
@@ -712,7 +744,6 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
     _ = native
     _ = query^
     _ = vectors^
-    _ = held^
     return words
 
 
@@ -1636,12 +1667,10 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     var n_features = d
     var query = q
     var query_address = q_meta.address
-    var held = PythonObject(None)
     if precomputed and n_support > 0:
         # the cross-kernel's columns at the support vectors (SVC's rule)
-        held = _i32_array(svc_field(fields, "support_"), context)
-        query = _gather(binding, q_meta.address, n_rows, q_meta.cols, 0, n_rows, _addr(held), Int(py=held.shape[0]), context, native)
-        _ = held  # keep the Python object alive through the native call above
+        query = _gather_support_columns(binding, q_meta.address, n_rows, q_meta.cols, svc_field(fields, "support_"), -1,
+            context, native)
         _ = q  # keep the Python object alive through the native call above
         query_address = _addr(query)
         n_features = n_support
@@ -1683,7 +1712,6 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     _ = lease
     _ = connection
     _ = query^
-    _ = held^
     _ = q^
     _ = q_meta^  # retain captured storage owners through the last native use
     return out
