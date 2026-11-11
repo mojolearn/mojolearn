@@ -78,7 +78,7 @@ def labels(driver: XnDriver, address: Int, expected_scores: List[Float64],
         var rp = result.unsafe_ptr() + 1
         var ep = expected_scores.unsafe_ptr()
         def cell(index: Int) {imm fp, imm rp, imm ep, imm expected_threshold}:
-            fp.unsafe_store(index, Int(rp[index] != (-1 if ep[index] < expected_threshold else 1)))
+            fp.unsafe_store(index, Int(rp[index] != Int64(-1 if ep[index] < expected_threshold else 1)))
         host_parallelize(cell, count)
         for failed in failures:
             require(failed == 0, "LOF labels agree with independent score threshold")
