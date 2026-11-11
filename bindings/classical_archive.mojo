@@ -12,6 +12,7 @@ from bindings.sequential_inputs import sequential_input
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.archive_unicode_native import _archive_unicode_failure
 from bindings.cpython_table import cpython_table
+from bindings.boundary_read import read_str_points
 from core.sha256 import sha256_hex, sha256_hex_addr
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_path import archive_filesystem_decode, archive_path_join, archive_path_normalize
@@ -34,7 +35,7 @@ def _archive_file_call(entry: PythonObject, *args: PythonObject) raises -> Pytho
     if not envelope:
         var failure = stash_python_error()
         raise failure^
-    for i in range(len(args)):  # small-loop(args: fixed native IO entry arguments)
+    for i in range(len(args)):  # driver-loop: over the fixed native IO entry arguments
         _ = cpy.PyTuple_SetItem(envelope, i, cpy.Py_NewRef(args[i]._obj_ptr))
     var result = cpy.PyObject_Call(entry._obj_ptr, envelope, PyObjectPtr())
     cpy.Py_DecRef(envelope)
@@ -58,15 +59,9 @@ def _archive_methods(file: PythonObject, context: PythonObject) raises -> Python
 def _archive_path_words_unpack(value: PythonObject) raises -> List[UInt32]:
     # Only exact native strings reach this boundary. Filesystem strings may
     # contain surrogateescaped bytes, so do not apply model-text admission.
-    ref cpy = Python().cpython()
-    var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(value._obj_ptr)
-    if count < 0:
-        raise cpy.unsafe_get_error()
-    var result = List[UInt32](capacity=count)
-    var api = cpython_table()
-    for i in range(count):  # unpack: exact native filesystem Unicode storage
-        result.append(api[].PyUnicode_ReadChar(value._obj_ptr, i))
-    return result^
+    # One code-point copy (bindings/boundary_read.mojo), not one
+    # PyUnicode_ReadChar per character.
+    return read_str_points(value)
 
 
 def _archive_path_words_pack(points: List[UInt32]) raises -> PythonObject:
@@ -100,7 +95,7 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
     var mro = py_call(native_type.__dict__["__mro__"].__get__, cls)
     var bases = context["archive_path_bases"]
     var parts = PythonObject(None)
-    for storage in range(2):  # small-loop(the two standard pathlib storage names)
+    for storage in range(2):  # driver-loop: over the two standard pathlib storage names
         var field = "_raw_paths" if storage == 0 else "_parts"
         for i in range(len(mro)):  # driver-loop: connected standard pathlib ancestry
             var known = False
@@ -224,17 +219,12 @@ def _archive_class_name_unpack(cls: PythonObject) raises -> String:
 def _archive_unpack_unicode(value: PythonObject, context: PythonObject) raises -> List[UInt32]:
     # Admission reads native Unicode storage; it never invokes a str subclass
     # method or creates Python byte containers for serialized metadata.
-    ref cpy = Python().cpython()
-    var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(value._obj_ptr)
-    if count < 0:
-        raise cpy.unsafe_get_error()
-    var words = List[UInt32](capacity=count)
-    var api = cpython_table()
-    for i in range(count):  # unpack: admitted native Unicode input words
-        var word = api[].PyUnicode_ReadChar(value._obj_ptr, i)
-        if word >= 0xD800 and word <= 0xDFFF:
+    # One code-point copy (bindings/boundary_read.mojo), then a typed scan
+    # for the first surrogate (the same position and refusal as before).
+    var words = read_str_points(value)
+    for i in range(len(words)):  # driver-loop: typed scan of the copied code points (no CPython call)
+        if words[i] >= 0xD800 and words[i] <= 0xDFFF:
             _archive_unicode_failure(value, "utf-32-le", i, i + 1, "surrogates not allowed", context, True)
-        words.append(word)
     return words^
 
 
@@ -245,7 +235,7 @@ def _archive_unpack_member(name: String, value: PythonObject, context: PythonObj
         if py_type(value) is py_type(PythonObject("")):
             strings.append(_archive_unpack_unicode(value, context))
         else:
-            for i in range(len(value)):  # unpack: admitted flat string-label inputs
+            for i in range(len(value)):  # driver-loop: over a str-list model field's entries (class or feature names: model metadata, one code-point copy each)
                 strings.append(_archive_unpack_unicode(value[i], context))
         return archive_unicode(name, strings)
     classical_admit_value(value, context)
@@ -283,7 +273,7 @@ def _archive_unpack_member(name: String, value: PythonObject, context: PythonObj
         if String(order) != "C" and String(order) != "F":
             raise Error("TypeError: checkpoint Array order must be C or F")
         var count = 1
-        for i in range(len(dimensions)):  # unpack: checked native Array dimensions
+        for i in range(len(dimensions)):  # driver-loop: over the checked native Array dimensions (rank metadata)
             if py_type(dimensions[i]) is not py_type(PythonObject(0)) or Int(py=dimensions[i]) < 0:
                 raise Error("TypeError: checkpoint Array dimensions require nonnegative native integers")
             var dimension = Int(py=dimensions[i])
@@ -321,7 +311,7 @@ def _archive_unpack_member(name: String, value: PythonObject, context: PythonObj
             var rank = Int(UInt64(exported[4]) >> 32)
             var dims = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=exported[6])
             var steps = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=exported[7])
-            for i in range(rank):  # unpack: the admitted buffer's native layout metadata
+            for i in range(rank):  # driver-loop: over the admitted buffer's rank (layout metadata)
                 shape.append(dims[i])
                 strides.append(steps[i])
             if rank == 0:
@@ -352,14 +342,14 @@ def _archive_pack_bytes(file: PythonObject, methods: PythonObject, address: Int,
 def _archive_pack_members(file: PythonObject, methods: PythonObject,
                           mut members: List[NativeArchiveMember]) raises:
     var records = archive_prepare(members)
-    for i in range(len(records)):  # pack: dependent stream position and writes, in archive order
+    for i in range(len(records)):  # driver-loop: over the archive members (model fields), dependent stream position and writes
         var offset = Int(py=_archive_file_call(methods["tell"], file))
         var header = archive_local(records[i], offset)
         _archive_pack_bytes(file, methods, Int(header.unsafe_ptr()), len(header))
         _archive_pack_bytes(file, methods, members[i].source, members[i].size)
         _ = header
     var directory = Int(py=_archive_file_call(methods["tell"], file))
-    for i in range(len(records)):  # pack: ordered central directory output
+    for i in range(len(records)):  # driver-loop: over the archive members (model fields), central directory output
         var header = archive_central(records[i])
         _archive_pack_bytes(file, methods, Int(header.unsafe_ptr()), len(header))
         _ = header
@@ -384,12 +374,12 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
             raise Error("TypeError: checkpoint members require a native dictionary")
         var keys = py_call(py_type(Python.list()), values.keys())
         var names = List[String]()
-        for i in range(len(keys)):  # unpack: native member names from an admitted dict
+        for i in range(len(keys)):  # driver-loop: over the checkpoint member names (model fields)
             if py_type(keys[i]) is not py_type(PythonObject("")):
                 raise Error("TypeError: checkpoint member names must be native strings")
             names.append(String(keys[i]))
         sort(names)
-        for name in names:  # unpack: each admitted model field and its lifetime pins
+        for name in names:  # driver-loop: over the admitted model fields and their lifetime pins
             members.append(_archive_unpack_member(name, values[PythonObject(name)], context, pins))
         _archive_pack_members(file, methods, members)
     finally:
