@@ -191,6 +191,9 @@ from bindings.msel_device import (
     msel_split_table_i32_binding,
     msel_group_fold_perm_i32_binding,
 )
+# lane calltable-msel: the same model-selection helpers as one native entry
+# for the model-selection doors (core/msel_entry_table.mojo).
+from core.msel_helpers_device import publish_msel_helpers_device
 from std.os import abort
 from std.math import isfinite
 from std.memory import unsafe_memcpy
@@ -2130,6 +2133,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[all_finite_f64_binding]("all_finite_f64")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        # lane calltable-msel: the model-selection helper table, for the
+        # native model-selection doors in another extension module.
+        publish_msel_helpers_device()
         m.def_function[msel_put_binding]("msel_put")
         m.def_function[msel_alloc_binding]("msel_alloc")
         m.def_function[msel_read_binding]("msel_read")

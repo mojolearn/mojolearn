@@ -52,6 +52,7 @@ def msel_parallel_capture(model: PythonObject, x: PythonObject, y: PythonObject,
     var metadata = context["family_msel_parallel"]
     if py_type(metadata["binding_vendor"]) is not py_type(b.len) or py_type(metadata["binding_mode"]) is not py_type(b.len):
         raise Error("TypeError: CV capture requires native vendor and numeric-mode witnesses")
+    # call-table: member gbdt binding probes (vendor, mode) have no native entry yet
     if String(py_call(metadata["binding_vendor"])) != String(metadata["vendor"]) or Int(py=py_call(metadata["binding_mode"])) != 1:
         raise Error("RuntimeError: CV capture requires a matching identical GBDT binding")
     var plan = msel_estimator_plan(model, context)
@@ -70,9 +71,11 @@ def msel_parallel_capture(model: PythonObject, x: PythonObject, y: PythonObject,
     var archive = PythonObject(None)
     var restored = PythonObject(None)
     try:
+        # call-table: member gbdt archive save (archive door over the Python model) has no native entry yet
         _ = family_call(archive_entry, learner, "archive_save", Python.tuple(stream), metadata["archive_context"])
         archive = py_call(metadata["bytesio_getvalue"], stream)
         _ = py_call(metadata["bytesio_seek"], stream, 0)
+        # call-table: member gbdt archive load (archive door over the Python model) has no native entry yet
         restored = family_call(archive_entry, metadata["gbdt_class"], "host_archive_load",
                                Python.tuple(stream), metadata["archive_context"])
     finally:
@@ -83,6 +86,7 @@ def msel_parallel_capture(model: PythonObject, x: PythonObject, y: PythonObject,
     py_setitem(result, "archive", archive)
     py_setitem(result, "model_text", learned["model_"])
     py_setitem(result, "predict", msel_estimator_call(model, "predict", Python.tuple(x), context))
+    # call-table: member gbdt predict (trees door over the Python model) has no native entry yet
     py_setitem(result, "raw_predict", family_call(trees_entry, learner, "trees_gbdt_predict", Python.tuple(x), metadata["gbdt_context"]))
     py_setitem(result, "reload_predict", family_call(trees_entry, restored, "trees_gbdt_predict", Python.tuple(x), metadata["gbdt_context"]))
     py_setitem(result, "loss_curve", learned["loss_curve_"])

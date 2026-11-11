@@ -165,6 +165,7 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
         var fit = plan["fit_entry"]
         if py_type(fit) is not py_type(b.len):
             raise Error("TypeError: native scaler fitting entry is unavailable")
+        # call-table: member scaler (plan "fit_entry", a Python-object door) has no native entry yet
         return family_call(fit, model, args[0], args[1], py_get(keywords, "sample_weight")
                            if keywords is not None else PythonObject(None), plan["context"])
     var values = Python.list()
@@ -208,6 +209,7 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
         var result = PythonObject(None)
         try:
+            # call-table: member forest estimator (family door over the Python model) has no native entry yet
             result = family_call(entry, model, method_plan[0], envelope, plan["context"])
         finally:
             fields = py_call(plan["fields_get"], model, py_type(model))
@@ -222,11 +224,13 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     if override is not None:
         if py_type(override[0]) is not py_type(b.len):
             raise Error("ImportError: native estimator method binding is unavailable")
+        # call-table: member estimator method override (family door over the Python model) has no native entry yet
         return family_call(override[0], model, operation, envelope, override[1])
     if scorer_response and method == "predict":
         var internal_operation = py_get(plan, "scorer_predict_operation")
         if internal_operation is not None:
             operation = internal_operation
+    # call-table: member estimator (family door over the Python model) has no native entry yet
     return family_call(entry, model, operation, envelope, plan["context"])
 
 
@@ -315,6 +319,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
     var names = plan["parameters"]
     var given: PythonObject
     if plan["forest"] is not None:
+        # call-table: member forest get_params (trees door over the Python model) has no native entry yet
         given = family_call(plan["entry"], model, "trees_forest_get_params", Python.tuple(), plan["context"])
     elif plan["init"] is None:
         given = py_call(plan["fields_get"], model, py_type(model))
@@ -347,6 +352,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject, depth: Int = 0
         var entry = plan["entry"]
         if entry is None or py_type(entry) is not py_type(b.len):
             raise Error("ImportError: native estimator constructor binding is unavailable")
+        # call-table: member estimator constructor (family door over the Python model) has no native entry yet
         _ = family_call(entry, result, plan["init"], py_call(b.tuple, args), plan["context"])
     return result
 
@@ -387,6 +393,7 @@ def msel_native_set_params(model: PythonObject, params: PythonObject,
         return model
     if plan["forest"] is None:
         return msel_estimator_call(model, "set_params", Python.tuple(params), context)
+    # call-table: member forest get_params (trees door over the Python model) has no native entry yet
     var values = family_call(plan["entry"], model, "trees_forest_get_params", Python.tuple(), plan["context"])
     var unknown = Python.list()
     for k in range(len(keys)):  # driver-loop: complete forest parameter name validation before mutation

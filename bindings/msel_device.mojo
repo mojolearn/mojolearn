@@ -22,18 +22,17 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
-from core.msel_device import (
-    MselStore,
-    device_group_fold_perm_i32,
-    device_proba_column,
-    device_split_table_i32,
-    device_rebase_offsets_i32,
-    device_scatter_rows,
-    device_take_rows,
-)
+from core.msel_device import device_rebase_offsets_i32, device_take_rows
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
+# lane calltable-msel: the store, scatter, column, split-table and
+# group-fold bodies are the runs the model-selection helper table publishes
+# (core/msel_helpers_device.mojo); these exports unpack and call them.
+from core.msel_helpers_device import (
+    msel_store_alloc_device_run, msel_store_read_device_run, msel_store_free_device_run,
+    msel_scatter_rows_device_run, msel_proba_column_device_run, msel_split_table_device_run,
+    msel_group_fold_perm_device_run, msel_store_free_bytes_device_run,
+)
 from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
 from core.pca_native_fold import PCA_FOLD_API
 from core.tsvd_native_fold import TSVD_FOLD_API
@@ -60,30 +59,32 @@ def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonO
 
 
 def msel_alloc_binding(nbytes: PythonObject) raises -> PythonObject:
+    """`core/msel_helpers_device.mojo::msel_store_alloc_device_run`."""
     var n = Int(py=nbytes)
-    var ctx = process_ctx[_MSEL_SLOT]()
     var id: Int
     with GILReleased(Python()):
-        id = msel_store()[].alloc(ctx, n)
+        id = msel_store_alloc_device_run(n)
     return PythonObject(id)
 
 
 def msel_read_binding(id: PythonObject, dst_addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
+    """`core/msel_helpers_device.mojo::msel_store_read_device_run`."""
     var i = Int(py=id)
     var d = Int(py=dst_addr)
     var n = Int(py=nbytes)
-    var ctx = process_ctx[_MSEL_SLOT]()
+    var status = 0
     with GILReleased(Python()):
-        msel_store()[].read(ctx, i, d, n)
-    return PythonObject(0)
+        status = msel_store_read_device_run(i, d, n)
+    return PythonObject(status)
 
 
 def msel_free_binding(id: PythonObject) raises -> PythonObject:
+    """`core/msel_helpers_device.mojo::msel_store_free_device_run`."""
     var i = Int(py=id)
-    var ctx = process_ctx[_MSEL_SLOT]()
+    var status = 0
     with GILReleased(Python()):
-        msel_store()[].free(ctx, i)
-    return PythonObject(0)
+        status = msel_store_free_device_run(i)
+    return PythonObject(status)
 
 
 def msel_live_binding() raises -> PythonObject:
@@ -91,12 +92,8 @@ def msel_live_binding() raises -> PythonObject:
 
 
 def msel_free_bytes_binding() raises -> PythonObject:
-    """Free bytes of the device the fold store lives on: the measured bound
-    of how many cross-validation units run at once (bindings/msel_cv.mojo
-    msel_cv_units, lane p3-msel-parallel-and-process-pool)."""
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var mem = ctx.get_memory_info()
-    return PythonObject(Int(mem[0]))
+    """`core/msel_helpers_device.mojo::msel_store_free_bytes_device_run`."""
+    return PythonObject(msel_store_free_bytes_device_run())
 
 
 def msel_take_rows_binding(
@@ -127,7 +124,8 @@ def msel_scatter_rows_binding(
     width: PythonObject, idx_id: PythonObject,
 ) raises -> PythonObject:
     """Rows of a host buffer cast into rows idx of a resident int64 or
-    float64 block (cross_val_predict's placement)."""
+    float64 block (cross_val_predict's placement):
+    `core/msel_helpers_device.mojo::msel_scatter_rows_device_run`."""
     var di = Int(py=dst_id)
     var nd = Int(py=n_dst)
     var dc = Int(py=dst_code)
@@ -136,44 +134,28 @@ def msel_scatter_rows_binding(
     var ns = Int(py=n_src)
     var w = Int(py=width)
     var ix = Int(py=idx_id)
-    if nd < 0 or ns < 0 or w < 0:
-        raise Error("msel_scatter_rows: dimensions must be non-negative")
-    if dc != MSEL_I64 and dc != MSEL_F64:
-        raise Error("msel_scatter_rows: the block is int64 or float64")
-    if not msel_valid_code(sc) or (dc == MSEL_I64 and not msel_is_int(sc)):
-        raise Error("msel_scatter_rows: bad source dtype code")
-    if ns > 0 and w > 0 and sa == 0:
-        raise Error("msel_scatter_rows: null source")
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var ok = True
+    var status = 0
     with GILReleased(Python()):
-        ok = device_scatter_rows(ctx, msel_store()[], di, nd, dc, sa, sc, ns, w, ix)
-    if not ok:
-        raise Error("msel_scatter_rows: row index out of bounds")
-    return PythonObject(0)
+        status = msel_scatter_rows_device_run(di, nd, dc, sa, sc, ns, w, ix)
+    return PythonObject(status)
 
 
 def msel_proba_column_binding(
     src_addr: PythonObject, code: PythonObject, n: PythonObject, k: PythonObject,
     col: PythonObject, dst_addr: PythonObject,
 ) raises -> PythonObject:
-    """Column `col` of an n x k float32/float64 buffer as float32."""
+    """Column `col` of an n x k float32/float64 buffer as float32:
+    `core/msel_helpers_device.mojo::msel_proba_column_device_run`."""
     var sa = Int(py=src_addr)
     var c = Int(py=code)
     var nn = Int(py=n)
     var kk = Int(py=k)
     var cc = Int(py=col)
     var d = Int(py=dst_addr)
-    if c != MSEL_F32 and c != MSEL_F64:
-        raise Error("msel_proba_column: float32 or float64 input")
-    if nn < 0 or kk < 1 or cc < 0 or cc >= kk:
-        raise Error("msel_proba_column: bad sizes")
-    if nn > 0 and (sa == 0 or d == 0):
-        raise Error("msel_proba_column: null buffer address")
-    var ctx = process_ctx[_MSEL_SLOT]()
+    var status = 0
     with GILReleased(Python()):
-        device_proba_column(ctx, sa, c, nn, kk, cc, d)
-    return PythonObject(0)
+        status = msel_proba_column_device_run(sa, c, nn, kk, cc, d)
+    return PythonObject(status)
 
 
 def msel_rebase_offsets_i32_binding(
@@ -215,26 +197,18 @@ def msel_split_table_i32_binding(
     counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
 ) raises -> PythonObject:
     """GroupShuffleSplit's per-group side table (the signature of
-    `split_table_i32`): table[g] 1 test, 0 train, 2 neither; sums [train
-    rows, test rows]."""
+    `split_table_i32`): `core/msel_helpers_device.mojo::msel_split_table_device_run`."""
     var mm = Int(py=m)
     var te = Int(py=n_test)
     var tr = Int(py=n_train)
-    if mm < 1 or te < 0 or tr < 0 or te + tr > mm or mm > 2147483000:
-        raise Error("split_table_i32: bad sizes")
     var pa = Int(py=perm_addr)
     var ca = Int(py=counts_addr)
     var ta = Int(py=table_addr)
     var sa = Int(py=sums_addr)
-    if (te + tr > 0 and pa == 0) or ca == 0 or ta == 0 or sa == 0:
-        raise Error("split_table_i32: null buffer address")
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var ok = True
+    var status = 0
     with GILReleased(Python()):
-        ok = device_split_table_i32(ctx, pa, mm, te, tr, ca, ta, sa)
-    if not ok:
-        raise Error("split_table_i32: group index out of range")
-    return PythonObject(0)
+        status = msel_split_table_device_run(pa, mm, te, tr, ca, ta, sa)
+    return PythonObject(status)
 
 
 def msel_group_fold_perm_i32_binding(
@@ -242,24 +216,17 @@ def msel_group_fold_perm_i32_binding(
     dst_addr: PythonObject, sizes_addr: PythonObject,
 ) raises -> PythonObject:
     """Shuffled GroupKFold (the perm branch of `group_fold_assign_i32`):
-    the permuted groups in n_folds nearly equal runs."""
+    `core/msel_helpers_device.mojo::msel_group_fold_perm_device_run`."""
     var mm = Int(py=m)
     var K = Int(py=n_folds)
-    if K < 1 or mm < K or mm > 2147483000:
-        raise Error("group_fold_assign_i32: m >= n_folds >= 1")
     var ca = Int(py=counts_addr)
     var pa = Int(py=perm_addr)
     var da = Int(py=dst_addr)
     var sa = Int(py=sizes_addr)
-    if ca == 0 or pa == 0 or da == 0 or sa == 0:
-        raise Error("group_fold_assign_i32: null buffer address")
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var ok = True
+    var status = 0
     with GILReleased(Python()):
-        ok = device_group_fold_perm_i32(ctx, ca, mm, K, pa, da, sa)
-    if not ok:
-        raise Error("group_fold_assign_i32: a permuted group is out of range")
-    return PythonObject(0)
+        status = msel_group_fold_perm_device_run(ca, mm, K, pa, da, sa)
+    return PythonObject(status)
 
 
 def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:

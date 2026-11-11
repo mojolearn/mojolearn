@@ -344,6 +344,7 @@ def msel_parallel_model_unpack(record: PythonObject, context: PythonObject, dept
         var entry = plan["entry"]
         if entry is None or py_type(entry) is not py_type(b.len):
             raise Error("ImportError: worker native estimator constructor is unavailable")
+        # call-table: member estimator constructor (family door over the Python model) has no native entry yet
         _ = family_call(entry, result, plan["init"], py_call(b.tuple, arguments), plan["context"])
     return result
 

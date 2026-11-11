@@ -10,6 +10,8 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.family_common import family_call, family_array
 from bindings.classical_arrays import classical_address
+from bindings.msel_helpers_key import msel_helpers_key
+from core.msel_helpers_calls import msel_proba_column
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_is_real, metric_float
 from bindings.msel_inputs import msel_input, msel_admit
@@ -343,6 +345,7 @@ struct MselMetricPrepared(Movable):
             # SetItem steals the new reference, including on failure.
             if cpy.PyTuple_SetItem(envelope._obj_ptr, i, cpy.Py_NewRef(value._obj_ptr)) != 0:
                 raise cpy.unsafe_get_error()
+        # call-table: member metric (x_metrics door over Python arrays) has no native entry yet
         return family_call(entry, PythonObject(None), self.operation, envelope, self.metric_context)
 
 
@@ -359,11 +362,9 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
         raise Error("TypeError: native probability output must be float32 or float64")
     var rows = Int(py=array.shape[0])
     var result = family_array(Python.tuple(rows), "<f4", context)
-    var entry = context["family_msel_entries"]["msel_proba_column"]
-    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
-        raise Error("ImportError: native probability column entry is unavailable")
-    _ = family_call(entry, classical_address(array), context["family_msel_codes"][array.dtype],
-                    PythonObject(rows), PythonObject(2), PythonObject(1), classical_address(result))
+    _ = msel_proba_column(msel_helpers_key(context), Int(py=classical_address(array)),
+                          Int(py=context["family_msel_codes"][array.dtype]), rows, 2, 1,
+                          Int(py=classical_address(result)))
     _ = array  # keep the Python object alive through the native call above
     _ = result  # keep the Python object alive through the native call above
     return result

@@ -225,18 +225,6 @@ def test_splitter_counts_and_native_fold_iteration_agree(cls, kwargs, count):
             assert set(y[train]) == set(y[test]) == {0, 1}
 
 
-def test_preconnected_helper_rejects_python_replacement(monkeypatch):
-    calls = []
-
-    def callback(*args):
-        calls.append(args)
-        raise AssertionError('compiled helper replacement ran')
-
-    monkeypatch.setitem(ms._NATIVE_CONTEXT['family_msel_entries'], 'arange_i64', callback)
-    clean(ms.train_test_split, np.arange(12, dtype='f4'), shuffle=False, error=TypeError)
-    assert calls == []
-
-
 @pytest.mark.parametrize('kind', ('float64', 'mixed', 'int16_float32', 'series'))
 def test_pandas_storage_avoids_array_protocol_and_preserves_promoted_values(kind, monkeypatch):
     pd = pytest.importorskip('pandas')

@@ -73,15 +73,11 @@ from bindings.hotpath_helpers import (
     count_mask_u8_binding as host_count_mask_u8_binding,
     first_seen_i32_binding as host_first_seen_i32_binding,
     fold_ids_binding as host_fold_ids_binding,
+    bincount_i64_binding as host_bincount_i64_binding,
+    check_indices_i64_binding as host_check_indices_i64_binding,
+    equal_elements_binding as host_equal_elements_binding,
     fold_pair_f32_binding as host_fold_pair_f32_binding,
-    indices_overlap_i64_binding as host_indices_overlap_i64_binding,
-    leave_range_i64_binding as host_leave_range_i64_binding,
     normal_init_f32_binding as host_normal_init_f32_binding,
-    mask_from_indices_u8_binding as host_mask_from_indices_u8_binding,
-    select_fold_i64_binding as host_select_fold_i64_binding,
-    select_folds_i64_binding as host_select_folds_i64_binding,
-    select_mask_u8_i64_binding as host_select_mask_u8_i64_binding,
-    strat_fold_assign_i32_binding as host_strat_fold_assign_i32_binding,
     threshold_labels_i64_binding as host_threshold_labels_i64_binding,
     uniform_init_f32_binding as host_uniform_init_f32_binding,
 )
@@ -94,22 +90,11 @@ from core.hotpath_device import (
     HPD_MAX_N,
     HPD_U32,
     HPD_U8,
-    device_arange_skip_i64,
     device_cast_f64_to_f32,
-    device_count_mask_u8,
     device_encode_labels,
-    device_first_seen_i32,
     device_fold_pair_f32,
     device_gather_u64,
-    device_indices_overlap_i64,
-    device_kfold_ids,
-    device_mask_from_indices_u8,
     device_normal_init_f32,
-    device_select_fold_i64,
-    device_select_folds_i64,
-    device_select_mask_u8_i64,
-    device_strat_fold_assign_i32,
-    device_stratified_fold_ids,
     device_uniform_init_f32,
 )
 from core.input_device import (
@@ -126,7 +111,7 @@ from core.label_device_steps import (
     LABELS_DEVICE_REDUCE as IDN_HPDEV_REDUCE, LABELS_DEVICE_ISUM as IDN_HPDEV_ISUM,
     LABELS_DEVICE_CAST as IDN_HPDEV_CAST, LABELS_DEVICE_INPUT as _HPDEV_INPUT,
     LABELS_DEVICE_CONTEXT as _HPDEV_SLOT, labels_device_reduce, labels_device_cast,
-    labels_device_gather_i32, labels_device_try_finite,
+    labels_device_try_finite,
     labels_device_threshold, labels_device_threshold_eligible,
 )
 from bindings.labels_stat_boundary import labels_stat_pack
@@ -135,6 +120,14 @@ from core.base_helpers_device import (
     bincount2_i32_device_run,
 )
 from core.hotpath_impl import HpStat
+# lane calltable-msel: the fold, index, mask and gather bodies these exports
+# unpack for are the runs the model-selection helper table publishes.
+from core.msel_helpers_device import (
+    arange_i64_device_run, count_mask_u8_device_run, first_seen_i32_device_run, fold_ids_device_run,
+    indices_overlap_i64_device_run, leave_range_i64_device_run, mask_from_indices_u8_device_run,
+    msel_gather_device_run, select_fold_i64_device_run, select_folds_i64_device_run,
+    select_mask_u8_i64_device_run, strat_fold_assign_i32_device_run,
+)
 
 
 comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_LABELS_OFF"]()
@@ -152,8 +145,8 @@ comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
 #: DeviceContext.
 
-#: Largest k x n_folds table the stratified helpers build.
-comptime _HPDEV_MAX_TABLE = 1 << 26
+#: The stratified helpers' table bound lives beside their runs
+#: (core/msel_helpers_device.mojo MSEL_HPDEV_MAX_TABLE, lane calltable-msel).
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +174,9 @@ def equal_elements_binding(
 
 def gather_i32_binding(table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
     n: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
+    """`gather_i32` on the device
+    (`core/msel_helpers_device.mojo::msel_gather_device_run`, the body the
+    model-selection helper table publishes)."""
     var count = Int(py=n)
     var classes = Int(py=n_table)
     var table = Int(py=table_addr)
@@ -188,7 +184,7 @@ def gather_i32_binding(table_addr: PythonObject, n_table: PythonObject, codes_ad
     var dst = Int(py=dst_addr)
     var result = 0
     with GILReleased(Python()):
-        result = labels_device_gather_i32(table, classes, codes, count, dst)
+        result = msel_gather_device_run(0, table, classes, codes, count, dst)
     return PythonObject(result)
 
 
@@ -274,17 +270,14 @@ def bincount2_i32_binding(
 
 
 def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`count_mask_u8`, on the device."""
-    comptime if IDN_HPDEV_ELEM:
-        var rows = Int(py=n)
-        var m = Int(py=mask_addr)
-        if rows >= 1 and rows <= HPD_MAX_N and m != 0:
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var c = 0
-            with GILReleased(Python()):
-                c = device_count_mask_u8(ctx, m, rows)
-            return PythonObject(c)
-    return host_count_mask_u8_binding(mask_addr, n)
+    """`count_mask_u8`, on the device
+    (`core/msel_helpers_device.mojo::count_mask_u8_device_run`)."""
+    var rows = Int(py=n)
+    var m = Int(py=mask_addr)
+    var c = 0
+    with GILReleased(Python()):
+        c = count_mask_u8_device_run(m, rows)
+    return PythonObject(c)
 
 
 def fold_pair_f32_binding(
@@ -352,175 +345,115 @@ def fold_ids_binding(
     n_splits: PythonObject, counts_addr: PythonObject, fold_addr: PythonObject,
     fold_counts_addr: PythonObject,
 ) raises -> PythonObject:
-    """`fold_ids`, on the device: KFold's fold of a row is a closed form of
-    its index; the stratified dealing ranks each row within its class by a
-    stable sort. The per-fold counts of KFold are its `n_splits` sizes,
-    written here (control data)."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var k = Int(py=n_classes)
-        var splits = Int(py=n_splits)
-        var ca = Int(py=codes_addr)
-        var fa = Int(py=fold_addr)
-        var fca = Int(py=fold_counts_addr)
-        if rows >= 1 and rows <= HPD_MAX_N and splits >= 2 and splits <= HPD_MAX_N and fa != 0 and fca != 0:
-            if ca == 0:
-                var ctx = process_ctx[_HPDEV_SLOT]()
-                with GILReleased(Python()):
-                    device_kfold_ids(ctx, rows, splits, fa)
-                var fcp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=fca)
-                for fold in range(splits):  # small-loop(splits: KFold n_splits fold sizes): control data, not rows
-                    var size = rows // splits
-                    if fold < rows % splits:
-                        size += 1
-                    fcp.unsafe_store(fold, Int64(size))
-                return PythonObject(0)
-            var na = Int(py=counts_addr)
-            if k >= 1 and na != 0 and k * splits <= _HPDEV_MAX_TABLE:
-                var ctx = process_ctx[_HPDEV_SLOT]()
-                var ok = False
-                with GILReleased(Python()):
-                    ok = device_stratified_fold_ids(ctx, ca, rows, k, splits, na, fa, fca)
-                if ok:
-                    return PythonObject(0)
-    return host_fold_ids_binding(
-        codes_addr, n, n_classes, n_splits, counts_addr, fold_addr, fold_counts_addr
-    )
+    """`fold_ids`, on the device (`core/msel_helpers_device.mojo::fold_ids_device_run`,
+    the body the model-selection helper table publishes)."""
+    var rows = Int(py=n)
+    var k = Int(py=n_classes)
+    var splits = Int(py=n_splits)
+    var ca = Int(py=codes_addr)
+    var na = Int(py=counts_addr)
+    var fa = Int(py=fold_addr)
+    var fca = Int(py=fold_counts_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = fold_ids_device_run(ca, rows, k, splits, na, fa, fca)
+    return PythonObject(status)
 
 
 def select_fold_i64_binding(
     fold_addr: PythonObject, n: PythonObject, fold: PythonObject,
     test_addr: PythonObject, train_addr: PythonObject,
 ) raises -> PythonObject:
-    """`select_fold_i64`, on the device (flag, exclusive scan, scatter)."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var fa = Int(py=fold_addr)
-        var ta = Int(py=test_addr)
-        var ra = Int(py=train_addr)
-        var want = Int(py=fold)
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and fa != 0 and ta != 0 and ra != 0
-            and want >= -2147483648 and want <= 2147483647
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var n_test = 0
-            with GILReleased(Python()):
-                n_test = device_select_fold_i64(ctx, fa, rows, want, ta, ra)
-            return PythonObject(n_test)
-    return host_select_fold_i64_binding(fold_addr, n, fold, test_addr, train_addr)
+    """`select_fold_i64`, on the device
+    (`core/msel_helpers_device.mojo::select_fold_i64_device_run`)."""
+    var rows = Int(py=n)
+    var fa = Int(py=fold_addr)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var want = Int(py=fold)
+    var n_test = 0
+    with GILReleased(Python()):
+        n_test = select_fold_i64_device_run(fa, rows, want, ta, ra)
+    return PythonObject(n_test)
 
 
 def select_folds_i64_binding(
     fold_addr: PythonObject, n: PythonObject, k: PythonObject, sizes_addr: PythonObject,
     test_addrs_addr: PythonObject, train_addrs_addr: PythonObject,
 ) raises -> PythonObject:
-    """`select_folds_i64`, on the device: one split plan per CV call (lane
-    ne1-b-door, N051): the fold ids go up once and every fold's train and
-    test rows come back behind one synchronize. A count that disagrees with
-    `sizes` reruns the host helper, which reports the fold."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var splits = Int(py=k)
-        var fa = Int(py=fold_addr)
-        var sa = Int(py=sizes_addr)
-        var ta = Int(py=test_addrs_addr)
-        var ra = Int(py=train_addrs_addr)
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and splits >= 1 and splits <= 2147483647
-            and fa != 0 and sa != 0 and ta != 0 and ra != 0
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var ok = False
-            with GILReleased(Python()):
-                ok = device_select_folds_i64(ctx, fa, rows, splits, sa, ta, ra)
-            if ok:
-                return PythonObject(-1)
-    return host_select_folds_i64_binding(fold_addr, n, k, sizes_addr, test_addrs_addr, train_addrs_addr)
+    """`select_folds_i64`, on the device
+    (`core/msel_helpers_device.mojo::select_folds_i64_device_run`)."""
+    var rows = Int(py=n)
+    var splits = Int(py=k)
+    var fa = Int(py=fold_addr)
+    var sa = Int(py=sizes_addr)
+    var ta = Int(py=test_addrs_addr)
+    var ra = Int(py=train_addrs_addr)
+    var bad = -1
+    with GILReleased(Python()):
+        bad = select_folds_i64_device_run(fa, rows, splits, sa, ta, ra)
+    return PythonObject(bad)
 
 
 def select_mask_u8_i64_binding(
     mask_addr: PythonObject, n: PythonObject, test_addr: PythonObject, train_addr: PythonObject,
 ) raises -> PythonObject:
-    """`select_mask_u8_i64`, on the device."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var ma = Int(py=mask_addr)
-        if rows >= 1 and rows <= HPD_MAX_N and ma != 0:
-            var ta = Int(py=test_addr)
-            var ra = Int(py=train_addr)
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var n_test = 0
-            with GILReleased(Python()):
-                n_test = device_select_mask_u8_i64(ctx, ma, rows, ta, ra)
-            return PythonObject(n_test)
-    return host_select_mask_u8_i64_binding(mask_addr, n, test_addr, train_addr)
+    """`select_mask_u8_i64`, on the device
+    (`core/msel_helpers_device.mojo::select_mask_u8_i64_device_run`)."""
+    var rows = Int(py=n)
+    var ma = Int(py=mask_addr)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var n_test = 0
+    with GILReleased(Python()):
+        n_test = select_mask_u8_i64_device_run(ma, rows, ta, ra)
+    return PythonObject(n_test)
 
 
 def mask_from_indices_u8_binding(
     idx_addr: PythonObject, k: PythonObject, n: PythonObject, mask_addr: PythonObject,
 ) raises -> PythonObject:
-    """`mask_from_indices_u8`, on the device; an index out of range reruns
-    the host helper, which raises."""
-    comptime if IDN_HPDEV_FOLDS:
-        var count = Int(py=k)
-        var rows = Int(py=n)
-        var ia = Int(py=idx_addr)
-        var ma = Int(py=mask_addr)
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and count >= 0 and count <= HPD_MAX_N
-            and ma != 0 and (count == 0 or ia != 0)
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var set = -1
-            with GILReleased(Python()):
-                set = device_mask_from_indices_u8(ctx, ia, count, rows, ma)
-            if set >= 0:
-                return PythonObject(set)
-    return host_mask_from_indices_u8_binding(idx_addr, k, n, mask_addr)
+    """`mask_from_indices_u8`, on the device
+    (`core/msel_helpers_device.mojo::mask_from_indices_u8_device_run`)."""
+    var count = Int(py=k)
+    var rows = Int(py=n)
+    var ia = Int(py=idx_addr)
+    var ma = Int(py=mask_addr)
+    var set = 0
+    with GILReleased(Python()):
+        set = mask_from_indices_u8_device_run(ia, count, rows, ma)
+    return PythonObject(set)
 
 
 def arange_i64_binding(
     dst_addr: PythonObject, start: PythonObject, n: PythonObject,
 ) raises -> PythonObject:
-    """`arange_i64`, on the device."""
-    comptime if IDN_HPDEV_FOLDS:
-        var count = Int(py=n)
-        var d = Int(py=dst_addr)
-        if count >= 1 and count <= HPD_MAX_N and d != 0:
-            var lo = Int(py=start)
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            with GILReleased(Python()):
-                device_arange_skip_i64(ctx, d, lo, count, 0, 0)
-            return PythonObject(0)
-    return host_arange_i64_binding(dst_addr, start, n)
+    """`arange_i64`, on the device
+    (`core/msel_helpers_device.mojo::arange_i64_device_run`)."""
+    var count = Int(py=n)
+    var d = Int(py=dst_addr)
+    var lo = Int(py=start)
+    var status = 0
+    with GILReleased(Python()):
+        status = arange_i64_device_run(d, lo, count)
+    return PythonObject(status)
 
 
 def leave_range_i64_binding(
     n: PythonObject, lo: PythonObject, hi: PythonObject,
     train_addr: PythonObject, test_addr: PythonObject,
 ) raises -> PythonObject:
-    """`leave_range_i64`, on the device: test = [lo, hi), train = the other
-    rows, each a range with at most one gap."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var a = Int(py=lo)
-        var b = Int(py=hi)
-        var ta = Int(py=test_addr)
-        var ra = Int(py=train_addr)
-        var held = b - a
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and a >= 0 and b >= a and b <= rows
-            and (held == 0 or ta != 0) and (held == rows or ra != 0)
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            with GILReleased(Python()):
-                if held > 0:
-                    device_arange_skip_i64(ctx, ta, a, held, 0, 0)
-                if rows - held > 0:
-                    device_arange_skip_i64(ctx, ra, 0, rows - held, a, held)
-            return PythonObject(held)
-    return host_leave_range_i64_binding(n, lo, hi, train_addr, test_addr)
+    """`leave_range_i64`, on the device
+    (`core/msel_helpers_device.mojo::leave_range_i64_device_run`)."""
+    var rows = Int(py=n)
+    var a = Int(py=lo)
+    var b = Int(py=hi)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var held = 0
+    with GILReleased(Python()):
+        held = leave_range_i64_device_run(rows, a, b, ra, ta)
+    return PythonObject(held)
 
 
 def check_indices_i64_binding(
@@ -542,50 +475,34 @@ def indices_overlap_i64_binding(
     a_addr: PythonObject, n_a: PythonObject, b_addr: PythonObject,
     n_b: PythonObject, bound: PythonObject,
 ) raises -> PythonObject:
-    """`indices_overlap_i64`, on the device; an index out of range reruns
-    the host helper."""
-    comptime if IDN_HPDEV_FOLDS:
-        var na = Int(py=n_a)
-        var nb = Int(py=n_b)
-        var limit = Int(py=bound)
-        var a = Int(py=a_addr)
-        var b = Int(py=b_addr)
-        if (
-            na >= 1 and na <= HPD_MAX_N and nb >= 1 and nb <= HPD_MAX_N
-            and limit >= 1 and limit <= HPD_MAX_N and a != 0 and b != 0
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var hit = -1
-            with GILReleased(Python()):
-                hit = device_indices_overlap_i64(ctx, a, na, b, nb, limit)
-            if hit >= 0:
-                return PythonObject(hit)
-    return host_indices_overlap_i64_binding(a_addr, n_a, b_addr, n_b, bound)
+    """`indices_overlap_i64`, on the device
+    (`core/msel_helpers_device.mojo::indices_overlap_i64_device_run`)."""
+    var na = Int(py=n_a)
+    var nb = Int(py=n_b)
+    var limit = Int(py=bound)
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    var hit = 0
+    with GILReleased(Python()):
+        hit = indices_overlap_i64_device_run(a, na, b, nb, limit)
+    return PythonObject(hit)
 
 
 def first_seen_i32_binding(
     codes_addr: PythonObject, n: PythonObject, k: PythonObject, enc_addr: PythonObject,
     counts_addr: PythonObject,
 ) raises -> PythonObject:
-    """`first_seen_i32`, on the device; a code out of range reruns the host
-    helper, which raises."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var kk = Int(py=k)
-        var ca = Int(py=codes_addr)
-        var ea = Int(py=enc_addr)
-        var na = Int(py=counts_addr)
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and kk >= 1 and kk <= HPD_MAX_N
-            and ca != 0 and ea != 0 and na != 0
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var m = -1
-            with GILReleased(Python()):
-                m = device_first_seen_i32(ctx, ca, rows, kk, ea, na)
-            if m >= 0:
-                return PythonObject(m)
-    return host_first_seen_i32_binding(codes_addr, n, k, enc_addr, counts_addr)
+    """`first_seen_i32`, on the device
+    (`core/msel_helpers_device.mojo::first_seen_i32_device_run`)."""
+    var rows = Int(py=n)
+    var kk = Int(py=k)
+    var ca = Int(py=codes_addr)
+    var ea = Int(py=enc_addr)
+    var na = Int(py=counts_addr)
+    var m = 0
+    with GILReleased(Python()):
+        m = first_seen_i32_device_run(ca, rows, kk, ea, na)
+    return PythonObject(m)
 
 
 def strat_fold_assign_i32_binding(
@@ -593,30 +510,20 @@ def strat_fold_assign_i32_binding(
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject,
     dst_addr: PythonObject,
 ) raises -> PythonObject:
-    """`strat_fold_assign_i32`, on the device; tables the device twin does
-    not accept rerun the host helper."""
-    comptime if IDN_HPDEV_FOLDS:
-        var rows = Int(py=n)
-        var kk = Int(py=k)
-        var K = Int(py=n_folds)
-        var ea = Int(py=enc_addr)
-        var aa = Int(py=alloc_addr)
-        var pa = Int(py=perms_addr)
-        var ca = Int(py=counts_addr)
-        var da = Int(py=dst_addr)
-        if (
-            rows >= 1 and rows <= HPD_MAX_N and kk >= 1 and K >= 1 and K <= HPD_MAX_N
-            and kk * K <= _HPDEV_MAX_TABLE and ea != 0 and aa != 0 and ca != 0 and da != 0
-        ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
-            var ok = False
-            with GILReleased(Python()):
-                ok = device_strat_fold_assign_i32(ctx, ea, rows, kk, K, aa, pa, ca, da)
-            if ok:
-                return PythonObject(0)
-    return host_strat_fold_assign_i32_binding(
-        enc_addr, n, k, n_folds, alloc_addr, perms_addr, counts_addr, dst_addr
-    )
+    """`strat_fold_assign_i32`, on the device
+    (`core/msel_helpers_device.mojo::strat_fold_assign_i32_device_run`)."""
+    var rows = Int(py=n)
+    var kk = Int(py=k)
+    var K = Int(py=n_folds)
+    var ea = Int(py=enc_addr)
+    var aa = Int(py=alloc_addr)
+    var pa = Int(py=perms_addr)
+    var ca = Int(py=counts_addr)
+    var da = Int(py=dst_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = strat_fold_assign_i32_device_run(ea, rows, kk, K, aa, pa, ca, da)
+    return PythonObject(status)
 
 
 # ---------------------------------------------------------------------------
