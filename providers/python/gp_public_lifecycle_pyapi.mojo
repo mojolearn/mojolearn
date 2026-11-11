@@ -5,6 +5,8 @@
 from bindings.admitted_finite_wording import admitted_finite_wording
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.cpython_table import cpython_table
 from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall
@@ -179,18 +181,34 @@ def _gp_finished(value: PythonObject, context: PythonObject) raises -> PythonObj
     var b = native_loaded_module("builtins")
     if py_type(value) is context["array_class"]:
         return native_array_ndarray_view(value, context)
-    if py_type(value) is b.tuple:
-        var out = Python.list()
-        for i in range(len(value)):  # driver-loop: fixed result tuple members
-            _ = py_call(out.append, _gp_finished(value[i], context))
-        return py_call(b.tuple, out)
-    if py_type(value) is b.list and len(value) > 0 and py_type(value[0]) is context["array_class"]:
-        var out = Python.list()
-        for i in range(len(value)):  # driver-loop: one native array result per output
-            _ = py_call(out.append, _gp_finished(value[i], context))
-        return out
-    return value
-
+    var tuple_output = py_type(value) is b.tuple
+    if not tuple_output and not (py_type(value) is b.list and len(value) > 0
+                                 and py_type(value[0]) is context["array_class"]):
+        return value
+    ref cpy = Python().cpython()
+    var api = cpython_table()
+    var raw: PyObjectPtr
+    if tuple_output:
+        raw = cpy.PyTuple_New(len(value))
+    else:
+        raw = api[].PyList_New(len(value))
+    if not raw:
+        raise cpy.unsafe_get_error()
+    # The exact, private NULL-filled output owns initialized slots even when
+    # a later view conversion raises. It is published only when complete.
+    var result = PythonObject(from_owned=raw)
+    for i in range(len(value)):  # PACK fixed result members in their original order
+        var item = _gp_finished(value[i], context)
+        var status = Int32(0)
+        if tuple_output:
+            status = cpy.PyTuple_SetItem(result._obj_ptr, i, item.steal_data())
+        else:
+            status = api[].PyList_SetItem(result._obj_ptr, i, item.steal_data())
+        # Both setters consume the item reference on success and failure.
+        if status != 0:
+            raise cpy.unsafe_get_error()
+    _ = value
+    return result
 
 
 def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: PythonObject, args: PythonObject,

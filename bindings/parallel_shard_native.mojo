@@ -56,7 +56,7 @@ from bindings.parallel_shard_common import (
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
-    gpc_validate, _gpc_fit_binary, _gpc_binary, _gpc_set_fitted, _gpc_latent, _gpc_ovr_combine,
+    gpc_validate, _gpc_fit_binary, _gpc_binary, _gpc_binary_result, GPCFitPublication, _gpc_set_fitted, _gpc_latent, _gpc_ovr_combine,
 )
 from bindings.gp_common_native import gp_kernel_arrays_transport
 from bindings.gp_labels_native import gp_encode_labels_transport, gp_decode_labels
@@ -394,12 +394,12 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
                                                       Python.tuple(x, codes, columns[i])))
     var parts = (shard_run_stored(Python.tuple(x, codes), token, requests, args[3], _CHILD) if stored
                  else shard_run(requests, args[3], _CHILD))
-    var fits = b.list()
-    for i in range(len(parts)):  # driver-loop: one binary fit per class column
+    var fits = GPCFitPublication(len(parts))
+    for i in range(len(parts)):  # driver-loop: UNPACK one transported binary fit per class column
         var f = parts[i]
-        _ = py_call(fits.append, _gpc_binary(context, f["y_train_"], f["L_"], f["pi_"], f["W_sr_"],
-                                             Float64(py=f["log_marginal_likelihood_value_"]), Int(py=f["n_iter_"]),
-                                             Int(py=f["nb_"])))
+        var member = _gpc_binary_result(context, f["y_train_"], f["L_"], f["pi_"], f["W_sr_"],
+            Float64(py=f["log_marginal_likelihood_value_"]), Int(py=f["n_iter_"]), Int(py=f["nb_"]))
+        fits.append(member)
     # published only now that every class fitted: `_fresh(estimator)` carried
     # the validated kernel, max_iter_predict and IDENTICAL
     py_setitem(work, "numeric_mode", "identical")
