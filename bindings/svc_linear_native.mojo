@@ -81,9 +81,9 @@ def _linear_strengths_values(fields: PythonObject) raises -> InlineArray[Float64
     var inv_c = 1.0 / svc_float(svc_field(fields, "C"))
     if String(svc_field(fields, "penalty")) == "l1":
         var values: InlineArray[Float64, 2] = [inv_c, 0.0]
-        return values
+        return values^
     var values: InlineArray[Float64, 2] = [0.0, inv_c]
-    return values
+    return values^
 
 
 def _linear_strengths(fields: PythonObject) raises -> PythonObject:

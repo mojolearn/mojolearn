@@ -40,7 +40,7 @@ def fixture(driver: LabelsNativeDriver, unit: Int) raises:
     if caught != (unit == 4 or unit == 5):
         raise Error("threshold refusal missing")
     if unit == 0 or unit == 1:
-        var zero = Int64(9) if unit == 1 else Int64(-7)
+        var zero = Int64(9 if unit == 1 else -7)
         if result[0] != -7 or result[1] != zero or result[2] != zero or result[3] != 9 or result[4] != -7:
             raise Error("threshold strict/equal/signed-zero/NaN comparison")
     elif unit == 2:

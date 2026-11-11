@@ -101,7 +101,7 @@ The solver driver preserves its original one-fit-at-a-time allocation/release
 policy and launch order. QN's numerical implementation is unchanged; only the
 independent 0/1 target writes replace the old boundary's scalar data loop.
 """
-    var o = r.options
+    var o = r.options.copy()
     var width = o.features + Int(o.intercept)
     var codes = i32_ptr(r.codes)
     for fit in range(o.fits):  # driver-loop: existing ordered one-vs-rest solver fits
@@ -109,7 +109,7 @@ independent 0/1 target writes replace the old boundary's scalar data loop.
         var target_ptr = target.unsafe_ptr()
         var selected = o.first_class + fit
         def encode(row: Int) {imm codes, imm target_ptr, imm selected}:
-            target_ptr[row] = Float32(1.0) if Int(codes[row]) == selected else Float32(0.0)
+            target_ptr[row] = Float32(1.0 if Int(codes[row]) == selected else 0.0)
         host_parallelize(encode, o.rows)
         var weights = List[Float32](length=width, fill=0)
         var info = List[Float32](length=2, fill=0)
@@ -213,7 +213,7 @@ struct LinearSvcDriver(Copyable, Movable):
         return self.metadata(LINEAR_SVC_FLAGS)
 
     def fit(self, request: LinearSvcFitRequest, mut plan: LinearSvcFitPlan) raises:
-        var o = request.options
+        var o = request.options.copy()
         var a: InlineArray[Int, 4] = [request.source, request.codes, request.weights, plan.address()]
         var p: InlineArray[Int, 10] = [o.rows, o.features, o.first_class, o.fits,
             o.max_iter, o.linesearch_max_iter, o.memory, Int(o.intercept), Int(o.normalized), o.loss]

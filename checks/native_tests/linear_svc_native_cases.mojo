@@ -99,9 +99,9 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
             xp[row * d + row % 3] = 1
         else:
             cp[row] = Int32(row % 2)
-            xp[row * d] = Float32(-1.0) if row % 2 == 0 else Float32(1.0)
+            xp[row * d] = Float32(-1.0 if row % 2 == 0 else 1.0)
         if unit == 4:
-            sp[row] = Float32(1.0) if row % 2 == 0 else Float32(3.0)
+            sp[row] = Float32(1.0 if row % 2 == 0 else 3.0)
         elif unit == 5:
             sp[row] = 2
     host_parallelize(fill, n)
