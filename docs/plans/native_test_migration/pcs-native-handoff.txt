@@ -1,0 +1,21 @@
+Mojolearn PolynomialCountSketch native migration (2026-11-10)
+
+Product dependencies d40d051034 + d44927e0b6 (root81162fec01 +999b6544ee).
+First chunk:34 pure native plan/request/refusal contracts. Positive/invalid
+sizes; zero/nonzero/signed-zero/sub-Float32 coefficient augmentation; exact
+rank-two shapes; hash counts/widths; six seed-low-word cases; distinct draw
+and old-items/resident query slots; Float32 scalar round trip after Float64
+augmentation; capability bits/refusal/native error text; independent copies.
+All cases parallel. No fake data pointer dereference or numerical mock.
+Source-only checks; no lane compilation/runtime/timing/identity/box jobs.
+RUN OWED: pcs_contract_suite.run_checks(),34 fixtures.
+No product/kernel/default/algorithm change, no A/B define.
+Nothing removed in this chunk: new pure typed contracts; Python numerical
+assertions stay until root executes native replacements.
+
+Numerical coverage in progress: original60x6 seed0 input, first5rows times6,
+degree3/gamma.5/coef0=1/components32/native draw seed7. Independent native
+Float64 full monomial expansion uses the emitted tables, not the production
+count-sketch/convolution algorithm. Existing external sklearn and RNG
+seams remain. CPU independent graphs parallel; GPU graphs ordered over
+shared contexts, kernels parallel. Recorded concurrency failures remain.
