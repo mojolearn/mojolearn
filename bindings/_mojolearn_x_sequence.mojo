@@ -98,6 +98,7 @@ from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py, moe_forward_dev_alloc_py
 from core.shared_slot import SharedSlot
+from sequence.small_mlp_entry_device import publish_neural_small_mlp_device
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
@@ -825,6 +826,9 @@ def build__mojolearn_x_sequence() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
+        # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
+        # program; the Python entry remains for its other callers and the boundary tests.
+        publish_neural_small_mlp_device()
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")
         m.def_function[vendor_binding]("x_sequence_vendor")
         m.def_function[resident_release_binding]("x_sequence_resident_release")

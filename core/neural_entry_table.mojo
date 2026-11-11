@@ -25,6 +25,14 @@ here at module init, once per (tier, vendor) key:
                               `mamba/native_block_dispatch.mojo` (`_mojolearn_mamba`),
                               CPU `mamba/host/native_block_dispatch.mojo`
                               (`_mojolearn_mamba_host`). MAMBA_BLOCK_ABI_NAME.
+  NEURAL_TABLE_MLP_PROGRAM    SmallMLPTrainer's captured program
+                              (`autograd/small_mlp_program.mojo`): GPU
+                              `sequence/small_mlp_entry_device.mojo`
+                              (`_mojolearn_x_sequence`), CPU
+                              `sequence/small_mlp_entry_host.mojo`
+                              (`_mojolearn_x_sequence_host`). NEURAL_MLP_PROGRAM_ABI;
+                              operations are the program's own codes
+                              (SMALL_MLP_PROGRAM_OPEN .. SMALL_MLP_PROGRAM_SESSIONS).
 
 The operation codes are the images' own (documented beside each dispatch):
 Transformer 0/1 reserve/release a session, 2/3 session forward/backward,
@@ -44,12 +52,16 @@ from core.native_descriptor_call import native_descriptor_call
 comptime NEURAL_TABLE_BLOCK_FORWARD = 0
 comptime NEURAL_TABLE_BLOCK_TRAIN = 1
 comptime NEURAL_TABLE_MAMBA_TRAIN = 2
-comptime NEURAL_TABLE_LAST = 2
+comptime NEURAL_TABLE_MLP_PROGRAM = 3
+comptime NEURAL_TABLE_LAST = 3
 
 # The operation counts every publisher and reader agree on: the readers'
 # former capsule admissions (`neural_descriptor_reuse(..., 36)` and `(..., 44)`).
 comptime NEURAL_BLOCK_OPERATIONS = 36
 comptime NEURAL_MAMBA_OPERATIONS = 44
+# The small MLP program: open, step, download, apply, close, sessions.
+comptime NEURAL_MLP_PROGRAM_ABI = "mojolearn.neural.small_mlp_program.v1"
+comptime NEURAL_MLP_PROGRAM_OPERATIONS = 6
 
 # Transformer block operation codes (transformer/native_block_dispatch.mojo).
 comptime NEURAL_BLOCK_RESERVE = 0
@@ -201,6 +213,39 @@ def neural_table_publish[family: Int](key: NeuralEntryKey, publisher: Int, entry
             comptime NAME = "MojolearnEntriesNeuralMambaTrainFastHIPV1"
             entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(MAMBA_BLOCK_ABI_NAME)], [NEURAL_MAMBA_OPERATIONS], [entry])
             return
+    comptime if family == NEURAL_TABLE_MLP_PROGRAM:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastCPUV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastMetalV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastCUDAV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastHIPV1"
+            entry_table_publish[NAME](key.mode, key.vendor, publisher, [String(NEURAL_MLP_PROGRAM_ABI)], [NEURAL_MLP_PROGRAM_OPERATIONS], [entry])
+            return
     raise Error("native neural entries: unsupported execution key")
 
 
@@ -284,6 +329,31 @@ def neural_table_entry[family: Int](key: NeuralEntryKey) raises -> NativeDescrip
         if key.vendor == 3 and key.mode == 0:
             comptime NAME = "MojolearnEntriesNeuralMambaTrainFastHIPV1"
             return entry_table_read[NAME](key.mode, key.vendor, 0, String(MAMBA_BLOCK_ABI_NAME), NEURAL_MAMBA_OPERATIONS)
+    comptime if family == NEURAL_TABLE_MLP_PROGRAM:
+        if key.vendor == 0 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 0 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastCPUV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 1 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 1 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastMetalV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 2 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 2 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastCUDAV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 3 and key.mode == 1:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramIdenticalHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
+        if key.vendor == 3 and key.mode == 0:
+            comptime NAME = "MojolearnEntriesNeuralMlpProgramFastHIPV1"
+            return entry_table_read[NAME](key.mode, key.vendor, 0, String(NEURAL_MLP_PROGRAM_ABI), NEURAL_MLP_PROGRAM_OPERATIONS)
     raise Error("native neural entries: unsupported execution key")
 
 
