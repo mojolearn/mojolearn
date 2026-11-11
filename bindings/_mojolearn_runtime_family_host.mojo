@@ -20,7 +20,8 @@ from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
 from bindings.kmeans_owner_boundary import KMeansResidentOwner
 from bindings.kde_native_boundary import KDEResidentOwner
-from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder
+from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
+from bindings.native_owner_registry import register_native_owner
 from bindings.kde_admission_boundary import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -95,8 +96,10 @@ def register_DBSCANReferenceOwner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[DBSCANReferenceOwner].name())):
             raise error
         _ = module.add_type[DBSCANReferenceOwner]("_DBSCANReferenceOwner")
+        register_native_owner(lookup_py_type_object[DBSCANReferenceOwner](), module.module, dbscan_reference_owner_pins)
         return
     py_type_attach(module.module, "_DBSCANReferenceOwner", existing)
+    register_native_owner(existing, module.module, dbscan_reference_owner_pins)
 
 
 def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
@@ -107,8 +110,10 @@ def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[DBSCANHolder].name())):
             raise error
         _ = module.add_type[DBSCANHolder]("_DBSCANHolder")
+        register_native_owner(lookup_py_type_object[DBSCANHolder](), module.module, dbscan_holder_pins)
         return
     py_type_attach(module.module, "_DBSCANHolder", existing)
+    register_native_owner(existing, module.module, dbscan_holder_pins)
 
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
