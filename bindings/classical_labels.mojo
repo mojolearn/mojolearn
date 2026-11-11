@@ -806,7 +806,9 @@ def _text_list_labels_into[S: _TextCodeStorage](flat: PythonObject, context: Pyt
     if fast.status == P3_TEXT_NOT_STR:
         return None
     if fast.status == P3_TEXT_OK:
-        var codes = S.from_values(fast.codes^, context)
+        var values = List[Int32]()
+        swap(values, fast.codes)
+        var codes = S.from_values(values^, context)
         var classes = p3_text_classes(flat, fast.first)
         return _TextLabels[S](classes, codes^, n)
 

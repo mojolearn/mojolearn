@@ -174,7 +174,7 @@ def gp_packed_kernel_reused(owner: PythonObject, kernel: PythonObject, context: 
     var classes = List[PythonObject]()
     try:
         var snapshot = gp_kernel_snapshot(kernel, context)
-        nodes = snapshot.owners^
+        swap(nodes, snapshot.owners)
         for i in range(len(nodes)):  # driver-loop: distinct admitted kernel classes, identity only
             var cls = py_type(nodes[i])
             var known = False

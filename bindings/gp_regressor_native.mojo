@@ -194,7 +194,8 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
     _ = x
     _ = targets
     var likelihood = scratch.scalars[1]
-    var gradient = scratch.gradient^
+    var gradient = List[Float64]()
+    swap(gradient, scratch.gradient)
     # Scratch owns one unused word when there are no free parameters; the
     # public gradient has always been empty in that case.
     if len(free.values) == 0:
@@ -645,7 +646,8 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, contex
         var result = _gpr_lml_grad(model, args[0], at, xt, yt, Int(py=xt.shape[0]), Int(py=xt.shape[1]), context)
         var lml = result.likelihood
         var info = result.info
-        var grad = result.gradient^
+        var grad = List[Float64]()
+        swap(grad, result.gradient)
         if info != 0:
             lml = Float64(py=py_call(b.float, PythonObject("-inf")))
             grad = List[Float64](length=len(theta), fill=0.0)

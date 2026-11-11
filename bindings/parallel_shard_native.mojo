@@ -26,6 +26,7 @@ native handlers in parallel_neighbor_worker; no estimator callback is stored.
 from std.ffi import external_call
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from core.native_label_codes import NativeLabelCodes
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.admitted_family import admit_family, admit_family_meta, admit_family_input, admit_family_cast
@@ -470,7 +471,8 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     if proba_method:
         return combined.probabilities
     # `codes32.astype("<i8")`: the exact widening
-    var codes32 = combined.codes^
+    var codes32 = NativeLabelCodes(0)
+    swap(codes32, combined.codes)
     var codes = List[Int64](length=n_star, fill=0)
     _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
     _ = codes32  # keep the Python object alive through the native call above
