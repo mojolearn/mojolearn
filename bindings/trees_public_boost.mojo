@@ -26,6 +26,7 @@
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
 from std.math import ceil
+from std.sys.compile import is_defined
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
@@ -103,6 +104,24 @@ def _xr(table: PythonObject) raises -> EntryRef:
     per operation and passed to every glue call of it (lane
     entry-table-zero-alloc)."""
     return xt_ref(_xk(table))
+
+
+# A/B define (lane loops-trees-ab, 2026-11-11; perf audit 20261111, fix
+# 10203a6430): `-D MOJOLEARN_DART_ROUND_REF_OFF` restores the per-round
+# re-read of the x_trees key inside `_dart_boost` (a Python attribute read,
+# a tuple index, two int conversions and the entry lookup, three times per
+# round and member) as the B arm. Default (undefined): the key resolved once
+# before the boosting loop. Same image, entries and words: no bit change.
+# Verdict pending: docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_DART_ROUND_REF_OFF.
+comptime _DART_ROUND_REF_OFF = is_defined["MOJOLEARN_DART_ROUND_REF_OFF"]()
+
+
+@always_inline
+def _dart_round_glue(glue: EntryRef, xt: PythonObject) raises -> EntryRef:
+    comptime if _DART_ROUND_REF_OFF:
+        return _xr(xt)
+    else:
+        return glue
 
 
 def _xk(table: PythonObject) raises -> TreesEntryKey:
@@ -1772,7 +1791,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
     var memo = Python.list()
     try:
         for it in range(n_iters):  # driver-loop: over the boosting rounds
-            _ = xt_dart_thresholds(glue, trees_address(weights64), trees_address(coefs64), trees_address(coef32),
+            _ = xt_dart_thresholds(_dart_round_glue(glue, xt), trees_address(weights64), trees_address(coefs64), trees_address(coef32),
                                    trees_address(thr64), trees_address(state), it, K, uniform, max_drop, drop_rate_f)
             _ = thr64  # keep the Python object alive through the native call above
             _ = coef32  # keep the Python object alive through the native call above
@@ -1789,7 +1808,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
             if _i32_word(bad, 0) != 0:
                 raise Error("RuntimeError: x_trees dart: a tree walk left its tree (child or column out of range)")
             var rescaled: List[Float64] = [0.0, 0.0, 0.0]
-            _ = xt_dart_rescale(glue, trees_address(weights64), trees_address(coefs64), trees_address(flags),
+            _ = xt_dart_rescale(_dart_round_glue(glue, xt), trees_address(weights64), trees_address(coefs64), trees_address(flags),
                                 trees_address(state), Int(rescaled.unsafe_ptr()), it, K, uniform, xgb, lr)
             _ = state  # keep the Python object alive through the native call above
             _ = flags  # keep the Python object alive through the native call above
@@ -1817,7 +1836,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
                 if cols is not None:
                     var colid = tf["_colid"]
                     var cid = _copy_i32(colid, 0, Int(py=colid.size), context)
-                    _ = xt_remap_cols(glue, trees_address(cid), trees_address(cols), Int(py=cid.size), len(cols))
+                    _ = xt_remap_cols(_dart_round_glue(glue, xt), trees_address(cid), trees_address(cols), Int(py=cid.size), len(cols))
                     _ = cid  # keep the Python object alive through the native call above
                     _ = cols  # keep the Python object alive through the native call above
                     py_setitem(tf, "_colid", cid)
