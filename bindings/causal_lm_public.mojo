@@ -1191,10 +1191,8 @@ def _resident_forward_ok(mut mods: NativeModules, model: PythonObject, state: Py
     var e = model._native_entries
     if String(model.kind) != "transformer" or not _resident_norm_ok(model):
         return False
-    for name in [String("causal_lm_session_forward"), String("transformer_decode_session_load_state"),  # small-loop(required resident entry names)
-                 String("transformer_decode_session_export_state"), String("causal_lm_session_run")]:
-        if not py_contains(e, name):
-            return False
+    if not py_contains(e, "resident"):
+        return False
     if String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) == "1" or String(getenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD")) == "0":
         return False
     if model._head_int15 is not None and String(e["resident_vendor"]) != "cuda":
@@ -1261,7 +1259,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             if retain:
                 read_plan.value().resident_lm = lm
                 read_plan.value().resident_sessions = sessions
-            _resident_load_states(e, sessions, state, keep)
+            _resident_load_states(e, lm, sessions, state, keep)
             mods.released()
         else:
             if kept is not None:
@@ -1269,7 +1267,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
                     read_plan.value().resident_lm = kept[1]
                     read_plan.value().resident_sessions = kept[2]
                 causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
-                _resident_close(e, kept[1], kept[2])
+                _resident_close(kept[1])
                 mods.released()
                 if retain:
                     read_plan.value().resident_lm = PythonObject(None)
@@ -1283,14 +1281,8 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
         if retain and not held:
             var live = py_get(fields, "_causal_live_fields", fields)
             read_plan.value().resident_cache = py_get(live, "_resident_sessions")
-        var provider = py_get(e, "native_block_operations")
-        var cached = PythonObject(None)
-        if provider is not None:
-            cached = PythonObject(transformer_resident_lm_run(provider, lm, sessions, False, [_addr(ids, keep), _addr(out, keep)], [l]))
-            mods.released()
-        else:
-            cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
-            mods.released()
+        var cached = PythonObject(_resident_group(e, lm, CAUSAL_SESSION_LM_FORWARD, [_addr(ids, keep), _addr(out, keep)], [l]))
+        mods.released()
         _ = out  # keep the Python object alive through the native call above
         if retain:
             # The read keeps these sessions for its next forward, which skips
@@ -1307,7 +1299,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
                 _resident_publish_profile(_block_at(mods, model, blocks, i), st)
                 py_setattr(st, "cached_tokens", cached)
         else:
-            _resident_export_states(mods, model, e, provider, sessions, state, blocks, b, cached)
+            _resident_export_states(mods, model, e, lm, sessions, state, blocks, b, cached)
     except error:
         mods.released()
         if retain:
@@ -1317,7 +1309,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
             causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
             causal_model_cache_set(mods, model, fields, "_resident_busy", False)
         if lm is not None:
-            _resident_close(e, lm, sessions)
+            _resident_close(lm)
             mods.released()
         raise error
     if retain:
@@ -1328,7 +1320,7 @@ def _resident_forward(mut mods: NativeModules, model: PythonObject, ids: PythonO
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
         causal_model_cache_set(mods, model, fields, "_resident_busy", False)
     else:
-        _resident_close(e, lm, sessions)
+        _resident_close(lm)
         mods.released()
     _ = keep^
     return out
@@ -1509,7 +1501,7 @@ struct LegacyGenerationReadPlan(Movable):
             raise Error("CausalLM: sequence exceeds allocated state capacity")
 
 
-def _resident_export_states(mut mods: NativeModules, model: PythonObject, e: PythonObject, provider: PythonObject,
+def _resident_export_states(mut mods: NativeModules, model: PythonObject, e: PythonObject, lm: PythonObject,
                             sessions: PythonObject, state: PythonObject, blocks: List[PythonObject], b: Int,
                             cached: PythonObject) raises:
     # Device KV of every layer session into the state's host caches (op 22).
@@ -1523,12 +1515,8 @@ def _resident_export_states(mut mods: NativeModules, model: PythonObject, e: Pyt
         var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
         var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
         var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
-        if provider is not None:
-            _ = transformer_resident_decode_call(provider, sessions[i], 22, [pk, pv], [])
-            mods.released()
-        else:
-            _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
-            mods.released()
+        _ = _resident_layer_call(e, lm, i, CAUSAL_SESSION_DECODE_EXPORT, [pk, pv], List[Int]())
+        mods.released()
         if cached is not None:
             _resident_publish_profile(blk, st)
             py_setattr(st, "cached_tokens", cached)
@@ -1542,7 +1530,7 @@ def _legacy_resident_export(mut mods: NativeModules, model: PythonObject, mut pl
         return
     plan.export_owed = False
     var e = model._native_entries
-    _resident_export_states(mods, model, e, py_get(e, "native_block_operations"), plan.resident_sessions,
+    _resident_export_states(mods, model, e, plan.resident_lm, plan.resident_sessions,
                             plan.export_state, plan.blocks, plan.export_batch, PythonObject(None))
 
 
@@ -1578,7 +1566,7 @@ def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut pl
     except:
         mods.released()
     try:
-        _resident_read_cleanup(py_get(model._native_entries, "native_block_operations"), lm, sessions)
+        _resident_read_cleanup(lm)
         mods.released()
     except:
         mods.released()
@@ -1763,18 +1751,49 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
     return causal_lm_forward_binding(mods, model, value, supplied_state, step)
 
 
-def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
-    var provider = py_get(entries, "native_block_operations")
-    if provider is not None:
-        transformer_resident_lm_close(provider, lm)
-    else:
-        _ = py_call_typed(entries["causal_lm_session_close"], lm)
-    for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-        var provider = py_get(entries, "native_block_operations")
-        if provider is not None:
-            _ = transformer_resident_decode_call(provider, sessions[i], 24, [], [])
-        else:
-            _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
+def _session_call(e: PythonObject, family: Int, operation: Int, addresses: List[Int], words: List[Int],
+    floats: List[Float64]) raises -> Int:
+    # One session-table call (core/causal_lm_entry_table_sessions.mojo) by the
+    # model's admitted key: plain words, no CPython call. The GIL is released
+    # around the device work as the former Python session entries released it.
+    var key = causal_entry_key(e)
+    var result = 0
+    with GILReleased(Python()):
+        result = causal_sessions_call(family, key, operation, addresses, words, floats)
+    return result
+
+
+def _resident_layer_call(e: PythonObject, lm: PythonObject, index: Int, operation: Int, addresses: List[Int],
+    scalars: List[Int]) raises -> Int:
+    # One layer decode session's operation, by its handle in the owner.
+    var owner = lm.downcast_value_ptr[CausalSessionHandles]()
+    var words: List[Int] = [owner[].layers[index]]
+    for i in range(len(scalars)):  # driver-loop: admitted session scalar span
+        words.append(scalars[i])
+    var result = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, operation, addresses, words, List[Float64]())
+    _ = lm
+    return result
+
+
+def _resident_group(e: PythonObject, lm: PythonObject, operation: Int, addresses: List[Int],
+    scalars: List[Int]) raises -> Int:
+    # The model session and every layer session in one grouped call
+    # (LM_RUN, LM_FORWARD): words [model, n, layer handles..., scalars...].
+    var owner = lm.downcast_value_ptr[CausalSessionHandles]()
+    var words: List[Int] = [owner[].primary, len(owner[].layers)]
+    for i in range(len(owner[].layers)):  # driver-loop: over layer decode sessions
+        words.append(owner[].layers[i])
+    for i in range(len(scalars)):  # driver-loop: admitted session scalar span
+        words.append(scalars[i])
+    var result = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, operation, addresses, words, List[Float64]())
+    _ = lm
+    return result
+
+
+def _resident_close(lm: PythonObject) raises:
+    # The handle owner closes the model session, then every layer session.
+    if lm is not None:
+        lm.downcast_value_ptr[CausalSessionHandles]()[].close()
 
 
 def _resident_open_all(mut mods: NativeModules,
@@ -1791,61 +1810,52 @@ def _resident_open_all(mut mods: NativeModules,
 ) raises -> PythonObject:
     """Open the model's resident sessions on `state`: one decode session per
     layer (weights and the layer's caches copied to the device) and the
-    model session (embedding, norm, head). Returns (lm, sessions)."""
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var sessions = g[].bi.list()
-    var lm = e["causal_lm_session_create"]()
+    model session (embedding, norm, head). Returns (lm, sessions): `lm` the
+    native handle owner (core/causal_session_handles.mojo), `sessions` its
+    layer handle words as a list (the resident cache record's shape)."""
+    var lm = PythonObject(alloc=CausalSessionHandles(causal_entry_key(e), CAUSAL_SESSIONS_TRANSFORMER,
+        _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_LM_CREATE, List[Int](), List[Int](), List[Float64]()),
+        CAUSAL_SESSION_LM_CLOSE))
     mods.released()
+    var owner = lm.downcast_value_ptr[CausalSessionHandles]()
     try:
         for i in range(len(model._blocks)):  # driver-loop: over model layers
             var blk = _block_at(mods, model, blocks, i)
             var st = state.layers[i]
-            var a = _transformer_args(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
-            var open_a = g[].bi.list()
+            var a = _transformer_arg_words(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
+            var open_a = List[Int]()
             for j in range(1, 12):  # driver-loop: over layer argument spans
-                _ = py_call(open_a.append, a[j])
+                open_a.append(a[j])
             for j in range(13, len(a)):  # driver-loop: over layer argument spans
-                _ = py_call(open_a.append, a[j])
-            var p = _transformer_params(blk, st, b, l)
-            var open_p = g[].bi.list()
+                open_a.append(a[j])
+            var ss = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int](), List[Float64]())
+            owner[].layers.append(ss)
+            var p = _transformer_param_words(blk, st, b, l)
+            var open_p: List[Int] = [ss]
             for j in range(len(p)):  # driver-loop: over layer shape parameters
                 if j != 1:
-                    _ = py_call(open_p.append, p[j])
-            var ss = e["transformer_decode_session_create"]()
+                    open_p.append(p[j])
+            _ = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_DECODE_OPEN15 if int15 else CAUSAL_SESSION_DECODE_OPEN,
+                open_a, open_p, List[Float64]())
             mods.released()
-            _ = py_call(sessions.append, ss)
-            var provider = py_get(e, "native_block_operations")
-            if provider is not None:
-                _ = transformer_resident_decode_call(provider, ss, 19 if int15 else 18,
-                    transformer_resident_words(open_a), transformer_resident_words(open_p))
-                mods.released()
-            else:
-                _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
-                mods.released()
         # A model without a final norm passes 0 (admitted only under
         # MOJOLEARN_IDN_LM_RESIDENT_GENERATE; see `_resident_norm_ok`).
-        var top = py_ints([_weight_addr(model._embed, keep), 0 if model._norm is None else _weight_addr(model._norm, keep)])
+        var top: List[Int] = [_weight_addr(model._embed, keep), 0 if model._norm is None else _weight_addr(model._norm, keep)]
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
-                _ = py_call(top.append, _weight_addr(model._head_int15[i], keep))
+                top.append(_weight_addr(model._head_int15[i], keep))
         else:
-            _ = py_call(top.append, 0 if model._head is model._embed else _weight_addr(model._head, keep))
-        var tp = py_ints([b, Int(py=model.vocab_size), Int(py=model.d_model)])
-        _ = py_call(tp.append, model.norm_eps)
-        var provider = py_get(e, "native_block_operations")
-        if provider is not None:
-            transformer_resident_lm_open(provider, lm, int15, transformer_resident_words(top),
-                [b, Int(py=model.vocab_size), Int(py=model.d_model)], Float64(py=model.norm_eps))
-            mods.released()
-        else:
-            _ = py_call(e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"], lm, top, tp)
-            mods.released()
+            top.append(0 if model._head is model._embed else _weight_addr(model._head, keep))
+        var tp: List[Int] = [owner[].primary, b, Int(py=model.vocab_size), Int(py=model.d_model)]
+        _ = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_LM_OPEN15 if int15 else CAUSAL_SESSION_LM_OPEN,
+            top, tp, [Float64(py=model.norm_eps)])
+        mods.released()
     except error:
         mods.released()
-        _resident_close(e, lm, sessions)
+        _resident_read_cleanup(lm)
         mods.released()
         raise error
-    return Python.tuple(lm, sessions)
+    return Python.tuple(lm, py_ints(owner[].layers))
 
 
 def _resident_key(mut mods: NativeModules, model: PythonObject, state: PythonObject, b: Int, int15: Bool) raises -> PythonObject:
@@ -1866,23 +1876,19 @@ def _resident_key(mut mods: NativeModules, model: PythonObject, state: PythonObj
     return Python.tuple(b, py_call(g[].bi.tuple, caps), int15, py_call(g[].bi.id, identity))
 
 
-def _resident_load_states(e: PythonObject, sessions: PythonObject, state: PythonObject, mut keep: List[PythonObject]) raises:
+def _resident_load_states(e: PythonObject, lm: PythonObject, sessions: PythonObject, state: PythonObject, mut keep: List[PythonObject]) raises:
     """Each kept layer session takes this call's caches (the state half of
     an open; the weights stay where they are)."""
-    var provider = py_get(e, "native_block_operations")
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
         var st = state.layers[i]
         var a: List[Int] = [_addr(st.k_cache, keep), _addr(st.v_cache, keep)]
         var p: List[Int] = [Int(py=st.cached_tokens)]
-        if provider is not None:
-            _ = transformer_resident_decode_call(provider, sessions[i], 23, a, p)
-        else:
-            _ = py_call(e["transformer_decode_session_load_state"], sessions[i], py_ints(a), py_ints(p))
+        _ = _resident_layer_call(e, lm, i, CAUSAL_SESSION_DECODE_LOAD, a, p)
 
 
 def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
     var e = model._native_entries
-    if not py_contains(e, "causal_lm_session_run") or not _resident_norm_ok(model):
+    if not py_contains(e, "resident") or not _resident_norm_ok(model):
         return PythonObject(None)
     var int15 = model._head_int15 is not None
     if int15 and String(e["resident_vendor"]) != "cuda":
@@ -1919,8 +1925,7 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     # before. A concurrent call, or a binding without load_state, opens its
     # own set.
     var fields = _standalone_record_fields(mods, model)
-    var persist = (py_contains(e, "transformer_decode_session_load_state")
-                   and not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+    var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
                    and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
     var key = _resident_key(mods, model, state, b, int15, blocks)
     var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
@@ -1932,24 +1937,18 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
         if kept is not None and Bool(py=kept[0] == key):
             lm = kept[1]
             sessions = kept[2]
-            _resident_load_states(e, sessions, state, keep)
+            _resident_load_states(e, lm, sessions, state, keep)
             mods.released()
         else:
             if kept is not None:
                 causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
-                _resident_close(e, kept[1], kept[2])
+                _resident_close(kept[1])
                 mods.released()
             var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep, blocks)
             lm = opened[0]
             sessions = opened[1]
-        var provider = py_get(e, "native_block_operations")
-        if provider is not None:
-            _ = transformer_resident_lm_run(provider, lm, sessions, True,
-                [_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)], [l, n, 0])
-            mods.released()
-        else:
-            _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
-            mods.released()
+        _ = _resident_group(e, lm, CAUSAL_SESSION_LM_RUN, [_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)], [l, n, 0])
+        mods.released()
         _ = out  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
     except error:
@@ -1958,14 +1957,14 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
             causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
             causal_model_cache_set(mods, model, fields, "_resident_busy", False)
         if lm is not None:
-            _resident_close(e, lm, sessions)
+            _resident_close(lm)
             mods.released()
         raise error
     if persist:
         causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
         causal_model_cache_set(mods, model, fields, "_resident_busy", False)
     else:
-        _resident_close(e, lm, sessions)
+        _resident_close(lm)
         mods.released()
     var result = generation_array([b, l + n], "i")
     var dst = i32_ptr(Int(py=result._addr))
@@ -2315,17 +2314,33 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
                         Int(s.seed & UInt64(0xFFFFFFFF)), Int(s.seed >> 32), length, max(0, n), s.produced]
     var fields = _standalone_record_fields(mods, s.model)
     var persist = not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+    # The model's decode program is a native registry handle in its block
+    # image (core/causal_lm_entry_table_sessions.mojo PROGRAM_READ); the
+    # model keeps its thin owner (core/causal_session_handles.mojo).
+    var entries = s.model._native_entries
+    var family = Int(py=entries["program_read"])
     var owner = py_get(fields, "_decode_program") if persist else PythonObject(None)
-    var ret = PythonObject(None)
+    var held = 0 if owner is None else owner.downcast_value_ptr[CausalSessionHandles]()[].primary
+    var capacity = 5 + 2 * len(blocks)
+    var reply = List[Int](length=capacity, fill=0)
+    var ret = List[Int]()
     try:
-        var pf = Python.list()
-        for i in range(len(f)):  # driver-loop: over descriptor floats (argument packing)
-            pf.append(f[i])
-        var reply = py_call(s.model._native_entries["program_read"], owner, py_ints(a), py_ints(p), pf)
+        var read_words: List[Int] = [held, Int(reply.unsafe_ptr()), capacity]
+        for i in range(len(p)):  # driver-loop: over descriptor words (argument packing)
+            read_words.append(p[i])
+        var served = _session_call(entries, family, CAUSAL_SESSION_PROGRAM_READ, a, read_words, f)
         mods.released()
-        if persist:
-            causal_model_cache_set(mods, s.model, fields, "_decode_program", reply[0])
-        ret = reply[1]
+        if served != held:
+            # A new program serves these weights: its owner replaces the held
+            # one (whose collection releases the old program), or, when the
+            # program does not persist, dies here and releases it at once.
+            var fresh = PythonObject(alloc=CausalSessionHandles(causal_entry_key(entries), family, served,
+                CAUSAL_SESSION_PROGRAM_RELEASE))
+            if persist:
+                causal_model_cache_set(mods, s.model, fields, "_decode_program", fresh)
+        for i in range(reply[0]):  # driver-loop: over result words (no data)
+            ret.append(reply[1 + i])
+        _ = reply^
     except error:
         mods.released()
         s.usable = False
@@ -2337,20 +2352,20 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
             _ = publication
         raise error
     admission.recheck(generation_array_context())
-    var wrote = Int(py=ret[0])
-    var forwards = Int(py=ret[1])
-    var bad = Int(py=ret[2])
-    var alive = Int(py=ret[3]) != 0
+    var wrote = ret[0]
+    var forwards = ret[1]
+    var bad = ret[2]
+    var alive = ret[3] != 0
     var at = 4
     for i in range(len(blocks)):  # driver-loop: over the model's layers (state publication)
         if kind == "transformer":
-            py_setitem(sts[i], "cached_tokens", ret[at])
+            py_setitem(sts[i], "cached_tokens", PythonObject(ret[at]))
             at += 1
             var profile = model_plain(py_get(blocks[i], "_arithmetic_profile", PythonObject(None)))
             if profile is not None:
                 py_setitem(sts[i], "arithmetic_profile", profile)
         elif kind == "mamba2":
-            py_setitem(sts[i], "buffered_tokens", ret[at])
+            py_setitem(sts[i], "buffered_tokens", PythonObject(ret[at]))
             at += 1
             py_setitem(blocks[i], "h_last_", reports[i])
         else:
@@ -2476,21 +2491,15 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
     return True
 
 
-def _resident_read_cleanup(provider: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
-    # Failure-only best effort: one failed close must not skip other owners.
-    # The caller preserves its original operation error, including if cleanup
-    # cannot inspect these already-admitted owners.
+def _resident_read_cleanup(lm: PythonObject) raises:
+    # Failure-only best effort: the caller preserves its original operation
+    # error. A handle a refused close keeps is released when the owner is
+    # collected (core/causal_session_handles.mojo).
     if lm is not None:
         try:
-            transformer_resident_lm_close(provider, lm)
+            lm.downcast_value_ptr[CausalSessionHandles]()[].close()
         except cleanup:
             _ = cleanup
-    if sessions is not None:
-        for i in range(len(sessions)):  # driver-loop: release every owned layer after failure
-            try:
-                _ = transformer_resident_decode_call(provider, sessions[i], 24, [], [])
-            except cleanup:
-                _ = cleanup
 
 
 def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
