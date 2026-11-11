@@ -5,7 +5,7 @@ from core.hostptr import f32_ptr
 from core.labels_accuracy_plan import LabelAccuracyPlan, label_accuracy_plan
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
-from x_metrics.descriptor_schema import MP_CAPABILITIES, MP_HAS_RANGES, MP_RUN_OUT, MP_RUN_RANGES
+from x_metrics.descriptor_schema import MP_CAPABILITIES, MP_HAS_RANGES, MP_RUN, MP_RUN_OUT, MP_RUN_RANGES
 
 
 struct GPCAccuracyProgram(Movable):
@@ -28,7 +28,7 @@ struct GPCAccuracyProgram(Movable):
         # group/count outputs. Do not shrink transfers to the final fraction.
         self.outputs = self.plan.program.download(known)
 
-    def run(self, entry: NativeDescriptorCall, ranges: Bool) raises -> Float64:
+    def run(self, entry: NativeDescriptorCall, ranges: Bool, output_ranges: Bool = True) raises -> Float64:
         var address = Int(self.arena.unsafe_ptr())
         var stages = len(self.plan.program.stages) // 16
         var words = Int(self.plan.program.stages.unsafe_ptr())
@@ -39,10 +39,13 @@ struct GPCAccuracyProgram(Movable):
                 _ = native_descriptor_call(entry, MP_RUN_RANGES,
                     [address, words, Int(self.inputs.unsafe_ptr()), Int(self.outputs.unsafe_ptr())],
                     [self.plan.program.size, stages, 1, count], [])
-            else:
+            elif output_ranges:
                 _ = native_descriptor_call(entry, MP_RUN_OUT,
                     [address, words, Int(self.outputs.unsafe_ptr())],
                     [self.plan.program.size, stages, count], [])
+            else:
+                _ = native_descriptor_call(entry, MP_RUN,
+                    [address, words], [self.plan.program.size, stages], [])
             var at = self.plan.result_offset + 8
             var result = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=address)
             return bitcast[DType.float64](UInt64(result[at]) | (UInt64(result[at + 1]) << 32))

@@ -1,0 +1,97 @@
+{
+  "base": "f93166d21e",
+  "depends_on": "f4dd94efec",
+  "status": "source authored, compilation and runtime pending",
+  "roles": [
+    {
+      "family": "LinearSVC",
+      "role": "private decoded score prediction Array/list",
+      "before": "svc_linear_native::svc_linear_operation score \u2192 _linear_svc_predict \u2192 svc_decode",
+      "after": "_linear_svc_prediction + svc_decode_score \u2192 GPDecodedScoreLabels(native words or boundary scalar pins)",
+      "aggregate_overlap": null
+    },
+    {
+      "family": "LinearSVC",
+      "role": "metric encoded and union-mapped row-code Arrays",
+      "before": "classical_labels::_native_classification and _codes",
+      "after": "SvcScoreLabels.codes and _svc_score_remap native Int32 Lists",
+      "aggregate_overlap": "existing shared label scoring schema; SVM provider route preserved"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "private COUNT arena storage",
+      "before": "classical_labels::_accuracy_run \u2192 arena_prog_native::_metrics_run_plan::_store",
+      "after": "GPCAccuracyProgram.arena native Float32 List",
+      "aggregate_overlap": "previous GP COUNT native arena schema reused"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "compiled-Python COUNT request envelope",
+      "before": "arena_prog_native::_metrics_execute \u2192 _entry_call Python tuples",
+      "after": "GPCAccuracyProgram.run \u2192 existing metrics native descriptor",
+      "aggregate_overlap": "previous GP COUNT native descriptor schema reused"
+    }
+  ],
+  "native_tests": {
+    "cpu": 5,
+    "ordered_gpu": 5,
+    "cases": "three original prepare/gather plus COUNT ranges/out/full paths, two native code-index contracts",
+    "status": "unrun"
+  },
+  "boundary_tests": {
+    "file": "test_linear_svc_score_native_boundary.py",
+    "definitions": 9,
+    "expanded_cases": 15,
+    "status": "unrun"
+  },
+  "source_conservation": {
+    "numerical_files": {
+      "glm/estimator.mojo": true,
+      "glm/host/qn_oracle.mojo": true,
+      "glm/logistic_native_device.mojo": true,
+      "glm/host/logistic_native_host.mojo": true,
+      "core/labels_native_host.mojo": true,
+      "core/labels_native_device.mojo": true,
+      "core/label_device_steps.mojo": true,
+      "x_metrics/descriptor_device.mojo": true,
+      "x_metrics/descriptor_host.mojo": true
+    },
+    "other_family_methods": {
+      "_linear_svr_fit": true,
+      "_linear_svr_fit_target": true,
+      "_linear_svr_predict": true,
+      "_linear_svc_fit": true,
+      "_linear_svc_codes": true,
+      "_qn_row_weights": true
+    }
+  },
+  "live_route_proof": {
+    "SVM": "svc_accuracy \u2192 labels_accuracy \u2192 labels_prepare_targets/labels_gather retained",
+    "GP": "existing host label path untouched",
+    "program_context": "live _expansion_metrics._PROG_CONTEXT read and admitted every call; no substitute context",
+    "residency": "python/mojolearn/_native_arena_prog.py _FAMILIES[x_metrics] exposes no store methods; both metrics binding modules preserve 2026-10-26 tombstones; active range thread-local admission retained; no resident cache resurrected",
+    "transfer": "existing ranges/out/full branch selection retained; GPCAccuracyProgram.run new optional output_ranges=True leaves GP defaults unchanged"
+  },
+  "removed": [
+    "private prediction result PACK in LinearSVC.score",
+    "private encoded/remapped row-code Arrays in this score path",
+    "private COUNT arena store/Array and compiled-Python transport in this score path",
+    "obsolete _pred_count helper"
+  ],
+  "remaining_boundaries": [
+    "public classes_ and mutable _w storage",
+    "existing weak class-table cache tuple and numeric class table remain shared boundary metadata",
+    "shared truth UNPACK normalization retains its existing Python storage views; no additional input copy",
+    "exact object scalar refs require GIL-held CPython UNPACK; numerical work remains native parallel",
+    "LinearSVR.score and SVC/SVR/OneClassSVM inventoried transport remain pending"
+  ],
+  "compile_roots": [
+    "identical/core",
+    "host/core",
+    "host/runtime_family",
+    "all transitive consumers of shared arena/classification/GPCAccuracyProgram helpers per root discovery"
+  ],
+  "abi": "no external descriptor ABI/schema change; appended optional native run argument defaults to old GP behavior",
+  "jobs": "none; root owns compilation and runtime",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/linear-svc-score-source.json"
+}

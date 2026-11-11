@@ -286,6 +286,15 @@ def svc_decode(var classes: PythonObject, codes: PythonObject, context: PythonOb
 comptime _SVC_CLASS_TABLE_SLOT = "svc_class_table_v1"
 
 
+def svc_cached_class_table(owner: PythonObject, classes: PythonObject, context: PythonObject) raises -> PythonObject:
+    var built = gpsvm_class_table(owner, _SVC_CLASS_TABLE_SLOT, classes)
+    if built is None:
+        var kind = svc_label_kind(classes, context)
+        built = Python.tuple(PythonObject(kind), _svc_class_table(classes, kind, context))
+        gpsvm_class_table_put(owner, _SVC_CLASS_TABLE_SLOT, classes, built)
+    return built
+
+
 def svc_decode(owner: PythonObject, var classes: PythonObject, codes: PythonObject,
                context: PythonObject) raises -> PythonObject:
     """`svc_decode(classes, codes)` for the fitted `owner`: the label kind and
@@ -293,11 +302,7 @@ def svc_decode(owner: PythonObject, var classes: PythonObject, codes: PythonObje
     kept in a weak-keyed native record (bindings/gp_svm_records.mojo)
     instead of being rebuilt with a per-class conversion on every predict."""
     classes = classifier_label_list(classes, context)
-    var built = gpsvm_class_table(owner, _SVC_CLASS_TABLE_SLOT, classes)
-    if built is None:
-        var kind = svc_label_kind(classes, context)
-        built = Python.tuple(PythonObject(kind), _svc_class_table(classes, kind, context))
-        gpsvm_class_table_put(owner, _SVC_CLASS_TABLE_SLOT, classes, built)
+    var built = svc_cached_class_table(owner, classes, context)
     return _svc_decode_with(classes, Int(py=built[0]), built[1], codes, context)
 
 
@@ -305,11 +310,7 @@ def svc_decode(owner: PythonObject, var classes: PythonObject, codes: List[Int64
                context: PythonObject) raises -> PythonObject:
     """PACK native code storage with the same weak class table and label types."""
     classes = classifier_label_list(classes, context)
-    var built = gpsvm_class_table(owner, _SVC_CLASS_TABLE_SLOT, classes)
-    if built is None:
-        var kind = svc_label_kind(classes, context)
-        built = Python.tuple(PythonObject(kind), _svc_class_table(classes, kind, context))
-        gpsvm_class_table_put(owner, _SVC_CLASS_TABLE_SLOT, classes, built)
+    var built = svc_cached_class_table(owner, classes, context)
     var kind = Int(py=built[0])
     var table = built[1]
     var n = len(codes)
