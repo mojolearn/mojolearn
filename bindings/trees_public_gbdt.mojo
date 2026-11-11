@@ -326,7 +326,7 @@ def _numeric_mode_used(table: PythonObject) raises -> String:
     var getter = trees_entry(table, "gbdt_numeric_mode")
     if getter is None:
         raise Error("RuntimeError: mojolearn: _mojolearn_gbdt has no gbdt_numeric_mode")
-    # The binary's compiled mode, asked once per binary (see _GbdtBinaryFacts).
+    # The binary's compiled mode, asked once per binary (see gbdt/trees_gbdt_run.mojo GbdtBinaryFacts).
     var key = Int(getter._obj_ptr)
     var known = gbdt_known_mode(key)
     if known:
