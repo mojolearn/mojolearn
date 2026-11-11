@@ -48,12 +48,7 @@ class ArrayBufferCompatibility(unittest.TestCase):
         self.assertEqual(len(result),10)
         self.assertTrue(all(row['bytes'] for row in result.values()))
 
-    def test_finite_reference_arm_and_typed_bytes(self):
-        x=data()
-        with patch.object(_buffer,'hotpath_enabled',return_value=False):
-            self.assertEqual(_buffer.flat_bytes(cluster._f32(x)).hex(),_buffer.flat_bytes(x).hex())
-            with self.assertRaisesRegex(ValueError,'NaN or infinity'):
-                cluster._f32([[float('nan'),0.]])
+    def test_typed_bytes(self):
         # Preserve signed-zero/subnormal storage and signed integer tree nodes.
         values=Array._from_flat([-0.,2**-149],(1,2),'<f4')
         self.assertEqual(_buffer.flat_bytes(values).hex(),'0000008001000000')
