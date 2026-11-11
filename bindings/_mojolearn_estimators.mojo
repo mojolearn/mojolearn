@@ -15,6 +15,8 @@ from core.logistic_native_api import (
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
+from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
 from core.pca_native_device import PCA_DEVICE_API
 from core.tsvd_native_device import TSVD_DEVICE_API
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
@@ -59,13 +61,6 @@ from bindings.labeled_reference_resident_binding import (
     labeled_reference_predict_resident_binding,
 )
 from dbscan.estimator import dbscan_fit
-from kde.estimator import kde_score_samples_host_ptr
-from kde.resident_fit import (
-    KDE_FAST_IMMUTABLE_FIT,
-    kde_fit_prepare,
-    kde_fit_release,
-    kde_score_samples_resident,
-)
 from decomposition.estimator import (
     inverse_transform_host,
     pca_fit_host,
@@ -953,6 +948,11 @@ def tsvd_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def kde_native_api_v1_binding() raises -> PythonObject:
+    var api = KDE_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def pca_native_api_v1_binding() raises -> PythonObject:
     var api = PCA_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1496,25 +1496,18 @@ def kde_score_samples_binding(
     var has_weights = Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    # DEVIATION 2660: X and the queries are validated and staged from the
-    # caller's memory (no `List` copies); the weights, `n_train` values
-    # that `kde_fit_validate` and `host_sum_weights` read, are still one
-    # owned copy. The scores are written to `out_addr` from the pinned
-    # download buffer. Same values in, same bits out.
-    var weights = List[Float32]()
+    var weights_address = 0
     if has_weights:
-        var wp = _f32_ptr(Int(py=weights_addr))
-        weights = read_f32(Int(wp), max(0, n_train))
+        weights_address = Int(_f32_ptr(Int(py=weights_addr)))
+    var request = KDEQueryRequest(Int(tp), Int(qp), weights_address, Int(op), n_train, n_query,
+                                  n_features, Float64(bandwidth), has_weights, False, kname^, mname^)
     with GILReleased(Python()):
-        kde_score_samples_host_ptr(
-            tp, n_train, qp, n_query, n_features, bandwidth, kname,
-            mname, weights, has_weights, op,
-        )
+        _ = KDEDeviceKernels.query(request)
     return PythonObject(n_query)
 
 
 def kde_fast_immutable_fit_binding() raises -> PythonObject:
-    return PythonObject(Int(KDE_FAST_IMMUTABLE_FIT))
+    return PythonObject(Int((KDEDeviceKernels.capabilities() & KDE_CAP_IMMUTABLE) != 0))
 
 
 def kde_fit_prepare_binding(
@@ -1551,20 +1544,20 @@ def kde_fit_prepare_binding(
     var finite_tested = len(params) == 5 and Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var weights = List[Float32]()
+    var weights_address = 0
     if has_weights:
-        var wp = _f32_ptr(Int(py=weights_addr))
-        weights = read_f32(Int(wp), max(0, n_train))
+        weights_address = Int(_f32_ptr(Int(py=weights_addr)))
+    var request = KDEPrepareRequest(Int(tp), weights_address, n_train, n_features, Float64(bandwidth),
+                                    has_weights, finite_tested, kname^, mname^)
     var handle: Int
     with GILReleased(Python()):
-        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights,
-                                 finite_tested)
+        handle = KDEDeviceKernels.prepare(request)
     return PythonObject(handle)
 
 
 def kde_fit_release_binding(handle: PythonObject) raises -> PythonObject:
     """Drop a resident KDE fit set (DEVIATION 3003)."""
-    kde_fit_release(Int(py=handle))
+    KDEDeviceKernels.release(Int(py=handle))
     return PythonObject(None)
 
 
@@ -1600,12 +1593,11 @@ def kde_score_samples_resident_binding(
     var bandwidth = Float32(Float64(py=params[2]))
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var total = Float32(0)
+    var request = KDEResidentQuery(h, Int(qp), Int(op), status, n_query, n_features,
+                                   Float64(bandwidth), want_total, kname^, mname^)
+    var total = Float64(0)
     with GILReleased(Python()):
-        total = kde_score_samples_resident(
-            h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
-            status_addr=status,
-        )
+        total = KDEDeviceKernels.resident(request)
     if want_total:
         return PythonObject(Float64(total))
     return PythonObject(n_query)
@@ -1718,6 +1710,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         m.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
+        m.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
         m.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         m.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")

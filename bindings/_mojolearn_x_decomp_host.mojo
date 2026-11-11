@@ -21,7 +21,7 @@ from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
 from x_decomp.ipca_owner import NoIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
-from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
+from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
 from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
 from providers.python.x_decomp_chi2_pyapi import chi2_quantile_py, consistency_factor_py
 from providers.python.x_decomp_als_pyapi import als_fit_py
@@ -60,6 +60,8 @@ from core.shared_slot import SharedSlot
 from core.tsvd_native_decomp import TSVDDecompAPI
 from core.nmf_native_provider import NMFProviderAPI
 from core.ipca_native_provider import IPCAProviderAPI
+from core.kpca_native_api import KPCAProviderAPI
+from core.kpca_native_provider import KPCAEigenKernels
 from checks.numerics import NUMERIC_IDENTICAL
 
 comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompHostFastV1"
@@ -72,6 +74,15 @@ comptime NMF_API = SharedSlot[NMFProviderAPI[HostExec, NoRDev, False, HostDecomp
 
 comptime _IPCA_API_NAME = "MojolearnIPCAHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnIPCAHostFastV1"
 comptime IPCA_API = SharedSlot[IPCAProviderAPI[HostExec, NoRDev, False, NoIpcaDev], _IPCA_API_NAME]
+
+
+comptime _KPCA_DECOMP_API_NAME = "MojolearnKPCADecompHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnKPCADecompHostFastV1"
+comptime KPCA_DECOMP_API = SharedSlot[KPCAProviderAPI[KPCAEigenKernels[HostExec, NoRDev, False, HostDecomp]], _KPCA_DECOMP_API_NAME]
+
+
+def kpca_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = KPCA_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def ipca_native_api_v1_binding() raises -> PythonObject:
@@ -107,6 +118,7 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
         m.def_function[nmf_native_api_v1_binding]("nmf_native_api_v1")
         m.def_function[ipca_native_api_v1_binding]("ipca_native_api_v1")
+        m.def_function[kpca_decomp_native_api_v1_binding]("kpca_decomp_native_api_v1")
         m.def_function[x_decomp_host_numeric_mode_binding]("x_decomp_host_numeric_mode")
         m.def_function[x_decomp_host_vendor_binding]("x_decomp_host_vendor")
         m.def_function[x_decomp_host_column_binding]("x_decomp_host_column")
@@ -165,7 +177,6 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[fa_fit_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_fa_fit")
         m.def_function[fa_query_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_fa_query")
         m.def_function[lda_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_lda_owner")
-        m.def_function[kpca_eig_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_kpca_eig")
         m.def_function[rp_fit_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_rp_fit")
         m.def_function[rp_project_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_rp_project")
         m.def_function[r_signs_py]("x_decomp_r_signs")

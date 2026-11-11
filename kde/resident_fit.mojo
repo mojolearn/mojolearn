@@ -62,7 +62,7 @@ from kde.impl.neighbors.kernel_density import (
 from kde.impl.distance.distance_ops import DIST_COSINE_EXPANDED, DIST_L2_EXPANDED
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
 def kde_host_rules_needed(metric: Int, finite_tested: Bool) -> Bool:
@@ -192,13 +192,15 @@ struct ResidentKdeFit(Movable):
 struct KdeFitRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentKdeFit]
     var next_id: Int
+    var metadata_lock: List[Int64]
 
     def __init__(out self):
         self.entries = Dict[Int, ResidentKdeFit]()
         self.next_id = 1
+        self.metadata_lock = List[Int64](length=1, fill=0)
 
 
-comptime KDE_FIT_REGISTRY = SharedSlot[KdeFitRegistry, ( "MojolearnKdeResidentFitIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKdeResidentFitFastV1" )]
+comptime KDE_FIT_REGISTRY = SharedSlot[KdeFitRegistry, ( "MojolearnKdeResidentFitIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKdeResidentFitFastV2" ), 2]
 
 
 def kde_fit_prepare(
@@ -221,21 +223,99 @@ def kde_fit_prepare(
     var state = KDE_FIT_REGISTRY.get_or_create_ptr()
     var entry = ResidentKdeFit(train_ptr, n_train, n_features, bandwidth, k, m, weights, has_weights,
                                finite_tested)
-    if state[].next_id == 9223372036854775807:
-        raise Error("resident KDE fit handle space exhausted")
-    var handle = state[].next_id
-    state[].next_id += 1
-    state[].entries[handle] = entry^
-    return handle
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if state[].next_id == 9223372036854775807:
+            raise Error("resident KDE fit handle space exhausted")
+        var handle = state[].next_id
+        state[].next_id += 1
+        state[].entries[handle] = entry^
+        return handle
+    finally:
+        shared_slot_unlock(lock)
 
 
 def kde_fit_release(handle: Int) raises:
-    """Drop the device copy; a released handle is refused by every later call."""
+    """Drop registry ownership; active queries retain their native buffers."""
     var state = KDE_FIT_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident KDE fit handle")
-    var released = state[].entries.pop(handle)
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var released: Optional[ResidentKdeFit] = None
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident KDE fit handle")
+        released = state[].entries.pop(handle)
+    finally:
+        shared_slot_unlock(lock)
+    # Pool closure, buffer release and context drain must be outside the lock.
     _ = released^
+
+
+@fieldwise_init
+struct KdeFitLease(Movable):
+    # These are owning native handle copies, never additional tensor copies.
+    var ctx: DeviceContext
+    var train: DeviceBuffer[DType.float32]
+    var weights: DeviceBuffer[DType.float32]
+    var has_weights: Bool
+    var sum_w: Float32
+    var n_train: Int
+    var n_features: Int
+    var kernel: Int
+    var metric: Int
+    var bandwidth: Float32
+    var partial_pool: Optional[KdeChunkWorkspace]
+
+    def __deinit__(deinit self):
+        _ = self.partial_pool^
+        _ = self.weights^
+        _ = self.train^
+        _ = self.ctx^
+
+
+def _kde_fit_lease(handle: Int) raises -> KdeFitLease:
+    var state = KDE_FIT_REGISTRY.get_or_create_ptr()
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident KDE fit handle")
+        ref entry = state[].entries[handle]
+        var pool: Optional[KdeChunkWorkspace] = None
+        if entry.partial_pool:
+            pool = entry.partial_pool.take()
+        return KdeFitLease(entry.ctx.copy(), entry.train.copy(), entry.weights.copy(),
+            entry.has_weights, entry.sum_w, entry.n_train, entry.n_features,
+            entry.kernel, entry.metric, entry.bandwidth, pool^)
+    finally:
+        shared_slot_unlock(lock)
+
+
+def _kde_fit_return(handle: Int, mut lease: KdeFitLease, clean: Bool) raises:
+    if not lease.partial_pool:
+        return
+    if not clean:
+        # A failed enqueue must not leave a busy/poisoned workspace cached.
+        lease.partial_pool.value().close(lease.ctx)
+        lease.partial_pool = None
+        return
+    var state = KDE_FIT_REGISTRY.get_or_create_ptr()
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if handle in state[].entries:
+            ref entry = state[].entries[handle]
+            if not entry.partial_pool:
+                entry.partial_pool = lease.partial_pool.take()
+    finally:
+        shared_slot_unlock(lock)
+    if lease.partial_pool:
+        # A concurrent query returned the cache first, or the handle was
+        # released. Keep only one idle workspace, with cleanup outside lock.
+        lease.partial_pool.value().close(lease.ctx)
+        lease.partial_pool = None
+
 
 
 def kde_score_samples_resident(
@@ -271,73 +351,89 @@ def kde_score_samples_resident(
     scores."""
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
-    var state = KDE_FIT_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident KDE fit handle")
-    ref entry = state[].entries[handle]
-    if entry.kernel != k or entry.metric != m or entry.n_features != n_features or entry.bandwidth != bandwidth:
-        raise Error(
-            "kde_score_samples_resident: the handle was prepared with kernel "
-            + String(entry.kernel) + ", metric " + String(entry.metric)
-            + ", " + String(entry.n_features) + " features and bandwidth "
-            + String(entry.bandwidth) + "; the call names kernel " + String(k)
-            + ", metric " + String(m) + ", " + String(n_features)
-            + " features and bandwidth " + String(bandwidth)
+    var entry = _kde_fit_lease(handle)
+    var clean = True
+    try:
+        if entry.kernel != k or entry.metric != m or entry.n_features != n_features or entry.bandwidth != bandwidth:
+            raise Error(
+                "kde_score_samples_resident: the handle was prepared with kernel "
+                + String(entry.kernel) + ", metric " + String(entry.metric)
+                + ", " + String(entry.n_features) + " features and bandwidth "
+                + String(entry.bandwidth) + "; the call names kernel " + String(k)
+                + ", metric " + String(m) + ", " + String(n_features)
+                + " features and bandwidth " + String(bandwidth)
+            )
+        if n_query <= 0:
+            raise Error("kde: X must have at least one row (n_query)")
+        if kde_host_rules_needed(m, status_addr != 0):
+            kde_validate_data_ptr(query, n_query, n_features, m, "query")
+        clean = False
+        var n = n_query * n_features
+        var dquery = entry.ctx.enqueue_create_buffer[DType.float32](n)
+        var host = entry.ctx.enqueue_create_host_buffer[DType.float32](n)
+        copy_f32(query, host.unsafe_ptr(), n)
+        entry.ctx.enqueue_copy(dst_buf=dquery, src_ptr=host.unsafe_ptr())
+        var dstatus = entry.ctx.enqueue_create_buffer[DType.int32](1)
+        var hstatus = entry.ctx.enqueue_create_host_buffer[DType.int32](1)
+        if status_addr != 0:
+            enqueue_fill[DType.int32](entry.ctx, dstatus, Int32(0))
+            enqueue_finite_status(entry.ctx, dquery.unsafe_ptr(), n, dstatus.unsafe_ptr(), 0)
+            entry.ctx.enqueue_copy(dst_ptr=hstatus.unsafe_ptr(), src_buf=dstatus)
+        var dout = entry.ctx.enqueue_create_buffer[DType.float32](n_query)
+        var trace = IdentityTrace()
+        trace.header(
+            "kde: n_train=" + String(entry.n_train) + " n_query=" + String(n_query)
+            + " n_features=" + String(n_features) + " kernel=" + kernel
+            + " metric=" + metric + " metric_arg=" + String(metric_arg)
+            + " weighted=" + String(entry.has_weights)
         )
-    if n_query <= 0:
-        raise Error("kde: X must have at least one row (n_query)")
-    if kde_host_rules_needed(m, status_addr != 0):
-        kde_validate_data_ptr(query, n_query, n_features, m, "query")
-    var n = n_query * n_features
-    var dquery = entry.ctx.enqueue_create_buffer[DType.float32](n)
-    var host = entry.ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(query, host.unsafe_ptr(), n)
-    entry.ctx.enqueue_copy(dst_buf=dquery, src_ptr=host.unsafe_ptr())
-    var dstatus = entry.ctx.enqueue_create_buffer[DType.int32](1)
-    var hstatus = entry.ctx.enqueue_create_host_buffer[DType.int32](1)
-    if status_addr != 0:
-        enqueue_fill[DType.int32](entry.ctx, dstatus, Int32(0))
-        enqueue_finite_status(entry.ctx, dquery.unsafe_ptr(), n, dstatus.unsafe_ptr(), 0)
-        entry.ctx.enqueue_copy(dst_ptr=hstatus.unsafe_ptr(), src_buf=dstatus)
-    var dout = entry.ctx.enqueue_create_buffer[DType.float32](n_query)
-    var trace = IdentityTrace()
-    trace.header(
-        "kde: n_train=" + String(entry.n_train) + " n_query=" + String(n_query)
-        + " n_features=" + String(n_features) + " kernel=" + kernel
-        + " metric=" + metric + " metric_arg=" + String(metric_arg)
-        + " weighted=" + String(entry.has_weights)
-    )
-    # TOMBSTONE: MOJOLEARN_KDE_SAMPLE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
-    # Tried: the one-drain score + download branch here.
-    # Restore: git apply experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch; record in docs/TOMBSTONES.md.
-    var pooled=False
-    comptime if KDE_CHUNK_POOL_ON:
-        if entry.partial_pool and not trace.enabled and kde_chunk_lse_metric_applies(m):
-            ref pool=entry.partial_pool.value()
-            # The registry's never-reused immutable handle owns the uploaded
-            # fit and weights. Queries change freely; all outputs recompute.
-            pooled=kde_score_samples_chunk_lse_reused(entry.ctx,entry.train,dquery,entry.weights,
-                entry.has_weights,entry.sum_w,entry.n_train,n_query,n_features,bandwidth,k,m,dout,
-                pool,UInt64(handle),elem_tpb,lse_tpb)
-    if not pooled:
-        score_samples(
-            entry.ctx, dquery, entry.train, entry.weights, entry.has_weights, dout,
-            n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
-            metric_arg, trace, elem_tpb, lse_tpb,
-        )
-    var total = Float32(0)
-    if want_total:
-        total = device_sum_f32_fixed(entry.ctx, dout, n_query)
-    var hout = entry.ctx.enqueue_create_host_buffer[DType.float32](n_query)
-    entry.ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
-    entry.ctx.synchronize()
-    copy_f32(hout.unsafe_ptr(), scores, n_query)
-    if status_addr != 0:
-        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, hstatus.unsafe_ptr()[0])
-    _ = hstatus^
-    _ = dstatus^
-    _ = hout^
-    _ = host^
-    _ = dquery^
-    _ = dout^
-    return total
+        # TOMBSTONE: MOJOLEARN_KDE_SAMPLE_FUSED (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+        # Tried: the one-drain score + download branch here.
+        # Restore: git apply experiments/removed/MOJOLEARN_KDE_SAMPLE_FUSED.patch; record in docs/TOMBSTONES.md.
+        var pooled=False
+        comptime if KDE_CHUNK_POOL_ON:
+            if not entry.partial_pool and not trace.enabled and kde_chunk_lse_metric_applies(m):
+                # Another active query owns the retained workspace. Preserve
+                # the same pooled kernel path with independent active storage.
+                entry.partial_pool = KdeChunkWorkspace()
+            if entry.partial_pool and not trace.enabled and kde_chunk_lse_metric_applies(m):
+                ref pool=entry.partial_pool.value()
+                # The registry's never-reused immutable handle owns the uploaded
+                # fit and weights. Queries change freely; all outputs recompute.
+                pooled=kde_score_samples_chunk_lse_reused(entry.ctx,entry.train,dquery,entry.weights,
+                    entry.has_weights,entry.sum_w,entry.n_train,n_query,n_features,bandwidth,k,m,dout,
+                    pool,UInt64(handle),elem_tpb,lse_tpb)
+        if not pooled:
+            score_samples(
+                entry.ctx, dquery, entry.train, entry.weights, entry.has_weights, dout,
+                n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
+                metric_arg, trace, elem_tpb, lse_tpb,
+            )
+        var total = Float32(0)
+        if want_total:
+            total = device_sum_f32_fixed(entry.ctx, dout, n_query)
+        var hout = entry.ctx.enqueue_create_host_buffer[DType.float32](n_query)
+        entry.ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
+        entry.ctx.synchronize()
+        copy_f32(hout.unsafe_ptr(), scores, n_query)
+        if status_addr != 0:
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, hstatus.unsafe_ptr()[0])
+        _ = hstatus^
+        _ = dstatus^
+        _ = hout^
+        _ = host^
+        _ = dquery^
+        _ = dout^
+        clean = True
+        return total
+    finally:
+        if clean:
+            _kde_fit_return(handle, entry, True)
+        else:
+            # Preserve the originating execution failure if draining failed
+            # workspace also raises; normal completion reports cleanup errors.
+            try:
+                _kde_fit_return(handle, entry, False)
+            except:
+                pass
+        _ = entry

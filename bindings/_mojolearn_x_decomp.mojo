@@ -20,7 +20,7 @@ from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
-from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
+from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
 
 # TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
@@ -87,6 +87,8 @@ from core.shared_slot import SharedSlot
 from core.tsvd_native_decomp import TSVDDecompAPI
 from core.nmf_native_provider import NMFProviderAPI
 from core.ipca_native_provider import IPCAProviderAPI
+from core.kpca_native_api import KPCAProviderAPI
+from core.kpca_native_provider import KPCAEigenKernels
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompDeviceFastV1"
@@ -99,6 +101,15 @@ comptime NMF_API = SharedSlot[NMFProviderAPI[DevExec, DevRDev, True, DevDecomp],
 
 comptime _IPCA_API_NAME = "MojolearnIPCADeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnIPCADeviceFastV1"
 comptime IPCA_API = SharedSlot[IPCAProviderAPI[DevExec, DevRDev, True, DevIpcaDev], _IPCA_API_NAME]
+
+
+comptime _KPCA_DECOMP_API_NAME = "MojolearnKPCADecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnKPCADecompDeviceFastV1"
+comptime KPCA_DECOMP_API = SharedSlot[KPCAProviderAPI[KPCAEigenKernels[DevExec, DevRDev, True, DevDecomp]], _KPCA_DECOMP_API_NAME]
+
+
+def kpca_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = KPCA_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def ipca_native_api_v1_binding() raises -> PythonObject:
@@ -135,6 +146,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
         m.def_function[nmf_native_api_v1_binding]("nmf_native_api_v1")
         m.def_function[ipca_native_api_v1_binding]("ipca_native_api_v1")
+        m.def_function[kpca_decomp_native_api_v1_binding]("kpca_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
@@ -200,7 +212,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[fa_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_fa_fit")
         m.def_function[fa_query_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_fa_query")
         m.def_function[lda_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_lda_owner")
-        m.def_function[kpca_eig_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_kpca_eig")
         m.def_function[rp_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_rp_fit")
         m.def_function[rp_project_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_rp_project")
         m.def_function[r_signs_py]("x_decomp_r_signs")

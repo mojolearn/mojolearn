@@ -1,0 +1,84 @@
+Mojolearn KDE native test migration (2026-11-10)
+
+Native product API f052c4918c; pure owner/state78be03c73b. Actual device
+registry/workspace lease repair8a624987ef; public boundary still owned by pilot.
+First test chunk:30 pure typed cache/owner/admission fixtures. Exact cache
+identity includes every address/dimension/name and unrounded Float64 width.
+Native strings retain NUL/Unicode; valid handle0 and integer>2^53 remain
+exact. Take-once invalidates matching without changing other fields; move
+retains identity/driver; complete admission metadata comparisons include
+length and owned-copy independence. Mock driver only permits metadata; no
+fake handle release or cleanup callback. Independent cases parallel.
+RUN OWED: kde_state_suite.run_checks()(30), no lane compilation/execution.
+No product/kernel/default/algorithm changes, no timing/bits campaign.
+Nothing removed: existing Python coverage stays until replacement execution.
+
+Inventory:24 existing Python files/104 definitions from a name-based scan,
+not104 migration candidates. Raw inventory is E/pca-native-tests/
+kde-python-inventory.json. Primary eligible numerical block:
+test_neighbors_kde_native.py::test_scores_equal_former_path,48 cases
+(6kernels x4metrics x2weight modes),37x5 seed3 training and11x5 seed9 query,
+bandwidth.75, two resident passes, samples and total. Preserve those inputs
+and settings. Independent NumPy Float64 mathematical references prepared
+without product imports: radial densities/distance definitions/stable log
+sums; cosine normalization by quadrature, not product recurrence.
+Use existing KDE correctness bound2e-4*max(1,abs(reference)); mathematical
+-inf requires actual<=-1e38, exactly as existing kde_check. This is a
+mathematical correctness oracle replacing a legacy byte comparison; no
+previous-version identity campaign is added. References contain200finite
+and328outside-support scores;24 of48profiles are entirely outside support.
+New references are preparation only, not native runtime evidence.
+
+Keep Python storage layout/array dtype/total scalar type, zero-copy owners,
+mutation/refit/cache invalidation hooks, sparse/dataframe/Torch admission,
+refusal/error precedence, archive, sklearn/API and late NumPy seams. Host
+fit formats x weights alone expand to120 boundary cases. Existing raw KDE
+kernel/refusal/float64/workspace suites overlap broad low-level coverage;
+do not rerun their unchanged legacy-path bit checks as a development gate.
+New native execution will use the actual typed driver and independently
+check density/total, released-handle refusal and retained native leases.
+CPU graphs parallel; GPU numeric/ownership graphs ordered over contexts.
+No new shared-context stress or claim that the known Metal failure is fixed.
+
+Second chunk:32 native descriptor contracts, dependency f052c4918c.
+Every prepare/query Boolean combination, distinct descriptor fields,
+length-delimited NUL/Unicode/empty names, unrounded Float64 options,
+exact integer handles beyond2^53, binary64 totals/signed zero, release,
+copy independence and provider failures. Malformed span/result/total/name
+errors preserve exact messages. Mock performs no numerical operation.
+Error/total/name storage stays owned; independent cases parallel.
+RUN OWED: kde_contract_suite.run_checks()(32). Combined pure state+wire62.
+No lane build/test/runtime/identity/timing; no Python deletion.
+
+Third chunk: actualCPU48/GPU48 plus GPUownership3. Include reference
+artifacts with this chunk; total newCPU110 including prior pure62, GPU51.
+Core product dependencies f052c4918c +78be03c73b +8a624987ef; public boundary
+frozen55425fb83f. The original48profiles run score_samples and score twice.
+GPU additionally checks the existing direct query path, then prepares one
+resident fit with the public already-finite flag and repeats native queries.
+Samples and total use independent mathematical references; status/output
+guards and source/weights immutability remain checked. Released query IDs
+are refused. Nothing compares previous-version output bits.
+
+GPU ownership3 uses original131x7/salt29 weighted/salt41 fixture, queries9/3
+with salts46/40, Gaussian/Euclidean/bandwidth.25. Retains original default
+pool allocation4/reuse1 expectation when enabled, and retained-byte bound.
+Two leases claim at most one cached workspace. After registry release, both
+native leases still download original train/weights despite poisoned host
+inputs; new lookup refuses. Clean return retains the same pool/counters;
+unclean return discards its pool while another lease retains valid buffers.
+GPU commands remain ordered; this does not test/fix concurrent submission.
+All real handles/leases are returned on success/error; no fake device owner.
+
+RUN OWED: kde_native_cpu_suite.run_checks()(48),
+          kde_native_gpu_suite.run_checks()(48),
+          kde_ownership_gpu_suite.run_checks()(3), plus pure state30/wire32.
+Use identical=1 on all; CPU column additionally. No lane compile/runtime.
+Static AST/JSON/TOML/artifact-hash/whitespace checks only.
+
+Exact pending Python cleanup: E/pca-native-tests/kde-native-python-cleanup.patch.
+After root native execution passes, replace only the48-case legacy numerical
+controller with public dtype/shape/scalar PACK checks. Existing source remains
+unchanged now; original boundary/layout/ownership/refusal tests and legacy
+helpers needed by them remain. No product/kernel/default/A-B define changed.
+No shared-context concurrency success or performance/identity claim.

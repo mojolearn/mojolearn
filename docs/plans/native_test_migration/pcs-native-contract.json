@@ -1,0 +1,31 @@
+{
+  "family": "PolynomialCountSketch",
+  "product_dependencies": [
+    "d40d051034",
+    "d44927e0b6"
+  ],
+  "root_adoptions": [
+    "81162fec01",
+    "999b6544ee"
+  ],
+  "status": "authored; uncompiled and unrun",
+  "fixtures": 34,
+  "entry": "checks/native_tests/pcs_contract.mojo",
+  "importable_suite": "checks.native_tests.pcs_contract_suite.run_checks",
+  "coverage": {
+    "positive_options": 5,
+    "size_refusals": 4,
+    "augmentation_shapes_draw_counts": 8,
+    "seed_low_words": 6,
+    "fitted_widths": 4,
+    "draw_query_capability_wire": 4,
+    "capability_error_propagation": 2,
+    "plan_copy": 1
+  },
+  "oracle": "Prescribed fields, fixed low words, exact old refusal strings; mock performs no sketch algorithm and never dereferences fake data addresses.",
+  "scheduling": "Independent fixtures use host_parallelize; no mutable global mock state.",
+  "python_removed": 0,
+  "retained": "Existing Python numerical, sklearn, RandomState, public lifetime and refusal assertions remain until replacements execute.",
+  "kernel_changes": false,
+  "runtime_evidence": false
+}

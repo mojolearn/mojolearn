@@ -20,6 +20,9 @@ from bindings.native_array_view import native_array_ndarray_view
 from bindings.cfb_dbscan import cfb_dbscan_operation
 from bindings.cfb_resident import cfb_release
 from bindings.neighbors_kde_native import neighbors_kde_operation, _kde_release
+from bindings.kde_native_boundary import kde_owner_admit
+from bindings.kde_admission_boundary import kde_admission_hit, kde_admission_remember, kde_admission_drop
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding_current as estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi import _target, _refusal
@@ -60,6 +63,9 @@ def _keep_binding(binding: PythonObject, context: PythonObject, required: Bool =
 def _resident(value: PythonObject, dbscan: Bool, context: PythonObject) raises:
     if value is None:
         return
+    if not dbscan:
+        kde_owner_admit(value)
+        return
     var b = native_loaded_module("builtins")
     var cached = value
     if dbscan:
@@ -84,15 +90,7 @@ def _resident(value: PythonObject, dbscan: Bool, context: PythonObject) raises:
             classical_admit_value(key[i], context)
         for i in range(3, 6):  # driver-loop: row, feature and metric scalars
             host_inference_scalar(key[i], context)
-    else:
-        for i in [0, 2, 3, 4, 5]:  # driver-loop: pointer, weight pointer, kernel, metric and bandwidth
-            host_inference_scalar(key[i], context)
-        if py_type(key[1]) is not b.tuple:
-            raise Error("TypeError: density resident shapes require an exact tuple")
-        for i in range(len(key[1])):  # driver-loop: shape dimensions only
-            if py_type(key[1][i]) is not b.int:
-                raise Error("TypeError: density resident shape dimensions require exact integers")
-    _ = neural_descriptor_entry(cached[2], "labeled_reference_release" if dbscan else "kde_fit_release", False)
+    _ = neural_descriptor_entry(cached[2], "labeled_reference_release", False)
 
 
 def _initialize(model: PythonObject, args: PythonObject, names: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -141,6 +139,7 @@ def _state(model: PythonObject, args: PythonObject, dbscan: Bool, restore: Bool,
 # Per-model record (bindings/cluster_side_records.mojo, lane perf2-cluster):
 # the public admission of a query passed for this key.
 comptime _ADMIT_SLOT = "cluster_density_admitted_v1"
+comptime _KDE_ADMIT_SLOT = "kde_density_admitted_v2"
 
 
 def _record_key(model: PythonObject, names: PythonObject, dbscan: Bool) raises -> PythonObject:
@@ -162,7 +161,9 @@ def _admit(model: PythonObject, names: PythonObject, dbscan: Bool, fitting: Bool
     every call. Returns whether the record matched."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var recorded = not fitting and cluster_record_get(_ADMIT_SLOT, model, key) is not None
+    var recorded = False
+    if not fitting:
+        recorded = (cluster_record_get(_ADMIT_SLOT, model, key) is not None) if dbscan else kde_admission_hit(model, names, True, _KDE_ADMIT_SLOT, context)
     if not recorded:
         for i in range(len(names)):  # driver-loop: consumed constructor metadata
             var name = String(names[i])
@@ -215,6 +216,8 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
     # (bindings/cluster_side_records.mojo), not a Python-level walk.
     if not cluster_is_subclass(py_type(model), owner):
         raise Error("TypeError: density execution requires its connected estimator class")
+    if not dbscan:
+        lifecycle_admit_fields(py_fields(model))
     var prefix = String("family_density_dbscan_") if dbscan else String("family_density_kde_")
     var method = String(operation[byte=prefix.byte_length():])
     var names = context["density_dbscan_parameters"] if dbscan else context["density_kde_parameters"]
@@ -231,22 +234,26 @@ def density_public_operation(model: PythonObject, operation: String, args: Pytho
         return PythonObject(None)
     var fitting = method == "fit" or method == "fit_predict"
     var query = not fitting and (method == "predict" or method == "score_samples" or method == "score")
-    var key = _record_key(model, names, dbscan) if query else PythonObject(None)
+    var key = _record_key(model, names, True) if query and dbscan else PythonObject(None)
     var recorded = _admit(model, names, dbscan, fitting, context, key)
     var fields = py_fields(model)
     if fitting:
         # A fit replaces the fitted state: release the old record now.
-        cluster_record_drop(_ADMIT_SLOT, model)
+        if dbscan:
+            cluster_record_drop(_ADMIT_SLOT, model)
+        else:
+            kde_admission_drop(model, _KDE_ADMIT_SLOT)
     var binding = estimator_binding(model, "_mojolearn_estimators", context)
     _keep_binding(binding, context)
     if not dbscan:
         # KDE already owns fitted tracking, y admission and public outputs in
         # the shared neighbor lifecycle. Preserve that compiled owner once.
         var prepared = Python.tuple(binding, args[0], args[2], args[1]) if fitting else Python.tuple(binding, args[0])
-        var kde_result = neighbors_kde_operation(model, "family_xn_kde_" + method, prepared, context)
         if query and not recorded:
-            cluster_record_put(_ADMIT_SLOT, model, key, PythonObject(True))
-        return kde_result
+            # Stamp admitted state before RUN. Concurrent replacement while
+            # RUN releases the GIL must never become a freshly admitted record.
+            kde_admission_remember(model, names, True, _KDE_ADMIT_SLOT, context)
+        return neighbors_kde_operation(model, "family_xn_kde_" + method, prepared, context)
     var outside = estimator_outside()
     var depth_value = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0)))
     if not fitting:
