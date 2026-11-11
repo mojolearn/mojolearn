@@ -290,24 +290,6 @@ def _refuse_multilabel(y, name, caller):
             "IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
 
 
-def _pair(y_true, y_pred, sample_weight, caller):
-    """(true, pred, kind, present, w): single-label targets of one kind."""
-    # Lane ne1-h-labels (N414, N438): the multilabel refusals, both sides'
-    # reads and encodes, the length / kind / INT32 checks and the sorted
-    # union in ONE native call (bindings/classical_labels.mojo
-    # `labels_union_encode`); each side comes back as its sorted classes and
-    # int32 codes, so `_codes` maps the k classes and gathers.
-    from ._metrics_impl import _EncodedLabels
-    from ._native_labels_bridge import labels_entry, LABELS_OP_UNION_ENCODE
-    entry, context = labels_entry()
-    true_classes, true_codes, pred_classes, pred_codes, kind, present = entry(
-        LABELS_OP_UNION_ENCODE, (y_true, y_pred, caller), context)
-    true = _EncodedLabels(true_classes, true_codes)
-    pred = _EncodedLabels(pred_classes, pred_codes)
-    w = _weights(sample_weight, len(true), caller)
-    return true, pred, kind, present, w
-
-
 def _codes(labels_seq, order):
     from ._metrics_impl import _label_map
     index = {c: i for i, c in enumerate(order)}  # glue: class index table
@@ -704,17 +686,6 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
     return _NATIVE(None, _OP.family_metric_max_error, (y_true, y_pred, numeric_mode), _NATIVE_CONTEXT)
 
 
-def _assemble(r, num, den, force_finite, *, average=True):
-    """Stage the per-output scores `1 - num / den` (reg_epi ASM, the
-    force_finite convention) and their multioutput average (reg_epi AVG
-    with the NaN rule: a NaN score, or an infinite one with weight zero,
-    answers NaN; variance_weighted weighs by `den` unless it is all zero)."""
-    prog, D = r.prog, r.D
-    scores = prog.alloc(2 * D)
-    prog.stage("reg_epi", D, _RE_ASM, D, num, den, 1 if force_finite else 0, scores)
-    return r.average(scores, nan_rule=True, variance=den) if average else scores
-
-
 def explained_variance_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                              force_finite=True, numeric_mode=None):
     """scikit-learn 1.9 `explained_variance_score`: `1 - Var(y - p) / Var(y)`
@@ -806,23 +777,6 @@ def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="
 
 _ROW = dict(topk=0, brier=1, logloss=2, hinge_bin=3, hinge_mc=4, dcg=5, coverage=6, lrap=7, rankloss=8,
             dcg_ignore_ties=9)
-
-
-def _scores(y_score, n, caller, *, ndim=None, name="y_score"):
-    from ._buffer import materialize_f32_lists
-    a = materialize_f32_lists(y_score, name)[0]
-    if a.dtype != "<f4":
-        raise TypeError(f"mojolearn {caller}: {name} must have dtype float32; cast explicitly")
-    if a.ndim == 2 and a.shape[1] == 1 and ndim == 1:
-        a = a.reshape((a.shape[0],))
-    if ndim is not None and a.ndim != ndim:
-        raise ValueError(f"mojolearn {caller}: {name} must be {ndim}-D, got shape {a.shape}")
-    if a.shape[0] != n:
-        raise ValueError(f"mojolearn {caller}: {name} has {a.shape[0]} rows for {n} samples")
-    a = as_f32_c(a, ndim=a.ndim, name=name)[0]
-    if not all_finite(a):
-        raise ValueError(f"mojolearn {caller}: {name} must be finite")
-    return a
 
 
 def _targets(y_true, caller):
@@ -1131,14 +1085,6 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
 # ---------------------------------------------------------------------------
 
 _M64 = (1 << 64) - 1
-
-
-def _mix64(x):
-    """splitmix64's finalizer in exact Python integers."""
-    x &= _M64
-    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & _M64
-    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & _M64
-    return x ^ (x >> 31)
 
 
 #: the largest K-fold row table (2 words per row per fold) `fold_rows` builds
