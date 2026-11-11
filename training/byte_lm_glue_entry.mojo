@@ -21,6 +21,8 @@ from training.byte_lm_glue_abi import (
     byte_lm_glue_text, byte_lm_glue_shape,
 )
 from training.byte_lm_binding_impl import ByteLMSession
+from core.byte_lm_entry_table_sessions import byte_lm_sessions_publish
+from training.byte_lm_session_entry import byte_lm_sessions_v1
 from training.byte_lm_native_dispatch import byte_lm_native_v1
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from transformer.impl.llama.fused_attention import (
@@ -148,3 +150,5 @@ def publish_byte_lm_entries() raises:
     byte_lm_table_publish[BYTE_LM_TABLE_TRAINER](key, Int(owner),
         [String(BYTE_LM_TRAINER_ABI), String(BYTE_LM_GLUE_ABI)], [BYTE_LM_TRAINER_OPS, BG_OP_COUNT],
         [byte_lm_native_v1, byte_lm_glue_v1])
+    # The resident sessions (core/byte_lm_entry_table_sessions.mojo).
+    byte_lm_sessions_publish(key, Int(owner), byte_lm_sessions_v1)

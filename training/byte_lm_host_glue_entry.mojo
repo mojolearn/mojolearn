@@ -21,6 +21,8 @@ from training.byte_lm_glue_abi import (
     byte_lm_glue_text, byte_lm_glue_shape,
 )
 from training.byte_lm_host_session import ByteHostSession
+from core.byte_lm_entry_table_sessions import byte_lm_sessions_publish
+from training.byte_lm_host_session_entry import byte_lm_host_sessions_v1
 from training.byte_lm_host_trainer_dispatch import host_trainer_native_v1
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 
@@ -99,3 +101,5 @@ def publish_byte_lm_host_entries() raises:
     byte_lm_table_publish[BYTE_LM_TABLE_TRAINER](key, Int(owner),
         [String(BYTE_LM_TRAINER_ABI), String(BYTE_LM_GLUE_ABI)], [BYTE_LM_TRAINER_OPS, BG_OP_COUNT],
         [host_trainer_native_v1, byte_lm_host_glue_v1])
+    # The resident sessions (core/byte_lm_entry_table_sessions.mojo).
+    byte_lm_sessions_publish(key, Int(owner), byte_lm_host_sessions_v1)
