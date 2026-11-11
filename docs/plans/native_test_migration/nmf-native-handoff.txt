@@ -1,9 +1,9 @@
 Mojolearn NMF native test lane (2026-11-10)
 
-Dependency9d39093e14 adds typed API/provider. Generic provider Self.E/D/RES/X
-repair7a4a338545 is adopted; local adoption commits are history, not picks.
+Dependency 9d39093e14 adds typed API/provider. Generic provider Self.E/D/RES/X
+repair 7a4a338545 is adopted; local adoption commits are history, not picks.
 
-First chunk:28 native wire/regularization/state fixtures
+First chunk: 28 native wire/regularization/state fixtures
   nmf_contract_suite.run_checks(), standalone nmf_contract.mojo and pixi task.
   Distinct fields cover five input/output addresses, typed NmfArgs Float64
   options, Boolean combinations, returned integer/Float64 spans, inverse
@@ -23,3 +23,9 @@ RUN OWED
 
 No kernel/default/experimental define changes. Nothing removed: this is new
 coverage of new typed API/state, not a replacement for Python boundaries.
+
+Second chunk: 20 typed options/rank-two shape/owned scratch fixtures.
+  Dependency bb172e710e. Empty dimensions, negative/count/byte overflow,
+  complete initialized Float32 storage and move-only owner lifetime.
+  check-native-nmf-state; nmf_state_suite.run_checks(). Uncompiled/unrun.
+  No Python tests removed: these are new internal state contracts.
