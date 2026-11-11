@@ -1,10 +1,10 @@
 # NearestCentroid native numerical plans
 
 Product source is frozen at `7cac218d3d8ad2b74bb8ec036f5ce2e1511ee9d7`.
-Fixture follow-up is `8d4b9f66db`; the documentation commit following it changes
-no product code. Dependency: integration `52074495df`, adopted into this lane
+Subsequent fixture and documentation commits change no product code. Dependency: integration `52074495df`, adopted into this lane
 by merge `eea9db9f40`. Integrate the ordered range
-`eea9db9f40..8d4b9f66db` plus this handoff commit, without the dependency merge.
+`eea9db9f40..lane/mojo-finite-tests-20261110` through the final handoff head,
+without the dependency merge.
 
 No compilation, tests, installed-wheel execution, timing, identity run or box
 job was started by this lane. All new fixtures are authored and unrun. The
