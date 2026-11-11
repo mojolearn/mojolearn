@@ -9,19 +9,14 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from core.msel_host_impl import msel_rebase_check_parts
-from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
-from core.msel_host import (
-    MselHostStore,
-    host_group_fold_perm_i32,
-    host_proba_column,
-    host_split_table_i32,
-    host_rebase_offsets_i32,
-    host_scatter_rows,
-    host_take_rows,
+from core.msel_host import host_rebase_offsets_i32, host_take_rows
+# lane calltable-msel: the store slot and the scatter, column, split-table
+# and group-fold bodies are the runs the model-selection helper table
+# publishes (core/msel_helpers_host.mojo); these exports unpack and call them.
+from core.msel_helpers_host import (
+    MSEL_HOST_STORE, msel_scatter_rows_host_run, msel_proba_column_host_run, msel_split_table_host_run,
+    msel_group_fold_perm_host_run,
 )
-from core.shared_slot import SharedSlot
-
-comptime MSEL_HOST_STORE = SharedSlot[MselHostStore, "MojolearnMselHostStoreV1"]
 
 
 def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
@@ -77,6 +72,7 @@ def msel_scatter_rows_binding(
     src_addr: PythonObject, src_code: PythonObject, n_src: PythonObject,
     width: PythonObject, idx_id: PythonObject,
 ) raises -> PythonObject:
+    """`core/msel_helpers_host.mojo::msel_scatter_rows_host_run`."""
     var di = Int(py=dst_id)
     var nd = Int(py=n_dst)
     var dc = Int(py=dst_code)
@@ -85,41 +81,27 @@ def msel_scatter_rows_binding(
     var ns = Int(py=n_src)
     var w = Int(py=width)
     var ix = Int(py=idx_id)
-    if nd < 0 or ns < 0 or w < 0:
-        raise Error("msel_scatter_rows: dimensions must be non-negative")
-    if dc != MSEL_I64 and dc != MSEL_F64:
-        raise Error("msel_scatter_rows: the block is int64 or float64")
-    if not msel_valid_code(sc) or (dc == MSEL_I64 and not msel_is_int(sc)):
-        raise Error("msel_scatter_rows: bad source dtype code")
-    if ns > 0 and w > 0 and sa == 0:
-        raise Error("msel_scatter_rows: null source")
-    var ok = True
+    var status = 0
     with GILReleased(Python()):
-        ok = host_scatter_rows(MSEL_HOST_STORE.get_or_create_ptr()[], di, nd, dc, sa, sc, ns, w, ix)
-    if not ok:
-        raise Error("msel_scatter_rows: row index out of bounds")
-    return PythonObject(0)
+        status = msel_scatter_rows_host_run(di, nd, dc, sa, sc, ns, w, ix)
+    return PythonObject(status)
 
 
 def msel_proba_column_binding(
     src_addr: PythonObject, code: PythonObject, n: PythonObject, k: PythonObject,
     col: PythonObject, dst_addr: PythonObject,
 ) raises -> PythonObject:
+    """`core/msel_helpers_host.mojo::msel_proba_column_host_run`."""
     var sa = Int(py=src_addr)
     var c = Int(py=code)
     var nn = Int(py=n)
     var kk = Int(py=k)
     var cc = Int(py=col)
     var d = Int(py=dst_addr)
-    if c != MSEL_F32 and c != MSEL_F64:
-        raise Error("msel_proba_column: float32 or float64 input")
-    if nn < 0 or kk < 1 or cc < 0 or cc >= kk:
-        raise Error("msel_proba_column: bad sizes")
-    if nn > 0 and (sa == 0 or d == 0):
-        raise Error("msel_proba_column: null buffer address")
+    var status = 0
     with GILReleased(Python()):
-        host_proba_column(sa, c, nn, kk, cc, d)
-    return PythonObject(0)
+        status = msel_proba_column_host_run(sa, c, nn, kk, cc, d)
+    return PythonObject(status)
 
 
 def msel_rebase_offsets_i32_binding(
@@ -148,25 +130,18 @@ def msel_split_table_i32_binding(
     counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
 ) raises -> PythonObject:
     """GroupShuffleSplit's per-group side table (the signature of
-    `split_table_i32`): table[g] 1 test, 0 train, 2 neither; sums [train
-    rows, test rows]."""
+    `split_table_i32`): `core/msel_helpers_host.mojo::msel_split_table_host_run`."""
     var mm = Int(py=m)
     var te = Int(py=n_test)
     var tr = Int(py=n_train)
-    if mm < 1 or te < 0 or tr < 0 or te + tr > mm or mm > 2147483000:
-        raise Error("split_table_i32: bad sizes")
     var pa = Int(py=perm_addr)
     var ca = Int(py=counts_addr)
     var ta = Int(py=table_addr)
     var sa = Int(py=sums_addr)
-    if (te + tr > 0 and pa == 0) or ca == 0 or ta == 0 or sa == 0:
-        raise Error("split_table_i32: null buffer address")
-    var ok = True
+    var status = 0
     with GILReleased(Python()):
-        ok = host_split_table_i32(pa, mm, te, tr, ca, ta, sa)
-    if not ok:
-        raise Error("split_table_i32: group index out of range")
-    return PythonObject(0)
+        status = msel_split_table_host_run(pa, mm, te, tr, ca, ta, sa)
+    return PythonObject(status)
 
 
 def msel_group_fold_perm_i32_binding(
@@ -174,20 +149,14 @@ def msel_group_fold_perm_i32_binding(
     dst_addr: PythonObject, sizes_addr: PythonObject,
 ) raises -> PythonObject:
     """Shuffled GroupKFold (the perm branch of `group_fold_assign_i32`):
-    the permuted groups in n_folds nearly equal runs."""
+    `core/msel_helpers_host.mojo::msel_group_fold_perm_host_run`."""
     var mm = Int(py=m)
     var K = Int(py=n_folds)
-    if K < 1 or mm < K or mm > 2147483000:
-        raise Error("group_fold_assign_i32: m >= n_folds >= 1")
     var ca = Int(py=counts_addr)
     var pa = Int(py=perm_addr)
     var da = Int(py=dst_addr)
     var sa = Int(py=sizes_addr)
-    if ca == 0 or pa == 0 or da == 0 or sa == 0:
-        raise Error("group_fold_assign_i32: null buffer address")
-    var ok = True
+    var status = 0
     with GILReleased(Python()):
-        ok = host_group_fold_perm_i32(ca, mm, K, pa, da, sa)
-    if not ok:
-        raise Error("group_fold_assign_i32: a permuted group is out of range")
-    return PythonObject(0)
+        status = msel_group_fold_perm_host_run(ca, mm, K, pa, da, sa)
+    return PythonObject(status)
