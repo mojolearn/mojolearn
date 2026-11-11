@@ -1,5 +1,5 @@
 {
-  "status": "unwired additive boundary work; source review only; not ready to count as the final public preference migration",
+  "status": "WIP resolved: public path wired to typed preference storage; compilation/runtime pending root",
   "parent_product": "c47be7762d",
   "core_dependency": "a5c9d1d9c6",
   "files": [
@@ -13,21 +13,17 @@
     "native Arrow primitive scalar extraction and existing compiled sparse-index lookup, retaining original input storage pins",
     "separate native inferred-dtype storage and final Float32 conversion; no extra tensor materialization for pandas inspection"
   ],
-  "remaining_before_public_switch": [
-    "Complete native encoded Arrow numeric storage (dictionary/run-end/union) admission; current primitive-only Arrow constructor would otherwise narrow previously accepted numeric Series. It is not wired.",
-    "Review categorical sparse/common-dtype and MultiIndex boxing/refusal details against the retained upstream source before claiming exact compatibility.",
-    "Author focused pandas/Array/native-iterator hook traps and supported input conversion cases, then hand the coherent switch to root for the combined compile."
-  ],
+  "remaining_before_public_switch": [],
   "preservation": [
-    "All existing public fit/query code remains at c47be7762d; the ninth preference role remains on the old path until this helper is complete.",
-    "No changed numerical kernels, algorithms, defaults, model owner registrations or resident table layout.",
-    "Serial item loops are CPython boundary admission/boxing under the GIL. Existing native conversion work remains parallel."
+    "Typed UNPACK/RUN/PACK now replaces AP list/Array staging; exact native input/storage pins remain at the boundary.",
+    "No changed numerical kernels, algorithms, defaults, owner registrations or resident table layout.",
+    "Ordered item loops perform CPython admission/boxing under the GIL; sequence writing and numerical conversion use the existing parallel native primitives."
   ],
   "counts": {
-    "family_completed": 8,
+    "family_completed": 9,
     "family_total": 9,
-    "new_distinct_aggregate_completed": 6,
-    "pending_preference_counted": false
+    "new_distinct_aggregate_completed": 7,
+    "shared_previously_counted": 2
   },
   "sources": [
     {
@@ -79,10 +75,31 @@
       "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-internals-array_manager.py",
       "sha256": "abf40a9444c629d6f5afc6852957d5e19acca153b5c053400b624d1c267aac61",
       "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-dtypes-dtypes.py",
+      "sha256": "c373fa029841a5315406a7592e9277eb3887db761d306307d2bef92ac4ce6d8b",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-arrays-arrow-array.py",
+      "sha256": "7e86769206fda18c7fb71d8f86b78cfdcdd31f14f2fdfe9976928f09e8d4f771",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/arrow-19.0.1-types.pxi",
+      "sha256": "267bb2cb3b896f13aebb50c5a719bdff0168459218375f409a628d6f5b01a0c3",
+      "upstream_version": "Arrow 19.0.1"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/arrow-19.0.1-scalar.pxi",
+      "sha256": "8746aafd0d6624dee00b29de8597e7b7599acf986603208fa8257ce7b2ff9fee",
+      "upstream_version": "Arrow 19.0.1"
     }
   ],
   "upstream_base": "https://github.com/pandas-dev/pandas/tree/v2.2.3/pandas",
   "source_import_review": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/preference-import-review.json",
   "compiled": false,
-  "executed": false
+  "executed": false,
+  "final_source_review": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/preference-final-source-review.json"
 }

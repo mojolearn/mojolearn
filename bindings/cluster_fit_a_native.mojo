@@ -37,7 +37,9 @@ from core.kmeans_variants_api import (
 )
 from core.kmeans_variants_plan import MiniBatchStreamState
 from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest, CentroidFitResultSlot
+from core.affinity_preference_plan import AffinityPreferencePlan
 from bindings.cluster_centroid_fit_boundary import centroid_fit_connection, CentroidPackedResult
+from bindings.affinity_preference_boundary import affinity_preference_prepare
 from bindings.kmeans_variants_boundary import (
     variants_connection, variants_span, VariantsAuxiliaryPins, VariantsPackedResult,
 )
@@ -458,13 +460,13 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
         seeds = _f32(seeds_field, "seeds", context)
         if Int(py=seeds.shape[1]) != d:
             raise Error("seeds have " + String(Int(py=seeds.shape[1])) + " features, X has " + String(d))
-    var bw = PythonObject(0.0)
+    var bw = Float64(0.0)
     var bandwidth = _attr(model, "bandwidth")
     if bandwidth is not None:
-        bw = _float(bandwidth)
-        if not Float64(py=bw) > 0:
+        bw = Float64(py=_float(bandwidth))
+        if not bw > 0:
             raise Error("bandwidth needs to be greater than zero or None, got "
-                        + String(py=py_call(b.format, bw, PythonObject("f"))))
+                        + String(py=py_call(b.format, PythonObject(bw), PythonObject("f"))))
     # ORDER MATCHES x_cluster/entries.mojo::meanshift_entry: n, d, n_seeds,
     # cluster_all, max_iter, bin_seeding, min_bin_freq.
     var n_seeds = 0 if seeds is None else Int(py=seeds.shape[0])
@@ -474,7 +476,7 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
     var min_bin_freq = _int(_attr(model, "min_bin_freq"))
     var connection = centroid_fit_connection(binding)
     var request = MeanShiftFitRequest(variants_span(x), variants_span(seeds), n, d, n_seeds,
-        cluster_all, Int(py=max_iter), bin_seeding, Int(py=min_bin_freq), Float64(py=bw))
+        cluster_all, Int(py=max_iter), bin_seeding, Int(py=min_bin_freq), bw)
     var result = CentroidFitResultSlot()
     try:
         with GILReleased(Python()):
@@ -617,17 +619,17 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
     if pre and n != d:
         raise Error("The matrix of similarities must be a square array. Got (" + String(n) + ", " + String(d)
                     + ") instead.")
-    var pref_arr = PythonObject(None)
+    var preference_plan = AffinityPreferencePlan()
     var mode = 0
-    var scalar = PythonObject(0.0)
+    var scalar = Float64(0.0)
     var preference = _attr(model, "preference")
     if preference is not None:
         if family_isinstance(preference, Python.tuple(b.int, b.float)):
             mode = 1
-            scalar = _float(preference)
+            scalar = Float64(py=_float(preference))
         else:
-            pref_arr = _f32(Python.list(family_call(b.list, preference)), "preference", context)
-            if Int(py=pref_arr.shape[1]) != n:
+            preference_plan = affinity_preference_prepare(preference, context)
+            if preference_plan.count != n:
                 raise Error("preference must be a scalar or have one value per sample")
             mode = 2
     # ORDER MATCHES x_cluster/entries.mojo::affinity_entry: n, d,
@@ -638,8 +640,8 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
     var seed = _seed(_attr(model, "random_state"))
     var repeated_damping = _float(damping_field)
     var connection = centroid_fit_connection(binding)
-    var request = AffinityFitRequest(variants_span(x), variants_span(pref_arr), n, d, pre, mode,
-        Int(py=max_iter), Int(py=conv), seed, Float64(py=repeated_damping), Float64(py=scalar))
+    var request = AffinityFitRequest(variants_span(x), preference_plan.span(), n, d, pre, mode,
+        Int(py=max_iter), Int(py=conv), seed, Float64(py=repeated_damping), scalar)
     var result = CentroidFitResultSlot()
     try:
         with GILReleased(Python()):
@@ -647,7 +649,7 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
     finally:
         _ = connection.provider
         _ = x
-        _ = pref_arr
+        _ = preference_plan
     var packed = CentroidPackedResult(result, True)
     var k = len(result.storage[0].center_indices)
     _set(model, "cluster_centers_indices_", _xc_array(packed.center_indices, Python.tuple(k), "<i4", "i", context))

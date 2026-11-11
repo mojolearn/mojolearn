@@ -1,64 +1,69 @@
 {
   "baseline": "fc8a09b92243d71ad5306f2f7f8d7ee066aeff6f",
-  "status": "additive typed fit API authored; public consumers still pending",
+  "status": "Nine family-scope private roles migrated in source; compilation and runtime pending root",
   "roles": [
     {
       "family": "MeanShift",
       "before": "bindings/cluster_fit_a_native.mojo:474",
       "role": "fit integer option list",
-      "after": "pending"
+      "after": "core/cluster_centroid_fit_api.mojo::MeanShiftFitRequest"
     },
     {
       "family": "MeanShift",
       "before": "bindings/cluster_fit_a_native.mojo:476",
       "role": "fit bandwidth option list",
-      "after": "pending"
+      "after": "core/cluster_centroid_fit_api.mojo::MeanShiftFitRequest.bandwidth"
     },
     {
       "family": "MeanShift",
       "before": "bindings/cluster_fit_a_native.mojo:476",
       "role": "nested fit result envelope",
-      "after": "pending"
+      "after": "core/cluster_centroid_fit_api.mojo::CentroidFitResultSlot"
     },
     {
       "family": "AffinityPropagation",
       "before": "bindings/cluster_fit_a_native.mojo:624",
       "role": "preference list/nested-list staging and private converted Array",
-      "after": "pending"
+      "after": "core/affinity_preference_plan.mojo::AffinityPreferencePlan + bindings/affinity_preference_boundary.mojo::affinity_preference_prepare"
     },
     {
       "family": "AffinityPropagation",
       "before": "bindings/cluster_fit_a_native.mojo:634",
       "role": "fit integer option list",
-      "after": "pending"
+      "after": "core/cluster_centroid_fit_api.mojo::AffinityFitRequest"
     },
     {
       "family": "AffinityPropagation",
       "before": "bindings/cluster_fit_a_native.mojo:636",
       "role": "fit damping/preference option list",
-      "after": "pending"
+      "after": "core/cluster_centroid_fit_api.mojo::AffinityFitRequest.damping/scalar"
     },
     {
       "family": "AffinityPropagation",
       "before": "bindings/cluster_fit_a_native.mojo:637",
       "role": "nested fit result envelope",
-      "after": "pending"
+      "after": "core/cluster_centroid_fit_api.mojo::CentroidFitResultSlot"
     },
     {
       "family": "shared MeanShift/AP queries",
       "before": "bindings/cluster_native.mojo:200",
       "role": "nearest query option and result envelopes",
-      "after": "pending"
+      "after": "bindings/cluster_native.mojo::_centers_query / core.kmeans_variants_api"
     },
     {
       "family": "shared MeanShift/AP queries",
       "before": "bindings/cluster_native.mojo:155",
       "role": "resident query/owner tuples and Python-callable numeric dispatch",
-      "after": "pending"
+      "after": "bindings/cluster_native.mojo::_centers_resident / VariantsResidentLease"
     }
   ],
   "distinct_role_count": 9,
-  "counting": "bounded semantic container roles, not runtime-instance counts or struct counts",
+  "counting": {
+    "family_scope": 9,
+    "distinct_new_aggregate": 7,
+    "shared_previously_counted_by_variants": 2,
+    "runtime_object_instances": "not counted; these are distinct schemas/roles, not allocations"
+  },
   "public_calls": {
     "MeanShift": [
       "MeanShift.fit -> family_cfa_meanshift_fit -> _meanshift_fit -> ENTRY_MEANSHIFT -> meanshift_entry -> meanshift_fit",

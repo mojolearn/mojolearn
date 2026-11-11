@@ -16,6 +16,20 @@
     "Public failure/publication ordering, precomputed refit stale centers semantics, exporter teardown/serialization lifetime, independent diagnostic storage",
     "Staged preference capture remains detached after the source buffer changes before final casting"
   ],
-  "pending": "AP iterable preference unpack still uses old Python staging in public path; core AffinityPreferencePlan is additive and not wired until supported iterable semantics can be preserved without callbacks",
-  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native"
+  "pending": "All authored native and Python boundary fixtures remain uncompiled/unrun by this lane; original workload tests retained.",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native",
+  "preference_boundary": {
+    "path": "python/mojolearn/tests/test_affinity_preference_native_boundary.py",
+    "definitions": 7,
+    "parametrized_cases": 34,
+    "coverage": [
+      "15 builtin iterable/buffer/order representations",
+      "Array iterator/tolist trap",
+      "7 pandas ordinary/nullable/category/sparse/frame storage cases with iterator traps",
+      "4 Arrow primitive/encoded numeric forms with iterator trap",
+      "3 missing/nonfinite refusal-order cases",
+      "custom iterator refusal without hooks",
+      "3 noniterable NumPy scalar/0-D refusals"
+    ]
+  }
 }

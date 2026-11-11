@@ -265,7 +265,16 @@ def _column_source(value: PythonObject, context: PythonObject) raises -> PandasC
     if py_type(value) is _pd_class("pandas.core.indexes.category", "CategoricalIndex"):
         return _categorical_source(py_get(_pd_fields(value), "_data"), context)
     var source = _plain_index_source(value, context)
-    source.prepare_boxing(context)
+    if source.mode == 3:
+        # MultiIndex._values explicitly casts extension levels to object before
+        # gathering. Sparse levels therefore preserve their fill object and
+        # boxed stored scalars instead of choosing SparseArray's default common
+        # numeric dtype (which ordinary Categorical iteration still uses).
+        source.box_kind = "O"
+        source.force_float = False
+        source.force_invalid = False
+    else:
+        source.prepare_boxing(context)
     var count = source.count
     return PandasColumnSource(source^, PythonObject(None), count)
 
@@ -364,12 +373,20 @@ def _sparse_source(value: PythonObject, context: PythonObject) raises -> PandasP
     return source^
 
 
-def _arrow_source(value: PythonObject, context: PythonObject) raises -> PandasPreferenceSource:
-    var chunked = _chunked(value)
-    _ = _static_descriptor(py_type(chunked), "__getitem__")
-    var dtype = _pd_get("pyarrow.lib", "ChunkedArray", "type", chunked)
-    if py_type(dtype) is not _pd_class("pyarrow.lib", "DataType"):
-        raise Error("TypeError: pandas Arrow preference requires a primitive native type")
+def _arrow_scalar_name(dtype: PythonObject) raises -> String:
+    # Admit the type before reading its native ID. User ExtensionType instances
+    # can manufacture Python scalar subclasses from __arrow_ext_scalar_class__;
+    # reject them before ChunkedArray.__getitem__ can create any scalar.
+    var cls = py_type(dtype)
+    if cls is _pd_class("pyarrow.lib", "DictionaryType"):
+        return String("DictionaryScalar")
+    if cls is _pd_class("pyarrow.lib", "RunEndEncodedType"):
+        return String("RunEndEncodedScalar")
+    if (cls is _pd_class("pyarrow.lib", "SparseUnionType")
+            or cls is _pd_class("pyarrow.lib", "DenseUnionType")):
+        return String("UnionScalar")
+    if cls is not _pd_class("pyarrow.lib", "DataType"):
+        raise Error("TypeError: pandas Arrow preference requires native primitive or encoded storage")
     var type_id = Int(py=_pd_get("pyarrow.lib", "DataType", "id", dtype))
     var names: List[String] = ["NullScalar", "BooleanScalar", "UInt8Scalar", "Int8Scalar",
         "UInt16Scalar", "Int16Scalar", "UInt32Scalar", "Int32Scalar", "UInt64Scalar", "Int64Scalar",
@@ -381,9 +398,39 @@ def _arrow_source(value: PythonObject, context: PythonObject) raises -> PandasPr
         name = "LargeStringScalar"
     elif type_id == 35:
         name = "LargeBinaryScalar"
-    var rows = len(chunked)
     if name.byte_length() == 0:
         raise Error("TypeError: pandas Arrow preference requires native numeric, string, binary or null storage")
+    return name^
+
+
+def _arrow_admit_tree(dtype: PythonObject) raises -> String:
+    var name = _arrow_scalar_name(dtype)
+    var pending: List[PythonObject] = [dtype]
+    while len(pending):  # metadata: encoded Arrow type tree, never data rows
+        var current = pending.pop()
+        var scalar_name = _arrow_scalar_name(current)
+        if scalar_name == "DictionaryScalar":
+            pending.append(_pd_get("pyarrow.lib", "DictionaryType", "value_type", current))
+        elif scalar_name == "RunEndEncodedScalar":
+            pending.append(_pd_get("pyarrow.lib", "RunEndEncodedType", "value_type", current))
+        elif scalar_name == "UnionScalar":
+            var getitem = _static_descriptor(py_type(current), "__getitem__")
+            var count = Int(py=_pd_get("pyarrow.lib", "DataType", "num_fields", current))
+            for i in range(count):  # metadata: union's native field types
+                var field = py_call(getitem, current, PythonObject(i))
+                if py_type(field) is not _pd_class("pyarrow.lib", "Field"):
+                    raise Error("TypeError: pandas Arrow union requires native fields")
+                pending.append(_pd_get("pyarrow.lib", "Field", "type", field))
+    return name^
+
+
+def _arrow_source(value: PythonObject, context: PythonObject) raises -> PandasPreferenceSource:
+    var chunked = _chunked(value)
+    _ = _static_descriptor(py_type(chunked), "__getitem__")
+    var dtype = _pd_get("pyarrow.lib", "ChunkedArray", "type", chunked)
+    var name = _arrow_admit_tree(dtype)
+    var type_id = Int(py=_pd_get("pyarrow.lib", "DataType", "id", dtype))
+    var rows = len(chunked)
     var scalar_class = _pd_class("pyarrow.lib", name)
     if scalar_class is None:
         raise Error("TypeError: pandas Arrow native scalar type is unavailable")
