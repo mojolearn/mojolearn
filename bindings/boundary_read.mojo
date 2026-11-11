@@ -51,6 +51,7 @@ from core.shared_slot import SharedSlot
 from core.boundary_layout import (
     BufferLayout, buffer_layout_from_words, layout_is_c_contiguous, format_kind, format_matches,
     gather_f32, gather_f64, gather_i64, PY_BUFFER_WORDS, PyBUF_RECORDS_RO, PyBUF_RECORDS, PyBUF_FORMAT,
+    BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_INT, BOUNDARY_KIND_UINT,
 )
 
 
@@ -382,6 +383,41 @@ def buffer_view(obj: PythonObject, flags: Int = PyBUF_RECORDS_RO) raises -> Buff
     as an exact native exporter (no Python `__buffer__` hook). CPython
     calls: PyObject_GetBuffer now, PyBuffer_Release at release."""
     return BufferView(obj, flags)
+
+
+def exact_ndarray_view(obj: PythonObject, ndarray: PythonObject) raises -> Optional[BufferView]:
+    """The read-only buffer of an exact NumPy ndarray (`type(obj) is
+    ndarray`, the class the family context connected; None when NumPy is
+    not loaded), else None: any other object, or a dtype the buffer
+    protocol cannot describe (object arrays). For a door that used to call
+    `ndarray.tolist()` and then read one Python scalar per element: the
+    caller reads the elements from the view instead and keeps its old route
+    for whatever this returns None for. CPython calls: PyObject_Type, then
+    one PyObject_GetBuffer (lane loops-trees-ab, 2026-11-11)."""
+    if ndarray is None or borrowed_type_word(obj._obj_ptr) != Int(ndarray._obj_ptr):
+        return None
+    try:
+        return BufferView(obj, PyBUF_RECORDS_RO)
+    except:
+        # The failed export's error was fetched (and so cleared) by
+        # `_pending_error`; the caller's old route raises its own refusal.
+        return None
+
+
+def view_kind_fits_i64(view: BufferView) -> Bool:
+    """True when every element of the view is exactly an int64 after
+    `as_i64_c`: signed integers of any width and unsigned integers of at
+    most four bytes (a uint64 above 2**63 - 1 would wrap)."""
+    return view.kind == BOUNDARY_KIND_INT or (view.kind == BOUNDARY_KIND_UINT and view.itemsize <= 4)
+
+
+def view_kind_real(view: BufferView) -> Bool:
+    """True for float32/float64 and integer storage, whose `as_f64_c`
+    value is exactly `float(x)` of the element `tolist()` returned (bool
+    and float16 storage excluded; a caller keeps its old route for them)."""
+    if view.kind == BOUNDARY_KIND_FLOAT:
+        return view.itemsize == 4 or view.itemsize == 8
+    return view.kind == BOUNDARY_KIND_INT or view.kind == BOUNDARY_KIND_UINT
 
 
 def admitted_buffer_view(obj: PythonObject, writable: Bool = False) raises -> BufferView:

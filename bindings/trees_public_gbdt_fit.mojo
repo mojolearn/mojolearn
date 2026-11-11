@@ -24,6 +24,8 @@ from bindings.params_metadata_native import _read, _resolved
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_public_state import _release_tree_values
 from bindings.py_typed_call import py_call_typed
+from bindings.boundary_read import read_int, read_float, exact_ndarray_view, view_kind_fits_i64, view_kind_real
+from bindings.cpython_borrowed import borrowed_type_word
 from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_buffer_view
@@ -545,71 +547,144 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     return out
 
 
+def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word: Int,
+                      context: PythonObject) raises -> Int:
+    """One end of `pairs[i]`: an exact Python int is read with one
+    PyLong_AsLongLong (it is Integral and not bool); any other object takes
+    the `isinstance(numbers.Integral)` / not-bool admission and `int()` of
+    `ensemble._pairs_arrays`, with its refusal text. Then the row range."""
+    var v: Int
+    if borrowed_type_word(index._obj_ptr) == int_word:
+        v = read_int(index)
+    else:
+        var b = _b()
+        if (not Bool(py=py_call(b.isinstance, index, context["trees_integral_type"]))
+                or Bool(py=py_call(b.isinstance, index, b.bool))):
+            raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
+                        + "type=" + _str(py_type(index)) + ": must be an integer.")
+        v = Int(py=py_call_typed(b.int, index))
+    _pair_end_range(v, i, j, n_rows)
+    return v
+
+
+def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
+    if not (0 <= v and v < n_rows):
+        raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
+                    + String(n_rows) + " rows")
+
+
+def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, context: PythonObject) raises -> Float32:
+    """One `pairs_weight[i]`: an exact Python float is read with one
+    PyFloat_AsDouble; any other object takes the `isinstance(numbers.Real)`
+    admission and `float()`. Finite and nonnegative, else the refusal."""
+    var ok: Bool
+    var f = Float64(0.0)
+    if borrowed_type_word(w._obj_ptr) == float_word:
+        ok = True
+        f = read_float(w)
+    else:
+        ok = Bool(py=py_call(_b().isinstance, w, context["trees_real_type"]))
+        if ok:
+            f = _float(w)
+    if ok:
+        ok = isfinite(f) and f >= 0
+    if not ok:
+        raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
+    return Float32(f)
+
+
 def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
                   context: PythonObject) raises -> PythonObject:
     """`ensemble._pairs_arrays`: (uint32 winner/loser pairs, float32 pair
-    weights) with its refusals."""
-    var b = _b()
-    var rows = _listed(pairs, context)
-    var m = len(rows)
+    weights) with its refusals, in the same order.
+
+    Lane loops-trees-ab (2026-11-11): an exact ndarray of integer pairs
+    (shape (m, 2)) and an exact ndarray of real weights are read through ONE
+    buffer view each (bindings/boundary_read.mojo `exact_ndarray_view`), not
+    `tolist()` plus an `isinstance` and an `int()`/`float()` call per value.
+    A Python list is read by exact-type slot reads (one C-API read per end,
+    no Python-level call); only a non-exact element takes the old
+    admission. Any other ndarray (bool, float or object pairs, other
+    shapes) keeps the `tolist()` route, so its refusal is unchanged."""
+    var ndarray = py_get(context, "ndarray")
+    var pair_view = exact_ndarray_view(pairs, ndarray)
+    var fast_pairs = False
+    if pair_view:
+        ref view = pair_view.value()
+        fast_pairs = view.ndim == 2 and view.shape[1] == 2 and view_kind_fits_i64(view)
+    var m: Int
+    var rows = PythonObject(None)
+    if fast_pairs:
+        m = pair_view.value().shape[0]
+    else:
+        pair_view = None  # release the export: the tolist() route reads it as Python values
+        rows = _listed(pairs, context)
+        m = len(rows)
     if m == 0:
         raise Error("mojolearn: pairs is empty")
     var flat = admitted_vector(2 * m, "<u4", context)
     var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(flat))
-    _ = flat  # keep the Python object alive through the native call above
-    # Builtins and the connected types read once, each index converted once
-    # (lane perf-sweep-trees, 2026-11-05: re-read and re-converted per pair).
-    var isinstance_ = b.isinstance
-    var integral_t = context["trees_integral_type"]
-    var bool_t = b.bool
-    var int_t = b.int
-    for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-        var pair = rows[i]
-        if len(pair) != 2:
-            raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
-        var ends = List[Int]()
-        for j in range(2):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-            var index = pair[j]
-            if not Bool(py=py_call(isinstance_, index, integral_t)) or Bool(py=py_call(isinstance_, index, bool_t)):
-                raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
-                            + "type=" + _str(py_type(index)) + ": must be an integer.")
-            var v = Int(py=py_call_typed(int_t, index))
-            if not (0 <= v and v < n_rows):
-                raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
-                            + String(n_rows) + " rows")
-            ends.append(v)
-        var w0 = ends[0]
-        var w1 = ends[1]
-        if w0 == w1:
-            raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
-        fp[2 * i] = UInt32(w0)
-        _ = flat  # keep the Python object alive through the native call above
-        fp[2 * i + 1] = UInt32(w1)
-        _ = flat  # keep the Python object alive through the native call above
+    if fast_pairs:
+        var ends = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pair_view.value().as_i64_c())
+        for i in range(m):  # boundary-read: native int64 words of the one pairs view (no CPython call)
+            var w0 = Int(ends[2 * i])
+            _pair_end_range(w0, i, 0, n_rows)
+            var w1 = Int(ends[2 * i + 1])
+            _pair_end_range(w1, i, 1, n_rows)
+            if w0 == w1:
+                raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+        pair_view.value().release()
+    else:
+        var int_word = borrowed_type_word(PythonObject(1)._obj_ptr)
+        for i in range(m):  # boundary-read: one exact-type slot read per pair end of a user list (no buffer to view)
+            var pair = rows[i]
+            if len(pair) != 2:
+                raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+            var w0 = _pair_end_checked(pair[0], i, 0, n_rows, int_word, context)
+            var w1 = _pair_end_checked(pair[1], i, 1, n_rows, int_word, context)
+            if w0 == w1:
+                raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+    _ = pair_view^
+    _ = flat  # keep the Python object alive through the native writes above
     var weights = admitted_vector(m, "<f4", context)
     var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=trees_address(weights))
-    _ = weights  # keep the Python object alive through the native call above
     if pairs_weight is None:
-        for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
+        for i in range(m):  # boundary-read: native fill of the weight Array (no CPython call)
             wp[i] = 1.0
-            _ = weights  # keep the Python object alive through the native call above
-    else:
-        var values = _listed(pairs_weight, context)
-        if len(values) != m:
-            raise Error("mojolearn: len(pairs_weight) = " + String(len(values)) + " is not equal to "
+        _ = weights  # keep the Python object alive through the native writes above
+        return Python.tuple(flat, weights)
+    var weight_view = exact_ndarray_view(pairs_weight, ndarray)
+    var fast_weights = False
+    if weight_view:
+        ref view = weight_view.value()
+        fast_weights = view.ndim == 1 and view_kind_real(view)
+    if fast_weights:
+        var count = weight_view.value().shape[0]
+        if count != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(count) + " is not equal to "
                         + "len(pairs) = " + String(m) + " ")
-        var real_t = context["trees_real_type"]
-        for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-            var w = values[i]
-            var ok = Bool(py=py_call(isinstance_, w, real_t))
-            var f = Float64(0.0)
-            if ok:
-                f = _float(w)
-                ok = isfinite(f) and f >= 0
-            if not ok:
+        var values = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=weight_view.value().as_f64_c())
+        for i in range(m):  # boundary-read: native float64 words of the one weight view (no CPython call)
+            var f = values[i]
+            if not (isfinite(f) and f >= 0):
                 raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
             wp[i] = Float32(f)
-            _ = weights  # keep the Python object alive through the native call above
+        weight_view.value().release()
+    else:
+        weight_view = None
+        var listed = _listed(pairs_weight, context)
+        if len(listed) != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(len(listed)) + " is not equal to "
+                        + "len(pairs) = " + String(m) + " ")
+        var float_word = borrowed_type_word(PythonObject(1.5)._obj_ptr)
+        for i in range(m):  # boundary-read: one exact-type slot read per weight of a user list (no buffer to view)
+            wp[i] = _pair_weight_checked(listed[i], i, float_word, context)
+    _ = weight_view^
+    _ = weights  # keep the Python object alive through the native writes above
     return Python.tuple(flat, weights)
 
 
