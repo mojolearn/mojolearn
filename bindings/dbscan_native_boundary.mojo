@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """DBSCAN unpack/pack storage and provider pins around native requests."""
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_fields, py_get, py_setitem
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
@@ -79,6 +79,40 @@ struct DBSCANHolder(Movable, Writable):
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
+
+
+def dbscan_reference_owner_pins(value: Int, index: Int) abi("C") -> Int:
+    if value == 0 or index < -1 or index >= 4:
+        return -1
+    try:
+        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var native = owner.downcast_value_ptr[DBSCANReferenceOwner]()
+        var result = 4
+        if index == 0:
+            result = Int(native[].provider._obj_ptr)
+        elif index == 1:
+            result = Int(native[].refs._obj_ptr)
+        elif index == 2:
+            result = Int(native[].keys._obj_ptr)
+        elif index == 3:
+            result = Int(native[].labels._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1
+
+
+def dbscan_holder_pins(value: Int, index: Int) abi("C") -> Int:
+    if value == 0 or index < -1 or index >= 1:
+        return -1
+    try:
+        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var native = owner.downcast_value_ptr[DBSCANHolder]()
+        var result = 1 if index == -1 else Int(native[].resident._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1
 
 
 def dbscan_holder_empty() raises -> PythonObject:
