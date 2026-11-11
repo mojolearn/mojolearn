@@ -127,6 +127,13 @@ def _helpers():
             table[name] = _native(name)
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
             table[name] = _refusal(error)
+    # glue: once at import, the base helper table key the native doors read
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        table["base_native_key"] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        table["base_native_key"] = _refusal(error)
     return table
 
 

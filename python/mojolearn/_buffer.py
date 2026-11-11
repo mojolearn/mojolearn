@@ -1087,6 +1087,25 @@ def _host_native(key):
     return None
 
 
+#: The base helper table's vendor words (core/base_entry_table.mojo
+#: `base_entry_vendor`), the mapping the binaries apply at publication.
+_BASE_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def base_native_key():
+    """`(mode, vendor)`: the base helper table key of the binary `_native`
+    resolves (lane calltable-base-helpers), which the Mojo doors read
+    instead of calling the helpers through Python. Read once at import by
+    the bridges that hand the helpers to a door; raises like `_native` when
+    the binary has no probes."""
+    mode = int(_native("mojolearn_numeric_mode")())  # import-time: the binary's compiled tier
+    vendor = _BASE_NATIVE_VENDORS.get(str(_native("mojolearn_vendor")()), -1)  # import-time: its vendor
+    if mode not in (0, 1) or vendor < 0:
+        raise ImportError("mojolearn: the base binding publishes no native helper table "
+                          f"(mode {mode!r}, vendor {vendor!r})")
+    return (mode, vendor)
+
+
 def as_index_i64(values, *, name="indices"):
     """Row indices (an Array, any buffer or a list of ints) as a 1-D int64
     Array: the native cast of a numeric buffer; a list goes in through
