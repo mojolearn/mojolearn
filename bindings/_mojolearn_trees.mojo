@@ -44,7 +44,14 @@ from forest_inference_binding import (
     forest_unstage_input_gpu_binding,
     forest_ordered_resident_binding,
     forest_identical_fused_labels_binding,
+    forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
+    forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
 )
+from bindings.forest_fit_boundary import forest_fit_args_py
+from core.forest_fit_request import ForestFitArgs, XF_CAP_DEVICE_SCAN, forest_export_verify_lists
+from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from core.forest_entry_table import FOREST_TABLE_ET
+from core.native_descriptor_abi import NativeDescriptorError
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
@@ -98,7 +105,15 @@ comptime ET_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], ("MojolearnETF
 # Restore: git apply experiments/removed/dead_entries_trees.patch
 
 
-def _retain_et_export(var result: FitResult) raises -> PythonObject:
+def et_legacy_meta(result: FitResult) -> List[Int64]:
+    """The six metadata words `_forest_out` reports (and the export keeps)."""
+    var meta: List[Int64] = [Int64(result.forest.n_trees), Int64(result.forest.num_outputs),
+        Int64(1 if result.depth_cap_bound else 0), Int64(result.plan.params.max_depth),
+        Int64(result.plan.max_features_count), Int64(result.plan.n_sampled_rows)]
+    return meta^
+
+
+def _retain_et_handle(var result: FitResult) raises -> Int:
     var trees = len(result.forest.trees)
     var nodes = 0
     for t in range(trees):  # small-loop(trees: fitted trees, one node count each): export shape bookkeeping, no row or node data
@@ -112,7 +127,48 @@ def _retain_et_export(var result: FitResult) raises -> PythonObject:
     var outputs = Int(result.forest.num_outputs)
     if trees != Int(result.forest.n_trees):
         raise Error("fitted ET tree metadata differs from export dimensions")
-    return ET_EXPORTS.get_or_create_ptr()[].insert(result^, trees, nodes, outputs, meta^)
+    return ET_EXPORTS.get_or_create_ptr()[].insert_native(result^, trees, nodes, outputs, meta^)
+
+
+def _et_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
+    """XF_EXPORT_INTO: the kept fit into the caller's five arrays."""
+    var registry = ET_EXPORTS.get_or_create_ptr()
+    registry[].validate(id, trees, nodes, outputs)
+    validate_forest_export_destinations(dst[0], dst[1], dst[2], dst[3], dst[4])
+    var op = _i32_ptr(dst[0])
+    var cp = _i32_ptr(dst[1])
+    var tp = _f32_ptr(dst[2])
+    var lp = _i32_ptr(dst[3])
+    var times = StageTimes()
+    var stamp = times.start()
+    et_export_into(
+        registry[].entries[id].model, op, cp, tp, lp, dst[4],
+        registry[].entries[id].outputs,
+    )
+    times.stop_host("boundary_export_into", stamp)
+    times.report()
+
+
+def _et_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
+    """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
+    lists `forest_export_legacy` returns, against the exported arrays."""
+    var registry = ET_EXPORTS.get_or_create_ptr()
+    if id not in registry[].entries:
+        raise Error("unknown or released fitted forest export handle")
+    ref entry = registry[].entries[id]
+    var legacy = et_legacy_meta(entry.model)
+    if len(legacy) != len(entry.meta):
+        return -1
+    for k in range(len(legacy)):  # small-loop(meta: six export metadata words)
+        if legacy[k] != entry.meta[k]:
+            return -1
+    var offsets = List[Int64]()
+    var colid = List[Int64]()
+    var quesval = List[Float64]()
+    var left_child = List[Int64]()
+    var leaves = List[Float64]()
+    et_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
+    return forest_export_verify_lists(offsets, colid, quesval, left_child, leaves, dst)
 
 
 def et_forest_export_binding(handle: PythonObject, offsets: PythonObject,
@@ -120,23 +176,8 @@ def et_forest_export_binding(handle: PythonObject, offsets: PythonObject,
     leaves: PythonObject, counts: PythonObject) raises -> PythonObject:
     if len(counts) != 3:
         raise Error("forest_export requires trees, nodes, outputs capacities")
-    var id = Int(py=handle)
-    var registry = ET_EXPORTS.get_or_create_ptr()
-    registry[].validate(id, Int(py=counts[0]), Int(py=counts[1]), Int(py=counts[2]))
-    validate_forest_export_destinations(Int(py=offsets), Int(py=columns),
-        Int(py=thresholds), Int(py=left), Int(py=leaves))
-    var op = _i32_ptr(Int(py=offsets))
-    var cp = _i32_ptr(Int(py=columns))
-    var tp = _f32_ptr(Int(py=thresholds))
-    var lp = _i32_ptr(Int(py=left))
-    var times = StageTimes()
-    var stamp = times.start()
-    et_export_into(
-        registry[].entries[id].model, op, cp, tp, lp, Int(py=leaves),
-        registry[].entries[id].outputs,
-    )
-    times.stop_host("boundary_export_into", stamp)
-    times.report()
+    var dst: List[Int] = [Int(py=offsets), Int(py=columns), Int(py=thresholds), Int(py=left), Int(py=leaves)]
+    _et_export_into_native(Int(py=handle), dst, Int(py=counts[0]), Int(py=counts[1]), Int(py=counts[2]))
     return PythonObject(None)
 
 
@@ -165,11 +206,11 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
-def _copy_f32(addr: PythonObject, n: Int) raises -> List[Float32]:
+def _copy_f32(addr: Int, n: Int) raises -> List[Float32]:
     """Borrowed host memory into an owned List, read while the GIL-holding
     caller keeps the array alive (the `_arrays.py` contract)."""
     # one memcpy (no per-element host loop)
-    return list_f32(_f32_ptr(Int(py=addr)), n)
+    return list_f32(_f32_ptr(addr), n)
 
 
 comptime N_FIT_PARAMS = 22
@@ -219,7 +260,7 @@ NOT_IMPLEMENTED.tsv rows validity_check does.
 
 
 def _config_from(
-    params: PythonObject, base: ExtraTreesConfig
+    params: ForestFitArgs, base: ExtraTreesConfig
 ) raises -> ExtraTreesConfig:
     """Slots 3-19 and 21 written OVER `base`. Read under the GIL.
 
@@ -234,26 +275,26 @@ def _config_from(
     regressor fit.
     """
     var config = base.copy()
-    config.n_estimators = Int32(Int(py=params[3]))
-    config.max_depth = Int32(Int(py=params[4]))
-    config.min_samples_split = Int32(Int(py=params[5]))
-    config.min_samples_leaf = Int32(Int(py=params[6]))
-    config.min_weight_fraction_leaf = Float64(py=params[7])
-    config.max_features_spec = Int(py=params[8])
-    config.max_features_fraction = Float64(py=params[9])
-    config.min_impurity_decrease = Float32(Float64(py=params[10]))
-    config.bootstrap = Int(py=params[11]) != 0
-    config.oob_score = Int(py=params[12]) != 0
-    config.random_state = UInt64(Int(py=params[13]))
-    config.warm_start = Int(py=params[14]) != 0
-    config.ccp_alpha = Float64(py=params[15])
-    config.has_class_weight = Int(py=params[16]) != 0
-    config.has_monotonic_cst = Int(py=params[17]) != 0
-    config.max_samples = Int(py=params[18])
-    config.max_leaf_nodes = Int32(Int(py=params[19]))
+    config.n_estimators = Int32(params.i(3))
+    config.max_depth = Int32(params.i(4))
+    config.min_samples_split = Int32(params.i(5))
+    config.min_samples_leaf = Int32(params.i(6))
+    config.min_weight_fraction_leaf = params.f(7)
+    config.max_features_spec = params.i(8)
+    config.max_features_fraction = params.f(9)
+    config.min_impurity_decrease = Float32(params.f(10))
+    config.bootstrap = params.i(11) != 0
+    config.oob_score = params.i(12) != 0
+    config.random_state = UInt64(params.i(13))
+    config.warm_start = params.i(14) != 0
+    config.ccp_alpha = params.f(15)
+    config.has_class_weight = params.i(16) != 0
+    config.has_monotonic_cst = params.i(17) != 0
+    config.max_samples = params.i(18)
+    config.max_leaf_nodes = Int32(params.i(19))
     # slot 21, DEVIATION 459: the criterion code, written over the base's
     # default like every other slot.
-    config.criterion = Int32(Int(py=params[21]))
+    config.criterion = Int32(params.i(21))
     return config^
 
 
@@ -289,47 +330,12 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     return out
 
 
-def et_classifier_fit_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    return _et_classifier_fit[EXPORT](x_addr, y_addr, params)
-
-
-def et_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`et_classifier_fit` with `x` ROW-major (C-order) float32, borrowed
-    through the call and transposed into the pinned upload stage across the
-    host pool (DEVIATION 2637). Same params, same forest bits."""
-    return _et_classifier_fit[EXPORT, True](x_addr, y_addr, params)
-
-
-def et_classifier_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`et_classifier_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
-    (lane sk-kernels): `weights` is n_rows float32, scikit-learn's
-    sample_weight times its class_weight row, borrowed through the call.
-    Checked and quantized on the device (`DeviceDataset.set_row_weights`)."""
-    var address = Int(py=weights_addr)
-    if address == 0:
-        raise Error("et_classifier_fit_weighted requires a nonzero float32 weight pointer")
-    return _et_classifier_fit[EXPORT, ROWMAJOR](
-        x_addr, y_addr, params, weights_addr=address
-    )
-
-
-def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    params: PythonObject,
-    tree_start: Int = 0,
-    weights_addr: Int = 0,
-) raises -> PythonObject:
+def _et_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit `ExtraTreesClassifier`. `x` is COLUMN-major float32
     (n_rows * n_features), `y` is float32 class CODES in [0, n_classes).
-    See `N_FIT_PARAMS`; EXPORT selects an owned handle instead of diagnostic lists."""
+    See `N_FIT_PARAMS`. Returns the export handle (lane calltable-forest:
+    every fit is kept in ET_EXPORTS; `_et_handle_py` reads the diagnostic
+    lists)."""
     if len(params) != N_FIT_PARAMS:
         raise Error(
             "et_classifier_fit: params must hold "
@@ -337,10 +343,10 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             + " values, got "
             + String(len(params))
         )
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_classes = Int(py=params[2])
-    if Float64(py=params[20]) != Float64(1):
+    var n_rows = params.i(0)
+    var n_features = params.i(1)
+    var n_classes = params.i(2)
+    if params.f(20) != Float64(1):
         raise Error("Extra Trees training is GPU-only; device (slot 20) must be 1")
     var config = _config_from(params, ExtraTreesConfig())
     if config.criterion != CRITERION_GINI and config.criterion != CRITERION_ENTROPY:
@@ -354,12 +360,12 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var stamp = times.start()
     # DEVIATION 2481: caller keeps the immutable feature buffer alive through
     # this synchronous fit; only labels still require owned staging.
-    var x_pointer = Int(py=x_addr)
+    var x_pointer = params.x
     _ = _f32_ptr(x_pointer)
     var x = List[Float32]()
     times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
-    var y = _copy_f32(y_addr, n_rows)
+    var y = _copy_f32(params.y, n_rows)
     times.stop_host("boundary_y_list", stamp)
     stamp = times.start()
 
@@ -368,63 +374,20 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var ctx = process_ctx[_DEVCTX_SLOT]()
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
-            config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
-            weights_addr=weights_addr,
+            config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
+            weights_addr=params.weights,
         )
         ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
-    var output: PythonObject
-    comptime if EXPORT:
-        output = _retain_et_export(result^)
-    else:
-        output = _forest_out(result)
-    comptime if EXPORT:
-        times.stop_host("boundary_export_handle", stamp)
-    else:
-        times.stop_host("boundary_python_objects", stamp)
+    var output = _retain_et_handle(result^)
+    times.stop_host("boundary_export_handle", stamp)
     times.stop_host("fit_total", total_start)
     times.report()
     return output
 
 
-def et_regressor_fit_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    return _et_regressor_fit[EXPORT](x_addr, y_addr, params)
-
-
-def et_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`et_regressor_fit` with `x` ROW-major (C-order) float32 (DEVIATION
-    2637), as `et_classifier_fit_rowmajor`."""
-    return _et_regressor_fit[EXPORT, True](x_addr, y_addr, params)
-
-
-def et_regressor_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`et_regressor_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
-    (lane sk-final): `weights` is n_rows float32, scikit-learn's
-    sample_weight, borrowed through the call. Checked and quantized on the
-    device (`upload_dataset_labels_quantized_weighted`)."""
-    var address = Int(py=weights_addr)
-    if address == 0:
-        raise Error("et_regressor_fit_weighted requires a nonzero float32 weight pointer")
-    return _et_regressor_fit[EXPORT, ROWMAJOR](
-        x_addr, y_addr, params, weights_addr=address
-    )
-
-
-def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    params: PythonObject,
-    tree_start: Int = 0,
-    weights_addr: Int = 0,
-) raises -> PythonObject:
+def _et_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit `ExtraTreesRegressor`. Same contract; slot 2 MUST be 0.
     `weights_addr` (lane sk-final, 0: none) as `et_regressor_fit_weighted`."""
     if len(params) != N_FIT_PARAMS:
@@ -434,11 +397,11 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             + " values, got "
             + String(len(params))
         )
-    if Int(py=params[2]) != 0:
+    if params.i(2) != 0:
         raise Error("et_regressor_fit: n_classes (slot 2) must be 0")
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    if Float64(py=params[20]) != Float64(1):
+    var n_rows = params.i(0)
+    var n_features = params.i(1)
+    if params.f(20) != Float64(1):
         raise Error("Extra Trees training is GPU-only; device (slot 20) must be 1")
     var config = _config_from(params, ExtraTreesConfig().for_regression())
     if config.criterion != CRITERION_MSE and config.criterion != CRITERION_POISSON and (
@@ -454,12 +417,12 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var stamp = times.start()
     # DEVIATION 2481: caller keeps the immutable feature buffer alive through
     # this synchronous fit; only labels still require owned staging.
-    var x_pointer = Int(py=x_addr)
+    var x_pointer = params.x
     _ = _f32_ptr(x_pointer)
     var x = List[Float32]()
     times.stop_host("boundary_x_borrow", stamp)
     stamp = times.start()
-    var y = _copy_f32(y_addr, n_rows)
+    var y = _copy_f32(params.y, n_rows)
     times.stop_host("boundary_y_list", stamp)
     stamp = times.start()
 
@@ -468,21 +431,14 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var ctx = process_ctx[_DEVCTX_SLOT]()
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config,
-            x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
-            weights_addr=weights_addr,
+            x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=params.tree_start,
+            weights_addr=params.weights,
         )
         ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
-    var output: PythonObject
-    comptime if EXPORT:
-        output = _retain_et_export(result^)
-    else:
-        output = _forest_out(result)
-    comptime if EXPORT:
-        times.stop_host("boundary_export_handle", stamp)
-    else:
-        times.stop_host("boundary_python_objects", stamp)
+    var output = _retain_et_handle(result^)
+    times.stop_host("boundary_export_handle", stamp)
     times.stop_host("fit_total", total_start)
     times.report()
     return output
@@ -498,37 +454,42 @@ def et_predict_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The forest's averaged vote per row, through the IMPLEMENTED traversal.
-
-    Model arrays are int32/float32 as `_forest_out` laid them out (the
-    wrapper exports and keeps host Arrays). `x` here is
-    ROW-major (the traversal reads `row[offset + colid]`). `out` is
-    n_rows * num_outputs float32 and receives `forest_vote_host`'s average --
-    per-class probabilities for the classifier (argmax is the wrapper's,
-    exactly as `RandomForest::predict` argmaxes over `predict_proba`), the
-    mean prediction for the regressor. `params` is `[n_rows, n_features,
-    n_trees, num_outputs]`. Returns rows written.
-    """
+    """`et_predict` (UNPACK of `et_predict_native`): `params` is `[n_rows,
+    n_features, n_trees, num_outputs]`. Returns rows written."""
     if len(params) != 4:
         raise Error(
             "et_predict: params must hold [n_rows, n_features, n_trees,"
             " num_outputs], got "
             + String(len(params))
         )
-    var n_rows = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_trees = Int(py=params[2])
-    var num_outputs = Int(py=params[3])
+    var model: List[Int] = [Int(py=offsets_addr), Int(py=colid_addr), Int(py=quesval_addr),
+                            Int(py=left_child_addr), Int(py=leaves_addr)]
+    return PythonObject(et_predict_native(model, Int(py=x_addr), Int(py=out_addr), Int(py=params[0]),
+                                          Int(py=params[1]), Int(py=params[2]), Int(py=params[3])))
+
+
+def et_predict_native(model: List[Int], x_address: Int, out_address: Int, n_rows: Int, n_features: Int,
+                      n_trees: Int, num_outputs: Int) raises -> Int:
+    """The forest's averaged vote per row, through the IMPLEMENTED traversal
+    (XF_PREDICT).
+
+    Model arrays are int32/float32 as `_forest_out` laid them out. `x` here
+    is ROW-major (the traversal reads `row[offset + colid]`). `out` is
+    n_rows * num_outputs float32 and receives `forest_vote_host`'s average --
+    per-class probabilities for the classifier (argmax is the wrapper's,
+    exactly as `RandomForest::predict` argmaxes over `predict_proba`), the
+    mean prediction for the regressor. Returns rows written.
+    """
     if n_trees < 1 or num_outputs < 1:
         raise Error("et_predict: n_trees and num_outputs must be >= 1")
 
-    var offsets_p = _i32_ptr(Int(py=offsets_addr))
-    var colid_p = _i32_ptr(Int(py=colid_addr))
-    var quesval_p = _f32_ptr(Int(py=quesval_addr))
-    var left_p = _i32_ptr(Int(py=left_child_addr))
-    var leaves_p = _f32_ptr(Int(py=leaves_addr))
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
+    var offsets_p = _i32_ptr(model[0])
+    var colid_p = _i32_ptr(model[1])
+    var quesval_p = _f32_ptr(model[2])
+    var left_p = _i32_ptr(model[3])
+    var leaves_p = _f32_ptr(model[4])
+    var xp = _f32_ptr(x_address)
+    var op = _f32_ptr(out_address)
 
     # cpu-gpu-cleanup t-gbdt: the `sequential` engine runs on the device.
     # The host walk (`core/forest_host_predict.mojo`'s `et_host_predict`,
@@ -538,7 +499,7 @@ def et_predict_binding(
     # `forest_ordered_kernel`, one thread per (row, output), through a
     # one-call ordered snapshot. The GIL stays held for the registry.
     if n_rows == 0:
-        return PythonObject(0)
+        return 0
     var n_nodes = Int(offsets_p[n_trees])
     if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
         raise Error("et_predict: tree_offsets must start at 0 and hold at least one node per tree")
@@ -564,7 +525,7 @@ def et_predict_binding(
         resident_release[False](handle)
         raise e
     resident_release[False](handle)
-    return PythonObject(n_rows)
+    return n_rows
 
 
 # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -605,14 +566,110 @@ def trees_shared_counts_mask_binding() raises -> PythonObject:
     return PythonObject(shared_class_counts_mask())
 
 
+def _et_fit_native[CLASSIFIER: Bool, ROWMAJOR: Bool](args: ForestFitArgs) raises -> Int:
+    """One fit (the forest entry's XF_FIT): the export handle."""
+    comptime if CLASSIFIER:
+        return _et_classifier_fit[ROWMAJOR](args)
+    else:
+        return _et_regressor_fit[ROWMAJOR](args)
+
+
+def _et_handle_py(handle: Int, export: Bool) raises -> PythonObject:
+    """PACK of a kept fit for the Python entries: the export descriptor
+    (`*_export`), or the diagnostic lists of the kept fit, released (the
+    plain entries; the lists `_forest_out` built from the fit)."""
+    var registry = ET_EXPORTS.get_or_create_ptr()
+    if export:
+        try:
+            return registry[].descriptor_py(handle)
+        except error:
+            registry[].release(handle)
+            raise error^
+    var out = PythonObject(None)
+    try:
+        out = _forest_out(registry[].entries[handle].model)
+    finally:
+        registry[].release(handle)
+    return out
+
+
+def _et_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject, export: Bool,
+    weights: Int = 0, tree_start: Int = 0,
+) raises -> PythonObject:
+    """The Python fit entries: UNPACK (`forest_fit_args_py`), the native
+    fit, PACK (`_et_handle_py`)."""
+    var args = forest_fit_args_py(x_addr, y_addr, params, PythonObject(None))
+    args.weights = weights
+    args.tree_start = tree_start
+    return _et_handle_py(_et_fit_native[CLASSIFIER, ROWMAJOR](args), export)
+
+
+def _et_weights(weights_addr: PythonObject, entry: String) raises -> Int:
+    var address = Int(py=weights_addr)
+    if address == 0:
+        raise Error(entry + " requires a nonzero float32 weight pointer")
+    return address
+
+
+def et_classifier_fit_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    return _et_fit_py[True, False](x_addr, y_addr, params, EXPORT)
+
+
+def et_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`et_classifier_fit` with `x` ROW-major (C-order) float32, borrowed
+    through the call (DEVIATION 2637). Same params, same forest bits."""
+    return _et_fit_py[True, True](x_addr, y_addr, params, EXPORT)
+
+
+def et_classifier_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`et_classifier_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
+    (lane sk-kernels): `weights` is n_rows float32, scikit-learn's
+    sample_weight times its class_weight row, borrowed through the call."""
+    return _et_fit_py[True, ROWMAJOR](x_addr, y_addr, params, EXPORT,
+                                      weights=_et_weights(weights_addr, "et_classifier_fit_weighted"))
+
+
+def et_regressor_fit_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    return _et_fit_py[False, False](x_addr, y_addr, params, EXPORT)
+
+
+def et_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`et_regressor_fit` with `x` ROW-major (C-order) float32 (DEVIATION
+    2637), as `et_classifier_fit_rowmajor`."""
+    return _et_fit_py[False, True](x_addr, y_addr, params, EXPORT)
+
+
+def et_regressor_fit_weighted_binding[EXPORT: Bool = False, ROWMAJOR: Bool = False](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`et_regressor_fit` (`_rowmajor` when ROWMAJOR) with per-row weights
+    (lane sk-final): `weights` is n_rows float32, scikit-learn's
+    sample_weight, borrowed through the call."""
+    return _et_fit_py[False, ROWMAJOR](x_addr, y_addr, params, EXPORT,
+                                       weights=_et_weights(weights_addr, "et_regressor_fit_weighted"))
+
+
 def et_classifier_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_classifier_fit(x_addr, y_addr, params, Int(py=tree_start))
+    return _et_fit_py[True, False](x_addr, y_addr, params, False, tree_start=Int(py=tree_start))
 
 
 def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start))
+    return _et_fit_py[False, False](x_addr, y_addr, params, False, tree_start=Int(py=tree_start))
 
 
 # The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
@@ -620,30 +677,111 @@ def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
 # `forest_export`, not one Python object per node. Same bytes.
 def et_classifier_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_classifier_fit[True](x_addr, y_addr, params, Int(py=tree_start))
+    return _et_fit_py[True, False](x_addr, y_addr, params, True, tree_start=Int(py=tree_start))
 
 
 def et_regressor_fit_shard_export_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _et_regressor_fit[True](x_addr, y_addr, params, Int(py=tree_start))
+    return _et_fit_py[False, False](x_addr, y_addr, params, True, tree_start=Int(py=tree_start))
 
 
 def et_classifier_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
     """lane sk-final: `et_classifier_fit_shard` with per-row weights."""
-    var address = Int(py=weights_addr)
-    if address == 0:
-        raise Error("et_classifier_fit_weighted_shard requires a nonzero float32 weight pointer")
-    return _et_classifier_fit(x_addr, y_addr, params, Int(py=tree_start), weights_addr=address)
+    var address = _et_weights(weights_addr, "et_classifier_fit_weighted_shard")
+    return _et_fit_py[True, False](x_addr, y_addr, params, False, weights=address, tree_start=Int(py=tree_start))
 
 
 def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, weights_addr: PythonObject, tree_start: PythonObject) raises -> PythonObject:
     """lane sk-final: `et_regressor_fit_shard` with per-row weights."""
-    var address = Int(py=weights_addr)
-    if address == 0:
-        raise Error("et_regressor_fit_weighted_shard requires a nonzero float32 weight pointer")
-    return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start), weights_addr=address)
+    var address = _et_weights(weights_addr, "et_regressor_fit_weighted_shard")
+    return _et_fit_py[False, False](x_addr, y_addr, params, False, weights=address, tree_start=Int(py=tree_start))
+
+
+struct EtGpuForest(ForestImage):
+    """This image's forest entry operations (core/forest_entry.mojo; lane
+    calltable-forest): the bodies the Python entries above unpack into."""
+
+    @staticmethod
+    def caps() -> Int:
+        var caps = forest_gpu_resident_caps()
+        comptime if FOREST_DEVICE_FINITE:
+            caps |= XF_CAP_DEVICE_SCAN
+        return caps
+
+    @staticmethod
+    def dt_default_bins() -> Int:
+        return 128
+
+    @staticmethod
+    def fit(classifier: Bool, row_major: Bool, args: ForestFitArgs) raises -> Int:
+        if classifier:
+            if row_major:
+                return _et_fit_native[True, True](args)
+            return _et_fit_native[True, False](args)
+        if row_major:
+            return _et_fit_native[False, True](args)
+        return _et_fit_native[False, False](args)
+
+    @staticmethod
+    def fit_dart(args: ForestFitArgs) raises -> Int:
+        raise Error("RuntimeError: the extra-trees binding has no DART member fit")
+
+    @staticmethod
+    def export_sizes(handle: Int, out_addr: Int) raises:
+        ET_EXPORTS.get_or_create_ptr()[].sizes_into(handle, out_addr)
+
+    @staticmethod
+    def export_into(handle: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
+        _et_export_into_native(handle, dst, trees, nodes, outputs)
+
+    @staticmethod
+    def export_verify(handle: Int, dst: List[Int]) raises -> Int:
+        return _et_export_verify_native(handle, dst)
+
+    @staticmethod
+    def export_release(handle: Int) raises:
+        ET_EXPORTS.get_or_create_ptr()[].release(handle)
+
+    @staticmethod
+    def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
+                regression: Bool) raises -> Int:
+        return et_predict_native(model, x, out_addr, rows, cols, trees, outputs)
+
+    @staticmethod
+    def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
+        return forest_prepare_gpu_native[False](model, features, trees, outputs, ordered)
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_predict_resident_into_gpu_native[False, True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def resident_labels(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_predict_resident_labels_gpu_native[False](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def resident_release(handle: Int) raises:
+        resident_release[False](handle)
+
+    @staticmethod
+    def strict_prepare(model: List[Int], features: Int, trees: Int, outputs: Int) raises -> Int:
+        raise Error("RuntimeError: rebuild the forest host binding")
+
+    @staticmethod
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        raise Error("RuntimeError: rebuild the forest host binding")
+
+    @staticmethod
+    def strict_release(handle: Int) raises:
+        raise Error("RuntimeError: rebuild the forest host binding")
+
+
+def et_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's published forest entry (core/forest_entry_table.mojo)."""
+    return forest_entry_dispatch[EtGpuForest](operation, aa, na, pp, np, ff, nf, result, context, sink)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_trees.mojo
@@ -653,6 +791,8 @@ def build__mojolearn_trees() -> PythonObject:
     comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
+        # The native forest entry (core/forest_entry_table.mojo) under this image's key.
+        forest_entry_publish["MojolearnForestEntryOwnerEtGpuV1"](FOREST_TABLE_ET, COMPILED_VENDOR, et_gpu_forest_entry_v1)
         # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
