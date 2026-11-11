@@ -53,8 +53,9 @@ def gpr_score_result(values: GPRScoreValues, target: PythonObject,
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"
     var result = Float64(0.0)
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = gp_r2_value(program.run(entry, ranges))
     finally:
         _ = provider
