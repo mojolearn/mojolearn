@@ -59,10 +59,6 @@ def _recv(sock, max_payload):
     return _native_cross_vendor("receive", (sock, max_payload))
 
 
-def _recv_exact(sock, n):
-    return _native_cross_vendor("receive_exact", (sock, n))
-
-
 _cross_vendor_errors = {"mismatch": CrossVendorMismatch}
 
 
