@@ -1,0 +1,23 @@
+Mojolearn bounded removed-definition source map, 2026-11-11
+
+Scope: exactly60 old test_ names absent from caba5aa232 to b7dad887992d.
+This is the requested immutable NEXT snapshot, not a new whole-project census.
+43 numerical/boundary splits or renames;8 numerical replacements with existing
+boundaries retained;4 nonzero numerical replacements with a separate boundary
+test;4 boundary redesigns/renames;1 unresolved. No retired source-only definition
+identified within these60. Native runtime case counts are not Python deletions.
+
+Unresolved: test_byte_lm_runtime_shape.py:178 large shape(1,2048,768,12,12,
+64,2048,12,50257), tensorcount110,total162147840,final registry offset.
+No replacement located; do not call this migrated or silently waive it.
+
+Each row records baseline AST hash/line, native module and immutable source hash,
+new or retained Python name/line, rationale and explicit input-generator limits.
+Several early migrations preserved shapes/settings/tolerances but replaced NumPy
+RNG with native deterministic inputs; these are not claimed as original bytes.
+Full baseline function/native source excerpts are preserved under
+E/pca-native-tests/migration-inventory. No compiler, runtime or identity result
+is inferred. DBSCANstate28 remains separately compiler-blocked; no old DBSCAN
+definition is in this60-name set. Whole-project predicate audit remains pending.
+
+No product, test, algorithm or kernel edits in this documentation commit.

@@ -1,0 +1,1941 @@
+{
+  "scope": "Exactly60 old test_ definition names structurally absent in baseline-to-requestedNEXT AST comparison",
+  "baseline": "caba5aa2320a9840891d2db9e80eebc0cd68b73e",
+  "target": "b7dad887992de15110b50b71227c2b2cbcc20394",
+  "status": "bounded source mapping; no compilation/execution and no whole-project numerical-deletion count",
+  "counts": {
+    "unresolved": 1,
+    "native_numerical_split_and_boundary_rename": 43,
+    "native_numerical_replacement_existing_boundaries_retained": 8,
+    "native_replacement_with_separate_boundary_test": 4,
+    "boundary_redesign_or_rename": 4
+  },
+  "rows": [
+    {
+      "path": "python/mojolearn/tests/test_byte_lm_runtime_shape.py",
+      "name": "test_large_configuration_is_host_only",
+      "line": 178,
+      "end": 183,
+      "baseline_ast_sha256": "4c37ae9f32163ced4bd6399a0ce1643bd23f85e0b0301fbd670c1c2bb6c602ee",
+      "index": 0,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "unresolved",
+      "mapping_reason": "Unresolved: original large native-layout arithmetic checked n_tensors110, n_total162147840 and final parameter-registry offset for Shape(1,2048,768,12,12,64,2048,12,50257). No replacement identified in this bounded audit.",
+      "native_modules": [],
+      "python_targets": [],
+      "uncertainties": [
+        "Replacement for the exact large-layout arithmetic assertions not located."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_classical_native_owner.py",
+      "name": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution",
+      "line": 60,
+      "end": 86,
+      "baseline_ast_sha256": "0ec6ad646345b07c7e6f5af8a7fd6ffc9e2d5e528e333247f70d20c521cc3812",
+      "index": 1,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Eight Ridge native configurations retain intercept/feature/weight matrix and coefficient tolerances; native dyadic data replaces NumPy RNG. Public fitted-output/owner test is renamed.",
+      "native_modules": [
+        "checks/native_tests/linear_owner_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_ridge_native_owner_publishes_fitted_outputs",
+          "line": 60,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_classical_ols_native_owner.py",
+      "name": "test_ols_native_preserves_driver_bits_and_independent_predictions",
+      "line": 78,
+      "end": 99,
+      "baseline_ast_sha256": "234eba54a4f2a84f96490a8c111b55aa7e33b85554ba31a99a84a714a44d4a87",
+      "index": 2,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Twelve OLS native configurations retain rank/support cases and prediction tolerance; known-solution dyadic inputs replace NumPy RNG. Public fitted-output test is renamed.",
+      "native_modules": [
+        "checks/native_tests/linear_owner_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_ols_native_publishes_fitted_outputs",
+          "line": 78,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_km_kernels.py",
+      "name": "test_kernel_matrix_cells_match_scikit_learn",
+      "line": 60,
+      "end": 71,
+      "baseline_ast_sha256": "ac77673610b0bb76f8a494009ac38436ece1348935ec3c3aca3e406b8650b45d",
+      "index": 3,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Original80x6/12-component Nystroem basis reconstruction is in nystroem_fixture; direct cosine/chi2/additive cells have independent references. Public basis shape/index/ownership checks remain.",
+      "native_modules": [
+        "checks/native_tests/kernel_methods_cells_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_nystroem_basis_public_shapes_and_owners",
+          "line": 56,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_decompositions.py",
+      "name": "test_qr_returns_numpys_r",
+      "line": 59,
+      "end": 74,
+      "baseline_ast_sha256": "9be2946481e2b1c86959a2196380cfc540468b21bac3c5e699d7f9fd4c8305a7",
+      "index": 4,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "QR triangular/Gram oracle moves to native QR cases; the renamed Python test keeps NumPy shape, dtype and input ownership.",
+      "native_modules": [
+        "checks/native_tests/linalg_numerical_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_qr_r_public_shape_and_dtype_match_numpy",
+          "line": 59,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_decompositions.py",
+      "name": "test_eigh_of_a_diagonal_matrix_is_that_diagonal_sorted",
+      "line": 121,
+      "end": 127,
+      "baseline_ast_sha256": "52535b337b616ce834cb468b9d094f939d0ba9088450e4d66515e0e42d42d358",
+      "index": 5,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Diagonal eigenvalue ordering is a direct native linalg fixture; this old numerical function is absent without a same-function rename.",
+      "native_modules": [
+        "checks/native_tests/linalg_numerical_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_the_three_doors_ship_in_the_linalg_family",
+          "line": 46,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_eigh_is_ascending_like_numpy_and_solves_its_own_equation",
+          "line": 74,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_eigh_reads_one_triangle_like_numpy",
+          "line": 93,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_svdvals_is_descending_like_numpy",
+          "line": 121,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_the_same_input_gives_the_same_bits",
+          "line": 134,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_decompositions.py",
+      "name": "test_svdvals_of_a_rank_deficient_matrix_ends_at_zero",
+      "line": 140,
+      "end": 147,
+      "baseline_ast_sha256": "bdb79085935fdcb97db2574239d03f8c9803e3a0dfe9a196863dce132c1e48ef",
+      "index": 6,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Rank-deficient singular-value ordering/null-tail is a direct native linalg fixture; this old numerical function is absent without a same-function rename.",
+      "native_modules": [
+        "checks/native_tests/linalg_numerical_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_the_three_doors_ship_in_the_linalg_family",
+          "line": 46,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_eigh_is_ascending_like_numpy_and_solves_its_own_equation",
+          "line": 74,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_eigh_reads_one_triangle_like_numpy",
+          "line": 93,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_svdvals_is_descending_like_numpy",
+          "line": 121,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_the_same_input_gives_the_same_bits",
+          "line": 134,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "name": "test_widening_is_the_shift_and_narrowing_is_rne",
+      "line": 52,
+      "end": 71,
+      "baseline_ast_sha256": "ff7f0927f9e82f24529939b4ea16dd9da69ab33c0c8fa2906d3872241b5519d7",
+      "index": 7,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Shift/RNE BF16 mathematical oracle is native; Python retains ndarray/raw-pointer shape/dtype conversion seams.",
+      "native_modules": [
+        "checks/native_tests/bf16_conversion_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_bf16_conversion_packs_expected_shapes_and_dtypes",
+          "line": 51,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "name": "test_matmul_bf16_matches_host_and_widened_fp32",
+      "line": 79,
+      "end": 96,
+      "baseline_ast_sha256": "db62544a8f718507d9a7320050dae77d5fe71b4cb43cbcfa88b630985511a201",
+      "index": 8,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native BF16 GEMM preserves shapes/transposes and independent arithmetic checks; public operand-form cases are consolidated in one Python test.",
+      "native_modules": [
+        "checks/native_tests/bf16_linalg_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_bf16_operand_forms_and_transpose_flags_pack_native_buffers",
+          "line": 76,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "name": "test_matmul_bf16_both_operands_bf16",
+      "line": 99,
+      "end": 108,
+      "baseline_ast_sha256": "273ac8c7c43deed2d8c1b49714241e5570816fe9ad81caa7f13901d5e7ce246c",
+      "index": 9,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Both-BF16 operand route is native; shares the consolidated public packing test with the former mixed-operand definition.",
+      "native_modules": [
+        "checks/native_tests/bf16_linalg_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_bf16_operand_forms_and_transpose_flags_pack_native_buffers",
+          "line": 76,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_linalg_lowbit.py",
+      "name": "test_matmul_int8_matches_host",
+      "line": 112,
+      "end": 144,
+      "baseline_ast_sha256": "0f17bd1f3025f547f2e8d542bbfef096a3fb7fb0472b4986ca23a7f6f1e10b72",
+      "index": 10,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native INT8 tests retain five shapes and input distribution, independently check quantizers, integer dots and scaling. Native generator replaces NumPy RNG; raw Python ABI/input forms remain.",
+      "native_modules": [
+        "checks/native_tests/int8_linalg_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_int8_input_forms_and_raw_bindings_pack_native_buffers",
+          "line": 97,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_logistic_multiclass_surface.py",
+      "name": "test_three_class_fit_shapes_and_argmax",
+      "line": 44,
+      "end": 67,
+      "baseline_ast_sha256": "cb16a2e1a8629ba5ad277295a7702e51d37363b9e426dd17eb850a5b61912126",
+      "index": 11,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native original600x4 three-class fixture covers softmax/first-argmax/accuracy; renamed Python function checks public layouts.",
+      "native_modules": [
+        "checks/native_tests/logistic_numeric_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_three_class_fit_public_layout",
+          "line": 32,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_lowbit_weights.py",
+      "name": "test_pack_unpack_are_exact_and_the_three_spellings_agree",
+      "line": 100,
+      "end": 135,
+      "baseline_ast_sha256": "084c23371f81442be30d3feee7ba12a710305a5ef649b2db85945d2cd30bcdd6",
+      "index": 12,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native BF16/INT8 pack/unpack math covers original40x32/32x24 shapes plus formerly unused special rows. Native RNG differs; container/repacking/ABI checks remain Python.",
+      "native_modules": [
+        "checks/native_tests/lowbit_weights_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_pack_unpack_preserves_containers_repacking_and_host_abi",
+          "line": 44,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_native_nonzero.py",
+      "name": "test_dense_scan_bytes_match_python_loop",
+      "line": 103,
+      "end": 113,
+      "baseline_ast_sha256": "c36212b6d3860e527295aca8515b89a692d0b375594c9d5e5eb2341e5d814c43",
+      "index": 13,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_replacement_with_separate_boundary_test",
+      "mapping_reason": "All8shapes x3seeds and native implementations remain; portable input generator replaces Python Random. Independent IEEE narrowing oracle. Python COO typed-buffer seam is separate.",
+      "native_modules": [
+        "checks/native_tests/nonzero_scan.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_dense_boundary_returns_native_typed_buffers",
+          "line": 17,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_native_nonzero.py",
+      "name": "test_every_planted_value_in_one_row",
+      "line": 116,
+      "end": 139,
+      "baseline_ast_sha256": "758cc74fc2525724e381a2d935875d18387b86df5c307f51281308986161e7bd",
+      "index": 14,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_replacement_with_separate_boundary_test",
+      "mapping_reason": "Native nonzero planted IEEE values preserve row-major order, NaN/Inf retention and zero/underflow distinctions. Python container seam remains separate.",
+      "native_modules": [
+        "checks/native_tests/nonzero_scan.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_dense_boundary_returns_native_typed_buffers",
+          "line": 17,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_native_nonzero.py",
+      "name": "test_ties_round_to_even_not_away",
+      "line": 142,
+      "end": 154,
+      "baseline_ast_sha256": "9803ab2d9f239a0e64d711644486efa81b0ccfe4b3747572c15be45a6de8bbd5",
+      "index": 15,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_replacement_with_separate_boundary_test",
+      "mapping_reason": "Native nonzero midpoint/RNE cases preserve tie parity and rounding semantics, with integer oracle independent of product cast.",
+      "native_modules": [
+        "checks/native_tests/nonzero_scan.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_dense_boundary_returns_native_typed_buffers",
+          "line": 17,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_native_nonzero.py",
+      "name": "test_all_zero_and_all_nonzero",
+      "line": 157,
+      "end": 161,
+      "baseline_ast_sha256": "0644ffacb18b0a346fd962580f038fe405de74717867da6d8da96aae4042f5fe",
+      "index": 16,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_replacement_with_separate_boundary_test",
+      "mapping_reason": "Native nonzero all-positivezero/negativezero/dense-one fixtures replace these pure value assertions.",
+      "native_modules": [
+        "checks/native_tests/nonzero_scan.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_dense_boundary_returns_native_typed_buffers",
+          "line": 17,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_neighbors_kde_native.py",
+      "name": "test_scores_equal_former_path",
+      "line": 83,
+      "end": 96,
+      "baseline_ast_sha256": "2427d65a3c23415cfe374e14c57dbaddabac65e64ee86acadde9474a8aaf8433",
+      "index": 17,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native KDE numerical/reference/ownership suites replace former-path equality and sign/scalar math.48 Python Array/scalar packing cases remain; not48 Python definitions removed.",
+      "native_modules": [
+        "checks/native_tests/kde_native_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_scores_public_array_and_scalar_boundary",
+          "line": 82,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_neighbors_loc_native.py",
+      "name": "test_lof_fit_and_fit_predict_match_former_path",
+      "line": 45,
+      "end": 53,
+      "baseline_ast_sha256": "952f1e8ce67c11898a5ac4e67f62c01020d46beb63863658f78d02644c797876",
+      "index": 18,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native actual LOF fit/predict graphs replace LegacyLocalOutlierFactor comparisons; public state/packing/refusal checks renamed.",
+      "native_modules": [
+        "checks/native_tests/lof_native_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_lof_fit_and_fit_predict_preserve_public_state",
+          "line": 44,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_neighbors_loc_native.py",
+      "name": "test_lof_novelty_methods_match_former_path",
+      "line": 57,
+      "end": 65,
+      "baseline_ast_sha256": "28057055b0c346491b33db76037740cb2fac65502086f26aedab97af65e8008b",
+      "index": 19,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native LOF novelty graphs replace legacy decision/predict comparisons; public returned arrays and refusal seam renamed.",
+      "native_modules": [
+        "checks/native_tests/lof_native_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_lof_novelty_methods_preserve_public_outputs",
+          "line": 63,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_oob_exact_sum.py",
+      "name": "test_oob_finite_sum_mean_bits",
+      "line": 19,
+      "end": 40,
+      "baseline_ast_sha256": "3eb46f5b6a8cd0b6020ec6f4b6a8407280f826d09a3951bd8ac5dc2efbd6467f",
+      "index": 20,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Ten native covered/uncovered OOB cases retain original cancellation/mean inputs with independent closed-form words. Python retains pointer-list ABI/result-write/owner seam.",
+      "native_modules": [
+        "checks/native_tests/oob_exact_sum_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_oob_pointer_list_abi_writes_results_and_preserves_inputs",
+          "line": 16,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_optimizer.py",
+      "name": "test_session_step_equals_sequential_fit",
+      "line": 118,
+      "end": 125,
+      "baseline_ast_sha256": "e7904ffa78ce445187d19dfe29e396e1c32cbd6a600bf5119e9aff3527acfbd0",
+      "index": 21,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native OpsSession optimizer MLP configurations retain dimensions/epochs/options and add independent equations. Dyadic inputs replace NumPy RNG; public options/output publication remains.",
+      "native_modules": [
+        "checks/native_tests/ops_optimizer_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_optimizer_options_and_output_publication",
+          "line": 55,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_optimizer.py",
+      "name": "test_learning_rate_schedule",
+      "line": 132,
+      "end": 141,
+      "baseline_ast_sha256": "e88c8cae723f8cf795d0cee69f479763f15f7fb72a1a5690261008b0304fbcd7",
+      "index": 22,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native literal five-rate schedule replaces value comparison; Python returned scalar type remains.",
+      "native_modules": [
+        "checks/native_tests/ops_optimizer_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_learning_rate_python_scalar",
+          "line": 71,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_optimizer.py",
+      "name": "test_optimizer_state_save_and_load",
+      "line": 153,
+      "end": 187,
+      "baseline_ast_sha256": "dc109282aeb6664edb6812098d60101bfed55ab9406b1df4be468b0469dd4d47",
+      "index": 23,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native SavedParameter checkpoint/storage independence replaces training numerical parity; Python checkpoint dict/schema/owner boundary remains.",
+      "native_modules": [
+        "checks/native_tests/ops_optimizer_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_optimizer_checkpoint_dict_and_owner_boundary",
+          "line": 80,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_optimizer.py",
+      "name": "test_zero_grad_then_accumulate_equals_backward",
+      "line": 190,
+      "end": 204,
+      "baseline_ast_sha256": "3da4e3d2fa5461e6290fd3dd7f2adde21ccf806d0658c62505f3d2e2d0cb6248",
+      "index": 24,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native zero-grad/accumulation/analytic MSE gradient and refusal state cover math; Python public result/refusal remains.",
+      "native_modules": [
+        "checks/native_tests/ops_optimizer_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_zero_grad_public_result_and_refusal",
+          "line": 115,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_views",
+      "line": 86,
+      "end": 93,
+      "baseline_ast_sha256": "792b040fc2382633505e49bb2211e901ab0ca312e42c522c706c66e54b067016",
+      "index": 25,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native views exercise layouts/index coordinates; Python shape/dtype and view method packaging remain.",
+      "native_modules": [
+        "checks/native_tests/rankn_views_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_view_methods_pack_expected_shapes_and_dtypes",
+          "line": 63,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_reductions",
+      "line": 123,
+      "end": 132,
+      "baseline_ast_sha256": "f21c247fcb25d946c4d241004084f9f331797c4f7782304f8aaed687128e2ccc",
+      "index": 26,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native reductions exercise arithmetic; Python result shapes/dtypes remain.",
+      "native_modules": [
+        "checks/native_tests/rankn_views_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_reduction_methods_pack_expected_shapes_and_dtypes",
+          "line": 100,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_max_nan_wins_and_gradient_takes_the_first_maximum",
+      "line": 135,
+      "end": 146,
+      "baseline_ast_sha256": "1dbdfc705970c278cddb73dc636608e8696e59272580016d7d489ca23e3c1c0f",
+      "index": 27,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native NaN maximum/first-max gradient checks retain the convention; public result/gradient buffers remain.",
+      "native_modules": [
+        "checks/native_tests/rankn_views_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_maximum_and_gradient_pack_native_buffers",
+          "line": 106,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_broadcasting_and_its_gradients",
+      "line": 166,
+      "end": 177,
+      "baseline_ast_sha256": "f784f51a66b0dfe2936576a561bf01d7cda7a8e57a7ce07b544c657001a5ff55",
+      "index": 28,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native broadcast and derivative oracles retain shapes/operations/tolerances; Python result/gradient buffer packing remains.",
+      "native_modules": [
+        "checks/native_tests/rankn_math_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_broadcast_and_gradient_buffers_pack_expected_shapes",
+          "line": 137,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_batched_matmul_and_attention",
+      "line": 198,
+      "end": 214,
+      "baseline_ast_sha256": "df4708af90e2533067757be0227f63df6813af2608aa237fcf5177899f667853",
+      "index": 29,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native attention graph retains Q(2,3,5,4)/K(2,3,7,4)/W(4,6), equations and tolerances; deterministic data replaces NumPy RNG. Public shapes/gradient arrays remain.",
+      "native_modules": [
+        "checks/native_tests/rankn_graph_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_attention_graph_packs_public_value_and_gradient_buffers",
+          "line": 164,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_concat_split_take",
+      "line": 238,
+      "end": 254,
+      "baseline_ast_sha256": "503588f20d231bf8ad1f700fbb8c1c6ed59e8f39fb8d57625242d717bb2f2275",
+      "index": 30,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native concat/split/take graph retains repeated indices and scatter gradients; Python split tuple/index admission/owners remain.",
+      "native_modules": [
+        "checks/native_tests/rankn_graph_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_layout_methods_pack_split_tuple_and_gradient_buffers",
+          "line": 193,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_softmax_along_an_axis",
+      "line": 265,
+      "end": 274,
+      "baseline_ast_sha256": "4163b36486a0dc864ba8158be717641b18ad55eea518fc254d8bd0ea9af227ff",
+      "index": 31,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native axis softmax independent oracle replaces NumPy arithmetic; Python axis routing/default/packing remains.",
+      "native_modules": [
+        "checks/native_tests/rankn_math_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_axis_softmax_methods_route_axes_and_pack_buffers",
+          "line": 203,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_conv2d_and_pools",
+      "line": 330,
+      "end": 338,
+      "baseline_ast_sha256": "b01cd6c30f2c3bccb0f6d85a8edbe917a0789bf11fcfe110ed894c16b4c1c1fb",
+      "index": 32,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native convolution/pool dimensions/operators/tolerances remain; deterministic data replaces NumPy RNG. Public result/gradient packing remains.",
+      "native_modules": [
+        "checks/native_tests/rankn_conv_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_conv_pool_methods_pack_public_value_and_gradient_buffers",
+          "line": 244,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "name": "test_conv2d_gradient_by_finite_differences",
+      "line": 341,
+      "end": 360,
+      "baseline_ast_sha256": "e794d38e9a1a9062100e17c2d1f9fb7b92b90e6a73f52f9b9a699f7021c45d0b",
+      "index": 33,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native three selected weight finite-difference probes retain shapes/h1e-3/tolerance; Python weight-only gradient routing sentinel remains.",
+      "native_modules": [
+        "checks/native_tests/rankn_conv_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_convolution_weight_only_gradient_buffer",
+          "line": 253,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "name": "test_binary_operation_matches_numpy",
+      "line": 57,
+      "end": 60,
+      "baseline_ast_sha256": "82db0b40e9bc5a98ad6897cb4f1dc47ff57dfdceeea964c407c5799b7e9ae906",
+      "index": 34,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native OpsSession binary operation equations replace full NumPy oracle; Python method/buffer routing remains.",
+      "native_modules": [
+        "checks/native_tests/ops_session_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_binary_method_routes_and_packs_numpy_buffer",
+          "line": 65,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "name": "test_unary_operation_matches_numpy",
+      "line": 64,
+      "end": 67,
+      "baseline_ast_sha256": "94a0d244d2212d291a0dbf9e8674be12e8ae132f9629b776915b7db2058d20b9",
+      "index": 35,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native OpsSession unary literals/equations replace NumPy oracle; Python method/buffer routing remains.",
+      "native_modules": [
+        "checks/native_tests/ops_session_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_unary_method_routes_and_packs_numpy_buffer",
+          "line": 73,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "name": "test_losses_match_numpy_and_honor_reduction",
+      "line": 70,
+      "end": 82,
+      "baseline_ast_sha256": "5bdc431d62ffced699c4f0277ec2d1393e98437a7b24ef49c6b5f37ca96dfbc9",
+      "index": 36,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native MAE/Huber/BCE reductions retain independent formulas/tolerances; Python keyword/result packing remains.",
+      "native_modules": [
+        "checks/native_tests/ops_session_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_loss_keyword_admission_and_result_packing",
+          "line": 81,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "name": "test_metrics_permutation_scalar_and_pooling_match_numpy",
+      "line": 85,
+      "end": 99,
+      "baseline_ast_sha256": "35b30a131b56270da41302f574b57b26a99a82b1c85a56393f072fe514fceefd",
+      "index": 37,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native accuracy/AUC/log-loss/permutation/pool/scalar numerical expectations; Python scalar/Array/result packing remains.",
+      "native_modules": [
+        "checks/native_tests/ops_session_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_metric_scalar_permutation_and_pooling_result_packing",
+          "line": 94,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "name": "test_scheduler_step_advances_learning_rate_and_profile_text",
+      "line": 102,
+      "end": 109,
+      "baseline_ast_sha256": "50d021949bcaf08370dd36b946d3b2ee5ecb971543ce428baa1de26e69da22b8",
+      "index": 38,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native schedule initial/advanced rates replace math; Python optimizer/profile result types remain.",
+      "native_modules": [
+        "checks/native_tests/ops_session_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_optimizer_and_profile_python_result_types",
+          "line": 109,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_lifecycle.py",
+      "name": "test_native_close_entry_called_once_with_exact_handle",
+      "line": 23,
+      "end": 38,
+      "baseline_ast_sha256": "c1745e5e03d2ef57b8de7831a2df1241e59c2af61d40d4d0e5bede63ab7c4104",
+      "index": 39,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "boundary_redesign_or_rename",
+      "mapping_reason": "Python fake SimpleNamespace/builtin close observer is replaced by real native-owner finalization/retained-buffer coverage. Native owner fixtures separately observe exact handle/once-only close. This is boundary redesign, not a numerical-test deletion.",
+      "native_modules": [
+        "checks/native_tests/optimizer_owner_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_real_native_owner_finalization_is_idempotent_and_keeps_public_buffers",
+          "line": 31,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_lifecycle.py",
+      "name": "test_python_close_callback_is_refused_without_invocation",
+      "line": 41,
+      "end": 54,
+      "baseline_ast_sha256": "db778c3e69f99c0e45c8e1457763d7b38939910a6343f33455c0b1d0cd0e5716",
+      "index": 40,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "boundary_redesign_or_rename",
+      "mapping_reason": "Unsupported Python close callback case is replaced by factory callback refusal with owner/state cleanup preserved. Native lifecycle cases retain exact closure semantics.",
+      "native_modules": [
+        "checks/native_tests/optimizer_owner_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_factory_callback_refusal_preserves_state_and_retained_owner_cleanup",
+          "line": 56,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_lifecycle.py",
+      "name": "test_real_resident_resource_is_released_by_native_finalizer",
+      "line": 57,
+      "end": 76,
+      "baseline_ast_sha256": "c4d2b3d908e481f23b9d4cbd0c7cc7e3205e20aa7c1b52472df9b16d5b2f544d",
+      "index": 41,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "boundary_redesign_or_rename",
+      "mapping_reason": "Real close/release behavior is retained in the renamed real-owner Python test and native actual-resource owner fixtures; new pending-exception test is additional coverage, not a one-to-one rename.",
+      "native_modules": [
+        "checks/native_tests/optimizer_owner_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_real_native_owner_finalization_is_idempotent_and_keeps_public_buffers",
+          "line": 31,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_parallel_finite_scan.py",
+      "name": "test_nonfinite_refused_at_every_position",
+      "line": 52,
+      "end": 58,
+      "baseline_ast_sha256": "fd9c0c123b2af6fc5a9b7b14e807ef20e71294bc8e8ba0545c539821bd45e85b",
+      "index": 42,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native finite-scan retains4096x64, six word positions,3nonfinite values and4layouts. Python keeps each estimator/layout admission at one representative position; native scan is not claimed to execute each estimator.",
+      "native_modules": [
+        "checks/native_tests/finite_scan.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_fit_refuses_nonfinite_admitted_layout",
+          "line": 51,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_parallel_finite_scan.py",
+      "name": "test_nonfinite_refused_at_predict",
+      "line": 62,
+      "end": 69,
+      "baseline_ast_sha256": "f9baf3e15a0c956cc4bdfe3af365d4915d796c2ed3e840e9b11c42654e803ece",
+      "index": 43,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Same native position sweep plus retained KMeans/PCA Python query/layout refusal seam; avoids repeating every scanner position through every public estimator.",
+      "native_modules": [
+        "checks/native_tests/finite_scan.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_query_refuses_nonfinite_admitted_layout",
+          "line": 61,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_exact_native_owner.py",
+      "name": "test_randomized_rank_deficiency_preserves_zero_padding",
+      "line": 349,
+      "end": 360,
+      "baseline_ast_sha256": "360d4599eb38a33a8c2e4c2de41c2f48a239c19df4aa69ff378b7357d521c3a2",
+      "index": 44,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native randomized PCA rank-deficient fit/query/inverse coverage; public requested-array shape/dtype/native-call ownership test remains renamed.",
+      "native_modules": [
+        "checks/native_tests/pca_native_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_randomized_rank_deficient_owner_publishes_requested_arrays",
+          "line": 349,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_full_surface.py",
+      "name": "test_full_remote_small_reference_and_identical_repeat",
+      "line": 34,
+      "end": 53,
+      "baseline_ast_sha256": "765aa72bac14a13e71193dd18083453f03290e93afc6c4ce4c49cc8bb457f02b",
+      "index": 45,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native PCA inverse reconstruction moves; NumPy singular/variance external oracle and input ownership remain under renamed Python test.",
+      "native_modules": [
+        "checks/native_tests/pca_native_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_full_remote_small_reference_and_input_ownership",
+          "line": 34,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_whitening_surface.py",
+      "name": "test_remote_planted_zero_scale_and_round_trip",
+      "line": 70,
+      "end": 87,
+      "baseline_ast_sha256": "ff0cbf16a7f609f72ea81356386be7a76e285952719cacd57b64304719bbcd89",
+      "index": 46,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Native literal zero-singular whitening/inverse state replaces mathematical checks; existing Python zero-singular admission and fitted-state/layout refusals remain.",
+      "native_modules": [
+        "checks/native_tests/pca_whitening_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_invalid_whitening_state_refused_by_the_native_call",
+          "line": 20,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_whitening_state_layout_refused_before_the_kernel",
+          "line": 31,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_zero_singular_values_are_admitted",
+          "line": 39,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_nonfinite_input_refused",
+          "line": 47,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_whitening_surface.py",
+      "name": "test_remote_fit_unit_variance_and_inverse",
+      "line": 90,
+      "end": 101,
+      "baseline_ast_sha256": "0d422dff9d626b057dfc1e7bb0c6aec0b75d85c9e3d250e0ce5e1ce28db772f5",
+      "index": 47,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Native original8x2 fit/unit sample variance/inverse fixture preserves2e-5 bounds and borrowed state/input guards; separate public admission checks remain.",
+      "native_modules": [
+        "checks/native_tests/pca_whitening_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_invalid_whitening_state_refused_by_the_native_call",
+          "line": 20,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_whitening_state_layout_refused_before_the_kernel",
+          "line": 31,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_zero_singular_values_are_admitted",
+          "line": 39,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_nonfinite_input_refused",
+          "line": 47,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_whitening_surface.py",
+      "name": "test_remote_strict_skip_threshold",
+      "line": 104,
+      "end": 118,
+      "baseline_ast_sha256": "46c289329183a38aef58c2053e0c9dbf9ed85a0f1badf7526a3f7faf06816cf3",
+      "index": 48,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Native exact threshold/next-below Float32 whitening states replace strict skip-threshold numerical checks; public state admission is separate.",
+      "native_modules": [
+        "checks/native_tests/pca_whitening_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_invalid_whitening_state_refused_by_the_native_call",
+          "line": 20,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_whitening_state_layout_refused_before_the_kernel",
+          "line": 31,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_zero_singular_values_are_admitted",
+          "line": 39,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_nonfinite_input_refused",
+          "line": 47,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_svc_probability.py",
+      "name": "test_shuffle_is_a_seeded_permutation",
+      "line": 38,
+      "end": 42,
+      "baseline_ast_sha256": "7054e9916b034e876c12426c250945094e7c607393af8754db8b8b76782113a8",
+      "index": 49,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Native seeded50-element shuffle permutation case; original public SVC probability settings/refusals/external sklearn tests remain.",
+      "native_modules": [
+        "checks/native_tests/svc_probability_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_random_state_needs_probability",
+          "line": 38,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_predict_proba_needs_probability",
+          "line": 46,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_probabilities_agree_with_sklearn_and_repeat",
+          "line": 59,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_save_load_keeps_probability_bits",
+          "line": 75,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_svc_probability.py",
+      "name": "test_sigmoid_train_separates_and_orients",
+      "line": 45,
+      "end": 50,
+      "baseline_ast_sha256": "ac55443af6ee6602ba1abe3b05c45a5b8a907570fbccdb75eb50efde64b2c01f",
+      "index": 50,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Native eight decision/label Platt-fit orientation case; public SVC sklearn comparison remains.",
+      "native_modules": [
+        "checks/native_tests/svc_probability_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_random_state_needs_probability",
+          "line": 38,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_predict_proba_needs_probability",
+          "line": 46,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_probabilities_agree_with_sklearn_and_repeat",
+          "line": 59,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_save_load_keeps_probability_bits",
+          "line": 75,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_svc_probability.py",
+      "name": "test_coupling_is_a_distribution",
+      "line": 53,
+      "end": 56,
+      "baseline_ast_sha256": "105c76d5e3f404f1d6af1baf6031dcd637941f0087fff67778d6c5a4649741f3",
+      "index": 51,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Native three-class coupling distribution/orientation case; public probability array/classifier seams remain.",
+      "native_modules": [
+        "checks/native_tests/svc_probability_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_random_state_needs_probability",
+          "line": 38,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_predict_proba_needs_probability",
+          "line": 46,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_probabilities_agree_with_sklearn_and_repeat",
+          "line": 59,
+          "relation": "retained family boundary/external oracle; not a rename"
+        },
+        {
+          "name": "test_save_load_keeps_probability_bits",
+          "line": 75,
+          "relation": "retained family boundary/external oracle; not a rename"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "name": "test_arima_resident_matches_per_call_and_lifetime",
+      "line": 39,
+      "end": 61,
+      "baseline_ast_sha256": "7b6c098c99bb39d5b07801ba177cc8ef087e985650b314a75ab6fc2dc63c650b",
+      "index": 52,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native ARIMA fit settings batch3,n80,order111,maxiter5,horizons6/9,predict10:90 preserved; native dyadic RNG replaces NumPy. Public outputs/owner lifetime retained.",
+      "native_modules": [
+        "checks/native_tests/arima_state_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_arima_resident_public_outputs_and_lifetime",
+          "line": 24,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "name": "test_arima_exog_resident_matches_per_call",
+      "line": 64,
+      "end": 73,
+      "baseline_ast_sha256": "9539cba342728e5f71b14721a48384bf541d6dd4926bd96771667984294eac0b",
+      "index": 53,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native ARIMA exogenous batch2,n64,order100,oneexog,maxiter5 preserves state/query routes; deterministic input substitution documented. Public exog output/owners retained.",
+      "native_modules": [
+        "checks/native_tests/arima_state_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_arima_exog_resident_public_output_and_owners",
+          "line": 55,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "name": "test_holtwinters_resident_one_call_matches_per_call",
+      "line": 76,
+      "end": 92,
+      "baseline_ast_sha256": "a821b356e7f4ab57b77bfc15496cd5dfc685678fae9cbc2b0da736fc00465ed5",
+      "index": 54,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native HoltWinters state/query fixtures replace per-call/resident numeric parity; Python result/lifetime remains.",
+      "native_modules": [
+        "checks/native_tests/holtwinters_state_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_holtwinters_resident_public_outputs_and_lifetime",
+          "line": 76,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "name": "test_theta_new_horizon_runs_the_forecast_tail",
+      "line": 95,
+      "end": 105,
+      "baseline_ast_sha256": "57fa3862bcd1ad6278770a195aeeb3bc1b12bdc017527e32467f7b2281a97fec",
+      "index": 55,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native Theta changed-horizon/forecast-tail state coverage; Python horizon publication/cache owners retained.",
+      "native_modules": [
+        "checks/native_tests/theta_state_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_theta_changed_horizon_publication_and_cache_owners",
+          "line": 96,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "name": "test_prophet_predict_repeats_bits",
+      "line": 108,
+      "end": 115,
+      "baseline_ast_sha256": "d48162dd6c8645b79cf284533ecc86af812d688df684320edd9da617fab09299",
+      "index": 56,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native Prophet original120-observation fit/settings and independent supplied-state queries; Python result/trend ownership remains. Existing repeat comparisons are not release identity evidence.",
+      "native_modules": [
+        "checks/native_tests/prophet_state_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_prophet_prediction_publishes_distinct_result_and_trend_owners",
+          "line": 120,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "name": "test_adafactor_against_torch_rule",
+      "line": 70,
+      "end": 100,
+      "baseline_ast_sha256": "96e263567913672f97999c5f8ff44a73766c2dbbf6270a8d064a11b8287785a3",
+      "index": 57,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native Adafactor5x4/vector3,sixsteps,original options/tolerances; deterministic data replaces RNG. Python matrix/vector publication retained.",
+      "native_modules": [
+        "checks/native_tests/adafactor_cases.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_adafactor_matrix_and_vector_publication",
+          "line": 40,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": [
+        "Native fixture input generator differs from original Python RNG; this mapping does not claim exact input bytes. Original shapes/settings/tolerances are documented in the native sources/handoffs."
+      ]
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_sched.py",
+      "name": "test_closed_forms",
+      "line": 25,
+      "end": 32,
+      "baseline_ast_sha256": "52febb1ce7e35cdb72bc8ad99ecef0356e0d0ef33e39a6dc30c0787e119d7408",
+      "index": 58,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "native_numerical_split_and_boundary_rename",
+      "mapping_reason": "Native40-step schedules preserve configurations, closed forms and relative bounds; Python scalar/array result/admission retained.",
+      "native_modules": [
+        "checks/native_tests/lr_schedule_check.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_schedule_public_scalar_and_array_results",
+          "line": 14,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    },
+    {
+      "path": "python/mojolearn/tests/test_xseq_native_provider.py",
+      "name": "test_recurrent_builtin_schedule_does_not_call_packed_schedule_entries",
+      "line": 78,
+      "end": 99,
+      "baseline_ast_sha256": "89934857748cf754616fa0eaf2b5240fc17f22b538bc02e928da8586a8e12f53",
+      "index": 59,
+      "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
+      "classification": "boundary_redesign_or_rename",
+      "mapping_reason": "Only stale schedule_entries dictionary poisoning is removed; packed-engine poisoning and public scheduler/RNN native-call audit remain renamed. Native schedule math was already covered separately.",
+      "native_modules": [
+        "checks/native_tests/lr_schedule_check.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_recurrent_builtin_schedule_stays_native_with_packed_entries_poisoned",
+          "line": 78,
+          "relation": "preserved/rewritten boundary portion or separate boundary replacement"
+        }
+      ],
+      "uncertainties": []
+    }
+  ],
+  "native_source_anchors": {
+    "checks/native_tests/adafactor_cases.mojo": {
+      "sha256": "f0253e7051032a8264c09c80fd45285f4a26fb465dd8fa3937c9c65a3c8d8b67",
+      "anchor": "checks/native_tests/adafactor_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "af_expected",
+          "line": 48
+        },
+        {
+          "name": "af_check",
+          "line": 120
+        },
+        {
+          "name": "run_adafactor_fixture",
+          "line": 127
+        }
+      ]
+    },
+    "checks/native_tests/arima_state_cases.mojo": {
+      "sha256": "e89306c81fccf939833df3520ac9e1947558b39774e74688b5d634bf7c315a54",
+      "anchor": "checks/native_tests/arima_state_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "check_closed_form",
+          "line": 190
+        }
+      ]
+    },
+    "checks/native_tests/bf16_conversion_cases.mojo": {
+      "sha256": "8a0e3f372ed478ec8ea73dad71ce6ba3b1aa8e528ecb56aa7fade538abb3f5d7",
+      "anchor": "checks/native_tests/bf16_conversion_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "expected_narrow",
+          "line": 41
+        },
+        {
+          "name": "expected_widen",
+          "line": 58
+        }
+      ]
+    },
+    "checks/native_tests/bf16_linalg_cases.mojo": {
+      "sha256": "b2ace9b2fe5b645a71a05042a97cef2313bd0ffc71bc3f3db69231513ed180ae",
+      "anchor": "checks/native_tests/bf16_linalg_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "fixture_shape",
+          "line": 25
+        },
+        {
+          "name": "check_words",
+          "line": 75
+        },
+        {
+          "name": "fixture_operands",
+          "line": 117
+        }
+      ]
+    },
+    "checks/native_tests/finite_scan.mojo": {
+      "sha256": "f5da7104692490a4215725b3f274caf38ed659160ff525322225b22a961aee67",
+      "anchor": "checks/native_tests/finite_scan.mojo:1",
+      "review_symbols": []
+    },
+    "checks/native_tests/holtwinters_state_cases.mojo": {
+      "sha256": "a3f148749c4a91af5b59eb7fe9b501a707c9909caeab41963f6d9b2511c6af6d",
+      "anchor": "checks/native_tests/holtwinters_state_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "hw_expected",
+          "line": 69
+        },
+        {
+          "name": "hw_check",
+          "line": 106
+        }
+      ]
+    },
+    "checks/native_tests/int8_linalg_cases.mojo": {
+      "sha256": "47e909e4e8927c60052d2542b4805d8ca1918ac9669bbb83e6a18b285dbed005",
+      "anchor": "checks/native_tests/int8_linalg_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "fixture_shape",
+          "line": 20
+        },
+        {
+          "name": "expected_quantized",
+          "line": 55
+        },
+        {
+          "name": "check_quantized",
+          "line": 85
+        },
+        {
+          "name": "check_product",
+          "line": 108
+        },
+        {
+          "name": "check_dequantized",
+          "line": 141
+        }
+      ]
+    },
+    "checks/native_tests/kde_native_cases.mojo": {
+      "sha256": "28a8c9b065e2e0834593d141f1601f4f58cab5c94ec2f5f19d055b00c7e5dc4e",
+      "anchor": "checks/native_tests/kde_native_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "fixture",
+          "line": 112
+        }
+      ]
+    },
+    "checks/native_tests/kernel_methods_cells_cases.mojo": {
+      "sha256": "4e594d2076926012e637600a8972791d4d4c1b5efd90d397edaecad01cc55d0b",
+      "anchor": "checks/native_tests/kernel_methods_cells_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "check_cells",
+          "line": 65
+        },
+        {
+          "name": "cell_fixture",
+          "line": 85
+        },
+        {
+          "name": "empty_fixture",
+          "line": 118
+        },
+        {
+          "name": "nystroem_fixture",
+          "line": 129
+        },
+        {
+          "name": "negative_minimum_fixture",
+          "line": 168
+        },
+        {
+          "name": "fixture",
+          "line": 187
+        }
+      ]
+    },
+    "checks/native_tests/linalg_numerical_cases.mojo": {
+      "sha256": "3b56a1dad3094f0adfee007b61605c88ad6eb113e813fcb38fc0d4cf596ed1cc",
+      "anchor": "checks/native_tests/linalg_numerical_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "qr_expectations",
+          "line": 83
+        },
+        {
+          "name": "singular_expectations",
+          "line": 107
+        },
+        {
+          "name": "fixture",
+          "line": 129
+        }
+      ]
+    },
+    "checks/native_tests/linear_owner_cases.mojo": {
+      "sha256": "44899502734430fbee0cf5e42a4a1aeae08fc61dbb63742346d0d3a96e663047",
+      "anchor": "checks/native_tests/linear_owner_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "_fit_fixture",
+          "line": 172
+        },
+        {
+          "name": "_score_fixture",
+          "line": 307
+        },
+        {
+          "name": "run_linear_fixture",
+          "line": 340
+        }
+      ]
+    },
+    "checks/native_tests/lof_native_cases.mojo": {
+      "sha256": "82919f4e22b2f63446b9c1609f4b29d48e8f78a211f036188092a2e0e564aef4",
+      "anchor": "checks/native_tests/lof_native_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "original_case",
+          "line": 103
+        },
+        {
+          "name": "analytic_case",
+          "line": 163
+        },
+        {
+          "name": "finite_case",
+          "line": 203
+        },
+        {
+          "name": "fixture",
+          "line": 216
+        }
+      ]
+    },
+    "checks/native_tests/logistic_numeric_cases.mojo": {
+      "sha256": "fe04d28be94e797b9f8f834ecd9191167391a330f6536d04a931f16125737f8a",
+      "anchor": "checks/native_tests/logistic_numeric_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "fixture",
+          "line": 46
+        }
+      ]
+    },
+    "checks/native_tests/lowbit_weights_cases.mojo": {
+      "sha256": "5b1a7964c9551bb93f279dbb8f75334fa6ce8b964aea4ee41f6a4aabb88e7deb",
+      "anchor": "checks/native_tests/lowbit_weights_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "check_bf16",
+          "line": 53
+        }
+      ]
+    },
+    "checks/native_tests/lr_schedule_check.mojo": {
+      "sha256": "3ed247afe51fe5a6eea7816eea0653c560e0591c64e121fbf8ba017d91119f89",
+      "anchor": "checks/native_tests/lr_schedule_check.mojo:1",
+      "review_symbols": [
+        {
+          "name": "closed_form",
+          "line": 37
+        },
+        {
+          "name": "numerical_fixture",
+          "line": 68
+        },
+        {
+          "name": "boundary_fixture",
+          "line": 101
+        },
+        {
+          "name": "literal_fixture",
+          "line": 123
+        },
+        {
+          "name": "optimizer_rate_fixture",
+          "line": 140
+        }
+      ]
+    },
+    "checks/native_tests/nonzero_scan.mojo": {
+      "sha256": "bd8ddf796350df878eec5cc20b8fbc1b271785643c82c415c43b2ad2dfb702f4",
+      "anchor": "checks/native_tests/nonzero_scan.mojo:1",
+      "review_symbols": [
+        {
+          "name": "_fixture",
+          "line": 89
+        },
+        {
+          "name": "_check",
+          "line": 133
+        }
+      ]
+    },
+    "checks/native_tests/oob_exact_sum_cases.mojo": {
+      "sha256": "be163915d21856d100c8e958005f7f500155b30a2f0f5234954bb3876a3e2063",
+      "anchor": "checks/native_tests/oob_exact_sum_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "run_oob_fixture",
+          "line": 21
+        }
+      ]
+    },
+    "checks/native_tests/ops_optimizer_cases.mojo": {
+      "sha256": "5f5ce488535c2fb062c0f54acc8f9d937f91e4990b5a04bc881deb7382e4005d",
+      "anchor": "checks/native_tests/ops_optimizer_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "_check_parameters",
+          "line": 77
+        },
+        {
+          "name": "_check_state",
+          "line": 84
+        },
+        {
+          "name": "run_ops_optimizer_fixture",
+          "line": 324
+        }
+      ]
+    },
+    "checks/native_tests/ops_session_cases.mojo": {
+      "sha256": "32d53919bd15751da3b0d695f19fe25b77aaeb11fef56968e9fa2bcd26f339ec",
+      "anchor": "checks/native_tests/ops_session_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "_check_tensor",
+          "line": 45
+        },
+        {
+          "name": "run_ops_session_fixture",
+          "line": 199
+        }
+      ]
+    },
+    "checks/native_tests/optimizer_owner_cases.mojo": {
+      "sha256": "1c99afbc2dbd2e44132ebe661655086d6be1dec3d2f6ccd07de3e14b3e5e05f5",
+      "anchor": "checks/native_tests/optimizer_owner_cases.mojo:1",
+      "review_symbols": []
+    },
+    "checks/native_tests/pca_native_cases.mojo": {
+      "sha256": "96a9c706fe0924dd3e3bcfd544a94013cc729706708be1dc52d6f8998638d024",
+      "anchor": "checks/native_tests/pca_native_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "check_guards",
+          "line": 117
+        },
+        {
+          "name": "fitted_fixture",
+          "line": 218
+        },
+        {
+          "name": "fixture",
+          "line": 342
+        }
+      ]
+    },
+    "checks/native_tests/pca_whitening_cases.mojo": {
+      "sha256": "c886468d1ebee30e34831b02eaaee34d7787707e5f5530a148266237278a538e",
+      "anchor": "checks/native_tests/pca_whitening_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "fitted_expectations",
+          "line": 52
+        },
+        {
+          "name": "fixture",
+          "line": 85
+        }
+      ]
+    },
+    "checks/native_tests/prophet_state_cases.mojo": {
+      "sha256": "c0b6549d1e76af0d88e1b38ef6c676542739b9d21c314d630ed66b964c618fcb",
+      "anchor": "checks/native_tests/prophet_state_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "check_equations",
+          "line": 201
+        }
+      ]
+    },
+    "checks/native_tests/rankn_conv_cases.mojo": {
+      "sha256": "f63460159385484e0984dacd5921863e64e55885f18d31e6e38253946a1621c5",
+      "anchor": "checks/native_tests/rankn_conv_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "run_rankn_conv_fixture",
+          "line": 232
+        }
+      ]
+    },
+    "checks/native_tests/rankn_graph_cases.mojo": {
+      "sha256": "704bc762c8dcbe156c163fdeba9a14caa6deaf7d2f39ab782535effb1750cbed",
+      "anchor": "checks/native_tests/rankn_graph_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "run_rankn_graph_fixture",
+          "line": 245
+        }
+      ]
+    },
+    "checks/native_tests/rankn_math_cases.mojo": {
+      "sha256": "acbcba07eb3c7fd71515ff5f543c700539c1f10704467fe8cb5e84d81d92c139",
+      "anchor": "checks/native_tests/rankn_math_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "run_rankn_math_fixture",
+          "line": 150
+        }
+      ]
+    },
+    "checks/native_tests/rankn_views_cases.mojo": {
+      "sha256": "3e3650e748b2c060df012b55ae24133ad7c07ff048341415bcbdb083a82a301d",
+      "anchor": "checks/native_tests/rankn_views_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "run_rankn_view_fixture",
+          "line": 200
+        }
+      ]
+    },
+    "checks/native_tests/svc_probability_cases.mojo": {
+      "sha256": "f601774bcd95ea860499051ec57354903d527b72c8cce1c64dfdd816a9bfae1b",
+      "anchor": "checks/native_tests/svc_probability_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "shuffle_fixture",
+          "line": 49
+        },
+        {
+          "name": "platt_fixture",
+          "line": 92
+        },
+        {
+          "name": "coupling_fixture",
+          "line": 115
+        },
+        {
+          "name": "fixture",
+          "line": 137
+        }
+      ]
+    },
+    "checks/native_tests/theta_state_cases.mojo": {
+      "sha256": "d7702a7c7138d2cd6af799a4026dd4709a61bc874f333e3f1c57df04af78c9ba",
+      "anchor": "checks/native_tests/theta_state_cases.mojo:1",
+      "review_symbols": [
+        {
+          "name": "expected_forecast",
+          "line": 60
+        },
+        {
+          "name": "run_theta_state_fixture",
+          "line": 82
+        }
+      ]
+    }
+  },
+  "issues": [],
+  "retired_source_check_definitions_identified": 0,
+  "limits": [
+    "A renamed or split mixed function is not a fully deleted numerical definition.",
+    "Native fixture counts and pytest parametrization are not Python definition removal counts.",
+    "No predicate-level all-project audit or runtime acceptance inferred from this mapping.",
+    "Independent owner/release compiler blocks elsewhere are not hidden; DBSCANstate28 remains separately recorded and no old DBSCAN definition is among these60.",
+    "Initial historical live-tree4129 count is preserved separately; this immutable baseline contains4131test_ definitions."
+  ],
+  "evidence": [
+    "E/pca-native-tests/migration-inventory/removed60-source-excerpts.json",
+    "E/pca-native-tests/migration-inventory/removed60-native-source-objects.json",
+    "E/pca-native-tests/migration-inventory/next-source-deltas.json"
+  ]
+}
