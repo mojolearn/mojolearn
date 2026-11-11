@@ -23,16 +23,33 @@ boundary helper instead of introducing another admission implementation.
 
 Five Python boundary definitions / 26 cases cover fit scalars, rebound query
 dimensions, builtin parse-error text and partial publication, ndarray subclass
-hook refusal, and invalid-algorithm native repr. These cases inspect the Python
+hook refusal, and invalid-algorithm native diagnostics. These cases inspect the Python
 API seam; numerical oracles remain the native test lane's responsibility.
 The Python source parses and `git diff --check` passes; no case was executed.
+
+A second source finding concerns error formatting: admitting an exact ndarray
+for scalar conversion does not make `repr(ndarray)` safe. Local NumPy source
+`numpy/_core/arrayprint.py::_array_repr_implementation` calls configured
+`override_repr`; its formatter selection also invokes supplied Python
+callables. The complete inspected source is retained with the review evidence.
+TSVD's invalid-algorithm path previously reached this printing machinery.
+
+`decomp_scalar_repr` now shares the NMF lane's native diagnostic policy:
+array-valued unsupported option names are reported as `<native scalar array>`
+without entering ndarray repr. Ordinary builtin scalar diagnostics and valid
+int/float conversions remain unchanged. NumPy callback-dependent formatting
+is unsupported by the owner no-callback rule. The TSVD-local repr wrapper is
+removed. Two additional definitions / 13 cases trap array formatters/print
+overrides and retain builtin invalid-option text; four override cases skip
+only on NumPy releases lacking that option, while formatter cases stay active.
+There are seven added boundary definitions / 39 cases in total, all unrun.
 
 PCA was checked separately: its fit scalar snapshot parser is byte-identical
 to `e53128fe7f` and already handles native U/S text. Its query dimensions use
 an integer-index contract. They are different contracts, so the repair does
 not weaken PCA query admission or replace its snapshot parser.
 
-No further concrete migration defect was found in the reviewed descriptor
+Apart from these two boundary findings, no concrete migration defect was found in the reviewed descriptor
 field/operation layouts, host `_bind` removal, route/capability selection,
 publication order or resident ownership. Native requests retain exact/fused,
 randomized, TSQR and resident-fold implementations. Host estimator selection
