@@ -38,7 +38,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.cpython_borrowed import borrowed_type_word
+from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 from bindings.native_instance_item import native_instance_item
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_array_storage import native_array_zeros
@@ -50,7 +50,7 @@ from core.native_string import unsafe_string_from_utf8_cstr
 from core.shared_slot import SharedSlot
 from core.boundary_layout import (
     BufferLayout, buffer_layout_from_words, layout_is_c_contiguous, format_kind, format_matches,
-    gather_f32, gather_f64, gather_i64, PY_BUFFER_WORDS, PyBUF_RECORDS_RO, PyBUF_RECORDS, PyBUF_FORMAT,
+    gather_f32, gather_f64, gather_i64, _load_i64, PY_BUFFER_WORDS, PyBUF_RECORDS_RO, PyBUF_RECORDS, PyBUF_FORMAT,
 )
 
 
@@ -455,3 +455,29 @@ def pack_i64(src_address: Int, rows: Int, cols: Int, context: PythonObject) rais
 
 def pack_u8(src_address: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
     return _pack_copy("<u1", 1, src_address, rows, cols, context)
+
+
+# ------------------------------------------------------------ element reads (lane loops-neural)
+
+def view_int_at(view: BufferView, index: Int) -> Int:
+    """Element `index` of a 1-D integer (or bool) buffer view as a word,
+    read natively through the view's byte stride. No CPython call; the
+    caller has checked `view.ndim == 1`, the bound and the element kind."""
+    return Int(_load_i64(view.layout.address + index * view.layout.strides[0], view.kind, view.itemsize))
+
+
+def read_exact_int_item(seq: PythonObject, index: Int, is_tuple: Bool, type_error: String) raises -> Int:
+    """Item `index` of an exact list or tuple, admitted as an exact `int`
+    (not bool, not a subclass; `type_error` is raised otherwise) and read
+    as a 64-bit word. CPython calls: PyList_GetItem / PyTuple_GetItem
+    (borrowed, no allocation, no `__getitem__`), PyObject_Type,
+    PyLong_AsLongLong. The caller holds `seq` and runs no Python code
+    between reads."""
+    var raw = borrowed_item(seq, index, is_tuple)
+    if borrowed_type_word(raw) != _scalar_types()[].int_word:
+        raise Error(type_error)
+    var t = cpython_table()
+    var value = t[].PyLong_AsLongLong(raw)
+    if value == -1 and t[].PyErr_Occurred():
+        raise _pending_error()
+    return Int(value)
