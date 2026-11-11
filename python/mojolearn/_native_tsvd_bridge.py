@@ -12,53 +12,19 @@ def connect(tsvd_class):
 
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
-    required = ("estimators_vendor", "estimators_numeric_mode", "tsvd_fit", "tsvd_explained",
-                "tsvd_transform", "inverse_transform")
-    # A build without tsvd_fit_explained takes the tsvd_fit / tsvd_explained pair.
-    # The resident-components entries (GPU builds; bindings/tsvd_native.mojo,
-    # lane ne1-a-decomp-resident): a build without them uploads per call.
-    optional = ("tsvd_fit_explained", "tsvd_transform_resident", "tsvd_inverse_transform_resident")
-    # The decomp kit's entries: the TSVD_QFIX flag and the two route drivers.
-    # A build without a driver refuses that route by name (bindings/tsvd_native.mojo).
-    decomp_names = ("x_decomp_qfix_flags", "x_decomp_tsvd_randomized", "x_decomp_tsvd_tsqr")
     connected = {}
-    # The estimators module of each mode: the resident door
-    # (bindings/fitted_resident_door.mojo) opens its lease through the
-    # module's own compiled entry.
-    modules = {}
     decomp = {}
     selected = _backend.default_mode()
-    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
-        try:
-            binding = _backend.binding("_mojolearn_estimators", mode)
-            entries = {}
-            for name in required + optional:  # glue: retain checked compiled estimator symbols
-                try:
-                    entry = getattr(binding, name)
-                except (AttributeError, ImportError):
-                    if name in required:
-                        raise
-                    continue
-                if not isinstance(entry, BuiltinFunctionType):
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed native provider images
+        for basename, name, table in (("_mojolearn_estimators", "tsvd_native_api_v1", connected),
+                                      ("_mojolearn_x_decomp", "tsvd_decomp_native_api_v1", decomp)):  # glue: fixed descriptor factories
+            try:
+                factory = getattr(_backend.binding(basename, mode), name)
+                if not isinstance(factory, BuiltinFunctionType):
                     raise TypeError(f"TruncatedSVD owner requires compiled {name}")
-                entries[name] = entry
-            connected[mode] = entries
-            modules[mode] = binding
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-            connected[mode] = type(error).__name__ + ": " + str(error)
-        try:
-            binding = _backend.binding("_mojolearn_x_decomp", mode)
-            entries = {}
-            for name in decomp_names:  # glue: retain checked compiled decomp symbols
-                try:
-                    entry = getattr(binding, name)
-                except (AttributeError, ImportError):
-                    continue
-                if isinstance(entry, BuiltinFunctionType):
-                    entries[name] = entry
-            decomp[mode] = entries
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-            decomp[mode] = type(error).__name__ + ": " + str(error)
+                table[mode] = factory
+            except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+                table[mode] = type(error).__name__ + ": " + str(error)
     # Fitted arrays are mojolearn Arrays, as `_buffer.empty` made them.
     context["output_context"] = _numpy_free_context()
     # glue (lane a8d): the Gram fit of a cross-validation fold resident on
@@ -67,11 +33,12 @@ def connect(tsvd_class):
     # (the CPU column) leaves None and the door gathers host rows.
     from ._buffer import _native
     try:
-        fold = _native('tsvd_fit_fold')
+        fold = _native('tsvd_fold_native_api_v1')
     except (ImportError, AttributeError, TypeError, RuntimeError):
         fold = None
-    context["tsvd_fit_fold"] = fold if isinstance(fold, BuiltinFunctionType) else None
-    context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp, tsvd_modules=modules)
+    context["tsvd_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
+    context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp,
+                   tsvd_host_factory="ImportError: Mojolearn host TruncatedSVD provider is unavailable")
     entry = _binding()._module.tsvd_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("TruncatedSVD owner requires a compiled tsvd_native_call")

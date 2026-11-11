@@ -62,6 +62,7 @@ from core.logistic_native_api import (
 from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.pca_native_host import PCA_HOST_API
+from core.tsvd_native_host import TSVD_HOST_API
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -955,6 +956,11 @@ def _dbscan_fit_run(
 
 
 
+def tsvd_native_api_v1_binding() raises -> PythonObject:
+    var api = TSVD_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def pca_native_api_v1_binding() raises -> PythonObject:
     var api = PCA_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1600,6 +1606,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         module.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
+        module.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         module.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")

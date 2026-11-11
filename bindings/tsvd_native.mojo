@@ -2,8 +2,8 @@
 # The native TruncatedSVD owner: every public TruncatedSVD operation (fit,
 # fit_transform, transform, inverse_transform) is one call into tsvd_c. It
 # checks the parameters and converts X once, selects the numeric-mode
-# bindings, runs the route the Python shell ran with the same compiled
-# entries and arguments in the same order (so the same bits), and stores the
+# bindings, runs the route the Python shell ran with the same native
+# kernels and typed requests in the same order, and stores the
 # fitted attributes under the names, types and shapes the shell stored:
 #   algorithm='randomized'   x_decomp_tsvd_randomized (x_decomp/tsvd_owner.mojo),
 #                            the steps `_randomized_decompose` sequenced
@@ -21,25 +21,50 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed
+from bindings.classical_arrays import classical_typed
+from bindings.native_buffer_address import native_buffer_address
 from bindings.admitted_input import admit_x, AdmittedX, admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse
-from bindings.decomp_inputs import decomp_input, decomp_admit, decomp_input_copied
+from bindings.decomp_inputs import decomp_admit, decomp_input_copied
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
-from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
-from bindings.entries_verified import entries_verified, entries_mark_verified
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.native_numpy_metadata import native_numpy_dtype
+from core.pca_native_api import PCAFoldStore
+from core.tsvd_native_api import (
+    TSVDFitRequest, TSVDQueryRequest, TSVD_GRAM, TSVD_FUSED, TSVD_EXPLAINED,
+    TSVD_RANDOMIZED, TSVD_TSQR, TSVD_FOLD, TSVD_CAP_FUSED, TSVD_CAP_RANDOMIZED,
+    TSVD_CAP_TSQR, TSVD_CAP_RESIDENT,
+)
+from bindings.tsvd_descriptor_boundary import (
+    tsvd_factory, tsvd_connect, tsvd_connection, tsvd_capabilities, tsvd_qfix, tsvd_run_fit, tsvd_run_query,
+)
+from bindings.tsvd_owner_boundary import tsvd_owner_drop, tsvd_owner_lease, TSVDLeasePin
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes
 comptime _TS_MAX_N = 512
 #: x_decomp/qfix.mojo TSVD_QFIX's bit in `x_decomp_qfix_flags`
 comptime _QFIX_TSVD = 2
-#: The prepared-owner slot of the device-resident components (N351).
-comptime _TSVD_RESIDENT_SLOT = "tsvd_resident_fitted_v1"
 
 
-def _repr(value: PythonObject) raises -> String:
+def _scalar(value: PythonObject, context: PythonObject) raises:
+    # Preserve admitted native NumPy scalar conversion forms without allowing
+    # user __int__, __float__, __class__ or object-array element protocols.
+    try:
+        host_inference_scalar(value, context)
+    except failure:
+        if py_get(context, "ndarray") is not None:
+            var cls = py_type(value)
+            var constructor = native_numpy_dtype(context)
+            var aliases = Python.tuple("U", "S", "q", "Q", "g")
+            for i in range(len(aliases)):  # driver-loop: exact native scalar ABI aliases
+                if cls is py_call(constructor, aliases[i]).type:
+                    return
+        raise failure^
+
+
+def _repr(value: PythonObject, context: PythonObject) raises -> String:
+    _scalar(value, context)
     return String(py_call(native_loaded_module("builtins").repr, value))
 
 
@@ -92,7 +117,8 @@ def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> Pyt
     return fields[name]
 
 
-def _int(value: PythonObject) raises -> Int:
+def _int(value: PythonObject, context: PythonObject) raises -> Int:
+    _scalar(value, context)
     return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
@@ -116,29 +142,19 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     return name
 
 
-def _entries(mode: String, context: PythonObject) raises -> PythonObject:
-    # The connected _mojolearn_estimators entries of `mode`, checked against
-    # the selected vendor and mode.
-    var key = PythonObject(mode)
-    var entries = context["tsvd_bindings"][key]
-    if py_type(entries) is native_loaded_module("builtins").str:
-        raise Error(String(entries))
-    # Checked once per connected table and selected vendor (N317,
-    # bindings/entries_verified.mojo): the binding's words cannot change.
-    if entries_verified(context, "tsvd_entries_verified", key, entries):
-        return entries
-    if String(entries["estimators_vendor"]()) != String(context["vendor"]):
-        raise Error("RuntimeError: TruncatedSVD native vendor differs from selected execution")
-    if Int(py=entries["estimators_numeric_mode"]()) != (1 if mode == "identical" else 0):
-        raise Error("RuntimeError: TruncatedSVD native mode differs from selected execution")
-    entries_mark_verified(context, "tsvd_entries_verified", key, entries)
-    return entries
+def _host_connection(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> Int:
+    # Keep _HostBound._bind's late mode refusal without calling that Python
+    # method or loading a module during fit. Import setup pins the CPU image.
+    var mode = py_get(fields, "numeric_mode")
+    if mode is not None and (py_type(mode) is not py_type(PythonObject("")) or String(mode) != "identical"):
+        var type_type = native_loaded_module("builtins").type
+        var name = String(py_call(type_type.__dict__["__name__"].__get__, py_type(model)))
+        raise Error("mojolearn: " + name + " runs IDENTICAL only on the host; this model was saved " + _repr(mode, context))
+    return tsvd_connect(context["tsvd_host_factory"], 1, "cpu")
 
 
 def _decomp(mode: String, context: PythonObject) raises -> PythonObject:
-    """The connected _mojolearn_x_decomp entries of `mode` (a dict), or the
-    connection's refusal (a str)."""
-    return context["tsvd_decomp"][PythonObject(mode)]
+    return tsvd_factory(context, "tsvd_decomp", mode)
 
 
 def _too_small(rows: Int, cols: Int) -> String:
@@ -150,13 +166,21 @@ def _too_small(rows: Int, cols: Int) -> String:
             + ")) while a minimum of 2 is required by TruncatedSVD.")
 
 
-def _components(fields: PythonObject, rows: Int, cols: Int) raises -> Int:
+def _components(fields: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> Int:
     # `_component_count`: n_components (None: the smaller dimension) in [1, cols].
     var requested = fields["n_components"]
-    var value = min(rows, cols) if requested is None else _int(requested)
+    var value = min(rows, cols) if requested is None else _int(requested, context)
     if value < 1 or value > cols:
         raise Error("mojolearn n_components must be in [1, " + String(cols) + "], got " + String(value))
     return value
+
+
+def _address(value: PythonObject, context: PythonObject) raises -> Int:
+    # Only admitted native arrays reach this UNPACK helper. Array owns its
+    # address slot; other admitted storage exposes the native buffer directly.
+    if py_type(value) is context["array_class"]:
+        return Int(py=value._addr)
+    return native_buffer_address(value)
 
 
 def _f32(shape: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -184,35 +208,34 @@ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows
     var name = String(normalizer) if py_type(normalizer) is b.str else String("")
     if name != "auto" and name != "QR" and name != "LU" and name != "none":
         raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
+    var connection = tsvd_connect(decomp, 1 if mode == "identical" else 0, String(context["vendor"]))
     var n_iter = fields["n_iter"]
     var auto = py_type(n_iter) is b.str and String(n_iter) == "auto"
-    var iterations = 0 if auto else _int(n_iter)
-    var oversamples = _int(fields["n_oversamples"])
+    var iterations = 0 if auto else _int(n_iter, context)
+    var oversamples = _int(fields["n_oversamples"], context)
     var seed = fields["random_state"]
     if seed is None:
         seed = PythonObject(0)
-    elif py_type(seed) is b.bool or not Bool(py=py_call(b.isinstance, seed, b.int)):
+    elif py_type(seed) is not b.int:
         raise Error("TypeError: random_state must be None or an int (the counter-based RNG takes an integer seed)")
-    if py_get(decomp, "x_decomp_tsvd_randomized") is None:
+    if (tsvd_capabilities(connection) & TSVD_CAP_RANDOMIZED) == 0:
         raise Error("NotImplementedError: mojolearn TruncatedSVD: this build of _mojolearn_x_decomp does not export "
                     + "x_decomp_tsvd_randomized; rebuild it with bindings/build_x_decomp.sh")
     # The Philox seed is taken mod 2^32, with Python integer semantics
     # (`_Kit.rand`'s `int(seed) & 0xFFFFFFFF`).
-    var word = py_call(b.int.__dict__["__and__"], py_call(b.int, seed), PythonObject(0xFFFFFFFF))
+    var word = py_call(b.int.__dict__["__and__"], seed, PythonObject(0xFFFFFFFF))
     var components = _f32(Python.tuple(nc, cols), context)
     var singular = _f32(Python.tuple(nc), context)
     var variance = _f32(Python.tuple(nc), context)
     var ratio = _f32(Python.tuple(nc), context)
     # Lane a8d: `test` appends the finite flag; the driver returns X's
     # finite status word, taken off the variance total it computes anyway.
-    var rparams = Python.list(rows, cols, nc, oversamples, iterations, 1 if auto else 0, word)
+    var request = TSVDFitRequest(_address(x, context), _address(components, context), _address(singular, context),
+        _address(variance, context), _address(ratio, context), rows, cols, nc, oversamples, iterations,
+        auto, Int(py=word), test, TSVD_RANDOMIZED, PCAFoldStore())
+    var result = tsvd_run_fit(connection, request)
     if test:
-        _ = py_call(rparams.append, PythonObject(1))
-    var status = py_call_typed(decomp["x_decomp_tsvd_randomized"], classical_address(x), classical_address(components),
-                               classical_address(singular), classical_address(variance), classical_address(ratio),
-                               rparams)
-    if test:
-        admitted_finite_refuse(Int(py=status), _TSVD_EST)
+        admitted_finite_refuse(result.finite, _TSVD_EST)
     _ = components  # keep the Python object alive through the native call above
     _ = ratio  # keep the Python object alive through the native call above
     _ = variance  # keep the Python object alive through the native call above
@@ -223,24 +246,24 @@ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows
     py_setitem(fields, "explained_variance_ratio_", ratio)
 
 
-def _tsqr_route(decomp: PythonObject, rows: Int, cols: Int, nc: Int) raises -> Bool:
-    """`_tsvd_tsqr_components`'s gate: the binding carries TSVD_QFIX (FAST;
-    0 on an IDENTICAL or host binding, or when the kit is unavailable) and
-    X is a TSQR shape (`_tsqr_on`: tall, at most _TS_MAX_N wide)."""
+def _tsqr_connection(decomp: PythonObject, mode: String, context: PythonObject,
+                     rows: Int, cols: Int, nc: Int) raises -> Int:
+    # The old kit treats an unavailable flag entry as zero. Keep that refusal
+    # order: an unavailable decomposition image does not disable the Gram fit.
     if py_type(decomp) is native_loaded_module("builtins").str:
-        return False
-    var flags_entry = py_get(decomp, "x_decomp_qfix_flags")
-    if flags_entry is None:
-        return False
-    # `_Kit.qfix_flags`: a binding that cannot answer counts as 0
+        return -1
+    var connection = -1
     var flags = 0
     try:
-        flags = Int(py=py_call(flags_entry))
+        connection = tsvd_connect(decomp, 1 if mode == "identical" else 0, String(context["vendor"]))
+        flags = tsvd_qfix(connection)
     except ignored:
-        flags = 0
+        return -1
     if (flags & _QFIX_TSVD) == 0:
-        return False
-    return cols >= 1 and cols <= _TS_MAX_N and rows >= cols and nc >= 1 and nc <= cols
+        return -1
+    if cols >= 1 and cols <= _TS_MAX_N and rows >= cols and nc >= 1 and nc <= cols:
+        return connection
+    return -1
 
 
 comptime _TSVD_EST = "TruncatedSVD"
@@ -252,11 +275,8 @@ comptime _TSVD_EST = "TruncatedSVD"
 
 
 def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows: Int, cols: Int, nc: Int,
-           mode: String, entries: PythonObject, context: PythonObject) raises:
-    """The exact arm: the TSVD_QFIX components where the shell took them,
-    else the Gram; then the explained variance, in this class's binding.
-    Lane a7d: the Gram entries test a borrowed X over their own upload and
-    return the status word (the finite flag appended to their params)."""
+           mode: String, connection: Int, context: PythonObject) raises:
+    """Existing TSQR/Gram/fused route, preserving each public publication stage."""
     var x = admitted.array
     var test = not admitted.finite
     var decomp = _decomp(mode, context)
@@ -264,69 +284,63 @@ def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows:
     var ratio = _f32(Python.tuple(nc), context)
     py_setitem(fields, "explained_variance_", variance)
     py_setitem(fields, "explained_variance_ratio_", ratio)
-    var params = Python.list(rows, cols, nc)
     var components = _f32(Python.tuple(nc, cols), context)
     var singular = _f32(Python.tuple(nc), context)
-    if _tsqr_route(decomp, rows, cols, nc):
-        if py_get(decomp, "x_decomp_tsvd_tsqr") is None:
+    var request = TSVDFitRequest(_address(x, context), _address(components, context), _address(singular, context),
+        _address(variance, context), _address(ratio, context), rows, cols, nc, 0, 0, False, 0, test,
+        TSVD_GRAM, PCAFoldStore())
+    var tsqr = _tsqr_connection(decomp, mode, context, rows, cols, nc)
+    if tsqr >= 0:
+        if (tsvd_capabilities(tsqr) & TSVD_CAP_TSQR) == 0:
             raise Error("NotImplementedError: mojolearn TruncatedSVD: this build of _mojolearn_x_decomp does not export "
                         + "x_decomp_tsvd_tsqr; rebuild it with bindings/build_x_decomp.sh")
-        var qparams = Python.list(rows, cols, nc, 1) if test else params
-        var qstatus = py_call_typed(decomp["x_decomp_tsvd_tsqr"], classical_address(x), classical_address(components),
-                                    classical_address(singular), qparams)
+        request.route = TSVD_TSQR
+        var result = tsvd_run_fit(tsqr, request)
         if test:
-            admitted_finite_refuse(Int(py=qstatus), _TSVD_EST)
-        _ = components  # keep the Python object alive through the native call above
-        _ = singular  # keep the Python object alive through the native call above
+            admitted_finite_refuse(result.finite, _TSVD_EST)
         py_setitem(fields, "components_", components)
         py_setitem(fields, "singular_values_", singular)
-    elif py_get(entries, "tsvd_fit_explained") is not None:
-        # lane fg-pca T1: the Gram fit and its explained variance in one
-        # binding call (one upload of X)
-        py_setitem(fields, "components_", components)
-        py_setitem(fields, "singular_values_", singular)
-        var fit_params = Python.list(rows, cols, nc, 1) if test else params
-        var status = py_call_typed(entries["tsvd_fit_explained"], classical_address(x), classical_address(components),
-                                   classical_address(singular), classical_address(variance), classical_address(ratio),
-                                   fit_params)
-        if test:
-            admitted_finite_refuse(Int(py=status), _TSVD_EST)
-        _ = components  # keep the Python object alive through the native call above
-        _ = singular  # keep the Python object alive through the native call above
-        _ = ratio  # keep the Python object alive through the native call above
-        _ = variance  # keep the Python object alive through the native call above
-        return
     else:
         py_setitem(fields, "components_", components)
         py_setitem(fields, "singular_values_", singular)
-        var fit_params = Python.list(rows, cols, nc, 1) if test else params
-        var status = py_call_typed(entries["tsvd_fit"], classical_address(x), classical_address(components),
-                                   classical_address(singular), fit_params)
+        var fused = (tsvd_capabilities(connection) & TSVD_CAP_FUSED) != 0
+        request.route = TSVD_FUSED if fused else TSVD_GRAM
+        var result = tsvd_run_fit(connection, request)
         if test:
-            admitted_finite_refuse(Int(py=status), _TSVD_EST)
-        _ = components  # keep the Python object alive through the native call above
-        _ = singular  # keep the Python object alive through the native call above
-    _ = py_call_typed(entries["tsvd_explained"], classical_address(x), classical_address(components),
-                      classical_address(variance), classical_address(ratio), params)
-    _ = components  # keep the Python object alive through the native call above
-    _ = ratio  # keep the Python object alive through the native call above
-    _ = variance  # keep the Python object alive through the native call above
+            admitted_finite_refuse(result.finite, _TSVD_EST)
+        if fused:
+            _ = x
+            _ = components
+            _ = singular
+            _ = variance
+            _ = ratio
+            return
+    request.route = TSVD_EXPLAINED
+    request.test_finite = False
+    _ = tsvd_run_fit(connection, request)
+    _ = x
+    _ = components
+    _ = singular
+    _ = variance
+    _ = ratio
 
 
-def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, fold: Bool = False) raises -> PythonObject:
-    """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform).
-    `fold` (lane a8d, `fit` only): a resident fold may be fit on the device
-    (`tsvd_fit_fold`); None is returned then (no host X exists)."""
+def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, fold: Bool = False) raises -> AdmittedX:
+    """Return the native admitted view/dimensions for fit_transform reuse.
+    Fit-only resident folds retain their native store descriptor, with no host X.
+    """
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     # New components replace the old: their device copy goes now (N351).
-    fitted_resident_drop(model, _TSVD_RESIDENT_SLOT)
-    if Float64(py=py_call(b.float, _attr(model, fields, "tol"))) != 0.0:
+    tsvd_owner_drop(model)
+    var tolerance = _attr(model, fields, "tol")
+    _scalar(tolerance, context)
+    if Float64(py=py_call(b.float, tolerance)) != 0.0:
         raise Error("NotImplementedError: mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
                     + "and algorithm='arpack' is not implemented; leave tol=0.0")
     var algorithm = _algorithm(fields)
     if algorithm != "randomized" and algorithm != "covariance_eigh" and algorithm != "jacobi":
-        raise Error("NotImplementedError: mojolearn TruncatedSVD: algorithm=" + _repr(fields["algorithm"])
+        raise Error("NotImplementedError: mojolearn TruncatedSVD: algorithm=" + _repr(fields["algorithm"], context)
                     + " is not implemented; this class runs ('covariance_eigh', 'jacobi', 'randomized'). "
                     + "'arpack' is scipy's svds (implicitly restarted Lanczos), a different algorithm; "
                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
@@ -343,7 +357,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
     # the host class) get the fold's host rows.
     var host = _host_only(model)
     var mode = _mode(fields, context)
-    var fold_entry = py_get(context, "tsvd_fit_fold")
+    var fold_entry = py_get(context, "tsvd_fold_factory")
     var fold_ok = fold and fold_entry is not None and not host and mode == "identical" and algorithm != "randomized"
     var admitted = decomp_admit(source, "TruncatedSVD", context, device_x=fold_ok, defer_finite=True)
     py_setitem(fields, "input_copied_", PythonObject(decomp_input_copied(admitted, context)))
@@ -351,98 +365,76 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
     var cols = admitted.cols
     if rows < 2 or cols < 2:
         raise Error(_too_small(rows, cols))
-    var nc = _components(fields, rows, cols)
+    var nc = _components(fields, rows, cols, context)
     if admitted.store.active():
         var components = _f32(Python.tuple(nc, cols), context)
         var singular = _f32(Python.tuple(nc), context)
         var variance = _f32(Python.tuple(nc), context)
         var ratio = _f32(Python.tuple(nc), context)
-        var words = py_call_typed(fold_entry, Python.list(admitted.store.base_id, admitted.store.base_rows,
-                                                          admitted.store.index_id),
-                                  Python.list(classical_address(components), classical_address(singular),
-                                              classical_address(variance), classical_address(ratio)),
-                                  Python.list(rows, cols, nc))
-        _ = components  # keep the Python object alive through the native call above
-        _ = singular  # keep the Python object alive through the native call above
-        _ = variance  # keep the Python object alive through the native call above
-        _ = ratio  # keep the Python object alive through the native call above
-        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), _TSVD_EST, admitted.store.base_rows)
+        var connection = tsvd_connect(fold_entry, 1, String(context["vendor"]))
+        var request = TSVDFitRequest(0, _address(components, context), _address(singular, context),
+            _address(variance, context), _address(ratio, context), rows, cols, nc, 0, 0, False, 0, True,
+            TSVD_FOLD, PCAFoldStore(admitted.store.base_id, admitted.store.base_rows, admitted.store.index_id))
+        var words = tsvd_run_fit(connection, request)
+        _ = components
+        _ = singular
+        _ = variance
+        _ = ratio
+        door_rows_refuse(words.finite, words.in_range, _TSVD_EST, admitted.store.base_rows)
         py_setitem(fields, "components_", components)
         py_setitem(fields, "singular_values_", singular)
         py_setitem(fields, "explained_variance_", variance)
         py_setitem(fields, "explained_variance_ratio_", ratio)
         py_setitem(fields, "n_components_", PythonObject(nc))
         py_setitem(fields, "n_features_in_", PythonObject(cols))
-        return PythonObject(None)
+        return admitted^
     var x = admitted.array
-    # the host class trains on the CPU: the estimators host binding of its
-    # `_bind` serves the same entry names (CPU TRAINING IS PUBLIC)
-    var entries = (py_call(native_loaded_module("builtins").vars, py_call(model._bind, "_mojolearn_estimators"))
-                   if host else _entries(mode, context))
+    var connection = _host_connection(model, fields, context) if host else tsvd_connection(mode, context)
     if algorithm == "randomized":
         _randomized(model, fields, x, rows, cols, nc, mode, context, not admitted.finite)
     else:
-        _exact(model, fields, admitted, rows, cols, nc, mode, entries, context)
+        _exact(model, fields, admitted, rows, cols, nc, mode, connection, context)
     py_setitem(fields, "n_components_", PythonObject(nc))
     py_setitem(fields, "n_features_in_", PythonObject(cols))
-    return x
+    return admitted^
 
 
-def _resident_lease(model: PythonObject, mode: String, entries: PythonObject, entry: String, stored: PythonObject,
-                    components: PythonObject, context: PythonObject) raises -> Int:
-    """The lease of `model`'s device copy of its fitted components (lane
-    ne1-a-decomp-resident, row N351): taken once per fitted state through
-    bindings/fitted_resident_door.mojo (prepared-owner record with the
-    model's generation word and the components object; the read-only rule
-    makes `components_` read-only), so transform and inverse_transform
-    upload only X. 0 when the binding has no resident entry `entry` (the
-    host binding), the converted components are not the stored object (a
-    cast copy), or the components cannot be made read-only: the caller then
-    takes the per-call entry, as before."""
-    if py_get(entries, PythonObject(entry)) is None:
-        return 0
-    var modules = py_get(context, "tsvd_modules")
-    var module = PythonObject(None) if modules is None else py_get(modules, PythonObject(mode))
-    if module is None:
-        return 0
+def _resident_lease(model: PythonObject, connection: Int, stored: PythonObject,
+                    components: PythonObject) raises -> TSVDLeasePin:
+    # Keep the existing read-only/owning-array rule and resident fallback.
+    # The native lease owner pins the image and component storage through RUN.
+    if (tsvd_capabilities(connection) & TSVD_CAP_RESIDENT) == 0:
+        return TSVDLeasePin(PythonObject(None), 0)
     if components is not stored:
-        fitted_resident_drop(model, _TSVD_RESIDENT_SLOT)
-        return 0
-    return fitted_resident_lease(model, _TSVD_RESIDENT_SLOT, module, "tsvd_resident_lease", Python.list(stored))
+        tsvd_owner_drop(model)
+        return TSVDLeasePin(PythonObject(None), 0)
+    return tsvd_owner_lease(model, connection, stored)
 
 
-def _project(model: PythonObject, fields: PythonObject, x: PythonObject, context: PythonObject,
+def _project(model: PythonObject, fields: PythonObject, admitted: AdmittedX, context: PythonObject,
              test: Bool = False) raises -> PythonObject:
     """`transform` of a converted X: X V^T through tsvd_transform. `test`
     (lane a7d): X was admitted with `defer_finite` and not scanned; the
     entry tests it over its own upload and returns the status word."""
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    if cols != _int(_attr(model, fields, "n_features_in_")):
+    var x = admitted.array
+    var rows = admitted.rows
+    var cols = admitted.cols
+    if cols != _int(_attr(model, fields, "n_features_in_"), context):
         raise Error("mojolearn TruncatedSVD feature count differs from fit")
-    var nc = _int(_attr(model, fields, "n_components_"))
+    var nc = _int(_attr(model, fields, "n_components_"), context)
     var out = _f32(Python.tuple(rows, nc), context)
     var mode = _mode(fields, context)
-    var entries = _entries(mode, context)
+    var connection = tsvd_connection(mode, context)
     var stored = fields["components_"]
     var components = admit_x(stored, 2, "components_", context)
-    var lease = _resident_lease(model, mode, entries, "tsvd_transform_resident", stored, components, context)
-    var status: PythonObject
-    if lease > 0:
-        # The same gemm over the lease's device copy of the same words.
-        var resident = Python.list(rows, cols, nc, lease)
-        if test:
-            _ = py_call(resident.append, PythonObject(1))
-        status = py_call_typed(entries["tsvd_transform_resident"], classical_address(x), classical_address(components),
-                               classical_address(out), resident)
-    else:
-        var plain = Python.list(rows, cols, nc)
-        if test:
-            _ = py_call(plain.append, PythonObject(1))
-        status = py_call_typed(entries["tsvd_transform"], classical_address(x), classical_address(components),
-                               classical_address(out), plain)
+    var lease = _resident_lease(model, connection, stored, components)
+    var request = TSVDQueryRequest(admitted.address, _address(components, context), _address(out, context),
+        rows, cols, nc, False, test, lease.lease > 0, lease.lease)
+    var status = tsvd_run_query(connection, request)
     if test:
-        admitted_finite_refuse(Int(py=status), _TSVD_EST)
+        admitted_finite_refuse(status, _TSVD_EST)
+    _ = lease
+    _ = x
     _ = components  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = components^
@@ -456,7 +448,7 @@ def tsvd_transform(model: PythonObject, source: PythonObject, context: PythonObj
     # Lane a7d: no host scan of a borrowed X; the transform entry tests it.
     var admitted = decomp_admit(source, _TSVD_EST, context, defer_finite=True)
     var x = admitted.array
-    var out = _project(model, fields, x, context, not admitted.finite)
+    var out = _project(model, fields, admitted, context, not admitted.finite)
     _ = x^
     _ = admitted^
     return out
@@ -466,30 +458,29 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
     """X @ components_ (`inverse_transform` without the mean: its pointer is
     the components, a valid float32 address the entry does not read)."""
     var fields = py_fields(model)
-    var z = decomp_input(source, "TruncatedSVD", context)
-    var rows = Int(py=z.shape[0])
-    var nc = _int(_attr(model, fields, "n_components_"))
-    if Int(py=z.shape[1]) != nc:
+    var admitted = decomp_admit(source, "TruncatedSVD", context)
+    var z = admitted.array
+    var rows = admitted.rows
+    var nc = _int(_attr(model, fields, "n_components_"), context)
+    if admitted.cols != nc:
         raise Error("mojolearn TruncatedSVD component count differs from fit")
-    var nf = _int(_attr(model, fields, "n_features_in_"))
+    var nf = _int(_attr(model, fields, "n_features_in_"), context)
     var out = _f32(Python.tuple(rows, nf), context)
     var mode = _mode(fields, context)
-    var entries = _entries(mode, context)
+    var connection = tsvd_connection(mode, context)
     var stored = _attr(model, fields, "components_")
     var components = admit_x(stored, 2, "components_", context)
-    var lease = _resident_lease(model, mode, entries, "tsvd_inverse_transform_resident", stored, components, context)
-    if lease > 0:
-        # The same transpose and gemm over the lease's device copy (N351).
-        _ = py_call_typed(entries["tsvd_inverse_transform_resident"], classical_address(z),
-                          classical_address(components), classical_address(out), Python.list(rows, nf, nc, lease))
-    else:
-        _ = py_call_typed(entries["inverse_transform"], classical_address(z), classical_address(components),
-                          classical_address(components), classical_address(out), Python.list(rows, nf, nc, 0))
+    var lease = _resident_lease(model, connection, stored, components)
+    var request = TSVDQueryRequest(admitted.address, _address(components, context), _address(out, context),
+        rows, nf, nc, True, False, lease.lease > 0, lease.lease)
+    _ = tsvd_run_query(connection, request)
+    _ = lease
     _ = z  # keep the Python object alive through the native call above
     _ = components  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = components^
     _ = z^
+    _ = admitted^
     return out
 
 
@@ -524,9 +515,9 @@ def tsvd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
                 result = model
             elif operation == "fit_transform":
                 # the transform projects the X the fit converted: one conversion
-                var x = tsvd_fit(model, args[0], context)
-                result = _project(model, py_fields(model), x, context)
-                _ = x^
+                var admitted = tsvd_fit(model, args[0], context)
+                result = _project(model, py_fields(model), admitted, context)
+                _ = admitted^
             elif operation == "transform":
                 result = tsvd_transform(model, args[0], context)
             else:
