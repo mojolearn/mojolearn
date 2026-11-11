@@ -71,9 +71,8 @@ import os
 import sys
 
 from . import _native_archive_bridge
-from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._bufcheck import flat_view, probe, strided_rows
+from ._buffer import addr, addr_ro, empty
+from ._bufcheck import flat_view, strided_rows
 
 
 def _one_series(src, index, n_series, steps, offset=0):
@@ -534,51 +533,6 @@ class ExponentialSmoothing:
         from . import _backend
         return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
 
-    def _check_dims(self, ts_input):
-        """`holtwinters.pyx:230-262` for a numpy input, by name.
-
-        A 2-D array is `(ts_num, n)`: their `d1 = shape[1]` is `n` and
-        their `d2 = shape[0]` is the series count, and they `ravel()` in C
-        order, so each series is contiguous. A 1-D array is one series and
-        `ts_num` must be 1. DEVIATION 2420: read through the buffer
-        protocol (a nested list is materialized once as float32, as
-        `np.asarray` did) and converted by `_buffer.as_f32_c`.
-        """
-        try:
-            pb = probe(ts_input)
-        except TypeError:
-            try:
-                ts_input = Array.from_list(ts_input, "<f4")
-            except Exception:
-                raise ValueError(
-                    "mojolearn ExponentialSmoothing: data input must be a "
-                    "1-D or 2-D array or a nested list of numbers, got "
-                    f"{type(ts_input).__name__}"
-                ) from None
-            pb = probe(ts_input)
-        err = (
-            "mojolearn ExponentialSmoothing: initialized with "
-            f"{self.ts_num} time series, but data has dimension "
-        )
-        if pb.ndim == 1:
-            n = int(pb.shape[0])
-            if self.ts_num != 1:
-                raise ValueError(err + "1.")
-            arr, _copied = as_f32_c(ts_input, ndim=1, name="endog")
-            flat = arr.reshape((1, n))
-        elif pb.ndim == 2:
-            n = int(pb.shape[1])
-            d2 = int(pb.shape[0])
-            if self.ts_num != d2:
-                raise ValueError(err + str(d2) + ".")
-            flat, _copied = as_f32_c(ts_input, ndim=2, name="endog")
-        else:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: data input must have 1 or 2 "
-                f"dimensions, got {pb.ndim}"
-            )
-        return flat, n
-
     # Fit level, trend, season and SSE. Returns self.
     #
     # Every validation cuML does in `holtwinters.pyx` runs on the Mojo
@@ -608,56 +562,6 @@ class ExponentialSmoothing:
         # (bindings/tsa_hw_native.mojo); the constraints are the binding's.
         return _TSA(self, "hw_fit", (), _TSA_CONTEXT)
 
-    def _set_fitted(self, n, comps, sse, alpha, beta, gamma, n_iter, criterion):
-        """The fitted state from the packed components and the per-series
-        blocks, shared by `fit` and `load` so a loaded model answers every
-        attribute a fitted one does, from the same bytes."""
-        components_len = (n - self.seasonal_periods) * self.ts_num
-        self.n = n
-        self._components_len = components_len
-        self._comps = comps  # kept for forecast(), which re-uploads them
-        # comps LAYOUT -- the same words as in bindings/_mojolearn_tsa.mojo
-        # and holtwinters/estimator.mojo:
-        #   [0 * components_len, 1 * components_len)   level
-        #   [1 * components_len, 2 * components_len)   trend
-        #   [2 * components_len, 3 * components_len)   season
-        # Each block is TIME-MAJOR: series s at step i is [s + i * ts_num].
-        # `.reshape((ts_num, num_rows), order="F")` is cuML's own line
-        # (holtwinters.pyx:341-344) and undoes exactly that. DEVIATION
-        # 2421: the `Array` contract has C order only, so the un-interleave
-        # is done ONCE, on first use of `level_` / `trend_` / `season_`
-        # (lane py-sequence: no longer at every fit and load; one series
-        # through `get_level(index)` is its single strided slice), into a
-        # C-contiguous `(ts_num, num_rows)` Array per component, by one Mojo
-        # transpose (`_bufcheck.strided_rows` -> `transpose_f32`; no Python
-        # element loop). The same bytes land at the same [s, i]. The
-        # time-major blocks are ALSO kept, as C-order `(num_rows,
-        # ts_num)` views, because that shape IS cuML's `get_level()`
-        # transpose and costs nothing to hand back.
-        num_rows = components_len // self.ts_num
-        cl = components_len
-        b = self.ts_num
-        # lane py-sequence: the three series-major Arrays are built on FIRST
-        # USE (`__getattr__` below; `get_level(index)` slices one series),
-        # not at every fit and load: at a million series each was 0.17 s of
-        # strided copies that forecast() never reads. Same bytes when read.
-        for name in self._LAZY_COMPONENTS:  # glue: the named lazy component attributes
-            self.__dict__.pop(name, None)
-        self._comp_layout = (cl, b, num_rows)
-        self._time_major = {
-            "level": comps[0:cl].reshape((num_rows, b)),
-            "trend": comps[cl:2 * cl].reshape((num_rows, b)),
-            "season": comps[2 * cl:3 * cl].reshape((num_rows, b)),
-        }
-        self.sse_ = sse
-        self.alpha_ = alpha
-        self.beta_ = beta
-        self.gamma_ = gamma
-        self.n_iter_ = n_iter
-        self.criterion_ = criterion
-        self.fit_executed_flag = True
-        return self
-
     def forecast(self, h=1, index=None):
         """Forecast ``h`` points per series.
 
@@ -675,17 +579,6 @@ class ExponentialSmoothing:
             ``ts_num > 1``; ``(h,)`` when ``ts_num == 1`` or for a given ``index``.
         """
         return _TSA(self, "hw_forecast", (h, index), _TSA_CONTEXT)
-
-    def _shaped(self, out, steps, index):
-        """`forecast`'s three return shapes over a TIME-MAJOR flat buffer of
-        `steps * ts_num` values."""
-        if index is not None:
-            # ONE series: its one strided slice, not every series
-            # un-interleaved and then indexed (lane py-sequence)
-            return _one_series(out, index, self.ts_num, steps)
-        if self.ts_num == 1:
-            return out
-        return out.reshape((steps, self.ts_num))
 
     # The one-step predictions at times `[start, end)` (lane/inference-
     # holtwinters, 2026-09-15). OURS: cuML has no prediction entry.
