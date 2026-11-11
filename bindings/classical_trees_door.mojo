@@ -21,7 +21,7 @@ from bindings.host_kde_fit_native import host_kde_fit
 from bindings.host_iforest_fit_native import host_iforest_fit
 from bindings.host_density_constructor_native import host_density_initialize
 from bindings.host_density_archive_native import host_density_save
-from bindings.host_density_hash_native import host_density_hash
+from bindings.host_density_hash_native import host_density_hash, host_bound_hash
 from bindings.py_balanced import py_type, py_get
 from bindings.admitted_call import AdmittedCall
 from bindings.classical_door_routes import classical_trees_operation
@@ -50,6 +50,8 @@ def _trees_named(model: PythonObject, operation: String, args: PythonObject, con
         return host_density_save(model, args, context["host_inference_context"])
     if operation == "host_density_hash":
         return host_density_hash(model, args, context["host_inference_context"])
+    if operation == "host_bound_hash":
+        return host_bound_hash(model, args, context["host_inference_context"])
     if operation == "host_density_initialize":
         return host_density_initialize(model, args, context["host_inference_context"])
     if operation.startswith("host_infer_"):

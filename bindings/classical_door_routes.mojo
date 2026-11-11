@@ -17,6 +17,7 @@ def classical_trees_operation(operation: String) -> Bool:
     classical door's own branches matched before the split."""
     return (operation == "host_kde_fit" or operation == "host_iforest_fit"
             or operation == "host_density_save" or operation == "host_density_hash"
+            or operation == "host_bound_hash"
             or operation == "host_density_initialize"
             or operation.startswith("host_infer_")
             or operation == "archive_infer_predict" or operation == "archive_infer_predict_proba"

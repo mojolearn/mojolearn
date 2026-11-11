@@ -54,7 +54,6 @@ lane/inference-holtwinters (2026-09-15) also saved Holt-Winters models
 (`forecast`, `predict` and the fitted state) through the same forecast
 binding.
 """
-import hashlib
 import os
 
 from . import _backend, _native_classical_bridge, _serialize
@@ -160,14 +159,15 @@ class _HostBound:
         return "cpu"
 
     def model_sha256(self):
-        """SHA-256 over the model file's bytes as `save` would write them
-        again, for a report to name the model it predicted with."""
-        h = hashlib.sha256()
-        for name in sorted(self._HOST_ARRAYS):
-            value = getattr(self, name)
-            if value is not None:
-                h.update(value.tobytes())
-        return h.hexdigest()
+        """SHA-256 over the model's stored arrays, for a report to name the
+        model it predicted with.
+
+        Returns
+        -------
+        str
+            The 64-character hexadecimal SHA-256 digest.
+        """
+        return _native_classical(self, "host_bound_hash", (), _CLASSICAL)
 
 
 class HostLinearRegression(_HostBound, LinearRegression):
