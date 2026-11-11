@@ -40,6 +40,8 @@ from bindings.admitted_input import (
 from bindings.classical_arrays import classical_address
 # TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+from xtrees.trees_meta_run import CalibratedProgram, meta_binary_column_check
+from xtrees.trees_forest_run import trees_check_features
 from bindings.trees_public_forest import (
     _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
 )
@@ -474,8 +476,7 @@ def _check_x(model: PythonObject, X: PythonObject, context: PythonObject) raises
         raise Error("RuntimeError: this estimator is not fitted yet")
     var Xa = _x_array(X, context)
     var fitted = Int(py=_attr(model, "n_features_in_", PythonObject(0)))
-    if _cols(Xa) != fitted:
-        raise Error("X has " + String(_cols(Xa)) + " features, fit saw " + String(fitted))
+    trees_check_features(_cols(Xa), fitted)
     return Xa
 
 
@@ -2038,9 +2039,7 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
     (xtrees/calibrated_apply.mojo)."""
     var keep = List[PythonObject]()
     var acc = admitted_vector(n * k, "<f8", context)
-    var addrs: List[Int] = [trees_address(acc)]
-    var ints: List[Int] = [n, k, len(pairs)]
-    var floats: List[Float64] = [Float64(n), Float64(k), Float64(len(pairs))]
+    var program = CalibratedProgram(trees_address(acc), n, k, len(pairs))
     for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
         var e = pairs[i][0]
         var cals = pairs[i][1]
@@ -2057,51 +2056,26 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
         if k == 2:
             if blk.cols != 1:
                 at = _index_of_one(e, context)
-                if at < 0:
-                    raise Error("1 is not in list")
+                meta_binary_column_check(at)
         else:
             var sub_cols = _sub_cols(e, context)
             keep.append(sub_cols)
             cols_addr = trees_address(sub_cols)
             ks = len(_attr(e, "classes_", Python.list()))
-        addrs.append(blk.address)
-        addrs.append(cols_addr)
-        var words: List[Int] = [blk.cols, at, ks, len(cals)]
-        for w in range(4):  # small-loop(the four integer words of a pair)
-            ints.append(words[w])
-            floats.append(Float64(words[w]))
+        program.pair(blk.address, cols_addr, blk.cols, at, ks, len(cals))
         for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
             var entry = cals[j]
             var par = entry[1]
             if String(entry[0]) == "sigmoid":
-                addrs.append(0)
-                addrs.append(0)
-                ints.append(0)
-                floats.append(0.0)
-                ints.append(0)
-                floats.append(Float64(py=par[0]))
-                ints.append(0)
-                floats.append(Float64(py=par[1]))
-                ints.append(0)
-                floats.append(0.0)
+                program.sigmoid(Float64(py=par[0]), Float64(py=par[1]))
             else:
                 var knots_x = par[0]
                 var knots_y = par[1]
                 keep.append(knots_x)
                 keep.append(knots_y)
-                addrs.append(trees_address(knots_x))
-                addrs.append(trees_address(knots_y))
-                ints.append(1)
-                floats.append(1.0)
-                ints.append(0)
-                floats.append(0.0)
-                ints.append(0)
-                floats.append(0.0)
-                var m = Int(py=par[2])
-                ints.append(m)
-                floats.append(Float64(m))
+                program.isotonic(trees_address(knots_x), trees_address(knots_y), Int(py=par[2]))
         _ = blk^
-    _ = xt_calibrated_proba(_xk(xt), addrs, ints, floats)
+    _ = xt_calibrated_proba(_xk(xt), program.addrs, program.ints, program.floats)
     _ = acc  # keep the Python object alive through the native call above
     _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
     return trees_reshape(acc, Python.tuple(n, k), context)
