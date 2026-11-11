@@ -6,7 +6,7 @@
 # encoded by ONE call of the base binding's `prepare_targets` (the device encoder
 # on a GPU install, the core host twin on a CPU-only one), the call `encode_labels`
 # made; str and other Python label objects take the label input step with the
-# same builtins `sorted_classes` used (dict.fromkeys, sorted, map). Integer and
+# native text/integer index or the admitted mixed-numeric order. Integer and
 # float classes decode through the base binding's `gather_i64` / `gather_f64`;
 # str and bool classes decode to the label objects. The shell hands over the
 # base binding (`_backend.binding("_mojolearn", "identical")`, `_buffer._native`'s).
@@ -38,6 +38,7 @@ from bindings.gp_class_table_boundary import GPPreparedClassTable
 from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
 from bindings.gp_label_input_boundary import gp_label_input
+from bindings.gp_label_order_boundary import gp_integer_classes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
 from bindings.p3_labels_metrics_native import p3_dict_codes
 
@@ -174,16 +175,18 @@ def _gp_list_labels[S: _TextCodeStorage](flat: PythonObject, base: PythonObject,
 
 
 def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: PythonObject) raises -> _TextLabels[S]:
-    """`sorted_classes(labels)` with codes as an int32 Array: the first of
-    equal labels kept, the classes sorted by Python's own comparison."""
+    """First equal label retained; native keys where their order is equivalent."""
     var b = native_loaded_module("builtins")
     if len(labels) == 0:
         raise Error("mojolearn: y is empty")
     var seen_number = False
     var seen_string = False
+    var builtin_integers = True
     for i in range(len(labels)):  # driver-loop: admitted native scalar labels only
         var value = labels[i]
         var kind = _gp_number_kind(value, context)
+        var cls = py_type(value)
+        builtin_integers = builtin_integers and (cls is b.int or cls is b.bool)
         # Input admission permits exact NumPy str_ as well as builtin str.
         # Their native Unicode slots preserve the original label identities.
         if family_is_str(value):
@@ -196,6 +199,16 @@ def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: Pytho
             raise Error("mojolearn: labels must be native numbers or strings without Python protocols")
     if seen_number and seen_string:
         raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
+    if seen_string:
+        # The shared text plan retains the first original exact str/NumPy str_
+        # object, including surrogate strings, and Python code-point ordering.
+        var named = _text_list_labels_into[S](labels, context)
+        if named:
+            return named.take()
+    if builtin_integers:
+        return gp_integer_classes[S](labels, context)
+    # Exact NumPy/mixed-real comparisons retain their existing native scalar
+    # semantics; a mathematical integer/Float64 key would change those rules.
     var classes = family_call(b.sorted, py_call(b.dict.fromkeys, labels))
     var table = py_call(b.dict, py_call(b.zip, classes, py_call(b.range, PythonObject(len(classes)))))
     if len(classes) > 2147483648:
