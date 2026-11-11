@@ -91,8 +91,11 @@ def partial_case(driver: KMeansVariantsDriver, kind: Int) raises:
 def bisect_case(driver: KMeansVariantsDriver, random_init: Bool) raises:
     var x: List[Float32] = [0, 1, 10, 11]
     var output = VariantsResultSlot()
+    # Bisect delegates each split to KMeans, whose existing validator requires
+    # positive tolerance. Use the public BisectingKMeans default; MiniBatch's
+    # separate tolerance-zero contract does not apply to this algorithm.
     driver.bisect_fit(BisectFitRequest(span(x), VariantsSpan(0, 0),
-        4, 1, 2, 1, random_init, 100, 7, random_init, 0), output)
+        4, 1, 2, 1, random_init, 100, 7, random_init, 1e-4), output)
     var first_low = output.storage[0].centers[0] == 0.5
     require((first_low and output.storage[0].centers[1] == 10.5)
             or (output.storage[0].centers[0] == 10.5 and output.storage[0].centers[1] == 0.5),

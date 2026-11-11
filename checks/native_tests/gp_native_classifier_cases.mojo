@@ -57,6 +57,9 @@ def classifier_fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host
     var columns = List[Float64](length=12 * members, fill=GP_GUARD64)
     var probabilities = List[Float64](length=10 * classes + 2, fill=GP_GUARD64)
     var predicted = List[Int64](length=12, fill=-31)
+    # The standalone OVR combine writes Int32 codes. Binary/fused prediction
+    # writes Int64; keep independent guarded spans for those ABI contracts.
+    var combined_codes = List[Int32](length=12, fill=-31)
     var failures = List[Int](length=48 * members, fill=0)
     var lease = -1
     tables.prepare_scalars()
@@ -184,7 +187,7 @@ def classifier_fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host
                 tables.columns[member] = Int(columns.unsafe_ptr() + 12 * member + 1)
             if multiclass:
                 require(query_driver.gpc_combine(GPCCombineRequest(Int(tables.columns.unsafe_ptr()),
-                    Int(probabilities.unsafe_ptr() + 1), Int(predicted.unsafe_ptr() + 1), 10, members)) == 0,
+                    Int(probabilities.unsafe_ptr() + 1), Int(combined_codes.unsafe_ptr() + 1), 10, members)) == 0,
                     "GPC original per-member native probability combine")
         if all_members and not multiclass:
             # Public binary latent_mean_and_variance remains a separate native
@@ -194,9 +197,10 @@ def classifier_fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host
                 Int(variances.unsafe_ptr() + 1), 0, 48, 3, 10, kernel.view(), False, 0, 0))
         var prob = probabilities.unsafe_ptr() + 1
         var pred = predicted.unsafe_ptr() + 1
+        var combined = combined_codes.unsafe_ptr() + 1
         var mp = means.unsafe_ptr() + 1
         var vp = variances.unsafe_ptr() + 1
-        def query_cell(row: Int) {imm fp, imm prob, imm pred, imm mp, imm vp, imm classes, imm multiclass}:
+        def query_cell(row: Int) {imm fp, imm prob, imm pred, imm combined, imm mp, imm vp, imm classes, imm multiclass, imm all_members}:
             var total = Float64(0)
             var best = 0
             var okay = True
@@ -208,7 +212,8 @@ def classifier_fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host
                     best = label
             okay = okay and abs(total - Float64(1)) < Float64(1e-12)
             if multiclass:
-                okay = okay and pred[row] == Int64(best)
+                var code = pred[row] if all_members else Int64(combined[row])
+                okay = okay and code == Int64(best)
             else:
                 okay = okay and isfinite(mp[row]) and isfinite(vp[row]) and vp[row] > 0
                 okay = okay and pred[row] == Int64(1 if mp[row] > 0 else 0)
@@ -227,6 +232,7 @@ def classifier_fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host
         require(probabilities[0] == GP_GUARD64 and probabilities[len(probabilities) - 1] == GP_GUARD64,
             "GPC combined probability guards")
         require(predicted[0] == Int64(-31) and predicted[11] == Int64(-31), "GPC predicted-code guards")
+        require(combined_codes[0] == Int32(-31) and combined_codes[11] == Int32(-31), "GPC Int32 combine-code guards")
         unchanged(source, source_before, "GPC borrowed training source unchanged")
         unchanged(query, query_before, "GPC borrowed query unchanged")
     finally:
@@ -246,3 +252,4 @@ def classifier_fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host
         _ = columns^
         _ = probabilities^
         _ = predicted^
+        _ = combined_codes^
