@@ -90,3 +90,38 @@ shared admission/lifecycle metadata. Raw boxed exports still have direct
 compatibility/test consumers and remain; their public fit callers have moved.
 The family is not yet fully migrated. Shared resident transport already counted
 for KMeans variants will not be counted again when Spectral reuses it.
+
+## Native query and resident ownership
+
+`_sc_predict` now constructs `SpectralQueryShape` and typed direct/resident
+requests. `_sc_resident` retains a `SpectralResidentLease`, whose native Arc
+owns `SpectralResidentState(driver, handle)`. The five public fitted buffers
+and actual descriptor provider remain explicit boundary pins. Query eviction
+cannot retire an active Arc; final release occurs after metadata removal,
+outside the Dict operation. Ordinary fit-state freezing, reuse, resident upload
+and query-copy routes are unchanged. No kernel or registry numerical body changed.
+
+The shared resident table is V6 with a Spectral branch beside the unchanged
+V5 variants branch. Limits, LRU accounting and generation/dimension/object
+matching remain; provider identity additionally prevents a replacement factory
+from reusing a different minting driver's handle. The new storage is internal
+native state, never a Python model-field owner, so no canonical field-release
+registration is needed. Native tests can own an Arc of `SpectralResidentState`
+and exercise release through a mock native descriptor; actual provider fixtures
+use the frozen SpectralDriver prepare/query_resident/release interface.
+
+Removed from Spectral execution: Python query dimension/address lists, fitted
+object identity tuple, `(query_callable, handle)` envelope, compiled-callable
+resident prepare/query/release dispatch. Public `(labels, embedding)` is still
+the documented output of the embedding prediction seam. Legacy table routines
+remain only because this lane's adopted older `cluster_native` still consumes
+them; the parent already has c47be7762d removing those consumers. After both
+changes collect, delete the now-unreferenced legacy table APIs and callable
+fields in that combined source. No aggregate role claim for shared table schema.
+
+Source evidence: `E/spectral-native-owner/public-query-source-audit.json` records
+five anchors and nine lifetime invariants; neither is a runtime verdict.
+Affected roots additionally include every current `cluster_resident_table`
+consumer through the existing runtime family build closure. Native ownership,
+public mutation/cache/lifetime tests and all target compiles remain root-owned.
+Affinity preparation and alternative label assignment remain staged next.
