@@ -4,6 +4,9 @@
 HOST ONLY: the entry points of x_decomp/api.mojo on the host executor
 (x_decomp/host.mojo), under the GPU binding's names and address contract,
 plus the family read-backs."""
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_DECOMP
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
+from x_decomp.descriptor_host import x_decomp_host_v1
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -110,6 +113,15 @@ def x_decomp_native_api_v1_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_decomp_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = X_DECOMP_HOST_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
+    linear_table_publish[LINEAR_TABLE_DECOMP](key,
+        Int(api[].entries.unsafe_ptr()), [String(XD_ABI_NAME)], [XD_OPERATION_COUNT], [x_decomp_host_v1])
+
 def build__mojolearn_x_decomp_host() -> PythonObject:
     comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
@@ -230,6 +242,8 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[graph_dijkstra_py]("x_decomp_graph_dijkstra")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_decomp_host: ", e))

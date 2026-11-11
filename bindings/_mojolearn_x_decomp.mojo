@@ -4,6 +4,10 @@
 points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_DECOMP
+from checks.vendor import COMPILED_VENDOR
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
+from x_decomp.descriptor_device import x_decomp_device_v1
 from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
@@ -138,6 +142,15 @@ def x_decomp_native_api_v1_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_decomp.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = X_DECOMP_DEVICE_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1))
+    linear_table_publish[LINEAR_TABLE_DECOMP](key,
+        Int(api[].entries.unsafe_ptr()), [String(XD_ABI_NAME)], [XD_OPERATION_COUNT], [x_decomp_device_v1])
+
 def build__mojolearn_x_decomp() -> PythonObject:
     comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
@@ -349,6 +362,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_decomp: ", e))

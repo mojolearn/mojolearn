@@ -4,6 +4,11 @@ Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
+from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
+from core.linear_boundary_types import LINEAR_PREDICT_ABI
+from glm.linear_fit_device import linear_fit_device_v1
+from glm.linear_predict_device import linear_predict_device_v1
 from std.python.bindings import lookup_py_type_object
 from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
@@ -1659,6 +1664,15 @@ def dbscan_core_arrays_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = LINEAR_FIT_DEVICE_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1))
+    linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
+        Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_device_v1, linear_predict_device_v1])
+
 def build__mojolearn_estimators() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1748,7 +1762,9 @@ def build__mojolearn_estimators() -> PythonObject:
             m.def_function[qn_predict_multiclass_binding]("qn_predict_multiclass")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))
 

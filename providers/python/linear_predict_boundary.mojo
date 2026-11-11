@@ -11,11 +11,10 @@ from bindings.classical_arrays import classical_array, classical_address
 from bindings.classical_validate import classical_check_x_snapshot, classical_estimator_name
 from bindings.admitted_input import admit_x
 from bindings.sequential_description import sequential_fields
-from core.linear_boundary_types import LINEAR_PREDICT_ABI
-from core.linear_boundary_run import linear_predict_run
-from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients, linear_state_predict_request
-from providers.python.linear_state_boundary import LinearStateOwner, linear_state_owner
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
+from providers.python.linear_state_boundary import LinearStateOwner, linear_state_owner, linear_state_snapshot, linear_state_refresh
+from core.linear_registry import LINEAR_STATES, linear_lease_predict
+from providers.python.linear_entry_boundary import linear_entry_connection
 
 
 def _linear_predict_boundary(model: PythonObject, value: PythonObject,
@@ -24,7 +23,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var owner = linear_state_owner(model)
     var state = LinearModelState()
     if owner is not None:
-        state = owner.downcast_value_ptr[LinearStateOwner]()[].state.copy()
+        state = linear_state_snapshot(owner)
     var coefficient_source = py_get(fields, "coef_")
     state.has_coef = coefficient_source is not None
     linear_state_require_coef(state)
@@ -45,14 +44,15 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     state.coef = Int(py=classical_address(coef))
     state.intercept = Float64(py=intercept_source)
     var dst = classical_array(rows, 0, context, wide)
-    var request = linear_state_predict_request(state, admitted_x.address,
-        Int(py=classical_address(dst)), rows, cols, wide, est)
-    var provider = neural_descriptor_connect_factory_once(
-        entries["linear_predict_native_api_v1"], String(LINEAR_PREDICT_ABI), 1)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    owner = linear_state_refresh(model, owner, state, coef)
+    var handle = owner.downcast_value_ptr[LinearStateOwner]()[].handle.copy()
+    var lease = LINEAR_STATES.acquire(handle)
+    var connection = linear_entry_connection(entries)
+    var key = connection.key.copy()
+    var destination = Int(py=classical_address(dst))
     try:
         with GILReleased(Python()):
-            linear_predict_run(entry, request)
+            linear_lease_predict(key, lease, admitted_x.address, destination, rows, cols, wide, est)
     finally:
         # Raw addresses and the copied native function pointer do not retain
         # the admitted arrays or the extension image that owns the endpoint.
@@ -60,8 +60,10 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
         _ = admitted_x
         _ = coef
         _ = dst
-        _ = provider
+        _ = entries
+        _ = connection
         _ = owner
+        _ = lease
     return dst
 
 

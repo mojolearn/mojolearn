@@ -15,7 +15,8 @@ from bindings.sequential_description import sequential_fields
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
 from core.linear_fit_run import linear_ridge_run
 from providers.python.linear_state_boundary import linear_state_publish
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
+from providers.python.linear_entry_boundary import linear_entry_connection
+from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_X_LINEAR, linear_table_entry
 
 
 def classical_ridge_fit(model: PythonObject, args: PythonObject,
@@ -41,12 +42,10 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         0 if weights is None else Int(py=classical_address(weights)),
         Int(py=classical_address(coef)), Int(py=classical_address(mean)), rows, cols,
         intercept, alpha)
-    var provider = neural_descriptor_connect_factory_once(
-        entries["linear_fit_native_api_v1"], String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
-    var weighted_provider = neural_descriptor_connect_factory_once(
-        entries["ridge_fit_native_api_v1"], String(RIDGE_FIT_ABI), 1)
-    var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
-    var weighted_entry = weighted_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var connection = linear_entry_connection(entries)
+    var key = connection.key.copy()
+    var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
+    var weighted_entry = linear_table_entry[LINEAR_TABLE_X_LINEAR](key, 0, String(RIDGE_FIT_ABI), 1)
     var result = LinearFitResult()
     try:
         with GILReleased(Python()):
@@ -58,8 +57,8 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         _ = weights
         _ = coef
         _ = mean
-        _ = provider
-        _ = weighted_provider
+        _ = entries
+        _ = connection
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", result.intercept)
     py_setitem(fields, "_x_mean", mean)
