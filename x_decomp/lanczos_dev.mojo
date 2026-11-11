@@ -32,7 +32,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
 from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
-from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
+from x_decomp.resident import pool_buffer, _ptr, pool_alloc, pool_free
 from x_decomp.eigh_ops import eigh_op_tridiag
 from core.step_gate import step_gate_open_word
 from max.gpu.host import DeviceBuffer
@@ -147,15 +147,14 @@ def dev_eigh_tridiag_run(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises ->
     and the dense route per basis round)."""
     if j < 1 or j > cap:
         raise Error("x_decomp: the Lanczos projected solve needs 1 <= j <= cap, got j=" + String(j) + " cap=" + String(cap))
-    _ = _ptr(iab, 2 * cap)
-    _ = _ptr(iw, j)
-    _ = _ptr(iz, j * j)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(iab, 2 * cap)
+    var weights = pool_buffer(iw, j)
+    var vectors = pool_buffer(iz, j * j)
     var ctx = xd_ctx()
-    var d = pool[].bufs[iab].create_sub_buffer[DType.float32](0, j)
-    var e = pool[].bufs[iab].create_sub_buffer[DType.float32](cap, max(j - 1, 1))
-    var w = pool[].bufs[iw].create_sub_buffer[DType.float32](0, j)
-    var z = pool[].bufs[iz].create_sub_buffer[DType.float32](0, j * j)
+    var d = source.create_sub_buffer[DType.float32](0, j)
+    var e = source.create_sub_buffer[DType.float32](cap, max(j - 1, 1))
+    var w = weights.create_sub_buffer[DType.float32](0, j)
+    var z = vectors.create_sub_buffer[DType.float32](0, j * j)
     var gate = step_gate_open_word(ctx)
     var status = ctx.enqueue_create_buffer[DType.int32](1)
     eigh_op_tridiag(ctx, gate, d, e, w, z, status, j)
@@ -167,6 +166,9 @@ def dev_eigh_tridiag_run(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises ->
     _ = e^
     _ = w^
     _ = z^
+    _ = source^
+    _ = weights^
+    _ = vectors^
     _ = gate^
     _ = status^
     _ = hs^
