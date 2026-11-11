@@ -2,6 +2,7 @@
 # Native framed transport. POSIX owns fd/process operations; CPython is used
 # only for exact builtin containers and an opaque fd-owning capsule. Calling
 # CPython's socket/posix wrappers would invoke Python audit hooks.
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.ffi import c_int, c_uint, c_size_t, external_call
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -202,7 +203,7 @@ def transport_address(socket: PythonObject, peer: Bool = False) raises -> Python
     if not found:
         posix_failure("inet_ntop", posix_errno())
     var result = Python.list()
-    _ = py_call(result.append, String(unsafe_from_utf8_ptr=text.unsafe_ptr()))
+    _ = py_call(result.append, unsafe_string_from_utf8_cstr(text.unsafe_ptr()))
     _ = py_call(result.append, (Int(bytes[2]) << 8) | Int(bytes[3]))
     if family == ipv6:
         var flow = (Int(bytes[4]) << 24) | (Int(bytes[5]) << 16) | (Int(bytes[6]) << 8) | Int(bytes[7])
@@ -218,7 +219,7 @@ def transport_hostname() raises -> String:
     if external_call["gethostname", c_int](buffer.unsafe_ptr(), c_size_t(256)) != 0:
         posix_failure("gethostname", posix_errno())
     buffer[255] = 0
-    return String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+    return unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
 
 
 def transport_port(socket: PythonObject) raises -> Int:

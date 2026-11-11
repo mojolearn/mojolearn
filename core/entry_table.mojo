@@ -41,7 +41,7 @@ def entry_table_publish[name: StaticString](mode: Int, vendor: Int,
             or len(entries) != len(operations)):
         raise Error("native entry table: invalid publication")
     for index in range(len(entries)):  # driver-loop: fixed ABI entries
-        if not len(schemas[index]) or operations[index] <= 0:
+        if schemas[index].byte_length() == 0 or operations[index] <= 0:
             raise Error("native entry table: invalid entry schema")
     comptime SLOT = SharedSlot[NativeEntryTable, name, ENTRY_TABLE_LAYOUT]
     var slot = SLOT.get_or_create_ptr()

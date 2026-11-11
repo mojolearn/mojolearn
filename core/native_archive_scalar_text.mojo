@@ -5,6 +5,7 @@ Normal saved metadata is Unicode. Historical archives can also carry numeric
 or byte fields; their standard scalar spelling is retained without constructing
 Python/NumPy scalar objects. This is formatting only, never model arithmetic.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.ffi import c_char, c_int, c_size_t, external_call
 from std.memory import bitcast
 from core.native_archive_span import ArchiveSpan
@@ -70,7 +71,7 @@ def archive_float_text(bits: UInt64, width: Int, print_mode: Int) raises -> Stri
         var used = external_call["snprintf", c_int, num_fixed_args=3](buffer.unsafe_ptr(), c_size_t(64), general.as_c_string_slice().unsafe_ptr(), c_int(6 if half else 12), value)
         if used < 0 or used >= 64:
             raise Error("native archive scalar formatting failed")
-        var result = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var result = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
         if result.find(".") < 0 and result.find("e") < 0:
             result += ".0"
         _ = locale^
@@ -94,7 +95,7 @@ def archive_float_text(bits: UInt64, width: Int, print_mode: Int) raises -> Stri
     var used = external_call["snprintf", c_int, num_fixed_args=3](buffer.unsafe_ptr(), c_size_t(64), exponent_format.as_c_string_slice().unsafe_ptr(), c_int(significant - 1), value)
     if used < 0 or used >= 64:
         raise Error("native archive scalar formatting failed")
-    var exponential = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+    var exponential = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
     if scientific:
         _ = locale^
         return exponential

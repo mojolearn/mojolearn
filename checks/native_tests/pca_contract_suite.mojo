@@ -4,6 +4,7 @@
 Fixed distinct field values expose slot swaps. Numerical kernels are not
 reimplemented here; their execution lives in the PCA CPU/GPU suites.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.native_call_output import NativeCallOutput
@@ -86,7 +87,7 @@ def missing_result(mut output: NativeCallOutput) raises:
     var status = pca_wire_entry(PCA_MODE, 0, 0, 0, 0, 0, 0, 0,
         Int(MutPointer(to=output.error)), native_descriptor_error)
     output.error.append(0)
-    require(status != 0 and String(unsafe_from_utf8_ptr=output.error.unsafe_ptr())
+    require(status != 0 and unsafe_string_from_utf8_cstr(output.error.unsafe_ptr())
             == "PCA native ABI: missing result span", "PCA missing-result refusal")
 
 

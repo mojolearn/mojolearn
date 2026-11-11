@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native-only invocation; Python ownership belongs in providers/python.
+from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_call_output import NativeCallOutput
 
@@ -45,7 +46,7 @@ def native_descriptor_call_spans(
         Int(MutPointer(to=output.error)), native_descriptor_error)
     if status != 0:
         output.error.append(0)
-        raise Error(String(unsafe_from_utf8_ptr=output.error.unsafe_ptr()))
+        raise Error(unsafe_string_from_utf8_cstr(output.error.unsafe_ptr()))
     return output.result
 
 

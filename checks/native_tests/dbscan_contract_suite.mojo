@@ -4,6 +4,7 @@
 Independent contracts run in parallel. Mock tensor addresses are never
 dereferenced or passed to real kernels; heap-owned error storage stays live.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.native_call_output import NativeCallOutput
@@ -98,7 +99,7 @@ def missing_span(mut output: NativeCallOutput, unit: Int) raises:
     var status = dbscan_native_v1[DBSCANWireOracle](99, 0, Int(unit == 14), 0, Int(unit == 15),
         0, Int(unit == 16), result, Int(MutPointer(to=output.error)), native_descriptor_error)
     output.error.append(0)
-    require(status != 0 and String(unsafe_from_utf8_ptr=output.error.unsafe_ptr()) == expected,
+    require(status != 0 and unsafe_string_from_utf8_cstr(output.error.unsafe_ptr()) == expected,
         "DBSCAN null span refusal precedes operation dispatch")
     _ = output
 

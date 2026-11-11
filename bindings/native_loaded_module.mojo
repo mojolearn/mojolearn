@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Read canonical import-time module/export connections without import callbacks.
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.ffi import c_int
 from std.python._cpython import ExternalFunction, PyObjectPtr
@@ -304,7 +305,7 @@ def shared_dict_watcher() raises -> Int:
         return g[].watcher
     ref cpy = Python().cpython()
     var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
-    var version = String(unsafe_from_utf8_ptr=version_ptr)
+    var version = unsafe_string_from_utf8_cstr(version_ptr)
     if version.startswith("3.10.") or version.startswith("3.11."):
         g[].watcher = -1
         return -1

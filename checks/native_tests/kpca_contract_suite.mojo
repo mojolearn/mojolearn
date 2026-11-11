@@ -4,6 +4,7 @@
 The prescribed wire oracle performs no kernel centering or eigendecomposition.
 Its fake addresses never reach numerical code. Error outputs are heap-owned.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from core.host_parallel import host_parallelize
 from core.native_call_output import NativeCallOutput
 from core.native_descriptor_abi import NativeDescriptorError
@@ -56,7 +57,7 @@ def missing_result(mut output: NativeCallOutput) raises:
     var status = kpca_native_v1[KPCAWireOracle](KPCA_MODE, 0, 0, 0, 0, 0, 0, 0,
         Int(MutPointer(to=output.error)), native_descriptor_error)
     output.error.append(0)
-    require(status != 0 and String(unsafe_from_utf8_ptr=output.error.unsafe_ptr())
+    require(status != 0 and unsafe_string_from_utf8_cstr(output.error.unsafe_ptr())
         == "KernelPCA native ABI: missing result span", "KPCA missing-result refusal")
     _ = output
 

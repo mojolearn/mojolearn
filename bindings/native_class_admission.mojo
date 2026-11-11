@@ -29,6 +29,7 @@ Records live in the prepared-owner registry keyed by a weak reference to the
 class, so a dead class's records are dropped and a recycled address never
 matches. A record must not strongly retain the class it belongs to.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
@@ -73,7 +74,7 @@ def _class_watcher() raises -> Int:
         return g[].watcher
     ref cpy = Python().cpython()
     var version_ptr = cpy.lib.get_function[Pointer[Int8, MutUntrackedOrigin]]("Py_GetVersion")()
-    var version = String(unsafe_from_utf8_ptr=version_ptr)
+    var version = unsafe_string_from_utf8_cstr(version_ptr)
     if version.startswith("3.10.") or version.startswith("3.11."):
         g[].watcher = -1
         return -1

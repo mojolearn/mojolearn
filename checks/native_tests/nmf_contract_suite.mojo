@@ -4,6 +4,7 @@
 The test-only entry validates distinct request slots and implements no NMF
 solver. Independent fixtures run in parallel, with heap-owned ABI outputs.
 """
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.native_call_output import NativeCallOutput
@@ -102,7 +103,7 @@ def missing_result(mut output: NativeCallOutput) raises:
     var status = nmf_wire_entry(NMF_MODE, 0, 0, 0, 0, 0, 0, 0,
         Int(MutPointer(to=output.error)), native_descriptor_error)
     output.error.append(0)
-    require(status != 0 and String(unsafe_from_utf8_ptr=output.error.unsafe_ptr())
+    require(status != 0 and unsafe_string_from_utf8_cstr(output.error.unsafe_ptr())
             == "NMF native ABI: missing result span", "NMF missing-result refusal")
     _ = output
 

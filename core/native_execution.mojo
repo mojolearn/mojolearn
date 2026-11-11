@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native operation endpoint. This transport adds an admitted lifetime
 # context to the existing descriptor ABI; it never exposes Python objects.
+from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_error
 from core.native_call_output import NativeCallWorkspaceLease
@@ -34,7 +35,7 @@ struct NativeExecutionEndpoint(Copyable, Movable):
                 Int(MutPointer(to=scratch[].output.error)), native_descriptor_error)
             if status != 0:
                 scratch[].output.error.append(0)
-                raise Error(String(unsafe_from_utf8_ptr=scratch[].output.error.unsafe_ptr()))
+                raise Error(unsafe_string_from_utf8_cstr(scratch[].output.error.unsafe_ptr()))
             return scratch[].output.result
         finally:
             # Keep the heap owner and exclusive claim through error conversion.

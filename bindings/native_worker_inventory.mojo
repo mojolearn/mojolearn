@@ -4,6 +4,7 @@
 # Python audit hooks, or a GPU driver call on the CPU/Metal routes.
 # https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html
 # https://rocm.docs.amd.com/projects/HIP/en/docs-6.4.2/doxygen/html/hip__runtime__api_8h_source.html
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.ffi import OwnedDLHandle, c_int, c_uint, external_call
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -135,7 +136,7 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
         _inventory_status(driver.get_function[c_int](bus_call)(bus.unsafe_ptr(), c_int(64), device[0]), bus_call)
         name[255] = 0
         bus[63] = 0
-        var pci = py_call(PythonObject(String(unsafe_from_utf8_ptr=bus.unsafe_ptr())).lower)
+        var pci = py_call(PythonObject(unsafe_string_from_utf8_cstr(bus.unsafe_ptr())).lower)
         if len(pci) == 0:
             raise Error("worker inventory: GPU driver returned an empty PCI bus ID")
         var row = bi.dict()

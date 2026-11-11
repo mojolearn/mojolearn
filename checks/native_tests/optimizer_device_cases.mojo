@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Actual optimizer device descriptor and native storage-plan contracts."""
+from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall
 from training.optimizer_native_api import OptimizerNativeDriver, OPT_NATIVE_COUNT
 from training.optimizer_device_storage_plan import (
@@ -53,7 +54,7 @@ def malformed(entry: NativeDescriptorCall, fixture_id: Int) raises:
     require(probes[0].calls == 1, "device descriptor error sink count differs")
     require(len(probes[0].bytes) == len(expected.as_bytes()), "device descriptor error was truncated")
     probes[0].bytes.append(0)
-    var copied = String(unsafe_from_utf8_ptr=probes[0].bytes.unsafe_ptr())
+    var copied = unsafe_string_from_utf8_cstr(probes[0].bytes.unsafe_ptr())
     require(copied == expected, "device descriptor error changed: " + copied)
     _ = probes
     _ = addresses
