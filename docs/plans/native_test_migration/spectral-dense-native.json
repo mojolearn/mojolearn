@@ -1,7 +1,7 @@
 {
   "family": "Spectral dense preparation",
   "status": "CPU14/GPU8 authored, uncompiled and unrun",
-  "dependency": "Existing core/dense_coo, core/dense_coo_host and core/dense_coo_device; no new typed Spectral API required",
+  "dependency": "71cd5c0138: actual Spectral preparation API/host/device providers over unchanged core dense COO/kNN kernels",
   "entries": {
     "cpu": "checks/native_tests/spectral_dense_cpu.mojo",
     "gpu": "checks/native_tests/spectral_dense_gpu.mojo"
@@ -36,18 +36,26 @@
   },
   "parallel_plan": "14 independent CPU cases use host_parallelize. GPU executes8 graphs in order on the one physical GPU; product GPU kernels stay parallel. The reproduced shared-DeviceContext concurrent-submission failure remains separate and open.",
   "compile_flags": {
-    "all": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
-    "cpu": ["-D MOJOLEARN_COLUMN_CPU=1"]
+    "all": [
+      "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+      "-I ."
+    ],
+    "cpu": [
+      "-D MOJOLEARN_COLUMN_CPU=1"
+    ]
   },
   "cleanup": "All original Python tests remain until root accepts native execution. Keep sparse public refusal, public packing and fit-time validation seams when numerical duplicates are removed.",
   "evidence": [
     "E/pca-native-tests/spectral-reference-preparation.log",
     "E/pca-native-tests/spectral-reference-source-check.json",
     "E/pca-native-tests/spectral-reference-source-check-r3.log",
-    "E/pca-native-tests/spectral-dense-static.json"
+    "E/pca-native-tests/spectral-dense-static.json",
+    "E/pca-native-tests/spectral-dense-preparation-static.json"
   ],
   "preserved_preparation_failures": "First static byte-check command used missing python (exit127), second system python3 lacked NumPy (exit1); successful third command used existing project Python. Both original logs retained; no native attempt occurred.",
   "product_or_kernel_changes": 0,
   "python_deletions": 0,
-  "runtime_identity_performance_claim": false
+  "runtime_identity_performance_claim": false,
+  "typed_driver_followup": "Original unrun CPU14/GPU8 fixtures now invoke SpectralPreparationDriver.count/fill/knn; original matrix/reference bytes, assertions and fixture counts unchanged. Device uses the actual provider image context.",
+  "local_adoption_not_producer": "093de0a9c62d89aa6473fb8380ad83477c50bb7e"
 }

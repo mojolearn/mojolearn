@@ -9,8 +9,9 @@ dimensions, seeds, exact oracles and public defaults are unchanged.
 Use the two `check-native-spectral-dense-*` tasks or import the corresponding
 `spectral_dense_{cpu,gpu}_suite.run_checks` in the integration bundle. Both need
 `MOJOLEARN_NUMERIC_IDENTICAL=1`; CPU additionally needs `MOJOLEARN_COLUMN_CPU=1`.
-Run from the repository root so saved fixtures resolve. No new product API or
-binding group is needed. The separate shared-context concurrency failure stays open.
+Run from the repository root so saved fixtures resolve. Typed preparation dependency `71cd5c0138` supplies the actual host/device
+`SpectralPreparationDriver.count/fill/knn` entries over the same kernels. The
+separate shared-context concurrency failure stays open.
 
 Reference preparation used 17 independent process jobs with all 10 host cores.
 It saved49 artifacts/334316 bytes, including full original150-row embedding,
@@ -25,3 +26,8 @@ native replacements. Their sparse refusal, public packing and validation seams
 stay in Python. No product/kernel, algorithm, benchmark or timing changes.
 Full Spectral fit/query/state coverage awaits the pilot's concrete backends;
 this handoff covers only the existing dense preparation primitives.
+
+The preparation follow-up changes only the call interface of these still-unrun
+fixtures. Counts, input/reference bytes and all original oracles stay unchanged.
+Device calls now use the production provider context. F64/sparse preparation
+is not claimed by the original F32 dense fixtures. No Python cleanup applied.
