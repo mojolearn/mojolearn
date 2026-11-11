@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "source_commit": "e53128fe7f9206abe748dbe32052a81ed864ef3c",
+  "source_python": "python/mojolearn/tests/test_linalg_decompositions.py",
+  "decision": "split-migrated",
+  "python_numerical_definitions_removed": 2,
+  "python_definitions_retained": 18,
+  "python_definitions_with_native_assertions_moved": 2,
+  "native_fixtures_per_target": 5,
+  "targets": [
+    "CPU",
+    "GPU"
+  ],
+  "fixtures": [
+    {
+      "case": "QR Gram and triangularity",
+      "shape": [
+        48,
+        5
+      ],
+      "rtol": 0.0001,
+      "atol": 0.0001,
+      "triangular_atol": 1e-05
+    },
+    {
+      "case": "QR Gram and triangularity",
+      "shape": [
+        16,
+        4
+      ],
+      "rtol": 0.0001,
+      "atol": 0.0001,
+      "triangular_atol": 1e-05
+    },
+    {
+      "case": "Ascending diagonal eigh",
+      "shape": [
+        4,
+        4
+      ],
+      "expected": [
+        0.5,
+        2,
+        3,
+        9
+      ],
+      "atol": 1e-06
+    },
+    {
+      "case": "Duplicate-column SVD rank",
+      "shape": [
+        48,
+        4
+      ],
+      "strict_last_abs_bound": 0.001
+    },
+    {
+      "case": "Constant-column SVD convergence",
+      "shape": [
+        64,
+        10
+      ],
+      "leading_count": 5,
+      "rtol": 0.0001,
+      "atol_times_reference_max": 1e-05,
+      "null_bound_times_reference_max": 0.001
+    }
+  ],
+  "retained_python": [
+    "NumPy oracle and returned-array shape/dtype checks",
+    "caller input ownership",
+    "mode/triangle/width/dtype/refusal behavior",
+    "existing identity-only tests unchanged and unrun; no native counterpart added"
+  ],
+  "native_calls": {
+    "CPU": [
+      "decomposition.linalg_host_impl.qr_r_host_run",
+      "decomposition.linalg_host_impl.svdvals_host_run",
+      "x_decomp.host.HostExec.eigh"
+    ],
+    "GPU": [
+      "decomposition.linalg_door_impl.qr_r_device_into",
+      "decomposition.linalg_door_impl.svdvals_device_into",
+      "x_decomp.device.DevExec.eigh"
+    ]
+  },
+  "data": "checks/native_tests/fixtures/linalg_numerical/metadata.json",
+  "runtime_status": "Uncompiled and unrun; orchestrator owns bundled compilation and native correctness execution.",
+  "product_changes": false,
+  "a_b_define": null
+}

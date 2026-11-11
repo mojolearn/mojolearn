@@ -1,0 +1,59 @@
+Mojolearn native linalg numerical migration (2026-11-10)
+
+Base: frozen integration e53128fe7f9206abe748dbe32052a81ed864ef3c.
+Own adoption commits bd8fc9cf5e/d8e81c0e31 are dependency history, not a root pick.
+No product/kernel/default changes. No A/B define. No output-bit requirement
+against an earlier release. No compiler/test/timing/identity/box execution.
+
+Five original fixtures per target (CPU5 + GPU5)
+  QR48x5 and16x4 preserve seed5, triangular atol1e-5 and Gram rtol/atol1e-4.
+  The oracle computes A'A in Float64 and R'R in Float32, matching the original
+  input/output precision. Independent cells run across the host pool.
+  Diagonal eigh4x4 retains literal[3,.5,2,9], ascending[.5,2,3,9], atol1e-6.
+  Rank-deficient SVD48x4 retains seed5's48x3 matrix and duplicate middle column,
+  descending order and strict abs(last)<1e-3.
+  Constant-column SVD64x10 retains the original scaled four random columns
+  and six literal columns. NumPy Float64 SVD supplies an independent saved
+  spectrum. Leading5 keep rtol1e-4/atol1e-5*reference_max; trailing5 keep
+  abs<=1e-3*reference_max. No workload/tolerance reduction.
+  Output guards and input-storage ownership are checked; these are not
+  repeatability runs. Existing source guards are not recreated.
+
+Actual calls / scheduling
+  CPU: qr_r_host_run, svdvals_host_run, HostExec.eigh (UPLO lower1), the
+  actual compiled linalg entry bodies. Five independent fixture graphs run
+  through host_parallelize; fixture decoding/comparison also splits by cell.
+  GPU: qr_r_device_into, svdvals_device_into, DevExec.eigh (same UPLO1).
+  Shared production device contexts/pools require ordered graph submission;
+  existing device kernels retain parallelism. No substitute CPU GPU route.
+  Input/output owners remain named after final raw-pointer reads/calls.
+
+Genuine Python split
+  test_linalg_decompositions.py:20->18 definitions. Two complete pure
+  numerical definitions moved (diagonal ordering, duplicate-column rank).
+  QR's two parametrized cases retain the public returned shape/dtype and
+  caller-storage seam; Gram/triangularity moved. Constant-column ordering
+  and null-direction checks moved; its independent NumPy comparison stays.
+  Other independent NumPy/public/refusal tests remain. Existing identity-only
+  tests were left untouched and were not run; no native counterpart added.
+  Existing PCA whitening3CPU/3GPU suites were reviewed, not duplicated.
+
+Fixture provenance
+  fixtures/linalg_numerical/generate.py imports NumPy only and never imports
+  or executes Mojolearn. Four independent variants run through a host-sized
+  pool. It records four original Float32 inputs and one Float64 NumPy spectrum;
+  metadata.json records NumPy2.5.3, source commit, seed and file/generator hashes.
+  This data-generation execution is not native/runtime correctness evidence.
+
+Root queue / RUN OWED
+  CPU: mojo run -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/linalg_numerical_cpu.mojo
+  GPU: mojo run -I . checks/native_tests/linalg_numerical_gpu.mojo
+  Importable suites expose run_checks(); small wrappers and pixi tasks included.
+  Run from repository root so recorded fixture paths resolve. Bundle these
+  with the PCA native request/state suites when ready; do not start an identity
+  run or a separate installed-wheel gate for this development merge.
+  Native compilation/correctness and retained installed Python tests remain owed.
+
+Static checks only: Python AST, TOML/JSON parse, git diff whitespace check.
+Full generation/adoption evidence:
+  ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/
