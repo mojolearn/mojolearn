@@ -126,12 +126,6 @@ def _reduction(reduction):
     return _REDUCTION[reduction]
 
 
-def _axis(axis):
-    if isinstance(axis, bool) or axis not in _AXIS:
-        raise ValueError("axis must be None (all elements), 0 (down the rows) or 1 (across the columns)")
-    return _AXIS[axis]
-
-
 def _axes(axis, name="axis"):
     """[] for None, else the listed axes as integers (Mojo normalizes them)."""
     if axis is None:
@@ -141,12 +135,6 @@ def _axes(axis, name="axis"):
             raise ValueError(f"{name} lists more than {_MAX_RANK} axes")
         return [_int(a, name) for a in axis]  # glue: at most eight axis arguments
     return [_int(axis, name)]
-
-
-def _keepdims(keepdims):
-    if keepdims is None:
-        return -1
-    return 1 if keepdims else 0
 
 
 def _dims(shape, name="shape", low=None):
@@ -326,10 +314,6 @@ class Session:
         ...     position = s.state(np.zeros((1, 1), np.int32), ids=True)
         """
         return _SESSION_CALL(self, "state", (x, ids))
-
-    @staticmethod
-    def _is_handle(v):
-        return isinstance(v, (int, np.integer)) and not isinstance(v, bool)
 
     def shape(self, h):
         """The shape of tensor ``h`` as a tuple: ``(rows, cols)`` for a
