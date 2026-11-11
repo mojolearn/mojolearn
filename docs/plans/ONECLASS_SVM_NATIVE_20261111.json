@@ -1,7 +1,7 @@
 {
   "base": "ed7d3711a61c84aa3fe293c846b9f967b6a4f9ad",
   "family": "OneClassSVM",
-  "status": "inventory before implementation; no execution",
+  "status": "additive native storage/API authored; public path not switched; no compilation/execution",
   "roles": [
     {
       "family": "OneClassSVM",
@@ -126,5 +126,24 @@
     "x_neighbors/iter_device.mojo"
   ],
   "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/ocsvm",
-  "jobs": "none; root only"
+  "jobs": "none; root only",
+  "additive_api": {
+    "resident_name": "mojolearn.ocsvm.resident.v1",
+    "operations": {
+      "mode": 0,
+      "compiled_flags": 1,
+      "resident_solve": 2
+    },
+    "resident_layout": "5 addresses /6 native integers (including existing fast-vs-identical route) /3 Float64",
+    "shared_x_neighbors_v1": "unchanged; candidate still uses original XnDriver resident operation",
+    "new_native_state": [
+      "OcMatrix",
+      "OcWeights",
+      "OcFitState",
+      "OcResidentRequest",
+      "OcResidentDriver"
+    ],
+    "kernel_calls": "same op_ocsvm_x; default numerical implementations unchanged",
+    "public_switch": "pending"
+  }
 }

@@ -729,6 +729,16 @@ def kpca_neighbors_native_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(table[].name, table[].entries)
 
 
+comptime _OC_RESIDENT_API_NAME = (("MojolearnOcResidentDevice" if OC_RESIDENT_DEVICE else "MojolearnOcResidentHost")
+    + ("IdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "FastV1"))
+comptime OC_RESIDENT_API = SharedSlot[OcResidentAPI[OcResidentBackend], _OC_RESIDENT_API_NAME]
+
+
+def ocsvm_resident_native_api_binding() raises -> PythonObject:
+    var table = OC_RESIDENT_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def x_neighbors_native_api_binding() raises -> PythonObject:
     var table = XN_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -736,6 +746,7 @@ def x_neighbors_native_api_binding() raises -> PythonObject:
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[x_neighbors_native_api_binding]("x_neighbors_native_api_v1")
+    m.def_function[ocsvm_resident_native_api_binding]("ocsvm_resident_native_api_v1")
     m.def_function[kpca_neighbors_native_api_binding]("kpca_neighbors_native_api_v1")
 {reg}    m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 """)
@@ -744,6 +755,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
 
 BIND_HEAD = """from core.shared_slot import SharedSlot
 from core.kpca_native_api import KPCAProviderAPI
+from core.ocsvm_resident_api import OcResidentAPI
 from core.kpca_native_info import KPCANeighborInfo
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -763,7 +775,7 @@ def own_imports(col):
 def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
-            + BIND_HEAD + "from x_neighbors.native_descriptor_device import XN_NATIVE_API\n" + "from checks.vendor import COMPILED_VENDOR\n"
+            + BIND_HEAD + "from x_neighbors.native_descriptor_device import XN_NATIVE_API\n" + "from x_neighbors.ocsvm_resident_native_device import OcDeviceResident as OcResidentBackend\ncomptime OC_RESIDENT_DEVICE = True\n" + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding\n"
@@ -809,7 +821,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
 def host_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
-            + BIND_HEAD + "from x_neighbors.native_descriptor_host import XN_NATIVE_API\n" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
+            + BIND_HEAD + "from x_neighbors.native_descriptor_host import XN_NATIVE_API\n" + "from x_neighbors.ocsvm_resident_native_host import OcHostResident as OcResidentBackend\ncomptime OC_RESIDENT_DEVICE = False\n" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from providers.python.x_neighbors_host_pyapi import kpca_resident_binding\n"
