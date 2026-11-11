@@ -157,6 +157,7 @@ struct GPCMemberPins(Movable):
 @fieldwise_init
 struct GPCLatentResult(Movable):
     var scratch: GPCQueryScratch
+    var codes: List[Int64]
     var mean: PythonObject
     var variance: PythonObject
     var probability: PythonObject
@@ -166,7 +167,13 @@ struct GPCLatentResult(Movable):
 @fieldwise_init
 struct GPCCombinedResult(Movable):
     var probabilities: PythonObject
-    var codes: PythonObject
+    var codes: NativeLabelCodes
+
+
+@fieldwise_init
+struct GPCPredictAllResult(Movable):
+    var probabilities: PythonObject
+    var codes: List[Int64]
 
 
 def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes, arrays: PythonObject,
@@ -354,7 +361,7 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
-                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject, pack: Int = 7) raises -> GPCLatentResult:
+                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject, pack: Int = 7, native_codes: Bool = False) raises -> GPCLatentResult:
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
     them (a multi-GPU shard worker, which holds no kernel object); else
@@ -372,8 +379,12 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     var var_out = family_array(Python.tuple(n_star), "<f4", context) if (exposed & 2) != 0 else PythonObject(None)
     var proba = family_array(Python.tuple(n_star), "<f8", context) if (exposed & 4) != 0 else PythonObject(None)
     var dst = PythonObject(None)
+    var codes = List[Int64]()
     if out_kind == 1:
-        dst = family_array(Python.tuple(n_star), "<i8", context)
+        if native_codes:
+            codes = List[Int64](length=n_star, fill=0)
+        else:
+            dst = family_array(Python.tuple(n_star), "<i8", context)
     elif out_kind == 2:
         dst = family_array(Python.tuple(n_star, 2), "<f8", context)
     var own = py_fields(est)
@@ -383,7 +394,9 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     var lf = gp_f32(own, "L_", -1, context)
     var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
-    var output_address = Int(py=classical_address(dst)) if out_kind != 0 else 0
+    var output_address = 0
+    if out_kind != 0:
+        output_address = Int(codes.unsafe_ptr()) if native_codes and out_kind == 1 else Int(py=classical_address(dst))
     var mean_address = Int(py=classical_address(mean)) if (exposed & 1) != 0 else Int(scratch.mean.unsafe_ptr())
     var variance_address = Int(py=classical_address(var_out)) if (exposed & 2) != 0 else Int(scratch.variance.unsafe_ptr())
     var probability_address = Int(py=classical_address(proba)) if (exposed & 4) != 0 else Int(scratch.probability.unsafe_ptr())
@@ -405,11 +418,11 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     _ = wsr^
     _ = lf^
     _ = arrays^
-    return GPCLatentResult(scratch^, mean, var_out, proba, dst)
+    return GPCLatentResult(scratch^, codes^, mean, var_out, proba, dst)
 
 
 def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, gq: GpQuery, out_kind: Int,
-                     context: PythonObject, kernel_arrays: PythonObject) raises -> PythonObject:
+                     context: PythonObject, kernel_arrays: PythonObject) raises -> GPCPredictAllResult:
     """`_predict_all`: every binary fit against one cross kernel in one
     `gpc_predict_all` session; int64 codes (1) or float64 rows (2).
     `kernel_arrays`: `gp_kernel_arrays(fields["_kernel"])`. The query `gq`
@@ -422,11 +435,15 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     var arrays = kernel_arrays
     var fits = fields["estimators_"]
     var k = len(fits)
-    var out: PythonObject
+    var probabilities = PythonObject(None)
+    var codes = List[Int64]()
+    var destination: Int
     if out_kind == 1:
-        out = family_array(Python.tuple(n_star), "<i8", context)
+        codes = List[Int64](length=n_star, fill=0)
+        destination = Int(codes.unsafe_ptr())
     else:
-        out = family_array(Python.tuple(n_star, max(k, 2)), "<f8", context)
+        probabilities = family_array(Python.tuple(n_star, max(k, 2)), "<f8", context)
+        destination = Int(py=classical_address(probabilities))
     var tables = GPCQueryTables(k)
     var kept = List[PythonObject]()
     var mirrors = List[PythonObject]()
@@ -462,7 +479,7 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
             fitted_resident_drop(model, _GPC_RESIDENT_SLOT)
     var kernel = gp_kernel_view(arrays)
     var request = GPCQueryAllRequest(Int(py=classical_address(xt)), Int(py=gp_query_address(gq)),
-        Int(py=classical_address(out)), Int(tables.targets.unsafe_ptr()), Int(tables.pis.unsafe_ptr()),
+        destination, Int(tables.targets.unsafe_ptr()), Int(tables.pis.unsafe_ptr()),
         Int(tables.wsrs.unsafe_ptr()), Int(tables.factors.unsafe_ptr()), n_train, n_features, n_star,
         kernel^, out_kind, k, lease, gq.store.base_id if gq.store.active() else -1,
         gq.store.base_rows if gq.store.active() else 0, gq.store.index_id if gq.store.active() else -1)
@@ -474,41 +491,50 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     _ = xt
     _ = arrays
     _ = gq
-    return out
+    return GPCPredictAllResult(probabilities, codes^)
 
 
 def _gpc_combine_addresses(ext: PythonObject, addresses: List[Int], n_star: Int,
-                           context: PythonObject) raises -> GPCCombinedResult:
+                           context: PythonObject, public_probabilities: Bool = True) raises -> GPCCombinedResult:
     var k = len(addresses)
-    var proba = family_array(Python.tuple(n_star, k), "<f8", context)
-    var codes = family_array(Python.tuple(n_star), "<i4", context)
+    var proba = PythonObject(None)
+    var private_proba = List[Float64]()
+    var probability_address: Int
+    if public_probabilities:
+        proba = family_array(Python.tuple(n_star, k), "<f8", context)
+        probability_address = Int(py=classical_address(proba))
+    else:
+        private_proba = List[Float64](length=n_star*k, fill=0.0)
+        probability_address = Int(private_proba.unsafe_ptr())
+    var codes = NativeLabelCodes(n_star)
     var connection = GPConnection(ext)
-    var request = GPCCombineRequest(Int(addresses.unsafe_ptr()), Int(py=classical_address(proba)),
-        Int(py=classical_address(codes)), n_star, k)
+    var request = GPCCombineRequest(Int(addresses.unsafe_ptr()), probability_address,
+        codes.address(), n_star, k)
     _ = gp_run(connection, request)
     _ = addresses
     _ = proba
     _ = codes
-    return GPCCombinedResult(proba, codes)
+    _ = private_proba
+    return GPCCombinedResult(proba, codes^)
 
 
 def _gpc_ovr_combine(ext: PythonObject, cols: List[PythonObject], n_star: Int,
-                     context: PythonObject) raises -> GPCCombinedResult:
+                     context: PythonObject, public_probabilities: Bool = True) raises -> GPCCombinedResult:
     # UNPACK of cross-interpreter Array transport.
     var addresses = List[Int](length=len(cols), fill=0)
     for i in range(len(cols)):  # driver-loop: one address per transported class column
         addresses[i] = Int(py=classical_address(cols[i]))
-    var answer = _gpc_combine_addresses(ext, addresses, n_star, context)
+    var answer = _gpc_combine_addresses(ext, addresses, n_star, context, public_probabilities)
     _ = cols
     return answer^
 
 
 def _gpc_ovr_combine(ext: PythonObject, cols: List[List[Float64]], n_star: Int,
-                     context: PythonObject) raises -> GPCCombinedResult:
+                     context: PythonObject, public_probabilities: Bool = True) raises -> GPCCombinedResult:
     var addresses = List[Int](length=len(cols), fill=0)
     for i in range(len(cols)):  # driver-loop: one native probability span per class
         addresses[i] = Int(cols[i].unsafe_ptr())
-    var answer = _gpc_combine_addresses(ext, addresses, n_star, context)
+    var answer = _gpc_combine_addresses(ext, addresses, n_star, context, public_probabilities)
     _ = cols
     return answer^
 
@@ -533,7 +559,7 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
     if all_entry:
-        return _gpc_predict_all(model, ext, fields, gq, 2, context, arrays)
+        return _gpc_predict_all(model, ext, fields, gq, 2, context, arrays).probabilities
     var q = gq.q
     if Int(py=fields["n_classes_"]) == 2:
         # `[1 - p, p]` from the binding (`gpc_binary_out`)
@@ -552,19 +578,22 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var q = gq.q
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
-    var codes: PythonObject
+    var codes = List[Int64]()
     if all_entry:
-        codes = _gpc_predict_all(model, ext, fields, gq, 1, context, arrays)
+        var result = _gpc_predict_all(model, ext, fields, gq, 1, context, arrays)
+        codes = result.codes^
     elif Int(py=fields["n_classes_"]) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
-        codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays).output
+        var result = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays, 0, True)
+        codes = result.codes^
     else:
         var n_star = Int(py=q.shape[0])
         var cols = _gpc_columns(ext, fields, q, context, arrays)
-        var codes32 = _gpc_ovr_combine(ext, cols, n_star, context).codes
+        var combined = _gpc_ovr_combine(ext, cols, n_star, context, False)
+        var codes32 = combined.codes^
         # `codes32.astype("<i8")`: the exact widening
-        codes = family_array(Python.tuple(n_star), "<i8", context)
-        _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
+        codes = List[Int64](length=n_star, fill=0)
+        _ = cast_elements(codes32.address(), HP_I32, Int(codes.unsafe_ptr()), HP_I64, n_star)
         _ = codes32  # keep the Python object alive through the native call above
         _ = codes32^
     # The class table is built once per class list of this model.
