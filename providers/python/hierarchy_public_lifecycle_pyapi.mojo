@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # AgglomerativeClustering's public lifecycle, setting admission and captured X.
-# Numerical backend extension dispatch remains explicit migration debt in the
-# dedicated owner; moving this envelope does not make those calls descriptor ABI.
+# Public values remain pins until their established conversion points. Typed
+# native options and requests carry the fit/query execution between providers.
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.admitted_family import admit_family_meta
 from bindings.native_class_admission import class_record, class_admit
@@ -32,6 +32,8 @@ from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.hierarchy_settings_pyapi import AggloSettings
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
@@ -39,7 +41,7 @@ from providers.python.estimator_lifecycle_pyapi import (
 
 struct HierarchyPublicCall(Movable):
     var fields: PythonObject
-    var settings: PythonObject
+    var settings: AggloSettings
     var source: PythonObject
     var x: ArrayMetadata
     var fitting: Bool
@@ -48,10 +50,10 @@ struct HierarchyPublicCall(Movable):
     var rows: Int
     var columns: Int
 
-    def __init__(out self, fields: PythonObject, settings: PythonObject, source: PythonObject,
+    def __init__(out self, fields: PythonObject, var settings: AggloSettings, source: PythonObject,
                  var x: ArrayMetadata, fitting: Bool, outside: Bool, depth: Int):
         self.fields = fields
-        self.settings = settings
+        self.settings = settings^
         self.source = source
         self.rows = x.shape[0]
         self.columns = x.shape[1]
@@ -64,11 +66,12 @@ struct HierarchyPublicCall(Movable):
 comptime _HIER_CLASS_SLOT = "p3nc_hierarchy_class_v1"
 
 
-def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> PythonObject:
+def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> AggloSettings:
     var b = native_loaded_module("builtins")
     if py_type(py_type(model)) is not b.type:
         raise Error("TypeError: native hierarchy operations refuse Python metaclass hooks")
     var fields = _fields(model)
+    lifecycle_admit_fields(fields)
     var attributes = py_get(_loaded_fields(native_loaded_module("mojolearn._native_public_attributes")), "_CONTEXT")
     var modules = NativeModules()
     var plan = _plan(modules, model, attributes)
@@ -90,10 +93,10 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Pyt
         class_admit(modules, _HIER_CLASS_SLOT, model_class, PythonObject(True))
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native hierarchy execution cannot invoke Python fit callbacks")
-    var settings = Python.dict()
+    var values = List[PythonObject]()
     var mode = py_get(fields, "numeric_mode")
     host_inference_scalar(mode, context)
-    py_setitem(settings, "numeric_mode", mode)
+    values.append(mode)
     var parameters = Python.tuple("n_clusters", "metric", "connectivity", "linkage", "c", "memory", "compute_full_tree", "distance_threshold", "compute_distances", "prediction_data")
     for i in range(len(parameters)):  # small-loop(fixed hierarchy parameter schema)
         var name = parameters[i]
@@ -108,8 +111,9 @@ def hierarchy_settings(model: PythonObject, context: PythonObject) raises -> Pyt
                 raise Error("NotImplementedError: mojolearn AgglomerativeClustering: memory is refused; there is no host tree cache")
         else:
             host_inference_scalar(value, context, True)
-        py_setitem(settings, name, value)
-    return settings
+        values.append(value)
+    return AggloSettings(values[0], values[1], values[2], values[3], values[4], values[5],
+        values[6], values[7], values[8], values[9], values[10])
 
 
 def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: Bool, required: Bool,
@@ -229,7 +233,7 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
             classical_check_width(x.shape[1], Int(py=width), "AgglomerativeClustering")
             estimator_feature_check(model, fields, source, context)
     var previous = estimator_fit_begin(fields) if fitting else Int(py=depth)
-    return HierarchyPublicCall(fields, settings, source, x^, fitting, estimator_outside(), previous)
+    return HierarchyPublicCall(fields, settings^, source, x^, fitting, estimator_outside(), previous)
 
 
 def hierarchy_public_end(model: PythonObject, call: HierarchyPublicCall) raises:
