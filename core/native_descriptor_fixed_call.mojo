@@ -36,15 +36,16 @@ def native_descriptor_call_fixed[NA: Int, NP: Int, NF: Int](
             _ = ints
             _ = floats
             _ = held
-    var output = NativeCallOutput()
-    try:
-        # Result/error reset and propagation stay in the existing shared call.
-        return native_descriptor_call_spans(entry, operation,
-            aa, NA, pp, NP, ff, NF, output)
-    finally:
-        # Integer addresses carry no lifetime information. These uses also
-        # cover refusal unwinding, nested entries and concurrent callers.
-        _ = addresses
-        _ = ints
-        _ = floats
-        _ = output
+    else:
+        var output = NativeCallOutput()
+        try:
+            # Result/error reset and propagation stay in the existing shared call.
+            return native_descriptor_call_spans(entry, operation,
+                aa, NA, pp, NP, ff, NF, output)
+        finally:
+            # Integer addresses carry no lifetime information. These uses also
+            # cover refusal unwinding, nested entries and concurrent callers.
+            _ = addresses
+            _ = ints
+            _ = floats
+            _ = output
