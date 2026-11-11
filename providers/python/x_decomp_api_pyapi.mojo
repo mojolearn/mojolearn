@@ -15,9 +15,9 @@ from x_decomp.api import (
     sqdist_run, svd_run, trisolve_run,
     absmax_sign_run, lars_rows_run, lasso_rows_run, lu_aux_run, omp_rows_run, r_signs_run,
     rank_above_run, tsqr_r_run,
-    argmin_all_run, dsum_sq_run, gather_run, geqrf_run, idn_flags_run, lu_gesv_run, mcd_run,
+    argmin_all_run, dsum_sq_run, geqrf_run, idn_flags_run,
     move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
-    topn_desc_run, tsqr_q_run,
+    tsqr_q_run,
 )
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -422,17 +422,6 @@ def ols_tsqr_r_py[E: Exec](
     return PythonObject(n)
 
 
-def lu_gesv_py[E: Exec](a: PythonObject, b: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
-    """b (n x nrhs) = the solution of a x = b through `lu` then `lu_solve`
-    with the factor resident (Exec.lu_gesv); info (1) is `lu`'s. p = [n, nrhs]."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var pa = _f(a)
-    var pb = _f(b)
-    var pi = _f(info)
-    with GILReleased(Python()):
-        lu_gesv_run[E](pa, pb, pi, n, nrhs)
-    return PythonObject(n)
 
 
 def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -476,45 +465,8 @@ def orgqr_py[E: Exec](h: PythonObject, tau: PythonObject, q: PythonObject, p: Py
     return PythonObject(qc)
 
 
-def mcd_py[E: Exec](
-    x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
-    p: PythonObject,
-) raises -> PythonObject:
-    """MinCovDet's fast_mcd (x_decomp/mcd.mojo): x (n x d) in; location
-    (d), covariance (d x d), support (n int32 0/1) and distances (n) out.
-    p = [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m]."""
-    var q = List[Int]()
-    q.append(Int(py=p[0]))
-    q.append(Int(py=p[1]))
-    q.append(Int(py=p[2]))
-    q.append(Int(py=p[3]))
-    q.append(Int(py=p[4]))
-    q.append(Int(py=p[5]))
-    q.append(Int(py=p[6]))
-    q.append(Int(py=p[7]))
-    q.append(Int(py=p[8]))
-    q.append(Int(py=p[9]))
-    q.append(Int(py=p[10]))
-    var n = q[0]
-    var px = _f(x)
-    var pl = _f(loc)
-    var pc = _f(cov)
-    var ps = _i(sup)
-    var pd = _f(dist)
-    with GILReleased(Python()):
-        mcd_run[E](px, pl, pc, ps, pd, q)
-    return PythonObject(n)
 
 
-def gather_py(src: PythonObject, idx: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """dst[a] = src[idx[a]] for a < m (exact copies; x_decomp/moves.mojo)."""
-    var n = Int(py=m)
-    var ps = _f(src)
-    var pi = _i(idx)
-    var pd = _f(dst)
-    with GILReleased(Python()):
-        gather_run(ps, pi, n, pd)
-    return PythonObject(n)
 
 
 # ---- lane apple-fast-py2mojo-decomp (2026-10-03): host buffers, both bindings
@@ -581,12 +533,6 @@ def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObje
     return PythonObject(pca_mle_rank_host_run(Int(py=sp), d, n))
 
 
-def topn_desc_py(x: PythonObject, p: PythonObject, skip: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """p = [m, n]: the n best positions by (-x, index), skipping the nonzero
-    entries of the float32 row at `skip` (0: none); their count."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    return PythonObject(topn_desc_run(Int(py=x), m, Int(py=skip), n, Int(py=dst)))
 
 
 def numeric_mode_py() raises -> PythonObject:
