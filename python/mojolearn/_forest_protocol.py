@@ -10,8 +10,7 @@ import inspect
 import weakref
 from types import GetSetDescriptorType
 
-from ._array import Array
-from ._buffer import _materialize, empty, as_f32_c
+from ._buffer import empty, as_f32_c
 from ._arrays import _addr, _addr_ro
 from . import _native_trees_bridge
 
@@ -96,11 +95,6 @@ def held_resident_forest(model):
     so `getattr(model, "_resident_forest", None)` raises TypeError there."""
     holder = model.__dict__.get("_resident_holder")  # glue: the fit's holder dict
     return holder.get("forest") if holder else None  # glue: one keyed read
-
-
-def _frozen_copy(a):
-    """A read-only copy of a flat int32 or float32 model array."""
-    return Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f"))
 
 
 class ForestProtocol:
@@ -226,25 +220,6 @@ class ForestProtocol:
             return None
         return selected if callable(selected) else None
 
-    def _resident_ordered_flag(self):
-        """The aggregation a resident snapshot is prepared with: True strict
-        increasing-tree, False the 32-grove graph, None the compiled
-        default. The `sequential` engine (served resident by
-        `_ordered_resident_auto` on a GPU binding) is always strict. IDENTICAL
-        names the groves explicitly so the recorded bits do not depend on a
-        vendor build default: `parallel_groves` is the grove
-        fold that the CPU host groves engine and the recorded GPU columns
-        compute. FAST keeps the binary's default, and so
-        does a binary older than the per-snapshot choice (no
-        `forest_ordered_resident` export), whose resident route is groves."""
-        if self._ordered_resident_export() is None:
-            return None
-        if self._prediction_engine() == "sequential":
-            return True
-        if self._effective_mode() != "identical":
-            return None
-        return False
-
     def _forest_auxiliary(self, X, *, leaves=False, prefixes=False, prediction=False):
         """T39 buffer/argument plumbing; all walks and reductions are Mojo."""
         return _TREES(self, "trees_public_forest_auxiliary", (X, leaves, prefixes, prediction), _TREES_CONTEXT)
@@ -268,47 +243,6 @@ class ForestProtocol:
         Only this requested API allocates the complete prefix buffer.
         """
         return _TREES(self, "trees_public_forest_staged_predict", (X,), _TREES_CONTEXT)
-
-    def _prepare_resident_forest(self, native=None):
-        """Prepare the existing immutable parallel-groves snapshot without a query."""
-        if self._prediction_engine() != "parallel_groves" and not self._ordered_resident_auto():
-            raise ValueError("resident forest preparation requires parallel_groves")
-        if not hasattr(self, "_offsets"):
-            raise RuntimeError("this estimator is not fitted yet")
-        if native is None:
-            native = self._bind()
-        dimensions = (int(self.n_features_in_), int(self._n_trees), int(self._num_outputs))
-        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)  # glue: the five model arrays
-        required = ("forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu")
-        if any(not callable(getattr(native, name, None)) for name in required):  # glue: checks three binding entry points
-            raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
-        mode = self._effective_mode()
-        ordered = self._resident_ordered_flag()
-        resident = held_resident_forest(self)
-        if resident is None or not resident.matches(native, arrays, dimensions, mode, ordered):
-            # A bytes owner cannot be made writable again via setflags(). A
-            # caller retaining an old mutable private-array alias cannot alter
-            # the device snapshot or the host model used by save/sequential.
-            dtypes = ("<i4", "<i4", "<f4", "<i4", "<f4")
-            arrays = tuple(_materialize(a, "forest model")[0] for a in arrays)  # glue: materializes the five model arrays
-            for a, dtype in zip(arrays, dtypes):  # glue: checks the five model arrays
-                if not isinstance(a, Array) or a.dtype != dtype or a.ndim != 1:
-                    raise ValueError("forest model arrays must have their original flat dtypes")
-            nodes = arrays[1].size
-            if (arrays[0].size != dimensions[1] + 1 or nodes < 1
-                    or arrays[2].size != nodes or arrays[3].size != nodes
-                    or arrays[4].size != nodes * dimensions[2]
-                    or int(arrays[0][-1]) != nodes):
-                raise ValueError("forest model array shapes do not match metadata")
-            # A fit leaves its arrays frozen already (`_mojolearn_after_fit`),
-            # so a predict after a fit stores nothing new on the instance.
-            frozen = tuple(a if not a.flags["WRITEABLE"] else _frozen_copy(a) for a in arrays)  # glue: freezes the five model arrays
-            resident = _ResidentForest(native, frozen, dimensions, mode, ordered)
-            for name, a in zip(_FOREST_ARRAYS, frozen):  # glue: stores the five model arrays
-                if getattr(self, name) is not a:
-                    setattr(self, name, a)
-            self._resident_forest = resident
-        return resident
 
     # The device snapshot lives in a holder dict the fit creates, not in an
     # attribute of its own: a predict that prepares the snapshot changes
