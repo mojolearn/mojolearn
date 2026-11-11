@@ -449,10 +449,10 @@ them for you.
 - Compile repairs from the native migration (2026-11-10): `Copyable` alone does not allow an implicit
   copy; use `.copy()` for borrowed descriptors. Conditional floating expressions infer `Float64`;
   use `Float32(1.0 if condition else 0.0)` in Float32 fixtures. Copy a string slice into a temporary
-  before assigning it back to the source. `memcpy` requires the `dest=`, `src=` and `count=` keywords.
+  before assigning it back to the source. `unsafe_memcpy` requires the `dest=`, `src=` and `count=` keywords.
 - A Mojo module containing `main()` cannot be imported as a package. Put reusable native test
   bodies in a suite module with `run_checks()` and keep the standalone `main()` wrapper separate.
-- Mojo 1.0's custom `sort` comparator is a local `@parameter` closure, passed with `cmp_fn` over a
+- The existing custom `sort` comparators use a local `@__parameter` closure, passed with `cmp_fn` over a
   mutable `Span`; a top-level thin function does not satisfy its capturing comparator signature.
   Import it from `std.builtin.sort`. In contrast, `host_parallelize` takes a runtime closure with
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.

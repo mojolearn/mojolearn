@@ -113,7 +113,7 @@ def test_device_and_host_share_one_estimate_function():
     assert "hw_est_finish(" in kernel[kernel.index("def holtwinters_estimate_finish_kernel("):]
     # no libm, no atomics, no warp or block reductions in the estimated path
     imports = set(re.findall(r"^from ([\w.]+) import", kernel, re.M))
-    assert imports <= {"std.gpu", "std.memory", "std.sys.compile", "max.gpu.host", "max.gpu.memory",
+    assert imports <= {"max.gpu", "std.memory", "std.sys.compile", "max.gpu.host", "max.gpu.memory",
                        "max.gpu.sync", "holtwinters.impl.internal.hw_utils",
                        "holtwinters.impl.tsa.holtwinters_params", "checks.numerics",
                        # the C58 switch (a comptime flag, default off; no code)
