@@ -365,44 +365,9 @@ def test_refusals_name_the_model_type_field_and_value(cfg, words):
         assert w in msg, (w, msg)
 
 
-class _TodayBlock:
-    def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None, window=0):
-        pass
-
-
-class _FullBlock:
-    def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None, window=0,
-                 rope_theta=10000.0, rope_scaling=None, rope_dim=None, max_positions=8192,
-                 qkv_bias=False, o_bias=False, norm="rmsnorm", norm_eps=1e-5, norm_bias=False,
-                 mlp="swiglu", mlp_bias=False, qk_norm=False, attn_softcap=None):
-        pass
-
-
-def test_block_kwargs_follow_the_live_signature():
-    """Independent of whether lane B1 has landed: the rule is exercised on
-    two stand-in signatures, today's and the full interface."""
-    fixed = plan_for(HFConfig(_llama_config()))            # eps 1e-6, theta 10000: what today's block fixes
-    assert _cl._block_kwargs(fixed, _TodayBlock) == {"n_kv_heads": 1}
-    assert _cl._block_kwargs(fixed, _FullBlock) == {"n_kv_heads": 1, "norm_eps": 1e-6}
-    l3 = plan_for(HFConfig(_llama_config(rms_norm_eps=1e-5, rope_theta=500000.0)))
-    with pytest.raises(UnsupportedModel) as e:
-        _cl._block_kwargs(l3, _TodayBlock)
-    assert "rope_theta=500000.0" in str(e.value) and "_TodayBlock" in str(e.value) and "fixes rope_theta=10000.0" in str(e.value)
-    assert _cl._block_kwargs(l3, _FullBlock) == {"n_kv_heads": 1, "rope_theta": 500000.0}
-    eps = plan_for(HFConfig(_llama_config(rms_norm_eps=1e-5)))
-    with pytest.raises(UnsupportedModel, match="norm_eps=1e-05.*rms_norm_eps"):
-        _cl._block_kwargs(eps, _TodayBlock)
-    assert _cl._block_kwargs(eps, _FullBlock) == {"n_kv_heads": 1}
-    q2 = plan_for(HFConfig(_llama_config(model_type="qwen2")))
-    with pytest.raises(UnsupportedModel, match="qkv_bias=True.*attention_bias"):
-        _cl._block_kwargs(q2, _TodayBlock)
-    assert _cl._block_kwargs(q2, _FullBlock) == {"n_kv_heads": 1, "norm_eps": 1e-6, "qkv_bias": True}
-    win = plan_for(HFConfig(_llama_config(model_type="mistral", sliding_window=16)))
-    assert _cl._block_kwargs(win, _TodayBlock) == {"n_kv_heads": 1, "window": 16}
-    # the live class: its signature is read, whatever it is today
-    from mojolearn._transformer_impl import TransformerBlock
-    acc = _cl._accepted_options(TransformerBlock)
-    assert acc is None or {"n_heads", "n_kv_heads", "head_dim", "window"} <= acc
+# test_block_kwargs_follow_the_live_signature DELETED (pyout-neural-lm, 2026-11-11):
+# it exercised the Python `causal_lm._block_kwargs`/`_accepted_options`, which no
+# product path called (bindings/causal_lm_construct.mojo builds the block options).
 
 
 def test_greedy_argmax_ties_go_to_the_lowest_index():
