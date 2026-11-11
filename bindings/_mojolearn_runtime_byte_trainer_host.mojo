@@ -16,6 +16,7 @@ from bindings.native_transport import transport_initialize
 from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
 from bindings.byte_lm_trainer_native import byte_lm_trainer_c, byte_lm_pooled_finalize_c
 from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
+from bindings.byte_lm_session_owner import register_bytelmsessionowner
 from std.python.bindings import lookup_py_type_object
 from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
@@ -73,6 +74,8 @@ def build__mojolearn_runtime_byte_trainer_host() -> PythonObject:
         module.def_py_c_function(byte_lm_pooled_finalize_c, "byte_lm_pooled_finalize_call")
         module.def_py_c_function(parallel_byte_c, "parallel_byte_call")
         register_parallelbyteowner(module)
+        # The resident byte LM session owner byte_lm_trainer_call allocates.
+        register_bytelmsessionowner(module)
         module.def_function[runtime_byte_trainer_host_numeric_mode_binding]("runtime_byte_trainer_host_numeric_mode")
         module.def_function[runtime_byte_trainer_host_vendor_binding]("runtime_byte_trainer_host_vendor")
         module.def_function[runtime_byte_trainer_host_column_binding]("runtime_byte_trainer_host_column")

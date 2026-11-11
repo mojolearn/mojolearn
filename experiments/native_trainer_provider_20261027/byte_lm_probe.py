@@ -70,9 +70,11 @@ def run(output, baseline=None):
         call(model,'close')
         values[label+'/reopened']=np.asarray(call(model,'logits',ids)).copy()
         if baseline:
-            counts[label]=_byte_lm_impl._LM_TRAINER(model,'native_provider_info',(),_byte_lm_impl._LM_TRAINER_CONTEXT)
-            assert counts[label][0]=='mojolearn.training.byte_lm.v1'
-            assert counts[label][1][2 if resident else 7] > 0
+            # The provider object and its per-operation counters were deleted
+            # (lanes calltable-byte-lm and byte-lm-sessions-native, 2026-11-11):
+            # every call runs through the native byte LM tables. The bitwise
+            # comparison against the baseline below is the probe's evidence.
+            counts[label]='native table route; provider counters deleted'
         try:
             model.logits(np.array([[shape.vocab_size]],dtype='i4'))
         except (ValueError,RuntimeError):

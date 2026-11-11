@@ -29,6 +29,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from training.byte_lm_glue_entry import publish_byte_lm_entries
 from max.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.memory import bitcast, unsafe_memcmp
@@ -1626,7 +1627,11 @@ def build__mojolearn_byte_lm() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm")
-        module.def_function[byte_lm_arithmetic_suffix_binding]("byte_lm_arithmetic_suffix")
+        # The native trainer door (bindings/byte_lm_trainer_native.mojo) reads
+        # the metadata, arm read-backs, stateless step and stateless logits
+        # through the trainer table published below (lane calltable-byte-lm).
+        # These Python entries remain only for unconverted callers: the Python
+        # session methods of python/mojolearn/_byte_lm_impl.py, tools and tests.
         module.def_function[byte_lm_numeric_mode_binding]("byte_lm_numeric_mode")
         module.def_function[byte_lm_vendor_binding]("byte_lm_vendor")
         module.def_function[byte_lm_profile_binding]("byte_lm_profile")
@@ -1706,6 +1711,8 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_schedule_api_binding]("byte_lm_schedule_api_v1")
         module.def_function[byte_lm_schedule_create_binding]("byte_lm_schedule_create_v1")
         module.def_function[byte_lm_schedule_handle_binding]("byte_lm_schedule_handle_v1")
+        # The native trainer door's table (core/byte_lm_entry_table.mojo).
+        publish_byte_lm_entries()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm: ", error))

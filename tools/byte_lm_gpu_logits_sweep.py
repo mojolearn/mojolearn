@@ -135,17 +135,22 @@ def main():
 
     try:
         binding = impl._load(shape)
-        missing = [entry for entry in ('byte_lm_logits', 'byte_lm_session_logits', *impl._SESSION_ENTRIES)
+        # The resident session entries are native table entries now
+        # (core/byte_lm_entry_table_sessions.mojo); only the Python logits
+        # entries this sweep calls are checked by name.
+        missing = [entry for entry in ('byte_lm_logits', 'byte_lm_session_logits')
                    if not callable(getattr(binding, entry, None))]
         if missing:
             raise ImportError('GPU byte LM binding lacks ' + ', '.join(missing)
                               + '; rebuild bindings/build_byte_lm.sh')
-        metadata = impl._binding_metadata(binding)
+        # impl._binding_metadata was deleted with the Python session bodies
+        # (lane byte-lm-sessions-native); the same fields read directly.
         gpu = dict(vendor=str(binding.byte_lm_vendor()), arch=_backend.gpu_arch(),
                    numeric_mode=dict(process=_backend.numeric_mode(),
                                      native=int(binding.byte_lm_numeric_mode())),
-                   profile=metadata['native_profile'], attention_arm=metadata['native_attention_arm'],
-                   path=metadata['binding_file'], sha256=metadata['binding_sha256'])
+                   profile=str(binding.byte_lm_profile()) + str(binding.byte_lm_arithmetic_suffix()),
+                   attention_arm=str(binding.byte_lm_attention_arm()[0]),
+                   path=binding.__file__, sha256=gate.sha256(binding.__file__))
         cpu = dict(path=binary_path(), sha256=gate.sha256(binary_path()))
     except Exception as exc:
         print(f'sweep: bindings not usable: {type(exc).__name__}: {exc}', file=sys.stderr)

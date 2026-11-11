@@ -27,22 +27,13 @@ from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, 
 from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from sequence.opt_entry_device import publish_seq_opt_entries
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
 from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
 from sequence.xseq_glue_device import publish_x_sequence_device
 from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
-from providers.python.sequence_opt_public_pyapi import (
-    seq_optimizer_init_py,
-    seq_optimizer_step_py,
-    seq_lamb_step_py,
-    seq_adafactor_step_py,
-    seq_optimizer_state_py,
-    seq_optimizer_export_py,
-    seq_optimizer_import_py,
-    seq_optimizer_close_py,
-)
 from providers.python.sequence_opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_device_pyapi import ops_imported_run_device_py
@@ -832,14 +823,6 @@ def build__mojolearn_x_sequence() -> PythonObject:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
         # the public optimizers' one native call per method (sequence/opt_public*.mojo)
-        m.def_function[seq_optimizer_init_py]("seq_optimizer_init")
-        m.def_function[seq_optimizer_step_py]("seq_optimizer_step")
-        m.def_function[seq_lamb_step_py]("seq_lamb_step")
-        m.def_function[seq_adafactor_step_py]("seq_adafactor_step")
-        m.def_function[seq_optimizer_state_py]("seq_optimizer_state")
-        m.def_function[seq_optimizer_export_py]("seq_optimizer_export")
-        m.def_function[seq_optimizer_import_py]("seq_optimizer_import")
-        m.def_function[seq_optimizer_close_py]("seq_optimizer_close")
         m.def_function[layer_norm_binding]("layer_norm")
         # lane gap-neural-io: resident tensors and the device-I/O entries
         # (the Python side uses them only when they exist; the host binding
@@ -873,6 +856,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
             m.def_function[moe_forward_dev_alloc_binding]("moe_forward_dev_alloc")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

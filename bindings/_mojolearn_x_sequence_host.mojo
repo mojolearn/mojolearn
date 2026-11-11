@@ -32,17 +32,8 @@ from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from sequence.opt_entry_host import publish_seq_opt_host_entries
 from sequence.exec import HostExec
-from providers.python.sequence_opt_public_host_pyapi import (
-    seq_optimizer_init_host_py,
-    seq_optimizer_step_host_py,
-    seq_lamb_step_host_py,
-    seq_adafactor_step_host_py,
-    seq_optimizer_state_host_py,
-    seq_optimizer_export_host_py,
-    seq_optimizer_import_host_py,
-    seq_optimizer_close_host_py,
-)
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.xseq_glue_host import publish_x_sequence_host
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
@@ -634,6 +625,9 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[seq_optimizer_export_host_py]("seq_optimizer_export")
         m.def_function[seq_optimizer_import_host_py]("seq_optimizer_import")
         m.def_function[seq_optimizer_close_host_py]("seq_optimizer_close")
+        m.def_function[stl_binding]("stl")
+        m.def_function[var_fit_binding]("var_fit")
+        m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
@@ -719,6 +713,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")
         m.def_py_c_function(graph_record_c, "ops_graph_record")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_host_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))
