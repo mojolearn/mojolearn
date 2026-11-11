@@ -19,7 +19,50 @@ from bindings.p3_array_arena_records import (
     P3_DICT_BINDING_IDS, P3_DICT_ENTRY_TUPLE_INTS, p3_dict_admitted, p3_dict_admit,
 )
 
+from std.python._cpython import GILReleased
+from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
+from core.prep_entry_table import PrepEntryKey, xp_transport_call
+from x_prep.transport_abi import (
+    XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, xp_vendor_word,
+)
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def xprep_key(entries: PythonObject) raises -> PrepEntryKey:
+    """The x_prep transport table key of a connected entries dict: the image's
+    compiled mode and vendor words, read once per binding (prep_entry_cache)."""
+    var mode = prep_entry_word(entries, "x_prep_numeric_mode", -1)
+    var vendor = xp_vendor_word(prep_entry_text(entries, "x_prep_vendor"))
+    if mode < 0 or mode > 1 or vendor < 0:
+        raise Error("ImportError: mojolearn: the x_prep binding publishes no native entry table")
+    return PrepEntryKey(mode, vendor)
+
+
+def xprep_call(key: PrepEntryKey, op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
+    """One x_prep transport operation (x_prep/transport_abi.mojo) through the
+    image's published entry, with the GIL released as the Python entries
+    released it. The caller keeps every addressed buffer alive."""
+    var result = 0
+    var py = Python()
+    with GILReleased(py):
+        result = xp_transport_call(key, op, addresses, ints)
+    return result
+
+
+def _store_put(entries: PythonObject, prefix: String, address: Int, words: Int) raises -> Int:
+    # x_prep: the native transport; x_metrics (bindings/arena_prog_native.mojo,
+    # not converted by lane calltable-prep-decomp) keeps its Python entry.
+    if prefix == "x_prep":
+        var src: List[Int] = [address]
+        return xprep_call(xprep_key(entries), XP_DEV_PUT, src, [words])
+    return Int(py=py_call_typed(entries[PythonObject(prefix+"_dev_put")], address, words))
+
+
+def _store_free(entries: PythonObject, prefix: String, slot: Int) raises:
+    if prefix == "x_prep":
+        _ = xprep_call(xprep_key(entries), XP_DEV_FREE, List[Int](), [slot])
+        return
+    _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")], slot)
 
 
 def xprep_r3(name: String) -> Bool:
@@ -274,7 +317,7 @@ def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObj
     # Allocate the counter before acquiring a device resource. Until cache
     # publication succeeds, this operation still owns the fresh slot.
     var next_uploads = PythonObject(Int(py=state["uploads"])+1)
-    var slot = Int(py=py_call_typed(entries[PythonObject(prefix+"_dev_put")],key[0],key[1]))
+    var slot = _store_put(entries, prefix, Int(py=key[0]), Int(py=key[1]))
     try:
         var admitted = p3_dict_admitted(P3_DICT_ENTRY_TUPLE_INTS, stored)
         py_setitem(stored,key,Python.tuple(slot,value))
@@ -283,7 +326,7 @@ def _cached_slot_in(state: PythonObject, value: PythonObject, entries: PythonObj
             p3_dict_admit(P3_DICT_ENTRY_TUPLE_INTS, stored)
     except error:
         try:
-            _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")],slot)
+            _store_free(entries, prefix, slot)
         except cleanup_error:
             raise Error("RuntimeError: arena cache publication failed: "+String(error)+"; slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
         raise error
@@ -316,7 +359,7 @@ def _drop_resident_impl(values: List[PythonObject], entries: PythonObject, conte
         _ = py_call(stored.pop, key)
         var slot = Int(py=hit[0])
         try:
-            _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")], slot)
+            _store_free(entries, prefix, slot)
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
     return failures
@@ -342,7 +385,7 @@ def _release_owned(owned: List[Int], entries: PythonObject) -> String:
     for i in range(len(owned)):  # driver-loop: attempt every gather/direct release even when an earlier free raises
         var slot = owned[len(owned)-1-i]
         try:
-            _ = py_call_typed(entries["x_prep_dev_free"],slot)
+            _store_free(entries, "x_prep", slot)
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
     return failures
@@ -437,10 +480,11 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                         cache_state = _cache_state(cache,entries,context)
                     source = _cached_slot_in(cache_state.value(),value,entries)
                 elif dev_put_on and (rows or (words >= 1048576 and direct_on)):
-                    source = Int(py=py_call_typed(entries["x_prep_dev_put"],classical_address(value),value.size))
+                    source = _store_put(entries, "x_prep", Int(py=classical_address(value)), Int(py=value.size))
                     owned.append(source)
                 if rows:
-                    source = Int(py=py_call_typed(entries["x_prep_dev_take_rows"],source,record[4],classical_address(record[2]),record[3]))
+                    var idx: List[Int] = [Int(py=classical_address(record[2]))]
+                    source = xprep_call(xprep_key(entries), XP_DEV_TAKE_ROWS, idx, [source, Int(py=record[4]), Int(py=record[3])])
                     owned.append(source)
             if source < 0:
                 unsafe_memcpy(dest=F32P(unsafe_from_address=arena+4*offset),src=F32P(unsafe_from_address=Int(py=classical_address(value))),count=words)
@@ -474,17 +518,22 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
         var nst = len(program)//16
         var pa = Int(program.unsafe_ptr())
         kernel_start = Int(perf_counter_ns()) if profile else 0
+        var key = xprep_key(entries)
+        var sc = scratch if device_scratch else 0
         if ranges:
-            _ = py_call_typed(entries["x_prep_run_ranges"],arena,pa,op,Python.tuple(host,scratch if device_scratch else 0,out_words,nst),Python.tuple(Int(ins.unsafe_ptr()),len(ins)//3,Int(outs.unsafe_ptr()),len(outs)//4))
+            var addresses: List[Int] = [arena, pa, op, Int(ins.unsafe_ptr()), Int(outs.unsafe_ptr())]
+            _ = xprep_call(key, XP_RUN_RANGES, addresses, [host, sc, out_words, nst, len(ins)//3, len(outs)//4])
         elif out_words > 0 or (device_scratch and py_get(entries,"x_prep_run_out") is not None):
-            _ = py_call_typed(entries["x_prep_run_out"],arena,pa,op,Python.tuple(host,scratch if device_scratch else 0,out_words,nst))
+            var addresses: List[Int] = [arena, pa, op]
+            _ = xprep_call(key, XP_RUN_OUT, addresses, [host, sc, out_words, nst])
         elif device_scratch:
-            _ = py_call_typed(entries["x_prep_run_scratch"],arena,host,scratch,pa,nst)
+            var addresses: List[Int] = [arena, pa]
+            _ = xprep_call(key, XP_RUN_SCRATCH, addresses, [host, scratch, nst])
         else:
-            _ = py_call_typed(entries["x_prep_run"],arena,host+scratch,pa,nst)
-        # The tuples above retain pointer integers, not their source Lists.
-        # Keep both descriptor buffers live until the native call returns;
-        # otherwise their last use is tuple construction, before py_call.
+            var addresses: List[Int] = [arena, pa]
+            _ = xprep_call(key, XP_RUN, addresses, [host+scratch, nst])
+        # The address words above are not owners: keep both descriptor
+        # buffers live until the native call returns.
         _ = ins^
         _ = outs^
     except error:

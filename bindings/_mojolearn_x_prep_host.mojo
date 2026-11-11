@@ -12,6 +12,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from core.shared_slot import SharedSlot
 from core.scaler_native_api import PrepProgramAPI
+from x_prep.transport_host import publish_x_prep_transport_host
 from core.prep_program_native_host import PrepProgramHostKernels
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
@@ -182,6 +183,10 @@ def build__mojolearn_x_prep_host() -> PythonObject:
             m.def_function[idn_fam2_binding]("x_prep_idn_fam2")
         comptime if PROBA64:
             m.def_function[proba64_binding]("x_prep_proba64")
-        return m.finalize()
+        var published_module = m.finalize()
+        # The native program transport (core/prep_entry_table.mojo) for the
+        # native owners (bindings/x_prep_native_owner.mojo xprep_run).
+        publish_x_prep_transport_host()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_prep_host: ", e))

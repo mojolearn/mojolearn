@@ -16,7 +16,8 @@ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "d
              "als_fit", "topn_desc", "gather",
              "s_flags", "qfix_flags", "idn_flags", "orth", "dev_orth",
              "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "randomized_svd", "dev_lu_factor", "dev_lu_solve",
-             "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr")
+             "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr",
+             "numeric_mode", "vendor")
 
 
 def _entries(binding):
@@ -34,9 +35,32 @@ def _entries(binding):
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"the native decomposition owner requires compiled {name}")
         entries[name] = entry
-    # glue: the module itself, for the kernel-call table (DecompKit.xd -> kit_connect)
+    # glue: the module itself (the resident-operand records and lu_factor's
+    # resident pair free through it)
     entries["x_decomp_module"] = binding
+    _native_key(entries)
     return entries
+
+
+#: The x_decomp table's vendor words (core/linear_entry_table.mojo key), the
+#: mapping the x_decomp images apply when they publish (0 host, 1 metal,
+#: 2 cuda, 3 hip).
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def _native_key(entries):
+    # glue: once at import, the connected x_decomp image's (tier, vendor) key,
+    # which the native decomposition kit (bindings/decomp_kit_native.mojo)
+    # reads to call the image's published operations entry
+    # (core/decomp_entry_table.mojo) instead of its Python entries. An image
+    # without one leaves the key absent and the kit refuses.
+    try:
+        mode = int(entries["x_decomp_numeric_mode"]())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(entries["x_decomp_vendor"]()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        entries["x_decomp_native_key"] = (mode, vendor)
 
 
 def connect(door, **classes):

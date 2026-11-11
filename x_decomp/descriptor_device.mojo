@@ -16,15 +16,21 @@ from x_decomp.resident import (
     pool_alloc, pool_free, dev_upload_run, dev_download_run, dev_ew_run, dev_gemm_run,
     dev_svd_run, dev_orth_diag_run,
     dev_colsum_run, dev_rowsum_run, dev_sqdist_run, dev_move_run, dev_upload_finite_run,
+    dev_rand_run, dev_absmax_run, dev_lu_run, dev_lu_aux_run, dev_code_rows_run, dev_eigh_to_run,
+    IDN_LU_RESIDENT, IDN_CODE_RESIDENT, IDN_EIGH_RESIDENT,
 )
-from x_decomp.select_dev import dev_reduce_run, dev_order_f_run
-from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float
+from x_decomp.select_dev import dev_reduce_run, dev_order_f_run, dev_argmin_all_run, dev_select_smallest_run
+from x_decomp.qfix import LU_QFIX, TSVD_QFIX, lu_resid_run
+from x_decomp.s_linalg_fast import s_flags_run
+from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float, xd_i32
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_CAP_RESIDENT,
     XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD, XD_DEV_EW, XD_DEV_GEMM,
     XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN, XD_DEV_UPLOAD_FINITE,
     XD_CELL_ADD, XD_CELL_MIN, XD_MV_TAKE_ROWS, XD_MV_TAKE_COLS,
     XD_DEV_REDUCE, XD_DEV_ORDER, XD_DEV_SVD, XD_DEV_ORTH_DIAG, XD_VENDOR, xd_vendor_code,
+    XD_LU_RESID, XD_S_FLAGS, XD_QFIX_FLAGS, XD_DEV_RAND, XD_DEV_ABSMAX, XD_DEV_LU, XD_DEV_LU_AUX,
+    XD_DEV_CODE_ROWS, XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL, XD_DEV_SELECT_SMALLEST,
     xd_validate_call, xd_dim,
 )
 from core.shared_slot import SharedSlot
@@ -110,6 +116,52 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
         return dev_svd_run(p[0], xd_f32(a[0]), xd_f32(a[1]), xd_dim(p[1]), xd_dim(p[2]))
     if op == XD_DEV_ORTH_DIAG:
         return dev_orth_diag_run(p[0], p[1], xd_f32(a[0]), xd_dim(p[2]), xd_dim(p[3]))
+    # lane calltable-prep-decomp (2026-11-11): the kit's remaining resident
+    # doors (x_decomp_resident_pyapi.mojo, x_decomp_select_dev_pyapi.mojo),
+    # compiled in exactly where the binding registers the door.
+    if op == XD_DEV_RAND:
+        # dev_rand_py: p = [dst, count, seed, stream, kind]
+        return dev_rand_run(p[0], xd_dim(p[1]), p[2], p[3], p[4])
+    if op == XD_DEV_ABSMAX:
+        return dev_absmax_run(p[0], p[1], xd_dim(p[2]), xd_dim(p[3]), p[4] != 0)
+    if op == XD_DEV_ARGMIN_ALL:
+        return dev_argmin_all_run(p[0], p[1], p[2], xd_dim(p[3]))
+    if op == XD_DEV_SELECT_SMALLEST:
+        return dev_select_smallest_run(p[0], p[1], p[2], xd_dim(p[3]), xd_dim(p[4]))
+    if op == XD_DEV_LU:
+        comptime if IDN_LU_RESIDENT:
+            return dev_lu_run(p[0], p[1], xd_i32(a[0]), xd_f32(a[1]), xd_dim(p[2]))
+        raise Error("x_decomp native ABI: this binding has no x_decomp_dev_lu")
+    if op == XD_DEV_LU_AUX:
+        comptime if IDN_LU_RESIDENT:
+            return dev_lu_aux_run(p[0], xd_i32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f32(a[3]), xd_f32(a[4]),
+                                  xd_dim(p[1]), xd_dim(p[2]))
+        raise Error("x_decomp native ABI: this binding has no x_decomp_dev_lu_aux")
+    if op == XD_DEV_CODE_ROWS:
+        # dev_code_rows_py: kind unchecked; alpha and tol as binary64
+        comptime if IDN_CODE_RESIDENT:
+            return dev_code_rows_run(p[0], p[1], p[2], p[3], xd_dim(p[4]), xd_dim(p[5]), xd_dim(p[6]),
+                                     xd_dim(p[7]), xd_float(floats, 0), xd_float(floats, 1))
+        raise Error("x_decomp native ABI: this binding has no x_decomp_dev_code_rows")
+    if op == XD_DEV_EIGH_TO:
+        comptime if IDN_EIGH_RESIDENT:
+            return dev_eigh_to_run(p[0], p[1], p[2], xd_dim(p[3]), xd_dim(p[4]))
+        raise Error("x_decomp native ABI: this binding has no x_decomp_dev_eigh_to")
+    if op == XD_LU_RESID:
+        # lu_resid_py: n and nrhs unchecked, as the door read them
+        comptime if LU_QFIX:
+            return lu_resid_run(xd_f32(a[0]), xd_f32(a[1]), xd_f32(a[2]), xd_f32(a[3]), p[0], p[1])
+        raise Error("x_decomp native ABI: this binding has no x_decomp_lu_resid")
+    if op == XD_S_FLAGS:
+        return s_flags_run()
+    if op == XD_QFIX_FLAGS:
+        # qfix_flags_py: bit 2 TSVD_QFIX, bit 4 LU_QFIX
+        var f = 0
+        comptime if TSVD_QFIX:
+            f |= 2
+        comptime if LU_QFIX:
+            f |= 4
+        return f
     raise Error("x_decomp native ABI: unknown resident operation " + String(op))
 
 
