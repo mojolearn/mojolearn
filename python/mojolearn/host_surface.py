@@ -2319,6 +2319,7 @@ FAMILIES = (
         display="the standard and min-max scalers",
         host_modules=("preprocessing/host/scaler_oracle.mojo",),
         exports=(
+            "scaler_native_api_v1",
             "preprocessing_host_numeric_mode", "preprocessing_host_vendor",
             "preprocessing_host_column", "preprocessing_host_sabotage",
             "preprocessing_numeric_mode", "preprocessing_vendor",

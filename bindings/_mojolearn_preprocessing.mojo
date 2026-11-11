@@ -8,6 +8,10 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.shared_slot import SharedSlot
+from core.scaler_native_api import ScalerProviderAPI
+from core.scaler_native_device import ScalerDeviceKernels
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from preprocessing.estimator import validate_dimensions, validate_standard, minmax_fit_refusing, minmax_transform_refusing, standard_fit_refusing, standard_transform_refusing, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct
@@ -273,10 +277,19 @@ def vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_preprocessing.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime SCALER_DEVICE_NATIVE_API = SharedSlot[ScalerProviderAPI[ScalerDeviceKernels], ("MojolearnScalerDeviceNativeV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnScalerDeviceNativeV1Fast")]
+
+
+def scaler_native_api_v1_binding() raises -> PythonObject:
+    var api = SCALER_DEVICE_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_preprocessing() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing")
+        m.def_function[scaler_native_api_v1_binding]("scaler_native_api_v1")
         m.def_function[standard_fit_binding]("standard_fit")
         m.def_function[standard_transform_binding]("standard_transform")
         m.def_function[fit_binding]("minmax_fit")
