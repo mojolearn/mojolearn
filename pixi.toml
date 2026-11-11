@@ -157,6 +157,7 @@ check-native-kpca-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks
 check-native-pcs-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pcs_contract.mojo"
 check-native-kde-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kde_state.mojo"
 check-native-dbscan-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_state.mojo"
+check-native-agglo-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_state.mojo"
 check-native-dbscan-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_contract.mojo"
 check-native-dbscan-options = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/dbscan_options.mojo"
 check-native-dbscan-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/dbscan_native_cpu.mojo"
