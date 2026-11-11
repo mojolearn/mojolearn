@@ -15,6 +15,7 @@ from core.logistic_native_api import (
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from core.dbscan_native_device import DBSCAN_DEVICE_API
 from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
 from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
 from core.pca_native_device import PCA_DEVICE_API
@@ -948,6 +949,11 @@ def tsvd_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def dbscan_native_api_v1_binding() raises -> PythonObject:
+    var api = DBSCAN_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def kde_native_api_v1_binding() raises -> PythonObject:
     var api = KDE_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1711,6 +1717,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         m.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
         m.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
+        m.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
         m.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         m.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
