@@ -158,17 +158,12 @@ def msel_proba_column_binding(
     return PythonObject(status)
 
 
-def msel_rebase_offsets_i32_binding(
-    raw_addr: PythonObject, n_raw: PythonObject, lens_addr: PythonObject, parts: PythonObject,
-    n_out: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """The parallel forest's merged int32 tree offsets."""
-    var ra = Int(py=raw_addr)
-    var nr = Int(py=n_raw)
-    var la = Int(py=lens_addr)
-    var p = Int(py=parts)
-    var no = Int(py=n_out)
-    var d = Int(py=dst_addr)
+def msel_rebase_offsets_i32_device_run(ra: Int, nr: Int, la: Int, p: Int, no: Int, d: Int) raises:
+    """The parallel forest's merged int32 tree offsets, on the device. The
+    GPU base image's parallel table entry (bindings/parallel_base_entry_device.mojo)
+    calls it with the GIL released by its caller; the Python door
+    `msel_rebase_offsets_i32` had no caller left once the parallel forest
+    merge read the table (lane calltable-parallel-archive, 2026-11-11)."""
     if p < 1 or nr < 1 or no < 1 or ra == 0 or la == 0 or d == 0:
         raise Error("msel_rebase_offsets_i32: bad sizes")
     # the part lengths are k scalars (one per device shard): checked here
@@ -184,12 +179,8 @@ def msel_rebase_offsets_i32_binding(
     if total != nr or outs != no:
         raise Error("msel_rebase_offsets_i32: part lengths disagree with the sizes")
     var ctx = process_ctx[_MSEL_SLOT]()
-    var ok = True
-    with GILReleased(Python()):
-        ok = device_rebase_offsets_i32(ctx, ra, nr, la, p, no, d)
-    if not ok:
+    if not device_rebase_offsets_i32(ctx, ra, nr, la, p, no, d):
         raise Error("msel_rebase_offsets_i32: a merged offset leaves int32")
-    return PythonObject(0)
 
 
 def msel_split_table_i32_binding(

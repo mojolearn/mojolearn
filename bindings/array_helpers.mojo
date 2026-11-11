@@ -193,10 +193,7 @@ def class_ratio_f64_host_binding(
     return PythonObject(class_ratio_f64(cp, op, kk, nn, m))
 
 
-def shard_topk_merge_f32_host_binding(
-    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
-    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
-) raises -> PythonObject:
+def shard_topk_merge_f32_host_run(ta: Int, s_count: Int, nq: Int, kk: Int, od: Int, oi: Int) raises -> Int:
     """`parallel_neighbors_reference._merge` (lane pyglue-sweep: out of the
     Python per-query loop): per query row, every reference shard's
     candidates as composite keys (neighbors/checks/select_radix_identical
@@ -206,18 +203,15 @@ def shard_topk_merge_f32_host_binding(
     shard the float32 distance address, the int64 local-id address, the
     first and end global rows and the width (columns per query row).
     Writes the winning float bits and uint32 global indices. Returns 0,
-    1 when a local id is outside its shard, 2 for fewer than k candidates."""
-    var s_count = Int(py=n_shards)
-    var nq = Int(py=n_queries)
-    var kk = Int(py=k)
+    1 when a local id is outside its shard, 2 for fewer than k candidates.
+    Reached through the core host image's parallel table entry
+    (bindings/parallel_base_entry_host.mojo); the Python door had no caller
+    left (lane calltable-parallel-archive, 2026-11-11)."""
     if s_count < 1 or nq < 0 or kk < 1:
         raise Error("shard_topk_merge_f32: bad dimensions")
     if nq == 0:
-        return PythonObject(0)
-    var tp = _addr_ptr[DType.int64](Int(py=table_addr))
-    var od = _addr_ptr[DType.uint32](Int(py=out_dist_addr))
-    var oi = _addr_ptr[DType.uint32](Int(py=out_idx_addr))
-    var rc = 0
-    with GILReleased(Python()):
-        rc = shard_topk_merge_f32(tp, od, oi, s_count, nq, kk)
-    return PythonObject(rc)
+        return 0
+    var tp = _addr_ptr[DType.int64](ta)
+    var dp = _addr_ptr[DType.uint32](od)
+    var ip = _addr_ptr[DType.uint32](oi)
+    return shard_topk_merge_f32(tp, dp, ip, s_count, nq, kk)

@@ -76,12 +76,14 @@ from bindings.hotpath_helpers import (
     bincount_i64_binding as host_bincount_i64_binding,
     check_indices_i64_binding as host_check_indices_i64_binding,
     equal_elements_binding as host_equal_elements_binding,
-    fold_pair_f32_binding as host_fold_pair_f32_binding,
+    indices_overlap_i64_binding as host_indices_overlap_i64_binding,
+    leave_range_i64_binding as host_leave_range_i64_binding,
     normal_init_f32_binding as host_normal_init_f32_binding,
     threshold_labels_i64_binding as host_threshold_labels_i64_binding,
     uniform_init_f32_binding as host_uniform_init_f32_binding,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.hotpath_impl_rows import fold_pair_f32
 from core.hotpath_device import (
     HPD_F32,
     HPD_F64,
@@ -280,20 +282,20 @@ def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> Py
     return PythonObject(c)
 
 
-def fold_pair_f32_binding(
-    dst_addr: PythonObject, src_addr: PythonObject, n: PythonObject,
-) raises -> PythonObject:
-    """`fold_pair_f32`, on the device."""
+def fold_pair_f32_device_run(d: Int, s: Int, count: Int) raises -> Int:
+    """`fold_pair_f32`, on the device when the switch covers the call, else
+    the host kernel (core/hotpath_impl_rows.mojo), which raises its own
+    words. The GPU base image's parallel table entry
+    (bindings/parallel_base_entry_device.mojo) calls it with the GIL
+    released by its caller; the former Python door `fold_pair_f32` had no
+    caller left once cross_vendor's fold read the table (lane
+    calltable-parallel-archive, 2026-11-11)."""
     comptime if IDN_HPDEV_ELEM:
-        var count = Int(py=n)
-        var d = Int(py=dst_addr)
-        var s = Int(py=src_addr)
         if count >= 1 and count <= HPD_MAX_N and d != 0 and s != 0:
             var ctx = process_ctx[_HPDEV_SLOT]()
-            with GILReleased(Python()):
-                device_fold_pair_f32(ctx, d, s, count)
-            return PythonObject(0)
-    return host_fold_pair_f32_binding(dst_addr, src_addr, n)
+            device_fold_pair_f32(ctx, d, s, count)
+            return 0
+    return fold_pair_f32(d, s, count)
 
 
 # ---------------------------------------------------------------------------

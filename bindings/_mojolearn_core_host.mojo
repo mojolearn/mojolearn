@@ -79,6 +79,7 @@ comparison and one narrowing per kept value, no fold to sabotage.
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_host.mojo).
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from bindings.parallel_base_entry_host import publish_parallel_base_host
 from bindings.msel_host import (
     msel_put_binding,
     msel_alloc_binding,
@@ -89,7 +90,6 @@ from bindings.msel_host import (
     msel_free_bytes_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
-    msel_rebase_offsets_i32_binding,
     msel_split_table_i32_binding,
     msel_group_fold_perm_i32_binding,
 )
@@ -139,7 +139,6 @@ from bindings.hotpath_helpers import (
     count_mask_u8_binding,
     ic_running_min_f64_host_binding,
     ic_running_min_f32_host_binding,
-    fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
     assign_fold_i64_binding,
@@ -170,7 +169,6 @@ from bindings.array_helpers import (
     fsum_f64_binding,
     row_stds_f64_binding,
     class_ratio_f64_host_binding,
-    shard_topk_merge_f32_host_binding,
 )
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.host_finite_scan import host_all_finite_f32
@@ -1202,7 +1200,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[msel_free_bytes_binding]("msel_free_bytes")
         module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         module.def_function[msel_proba_column_binding]("msel_proba_column")
-        module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
         module.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
         module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
@@ -1241,7 +1238,6 @@ def build__mojolearn_core_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
-        module.def_function[fold_pair_f32_binding]("fold_pair_f32")
         module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         module.def_function[bincount_i64_binding]("bincount_i64")
         module.def_function[assign_fold_i64_binding]("assign_fold_i64")
@@ -1279,11 +1275,13 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
         module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
-        module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
         var published_module = module.finalize()
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.
         publish_base_helpers_host()
+        # The parallel base table (core/parallel_entry_table.mojo): the
+        # parallel owners call its entry natively, not this module's doors.
+        publish_parallel_base_host()
         return published_module
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

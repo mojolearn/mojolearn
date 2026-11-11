@@ -117,7 +117,6 @@ from bindings.array_helpers import (
     fsum_f64_binding,
     row_stds_f64_binding,
 )
-from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
 from core.ic_min_device import device_ic_running_min
 from bindings.hotpath_helpers import (
@@ -145,7 +144,6 @@ from bindings.hotpath_device import (
     mask_from_indices_u8_binding,
     select_mask_u8_i64_binding,
     count_mask_u8_binding,
-    fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
     bincount2_i32_binding,
@@ -187,7 +185,6 @@ from bindings.msel_device import (
     kmeans_transform_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
-    msel_rebase_offsets_i32_binding,
     msel_split_table_i32_binding,
     msel_group_fold_perm_i32_binding,
 )
@@ -216,11 +213,13 @@ from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from bindings.parallel_base_entry_device import CORE_DEVCTX_SLOT, publish_parallel_base_device
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV3"
+#: Defined once beside the parallel base entry that shares it
+#: (bindings/parallel_base_entry_device.mojo).
+comptime _DEVCTX_SLOT = CORE_DEVCTX_SLOT
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
@@ -1783,33 +1782,6 @@ def argmax_rows_f64_binding(
     return _argmax_rows_device("argmax_rows_f64", True, scores_addr, n_rows, n_cols, dst_addr)
 
 
-def shard_topk_merge_f32_binding(
-    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
-    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
-) raises -> PythonObject:
-    """`shard_topk_merge_f32` (bindings/array_helpers.mojo's contract: 0, 1
-    a local id outside its shard, 2 fewer than k candidates) on the device
-    (lane cpu4-python, core/shard_merge_device.mojo); the host loop is the
-    host binding's column."""
-    var s_count = Int(py=n_shards)
-    var nq = Int(py=n_queries)
-    var kk = Int(py=k)
-    if s_count < 1 or nq < 0 or kk < 1:
-        raise Error("shard_topk_merge_f32: bad dimensions")
-    if nq == 0:
-        return PythonObject(0)
-    if Int(py=table_addr) == 0 or Int(py=out_dist_addr) == 0 or Int(py=out_idx_addr) == 0:
-        raise Error("shard_topk_merge_f32: null buffer address")
-    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
-    var od = Int(py=out_dist_addr)
-    var oi = Int(py=out_idx_addr)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var rc = 0
-    with GILReleased(Python()):
-        rc = device_shard_topk_merge_f32(ctx, tp, s_count, nq, kk, od, oi)
-    return PythonObject(rc)
-
-
 def _ic_running_min_device(
     name: String, wide: Bool, llf_addr: PythonObject, n: PythonObject, penalty: PythonObject,
     order: PythonObject, ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
@@ -2155,7 +2127,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
         m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         m.def_function[msel_proba_column_binding]("msel_proba_column")
-        m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
         m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
         m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
@@ -2188,7 +2159,6 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
-        m.def_function[fold_pair_f32_binding]("fold_pair_f32")
         m.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         m.def_function[bincount_i64_binding]("bincount_i64")
         m.def_function[assign_fold_i64_binding]("assign_fold_i64")
@@ -2222,7 +2192,6 @@ def build__mojolearn() -> PythonObject:
         m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
         m.def_py_c_function(entry_init, "optimizer_door_init")
         m.def_function[class_ratio_f64_binding]("class_ratio_f64")
-        m.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
@@ -2235,6 +2204,9 @@ def build__mojolearn() -> PythonObject:
         # The base helper table (core/base_entry_table.mojo): the same
         # helpers for native callers in other extension modules.
         publish_base_helpers_device()
+        # The parallel base table (core/parallel_entry_table.mojo): the
+        # parallel owners call its entry natively, not this module's doors.
+        publish_parallel_base_device()
         return published_module
     except e:
         abort(String("failed to create _mojolearn module: ", e))

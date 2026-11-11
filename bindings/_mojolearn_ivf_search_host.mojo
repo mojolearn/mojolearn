@@ -33,7 +33,6 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_index_arrays import ivf_merge_shards_host_binding
 from bindings.ivf_host_search import (
     ivf_flat_index_prepare_binding,
     ivf_flat_index_release_binding,
@@ -103,7 +102,9 @@ def build__mojolearn_ivf_search_host() -> PythonObject:
         module.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
         module.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         module.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
-        module.def_function[ivf_merge_shards_host_binding]("ivf_merge_shards")
+        # ivf_merge_shards: no Python door (lane calltable-parallel-archive,
+        # 2026-11-11); the distributed IVF owner reads the parallel IVF table
+        # `_mojolearn_ivf_host` publishes.
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_ivf_search_host: ", error))
