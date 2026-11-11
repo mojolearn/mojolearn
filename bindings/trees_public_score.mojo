@@ -27,7 +27,7 @@
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
 from bindings.labels_stat_boundary import labels_stat_pack
-from core.base_helpers_calls import base_reduce_stat
+from bindings.base_helpers_released import base_reduce_stat
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed

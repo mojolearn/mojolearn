@@ -16,7 +16,7 @@ from std.memory import unsafe_memcpy
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_reduce_stat
+from bindings.base_helpers_released import base_reduce_stat
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32

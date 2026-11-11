@@ -30,7 +30,7 @@ from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat
 from x_metrics.epilogue import first_rows_i32
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_reduce_stat_int, base_bincount_i64, base_bincount2_i32
+from bindings.base_helpers_released import base_reduce_stat_int, base_bincount_i64, base_bincount2_i32
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_storage_allocate

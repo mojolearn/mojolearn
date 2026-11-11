@@ -14,7 +14,7 @@ from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_check_indices_i64
+from bindings.base_helpers_released import base_check_indices_i64
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.ffi import c_int, external_call
 from std.sys.compile import is_defined
