@@ -2000,14 +2000,14 @@ FAMILIES = (
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
             "msel_free_bytes",
             "msel_take_rows", "msel_scatter_rows", "msel_proba_column",
-            "msel_rebase_offsets_i32", "msel_split_table_i32", "msel_group_fold_perm_i32",
+            "msel_split_table_i32", "msel_group_fold_perm_i32",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
             # lane migrate-shared-labels: the shared argument-and-label entry
             "prepare_targets",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
             "ic_running_min_f64", "ic_running_min_f32",
-            "fold_pair_f32", "threshold_labels_i64",
+            "threshold_labels_i64",
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
@@ -2020,7 +2020,9 @@ FAMILIES = (
             "truncnorm_draws", "fsum_f64", "row_stds_f64",
             "lr_schedule_exact",
             "class_ratio_f64",
-            "shard_topk_merge_f32",
+            # fold_pair_f32, msel_rebase_offsets_i32, shard_topk_merge_f32: no
+            # Python door since lane calltable-parallel-archive (2026-11-11);
+            # the parallel owners read this image's parallel base table.
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3301,9 +3303,9 @@ FAMILIES = (
             "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
-            "ivf_merge_shards",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "ivf_shard_plan",
+            # ivf_merge_shards, ivf_shard_plan: no Python door since lane
+            # calltable-parallel-archive (2026-11-11); this image publishes them
+            # in its parallel IVF table.
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3343,7 +3345,8 @@ FAMILIES = (
             "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
             "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
-            "ivf_merge_shards",
+            # ivf_merge_shards: no Python door since lane calltable-parallel-archive
+            # (2026-11-11); `_mojolearn_ivf_host` publishes it natively.
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(
