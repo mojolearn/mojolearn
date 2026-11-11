@@ -304,9 +304,15 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support (decided
 2026-10-04; the parked AMD portable prototype is on `lane/amd-portable`). Do not hand-rewrite compiler output, patch
-toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. One authorized repair
-(owner, 2026-10-25): the native CPython dictionary API for instance-field lookup in `get_params` and public
-attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
+toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. The authorized narrow
+exceptions are:
+
+- (Owner, 2026-10-25) The native CPython dictionary API for instance-field lookup in `get_params` and public
+  attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
+- (Owner, 2026-11-10) Replace the IPCA tests' nested native buffer list with six named Mojo buffer fields to avoid
+  the confirmed compiler crash. This exception covers test storage only: preserve the numerical implementation,
+  input/reference bytes, assertions, tolerances and kernel calls. Retain the original standalone reproducer and
+  upstream report; it does not authorize other compiler workarounds or Python fallbacks.
 
 ### Framework adapters are the same API in another format (Andrew, 2026-10-24)
 

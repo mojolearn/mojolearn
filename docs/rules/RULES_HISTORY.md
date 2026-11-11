@@ -900,3 +900,14 @@ Each retired text is quoted in full in the file copies above; the pointers give 
    default.
 6. **Hard rules.** Replaced by the verbatim hard rules: `CLAUDE.md` "Never add, rent, extend or release an Apple
    machine" and `AGENTS.md` "Use all allocated CPU cores for compiler workers or bounded build concurrency".
+
+
+## Wait for Mojo and Modular before the 2026-11-10 IPCA test-storage exception
+
+Preserved verbatim before Andrew approved the specific six-field native IPCA test-storage refactor.
+
+If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support (decided
+2026-10-04; the parked AMD portable prototype is on `lane/amd-portable`). Do not hand-rewrite compiler output, patch
+toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. One authorized repair
+(owner, 2026-10-25): the native CPython dictionary API for instance-field lookup in `get_params` and public
+attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
