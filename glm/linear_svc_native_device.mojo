@@ -24,7 +24,7 @@ struct LinearSvcDeviceKernels(LinearSvcOvrKernels):
             var wp = f32_ptr(Int(state.coefficients.unsafe_ptr()))
             var ip = f32_ptr(Int(state.info.unsafe_ptr()))
             var sw = f32_ptr(r.weights) if r.weights != 0 else wp
-            var o = r.options
+            var o = r.options.copy()
             var ctx = process_ctx[_CONTEXT]()
             qn_fit_ovr_host(ctx, xp, cp, wp, ip, o.rows, o.features, o.first_class,
                 o.fits, o.l1, o.l2, o.gradient_tolerance, o.change_tolerance,
