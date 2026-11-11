@@ -51,11 +51,27 @@ struct ScoreKeyOwner(Movable):
 
 
 def score_keys_unpack(values: PythonObject, string_kind: Bool, context: PythonObject) raises -> ScoreKeyOwner:
+    var native_values = List[PythonObject]()
+    return _score_keys_unpack[False](values, native_values, string_kind, context)
+
+
+def score_keys_unpack(values: List[PythonObject], string_kind: Bool, context: PythonObject) raises -> ScoreKeyOwner:
+    return _score_keys_unpack[True](PythonObject(None), values, string_kind, context)
+
+
+def _score_keys_unpack[native: Bool](values: PythonObject, native_values: List[PythonObject],
+                                    string_kind: Bool, context: PythonObject) raises -> ScoreKeyOwner:
     # The caller completed shape and exact primitive admission first, so
     # these stable scalar C APIs cannot enter user conversion slots.
     var result = ScoreKeyOwner()
     var b = native_loaded_module("builtins")
-    var is_tuple = py_type(values) is b.tuple
+    var is_tuple = False
+    var count: Int
+    comptime if native:
+        count = len(native_values)
+    else:
+        is_tuple = py_type(values) is b.tuple
+        count = len(values)
     var unicode_error = b.UnicodeEncodeError
     var npbool = py_get(context, "ndarray")
     if npbool is not None:
@@ -69,8 +85,12 @@ def score_keys_unpack(values: PythonObject, string_kind: Bool, context: PythonOb
     var op = overflow.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     # Exact CPython slot reads require the GIL; RUN hashes/sorts/lookups split
     # the admitted native keys across the host worker pool.
-    for i in range(len(values)):  # UNPACK exact scalar slots under the GIL
-        var raw = borrowed_item(values, i, is_tuple)
+    for i in range(count):  # UNPACK exact scalar slots under the GIL
+        var raw: PyObjectPtr
+        comptime if native:
+            raw = native_values[i]._obj_ptr
+        else:
+            raw = borrowed_item(values, i, is_tuple)
         var identity = borrowed_type_word(raw)
         var value = PythonObject(from_borrowed=raw)
         if string_kind:
@@ -135,6 +155,7 @@ def score_keys_unpack(values: PythonObject, string_kind: Bool, context: PythonOb
     _ = length^
     _ = overflow^
     _ = values
+    _ = native_values
     return result^
 
 

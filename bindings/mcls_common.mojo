@@ -361,32 +361,50 @@ def _view_kind(dtype: String) raises -> Int:
     return 0
 
 
-def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(store, n)`: an `array.array('q')` of the integer labels of a 1-D
-    integer buffer or Array, or None when the value is not one (the label
-    input step then reads it)."""
-    var b = mc_b()
+@fieldwise_init
+struct MetricIntegerView(Movable):
+    var view: PythonObject
+    var count: Int
+    var item: Int
+    var stride: Int
+    var signed: Bool
+
+
+def mc_integer_view(values: PythonObject, context: PythonObject) raises -> Optional[MetricIntegerView]:
+    """The existing integer-store admission; storage choice follows it."""
     var view: PythonObject
     try:
         view = classical_view(values, context, "y")
     except:
-        return PythonObject(None)
+        return None
     if Int(py=view.ndim) != 1:
-        return PythonObject(None)
+        return None
     var kind = _view_kind(classical_dtype_str(view, context))
     if kind == 0:
-        return PythonObject(None)
+        return None
     var count = Int(py=view.shape[0])
     if count < 1:
-        return PythonObject(None)
+        return None
     var item = Int(py=view.itemsize)
     var stride = Int(py=view.strides[0])
-    # One zeroed int64 store (it was a bytes object copied into an array).
+    return MetricIntegerView(view, count, item, stride, kind == 1)
+
+
+def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """Legacy Array store wrapper over the shared admitted view."""
+    var input = mc_integer_view(values, context)
+    if not input:
+        return PythonObject(None)
+    var count = input.value().count
+    # Keep the existing zeroed Int64 store and native conversion route.
     var store = native_array_zeros(String("q"), count)
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
-    if not admitted_ids_i64(Int(py=classical_address(view)), stride, 0, count, 1, item, kind == 1, False, dst):
+    var admitted = admitted_ids_i64(Int(py=classical_address(input.value().view)), input.value().stride,
+        0, count, 1, input.value().item, input.value().signed, False, dst)
+    _ = input  # retain the source owner through success and refusal
+    _ = store
+    if not admitted:
         return PythonObject(None)
-    _ = view^
     return Python.tuple(store, PythonObject(count))
 
 
