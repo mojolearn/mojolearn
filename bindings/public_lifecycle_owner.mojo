@@ -144,10 +144,16 @@ def lifecycle_check_x_width(model: PythonObject, fields: PythonObject, source: P
     _check_width_shape(model, fields, source, _check_x_values(model, source, sparse_ok, context), context)
 
 
-def lifecycle_admit_state(model: PythonObject, fields: PythonObject) raises:
-    var b = native_loaded_module("builtins")
-    if py_type(py_get(fields, "_mojolearn_fitting", PythonObject(0))) is not b.int:
+def lifecycle_depth_value(fields: PythonObject) raises -> PythonObject:
+    """Read and admit the public fit depth before any numeric conversion."""
+    var value = py_get(fields, "_mojolearn_fitting", PythonObject(0))
+    if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: native fitting depth requires an exact integer")
+    return value
+
+
+def lifecycle_admit_state(model: PythonObject, fields: PythonObject) raises:
+    _ = lifecycle_depth_value(fields)
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
 
@@ -162,9 +168,7 @@ def lifecycle_begin(model: PythonObject, method: String, source: PythonObject, x
     var fields = py_fields(model)
     # lifecycle_admit_state's checks, in its order, with the fitting depth
     # read once (it was read again right after the admission).
-    var depth_value = py_get(fields, "_mojolearn_fitting", PythonObject(0))
-    if py_type(depth_value) is not native_loaded_module("builtins").int:
-        raise Error("TypeError: native fitting depth requires an exact integer")
+    var depth_value = lifecycle_depth_value(fields)
     if py_contains(fields, "_mojolearn_after_fit"):
         raise Error("TypeError: native fitting cannot invoke Python completion callbacks")
     var nested = Int(py=depth_value) > 0

@@ -12,7 +12,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_get, py_fields, py_contains
 from bindings.public_lifecycle_owner import (
     lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result, lifecycle_check_width,
-    lifecycle_check_x, lifecycle_x_shape,
+    lifecycle_check_x, lifecycle_x_shape, lifecycle_depth_value,
 )
 from bindings.classical_validate import classical_estimator_name
 
@@ -46,7 +46,7 @@ def decomp_public_begin(model: PythonObject, method: String, args: PythonObject,
         return 0
     var source = args[0] if len(args) > 0 else PythonObject(None)
     var fields = py_fields(model)
-    var nested = Int(py=py_get(fields, "_mojolearn_fitting", PythonObject(0))) > 0
+    var nested = Int(py=lifecycle_depth_value(fields)) > 0
     if method == "partial_fit" and x_checks and not nested and py_contains(fields, "n_features_in_"):
         # a later batch keeps the first batch's width and feature names
         # (scikit-learn's validate_data(reset=False)), before the depth moves
