@@ -1,10 +1,11 @@
 """Observer controls; no product import, GPU, or compiler is needed."""
 import sys
 import threading
+import json
 
 import pytest
 
-from python_crossing_probe import PythonCalls, visibility_control, compare_observations
+from python_crossing_probe import PythonCalls, visibility_control, compare_observations, launch_case
 
 
 def test_nested_python_callback_is_visible_and_report_never_qualifies_zero():
@@ -56,3 +57,21 @@ def test_failed_or_different_fixtures_cannot_claim_a_reduction():
                     {"requested_backend": "cuda"}, {"parameters": {"alpha": 2.0}},
                     {"operations": []}):
         assert compare_observations(prior, dict(after, **changed))["status"] == "incomparable"
+
+
+def test_native_abort_cannot_be_reported_as_an_observed_case(tmp_path, monkeypatch):
+    import build_process
+    target = tmp_path / "cpu-Ridge-32.json"
+    # A child may finish writing its numerical observations and then abort in
+    # teardown. The process result must still fail the case and retain those
+    # observations for diagnosis, rather than letting a JSON file imply pass.
+    def aborted(*args, **kwargs):
+        target.write_text(json.dumps({"status": "observed", "operations": [{"operation": "fit"}]}))
+        return dict(status="failed", exit_code=-6, process_returncode=-6, peak_rss_bytes=1024)
+
+    monkeypatch.setattr(build_process, "run", aborted)
+    result = launch_case(("Ridge", "cpu", 32, str(tmp_path)), 10)
+    assert result["status"] == "failed"
+    saved = json.loads(target.read_text())
+    assert saved["execution"]["process_returncode"] == -6
+    assert saved["operations"] == [{"operation": "fit"}]

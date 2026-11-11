@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import ctypes
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import resource
@@ -190,7 +191,33 @@ def run_case(case):
             "status": result["status"], "evidence": str(target)}
 
 
+def launch_case(case, seconds):
+    """Isolate native aborts/timeouts without losing other completed cases."""
+    import build_process
+    name, backend, rows, evidence = case
+    stem = Path(evidence) / f"{backend}-{name}-{rows}"
+    receipt = build_process.run(
+        [sys.executable, str(Path(__file__).resolve()), "--worker-spec", json.dumps(case)],
+        cwd=Path.cwd(), env=os.environ.copy(), log=stem.with_suffix(".log"), seconds=seconds)
+    target = stem.with_suffix(".json")
+    if target.exists():
+        result = json.loads(target.read_text())
+    else:
+        result = {"estimator": name, "rows": rows, "requested_backend": backend,
+                  "status": "failed", "operations": [], "python_free_qualification": "pending"}
+    result["execution"] = {key: receipt.get(key) for key in
+                           ("status", "exit_code", "process_returncode", "peak_rss_bytes")}
+    if receipt["exit_code"] != 0:
+        result["status"] = "failed"
+    target.write_text(json.dumps(result, indent=2) + "\n")
+    return {"estimator": name, "rows": rows, "backend": backend,
+            "status": result["status"], "evidence": str(target)}
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if len(argv) == 2 and argv[0] == "--worker-spec":
+        return int(run_case(json.loads(argv[1]))["status"] != "observed")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("cpu", "metal", "cuda", "hip"), default="cpu")
     parser.add_argument("--estimators", nargs="+", choices=CASES, default=list(CASES))
@@ -198,25 +225,31 @@ def main(argv=None):
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--label", required=True, help="Source/wheel identifier for before/after attribution")
     parser.add_argument("--before", type=Path, help="Previous observation summary.json for count comparison")
+    parser.add_argument("--seconds", type=float, default=600, help="Per-case execution deadline, never a speed score")
     args = parser.parse_args(argv)
+    if not math.isfinite(args.seconds) or args.seconds <= 0:
+        parser.error("--seconds must be finite and positive")
     if any(rows < 8 for rows in args.rows):
         parser.error("each case needs at least eight rows")
     args.evidence = args.evidence.resolve()
     args.evidence.mkdir(parents=True, exist_ok=True)
     cases = [(name, args.backend, rows, str(args.evidence))
              for name in dict.fromkeys(args.estimators) for rows in dict.fromkeys(args.rows)]
+    if (args.evidence / "summary.json").exists() or any(
+            (args.evidence / f"{backend}-{name}-{rows}.json").exists() for name, backend, rows, _ in cases):
+        parser.error("case evidence already exists; use a fresh evidence directory")
     if sys.platform == "linux":
         from build_sizing import box_resources
         allocation, _ = box_resources()
     else:
         allocation = os.cpu_count() or 1
     workers = min(allocation, len(cases)) if args.backend == "cpu" else 1
-    # Spawn prevents inherited product modules/backend state from contaminating
-    # another case. One task per child keeps caches and profilers independent.
-    import multiprocessing
-    with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
-                             max_tasks_per_child=1) as pool:
-        results = list(pool.map(run_case, cases))
+    # Every case executes in a fresh bounded subprocess. The existing process
+    # controller retains full logs and exit/signal receipts even for native
+    # aborts. An abort never destroys other workers or hides their results.
+    from functools import partial
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(partial(launch_case, seconds=args.seconds), cases))
     report = {"schema": "mojolearn-python-crossing-observation-v1", "label": args.label,
               "backend": args.backend, "workers": workers, "allocation": allocation,
               "cases": results, "failed": sum(row["status"] != "observed" for row in results),
