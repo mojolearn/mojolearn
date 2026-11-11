@@ -23,31 +23,23 @@ THE GIL is released around the device call, and nothing inside the
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
-from std.memory import memcpy
 from std.sys.compile import is_defined
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.python import Python, PythonObject
+from core.hdbscan_query_api import hdbscan_soft_shape_refusal as _soft_shape_refusal
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hdbscan.native_query_device import HDBSCAN_QUERY_DEVICE_API
+from hdbscan.native_query_device_doors import _hdbscan_predict_run, _hdbscan_membership_run, _hdbscan_all_points_run
 from hdbscan.native_fit_device import HDBSCAN_FIT_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from max.gpu.host import DeviceContext
-from core.neural_context import process_ctx
-from hdbscan.impl.hdbscan_door_impl import HDB_DEVCTX_SLOT, hdbscan_fit_door_run, prediction_data_door_run
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from hdbscan.impl.hdbscan_door_impl import hdbscan_fit_door_run, prediction_data_door_run
 
-comptime _DEVCTX_SLOT = HDB_DEVCTX_SLOT
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from hdbscan.estimator import (
-    hdbscan_all_points_membership_vectors_host,
-    hdbscan_approximate_predict_host,
-    hdbscan_membership_vector_host,
-    hdbscan_fit_host_output,
-)
-from hdbscan.impl.prediction_data import generate_prediction_data_device
+
 
 
 
@@ -71,6 +63,11 @@ def hdbscan_vendor_binding() raises -> PythonObject:
 
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+
+
+def hdbscan_query_native_api_v1_binding() raises -> PythonObject:
+    var api = HDBSCAN_QUERY_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def hdbscan_fit_native_api_v1_binding() raises -> PythonObject:
@@ -255,34 +252,6 @@ def hdbscan_generate_prediction_data_binding(
     return PythonObject(n_ex)
 
 
-def _hdbscan_predict_run(
-    x: List[Float32],
-    m: Int,
-    d: Int,
-    core: List[Float32],
-    labels: List[Int32],
-    lambdas: List[Float32],
-    n_edges: Int,
-    n_clusters: Int,
-    deaths: List[Float32],
-    selected: List[Int32],
-    iic: List[Int32],
-    q: List[Float32],
-    nq: Int,
-    min_samples: Int,
-    lo: MutPointer[Int32, MutUntrackedOrigin],
-    po: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    hdbscan_approximate_predict_host(
-        ctx, x, m, d, core, labels, lambdas, n_edges, n_clusters, deaths,
-        selected, iic, q, nq, min_samples, lo, po,
-    )
-    ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-
-
 def hdbscan_approximate_predict_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -339,40 +308,6 @@ def hdbscan_approximate_predict_binding(
             selected, iic, q, nq, min_samples, lo, po,
         )
     return PythonObject(nq)
-
-
-def _soft_shape_refusal(where: String, vals: List[Int]) raises:
-    """Every count the soft clustering calls take must be positive (m at
-    least 2), else a refusal naming them."""
-    var ok = vals[0] >= 2
-    for i in range(1, len(vals)):  # small-loop(vals: a handful of shape counts): shape refusal, not data
-        if vals[i] < 1:
-            ok = False
-    if not ok:
-        var s = String(where) + ": shape refused by name ("
-        for i in range(len(vals)):  # small-loop(vals: a handful of shape counts): refusal message, not data
-            if i > 0:
-                s += ", "
-            s += String(vals[i])
-        raise Error(s + ")")
-
-
-def _hdbscan_membership_run(
-    x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32],
-    parents: List[Int32], lambdas: List[Float32], n_edges: Int,
-    n_clusters: Int, deaths: List[Float32], selected: List[Int32],
-    iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32],
-    q: List[Float32], nq: Int, min_samples: Int,
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    hdbscan_membership_vector_host(
-        ctx, x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
-        deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out_ptr,
-    )
-    ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
 
 def hdbscan_membership_vector_binding(
@@ -446,23 +381,6 @@ def hdbscan_membership_vector_binding(
             )
             first += count
     return PythonObject(nq)
-
-
-def _hdbscan_all_points_run(
-    x: List[Float32], m: Int, d: Int, parents: List[Int32],
-    lambdas: List[Float32], n_edges: Int, n_clusters: Int,
-    deaths: List[Float32], selected: List[Int32], iic: List[Int32],
-    ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int,
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    hdbscan_all_points_membership_vectors_host(
-        ctx, x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
-        iic, ex_idx, offsets, row0, count, out_ptr,
-    )
-    ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
 
 def hdbscan_all_points_membership_vectors_binding(
@@ -555,6 +473,7 @@ def build__mojolearn_hdbscan() -> PythonObject:
         m.def_function[hdbscan_fit_native_api_v1_binding]("hdbscan_fit_native_api_v1")
         m.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
         m.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
+        m.def_function[hdbscan_query_native_api_v1_binding]("hdbscan_query_native_api_v1")
         m.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
         m.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")
         return m.finalize()

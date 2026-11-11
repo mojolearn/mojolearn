@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.cluster_side_records import (
     cluster_is_subclass, cluster_refuse_fit_callbacks, cluster_record_key, cluster_record_get,
@@ -17,11 +17,19 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or
-from bindings.family_common import family_array, family_call
+from bindings.family_common import family_array
 from bindings.cluster_fit_a_native import cluster_fit_a_operation, _hdbscan_mode
+from bindings.hdbscan_fit_boundary import hdbscan_buffer_span
+from bindings.hdbscan_query_boundary import (
+    HdbscanQueryConnection, HdbscanQueryRecord, hdbscan_query_connection, hdbscan_query_run,
+)
+from core.hdbscan_query_api import (
+    HdbscanQueryDimensions, HdbscanQueryBuffers, HdbscanQueryRequest,
+    HDBSCAN_QUERY_APPROXIMATE, HDBSCAN_QUERY_MEMBERSHIP, HDBSCAN_QUERY_ALL_POINTS,
+)
+from core.kmeans_variants_api import VariantsSpan
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_binding_pyapi import estimator_binding
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 
@@ -42,14 +50,14 @@ def _initialize(model: PythonObject, args: PythonObject, context: PythonObject) 
     var names = _schema(context)
     if len(names) != len(args):
         raise Error("TypeError: HDBSCAN constructor metadata differs")
-    var replacements = Python.list()
+    var replacements = List[PythonObject]()
     for i in range(len(names)):  # driver-loop: fixed constructor fields; admit every replaced owner first
         var value = args[i]
         if String(names[i]) == "numeric_mode" and value is None:
             value = family_raw_get_or(model, "numeric_mode", PythonObject(None))
         if py_contains(fields, names[i]) and fields[names[i]] is not value:
             native_release_admit(fields[names[i]], context)
-        _ = py_call(replacements.append, value)
+        replacements.append(value)
     for i in range(len(names)):  # driver-loop: publish after complete lifetime admission
         py_setitem(fields, names[i], replacements[i])
     return PythonObject(None)
@@ -62,7 +70,7 @@ comptime _ADMIT_SLOT = "cluster_hdbscan_admitted_v1"
 
 
 def _query_slot(method: String) -> String:
-    return "cluster_hdbscan_" + method + "_v1"
+    return "cluster_hdbscan_" + method + "_v2"
 
 
 def _scalars() raises -> PythonObject:
@@ -148,8 +156,10 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var all_points = method == "all_points_membership_vectors"
     var slot = _query_slot(method)
     var held = cluster_record_get(slot, model, key)
-    if held is not None and held[0] is not binding:
-        held = PythonObject(None)
+    if held is not None:
+        var cached = held.downcast_value_ptr[HdbscanQueryRecord]()
+        if cached[].binding is not binding:
+            held = PythonObject(None)
     var raw = PythonObject(None)
     var core = PythonObject(None)
     var labels = PythonObject(None)
@@ -160,7 +170,7 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var children = PythonObject(None)
     var indices = PythonObject(None)
     var offsets = PythonObject(None)
-    var entry = PythonObject(None)
+    var connection = Optional[HdbscanQueryConnection]()
     var edges = 0
     var condensed = 0
     var exemplars = 0
@@ -170,25 +180,26 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     var neighbors = 0
     var pd = PythonObject(None)
     if held is not None:
-        entry = held[1]
-        raw = held[2]
-        core = held[3]
-        labels = held[4]
-        parents = held[5]
-        lambdas = held[6]
-        deaths = held[7]
-        clusters = held[8]
-        children = held[9]
-        indices = held[10]
-        offsets = held[11]
-        var counts = held[12]
-        rows = Int(py=counts[0])
-        columns = Int(py=counts[1])
-        edges = Int(py=counts[2])
-        condensed = Int(py=counts[3])
-        exemplars = Int(py=counts[4])
-        selected = Int(py=counts[5])
-        neighbors = Int(py=counts[6])
+        var cached = held.downcast_value_ptr[HdbscanQueryRecord]()
+        connection = Optional(HdbscanQueryConnection(cached[].provider, cached[].driver, cached[].host))
+        raw = cached[].raw
+        core = cached[].core_distances
+        labels = cached[].labels
+        parents = cached[].parents
+        lambdas = cached[].lambdas
+        deaths = cached[].deaths
+        clusters = cached[].clusters
+        children = cached[].children
+        indices = cached[].indices
+        offsets = cached[].offsets
+        var counts = cached[].dimensions
+        rows = counts.rows
+        columns = counts.features
+        edges = counts.edges
+        condensed = counts.condensed
+        exemplars = counts.exemplars
+        selected = counts.clusters
+        neighbors = counts.neighbors
     else:
         if not py_contains(fields, "labels_"):
             raise Error("mojolearn " + method + ": this HDBSCAN instance is not fitted yet; call fit first")
@@ -197,10 +208,8 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
             raise Error("mojolearn " + method + ": Prediction data not yet generated. Fit with HDBSCAN(prediction_data=True); cuML refuses the same call the same way (hdbscan.pyx:1104-1108)")
         if py_type(pd) is not b.dict:
             raise Error("TypeError: HDBSCAN prediction metadata requires an exact dictionary")
-        var keys = py_call(b.list, pd)
-        for i in range(len(keys)):  # driver-loop: no dictionary key protocols during metadata access
-            if py_type(keys[i]) is not b.str:
-                raise Error("TypeError: HDBSCAN prediction metadata requires exact string keys")
+        if not native_namespace_string_keys(pd._obj_ptr, b.str):
+            raise Error("TypeError: HDBSCAN prediction metadata requires exact string keys")
         for name in ["n_edges", "n_condensed", "n_exemplars"]:  # driver-loop: fixed tree counts
             if py_type(pd[name]) is not b.int or Int(py=pd[name]) < 0:
                 raise Error("TypeError: HDBSCAN tree counts require non-negative native integers")
@@ -253,15 +262,27 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
         _hdbscan_mode(model, binding, context)
     if approximate:
         if held is None:
-            entry = neural_descriptor_entry(binding, "hdbscan_approximate_predict")
+            connection = Optional(hdbscan_query_connection(binding))
         var probabilities = family_array(Python.tuple(nq), "<f4", context)
-        _ = family_call(entry,
-            Python.list(classical_address(raw), classical_address(core), classical_address(labels), classical_address(lambdas),
-                        classical_address(deaths), classical_address(clusters), classical_address(children), classical_address(queries),
-                        classical_address(output), classical_address(probabilities)),
-            Python.list(rows, columns, edges, condensed, selected, nq, neighbors))
+        var dims = HdbscanQueryDimensions(rows, columns, edges, condensed, exemplars, selected, neighbors)
+        # Preserve address-read order from the old ten-address envelope.
+        var training_span = hdbscan_buffer_span(raw, rows * columns)
+        var core_span = hdbscan_buffer_span(core, rows)
+        var label_span = hdbscan_buffer_span(labels, rows)
+        var lambda_span = hdbscan_buffer_span(lambdas, edges)
+        var death_span = hdbscan_buffer_span(deaths, condensed)
+        var selected_span = hdbscan_buffer_span(clusters, selected)
+        var child_span = hdbscan_buffer_span(children, edges + 1)
+        var query_span = hdbscan_buffer_span(queries, nq * columns)
+        var output_span = hdbscan_buffer_span(output, nq)
+        var probability_span = hdbscan_buffer_span(probabilities, nq)
+        var absent = VariantsSpan(0, 0)
+        var buffers = HdbscanQueryBuffers(training_span, core_span, label_span, absent,
+            lambda_span, death_span, selected_span, child_span, absent, absent,
+            query_span, output_span, probability_span)
+        hdbscan_query_run(connection.value(), HdbscanQueryRequest(dims, buffers, nq, 0, batch), HDBSCAN_QUERY_APPROXIMATE)
         if held is None:
-            _record(model, slot, key, binding, entry, raw, core, labels, parents, lambdas, deaths, clusters, children,
+            _record(model, slot, key, binding, connection.value(), raw, core, labels, parents, lambdas, deaths, clusters, children,
                     indices, offsets, rows, columns, edges, condensed, exemplars, selected, neighbors)
         _ = raw^
         _ = queries^
@@ -276,37 +297,32 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     if held is None:
         indices = _buffer(pd["exemplar_idx"], "exemplar_idx", "<i4", exemplars, context)
         offsets = _buffer(pd["exemplar_label_offsets"], "exemplar_label_offsets", "<i4", selected + 1, context)
-        entry = neural_descriptor_entry(binding, "hdbscan_all_points_membership_vectors" if all_points else "hdbscan_membership_vector")
-    var tree = Python.list(classical_address(parents), classical_address(lambdas), classical_address(deaths), classical_address(clusters),
-                           classical_address(children), classical_address(indices), classical_address(offsets))
-    # The admitted views and output stay owned until the last synchronous
-    # native batch returns. Capture their addresses and invariant argument
-    # words once per public operation. The connected bindings only read these
-    # private lists; each iteration replaces the varying slice/count words.
-    var query_address = 0 if all_points else Int(py=classical_address(queries))
-    var output_address = Int(py=classical_address(output))
-    var addrs = Python.list(classical_address(raw))
+        connection = Optional(hdbscan_query_connection(binding))
+    # Keep the old tree-first and query/output-before-training address reads.
+    # These are boundary storage admissions, not numerical work.
+    var parent_span = hdbscan_buffer_span(parents, edges)
+    var lambda_span = hdbscan_buffer_span(lambdas, edges)
+    var death_span = hdbscan_buffer_span(deaths, condensed)
+    var selected_span = hdbscan_buffer_span(clusters, selected)
+    var child_span = hdbscan_buffer_span(children, edges + 1)
+    var exemplar_span = hdbscan_buffer_span(indices, exemplars)
+    var offset_span = hdbscan_buffer_span(offsets, selected + 1)
+    var query_span = VariantsSpan(0, 0) if all_points else hdbscan_buffer_span(queries, nq * columns)
+    var output_span = hdbscan_buffer_span(output, nq * selected)
+    var training_span = hdbscan_buffer_span(raw, rows * columns)
+    var core_span = VariantsSpan(0, 0)
+    var label_span = VariantsSpan(0, 0)
     if not all_points:
-        _ = py_call(addrs.append, classical_address(core))
-        _ = py_call(addrs.append, classical_address(labels))
-    _ = py_call(addrs.extend, tree)
-    if not all_points:
-        _ = py_call(addrs.append, query_address)
-    _ = py_call(addrs.append, output_address)
-    var output_slot = 8 if all_points else 11
-    # p3-neighbors-cluster: ONE binding call; the entry batches by
-    # `batch_size` itself (the optional 9th parameter word), so the fitted
-    # state is read once per public call instead of once per batch.
-    var params = Python.list(rows, columns, edges, condensed, selected, exemplars, 0, neighbors)
-    if all_points:
-        py_setitem(params, 7, nq)
-    else:
-        py_setitem(params, 6, nq)
-    _ = py_call(params.append, PythonObject(batch))
-    _ = output_slot
-    _ = family_call(entry, addrs, params)
+        core_span = hdbscan_buffer_span(core, rows)
+        label_span = hdbscan_buffer_span(labels, rows)
+    var dims = HdbscanQueryDimensions(rows, columns, edges, condensed, exemplars, selected, neighbors)
+    var buffers = HdbscanQueryBuffers(training_span, core_span, label_span, parent_span,
+        lambda_span, death_span, selected_span, child_span, exemplar_span, offset_span,
+        query_span, output_span, VariantsSpan(0, 0))
+    hdbscan_query_run(connection.value(), HdbscanQueryRequest(dims, buffers, nq, 0, batch),
+        HDBSCAN_QUERY_ALL_POINTS if all_points else HDBSCAN_QUERY_MEMBERSHIP)
     if held is None:
-        _record(model, slot, key, binding, entry, raw, core, labels, parents, lambdas, deaths, clusters, children,
+        _record(model, slot, key, binding, connection.value(), raw, core, labels, parents, lambdas, deaths, clusters, children,
                 indices, offsets, rows, columns, edges, condensed, exemplars, selected, neighbors)
     # Retain every input and output buffer owner through the final launch.
     _ = raw^
@@ -323,20 +339,17 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
     return output
 
 
-def _record(model: PythonObject, slot: String, key: PythonObject, binding: PythonObject, entry: PythonObject,
-            raw: PythonObject, core: PythonObject, labels: PythonObject, parents: PythonObject,
-            lambdas: PythonObject, deaths: PythonObject, clusters: PythonObject, children: PythonObject,
-            indices: PythonObject, offsets: PythonObject, rows: Int, columns: Int, edges: Int, condensed: Int,
-            exemplars: Int, selected: Int, neighbors: Int) raises:
-    """Keep a query's validated views, counts, mode verdict (the binding it
-    was checked against) and entry for `key`."""
-    var counts = Python.tuple(PythonObject(rows), PythonObject(columns), PythonObject(edges), PythonObject(condensed),
-                              PythonObject(exemplars), PythonObject(selected), PythonObject(neighbors))
-    var payload = Python.list(binding, entry, raw, core, labels, parents, lambdas, deaths, clusters, children)
-    _ = py_call(payload.append, indices)
-    _ = py_call(payload.append, offsets)
-    _ = py_call(payload.append, counts)
-    cluster_record_put(slot, model, key, py_call(native_loaded_module("builtins").tuple, payload))
+def _record(model: PythonObject, slot: String, key: PythonObject, binding: PythonObject,
+            connection: HdbscanQueryConnection, raw: PythonObject, core: PythonObject,
+            labels: PythonObject, parents: PythonObject, lambdas: PythonObject,
+            deaths: PythonObject, clusters: PythonObject, children: PythonObject,
+            indices: PythonObject, offsets: PythonObject, rows: Int, columns: Int,
+            edges: Int, condensed: Int, exemplars: Int, selected: Int, neighbors: Int) raises:
+    """Same weak-key/provider cache with typed counts, driver and named pins."""
+    var dims = HdbscanQueryDimensions(rows, columns, edges, condensed, exemplars, selected, neighbors)
+    var record = HdbscanQueryRecord(binding, connection.provider, connection.driver, connection.host,
+        dims, raw, core, labels, parents, lambdas, deaths, clusters, children, indices, offsets)
+    cluster_record_put(slot, model, key, PythonObject(record^))
 
 
 def hdbscan_public_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:

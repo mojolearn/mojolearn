@@ -1,6 +1,6 @@
 {
   "baseline": "eee8fa67b4",
-  "status": "OPTICS transport and HDBSCAN fit/preparation roles migrated in source; HDBSCAN query/cache and constructor staging remain pending",
+  "status": "All 19 scoped transport/state/boundary-container roles migrated in source; HDBSCAN fixtures still pending, compilation/runtime not run by lane",
   "roles": [
     {
       "id": 1,
@@ -84,54 +84,62 @@
       "family": "HDBSCAN query",
       "role": "cached query payload list/tuple",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:335",
-      "after": "pending"
+      "after": "bindings/hdbscan_query_boundary.mojo::HdbscanQueryRecord + core::HdbscanQueryDimensions"
     },
     {
       "id": 13,
       "family": "HDBSCAN query",
       "role": "approximate-predict address list",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:259",
-      "after": "pending"
+      "after": "core/hdbscan_query_api.mojo::HdbscanQueryBuffers"
     },
     {
       "id": 14,
       "family": "HDBSCAN query",
       "role": "approximate-predict parameter list",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:262",
-      "after": "pending"
+      "after": "core/hdbscan_query_api.mojo::HdbscanQueryDimensions"
     },
     {
       "id": 15,
       "family": "HDBSCAN query",
       "role": "soft-membership tree address list",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:280",
-      "after": "pending"
+      "after": "core/hdbscan_query_api.mojo::HdbscanQueryBuffers named tree spans"
     },
     {
       "id": 16,
       "family": "HDBSCAN query",
       "role": "soft-membership full address list",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:288",
-      "after": "pending"
+      "after": "core/hdbscan_query_api.mojo::HdbscanQueryBuffers"
     },
     {
       "id": 17,
       "family": "HDBSCAN query",
       "role": "soft-membership parameter list",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:300",
-      "after": "pending"
+      "after": "core/hdbscan_query_api.mojo::HdbscanQueryRequest"
     },
     {
       "id": 18,
       "family": "HDBSCAN constructor boundary",
       "role": "replacement-value staging list",
       "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo:45",
-      "after": "pending"
+      "after": "providers/python/hdbscan_public_lifecycle_pyapi.mojo::_initialize native List[PythonObject] boundary pins"
+    },
+    {
+      "id": 19,
+      "family": "HDBSCAN query boundary",
+      "role": "prediction metadata key-list admission",
+      "before": "providers/python/hdbscan_public_lifecycle_pyapi.mojo at ff40c154db:198",
+      "after": "native_namespace_string_keys direct exact-dictionary key admission",
+      "inventory_note": "Discovered during full query closure review; boundary admission role, not numerical state."
     }
   ],
   "scope_counts": {
-    "candidate_distinct_roles": 18,
-    "completed": 11,
+    "candidate_distinct_roles": 19,
+    "completed": 19,
     "new_runtime_instance_count": "not inferred"
   },
   "public_calls": {
@@ -208,5 +216,19 @@
     "_mojolearn_runtime_family_host",
     "_mojolearn_hdbscan",
     "_mojolearn_hdbscan_host"
-  ]
+  ],
+  "query_review": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/optics-hdbscan-native/hdbscan-query-source-review.json",
+  "query_owner_policy": {
+    "slot": "cluster_hdbscan_<method>_v2",
+    "type": "HdbscanQueryRecord",
+    "registration": "runtime_family_host guarded canonical add/attach; prepared weak record only, not estimator-field admission",
+    "ownership": "exact old views and binding pin plus typed descriptor-provider pin; never owns model; key/invalidation algorithm unchanged",
+    "serialization": "model __dict__/archives do not carry weak side records",
+    "provider_slots": [
+      "MojolearnHdbscanQueryHostIdenticalV1",
+      "MojolearnHdbscanQueryInferHostIdenticalV1",
+      "MojolearnHdbscanQueryDeviceIdenticalV1"
+    ],
+    "slot_reason": "fit-host and infer-host images must not borrow each others first-published function pointers"
+  }
 }
