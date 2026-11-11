@@ -222,7 +222,7 @@ def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
         for _ in range(d):  # driver-loop: over the columns (one bound argument each)
             _ = py_call(vals.append, v)
     var out = List[Float64]()
-    for i in range(len(vals)):  # cpu-route: converts the min_value / max_value arguments once
+    for i in range(len(vals)):  # driver-loop: over the columns' min_value / max_value parameters (one per feature)
         out.append(_float(vals[i]))
     return out^
 
@@ -687,10 +687,10 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         var xt = xf
         var seq = Python.list()
         var done = 0
-        for r in range(len(orders)):  # cpu-route: the user estimator, fitted once per imputation round (user code)
+        for r in range(len(orders)):  # driver-loop: over the imputation rounds (one native estimator fit per feature each)
             var check = not posterior and len(orders[r]) > 0
             var prev = xt
-            for i in range(len(orders[r])):  # cpu-route: the user estimator, fitted once per feature (user code)
+            for i in range(len(orders[r])):  # driver-loop: over the round's features (one native estimator fit each)
                 var j = orders[r][i]
                 var nbl = draws.next(rng) if draws.on else _others(dk, j)
                 var est = prep_estimator_clone(estimator, context)
@@ -830,7 +830,7 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     if fields["estimator"] is not None:
         var mask = _mask_arr(values, keep, fields["missing_values"], context)
         var xt = xf
-        for s in range(len(sequence)):  # cpu-route: the fitted user estimators, one predict per step (user code)
+        for s in range(len(sequence)):  # driver-loop: over the fitted imputation steps (one native predict each)
             var step = sequence[s]
             var j = Int(py=step[0])
             var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), mode, False, context)

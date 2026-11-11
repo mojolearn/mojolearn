@@ -1142,7 +1142,7 @@ def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, cont
     _stage(p.program, OP_UNIQUE_INVERSE, d, sorted, n, d, dictionary, counts, xo, inverse)
     var ran = p.run(entries, context)
     var out = Python.list()
-    for c in range(d):  # small-loop(d: per-feature category dictionaries): wraps fitted metadata per feature
+    for c in range(d):  # driver-loop: over the features' fitted category dictionaries (model metadata per feature)
         _ = py_call(out.append, _take1(ran, dictionary + c * n, Int(_word(ran, counts + c)), context))
     return (out, _take2(ran, inverse, n, d, context))
 
@@ -2857,7 +2857,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
     for i in range(n):  # cpu-route: the row -> fold table the user splits fill (rows)
         fp[i] = -1
     var trains = List[IndexI64]()
-    for k in range(F):  # cpu-route: user cv splitter (train, test) pairs, one per fold
+    for k in range(F):  # driver-loop: over the cv folds (one (train, test) pair each)
         var pair = py_call(b.tuple, splits[k])
         if len(pair) > 2:
             raise Error("too many values to unpack (expected 2)")

@@ -140,7 +140,7 @@ def _class_settings(model: PythonObject) raises -> PythonObject:
     var out = Python.list()
     _ = py_call(out.append, missing)
     var plain = True
-    for i in range(len(names)):  # small-loop(metadata: the seven fixed class setting names)
+    for i in range(len(names)):  # driver-loop: over the seven fixed class setting names
         var value = _resolved(mods, cls, names[i], missing)
         plain = plain and (value is missing or _plain_setting(value, b))
         _ = py_call(out.append, value)
@@ -322,7 +322,7 @@ def normalizer_transform(model: PythonObject, source: PythonObject, context: Pyt
                                                  PythonObject(None)) is not None:
         raise Error("TypeError: native Normalizer validation requires static input tags; Python allow-NaN hooks cannot execute")
     var precomputed = False
-    for k in range(3, 7):  # small-loop(metadata: existing width-check exemptions metric/kernel/affinity/dissimilarity)
+    for k in range(3, 7):  # driver-loop: over the fixed width-check exemptions metric/kernel/affinity/dissimilarity)
         var option = _instance_setting(model, fields, settings, setting_names, k, PythonObject(None))
         precomputed = precomputed or (py_type(option) is b.str and String(option) == "precomputed")
     var sparse = _truth(py_get(tags, "sparse", False))
