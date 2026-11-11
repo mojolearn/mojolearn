@@ -39,5 +39,11 @@
     "_mojolearn_x_cluster",
     "_mojolearn_x_cluster_host"
   ],
-  "tests": "authoring owed; no execution by lane"
+  "tests": "authoring owed; no execution by lane",
+  "completed_family_scope_roles": 8,
+  "new_distinct_aggregate_roles": 6,
+  "shared_roles_already_counted_by_variants": [
+    "nearest query integer/float lists and nested result envelope",
+    "resident query tuple/objects tuple and compiled Python dispatch"
+  ]
 }

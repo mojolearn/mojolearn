@@ -6,7 +6,7 @@ from core.sequential_input_plan import SequenceInputPlan
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.affinity_preference_plan import AffinityPreferencePlan
 
-comptime AFFINITY_PREFERENCE_PLAN_FIXTURES = 10
+comptime AFFINITY_PREFERENCE_PLAN_FIXTURES = 11
 
 
 def require(ok: Bool, message: String) raises:
@@ -23,12 +23,12 @@ def fixture(unit: Int) raises:
     plan.container(0, 1)
     var singles: List[Float32] = [-2, 0.5, 7]
     var doubles: List[Float64] = [-3, 999, 1.25, 999, 8, 999]
-    if unit == 7 or unit == 8:
+    if unit == 7 or unit == 8 or unit == 10:
         var shape: List[Int] = [3]
-        var strides: List[Int] = [4 if unit == 7 else 16]
+        var strides: List[Int] = [4 if unit != 8 else 16]
         var indirect: List[Int] = [-1]
-        var layout = BorrowedBufferLayout(Int(singles.unsafe_ptr()) if unit == 7 else Int(doubles.unsafe_ptr()),
-            4 if unit == 7 else 8, True, shape^, strides^, indirect^)
+        var layout = BorrowedBufferLayout(Int(singles.unsafe_ptr()) if unit != 8 else Int(doubles.unsafe_ptr()),
+            4 if unit != 8 else 8, True, shape^, strides^, indirect^)
         plan.array(1, layout^, "f", True)
     else:
         var count = 3 if unit == 0 else (2 if unit == 1 else 1)
@@ -51,7 +51,14 @@ def fixture(unit: Int) raises:
             plan.scalar(2, UInt64(0x7ff0000000000000) if unit == 4 else UInt64(0x7ff8000000000001), "f", 8)
     var refused = False
     try:
-        result.prepare(plan, unit != 3)
+        if unit == 10:
+            result.capture(plan)
+            singles[0] = 99
+            singles[1] = 100
+            singles[2] = 101
+            result.finish(plan, True)
+        else:
+            result.prepare(plan, unit != 3)
     except problem:
         if unit == 3:
             require(String(problem).find("holds integers beyond the int64 range") >= 0, "no-NumPy unsigned refusal")
@@ -71,7 +78,7 @@ def fixture(unit: Int) raises:
             require(values[0] == -1 and bitcast[DType.uint32](values[1]) == UInt32(0x5f000000), "mixed integer promotion retains double rounding")
         elif unit == 2:
             require(bitcast[DType.uint32](values[0]) == UInt32(0x5f800000), "unsigned native preference conversion")
-        elif unit == 7:
+        elif unit == 7 or unit == 10:
             require(result.direct and len(result.values) == 0 and len(result.inferred) == 12,
                 "already Float32 uses its inferred storage without another tensor copy")
             require(values[0] == -2 and values[1] == 0.5 and values[2] == 7, "direct Float32 values")
