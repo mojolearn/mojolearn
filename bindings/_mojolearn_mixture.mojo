@@ -33,6 +33,8 @@ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from mixture.gmm_native_device import GMM_NATIVE_DEVICE_API
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 # The typed bodies (lane thin-trees-metrics, 2026-10-21).
@@ -323,6 +325,16 @@ def gmm_score_bic_aic_binding(
     return PythonObject(0)
 
 
+def mixture_native_api_v1_binding() raises -> PythonObject:
+    """The typed GaussianMixture transport (core/mixture_native_api.mojo)
+    the mixture door (bindings/mixture_native.mojo) calls. The Python
+    `gmm_*` entries above stay for their remaining Python callers
+    (python/mojolearn/_native_parallel_public.py, the host_surface export
+    checks and the verify lanes) and are not called by the door."""
+    var api = GMM_NATIVE_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mixture.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -344,6 +356,7 @@ def build__mojolearn_mixture() -> PythonObject:
         m.def_function[gmm_predict_binding]("gmm_predict")
         m.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
         m.def_function[gmm_sample_binding]("gmm_sample")
+        m.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mixture: ", e))
