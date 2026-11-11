@@ -17,7 +17,7 @@ from core.msel_entry_table import (
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
     MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
-    MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
+    MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
 )
 from core.native_descriptor_call import native_descriptor_call
 
@@ -185,3 +185,10 @@ def msel_group_fold_perm_i32(key: MselEntryKey, counts: Int, m: Int, n_folds: In
     var addrs: List[Int] = [counts, perm, dst, sizes]
     var ints: List[Int] = [m, n_folds]
     return msel_helper(key, MH_GROUP_FOLD_PERM_I32, addrs, ints)
+
+
+def msel_store_free_bytes(key: MselEntryKey) raises -> Int:
+    """Free bytes of the device the publisher's fold store lives on; -1 for
+    the host column."""
+    var none = List[Int]()
+    return msel_helper(key, MH_STORE_FREE_BYTES, none, none)

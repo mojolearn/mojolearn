@@ -23,7 +23,7 @@ from core.msel_entry_table import (
     MH_ARANGE_I64, MH_COUNT_MASK_U8, MH_SELECT_MASK_U8_I64, MH_MASK_FROM_INDICES_U8, MH_LEAVE_RANGE_I64,
     MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
-    MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32,
+    MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, indices_overlap_i64, leave_range_i64, mask_from_indices_u8,
@@ -194,6 +194,10 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == MH_GROUP_FOLD_PERM_I32:
         return msel_group_fold_perm_host_run(msel_word(aa, 0), msel_word(pp, 0), msel_word(pp, 1), msel_word(aa, 1),
                                              msel_word(aa, 2), msel_word(aa, 3))
+    if op == MH_STORE_FREE_BYTES:
+        # The host column has no device memory to bound concurrent
+        # cross-validation units by (bindings/msel_cv.mojo msel_cv_units).
+        return -1
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

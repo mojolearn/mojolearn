@@ -21,6 +21,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.msel_helpers_key import msel_helpers_key
 from core.msel_helpers_calls import (
     msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
+    msel_store_free_bytes,
 )
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
@@ -658,15 +659,12 @@ def msel_unit_workers(jobs: Int, units: Int, context: PythonObject) -> Int:
 
 def _msel_device_free(rows: MselFoldRows, context: PythonObject) -> Int:
     """Free bytes of the device the fold rows live on (the base binding's
-    `msel_free_bytes`), or -1 with no device rows or no entry."""
+    `msel_free_bytes`, through the native helper table), or -1 with no
+    device rows or no table."""
     if not rows.dev:
         return -1
     try:
-        var rc = context["family_msel_rows_context"]
-        var entry = py_get(rc, "arena_msel_free_bytes")
-        if entry is None:
-            return -1
-        return Int(py=family_call(entry))
+        return msel_store_free_bytes(msel_helpers_key(context))
     except:
         return -1
 

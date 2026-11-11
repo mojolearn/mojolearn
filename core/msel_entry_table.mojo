@@ -41,6 +41,7 @@ one (an empty side, no codes, no permutation).
   MH_PROBA_COLUMN          a [src, dst]                   p [code, n, k, col]    -> 0
   MH_SPLIT_TABLE_I32       a [perm, counts, table, sums]  p [m, n_test, n_train] -> 0
   MH_GROUP_FOLD_PERM_I32   a [counts, perm, dst, sizes]   p [m, n_folds]         -> 0
+  MH_STORE_FREE_BYTES      a []                           p []                   -> free device bytes, -1 on the host
 Each operation is the former Python export of the same name after its
 arguments were unpacked: the same checks, kernels, words and refusals.
 
@@ -73,7 +74,8 @@ comptime MH_SCATTER_ROWS = 16
 comptime MH_PROBA_COLUMN = 17
 comptime MH_SPLIT_TABLE_I32 = 18
 comptime MH_GROUP_FOLD_PERM_I32 = 19
-comptime MH_OP_COUNT = 20
+comptime MH_STORE_FREE_BYTES = 20
+comptime MH_OP_COUNT = 21
 
 
 @fieldwise_init
@@ -207,6 +209,8 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (2, 4)
     if operation == MH_SPLIT_TABLE_I32:
         return (4, 3)
+    if operation == MH_STORE_FREE_BYTES:
+        return (0, 0)
     return (4, 2)  # MH_GROUP_FOLD_PERM_I32
 
 

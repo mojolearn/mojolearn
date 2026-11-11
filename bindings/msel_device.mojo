@@ -31,7 +31,7 @@ from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT
 from core.msel_helpers_device import (
     msel_store_alloc_device_run, msel_store_read_device_run, msel_store_free_device_run,
     msel_scatter_rows_device_run, msel_proba_column_device_run, msel_split_table_device_run,
-    msel_group_fold_perm_device_run,
+    msel_group_fold_perm_device_run, msel_store_free_bytes_device_run,
 )
 from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
 from core.pca_native_fold import PCA_FOLD_API
@@ -92,12 +92,8 @@ def msel_live_binding() raises -> PythonObject:
 
 
 def msel_free_bytes_binding() raises -> PythonObject:
-    """Free bytes of the device the fold store lives on: the measured bound
-    of how many cross-validation units run at once (bindings/msel_cv.mojo
-    msel_cv_units, lane p3-msel-parallel-and-process-pool)."""
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var mem = ctx.get_memory_info()
-    return PythonObject(Int(mem[0]))
+    """`core/msel_helpers_device.mojo::msel_store_free_bytes_device_run`."""
+    return PythonObject(msel_store_free_bytes_device_run())
 
 
 def msel_take_rows_binding(
