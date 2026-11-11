@@ -596,12 +596,15 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
         var nte = Int(py=te.size)
         if ntr == 0 or nte == 0:
             raise Error("every cv split needs train and test rows")
+        # call-table: base helper check (_mojolearn) has no native entry yet
         if Int(py=py_call_typed(check, _A(tr), _P(ntr), _P(n))) == 1:
             raise Error("a cv index is outside [0, " + String(n) + ")")
         _ = tr  # keep the Python object alive through the native calls above
+        # call-table: base helper check (_mojolearn) has no native entry yet
         if Int(py=py_call_typed(check, _A(te), _P(nte), _P(n))) == 1:
             raise Error("a cv index is outside [0, " + String(n) + ")")
         _ = te  # keep the Python object alive through the native calls above
+        # call-table: base helper bincount (_mojolearn) has no native entry yet
         _ = py_call_typed(bincount, _A(te), _P(3), _P(nte), _P(n), _A(seen), _P(1))
         _ = te  # keep the Python object alive through the native call above
         _ = seen  # keep the Python object alive through the native call above
@@ -619,8 +622,10 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     if partition:
         var m = n if n > 1 else 1
         var stat = trees_helper(context, "reduce_stat")
+        # call-table: base helper stat (_mojolearn) has no native entry yet
         var low = Int(py=py_call_typed(stat, _A(seen), _P(3), _P(m), _P(0)))
         _ = seen  # keep the Python object alive through the native call above
+        # call-table: base helper stat (_mojolearn) has no native entry yet
         var high = Int(py=py_call_typed(stat, _A(seen), _P(3), _P(m), _P(1)))
         _ = seen  # keep the Python object alive through the native call above
         if low != 1 or high != 1:
@@ -1103,15 +1108,18 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
         # `_column_means(b, Xa, None)` (`_means`: lm_col_sums, lm_means_finish)
         # then `_center` (lm_center).
         var sums = _zeros(d, context)
+        # call-table: member Ridge (multi-output lm_col_sums) has no native entry yet
         _ = py_call_typed(trees_entry(table, "lm_col_sums"), _A(Xa), _A(sums), Python.list(_P(n), _P(d)))
         _ = sums  # keep the Python object alive through the native call above
         var m64 = _zeros(d, context)
         xm = admitted_vector(d, "<f4", context)
+        # call-table: member Ridge (multi-output lm_means_finish) has no native entry yet
         _ = py_call_typed(trees_entry(table, "lm_means_finish"), _A(sums), _A(m64), _A(xm),
                           Python.list(_P(d), _P(n), _P(0)), _F(0.0))
         _ = m64  # keep the Python object alive through the native call above
         _ = sums  # keep the Python object alive through the native call above
         work_x = admitted_array(Python.tuple(n, d), "<f4", context)
+        # call-table: member Ridge (multi-output lm_center) has no native entry yet
         _ = py_call_typed(trees_entry(table, "lm_center"), _A(Xa), _A(xm), _A(work_x), Python.list(_P(n), _P(d)))
         _ = work_x  # keep the Python object alive through the native call above
     else:
@@ -1125,6 +1133,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
         _ = py_call(params.append, _A(xm))
         _ = py_call(params.append, _A(icpt32))
         _ = icpt32  # keep the Python object alive through the native call above
+    # call-table: member Ridge (multi-output ridge_fit_multi) has no native entry yet
     _ = py_call_typed(trees_entry(table, "ridge_fit_multi"), _A(work_x), _A(Ya), _A(coef), _A(ymean), params)
     _ = icpt32  # keep the Python object alive through the native call above
     _ = ymean  # keep the Python object alive through the native call above
@@ -1197,6 +1206,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
+        # call-table: member Ridge (multi-output ridge_predict_multi) has no native entry yet
         _ = py_call_typed(trees_entry(table, "ridge_predict_multi"), _A(Xa), _A(mr[0]), _A(mr[1]), _A(out),
                           Python.list(_P(n), _P(_cols(Xa)), _P(outputs)))
         _ = out  # keep the Python object alive through the native call above
@@ -1465,12 +1475,14 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     _ = tc  # keep the Python object alive through the native call above
     _ = truth  # keep the Python object alive through the native call above
     if t_int == p_int:
+        # call-table: base helper equal (_mojolearn) has no native entry yet
         _ = py_call_typed(equal, _A(tc), _A(pred), _P(3 if p_int else 1), _P(size), py_call(eq.buffer_info)[0])
         _ = tc  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above
     else:
         var ints = tc if t_int else pred
         var flts = pred if t_int else tc
+        # call-table: base helper equal (_mojolearn) has no native entry yet
         _ = py_call_typed(equal, _A(ints), _A(flts), _P(9), _P(size), py_call(eq.buffer_info)[0])
         _ = flts  # keep the Python object alive through the native call above
         _ = ints  # keep the Python object alive through the native call above
@@ -1530,6 +1542,7 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
             listed = _label_list(listed, context)
         var truth = score_codes_into(score_classification_encoded(column, "y", context), listed, context)
         var pred = codes[j]
+        # call-table: base helper equal (_mojolearn) has no native entry yet
         _ = py_call_typed(equal, _A(truth), _A(pred), _P(2), _P(n), _P(base + j * n))
         _ = truth  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above
