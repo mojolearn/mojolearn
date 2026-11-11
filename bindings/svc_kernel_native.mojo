@@ -49,6 +49,8 @@ from bindings.family_common import (
     family_entry, family_array,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
+from core.svr_native_api import SvrFitPlan, SvrFitRequest
+from bindings.svr_native_boundary import svr_connection, svr_run_fit
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
@@ -1547,84 +1549,64 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         gamma = _resolve_gamma(fields, binding, x_meta, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3], PythonObject(None),
                          PythonObject(None), "SVR", context, native)
-    # WORST-CASE OUTPUT BUFFERS: at most n_rows coefficients (DEVIATION 873)
-    var dual = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
-    var support = family_array(Python.tuple(PythonObject(n_rows)), "<i4", context)
-    var sv = family_array(Python.tuple(PythonObject(n_rows * n_cols)), "<f4", context)
-    var info = family_array(Python.tuple(PythonObject(6)), "<f8", context)
-    # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding: n_rows,
-    # n_features, kernel, gamma, C, epsilon, tol, max_iter,
-    # nochange_steps[, the per-row bounds' address[, degree, coef0[, the
-    # fold's three store ids, scale_gamma]]]
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(_kernel_code(fields, context)),
-                             PythonObject(gamma), svc_field(fields, "_hp_C"), svc_field(fields, "_hp_epsilon"),
-                             svc_field(fields, "_hp_tol"), svc_field(fields, "_hp_max_iter"),
-                             svc_field(fields, "_hp_nochange_steps"))
+    var plan = SvrFitPlan(n_rows, n_cols)
+    # Capture boundary scalar references in the same field-read order as
+    # the former option list. Conversion remains after address admission.
+    var kernel = _kernel_code(fields, context)
+    var c_value = svc_field(fields, "_hp_C")
+    var epsilon_value = svc_field(fields, "_hp_epsilon")
+    var tolerance_value = svc_field(fields, "_hp_tol")
+    var iterations_value = svc_field(fields, "_hp_max_iter")
+    var steps_value = svc_field(fields, "_hp_nochange_steps")
     var k = String(svc_field(fields, "_hp_kernel"))
-    if device_x and native is None:
-        # The 16-value device-X form (lane a8a); degree and coef0 are the
-        # constructor values off 'poly' / 'sigmoid', as the short forms pass.
-        _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
-        _ = c_rows  # keep the Python object alive through the native call below
-        if k == "poly" or k == "sigmoid":
-            _kernel_tail(fields, params)
-        else:
-            _ = py_call(params.append, PythonObject(3))
-            _ = py_call(params.append, PythonObject(0.0))
-        _ = py_call(params.append, PythonObject(fold.base_id))
-        _ = py_call(params.append, PythonObject(fold.base_rows))
-        _ = py_call(params.append, PythonObject(fold.index_id))
-        _ = py_call(params.append, PythonObject(1 if scale_gamma else 0))
-    elif c_rows is not None or k == "poly" or k == "sigmoid":
-        _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
-        _ = c_rows  # keep the Python object alive through the native call above
-        _kernel_tail(fields, params)
-        _ = c_rows  # keep the Python object alive through the native call above
-    var n_support = svc_int(svr_execute(binding, native, True, Python.list(PythonObject(x_meta.source.addr), classical_address(targets),
-                                        classical_address(dual), classical_address(support), classical_address(sv),
-                                        classical_address(info)), params))
-    _ = targets  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = c_rows  # keep the Python object alive through the native call above
+    var bounds_address = 0 if c_rows is None else Int(py=classical_address(c_rows))
+    var degree = 3
+    var coef0 = Float64(0)
+    if k == "poly" or k == "sigmoid":
+        degree = svc_int(svc_field(fields, "_hp_degree"))
+        coef0 = svc_float(svc_field(fields, "_hp_coef0"))
+    var target_address = Int(py=classical_address(targets))
+    var connection = svr_connection(binding)
+    var c = Float64(py=c_value)
+    var epsilon = Float64(py=epsilon_value)
+    var tolerance = Float64(py=tolerance_value)
+    var max_iter = Int(py=iterations_value)
+    var nochange_steps = Int(py=steps_value)
+    var request = SvrFitRequest(x_meta.source.addr, target_address,
+        Int(plan.dual.unsafe_ptr()), Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()),
+        Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, kernel,
+        max_iter, nochange_steps, degree,
+        fold.base_id, fold.base_rows, fold.index_id, device_x and native is None,
+        scale_gamma, native is not None, gamma, c, epsilon, tolerance, coef0)
+    svr_run_fit(connection, request, plan)
+    _ = targets
+    _ = x
+    _ = c_rows
+    var n_support = plan.count
     if device_x and native is None:
         # X's finite and range words and the gamma solved with (lane a8a)
-        _svm_fit_refuse(Int(svc_read_f64(info, 3)), Int(svc_read_f64(info, 4)), fold, "SVR")
-        gamma = svc_read_f64(info, 5)
+        _svm_fit_refuse(Int(plan.info[3]), Int(plan.info[4]), fold, "SVR")
+        gamma = plan.info[5]
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(n_cols))
     py_setitem(fields, PythonObject("n_support_"), PythonObject(n_support))
-    _ = info  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(svc_read_f64(info, 2))))
-    py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(svc_round_f32(svc_read_f64(info, 0)), "<f4", context))
-    py_setitem(fields, PythonObject("support_"), svc_prefix(support, n_support, Python.tuple(PythonObject(n_support)), "<i4", context))
-    _ = info  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
+    py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(plan.info[2])))
+    py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(svc_round_f32(plan.info[0]), "<f4", context))
+    py_setitem(fields, PythonObject("support_"), svc_prefix(Int(plan.support.unsafe_ptr()), n_support, Python.tuple(PythonObject(n_support)), "<i4", context))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("support_vectors_"),
-               svc_prefix(sv, n_support * n_cols, Python.tuple(PythonObject(n_support), PythonObject(n_cols)), "<f4", context))
-    _ = info  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = dual  # keep the Python object alive through the native call above
+               svc_prefix(Int(plan.vectors.unsafe_ptr()), n_support * n_cols, Python.tuple(PythonObject(n_support), PythonObject(n_cols)), "<f4", context))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("dual_coef_"),
-               svc_prefix(dual, n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
-    _ = info  # keep the Python object alive through the native call above
-    _ = sv  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
+               svc_prefix(Int(plan.dual.unsafe_ptr()), n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
     _ = targets  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
+    _ = plan
+    _ = connection
     _ = x^
     _ = x_meta  # retain captured storage owners through the last native use
     _ = targets^
