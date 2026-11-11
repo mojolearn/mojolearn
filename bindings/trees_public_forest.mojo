@@ -1609,8 +1609,7 @@ def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba
         if not py_contains(inner_fields, "_offsets"):
             raise Error("RuntimeError: this estimator is not fitted yet")
         var fitted = Int(py=_int(inner_fields["n_features_in_"]))
-        if x.cols != fitted:
-            raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
+        trees_check_features(x.cols, fitted)
         return _public_deferred(model, inner, inner_fields, inner_kind,
                                 _stage(inner_fields, inner_kind, x.copy(), context), proba, codes, context)
     return _public_deferred(model, model, fields, kind, _stage(fields, kind, x.copy(), context), proba, codes, context)
