@@ -16,11 +16,12 @@ The cases are independent units: on the host column they run across the
 native host worker pool; on a device column one after another. Run in a
 fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.xcnn_entry_table import (
-    XcnnEntryKey, xcnn_entry_call, XC_OP_COUNT,
+    XcnnEntryKey, xcnn_entry_ref, xcnn_entry_call, xcnn_table_entry, XC_ENTRY_ABI, XC_OP_COUNT,
     XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_RES_FREE, XC_RES_UPLOAD, XC_RES_DOWNLOAD, XC_GEMM, XC_CONV2D_FORWARD, XC_CONV2D_BACKWARD, XC_MAXPOOL2D_FORWARD, XC_MAXPOOL2D_BACKWARD, XC_AVGPOOL2D_FORWARD, XC_AVGPOOL2D_BACKWARD, XC_RELU_FORWARD, XC_RELU_BACKWARD, XC_ADD, XC_MUL, XC_LINEAR_FORWARD, XC_LINEAR_BACKWARD, XC_BATCHNORM_FORWARD, XC_BATCHNORM_BACKWARD, XC_DROPOUT2D, XC_SPMM, XC_GCN_NORM, XC_PAD2D_FORWARD, XC_PAD2D_BACKWARD, XC_ADAPTIVE_POOL, XC_GRAPH_OP, XC_CSR_BUILD, XC_CSR_UPLOAD, XC_PERM_GATHER, XC_VALS_T, XC_GCN_LOOPS, XC_GCN_BACKWARD_T, XC_SAGE_BACKWARD_T, XC_GEMM_M, XC_CONV2D_FORWARD_M, XC_CONV2D_BACKWARD_M, XC_MAXPOOL2D_FORWARD_M, XC_MAXPOOL2D_BACKWARD_M, XC_AVGPOOL2D_FORWARD_M, XC_AVGPOOL2D_BACKWARD_M, XC_MAP2_M, XC_LINEAR_FORWARD_M, XC_BATCHNORM_FORWARD_M, XC_BATCHNORM_BACKWARD_M, XC_DROPOUT2D_M, XC_SPMM_M, XC_ADAPTIVE_POOL_M, XC_GRAPH_OP_M, XC_GCN_NORM_M, XC_PAD2D_M, XC_CHAN_COPY_M,
 )
 from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
@@ -47,7 +48,7 @@ def _i32(mut l: List[Int32]) -> Int:
 
 def _call(op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
     var floats = List[Float64]()
-    return xcnn_entry_call(_key(), op, addrs, ints, floats)
+    return xcnn_entry_call(xcnn_entry_ref(_key()), op, addrs, ints, floats)
 
 
 def _same(got: List[Float32], expected: List[Float32], what: String) raises:
@@ -91,7 +92,23 @@ def precondition_unpublished() raises:
     raise Error("an unpublished x_cnn table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = xcnn_entry_ref(_key())
+    var second = xcnn_entry_ref(_key())
+    require(entry_ref_same(first, second), "x_cnn: a second resolution returned another entry")
+    try:
+        _ = xcnn_table_entry(_key(), 0, String(XC_ENTRY_ABI), XC_OP_COUNT + 1)
+        raise Error("x_cnn: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "x_cnn: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     try:
         _ = _call(XC_OP_COUNT + 7, List[Int](), List[Int]())
     except problem:
@@ -281,7 +298,7 @@ def case_batchnorm_backward() raises:
 def case_dropout2d() raises:
     var floats: List[Float64] = [0.5]
     try:
-        _ = xcnn_entry_call(_key(), XC_DROPOUT2D, [0, 0, 0], [1, 1, 1, -1, 0, 0, 0], floats)
+        _ = xcnn_entry_call(xcnn_entry_ref(_key()), XC_DROPOUT2D, [0, 0, 0], [1, 1, 1, -1, 0, 0, 0], floats)
     except problem:
         _refuses(problem, "x_cnn dropout2d: negative parameter")
         return

@@ -61,7 +61,8 @@ from core.small_mlp_state_impl import (
 )
 from training.parallel_byte_impl import parallel_copy_words
 from core.shared_slot import SharedSlot
-from core.neural_entry_table import NeuralEntryKey, neural_entry_vendor, neural_entry_call, NEURAL_TABLE_MLP_PROGRAM
+from core.entry_table import EntryRef
+from core.neural_entry_table import NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref, NEURAL_TABLE_MLP_PROGRAM
 from bindings.sha256_door import sha256_hexdigest
 
 # The program's STEP modes (autograd/small_mlp_program.mojo).
@@ -227,13 +228,14 @@ struct SmallMlpModeVerified(Defaultable, Movable):
 comptime SMALL_MLP_MODE_VERIFIED = SharedSlot[SmallMlpModeVerified, "MojolearnP3SmallMlpModeVerifiedV3", 3]
 
 
-def _program_key(mode: String) raises -> NeuralEntryKey:
-    """The neural entry table key of `mode`'s program image."""
+def _program_ref(mode: String) raises -> EntryRef:
+    """`mode`'s program image entry, resolved once per operation (lane
+    entry-table-zero-alloc); the table refusals raise here."""
     var v = SMALL_MLP_MODE_VERIFIED.get_or_create_ptr()
     var vendor = v[].identical_vendor if mode == "identical" else v[].fast_vendor
     if vendor < 0:
         raise Error(_MODE_REFUSAL)
-    return NeuralEntryKey(1 if mode == "identical" else 0, vendor)
+    return neural_ref[NEURAL_TABLE_MLP_PROGRAM](NeuralEntryKey(1 if mode == "identical" else 0, vendor))
 
 
 def _mode_name(entries: MlpOperationMetadata) raises -> String:
@@ -583,14 +585,14 @@ def _program_addresses(index: Int) raises -> List[Int]:
         store[].slots[index].state.m_addr(), store[].slots[index].state.v_addr()]
 
 
-def _program_call(key: NeuralEntryKey, op: Int, addresses: List[Int], ints: List[Int],
+def _program_call(program: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
                   floats: List[Float64]) raises -> Int:
     # One call of the program image's `small_mlp_program` descriptor entry
     # through the neural entry table (core/neural_entry_table.mojo family
     # NEURAL_TABLE_MLP_PROGRAM): plain words, no CPython call. The GIL stays
     # held, as it was across the former Python entry.
     try:
-        return neural_entry_call[NEURAL_TABLE_MLP_PROGRAM](key, op, addresses, ints, floats)
+        return neural_entry_call(program, op, addresses, ints, floats)
     except error:
         raise _step_error(error)
 
@@ -601,7 +603,7 @@ def _program_sync(index: Int) raises:
     var handle = store[].slots[index].program
     if handle < 0:
         return
-    if _program_call(_program_key(store[].slots[index].program_mode), _P_DOWNLOAD, _program_addresses(index),
+    if _program_call(_program_ref(store[].slots[index].program_mode), _P_DOWNLOAD, _program_addresses(index),
                      [handle], List[Float64]()) != MLP_TOTAL:
         raise Error("RuntimeError: SmallMLPTrainer state download returned an invalid result")
 
@@ -614,7 +616,7 @@ def _program_close(index: Int) raises:
     var mode = store[].slots[index].program_mode
     store[].slots[index].program = -1
     store[].slots[index].program_mode = String()
-    _ = _program_call(_program_key(mode), _P_CLOSE, List[Int](), [handle], List[Float64]())
+    _ = _program_call(_program_ref(mode), _P_CLOSE, List[Int](), [handle], List[Float64]())
 
 
 def _settle(index: Int, close: Bool) raises:
@@ -636,7 +638,7 @@ def _program_open(index: Int, entries: MlpOperationMetadata) raises -> Int:
         _settle(index, True)
     mlp_require_state(store[].slots[index].state)
     ref s = store[].slots[index].state
-    var handle = _program_call(_program_key(mode), _P_OPEN, _program_addresses(index), [s.step],
+    var handle = _program_call(_program_ref(mode), _P_OPEN, _program_addresses(index), [s.step],
         [s.lr, s.beta1, s.beta2, s.eps, s.weight_decay])
     store[].slots[index].program = handle
     store[].slots[index].program_mode = mode
@@ -680,7 +682,7 @@ def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], 
         Int(py=g3._addr) if grads else sa + 4 * mlp_offset(3),
         Int(py=dx._addr) if want_dx else sa]
     var t = store[].slots[index].state.step + 1
-    var written = _program_call(_program_key(_mode_name(entries)), _P_STEP, addresses,
+    var written = _program_call(_program_ref(_mode_name(entries)), _P_STEP, addresses,
                                 [handle, rows, mode, 1 if want_dx else 0, k], List[Float64]())
     _ = dx  # keep the Python objects alive through the native call above
     _ = g3
@@ -900,7 +902,7 @@ def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObjec
     # One AdamW update on the program's weights and moments (the update a
     # train_step applies); the host copy comes down only on export.
     var program = _program_open(index, entries)
-    var applied = _program_call(_program_key(_mode_name(entries)), _P_APPLY,
+    var applied = _program_call(_program_ref(_mode_name(entries)), _P_APPLY,
                                 [Int(grads.unsafe_ptr())], [program], List[Float64]())
     _ = grads^
     if applied != MLP_TOTAL:

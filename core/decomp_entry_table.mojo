@@ -13,12 +13,14 @@ reads the slot of the binding its owner connected (the key is the decomp
 bridge's `x_decomp_native_key`, python/mojolearn/_native_decomp_kit_bridge.py)
 and calls the pointer with plain spans; no Python object crosses.
 
-Lookup is a lock-free acquire load and a schema compare per call, a small
-metadata operation with no independent numerical work to split.
+A caller resolves the slot once (`decomp_ref`, lane entry-table-zero-alloc:
+at its kit's construction or its operation's UNPACK) and every call is one
+indirect call through the `EntryRef`. Lookup is a small metadata operation
+with no independent numerical work to split.
 """
 from core.linear_entry_table import LinearEntryKey, linear_table_entry, LINEAR_TABLE_DECOMP
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 
 
@@ -28,9 +30,15 @@ def decomp_table_entry(key: LinearEntryKey) raises -> NativeDescriptorCall:
     return linear_table_entry[LINEAR_TABLE_DECOMP](key, 0, String(XD_ABI_NAME), XD_OPERATION_COUNT)
 
 
-def decomp_table_call(key: LinearEntryKey, operation: Int, addresses: List[Int], ints: List[Int],
+def decomp_ref(key: LinearEntryKey) raises -> EntryRef:
+    """The x_decomp dispatch of the image `key` names, resolved once; the
+    table refusals raise here."""
+    return EntryRef(decomp_table_entry(key), entry_ref_word(key.mode, key.vendor, XD_OPERATION_COUNT))
+
+
+def decomp_table_call(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
                       floats: List[Float64]) raises -> Int:
-    """One x_decomp operation (an `XD_*` code) in the image `key` names. The
-    caller keeps every addressed buffer alive until the call returns."""
-    var entry = decomp_table_entry(key)
-    return native_descriptor_call(entry, operation, addresses, ints, floats)
+    """One x_decomp operation (an `XD_*` code) through the resolved entry:
+    one indirect call. The caller keeps every addressed buffer alive until the
+    call returns."""
+    return entry_ref_call(entry, operation, addresses, ints, floats)

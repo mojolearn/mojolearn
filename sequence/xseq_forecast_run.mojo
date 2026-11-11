@@ -16,10 +16,10 @@ not this module.
 """
 from std.math import floor
 from std.memory import unsafe_memcpy
-from core.base_entry_table import BaseEntryKey
+from core.entry_table import EntryRef
 from core.base_helpers_calls import base_reduce_stat
 from core.xseq_entry_table import (
-    XseqEntryKey, XS_THETA, XS_THETA_FORECAST, XS_CROSTON, XS_CROSTON_FORECAST, XS_ETS, XS_GARCH,
+    XS_THETA, XS_THETA_FORECAST, XS_CROSTON, XS_CROSTON_FORECAST, XS_ETS, XS_GARCH,
 )
 from sequence.xseq_door_run import xseq_run_glue
 
@@ -57,23 +57,23 @@ def forecast_run_theta_mask(has_initial: Bool, has_alpha: Bool, has_theta: Bool)
     return (1 if has_initial else 0) | (2 if has_alpha else 0) | (4 if has_theta else 0)
 
 
-def forecast_run_theta(key: XseqEntryKey, y: Int, forecast: Int, info: Int, batch: Int, n: Int, h: Int,
+def forecast_run_theta(entry: EntryRef, y: Int, forecast: Int, info: Int, batch: Int, n: Int, h: Int,
                        season: Int, code: Int, additive: Bool, mask: Int, settings: List[Float64]) raises:
     """The whole theta fit and forecast (`XS_THETA`); `settings` holds the
     initial level, alpha and theta (zero when free). The caller keeps every
     addressed buffer alive and has released the GIL."""
     var addresses: List[Int] = [y, forecast, info]
     var words: List[Int] = [batch, n, h, season, code, 1 if additive else 0, mask]
-    _ = xseq_run_glue(key, XS_THETA, addresses, words, settings)
+    _ = xseq_run_glue(entry, XS_THETA, addresses, words, settings)
 
 
-def forecast_run_theta_forecast(key: XseqEntryKey, y: Int, info: Int, forecast: Int, batch: Int, n: Int, h: Int,
+def forecast_run_theta_forecast(entry: EntryRef, y: Int, info: Int, forecast: Int, batch: Int, n: Int, h: Int,
                                 season: Int) raises:
     """The fit's forecast-only tail at another horizon (`XS_THETA_FORECAST`),
     driven by the fit's own info rows."""
     var addresses: List[Int] = [y, info, forecast]
     var words: List[Int] = [batch, n, h, season]
-    _ = xseq_run_glue(key, XS_THETA_FORECAST, addresses, words, List[Float64]())
+    _ = xseq_run_glue(entry, XS_THETA_FORECAST, addresses, words, List[Float64]())
 
 
 def forecast_run_theta_codes(info: Int, batch: Int) -> List[Int]:
@@ -99,18 +99,18 @@ def forecast_run_croston_check_h(h: Int) raises:
         raise Error("Croston: h must be >= 0")
 
 
-def forecast_run_croston(key: XseqEntryKey, y: Int, mean: Int, batch: Int, n: Int, variant: Int) raises:
+def forecast_run_croston(entry: EntryRef, y: Int, mean: Int, batch: Int, n: Int, variant: Int) raises:
     """Each series' Croston mean (`XS_CROSTON`)."""
     var addresses: List[Int] = [y, mean]
     var words: List[Int] = [batch, n, variant]
-    _ = xseq_run_glue(key, XS_CROSTON, addresses, words, List[Float64]())
+    _ = xseq_run_glue(entry, XS_CROSTON, addresses, words, List[Float64]())
 
 
-def forecast_run_croston_forecast(key: XseqEntryKey, mean: Int, forecast: Int, batch: Int, h: Int) raises:
+def forecast_run_croston_forecast(entry: EntryRef, mean: Int, forecast: Int, batch: Int, h: Int) raises:
     """Every forecast row its series' mean (`XS_CROSTON_FORECAST`)."""
     var addresses: List[Int] = [mean, forecast]
     var words: List[Int] = [batch, h]
-    _ = xseq_run_glue(key, XS_CROSTON_FORECAST, addresses, words, List[Float64]())
+    _ = xseq_run_glue(entry, XS_CROSTON_FORECAST, addresses, words, List[Float64]())
 
 
 # ---------------------------------------------------------------- ETS
@@ -134,7 +134,7 @@ def forecast_run_ets_needs_positive(spec: String, season: String) raises -> Bool
     return forecast_run_letter(spec, 0) == "M" or season == "M"
 
 
-def forecast_run_min_above_zero(base: BaseEntryKey, y: Int, size: Int) raises -> Bool:
+def forecast_run_min_above_zero(base: EntryRef, y: Int, size: Int) raises -> Bool:
     """A first-wins minimum (`reduce_stat` 0) above zero; the boundary has
     already checked every value finite."""
     var low = base_reduce_stat(base, y, 0, size, 0)
@@ -192,11 +192,11 @@ def forecast_run_ets_words(batch: Int, n: Int, h: Int, spec: String, damped: Boo
     return words^
 
 
-def forecast_run_ets(key: XseqEntryKey, y: Int, forecast: Int, info: Int, states: Int, words: List[Int],
+def forecast_run_ets(entry: EntryRef, y: Int, forecast: Int, info: Int, states: Int, words: List[Int],
                      floats: List[Float64]) raises:
     """The ETS fit and forecast (`XS_ETS`)."""
     var addresses: List[Int] = [y, forecast, info, states]
-    _ = xseq_run_glue(key, XS_ETS, addresses, words, floats)
+    _ = xseq_run_glue(entry, XS_ETS, addresses, words, floats)
 
 
 # ---------------------------------------------------------------- GARCH
@@ -245,8 +245,8 @@ def forecast_run_garch_stall(mut words: List[Int], iterations: Int, drop: Float6
     words.append(forecast_run_round_half_even(drop * 1e9))
 
 
-def forecast_run_garch(key: XseqEntryKey, y: Int, params: Int, info: Int, sigma: Int, forecast: Int,
+def forecast_run_garch(entry: EntryRef, y: Int, params: Int, info: Int, sigma: Int, forecast: Int,
                        words: List[Int]) raises:
     """The GARCH fit and forecast (`XS_GARCH`)."""
     var addresses: List[Int] = [y, params, info, sigma, forecast]
-    _ = xseq_run_glue(key, XS_GARCH, addresses, words, List[Float64]())
+    _ = xseq_run_glue(entry, XS_GARCH, addresses, words, List[Float64]())

@@ -8,7 +8,8 @@ release of a resident allocation handle. The boundary reads the tensor's
 slots and the caller's shape objects into words and releases the GIL around
 `xcnn_tensor_run_free`, where the door released it before the split.
 """
-from core.xcnn_entry_table import XcnnEntryKey, XC_RES_FREE
+from core.entry_table import EntryRef
+from core.xcnn_entry_table import XC_RES_FREE
 from x_cnn.door_run import xcnn_run_call, xcnn_run_infer_dims, xcnn_size
 
 
@@ -35,7 +36,7 @@ def xcnn_tensor_run_reshape_dims(var dims: List[Int], shape: List[Int]) raises -
     return xcnn_run_infer_dims(dims^, xcnn_size(shape))
 
 
-def xcnn_tensor_run_free(key: XcnnEntryKey, handle: Int) raises:
-    """Release one resident allocation handle of the image `key`. The caller
+def xcnn_tensor_run_free(entry: EntryRef, handle: Int) raises:
+    """Release one resident allocation handle of the image `entry` resolves to. The caller
     cleared every slot that named it and has released the GIL."""
-    _ = xcnn_run_call(key, XC_RES_FREE, [handle], List[Int]())
+    _ = xcnn_run_call(entry, XC_RES_FREE, [handle], List[Int]())

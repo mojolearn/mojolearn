@@ -12,7 +12,7 @@ per-call scalar decision over one fit's metadata; there is no independent
 work to split across cores.
 """
 from std.os import getenv
-from core.forest_entry_table import ForestEntryKey
+from core.entry_table import EntryRef
 from core.forest_calls import ForestExport
 from ensemble.rf_notices import (
     RF_NOTICE_ALL, RF_NOTICE_BINS_CLAMPED, RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
@@ -55,13 +55,15 @@ struct ForestHandle(Movable):
     resident table keeps it (pinned for the call) or the call owns it alone
     (released when the call ends through the image's native release
     `release_op` (XF_RESIDENT_RELEASE / XF_STRICT_RELEASE): a model that
-    takes no weak reference, or a snapshot over the table's byte cap)."""
+    takes no weak reference, or a snapshot over the table's byte cap). `key`
+    is the forest entry resolved once for the operation (lane
+    entry-table-zero-alloc)."""
     var handle: Int
     var kept: Bool
-    var key: ForestEntryKey
+    var key: EntryRef
     var release_op: Int
 
-    def __init__(out self, handle: Int, kept: Bool, key: ForestEntryKey, release_op: Int):
+    def __init__(out self, handle: Int, kept: Bool, key: EntryRef, release_op: Int):
         self.handle = handle
         self.kept = kept
         self.key = key.copy()

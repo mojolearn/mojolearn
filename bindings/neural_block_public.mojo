@@ -31,8 +31,9 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_reserved_execute, neural_descriptor_handle,
 )
 from bindings.causal_lm_public import _causal_array_guard
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.neural_entry_table import (
-    NeuralEntryKey, neural_entry_vendor, neural_entry_call,
+    NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
     NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_BLOCK_TRAIN, NEURAL_TABLE_MAMBA_TRAIN,
     NEURAL_BLOCK_RESERVE, NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_FORWARD_FRESH,
     NEURAL_BLOCK_SESSION_BACKWARD, NEURAL_BLOCK_FORWARD_FRESH, NEURAL_BLOCK_BACKWARD,
@@ -59,16 +60,22 @@ struct NativeBlockPlan(Movable, Writable):
     var state_scalars: PythonObject
     var state_buffers: PythonObject
     var state_fields: PythonObject
-    # The neural entry table key (core/neural_entry_table.mojo) of the block
-    # image this plan's forward calls: the tier and vendor
-    # causal_lm_admit_binding admitted for it.
-    var entry_key: NeuralEntryKey
+    # The forward entry (core/neural_entry_table.mojo) of the block image
+    # this plan's forward calls, keyed by the tier and vendor
+    # causal_lm_admit_binding admitted for it and resolved once, here, at
+    # plan construction (lane entry-table-zero-alloc): every forward is one
+    # indirect call through it.
+    var forward_entry: EntryRef
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
         self.entries = owner._native_entries
         self.kind = String(owner.kind)
-        self.entry_key = NeuralEntryKey(Int(py=owner._native_numeric_mode), neural_entry_vendor(String(py=owner._native_vendor)))
+        # Only a Transformer block's forward calls the forward table.
+        self.forward_entry = entry_ref_unresolved()
+        if self.kind == "transformer":
+            self.forward_entry = neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
+                NeuralEntryKey(Int(py=owner._native_numeric_mode), neural_entry_vendor(String(py=owner._native_vendor))))
         self.d_model = Int(py=owner.d_model)
         self.numeric_profile = owner.numeric_profile
         self.packed = owner._head_int15 is not None
@@ -98,7 +105,7 @@ struct NativeBlockExecution(Movable):
         self.fields = fields
 
 
-def _neural_table_call[family: Int](key: NeuralEntryKey, operation: Int, addresses: List[Int],
+def _neural_table_call(entry: EntryRef, operation: Int, addresses: List[Int],
     ints: List[Int], floats: List[Float64]) raises -> Int:
     # One descriptor call into a sibling image through the neural entry table
     # (core/neural_entry_table.mojo): plain words, no CPython call. The GIL is
@@ -107,11 +114,11 @@ def _neural_table_call[family: Int](key: NeuralEntryKey, operation: Int, address
     # resets it afterwards (mods.released()), as it did after those calls.
     var result = 0
     with GILReleased(Python()):
-        result = neural_entry_call[family](key, operation, addresses, ints, floats)
+        result = neural_entry_call(entry, operation, addresses, ints, floats)
     return result
 
 
-def _neural_table_reserved[family: Int](key: NeuralEntryKey, handle: Int, reserve: Int, release: Int,
+def _neural_table_reserved(entry: EntryRef, handle: Int, reserve: Int, release: Int,
     operation: Int, addresses: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
     # A session operation: reserve and release run with the GIL held (the
     # image's busy/closed admission, as the provider ran them), the operation
@@ -121,15 +128,17 @@ def _neural_table_reserved[family: Int](key: NeuralEntryKey, handle: Int, reserv
     var words: List[Int] = [handle]
     for i in range(len(ints)):  # small-loop(session operation scalar words)
         words.append(ints[i])
-    _ = neural_entry_call[family](key, reserve, List[Int](), slot, List[Float64]())
+    var none = List[Int]()
+    var no_floats = List[Float64]()
+    _ = neural_entry_call(entry, reserve, none, slot, no_floats)
     var result = 0
     try:
         with GILReleased(Python()):
-            result = neural_entry_call[family](key, operation, addresses, words, floats)
+            result = neural_entry_call(entry, operation, addresses, words, floats)
     except problem:
-        _ = neural_entry_call[family](key, release, List[Int](), slot, List[Float64]())
+        _ = neural_entry_call(entry, release, none, slot, no_floats)
         raise problem
-    _ = neural_entry_call[family](key, release, List[Int](), slot, List[Float64]())
+    _ = neural_entry_call(entry, release, none, slot, no_floats)
     _ = words^
     _ = slot^
     return result
@@ -150,13 +159,13 @@ def _neural_session_handle(mut mods: NativeModules, factory: PythonObject, sessi
     return handle
 
 
-def _neural_mamba_session_table(mut mods: NativeModules, key: NeuralEntryKey, fields: PythonObject,
+def _neural_mamba_session_table(mut mods: NativeModules, entry: EntryRef, fields: PythonObject,
     entries: PythonObject, operation: Int, addresses: List[Int], params: List[Int]) raises -> Int:
     # A Mamba3 prefill-session operation (7 backward, 9 owned backward,
     # 15 owned install) through the training image's table entry.
     var session = fields["_prefill_session"]
     var handle = _neural_session_handle(mods, _native_function(mods, entries, "mamba_prefill_native_handle_v1"), session)
-    var result = _neural_table_reserved[NEURAL_TABLE_MAMBA_TRAIN](key, handle, NEURAL_MAMBA_RESERVE,
+    var result = _neural_table_reserved(entry, handle, NEURAL_MAMBA_RESERVE,
         NEURAL_MAMBA_RELEASE, operation, addresses, params, List[Float64]())
     mods.released()
     _ = session^
@@ -759,7 +768,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                 # entries (transformer_session_forward_fresh,
                 # transformer_forward_fresh) and the env-gated provider capsule
                 # arms ran the same bodies with these words.
-                var key = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entry_key.copy()
+                var forward = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].forward_entry
                 if fresh_session:
                     if fields["_native_session"] is None:
                         py_setitem(fields, "_native_session", e["create"]())
@@ -767,12 +776,12 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
                         py_setitem(fields, "_session_binding", e["block_binding"])
                     var session_owner = fields["_native_session"]
                     var handle = _neural_session_handle(mods, py_get(e, "transformer_native_session_handle_v1"), session_owner)
-                    _ = _neural_table_reserved[NEURAL_TABLE_BLOCK_FORWARD](key, handle, NEURAL_BLOCK_RESERVE,
+                    _ = _neural_table_reserved(forward, handle, NEURAL_BLOCK_RESERVE,
                         NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_FORWARD_FRESH, addresses, params, List[Float64]())
                     mods.released()
                     _ = session_owner^
                 else:
-                    _ = _neural_table_call[NEURAL_TABLE_BLOCK_FORWARD](key, NEURAL_BLOCK_FORWARD_FRESH,
+                    _ = _neural_table_call(forward, NEURAL_BLOCK_FORWARD_FRESH,
                         addresses, params, List[Float64]())
                     mods.released()
                 if locked:
@@ -1068,7 +1077,8 @@ def neural_mamba3_restore(mut mods: NativeModules, fields: PythonObject, entries
         # Owned snapshot install (op 15) through the training image's table
         # entry; the former Python entry mamba3_prefill_session_install_weights
         # and the env-gated provider arm ran the same install with these words.
-        var generation = _neural_mamba_session_table(mods, key, fields, entries, NEURAL_MAMBA3_OWNED_INSTALL,
+        var generation = _neural_mamba_session_table(mods, neural_ref[NEURAL_TABLE_MAMBA_TRAIN](key), fields, entries,
+            NEURAL_MAMBA3_OWNED_INSTALL,
             addresses, [Int(py=fields["d_model"])])
         _ = weights
         py_setitem(fields, "_owned_generation", PythonObject(generation))
@@ -1308,6 +1318,9 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         addresses.append(_addr(gradients[i], keep))
     var params: List[Int] = [b, l, d]
     var table_key = training.key.copy()
+    # The training entry, resolved once per backward (lane
+    # entry-table-zero-alloc): every table call below goes through it.
+    var train_entry = neural_ref[NEURAL_TABLE_BLOCK_TRAIN](table_key) if transformer else neural_ref[NEURAL_TABLE_MAMBA_TRAIN](table_key)
     if transformer:
         for name_key in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
             params.append(Int(py=fields[name_key]))
@@ -1333,7 +1346,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                 var session_owner = fields["_native_session"]
                 var handle = _neural_session_handle(mods,
                     _native_function(mods, entries, "transformer_native_session_handle_v1"), session_owner)
-                _ = _neural_table_reserved[NEURAL_TABLE_BLOCK_TRAIN](table_key, handle, NEURAL_BLOCK_RESERVE,
+                _ = _neural_table_reserved(train_entry, handle, NEURAL_BLOCK_RESERVE,
                     NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_BACKWARD, addresses, params, List[Float64]())
                 mods.released()
                 _ = session_owner^
@@ -1342,7 +1355,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
                 # (the session tape's invalidation before a per-call backward.)
                 # Ephemeral backward (op 5): the former transformer_backward entry.
-                _ = _neural_table_call[NEURAL_TABLE_BLOCK_TRAIN](table_key, NEURAL_BLOCK_BACKWARD, addresses, params, List[Float64]())
+                _ = _neural_table_call(train_entry, NEURAL_BLOCK_BACKWARD, addresses, params, List[Float64]())
                 mods.released()
             lock_lease.release()
         except error:
@@ -1369,20 +1382,20 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                 for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots
                     owned_addresses.append(addresses[i])
                 params.append(Int(py=generation))
-                _ = _neural_mamba_session_table(mods, table_key, fields, entries, NEURAL_MAMBA3_OWNED_BACKWARD,
+                _ = _neural_mamba_session_table(mods, train_entry, fields, entries, NEURAL_MAMBA3_OWNED_BACKWARD,
                     owned_addresses, params)
             elif session:
                 if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
                     py_setitem(fields, "_prefill_session", _native_function(mods, entries, "mamba3_prefill_session_create")())
                     mods.released()
                     py_setitem(fields, "_prefill_binding", entries.canonical)
-                _ = _neural_mamba_session_table(mods, table_key, fields, entries, NEURAL_MAMBA3_SESSION_BACKWARD,
+                _ = _neural_mamba_session_table(mods, train_entry, fields, entries, NEURAL_MAMBA3_SESSION_BACKWARD,
                     addresses, params)
             else:
-                _ = _neural_table_call[NEURAL_TABLE_MAMBA_TRAIN](table_key, NEURAL_MAMBA3_BACKWARD, addresses, params, List[Float64]())
+                _ = _neural_table_call(train_entry, NEURAL_MAMBA3_BACKWARD, addresses, params, List[Float64]())
                 mods.released()
         else:
-            _ = _neural_table_call[NEURAL_TABLE_MAMBA_TRAIN](table_key,
+            _ = _neural_table_call(train_entry,
                 NEURAL_MAMBA2_BACKWARD if kind == "mamba2" else NEURAL_MAMBA1_BACKWARD, addresses, params, floats)
             mods.released()
     var result = bi.dict()

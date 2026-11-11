@@ -21,7 +21,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value
 from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value
-from bindings.xcnn_common import xcnn_out_new, xcnn_dev_fields, xcnn_key
+from bindings.xcnn_common import xcnn_out_new, xcnn_dev_fields, xcnn_ref
 from std.python._cpython import GILReleased
 from x_cnn.door_run import xcnn_run_fill_f32
 from x_cnn.bn_run import (
@@ -209,7 +209,7 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
         _ = xcnn_dev_upload(layer, entries, "running", r, context)
         _set(fields, "_run_dev", dev)
     var rh = xcnn_dev_handle(dev, "running")
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)]
     var py = Python()
     with GILReleased(py):
@@ -234,7 +234,7 @@ def xcnn_bn_forward_dev(layer: PythonObject, fields: PythonObject, entries: Pyth
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)]
     var py = Python()
     with GILReleased(py):
@@ -304,7 +304,7 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    var key = xcnn_key(b)
+    var key = xcnn_ref(b)
     var addrs: List[Int] = [xcnn_ptr(x3), xcnn_ptr(y), xcnn_ptr(running), xcnn_ptr(aux)]
     var py = Python()
     with GILReleased(py):
@@ -372,7 +372,7 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
             and _truth(fields["track_running_stats"]) and xcnn_resident(entries, context)):
         _set(fields, "_g_dev", PythonObject(None))
         var flags = 8 | bn_run_flags(True, dev_g, dev_dx)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_word(ad[1])]
         var py = Python()
         with GILReleased(py):
@@ -383,7 +383,7 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
     if Int(py=original.size) != bn_run_aux_count(c):
         raise Error("ValueError: batch normalization saved aux has the wrong size")
     var aux = xcnn_slice_f32(original, 0, bn_run_aux_count(c), context)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)]
     var py = Python()
     with GILReleased(py):

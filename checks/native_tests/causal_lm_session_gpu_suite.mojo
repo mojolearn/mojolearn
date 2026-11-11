@@ -22,13 +22,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor
 from core.causal_lm_entry_table_sessions import (
-    causal_sessions_call, causal_session_handle_of, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSIONS_MAMBA,
+    causal_sessions_ref, causal_sessions_call, causal_session_handle_of, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSIONS_MAMBA,
     CAUSAL_SESSION_DECODE_CREATE, CAUSAL_SESSION_DECODE_OPEN, CAUSAL_SESSION_DECODE_OPEN15,
     CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD, CAUSAL_SESSION_DECODE_CLOSE,
     CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_LM_OPEN, CAUSAL_SESSION_LM_OPEN15, CAUSAL_SESSION_LM_RUN,
     CAUSAL_SESSION_LM_FORWARD, CAUSAL_SESSION_LM_CLOSE, CAUSAL_SESSION_PROGRAM_READ, CAUSAL_SESSION_PROGRAM_RELEASE,
 )
 from core.causal_session_handles import CausalSessionHandles
+from core.entry_table import entry_ref_same
 from transformer.causal_entry_device import publish_causal_transformer_device
 from mamba.causal_entry_device import publish_causal_mamba_device
 
@@ -51,7 +52,7 @@ def _key() raises -> CausalEntryKey:
 
 
 def _call(family: Int, op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
-    return causal_sessions_call(family, _key(), op, a, words, f)
+    return causal_sessions_call(causal_sessions_ref(family, _key()), op, a, words, f)
 
 
 def _t(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
@@ -183,6 +184,10 @@ def case(unit: Int) raises:
         var lm = _lm()
         var layer = _decode()
         var owner = CausalSessionHandles(_key(), CAUSAL_SESSIONS_TRANSFORMER, lm, CAUSAL_SESSION_LM_CLOSE)
+        # Lane entry-table-zero-alloc: the owner holds the entry resolved at
+        # construction, the same ref a fresh resolution returns.
+        require(entry_ref_same(owner.entry, causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, _key())),
+                "the session owner does not hold the resolved session entry")
         owner.layers.append(layer)
         owner.close()
         require(owner.primary == 0 and len(owner.layers) == 0, "owner kept closed handles")

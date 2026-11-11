@@ -12,11 +12,13 @@ table stays unavailable, which is what MultiOutputRegressor reads as "one
 member per column". The device operations share the process's one device
 context, so the cases run one after another. Run in a fresh process.
 """
+from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.linear_entry_table import LinearEntryKey
+from core.linear_entry_table_multi import ridge_multi_table_entry, RIDGE_MULTI_ABI, RM_OP_COUNT
 from core.linear_multi_calls import (
-    ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict,
+    ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict,
 )
 from core.linear_multi_device import publish_ridge_multi
 from glm.impl.ridge_multi import MULTIOUT_RIDGE
@@ -40,7 +42,7 @@ def precondition_unpublished() raises:
     var x: List[Float32] = [1.0]
     var sums: List[Float64] = [0.0]
     try:
-        rm_col_sums(_key(), Int(x.unsafe_ptr()), Int(sums.unsafe_ptr()), 1, 1)
+        rm_col_sums(ridge_multi_ref(_key()), Int(x.unsafe_ptr()), Int(sums.unsafe_ptr()), 1, 1)
     except problem:
         require("provider is not published" in String(problem), "unexpected refusal: " + String(problem))
         _ = x
@@ -50,7 +52,7 @@ def precondition_unpublished() raises:
 
 
 def case(unit: Int) raises:
-    var k = _key()
+    var k = ridge_multi_ref(_key())
     if unit == 0:
         var x: List[Float32] = [1.0, 2.0, 3.0, 4.0]
         var sums: List[Float64] = [0.0, 0.0]
@@ -112,12 +114,28 @@ def case(unit: Int) raises:
         raise Error("no ridge multi case " + String(unit))
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = ridge_multi_ref(_key())
+    var second = ridge_multi_ref(_key())
+    require(entry_ref_same(first, second), "ridge multi: a second resolution returned another entry")
+    try:
+        _ = ridge_multi_table_entry(_key(), 0, String(RIDGE_MULTI_ABI), RM_OP_COUNT + 1)
+        raise Error("ridge multi: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "ridge multi: unexpected refusal: " + String(problem))
+
+
 def run_checks() raises:
     precondition_unpublished()
     # The publication _mojolearn_estimators makes at module init.
     publish_ridge_multi()
     comptime if MULTIOUT_RIDGE:
         require(ridge_multi_available(_key()), "the published ridge multi table reads as unavailable")
+        ref_resolution()
         var failed = 0
         for unit in range(RIDGE_MULTI_CASES):  # driver-loop: device cases share one device context
             try:

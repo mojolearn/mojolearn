@@ -25,7 +25,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from core.shared_slot import SharedSlot
-from core.parallel_entry_table import ParallelEntryKey, parallel_fold_pair_f32
+from core.parallel_entry_table import ParallelEntryKey, parallel_ref, parallel_fold_pair_f32, PARALLEL_TABLE_BASE
 from std.python._cpython import GILReleased
 
 
@@ -113,7 +113,8 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
     _ = py_call(store.frombytes, py_call(cross_vendor_f32(source).cast, "B"))
     var n = len(store)
     var total = Int(py=store.buffer_info()[0])
-    var key = ParallelEntryKey(c[].fold_mode, c[].fold_vendor)
+    # Resolved once before the shard loop (lane entry-table-zero-alloc).
+    var key = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(c[].fold_mode, c[].fold_vendor))
     for k in range(first, len(parts)):  # driver-loop: over logical shard gradient buffers in immutable order
         # pass 3 (rank 36): the shard's received float32 view is folded in
         # place (one read-only buffer export); it was copied into a new

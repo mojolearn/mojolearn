@@ -15,7 +15,9 @@ from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixe
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_entry_key, samba_primitive
+from core.entry_table import EntryRef
 from core.samba_entry_table import (
+    samba_ref,
     SambaEntryKey, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST, SAMBA_PRIM_EMBEDDING_FORWARD,
     SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD, SAMBA_PRIM_CE_LOSS,
 )
@@ -406,14 +408,19 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     return (ids, sizes^)
 
 
-def _samba_host_primitive(cpu_inference: Bool, key: SambaEntryKey, op: Int, addresses: List[Int], ints: List[Int],
-                          floats: List[Float64]) raises:
-    """The host route's primitive: the CPU inference model's neural_host
-    image or the stack's connected training image, through the Samba table."""
+def _samba_host_ref(cpu_inference: Bool, key: SambaEntryKey) raises -> EntryRef:
+    """The host route's primitive entry, resolved once per forward: the CPU
+    inference model's neural_host image or the stack's connected training
+    image, through the Samba table."""
     if cpu_inference:
-        _ = samba_primitive[SAMBA_TABLE_NEURAL_HOST](key, op, addresses, ints, floats)
-    else:
-        _ = samba_primitive[SAMBA_TABLE_TRAINING](key, op, addresses, ints, floats)
+        return samba_ref[SAMBA_TABLE_NEURAL_HOST](key)
+    return samba_ref[SAMBA_TABLE_TRAINING](key)
+
+
+def _samba_host_primitive(prim: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
+                          floats: List[Float64]) raises:
+    """One host route primitive through the resolved entry."""
+    _ = samba_primitive(prim, op, addresses, ints, floats)
 
 
 def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject, lengths: PythonObject,
@@ -466,7 +473,8 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             states = slots["layers"]
         var arrays = fields["arrays"]
         var hidden = generation_array([b, l, d])
-        _samba_host_primitive(cpu_inference, key, SAMBA_PRIM_EMBEDDING_FORWARD,
+        var prim = _samba_host_ref(cpu_inference, key)
+        _samba_host_primitive(prim, SAMBA_PRIM_EMBEDDING_FORWARD,
             [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [b * l, v, d], [])
         _ = hidden  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
@@ -483,12 +491,12 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         output = generation_array([b, l, v])
         var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
         var normalized = generation_array([b, l, d])
-        _samba_host_primitive(cpu_inference, key, SAMBA_PRIM_RMS_NORM_FORWARD,
+        _samba_host_primitive(prim, SAMBA_PRIM_RMS_NORM_FORWARD,
             [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=arrays["norm_f.weight"]._addr)], [b * l, d],
             [Float64(py=config["norm_eps"])])
         _ = normalized  # keep the Python object alive through the native call above
         _ = hidden  # keep the Python object alive through the native call above
-        _samba_host_primitive(cpu_inference, key, SAMBA_PRIM_LINEAR_FORWARD,
+        _samba_host_primitive(prim, SAMBA_PRIM_LINEAR_FORWARD,
             [Int(py=output._addr), Int(py=normalized._addr), Int(py=head._addr)], [b * l, v, d], [])
         _ = normalized  # keep the Python object alive through the native call above
         _ = head  # keep the Python object alive through the native call above
@@ -530,7 +538,7 @@ def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject,
     var row_loss = generation_array([rows])
     var unused_gradient = generation_array([1])
     # ce_loss words: [n_rows, vocab, ignore_index, reduction (2 mean), num_items, want_grad], [label_smoothing].
-    _ = samba_primitive[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"]), SAMBA_PRIM_CE_LOSS,
+    _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"])), SAMBA_PRIM_CE_LOSS,
         [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=unused_gradient._addr), Int(py=logits._addr), Int(py=y._addr)],
         [rows, v, -100, 2, 0, 0], [0.0])
     _ = unused_gradient  # keep the Python object alive through the native call above

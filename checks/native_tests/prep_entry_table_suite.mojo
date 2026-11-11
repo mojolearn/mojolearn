@@ -16,10 +16,11 @@ The cases are independent units: on the host column they run across the
 native host worker pool; on a device column they run one after another.
 Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
-from core.prep_entry_table import PrepEntryKey, prep_table_entry, xp_transport_call, PREP_TABLE_X_PREP
+from core.prep_entry_table import PrepEntryKey, prep_table_entry, xp_transport_ref, xp_transport_call, PREP_TABLE_X_PREP
 from x_prep.transport_abi import (
     XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE,
     XP_DEV_TAKE_ROWS,
@@ -44,26 +45,42 @@ def _refuses(problem: Error, text: String) raises:
 
 def precondition_unpublished() raises:
     try:
-        _ = xp_transport_call(_key(), XP_DEV_FREE, List[Int](), [0])
+        _ = xp_transport_call(xp_transport_ref(_key()), XP_DEV_FREE, List[Int](), [0])
     except problem:
         _refuses(problem, "provider is not published")
         return
     raise Error("an unpublished x_prep table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = xp_transport_ref(_key())
+    var second = xp_transport_ref(_key())
+    require(entry_ref_same(first, second), "x_prep transport: a second resolution returned another entry")
+    try:
+        _ = prep_table_entry[PREP_TABLE_X_PREP](_key(), 0, String(XP_TRANSPORT_ABI), XP_OP_COUNT + 1)
+        raise Error("x_prep transport: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "x_prep transport: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     try:
         _ = prep_table_entry[PREP_TABLE_X_PREP](_key(), 0, String("mojolearn.x_prep.other.v1"), XP_OP_COUNT)
         raise Error("a mismatched schema did not refuse")
     except problem:
         _refuses(problem, "ABI schema differs")
     try:
-        _ = xp_transport_call(_key(), XP_RUN, List[Int](), [0, 0])
+        _ = xp_transport_call(xp_transport_ref(_key()), XP_RUN, List[Int](), [0, 0])
         raise Error("a wrong arity did not refuse")
     except problem:
         _refuses(problem, "takes 2 addresses")
     try:
-        _ = xp_transport_call(_key(), XP_OP_COUNT, List[Int](), List[Int]())
+        _ = xp_transport_call(xp_transport_ref(_key()), XP_OP_COUNT, List[Int](), List[Int]())
         raise Error("an unknown operation did not refuse")
     except problem:
         _refuses(problem, "unknown operation")
@@ -73,7 +90,7 @@ def _device_refuses(op: Int, na: Int, ni: Int) raises:
     var a = List[Int](length=na, fill=0)
     var i = List[Int](length=ni, fill=0)
     try:
-        _ = xp_transport_call(_key(), op, a, i)
+        _ = xp_transport_call(xp_transport_ref(_key()), op, a, i)
     except problem:
         _refuses(problem, "host binding has no device operation")
         return
@@ -86,12 +103,12 @@ def case(unit: Int) raises:
         var arena: List[Float32] = [7.0]
         var program = List[Int32](length=16, fill=0)
         var addresses: List[Int] = [Int(arena.unsafe_ptr()), Int(program.unsafe_ptr())]
-        require(xp_transport_call(_key(), XP_RUN, addresses, [1, 0]) == 0, "empty program")
+        require(xp_transport_call(xp_transport_ref(_key()), XP_RUN, addresses, [1, 0]) == 0, "empty program")
         require(arena[0] == 7.0, "empty program left the arena")
         _ = program
     elif unit == 1:
         try:
-            _ = xp_transport_call(_key(), XP_RUN, [0, 0], [1, 0])
+            _ = xp_transport_call(xp_transport_ref(_key()), XP_RUN, [0, 0], [1, 0])
             raise Error("null program buffers did not refuse")
         except problem:
             _refuses(problem, "x_prep: invalid program buffers")

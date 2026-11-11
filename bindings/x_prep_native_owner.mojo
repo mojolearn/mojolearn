@@ -20,24 +20,26 @@ from bindings.p3_array_arena_records import (
 
 from std.python._cpython import GILReleased
 from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
-from core.prep_entry_table import PrepEntryKey, xp_transport_call
+from core.entry_table import EntryRef
+from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
 from x_prep.transport_abi import (
     XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS, xp_vendor_word,
 )
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
-def xprep_key(entries: PythonObject) raises -> PrepEntryKey:
-    """The x_prep transport table key of a connected entries dict: the image's
-    compiled mode and vendor words, read once per binding (prep_entry_cache)."""
+def xprep_key(entries: PythonObject) raises -> EntryRef:
+    """The x_prep transport entry of a connected entries dict (the image's
+    compiled mode and vendor words, read once per binding by
+    prep_entry_cache), resolved once per operation into an `EntryRef`."""
     var mode = prep_entry_word(entries, "x_prep_numeric_mode", -1)
     var vendor = xp_vendor_word(prep_entry_text(entries, "x_prep_vendor"))
     if mode < 0 or mode > 1 or vendor < 0:
         raise Error("ImportError: mojolearn: the x_prep binding publishes no native entry table")
-    return PrepEntryKey(mode, vendor)
+    return xp_transport_ref(PrepEntryKey(mode, vendor))
 
 
-def xprep_call(key: PrepEntryKey, op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
+def xprep_call(key: EntryRef, op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
     """One x_prep transport operation (x_prep/transport_abi.mojo) through the
     image's published entry, with the GIL released as the Python entries
     released it. The caller keeps every addressed buffer alive."""
@@ -436,6 +438,9 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
     var op = 0 if out_words == 0 else Int(py=output[1])
     var device_scratch = scratch > 0 and (py_get(entries,"x_prep_run_out") is not None or py_get(entries,"x_prep_run_scratch") is not None)
     var ranges = xprep_ranges(entries,scratch)
+    # The transport entry, resolved once per run (lane entry-table-zero-alloc):
+    # the per-input row gathers and the run below call through it.
+    var key = xprep_key(entries)
     var ins = List[Int32]()
     var outs = List[Int32]()
     # Each input can own at most a direct base and a gathered selection.
@@ -485,7 +490,7 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                     owned.append(source)
                 if rows:
                     var idx: List[Int] = [Int(py=classical_address(record[2]))]
-                    source = xprep_call(xprep_key(entries), XP_DEV_TAKE_ROWS, idx, [source, Int(py=record[4]), Int(py=record[3])])
+                    source = xprep_call(key, XP_DEV_TAKE_ROWS, idx, [source, Int(py=record[4]), Int(py=record[3])])
                     owned.append(source)
             if source < 0:
                 unsafe_memcpy(dest=F32P(unsafe_from_address=arena+4*offset),src=F32P(unsafe_from_address=Int(py=classical_address(value))),count=words)
@@ -519,7 +524,6 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
         var nst = len(program)//16
         var pa = Int(program.unsafe_ptr())
         kernel_start = Int(perf_counter_ns()) if profile else 0
-        var key = xprep_key(entries)
         var sc = scratch if device_scratch else 0
         if ranges:
             var addresses: List[Int] = [arena, pa, op, Int(ins.unsafe_ptr()), Int(outs.unsafe_ptr())]

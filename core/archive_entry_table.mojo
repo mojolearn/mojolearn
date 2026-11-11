@@ -18,9 +18,8 @@ the minting image is recorded once at load by
 `python/mojolearn/_native_table_key.py`. Publication and lookup are small
 metadata operations with no independent numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 from core.parallel_entry_table import ParallelEntryKey
 
 comptime ARCHIVE_TABLE_IVF = 0
@@ -159,11 +158,16 @@ def archive_table_entry(family: Int, key: ParallelEntryKey) raises -> NativeDesc
     raise Error("native archive entries: unsupported execution key")
 
 
-def archive_resident_export(family: Int, key: ParallelEntryKey, handle: Int, dst: Int, count: Int) raises -> Int:
-    """Copy `count` words of the keyed image's resident index `handle` into
-    the host buffer at `dst` (kept alive by the caller)."""
-    var entry = archive_table_entry(family, key)
-    var addrs: List[Int] = [dst]
-    var ints: List[Int] = [handle, count]
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, AX_EXPORT, addrs, ints, floats)
+def archive_ref(family: Int, key: ParallelEntryKey) raises -> EntryRef:
+    """The keyed image's archive export entry, resolved once (lane
+    entry-table-zero-alloc); the table refusals raise here."""
+    return EntryRef(archive_table_entry(family, key), entry_ref_word(key.mode, key.vendor, AX_OPERATION_COUNT))
+
+
+def archive_resident_export(entry: EntryRef, handle: Int, dst: Int, count: Int) raises -> Int:
+    """Copy `count` words of the resolved image's resident index `handle` into
+    the host buffer at `dst` (kept alive by the caller): one indirect call."""
+    var addrs: Array[Int, 1] = [dst]
+    var ints: Array[Int, 2] = [handle, count]
+    var floats: Array[Float64, 0] = []
+    return entry_ref_call(entry, AX_EXPORT, addrs, ints, floats)

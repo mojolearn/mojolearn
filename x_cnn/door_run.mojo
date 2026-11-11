@@ -5,8 +5,9 @@
 The doors in `bindings/xcnn_*.mojo` are the UNPACK/PACK boundary: they read
 the layer's Python fields, admit the caller's arrays and publish the results.
 Everything they hand to this directory is a typed Mojo value: the route of the
-layer's connected x_cnn image (`XcnnRoute`: its native table key and the lane
-switch words the bridge recorded at import), plain address and handle words,
+layer's connected x_cnn image (`XcnnRoute`: its native table entry, resolved
+once per door operation as an `EntryRef`, and the lane switch words the bridge
+recorded at import), plain address and handle words,
 shape words and scalars. No module under `x_cnn/` imports Python
 (`tools/python_free_dirs.sh`).
 
@@ -15,7 +16,7 @@ GIL: RUN never touches the GIL. The boundary releases it around a RUN call
 it before the split, so the release points are unchanged.
 """
 from std.memory import unsafe_memcpy
-from core.xcnn_entry_table import XcnnEntryKey, xcnn_entry_call
+from core.entry_table import EntryRef, entry_ref_call
 
 comptime XCNN_F_ADAPT = 1
 comptime XCNN_F_GRAPH = 2
@@ -33,10 +34,11 @@ comptime XcnnF32P = MutPointer[Float32, MutUntrackedOrigin]
 @fieldwise_init
 struct XcnnRoute(Copyable, Movable):
     """The layer's connected x_cnn image as typed words (UNPACK reads them
-    once from the bridge's entries record): the native table key, whether
+    once from the bridge's entries record): the resolved native table entry
+    (lane entry-table-zero-alloc: the slot is read once, never per call), whether
     the image has the mixed-residency (`_m`) operations, the two lane switch
     words and the import-time environment switch of the resident I/O route."""
-    var key: XcnnEntryKey
+    var entry: EntryRef
     var mixed: Bool
     var idn: Int
     var idn2: Int
@@ -58,18 +60,22 @@ struct XcnnRoute(Copyable, Movable):
         return self.mixed and self.has(XCNN_F_RESIDENT) and not self.device_io_off()
 
 
-def xcnn_run_call_f(key: XcnnEntryKey, op: Int, addrs: List[Int], ints: List[Int],
+def xcnn_run_call_f(entry: EntryRef, op: Int, addrs: List[Int], ints: List[Int],
                     floats: List[Float64]) raises -> Int:
-    """One x_cnn operation (`XC_*`) through the image's published native
-    entry. Plain words only; the caller keeps every addressed buffer alive
-    and has released the GIL."""
-    return xcnn_entry_call(key, op, addrs, ints, floats)
+    """One x_cnn operation (`XC_*`) through the image's resolved native
+    entry: one indirect call. Plain words only; the caller keeps every
+    addressed buffer alive and has released the GIL."""
+    return entry_ref_call(entry, op, addrs, ints, floats)
 
 
-def xcnn_run_call(key: XcnnEntryKey, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
-    """`xcnn_run_call_f` for the operations that read no Float64 scalar."""
-    var floats = List[Float64]()
-    return xcnn_entry_call(key, op, addrs, ints, floats)
+def xcnn_run_call(entry: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
+    """`xcnn_run_call_f` for the operations that read no Float64 scalar (no
+    empty float List is built)."""
+    var result = entry_ref_call(entry, op, Int(addrs.unsafe_ptr()), len(addrs), Int(ints.unsafe_ptr()), len(ints), 0, 0)
+    # Raw span addresses do not themselves retain their List owners.
+    _ = addrs
+    _ = ints
+    return result
 
 
 # ---------------------------------------------------------------- shape words

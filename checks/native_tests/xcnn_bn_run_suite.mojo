@@ -8,7 +8,7 @@ covered by `xcnn_entry_table_suite.mojo`.
 The cases are independent units and run across the native host worker pool.
 """
 from core.host_parallel import host_parallelize
-from core.xcnn_entry_table import XcnnEntryKey
+from core.entry_table import entry_ref_unresolved
 from x_cnn.door_run import (
     XcnnRoute, XCNN_F_RESIDENT, XCNN_F2_ALL_OFF, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
     xcnn_run_infer_dims, xcnn_run_copy_f32, xcnn_run_fill_f32,
@@ -56,9 +56,9 @@ def case(unit: Int) raises:
         _ = src
         _ = dst
     elif unit == 3:
-        var on = XcnnRoute(XcnnEntryKey(1, 0), True, XCNN_F_RESIDENT, 0, False)
-        var off = XcnnRoute(XcnnEntryKey(1, 0), True, XCNN_F_RESIDENT, XCNN_F2_ALL_OFF, False)
-        var host = XcnnRoute(XcnnEntryKey(1, 0), False, XCNN_F_RESIDENT, 0, False)
+        var on = XcnnRoute(entry_ref_unresolved(), True, XCNN_F_RESIDENT, 0, False)
+        var off = XcnnRoute(entry_ref_unresolved(), True, XCNN_F_RESIDENT, XCNN_F2_ALL_OFF, False)
+        var host = XcnnRoute(entry_ref_unresolved(), False, XCNN_F_RESIDENT, 0, False)
         require(on.resident() and not off.resident() and not host.resident(), "route residency")
         require(off.device_io_off() and not on.device_io_off(), "route io switch")
     elif unit == 4:

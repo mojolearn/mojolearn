@@ -10,7 +10,7 @@ from bindings.xcnn_common import (
     xcnn_builtins, xcnn_tensor, xcnn_tensor_slot, xcnn_tensor_set, xcnn_tensor_admit,
     xcnn_shape, xcnn_size, xcnn_tuple, xcnn_new, xcnn_out_new, xcnn_wrap,
     xcnn_host_of, xcnn_f32, xcnn_entries, xcnn_module_entries, xcnn_device_io_off,
-    xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw, xcnn_key,
+    xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw, xcnn_ref,
 )
 from std.python._cpython import GILReleased
 from x_cnn.tensor_run import (
@@ -89,7 +89,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
                     return PythonObject(None)
                 var entries = xcnn_module_entries(_xcnn_slot_raw(owner, "b", context), context)
                 _xcnn_set_raw(owner, "h", PythonObject(None), context)
-                var key = xcnn_key(entries)
+                var key = xcnn_ref(entries)
                 var word = Int(py=handle)
                 var py = Python()
                 with GILReleased(py):

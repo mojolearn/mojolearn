@@ -20,9 +20,10 @@ Run in a fresh process (the first check needs an unpublished table).
 from std.math import sqrt
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.entry_table import entry_ref_same
 from core.host_parallel import host_parallelize
 from core.causal_lm_entry_table import (
-    CausalEntryKey, causal_entry_call, CAUSAL_TABLE_LINALG, CAUSAL_TABLE_PRIMITIVES, CAUSAL_TABLE_BLOCK,
+    CausalEntryKey, causal_entry_call, causal_ref, CAUSAL_TABLE_LINALG, CAUSAL_TABLE_PRIMITIVES, CAUSAL_TABLE_BLOCK,
     CAUSAL_TABLE_MAMBA, CAUSAL_LIN_TO_BF16, CAUSAL_LIN_FROM_BF16, CAUSAL_LIN_QUANTIZE_INT8,
     CAUSAL_LIN_DEQUANTIZE_INT8, CAUSAL_LIN_QUANTIZE_INT15, CAUSAL_LIN_GEMM_INT15, CAUSAL_PRIM_EMBED_FORWARD,
     CAUSAL_PRIM_NORM_FORWARD, CAUSAL_PRIM_LINEAR_FORWARD, CAUSAL_BLOCK_HOST_FORWARD,
@@ -32,7 +33,7 @@ from core.causal_entry_neural_host import publish_causal_neural_host
 from gemm.host.causal_entry_host import publish_causal_linalg_host
 from core.state_registry import StateHandle
 from core.causal_lm_entry_table_sessions import (
-    causal_sessions_call, causal_session_handle_word, causal_session_handle_of, CAUSAL_SESSIONS_TRANSFORMER,
+    causal_sessions_ref, causal_sessions_call, causal_session_handle_word, causal_session_handle_of, CAUSAL_SESSIONS_TRANSFORMER,
     CAUSAL_SESSIONS_MAMBA, CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_PROGRAM_READ,
 )
 
@@ -75,29 +76,45 @@ def _close(got: Float32, want: Float64, tolerance: Float64) -> Bool:
 def precondition_unpublished() raises:
     var none = List[Int]()
     try:
-        _ = causal_entry_call[CAUSAL_TABLE_PRIMITIVES](_key(), CAUSAL_PRIM_EMBED_FORWARD, none, none, List[Float64]())
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_PRIMITIVES](_key()), CAUSAL_PRIM_EMBED_FORWARD, none, none, List[Float64]())
     except problem:
         _refuses(problem, "provider is not published")
         return
     raise Error("an unpublished CausalLM table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: each family resolves once into a ref that
+    a connection owner reuses (the same pointer and layout word every time),
+    and a mismatched key refuses at resolution, never at a call."""
+    require(entry_ref_same(causal_ref[CAUSAL_TABLE_PRIMITIVES](_key()), causal_ref[CAUSAL_TABLE_PRIMITIVES](_key())),
+            "CausalLM primitives: a second resolution returned another entry")
+    require(entry_ref_same(causal_ref[CAUSAL_TABLE_LINALG](_key()), causal_ref[CAUSAL_TABLE_LINALG](_key())),
+            "CausalLM linalg: a second resolution returned another entry")
+    try:
+        _ = causal_ref[CAUSAL_TABLE_PRIMITIVES](CausalEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0))
+        raise Error("CausalLM: a mismatched key did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var none = List[Int]()
     try:
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 2),
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 2)),
             CAUSAL_LIN_TO_BF16, none, none, List[Float64]())
         raise Error("an unpublished vendor key did not refuse")
     except problem:
         _refuses(problem, "provider is not published")
     try:
-        _ = causal_entry_call[CAUSAL_TABLE_BLOCK](CausalEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0),
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_BLOCK](CausalEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)),
             CAUSAL_BLOCK_HOST_FORWARD, none, none, List[Float64]())
         raise Error("a mismatched tier key did not refuse")
     except problem:
         require("did not refuse" not in String(problem), String(problem))
     try:
-        _ = causal_entry_call[CAUSAL_TABLE_MAMBA](CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 4),
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_MAMBA](CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 4)),
             CAUSAL_MAMBA1_FORWARD, none, none, List[Float64]())
         raise Error("an invalid vendor key did not refuse")
     except problem:
@@ -112,7 +129,7 @@ def case(unit: Int) raises:
         var y: List[Float32] = [9.0, 9.0, 9.0, 9.0]
         var w: List[Float32] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
         var ids: List[Int32] = [2, 0]
-        var n = causal_entry_call[CAUSAL_TABLE_PRIMITIVES](k, CAUSAL_PRIM_EMBED_FORWARD,
+        var n = causal_entry_call(causal_ref[CAUSAL_TABLE_PRIMITIVES](k), CAUSAL_PRIM_EMBED_FORWARD,
             [_f32(y), _f32(w), _i32(ids)], [2, 3, 2], no_floats)
         require(n == 4 and y[0] == 4.0 and y[1] == 5.0 and y[2] == 0.0 and y[3] == 1.0, "embedding forward")
         _ = w
@@ -123,7 +140,7 @@ def case(unit: Int) raises:
         var x: List[Float32] = [3.0, 4.0]
         var w: List[Float32] = [1.0, 2.0]
         var eps: List[Float64] = [1.0e-6]
-        _ = causal_entry_call[CAUSAL_TABLE_PRIMITIVES](k, CAUSAL_PRIM_NORM_FORWARD,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_PRIMITIVES](k), CAUSAL_PRIM_NORM_FORWARD,
             [_f32(y), _f32(x), _f32(w)], [1, 2], eps)
         var r = sqrt(12.5 + 1.0e-6)
         require(_close(y[0], 3.0 / r, 1.0e-5) and _close(y[1], 8.0 / r, 1.0e-5), "rms norm forward")
@@ -134,7 +151,7 @@ def case(unit: Int) raises:
         var c: List[Float32] = [0.0, 0.0]
         var a: List[Float32] = [1.0, 2.0]
         var w: List[Float32] = [3.0, 4.0, 5.0, 6.0]
-        _ = causal_entry_call[CAUSAL_TABLE_PRIMITIVES](k, CAUSAL_PRIM_LINEAR_FORWARD,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_PRIMITIVES](k), CAUSAL_PRIM_LINEAR_FORWARD,
             [_f32(c), _f32(a), _f32(w)], [1, 2, 2], no_floats)
         require(c[0] == 11.0 and c[1] == 17.0, "linear forward")
         _ = a
@@ -144,9 +161,9 @@ def case(unit: Int) raises:
         var x: List[Float32] = [1.0, -2.5]
         var bits: List[UInt16] = [0, 0]
         var back: List[Float32] = [0.0, 0.0]
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_TO_BF16, [_u16(bits), _f32(x)], [2], no_floats)
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_TO_BF16, [_u16(bits), _f32(x)], [2], no_floats)
         require(bits[0] == 0x3F80 and bits[1] == 0xC020, "to_bf16 bits")
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_FROM_BF16, [_f32(back), _u16(bits)], [2], no_floats)
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_FROM_BF16, [_f32(back), _u16(bits)], [2], no_floats)
         require(back[0] == 1.0 and back[1] == -2.5, "from_bf16")
         _ = x
     elif unit == 4:
@@ -155,9 +172,9 @@ def case(unit: Int) raises:
         var codes: List[Int8] = [0, 0, 0, 0]
         var exponents: List[Int32] = [0]
         var back: List[Float32] = [0.0, 0.0, 0.0, 0.0]
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_QUANTIZE_INT8,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_QUANTIZE_INT8,
             [_i8(codes), _i32(exponents), _f32(x)], [1, 4], no_floats)
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_DEQUANTIZE_INT8,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_DEQUANTIZE_INT8,
             [_f32(back), _i8(codes), _i32(exponents)], [1, 4], no_floats)
         for i in range(4):  # small-loop(four fixture values)
             require(back[i] == x[i], "int8 round trip at " + String(i))
@@ -172,11 +189,11 @@ def case(unit: Int) raises:
         var blo: List[Int8] = [0, 0]
         var bex: List[Int32] = [0]
         var c: List[Float32] = [0.0]
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_QUANTIZE_INT15,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_QUANTIZE_INT15,
             [_i8(ahi), _i8(alo), _i32(aex), _f32(a)], [1, 2], no_floats)
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_QUANTIZE_INT15,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_QUANTIZE_INT15,
             [_i8(bhi), _i8(blo), _i32(bex), _f32(b)], [1, 2], no_floats)
-        _ = causal_entry_call[CAUSAL_TABLE_LINALG](k, CAUSAL_LIN_GEMM_INT15,
+        _ = causal_entry_call(causal_ref[CAUSAL_TABLE_LINALG](k), CAUSAL_LIN_GEMM_INT15,
             [_f32(c), _i8(ahi), _i8(alo), _i32(aex), _i8(bhi), _i8(blo), _i32(bex)], [1, 1, 2], no_floats)
         require(c[0] == 11.0, "int15 gemm")
         _ = a
@@ -185,7 +202,7 @@ def case(unit: Int) raises:
         # block op 33 reaches the CPU image's Transformer dispatch
         var none = List[Int]()
         try:
-            _ = causal_entry_call[CAUSAL_TABLE_BLOCK](k, CAUSAL_BLOCK_HOST_FORWARD, none, none, no_floats)
+            _ = causal_entry_call(causal_ref[CAUSAL_TABLE_BLOCK](k), CAUSAL_BLOCK_HOST_FORWARD, none, none, no_floats)
             raise Error("block forward accepted an empty descriptor")
         except problem:
             _refuses(problem, "CPU Transformer inference: invalid descriptor arity")
@@ -193,7 +210,7 @@ def case(unit: Int) raises:
         # block op 34 (fixed15_v1) requires both option tails
         var none = List[Int]()
         try:
-            _ = causal_entry_call[CAUSAL_TABLE_BLOCK](k, CAUSAL_BLOCK_HOST_FORWARD_INT15, none, none, no_floats)
+            _ = causal_entry_call(causal_ref[CAUSAL_TABLE_BLOCK](k), CAUSAL_BLOCK_HOST_FORWARD_INT15, none, none, no_floats)
             raise Error("fixed15 block forward accepted an empty descriptor")
         except problem:
             _refuses(problem, "CPU Transformer inference: invalid descriptor arity")
@@ -201,7 +218,7 @@ def case(unit: Int) raises:
         # Mamba state op 3 reaches the CPU image's Mamba dispatch
         var none = List[Int]()
         try:
-            _ = causal_entry_call[CAUSAL_TABLE_MAMBA](k, CAUSAL_MAMBA2_DECODE, none, none, no_floats)
+            _ = causal_entry_call(causal_ref[CAUSAL_TABLE_MAMBA](k), CAUSAL_MAMBA2_DECODE, none, none, no_floats)
             raise Error("Mamba-2 decode accepted an empty descriptor")
         except problem:
             _refuses(problem, "CPU Mamba state: invalid descriptor arity")
@@ -223,14 +240,14 @@ def sessions_table_contract() raises:
         _refuses(problem, "no session handle")
     var none = List[Int]()
     try:
-        _ = causal_sessions_call(CAUSAL_SESSIONS_TRANSFORMER, CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
+        _ = causal_sessions_call(causal_sessions_ref(CAUSAL_SESSIONS_TRANSFORMER, CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)),
             CAUSAL_SESSION_LM_CREATE, none, none, List[Float64]())
         raise Error("a CPU session key was admitted")
     except problem:
         _refuses(problem, "GPU images only")
     comptime if TARGET_COLUMN == COLUMN_CPU:
         try:
-            _ = causal_sessions_call(CAUSAL_SESSIONS_MAMBA, CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 2),
+            _ = causal_sessions_call(causal_sessions_ref(CAUSAL_SESSIONS_MAMBA, CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 2)),
                 CAUSAL_SESSION_PROGRAM_READ, none, none, List[Float64]())
             raise Error("an unpublished session table was admitted")
         except problem:

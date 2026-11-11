@@ -13,9 +13,10 @@ fitted state.
 """
 from std.math import floor
 from core.xseq_entry_table import (
-    XseqEntryKey, XS_PROPHET_DAYS, XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT,
+    XS_PROPHET_DAYS, XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT,
     XS_PROPHET_PREDICT_DAYS,
 )
+from core.entry_table import EntryRef
 from sequence.xseq_door_run import xseq_run_glue
 
 comptime _P = "ProphetForecaster: "
@@ -74,13 +75,13 @@ struct ProphetPredictRequest(Copyable, Movable):
 
 # ---------------------------------------------------------------- days and features
 
-def prophet_run_days(key: XseqEntryKey, src: Int, days: Int, info: Int, n: Int, datetime: Bool) raises:
+def prophet_run_days(entry: EntryRef, src: Int, days: Int, info: Int, n: Int, datetime: Bool) raises:
     """`_days(t)`: days float64 (n,) and info [status, span, least spacing]
     from float64 values or datetime64 nanoseconds. The boundary skips the
     call for an empty `t`."""
     var addresses: List[Int] = [src, days, info]
     var words: List[Int] = [n, 1 if datetime else 0]
-    _ = xseq_run_glue(key, XS_PROPHET_DAYS, addresses, words, List[Float64]())
+    _ = xseq_run_glue(entry, XS_PROPHET_DAYS, addresses, words, List[Float64]())
 
 
 def prophet_run_check_days(status: Int) raises:
@@ -91,14 +92,14 @@ def prophet_run_check_days(status: Int) raises:
         raise Error("ValueError: " + _P + "t must be sorted ascending")
 
 
-def prophet_run_features(key: XseqEntryKey, days: Int, periods: Int, t_scaled: Int, phases: Int, n: Int,
+def prophet_run_features(entry: EntryRef, days: Int, periods: Int, t_scaled: Int, phases: Int, n: Int,
                          n_seasons: Int, start: Float64, t_scale: Float64) raises:
     """`_features(days)`: scaled times float32 (n,) and seasonal phases
     float32 (n, max(n_seasons, 1))."""
     var addresses: List[Int] = [days, periods, t_scaled, phases]
     var words: List[Int] = [n, n_seasons]
     var floats: List[Float64] = [start, t_scale]
-    _ = xseq_run_glue(key, XS_PROPHET_FEATURES, addresses, words, floats)
+    _ = xseq_run_glue(entry, XS_PROPHET_FEATURES, addresses, words, floats)
 
 
 def prophet_run_auto_period(name: String) -> Float64:
@@ -144,7 +145,7 @@ def prophet_run_changepoint_count(n_user: Int, n_cp: Int) -> Int:
     return max(n_user, max(n_cp, 1))
 
 
-def prophet_run_changepoints(key: XseqEntryKey, days: Int, user: Int, changepoints: Int, n: Int, n_user: Int,
+def prophet_run_changepoints(entry: EntryRef, days: Int, user: Int, changepoints: Int, n: Int, n_user: Int,
                              hist: Int, n_cp: Int, start: Float64, t_scale: Float64) raises -> Int:
     """The changepoint plan (scaled float32 times); `n_user` -1 when the
     model has no user changepoints. The answer is their count, negative when
@@ -153,7 +154,7 @@ def prophet_run_changepoints(key: XseqEntryKey, days: Int, user: Int, changepoin
     var addresses: List[Int] = [days, user, changepoints]
     var words: List[Int] = [n, n_user, hist, n_cp]
     var floats: List[Float64] = [start, t_scale]
-    return xseq_run_glue(key, XS_PROPHET_CHANGEPOINTS, addresses, words, floats)
+    return xseq_run_glue(entry, XS_PROPHET_CHANGEPOINTS, addresses, words, floats)
 
 
 def prophet_run_check_changepoints(count: Int) raises:
@@ -167,14 +168,14 @@ def prophet_run_parameter_count(n_changepoints: Int, k: Int) -> Int:
     return 3 + n_changepoints + k
 
 
-def prophet_run_fit(key: XseqEntryKey, request: ProphetFitRequest) raises:
+def prophet_run_fit(entry: EntryRef, request: ProphetFitRequest) raises:
     """The MAP fit of every series (`XS_PROPHET_FIT`)."""
     var addresses: List[Int] = [request.y, request.t_scaled, request.phases, request.orders, request.holidays,
                                 request.changepoints, request.priors, request.params, request.info]
     var words: List[Int] = [request.batch, request.n, request.n_seasons, request.nh, request.k, request.s,
                             1 if request.multiplicative else 0, request.max_iter]
     var floats: List[Float64] = [request.changepoint_prior_scale]
-    _ = xseq_run_glue(key, XS_PROPHET_FIT, addresses, words, floats)
+    _ = xseq_run_glue(entry, XS_PROPHET_FIT, addresses, words, floats)
 
 
 # ---------------------------------------------------------------- predict
@@ -223,7 +224,7 @@ def prophet_run_check_holiday_columns(nh: Int, columns: Int) raises:
         raise Error("ValueError: ProphetForecaster holiday column count differs from fit")
 
 
-def prophet_run_predict(key: XseqEntryKey, request: ProphetPredictRequest) raises:
+def prophet_run_predict(entry: EntryRef, request: ProphetPredictRequest) raises:
     """The forecast and trend of every series: `XS_PROPHET_PREDICT_DAYS`
     (features built on the executor) when fused, `XS_PROPHET_PREDICT` from
     the feature call's buffers otherwise."""
@@ -234,8 +235,8 @@ def prophet_run_predict(key: XseqEntryKey, request: ProphetPredictRequest) raise
                                           request.orders, request.holidays, request.changepoints, request.yhat,
                                           request.trend]
         var floats: List[Float64] = [request.start, request.t_scale]
-        _ = xseq_run_glue(key, XS_PROPHET_PREDICT_DAYS, fused_addresses, words, floats)
+        _ = xseq_run_glue(entry, XS_PROPHET_PREDICT_DAYS, fused_addresses, words, floats)
     else:
         var addresses: List[Int] = [request.params, request.info, request.t_scaled, request.phases, request.orders,
                                     request.holidays, request.changepoints, request.yhat, request.trend]
-        _ = xseq_run_glue(key, XS_PROPHET_PREDICT, addresses, words, List[Float64]())
+        _ = xseq_run_glue(entry, XS_PROPHET_PREDICT, addresses, words, List[Float64]())

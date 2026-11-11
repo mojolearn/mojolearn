@@ -14,14 +14,15 @@ native host worker pool; on a device column they run one after another,
 because every case launches on the process's one device context.
 Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.trees_entry_table import TreesEntryKey, trees_table_entry, TREES_TABLE_X_TREES
-from xtrees.glue_abi import XT_OP_COUNT
+from xtrees.glue_abi import XT_GLUE_ABI, XT_OP_COUNT
 from xtrees.glue_runs import publish_x_trees_glue
 from xtrees.glue_calls import (
-    xt_glue, xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
+    xt_ref, xt_glue, xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
     xt_bag_rows, xt_binary_proba, xt_class_counts, xt_class_priors, xt_complement_pairs, xt_count_equal,
     xt_count_rows, xt_dart_rescale, xt_dart_thresholds, xt_device_folds, xt_exact_sum, xt_fill_class_major_f64,
     xt_gather_f32, xt_gather_i32, xt_indicator_codes, xt_iota_i32, xt_isotonic_fit, xt_isotonic_predict_strided,
@@ -71,7 +72,7 @@ def _refuses(problem: Error, text: String) raises:
 def precondition_unpublished() raises:
     var out: List[Int32] = [0]
     try:
-        _ = xt_iota_i32(_key(), _i32(out), 1)
+        _ = xt_iota_i32(xt_ref(_key()), _i32(out), 1)
     except problem:
         _refuses(problem, "provider is not published")
         _ = out
@@ -79,10 +80,26 @@ def precondition_unpublished() raises:
     raise Error("an unpublished trees table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = xt_ref(_key())
+    var second = xt_ref(_key())
+    require(entry_ref_same(first, second), "trees glue: a second resolution returned another entry")
+    try:
+        _ = trees_table_entry[TREES_TABLE_X_TREES](_key(), 0, String(XT_GLUE_ABI), XT_OP_COUNT + 1)
+        raise Error("trees glue: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "trees glue: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var out: List[Int32] = [0]
     try:
-        _ = xt_iota_i32(TreesEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0), _i32(out), 1)
+        _ = xt_iota_i32(xt_ref(TreesEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)), _i32(out), 1)
         raise Error("a mismatched tier key did not refuse")
     except problem:
         require("did not refuse" not in String(problem), String(problem))
@@ -93,7 +110,7 @@ def preconditions_published() raises:
         _refuses(problem, "ABI schema differs")
     try:
         var none = List[Int]()
-        _ = xt_glue(_key(), XT_OP_COUNT, none, none, List[Float64]())
+        _ = xt_glue(xt_ref(_key()), XT_OP_COUNT, none, none, List[Float64]())
         raise Error("an unknown operation did not refuse")
     except problem:
         _refuses(problem, "unknown operation")
@@ -101,7 +118,7 @@ def preconditions_published() raises:
 
 
 def case(unit: Int) raises:
-    var k = _key()
+    var k = xt_ref(_key())
     if unit == 0:
         var out: List[Int32] = [9, 9, 9, 9]
         require(xt_iota_i32(k, _i32(out), 4) == 4 and out[0] == 0 and out[3] == 3, "iota_i32")

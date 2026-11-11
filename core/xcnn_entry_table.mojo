@@ -31,9 +31,8 @@ operation appends a code and bumps nothing; changing a layout needs a new V
 suffix. Publication and lookup are small metadata operations with no
 independent numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 
 comptime XC_ENTRY_ABI = "mojolearn.cnn.x_cnn.entry.v1"
 
@@ -295,11 +294,16 @@ def xcnn_table_entry(key: XcnnEntryKey, index: Int, schema: String, operations: 
     raise Error("native x_cnn entries: unsupported execution key")
 
 
-def xcnn_entry_call(key: XcnnEntryKey, op: Int, addrs: List[Int], ints: List[Int],
+def xcnn_entry_ref(key: XcnnEntryKey) raises -> EntryRef:
+    """The x_cnn entry of the image the key names, resolved once (lane
+    entry-table-zero-alloc); the table refusals raise here."""
+    return EntryRef(xcnn_table_entry(key, 0, String(XC_ENTRY_ABI), XC_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, XC_OP_COUNT))
+
+
+def xcnn_entry_call(entry: EntryRef, op: Int, addrs: List[Int], ints: List[Int],
                     floats: List[Float64]) raises -> Int:
-    """One x_cnn operation in the image the key names: the published entry
-    read once (an acquire load and a schema compare), then the call. The
+    """One x_cnn operation through the resolved entry: one indirect call. The
     caller keeps every addressed buffer alive and releases the GIL when it
     holds one."""
-    var entry = xcnn_table_entry(key, 0, String(XC_ENTRY_ABI), XC_OP_COUNT)
-    return native_descriptor_call(entry, op, addrs, ints, floats)
+    return entry_ref_call(entry, op, addrs, ints, floats)

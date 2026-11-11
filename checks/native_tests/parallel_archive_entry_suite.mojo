@@ -18,14 +18,15 @@ Run in a fresh process (the first check needs unpublished tables).
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.archive_entry_table import (
-    ARCHIVE_TABLE_IVF, ARCHIVE_TABLE_X_ANN, archive_check_spans, archive_export_family, archive_resident_export,
+    ARCHIVE_TABLE_IVF, ARCHIVE_TABLE_X_ANN, archive_check_spans, archive_export_family, archive_ref, archive_resident_export,
     archive_table_publish,
 )
+from core.entry_table import EntryRef, entry_ref_same
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_report
 from core.parallel_entry_table import (
-    PARALLEL_TABLE_BASE, PB_TOPK_MERGE_F32, ParallelEntryKey, parallel_fold_pair_f32, parallel_ivf_finalize,
+    PARALLEL_TABLE_BASE, PARALLEL_TABLE_IVF, PB_OPERATION_COUNT, PB_TOPK_MERGE_F32, ParallelEntryKey, parallel_ref, parallel_fold_pair_f32, parallel_ivf_finalize,
     parallel_ivf_merge_shards, parallel_ivf_shard_plan, parallel_rebase_offsets_i32, parallel_table_entry,
     parallel_topk_merge_f32,
 )
@@ -43,6 +44,14 @@ def require(ok: Bool, message: String) raises:
 
 def _key() -> ParallelEntryKey:
     return ParallelEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)
+
+
+def _base(key: ParallelEntryKey) raises -> EntryRef:
+    return parallel_ref(PARALLEL_TABLE_BASE, key)
+
+
+def _ivf(key: ParallelEntryKey) raises -> EntryRef:
+    return parallel_ref(PARALLEL_TABLE_IVF, key)
 
 
 def _refuses(problem: Error, text: String) raises:
@@ -70,17 +79,17 @@ def precondition_unpublished() raises:
     var dst: List[Float32] = [1.0]
     var src: List[Float32] = [1.0]
     try:
-        _ = parallel_fold_pair_f32(_key(), Int(dst.unsafe_ptr()), Int(src.unsafe_ptr()), 1)
+        _ = parallel_fold_pair_f32(_base(_key()), Int(dst.unsafe_ptr()), Int(src.unsafe_ptr()), 1)
         raise Error("an unpublished parallel base table did not refuse")
     except problem:
         _refuses(problem, "provider is not published")
     try:
-        _ = parallel_ivf_finalize(_key(), Int(dst.unsafe_ptr()), 1, 1)
+        _ = parallel_ivf_finalize(_ivf(_key()), Int(dst.unsafe_ptr()), 1, 1)
         raise Error("an unpublished parallel IVF table did not refuse")
     except problem:
         _refuses(problem, "provider is not published")
     try:
-        _ = archive_resident_export(ARCHIVE_TABLE_IVF, _key(), 1, Int(dst.unsafe_ptr()), 1)
+        _ = archive_resident_export(archive_ref(ARCHIVE_TABLE_IVF, _key()), 1, Int(dst.unsafe_ptr()), 1)
         raise Error("an unpublished archive table did not refuse")
     except problem:
         _refuses(problem, "provider is not published")
@@ -88,11 +97,26 @@ def precondition_unpublished() raises:
     _ = src
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: each table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a mismatched key refuses at resolution, never at a call."""
+    require(entry_ref_same(_base(_key()), _base(_key())), "parallel base: a second resolution returned another entry")
+    require(entry_ref_same(_ivf(_key()), _ivf(_key())), "parallel ivf: a second resolution returned another entry")
+    require(not entry_ref_same(_base(_key()), _ivf(_key())), "parallel: base and ivf refs are the same entry")
+    try:
+        _ = _base(ParallelEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0))
+        raise Error("parallel: a mismatched key did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var dst: List[Float32] = [1.0]
     var src: List[Float32] = [1.0]
     try:
-        _ = parallel_fold_pair_f32(ParallelEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0), Int(dst.unsafe_ptr()),
+        _ = parallel_fold_pair_f32(_base(ParallelEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)), Int(dst.unsafe_ptr()),
                                    Int(src.unsafe_ptr()), 1)
         raise Error("a mismatched tier key did not refuse")
     except problem:
@@ -116,7 +140,7 @@ def preconditions_published() raises:
 def case_fold_pair() raises:
     var dst: List[Float32] = [1.0, 2.0, -0.5]
     var src: List[Float32] = [0.5, -2.0, 0.25]
-    _ = parallel_fold_pair_f32(_key(), Int(dst.unsafe_ptr()), Int(src.unsafe_ptr()), 3)
+    _ = parallel_fold_pair_f32(_base(_key()), Int(dst.unsafe_ptr()), Int(src.unsafe_ptr()), 3)
     require(dst[0] == 1.5 and dst[1] == 0.0 and dst[2] == -0.25, "fold_pair_f32 values")
     _ = src
 
@@ -125,11 +149,11 @@ def case_rebase_offsets() raises:
     var raw: List[Int32] = [0, 2, 5, 0, 3]
     var lens: List[Int64] = [3, 2]
     var out: List[Int32] = [-1, -1, -1, -1]
-    _ = parallel_rebase_offsets_i32(_key(), Int(raw.unsafe_ptr()), 5, Int(lens.unsafe_ptr()), 2, 4,
+    _ = parallel_rebase_offsets_i32(_base(_key()), Int(raw.unsafe_ptr()), 5, Int(lens.unsafe_ptr()), 2, 4,
                                     Int(out.unsafe_ptr()))
     require(out[0] == 0 and out[1] == 2 and out[2] == 5 and out[3] == 8, "rebased offsets")
     try:
-        _ = parallel_rebase_offsets_i32(_key(), Int(raw.unsafe_ptr()), 5, Int(lens.unsafe_ptr()), 2, 3,
+        _ = parallel_rebase_offsets_i32(_base(_key()), Int(raw.unsafe_ptr()), 5, Int(lens.unsafe_ptr()), 2, 3,
                                         Int(out.unsafe_ptr()))
         raise Error("disagreeing sizes did not refuse")
     except problem:
@@ -148,7 +172,7 @@ def case_topk_merge() raises:
                               Int64(Int(d1.unsafe_ptr())), Int64(Int(i1.unsafe_ptr())), 2, 4, 2]
     var od: List[UInt32] = [0, 0]
     var oi: List[UInt32] = [9, 9]
-    var rc = parallel_topk_merge_f32(_key(), Int(table.unsafe_ptr()), 2, 1, 2, Int(od.unsafe_ptr()),
+    var rc = parallel_topk_merge_f32(_base(_key()), Int(table.unsafe_ptr()), 2, 1, 2, Int(od.unsafe_ptr()),
                                      Int(oi.unsafe_ptr()))
     require(rc == 0, "top-k merge status " + String(rc))
     require(bitcast[DType.float32](od[0]) == 0.1 and bitcast[DType.float32](od[1]) == 0.3, "top-k distances")
@@ -166,7 +190,7 @@ def case_ivf_shard_plan() raises:
     var soff = List[Int32](length=6, fill=-1)
     var loc = List[Int32](length=4, fill=-1)
     var mp = List[Int32](length=4, fill=-1)
-    var status = parallel_ivf_shard_plan(_key(), Int(ind.unsafe_ptr()), Int(offs.unsafe_ptr()),
+    var status = parallel_ivf_shard_plan(_ivf(_key()), Int(ind.unsafe_ptr()), Int(offs.unsafe_ptr()),
                                          Int(soff.unsafe_ptr()), Int(loc.unsafe_ptr()), Int(mp.unsafe_ptr()), 4, 2, 2)
     require(status == 0, "shard plan status " + String(status))
     require(soff[0] == 0 and soff[1] == 2 and soff[2] == 2 and soff[3] == 0 and soff[4] == 0 and soff[5] == 2,
@@ -174,7 +198,7 @@ def case_ivf_shard_plan() raises:
     require(loc[0] == 1 and loc[1] == 0 and loc[2] == 1 and loc[3] == 0, "local ids")
     require(mp[0] == 0 and mp[1] == 2 and mp[2] == 1 and mp[3] == 3, "shard id maps")
     var dup: List[Int32] = [0, 0, 3, 1]
-    require(parallel_ivf_shard_plan(_key(), Int(dup.unsafe_ptr()), Int(offs.unsafe_ptr()), Int(soff.unsafe_ptr()),
+    require(parallel_ivf_shard_plan(_ivf(_key()), Int(dup.unsafe_ptr()), Int(offs.unsafe_ptr()), Int(soff.unsafe_ptr()),
                                     Int(loc.unsafe_ptr()), Int(mp.unsafe_ptr()), 4, 2, 2) == 1,
             "a repeated id is not a permutation")
     _ = ind
@@ -193,7 +217,7 @@ def case_ivf_merge() raises:
     var addrs: List[Int] = [Int(od.unsafe_ptr()), Int(oi.unsafe_ptr()), Int(oc.unsafe_ptr()),
                             Int(sd.unsafe_ptr()), Int(si.unsafe_ptr()), Int(sc.unsafe_ptr()), Int(sm.unsafe_ptr())]
     var ints: List[Int] = [1, 1, 2, 2]
-    var status = parallel_ivf_merge_shards(_key(), addrs, ints)
+    var status = parallel_ivf_merge_shards(_ivf(_key()), addrs, ints)
     require(status == 0, "ivf merge status " + String(status))
     require(od[0] == 0.2 and od[1] == 0.4 and oi[0] == 5 and oi[1] == 7 and oc[0] == 2, "ivf merged row")
     _ = sd
@@ -206,11 +230,11 @@ def case_ivf_finalize() raises:
     var values: List[Float32] = [4.0, 9.0, 0.25]
     var expected: List[Float32] = [4.0, 9.0, 0.25]
     ivf_finalize_distances_host(Int(expected.unsafe_ptr()), 3, 1)
-    _ = parallel_ivf_finalize(_key(), Int(values.unsafe_ptr()), 3, 1)
+    _ = parallel_ivf_finalize(_ivf(_key()), Int(values.unsafe_ptr()), 3, 1)
     for i in range(3):  # small-loop(three words)
         require(values[i] == expected[i], "finalized distance " + String(i))
     try:
-        _ = parallel_ivf_finalize(_key(), Int(values.unsafe_ptr()), -1, 1)
+        _ = parallel_ivf_finalize(_ivf(_key()), Int(values.unsafe_ptr()), -1, 1)
         raise Error("a negative count did not refuse")
     except problem:
         _refuses(problem, "nonnegative")
@@ -218,14 +242,14 @@ def case_ivf_finalize() raises:
 
 def case_archive_export() raises:
     var out: List[Int32] = [0, 0, 0]
-    _ = archive_resident_export(ARCHIVE_TABLE_IVF, _key(), 42, Int(out.unsafe_ptr()), 3)
+    _ = archive_resident_export(archive_ref(ARCHIVE_TABLE_IVF, _key()), 42, Int(out.unsafe_ptr()), 3)
     require(out[0] == 42 and out[1] == 42 and out[2] == 42, "archive export words")
 
 
 def case_archive_unpublished_family() raises:
     var out: List[Int32] = [0]
     try:
-        _ = archive_resident_export(ARCHIVE_TABLE_X_ANN, _key(), 1, Int(out.unsafe_ptr()), 1)
+        _ = archive_resident_export(archive_ref(ARCHIVE_TABLE_X_ANN, _key()), 1, Int(out.unsafe_ptr()), 1)
         raise Error("an unpublished archive family did not refuse")
     except problem:
         _refuses(problem, "provider is not published")

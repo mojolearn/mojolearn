@@ -15,6 +15,7 @@ participates.
 The cases are independent units and run across the native host worker pool.
 Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
@@ -22,7 +23,7 @@ from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_entry, BYTE_L
 from sequence.exec import HostExec
 from sequence.ops import OPT_RMSPROP
 from sequence.opt_entry_abi import (
-    seq_opt_call, SEQ_OPT_ABI, SO_OP_COUNT, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE,
+    seq_opt_ref, seq_opt_call, SEQ_OPT_ABI, SO_OP_COUNT, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE,
     SO_EXPORT, SO_IMPORT, SO_CLOSE,
 )
 from sequence.opt_entry_host import publish_seq_opt_host_entries
@@ -136,7 +137,7 @@ def _ready(mut t: Twin) raises:
 def precondition_unpublished() raises:
     var t = Twin()
     try:
-        _ = seq_opt_call(_key(), SO_INIT, List[Int](), _with([t.w()], t.init_ip()), List[Float64]())
+        _ = seq_opt_call(seq_opt_ref(_key()), SO_INIT, List[Int](), _with([t.w()], t.init_ip()), List[Float64]())
     except problem:
         _refuses(problem, "provider is not published")
         _ = t^
@@ -144,10 +145,26 @@ def precondition_unpublished() raises:
     raise Error("an unpublished sequence optimizer table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = seq_opt_ref(_key())
+    var second = seq_opt_ref(_key())
+    require(entry_ref_same(first, second), "sequence optimizer: a second resolution returned another entry")
+    try:
+        _ = byte_lm_table_entry[BYTE_LM_TABLE_SEQ_OPT](_key(), 0, String(SEQ_OPT_ABI), SO_OP_COUNT + 1)
+        raise Error("sequence optimizer: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "sequence optimizer: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var t = Twin()
     try:
-        _ = seq_opt_call(ByteLmEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0), SO_INIT, List[Int](),
+        _ = seq_opt_call(seq_opt_ref(ByteLmEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)), SO_INIT, List[Int](),
                          _with([t.w()], t.init_ip()), List[Float64]())
         raise Error("a mismatched tier key did not refuse")
     except problem:
@@ -158,7 +175,7 @@ def preconditions_published() raises:
     except problem:
         _refuses(problem, "ABI schema differs")
     try:
-        _ = seq_opt_call(_key(), SO_OP_COUNT, List[Int](), [t.w()], List[Float64]())
+        _ = seq_opt_call(seq_opt_ref(_key()), SO_OP_COUNT, List[Int](), [t.w()], List[Float64]())
         raise Error("an unknown operation did not refuse")
     except problem:
         _refuses(problem, "unknown operation")
@@ -166,7 +183,7 @@ def preconditions_published() raises:
 
 
 def case(unit: Int) raises:
-    var k = _key()
+    var k = seq_opt_ref(_key())
     var ex = HostExec()
     var a = Twin()
     var b = Twin()

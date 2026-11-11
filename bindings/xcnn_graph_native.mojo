@@ -34,7 +34,7 @@ from bindings.xcnn_conv_native import _snapshot, _dimension, _relu_backward, xcn
 from core.cast_in import cast_in_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.xcnn_common import (
-    xcnn_builtins, xcnn_entries, xcnn_key, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
+    xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_slice_f32, xcnn_device_io_off,
     xcnn_dev_fields, xcnn_reshape_t,
@@ -169,7 +169,7 @@ def _csr(entries: PythonObject, rows: PythonObject, cols: PythonObject, n: Int, 
     var a_cols = xcnn_ptr(cols)
     var a_csr = xcnn_ptr(csr)
     var a_order = xcnn_ptr(order)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_csr_build(key, a_rows, a_cols, a_csr, a_order, n, nnz)
@@ -213,7 +213,7 @@ def _gather(entries: PythonObject, values: PythonObject, order: PythonObject, co
     var a_order = xcnn_ptr(order)
     var a_out = xcnn_ptr(out)
     var size = xcnn_size(xcnn_shape(values))
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_gather(key, a_values, a_order, a_out, size, n)
@@ -230,7 +230,7 @@ def _vals_t(entries: PythonObject, g: PythonObject, vals_f: PythonObject, contex
     var a_order_f = xcnn_ptr(g["order_f"])
     var a_order_t = xcnn_ptr(g["order_t"])
     var a_out = xcnn_ptr(out)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_vals_t(key, a_vals, a_order_f, a_order_t, a_out, nnz)
@@ -252,7 +252,7 @@ def _gemm(entries: PythonObject, a: PythonObject, b2: PythonObject, m: Int, n: I
     var a_a = xcnn_ptr(fa)
     var a_b = xcnn_ptr(fb)
     var a_out = xcnn_ptr(out)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_gemm(key, a_a, a_b, a_out, m, n, k, op)
@@ -275,7 +275,7 @@ def _spmm(entries: PythonObject, g: PythonObject, vals: PythonObject, h: PythonO
     var n = Int(py=g["n"])
     var cols = Int(py=hh.shape[1])
     var nnz = Int(py=g["nnz"])
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_spmm(key, a_v, a_h, a_out, a_csr, n, cols, nnz, mode)
@@ -295,7 +295,7 @@ def _add(entries: PythonObject, a: PythonObject, b2: PythonObject, context: Pyth
     var a_b = xcnn_ptr(fb)
     var a_out = xcnn_ptr(out)
     var count = Int(py=fa.size)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_add(key, a_a, a_b, a_out, count)
@@ -331,7 +331,7 @@ def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) r
     var a_out = xcnn_ptr(out)
     var d = Int(py=fields["in_features"])
     var f = Int(py=fields["out_features"])
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_linear_forward(key, a_x, a_w, a_b, a_out, rows, d, f)
@@ -353,7 +353,7 @@ def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) ra
     var a_x = xcnn_ptr(fx)
     var a_out = xcnn_ptr(out)
     var count = Int(py=fx.size)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_relu_forward(key, a_x, a_out, count)
@@ -371,7 +371,7 @@ def _adopt(dev: PythonObject, entries: PythonObject, name: String, h: Int, n: In
     var cur = py_call(table.pop, name, PythonObject(None))
     if cur is not None:
         var old = xcnn_word(cur[0])
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var py = Python()
         with GILReleased(py):
             graph_run_res_free(key, old)
@@ -381,7 +381,7 @@ def _adopt(dev: PythonObject, entries: PythonObject, name: String, h: Int, n: In
 def _csr_upload(entries: PythonObject, csr: PythonObject, n: Int, nnz: Int) raises -> Int:
     """One CSR view to a resident buffer (RUN `graph_run_csr_upload`)."""
     var a_csr = xcnn_ptr(csr)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var h = 0
     var py = Python()
     with GILReleased(py):
@@ -426,7 +426,7 @@ def _download(entries: PythonObject, h: PythonObject, out_buf: PythonObject) rai
     var word = xcnn_word(h)
     var a_out = xcnn_ptr(out_buf)
     var count = Int(py=out_buf.size)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_download(key, word, a_out, count)
@@ -436,7 +436,7 @@ def _download(entries: PythonObject, h: PythonObject, out_buf: PythonObject) rai
 # word first, then one RUN call with the GIL released (as `xcnn_call` did).
 
 def _gemm_m(entries: PythonObject, a: Int, b: Int, dst: Int, flags: Int, m: Int, n: Int, k: Int, op: Int) raises:
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_gemm_m(key, a, b, dst, flags, m, n, k, op)
@@ -444,21 +444,21 @@ def _gemm_m(entries: PythonObject, a: Int, b: Int, dst: Int, flags: Int, m: Int,
 
 def _spmm_m(entries: PythonObject, vals: Int, h: Int, csr: Int, dst: Int, flags: Int, n: Int, cols: Int, nnz: Int,
             mode: Int) raises:
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_spmm_m(key, vals, h, csr, dst, flags, n, cols, nnz, mode)
 
 
 def _bias_m(entries: PythonObject, a: Int, bias: Int, dst: Int, flags: Int, count: Int, cols: Int) raises:
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_bias_m(key, a, bias, dst, flags, count, cols)
 
 
 def _add_m(entries: PythonObject, a: Int, b: Int, dst: Int, flags: Int, count: Int) raises:
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_add_m(key, a, b, dst, flags, count)
@@ -466,7 +466,7 @@ def _add_m(entries: PythonObject, a: Int, b: Int, dst: Int, flags: Int, count: I
 
 def _graph_op_m(entries: PythonObject, a: Int, b: Int, aux: Int, dst: Int, csr: Int, flags: Int, n: Int, cols: Int,
                 nnz: Int, kind: Int) raises:
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_graph_op_m(key, a, b, aux, dst, csr, flags, n, cols, nnz, kind)
@@ -474,7 +474,7 @@ def _graph_op_m(entries: PythonObject, a: Int, b: Int, aux: Int, dst: Int, csr: 
 
 def _graph_op(entries: PythonObject, a: Int, b: Int, aux: Int, dst: Int, csr: Int, n: Int, cols: Int, nnz: Int,
               kind: Int) raises:
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_graph_op(key, a, b, aux, dst, csr, n, cols, nnz, kind)
@@ -512,7 +512,7 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
         var a_dso = xcnn_ptr(dso)
         var a_wo = xcnn_ptr(wo)
         var improved = Bool(py=fields["improved"])
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var k = 0
         var py = Python()
         with GILReleased(py):
@@ -536,7 +536,7 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
         var a_wf = xcnn_ptr(wf)
         var a_vals = xcnn_ptr(vals)
         var a_csr = xcnn_ptr(g["csr_f"])
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var py = Python()
         with GILReleased(py):
             graph_run_gcn_norm(key, a_wf, a_vals, a_csr, n, nnz, graph_route)
@@ -697,7 +697,7 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     var a_w = xcnn_ptr(lin_values[0])
     var a_b = xcnn_ptr(lin_values[1])
     var a_ol = xcnn_word(olh)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_linear_forward_m(key, a_agg, a_w, a_b, a_ol, 0b1001, n, d_in, f_out)
@@ -886,7 +886,7 @@ def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonO
     var a_dw = xcnn_ptr(dw)
     var a_db = xcnn_ptr(db)
     var rows = shape[0]
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_linear_backward(key, a_x, a_w, a_g, a_dx, a_dw, a_db, rows, d, f)
@@ -1037,7 +1037,7 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         xcnn_word(b_addr), xcnn_word(gb_addr), xcnn_word(ones_addr),
     ]
     var nnz = Int(py=graph["nnz"])
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_gcn_backward(key, addrs, n, d, f, nnz, bias, gt, ones_dev, False)
@@ -1108,7 +1108,7 @@ def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObj
         xcnn_word(ones_addr),
     ]
     var nnz = Int(py=graph["nnz"])
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_gcn_backward(key, addrs, n, d, f, nnz, bias, False, 0, True)
@@ -1204,7 +1204,7 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
         xcnn_word(gpre), xcnn_word(denh),
     ]
     var nnz = Int(py=graph["nnz"])
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_sage_backward(key, addrs, n, d, f, nnz, kind, norm, root, gt, False, False)
@@ -1376,7 +1376,7 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
         xcnn_word(s_addr), xcnn_word(prep), xcnn_word(wp), xcnn_word(bp), xcnn_word(dwp_addr), xcnn_word(dbp_addr),
         xcnn_word(dsp), xcnn_word(dpre), xcnn_word(nograph), xcnn_word(dxp),
     ]
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var py = Python()
     with GILReleased(py):
         graph_run_sage_backward(key, addrs, n, d, f, nnz, kind, norm, root, False, True, project)

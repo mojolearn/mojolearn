@@ -15,8 +15,9 @@ door released it before the split.
 """
 from std.math import sqrt
 from std.memory import unsafe_memcpy
+from core.entry_table import EntryRef
 from core.xcnn_entry_table import (
-    XcnnEntryKey, XC_CSR_BUILD, XC_PERM_GATHER, XC_VALS_T, XC_GEMM, XC_SPMM, XC_ADD, XC_LINEAR_FORWARD,
+    XC_CSR_BUILD, XC_PERM_GATHER, XC_VALS_T, XC_GEMM, XC_SPMM, XC_ADD, XC_LINEAR_FORWARD,
     XC_RELU_FORWARD, XC_RES_FREE, XC_CSR_UPLOAD, XC_RES_DOWNLOAD, XC_GCN_LOOPS, XC_GCN_NORM, XC_GCN_NORM_M,
     XC_GEMM_M, XC_SPMM_M, XC_MAP2_M, XC_GRAPH_OP, XC_GRAPH_OP_M, XC_LINEAR_FORWARD_M, XC_LINEAR_BACKWARD,
     XC_GCN_BACKWARD_T, XC_SAGE_BACKWARD_T,
@@ -185,127 +186,127 @@ def graph_run_bias_rows(bias: Int, dst: Int, rows: Int, cols: Int):
 
 # ---------------------------------------------------------------- native entries (GIL released by the caller)
 
-def graph_run_csr_build(key: XcnnEntryKey, rows: Int, cols: Int, csr: Int, order: Int, n: Int, nnz: Int) raises:
-    _ = xcnn_run_call(key, XC_CSR_BUILD, [rows, cols, csr, order], [n, nnz])
+def graph_run_csr_build(entry: EntryRef, rows: Int, cols: Int, csr: Int, order: Int, n: Int, nnz: Int) raises:
+    _ = xcnn_run_call(entry, XC_CSR_BUILD, [rows, cols, csr, order], [n, nnz])
 
 
-def graph_run_gather(key: XcnnEntryKey, values: Int, order: Int, dst: Int, size: Int, n: Int) raises:
-    _ = xcnn_run_call(key, XC_PERM_GATHER, [values, order, dst], [size, n])
+def graph_run_gather(entry: EntryRef, values: Int, order: Int, dst: Int, size: Int, n: Int) raises:
+    _ = xcnn_run_call(entry, XC_PERM_GATHER, [values, order, dst], [size, n])
 
 
-def graph_run_vals_t(key: XcnnEntryKey, vals_f: Int, order_f: Int, order_t: Int, dst: Int, nnz: Int) raises:
-    _ = xcnn_run_call(key, XC_VALS_T, [vals_f, order_f, order_t, dst], [nnz])
+def graph_run_vals_t(entry: EntryRef, vals_f: Int, order_f: Int, order_t: Int, dst: Int, nnz: Int) raises:
+    _ = xcnn_run_call(entry, XC_VALS_T, [vals_f, order_f, order_t, dst], [nnz])
 
 
-def graph_run_gemm(key: XcnnEntryKey, a: Int, b: Int, dst: Int, m: Int, n: Int, k: Int, op: Int) raises:
-    _ = xcnn_run_call(key, XC_GEMM, [a, b, dst], [m, n, k, op])
+def graph_run_gemm(entry: EntryRef, a: Int, b: Int, dst: Int, m: Int, n: Int, k: Int, op: Int) raises:
+    _ = xcnn_run_call(entry, XC_GEMM, [a, b, dst], [m, n, k, op])
 
 
-def graph_run_spmm(key: XcnnEntryKey, vals: Int, h: Int, dst: Int, csr: Int, n: Int, cols: Int, nnz: Int,
+def graph_run_spmm(entry: EntryRef, vals: Int, h: Int, dst: Int, csr: Int, n: Int, cols: Int, nnz: Int,
                    mode: Int) raises:
-    _ = xcnn_run_call(key, XC_SPMM, [vals, h, dst, csr], [n, cols, nnz, mode])
+    _ = xcnn_run_call(entry, XC_SPMM, [vals, h, dst, csr], [n, cols, nnz, mode])
 
 
-def graph_run_add(key: XcnnEntryKey, a: Int, b: Int, dst: Int, count: Int) raises:
-    _ = xcnn_run_call(key, XC_ADD, [a, b, dst], [count])
+def graph_run_add(entry: EntryRef, a: Int, b: Int, dst: Int, count: Int) raises:
+    _ = xcnn_run_call(entry, XC_ADD, [a, b, dst], [count])
 
 
-def graph_run_linear_forward(key: XcnnEntryKey, x: Int, w: Int, b: Int, dst: Int, rows: Int, d: Int, f: Int) raises:
-    _ = xcnn_run_call(key, XC_LINEAR_FORWARD, [x, w, b, dst], [rows, d, f])
+def graph_run_linear_forward(entry: EntryRef, x: Int, w: Int, b: Int, dst: Int, rows: Int, d: Int, f: Int) raises:
+    _ = xcnn_run_call(entry, XC_LINEAR_FORWARD, [x, w, b, dst], [rows, d, f])
 
 
-def graph_run_linear_forward_m(key: XcnnEntryKey, x: Int, w: Int, b: Int, dst: Int, flags: Int, n: Int, d: Int,
+def graph_run_linear_forward_m(entry: EntryRef, x: Int, w: Int, b: Int, dst: Int, flags: Int, n: Int, d: Int,
                                f: Int) raises:
-    _ = xcnn_run_call(key, XC_LINEAR_FORWARD_M, [x, w, b, dst], [flags, n, d, f])
+    _ = xcnn_run_call(entry, XC_LINEAR_FORWARD_M, [x, w, b, dst], [flags, n, d, f])
 
 
-def graph_run_linear_backward(key: XcnnEntryKey, x: Int, w: Int, g: Int, dx: Int, dw: Int, db: Int, rows: Int,
+def graph_run_linear_backward(entry: EntryRef, x: Int, w: Int, g: Int, dx: Int, dw: Int, db: Int, rows: Int,
                               d: Int, f: Int) raises:
-    _ = xcnn_run_call(key, XC_LINEAR_BACKWARD, [x, w, g, dx, dw, db], [rows, d, f])
+    _ = xcnn_run_call(entry, XC_LINEAR_BACKWARD, [x, w, g, dx, dw, db], [rows, d, f])
 
 
-def graph_run_relu_forward(key: XcnnEntryKey, x: Int, dst: Int, count: Int) raises:
-    _ = xcnn_run_call(key, XC_RELU_FORWARD, [x, dst], [count])
+def graph_run_relu_forward(entry: EntryRef, x: Int, dst: Int, count: Int) raises:
+    _ = xcnn_run_call(entry, XC_RELU_FORWARD, [x, dst], [count])
 
 
-def graph_run_res_free(key: XcnnEntryKey, h: Int) raises:
-    _ = xcnn_run_call(key, XC_RES_FREE, [h], List[Int]())
+def graph_run_res_free(entry: EntryRef, h: Int) raises:
+    _ = xcnn_run_call(entry, XC_RES_FREE, [h], List[Int]())
 
 
-def graph_run_csr_upload(key: XcnnEntryKey, csr: Int, n: Int, nnz: Int) raises -> Int:
+def graph_run_csr_upload(entry: EntryRef, csr: Int, n: Int, nnz: Int) raises -> Int:
     """One CSR view to a resident buffer; returns its handle."""
-    return xcnn_run_call(key, XC_CSR_UPLOAD, [csr], [n, 1, nnz, 0])
+    return xcnn_run_call(entry, XC_CSR_UPLOAD, [csr], [n, 1, nnz, 0])
 
 
-def graph_run_download(key: XcnnEntryKey, h: Int, dst: Int, count: Int) raises:
-    _ = xcnn_run_call(key, XC_RES_DOWNLOAD, [h, dst], [count])
+def graph_run_download(entry: EntryRef, h: Int, dst: Int, count: Int) raises:
+    _ = xcnn_run_call(entry, XC_RES_DOWNLOAD, [h, dst], [count])
 
 
-def graph_run_gcn_loops(key: XcnnEntryKey, src: Int, dst: Int, w: Int, src_out: Int, dst_out: Int, w_out: Int,
+def graph_run_gcn_loops(entry: EntryRef, src: Int, dst: Int, w: Int, src_out: Int, dst_out: Int, w_out: Int,
                         n: Int, edges: Int, improved: Bool) raises -> Int:
     """GCN's self loops; returns the kept edge count (the loops follow)."""
-    return xcnn_run_call(key, XC_GCN_LOOPS, [src, dst, w, src_out, dst_out, w_out], [n, edges, 1 if improved else 0])
+    return xcnn_run_call(entry, XC_GCN_LOOPS, [src, dst, w, src_out, dst_out, w_out], [n, edges, 1 if improved else 0])
 
 
-def graph_run_gcn_norm(key: XcnnEntryKey, wf: Int, vals: Int, csr: Int, n: Int, nnz: Int, graph_route: Bool) raises:
+def graph_run_gcn_norm(entry: EntryRef, wf: Int, vals: Int, csr: Int, n: Int, nnz: Int, graph_route: Bool) raises:
     """GCN's symmetric normalization: the `_m` entry on the graph lane
     switch, the host entry otherwise."""
     if graph_route:
-        _ = xcnn_run_call(key, XC_GCN_NORM_M, [wf, vals, csr], [0, n, 1, nnz, 0])
+        _ = xcnn_run_call(entry, XC_GCN_NORM_M, [wf, vals, csr], [0, n, 1, nnz, 0])
     else:
-        _ = xcnn_run_call(key, XC_GCN_NORM, [wf, vals, csr], [n, 1, nnz, 0])
+        _ = xcnn_run_call(entry, XC_GCN_NORM, [wf, vals, csr], [n, 1, nnz, 0])
 
 
-def graph_run_gemm_m(key: XcnnEntryKey, a: Int, b: Int, dst: Int, flags: Int, m: Int, n: Int, k: Int,
+def graph_run_gemm_m(entry: EntryRef, a: Int, b: Int, dst: Int, flags: Int, m: Int, n: Int, k: Int,
                      op: Int) raises:
-    _ = xcnn_run_call(key, XC_GEMM_M, [a, b, dst], [flags, m, n, k, op])
+    _ = xcnn_run_call(entry, XC_GEMM_M, [a, b, dst], [flags, m, n, k, op])
 
 
-def graph_run_spmm_m(key: XcnnEntryKey, vals: Int, h: Int, csr: Int, dst: Int, flags: Int, n: Int, cols: Int,
+def graph_run_spmm_m(entry: EntryRef, vals: Int, h: Int, csr: Int, dst: Int, flags: Int, n: Int, cols: Int,
                      nnz: Int, mode: Int) raises:
-    _ = xcnn_run_call(key, XC_SPMM_M, [vals, h, csr, dst], [flags, n, cols, nnz, mode])
+    _ = xcnn_run_call(entry, XC_SPMM_M, [vals, h, csr, dst], [flags, n, cols, nnz, mode])
 
 
-def graph_run_bias_m(key: XcnnEntryKey, a: Int, bias: Int, dst: Int, flags: Int, count: Int, cols: Int) raises:
+def graph_run_bias_m(entry: EntryRef, a: Int, bias: Int, dst: Int, flags: Int, count: Int, cols: Int) raises:
     """map2 kind 4: the bias row added to every row."""
-    _ = xcnn_run_call(key, XC_MAP2_M, [a, bias, dst], [flags, 4, count, cols])
+    _ = xcnn_run_call(entry, XC_MAP2_M, [a, bias, dst], [flags, 4, count, cols])
 
 
-def graph_run_add_m(key: XcnnEntryKey, a: Int, b: Int, dst: Int, flags: Int, count: Int) raises:
+def graph_run_add_m(entry: EntryRef, a: Int, b: Int, dst: Int, flags: Int, count: Int) raises:
     """map2 kind 2: element-wise sum."""
-    _ = xcnn_run_call(key, XC_MAP2_M, [a, b, dst], [flags, 2, count])
+    _ = xcnn_run_call(entry, XC_MAP2_M, [a, b, dst], [flags, 2, count])
 
 
-def graph_run_graph_op(key: XcnnEntryKey, a: Int, b: Int, aux: Int, dst: Int, csr: Int, n: Int, cols: Int,
+def graph_run_graph_op(entry: EntryRef, a: Int, b: Int, aux: Int, dst: Int, csr: Int, n: Int, cols: Int,
                        nnz: Int, kind: Int) raises:
-    _ = xcnn_run_call(key, XC_GRAPH_OP, [a, b, aux, dst, csr], [n, cols, nnz, kind])
+    _ = xcnn_run_call(entry, XC_GRAPH_OP, [a, b, aux, dst, csr], [n, cols, nnz, kind])
 
 
-def graph_run_graph_op_m(key: XcnnEntryKey, a: Int, b: Int, aux: Int, dst: Int, csr: Int, flags: Int, n: Int,
+def graph_run_graph_op_m(entry: EntryRef, a: Int, b: Int, aux: Int, dst: Int, csr: Int, flags: Int, n: Int,
                          cols: Int, nnz: Int, kind: Int) raises:
-    _ = xcnn_run_call(key, XC_GRAPH_OP_M, [a, b, aux, dst, csr], [flags, n, cols, nnz, kind])
+    _ = xcnn_run_call(entry, XC_GRAPH_OP_M, [a, b, aux, dst, csr], [flags, n, cols, nnz, kind])
 
 
-def graph_run_gcn_backward(key: XcnnEntryKey, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, bias: Bool,
+def graph_run_gcn_backward(entry: EntryRef, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, bias: Bool,
                            resident_grad: Bool, ones_dev: Int, host_form: Bool) raises:
     """GCNConv's backward tape (13 address words): the resident form
     (autograd/rules_graph.mojo, seven integers) or the host form (eight
     integers, the residency words zero)."""
     if host_form:
-        _ = xcnn_run_call(key, XC_GCN_BACKWARD_T, addrs, [n, d, f, nnz, 1 if bias else 0, 0, 0, 0])
+        _ = xcnn_run_call(entry, XC_GCN_BACKWARD_T, addrs, [n, d, f, nnz, 1 if bias else 0, 0, 0, 0])
     else:
-        _ = xcnn_run_call(key, XC_GCN_BACKWARD_T, addrs,
+        _ = xcnn_run_call(entry, XC_GCN_BACKWARD_T, addrs,
                           [n, d, f, nnz, 1 if bias else 0, 1 if resident_grad else 0, ones_dev])
 
 
-def graph_run_sage_backward(key: XcnnEntryKey, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, kind: Int,
+def graph_run_sage_backward(entry: EntryRef, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, kind: Int,
                             norm: Bool, root: Bool, resident_grad: Bool, host_form: Bool, project: Bool) raises:
     """SAGEConv's backward tape: the resident form (23 address words, eight
     integers) or the host form (33 address words, ten integers;
     autograd/graph_tape.mojo `sage_cfg`)."""
     if host_form:
-        _ = xcnn_run_call(key, XC_SAGE_BACKWARD_T, addrs,
+        _ = xcnn_run_call(entry, XC_SAGE_BACKWARD_T, addrs,
                           [n, d, f, nnz, kind, 1 if norm else 0, 1 if root else 0, 0, 0, 1 if project else 0])
     else:
-        _ = xcnn_run_call(key, XC_SAGE_BACKWARD_T, addrs,
+        _ = xcnn_run_call(entry, XC_SAGE_BACKWARD_T, addrs,
                           [n, d, f, nnz, kind, 1 if norm else 0, 1 if root else 0, 1 if resident_grad else 0])

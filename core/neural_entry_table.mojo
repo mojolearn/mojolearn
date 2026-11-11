@@ -52,9 +52,9 @@ crosses. Extending a table's layout requires a new V suffix, never a new
 loader. Publication and lookup are small metadata operations with no
 independent numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall, TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME
-from core.native_descriptor_call import native_descriptor_call, native_descriptor_words
+from core.native_descriptor_call import native_descriptor_words
 
 
 def neural_entry_spans(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int, result: Int,
@@ -520,10 +520,27 @@ def neural_table_entry[family: Int](key: NeuralEntryKey) raises -> NativeDescrip
     raise Error("native neural entries: unsupported execution key")
 
 
-def neural_entry_call[family: Int](key: NeuralEntryKey, operation: Int, addresses: List[Int],
+def _neural_operations[family: Int]() -> Int:
+    comptime if family == NEURAL_TABLE_BLOCK_FORWARD or family == NEURAL_TABLE_BLOCK_TRAIN:
+        return NEURAL_BLOCK_OPERATIONS
+    elif family == NEURAL_TABLE_MAMBA_TRAIN:
+        return NEURAL_MAMBA_OPERATIONS
+    elif family == NEURAL_TABLE_MLP_PROGRAM:
+        return NEURAL_MLP_PROGRAM_OPERATIONS
+    else:
+        return NEURAL_EMB_OPERATIONS
+
+
+def neural_ref[family: Int](key: NeuralEntryKey) raises -> EntryRef:
+    """The `family` entry of the image `key` names, resolved once (lane
+    entry-table-zero-alloc): a connection owner holds it; the table refusals
+    raise here, never per call."""
+    return EntryRef(neural_table_entry[family](key), entry_ref_word(key.mode, key.vendor, _neural_operations[family]()))
+
+
+def neural_entry_call(entry: EntryRef, operation: Int, addresses: List[Int],
     ints: List[Int], floats: List[Float64]) raises -> Int:
-    """One synchronous descriptor call into the image `key` names. The caller
-    owns every buffer the addresses name until this returns and decides the
-    GIL (this module imports no Python)."""
-    var entry = neural_table_entry[family](key)
-    return native_descriptor_call(entry, operation, addresses, ints, floats)
+    """One synchronous descriptor call through a resolved entry: one indirect
+    call. The caller owns every buffer the addresses name until this returns
+    and decides the GIL (this module imports no Python)."""
+    return entry_ref_call(entry, operation, addresses, ints, floats)

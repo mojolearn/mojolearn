@@ -16,12 +16,13 @@ through the entry's sink unchanged. No Python participates.
 The cases are independent units and run across the native host worker
 pool. Run in a fresh process (the first check needs unpublished tables).
 """
+from core.entry_table import entry_ref_call, entry_ref_same
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.native_descriptor_call import native_descriptor_call
 from core.xseq_entry_table import (
-    XseqEntryKey, xseq_glue_entry, xseq_table_entry, XSEQ_ENTRY_GLUE, XS_OP_COUNT,
+    XseqEntryKey, xseq_glue_entry, xseq_glue_ref, xseq_table_entry, XSEQ_ENTRY_GLUE, XSEQ_GLUE_ABI, XS_OP_COUNT,
     XS_THETA, XS_THETA_FORECAST, XS_CROSTON, XS_CROSTON_FORECAST, XS_ETS, XS_GARCH, XS_PROPHET_DAYS,
     XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT, XS_PROPHET_PREDICT_DAYS,
     XS_VAR_FIT, XS_VAR_FORECAST, XS_STL,
@@ -49,7 +50,7 @@ def _mkey() -> MetricsEntryKey:
 
 
 def _glue(op: Int, addrs: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
-    return native_descriptor_call(xseq_glue_entry(_key()), op, addrs, ints, floats)
+    return entry_ref_call(xseq_glue_ref(_key()), op, addrs, ints, floats)
 
 
 def _direct(op: Int, addrs: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
@@ -106,7 +107,23 @@ def preconditions_unpublished() raises:
         _refuses(problem, "provider is not published")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = xseq_glue_ref(_key())
+    var second = xseq_glue_ref(_key())
+    require(entry_ref_same(first, second), "x_sequence glue: a second resolution returned another entry")
+    try:
+        _ = xseq_table_entry(_key(), XSEQ_ENTRY_GLUE, String(XSEQ_GLUE_ABI), XS_OP_COUNT + 1)
+        raise Error("x_sequence glue: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "x_sequence glue: unexpected refusal: " + String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var none = List[Int]()
     try:
         _ = xseq_glue_entry(XseqEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0))

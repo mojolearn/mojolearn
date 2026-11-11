@@ -9,8 +9,9 @@ used. The boundary reads the layer's fields into `BnSettings`, owns every
 buffer (addresses and handles arrive as words), releases the GIL around the
 calls here, and writes the fields back.
 """
+from core.entry_table import EntryRef
 from core.xcnn_entry_table import (
-    XcnnEntryKey, XC_BATCHNORM_FORWARD, XC_BATCHNORM_FORWARD_M, XC_BATCHNORM_BACKWARD, XC_BATCHNORM_BACKWARD_M,
+    XC_BATCHNORM_FORWARD, XC_BATCHNORM_FORWARD_M, XC_BATCHNORM_BACKWARD, XC_BATCHNORM_BACKWARD_M,
 )
 from x_cnn.door_run import XcnnF32P, xcnn_run_call, xcnn_run_fill_f32, xcnn_size
 
@@ -99,27 +100,27 @@ def bn_run_check_nonneg(dim: Int) raises:
         raise Error("ValueError: batch normalization saved shape must be nonnegative")
 
 
-def bn_run_forward(key: XcnnEntryKey, x: Int, y: Int, running: Int, aux: Int, n: Int, c: Int, hw: Int,
+def bn_run_forward(entry: EntryRef, x: Int, y: Int, running: Int, aux: Int, n: Int, c: Int, hw: Int,
                    batch_stats: Bool) raises:
     """The host batch-normalization forward entry."""
-    _ = xcnn_run_call(key, XC_BATCHNORM_FORWARD, [x, y, running, aux], [n, c, hw, 1 if batch_stats else 0])
+    _ = xcnn_run_call(entry, XC_BATCHNORM_FORWARD, [x, y, running, aux], [n, c, hw, 1 if batch_stats else 0])
 
 
-def bn_run_forward_m(key: XcnnEntryKey, x: Int, y: Int, running: Int, aux: Int, dev: Int, n: Int, c: Int,
+def bn_run_forward_m(entry: EntryRef, x: Int, y: Int, running: Int, aux: Int, dev: Int, n: Int, c: Int,
                      hw: Int, batch_stats: Bool) raises:
     """The mixed-residency forward entry; `dev` is the residency word (1 x
     resident, 2 y resident, 4 running resident, 8 aux resident)."""
-    _ = xcnn_run_call(key, XC_BATCHNORM_FORWARD_M, [x, y, running, aux], [dev, n, c, hw, 1 if batch_stats else 0])
+    _ = xcnn_run_call(entry, XC_BATCHNORM_FORWARD_M, [x, y, running, aux], [dev, n, c, hw, 1 if batch_stats else 0])
 
 
-def bn_run_backward(key: XcnnEntryKey, x: Int, g: Int, dx: Int, aux: Int, flags: Int, mixed_call: Bool,
+def bn_run_backward(entry: EntryRef, x: Int, g: Int, dx: Int, aux: Int, flags: Int, mixed_call: Bool,
                     shape: List[Int], c: Int, stats: Int) raises:
     """The backward entry: `_m` with residency `flags` when any operand is
     resident (`mixed_call`), the host entry otherwise."""
     if mixed_call:
-        _ = xcnn_run_call(key, XC_BATCHNORM_BACKWARD_M, [x, g, dx, aux], [flags, shape[0], c, shape[2], stats])
+        _ = xcnn_run_call(entry, XC_BATCHNORM_BACKWARD_M, [x, g, dx, aux], [flags, shape[0], c, shape[2], stats])
     else:
-        _ = xcnn_run_call(key, XC_BATCHNORM_BACKWARD, [x, g, dx, aux], [shape[0], c, shape[2], stats])
+        _ = xcnn_run_call(entry, XC_BATCHNORM_BACKWARD, [x, g, dx, aux], [shape[0], c, shape[2], stats])
 
 
 def bn_run_flags(dev_x: Bool, dev_g: Bool, dev_dx: Bool) -> Int:

@@ -17,9 +17,9 @@ Run in a fresh process (the first check needs an unpublished table).
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
-from core.native_descriptor_call import native_descriptor_call
+from core.entry_table import entry_ref_call, entry_ref_same
 from core.samba_entry_table import (
-    SambaEntryKey, samba_table_entry, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST,
+    SambaEntryKey, samba_table_entry, samba_ref, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST,
     SAMBA_PRIM_EMBEDDING_FORWARD, SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD,
     SAMBA_PRIM_CE_LOSS, SAMBA_PRIM_OPTIMIZER_STEP,
 )
@@ -40,8 +40,7 @@ def _key() -> SambaEntryKey:
 
 def _call[family: Int](key: SambaEntryKey, op: Int, addresses: List[Int], ints: List[Int],
                        floats: List[Float64]) raises -> Int:
-    var entry = samba_table_entry[family](key)
-    return native_descriptor_call(entry, op, addresses, ints, floats)
+    return entry_ref_call(samba_ref[family](key), op, addresses, ints, floats)
 
 
 def _f32(mut l: List[Float32]) -> Int:
@@ -63,6 +62,22 @@ def precondition_unpublished() raises:
         _refuses(problem, "provider is not published")
         return
     raise Error("an unpublished samba table did not refuse")
+
+
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: each family resolves once into a ref that
+    a connection owner reuses (the same pointer and layout word every time),
+    and a mismatched key refuses at resolution, never at a call."""
+    require(entry_ref_same(samba_ref[SAMBA_TABLE_TRAINING](_key()), samba_ref[SAMBA_TABLE_TRAINING](_key())),
+            "samba training: a second resolution returned another entry")
+    require(entry_ref_same(samba_ref[SAMBA_TABLE_NEURAL_HOST](_key()),
+                           samba_ref[SAMBA_TABLE_NEURAL_HOST](_key())),
+            "samba neural host: a second resolution returned another entry")
+    try:
+        _ = samba_ref[SAMBA_TABLE_TRAINING](SambaEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0))
+        raise Error("samba: a mismatched key did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
 
 
 def preconditions_published() raises:
@@ -171,6 +186,7 @@ def run_checks() raises:
     publish_samba_training_host_primitives()
     publish_samba_neural_host_primitives()
     preconditions_published()
+    ref_resolution()
     var failures = List[Int](length=SAMBA_ENTRY_CASES, fill=0)
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:

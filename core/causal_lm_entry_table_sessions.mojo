@@ -25,9 +25,8 @@ CPU images own no resident session.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 from core.causal_lm_entry_table import CausalEntryKey
 from core.state_registry import StateHandle
 
@@ -145,12 +144,17 @@ def causal_sessions_entry(family: Int, key: CausalEntryKey) raises -> NativeDesc
     raise Error("native CausalLM sessions: unknown session family")
 
 
-def causal_sessions_call(family: Int, key: CausalEntryKey, operation: Int, addresses: List[Int],
+def causal_sessions_ref(family: Int, key: CausalEntryKey) raises -> EntryRef:
+    """The session entry of `family` in the image `key` names, resolved once
+    (lane entry-table-zero-alloc); the table refusals raise here."""
+    return EntryRef(causal_sessions_entry(family, key), entry_ref_word(key.mode, key.vendor, CAUSAL_SESSIONS_OPERATIONS))
+
+
+def causal_sessions_call(entry: EntryRef, operation: Int, addresses: List[Int],
     words: List[Int], floats: List[Float64]) raises -> Int:
-    """One synchronous session call into the image `key` names. The caller
-    owns every buffer the addresses name until this returns."""
-    var entry = causal_sessions_entry(family, key)
-    return native_descriptor_call(entry, operation, addresses, words, floats)
+    """One synchronous session call through a resolved entry: one indirect
+    call. The caller owns every buffer the addresses name until this returns."""
+    return entry_ref_call(entry, operation, addresses, words, floats)
 
 
 def causal_sessions_tables_admit(key: CausalEntryKey, kind_family: Int) raises:

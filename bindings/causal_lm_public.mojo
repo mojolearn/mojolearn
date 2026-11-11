@@ -8,13 +8,14 @@ a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
 from core.causal_lm_entry_table_sessions import (
-    causal_sessions_call, causal_sessions_tables_admit, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSIONS_MAMBA,
+    causal_sessions_ref, causal_sessions_call, causal_sessions_tables_admit, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSIONS_MAMBA,
     CAUSAL_SESSION_DECODE_CREATE, CAUSAL_SESSION_DECODE_OPEN, CAUSAL_SESSION_DECODE_OPEN15,
     CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD, CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_LM_OPEN,
     CAUSAL_SESSION_LM_OPEN15, CAUSAL_SESSION_LM_RUN, CAUSAL_SESSION_LM_FORWARD, CAUSAL_SESSION_LM_CLOSE,
     CAUSAL_SESSION_PROGRAM_READ, CAUSAL_SESSION_PROGRAM_RELEASE,
 )
 from core.causal_session_handles import CausalSessionHandles
+from core.entry_table import EntryRef
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
@@ -67,7 +68,7 @@ from bindings.causal_model_config import model_record_fields, model_plan_snapsho
 from bindings.causal_operation_owner import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
 from core.shared_slot import SharedSlot
 from core.causal_lm_entry_table import (
-    CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_tables_admit,
+    CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_ref, causal_tables_admit,
     CAUSAL_TABLE_LINALG, CAUSAL_TABLE_PRIMITIVES, CAUSAL_TABLE_BLOCK, CAUSAL_TABLE_MAMBA,
     CAUSAL_LIN_GEMM_INT15, CAUSAL_LIN_QUANTIZE_INT15, CAUSAL_PRIM_EMBED_FORWARD, CAUSAL_PRIM_NORM_FORWARD,
     CAUSAL_PRIM_LINEAR_FORWARD, CAUSAL_BLOCK_HOST_FORWARD, CAUSAL_BLOCK_HOST_FORWARD_INT15,
@@ -211,7 +212,7 @@ def causal_entry_key(entries: PythonObject) raises -> CausalEntryKey:
     return CausalEntryKey(Int(py=entries["entry_mode"]), Int(py=entries["entry_vendor"]))
 
 
-def _causal_table_call[family: Int](key: CausalEntryKey, operation: Int, addresses: List[Int],
+def _causal_table_call(entry: EntryRef, operation: Int, addresses: List[Int],
     ints: List[Int], floats: List[Float64]) raises -> Int:
     # One descriptor call into a sibling image through the CausalLM entry
     # table: plain words, no CPython call. The GIL is released around the
@@ -220,7 +221,7 @@ def _causal_table_call[family: Int](key: CausalEntryKey, operation: Int, address
     # (mods.released()), as it did after those calls.
     var result = 0
     with GILReleased(Python()):
-        result = causal_entry_call[family](key, operation, addresses, ints, floats)
+        result = causal_entry_call(entry, operation, addresses, ints, floats)
     return result
 
 
@@ -890,7 +891,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # 33). The former Python-entry arms (transformer_forward,
             # transformer_decode_step at L = 1, transformer_forward_int15) ran
             # the same _run_forward with the same words.
-            py_setattr(st, "cached_tokens", PythonObject(_causal_table_call[CAUSAL_TABLE_BLOCK](causal_entry_key(e),
+            py_setattr(st, "cached_tokens", PythonObject(_causal_table_call(causal_ref[CAUSAL_TABLE_BLOCK](causal_entry_key(e)),
                 CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words, [])))
             mods.released()
         elif device15 and block_provider is not None:
@@ -977,7 +978,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             # one route for every tier and profile (the provider-capsule and
             # Python-entry arms ran this same mamba_state operation; both
             # refuse the 17-word affine profile by the same arity rule).
-            _ = _causal_table_call[CAUSAL_TABLE_MAMBA](causal_entry_key(e),
+            _ = _causal_table_call(causal_ref[CAUSAL_TABLE_MAMBA](causal_entry_key(e)),
                 CAUSAL_MAMBA1_DECODE if step else CAUSAL_MAMBA1_FORWARD, m_addresses, m_params, [])
             mods.released()
             _ = y  # keep the Python object alive through the native call above
@@ -1000,7 +1001,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
             _ = last  # keep the Python object alive through the native call above
             _ = y  # keep the Python object alive through the native call above
             var m_params: List[Int] = [b, d, Int(py=st.buffered_tokens)] if step else [b, l, d, Int(py=st.buffered_tokens)]
-            py_setattr(st, "buffered_tokens", PythonObject(_causal_table_call[CAUSAL_TABLE_MAMBA](causal_entry_key(e),
+            py_setattr(st, "buffered_tokens", PythonObject(_causal_table_call(causal_ref[CAUSAL_TABLE_MAMBA](causal_entry_key(e)),
                 CAUSAL_MAMBA2_DECODE if step else CAUSAL_MAMBA2_FORWARD,
                 m_addresses, m_params, [layer.words.dt_low, layer.words.dt_high])))
             mods.released()
@@ -1036,7 +1037,7 @@ def _causal_model_embedding_prepared(
     # The primitives image's entry through the CausalLM entry table: one
     # route for every tier (the provider-capsule and Python-entry arms that
     # stood here ran this same operation 0).
-    _ = _causal_table_call[CAUSAL_TABLE_PRIMITIVES](causal_entry_key(e), CAUSAL_PRIM_EMBED_FORWARD, a, [b * l, v, d], [])
+    _ = _causal_table_call(causal_ref[CAUSAL_TABLE_PRIMITIVES](causal_entry_key(e)), CAUSAL_PRIM_EMBED_FORWARD, a, [b * l, v, d], [])
     _ = x  # keep the Python object alive through the native call above
     if flat:
         _causal_array_guard()
@@ -1083,28 +1084,31 @@ def _causal_model_head_prepared(head: GenerationHeadSnapshot, x: PythonObject, b
     # table (core/causal_lm_entry_table.mojo); the same operations the former
     # provider-capsule and Python-entry arms ran, with the same words.
     var key = causal_entry_key(e)
+    # Resolved once for the head (lane entry-table-zero-alloc).
+    var prim = causal_ref[CAUSAL_TABLE_PRIMITIVES](key)
     if head.normalize:
         hn = generation_array([b, l, d])
         var a: List[Int] = [_addr(hn, keep), _addr(x, keep), weights_at[0]]
-        _ = _causal_table_call[CAUSAL_TABLE_PRIMITIVES](key, CAUSAL_PRIM_NORM_FORWARD, a, [b * l, d], [head.norm_eps])
+        _ = _causal_table_call(prim, CAUSAL_PRIM_NORM_FORWARD, a, [b * l, d], [head.norm_eps])
         _ = hn  # keep the Python object alive through the native call above
     var out = _causal_logits_output(b, l, v, output)
     if not head.packed:
         var a: List[Int] = [_addr(out, keep), _addr(hn, keep), weights_at[1]]
-        _ = _causal_table_call[CAUSAL_TABLE_PRIMITIVES](key, CAUSAL_PRIM_LINEAR_FORWARD, a, [b * l, v, d], [])
+        _ = _causal_table_call(prim, CAUSAL_PRIM_LINEAR_FORWARD, a, [b * l, v, d], [])
         _ = out  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
     else:
         var hi = generation_array([b * l, d], "b")
         var lo = generation_array([b * l, d], "b")
         var ex = generation_array([b * l], "i")
-        _ = _causal_table_call[CAUSAL_TABLE_LINALG](key, CAUSAL_LIN_QUANTIZE_INT15,
+        var lin = causal_ref[CAUSAL_TABLE_LINALG](key)
+        _ = _causal_table_call(lin, CAUSAL_LIN_QUANTIZE_INT15,
             [_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)], [b * l, d], [])
         _ = ex  # keep the Python object alive through the native call above
         _ = lo  # keep the Python object alive through the native call above
         _ = hi  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
-        _ = _causal_table_call[CAUSAL_TABLE_LINALG](key, CAUSAL_LIN_GEMM_INT15,
+        _ = _causal_table_call(lin, CAUSAL_LIN_GEMM_INT15,
             [_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
              weights_at[2], weights_at[3], weights_at[4]], [b * l, v, d], [])
         _ = ex  # keep the Python object alive through the native call above
@@ -1750,16 +1754,23 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
     return causal_lm_forward_binding(mods, model, value, supplied_state, step)
 
 
-def _session_call(e: PythonObject, family: Int, operation: Int, addresses: List[Int], words: List[Int],
+def _session_call_ref(entry: EntryRef, operation: Int, addresses: List[Int], words: List[Int],
     floats: List[Float64]) raises -> Int:
-    # One session-table call (core/causal_lm_entry_table_sessions.mojo) by the
-    # model's admitted key: plain words, no CPython call. The GIL is released
-    # around the device work as the former Python session entries released it.
-    var key = causal_entry_key(e)
+    # One session-table call (core/causal_lm_entry_table_sessions.mojo)
+    # through a resolved session entry: plain words, no CPython call. The GIL
+    # is released around the device work as the former Python session entries
+    # released it.
     var result = 0
     with GILReleased(Python()):
-        result = causal_sessions_call(family, key, operation, addresses, words, floats)
+        result = causal_sessions_call(entry, operation, addresses, words, floats)
     return result
+
+
+def _session_call(e: PythonObject, family: Int, operation: Int, addresses: List[Int], words: List[Int],
+    floats: List[Float64]) raises -> Int:
+    # A one-off session call by the model's admitted key (resolved here); the
+    # per-step calls go through their session owner's resolved entry.
+    return _session_call_ref(causal_sessions_ref(family, causal_entry_key(e)), operation, addresses, words, floats)
 
 
 def _resident_layer_call(e: PythonObject, lm: PythonObject, index: Int, operation: Int, addresses: List[Int],
@@ -1769,7 +1780,7 @@ def _resident_layer_call(e: PythonObject, lm: PythonObject, index: Int, operatio
     var words: List[Int] = [owner[].layers[index]]
     for i in range(len(scalars)):  # driver-loop: admitted session scalar span
         words.append(scalars[i])
-    var result = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, operation, addresses, words, List[Float64]())
+    var result = _session_call_ref(owner[].entry, operation, addresses, words, List[Float64]())
     _ = lm
     return result
 
@@ -1784,7 +1795,7 @@ def _resident_group(e: PythonObject, lm: PythonObject, operation: Int, addresses
         words.append(owner[].layers[i])
     for i in range(len(scalars)):  # driver-loop: admitted session scalar span
         words.append(scalars[i])
-    var result = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, operation, addresses, words, List[Float64]())
+    var result = _session_call_ref(owner[].entry, operation, addresses, words, List[Float64]())
     _ = lm
     return result
 
@@ -1833,14 +1844,14 @@ def _resident_open_all(mut mods: NativeModules,
                 open_a.append(a[j])
             for j in range(13, len(a)):  # driver-loop: over layer argument spans
                 open_a.append(a[j])
-            var ss = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int](), List[Float64]())
+            var ss = _session_call_ref(owner[].entry, CAUSAL_SESSION_DECODE_CREATE, List[Int](), List[Int](), List[Float64]())
             owner[].layers.append(ss)
             var p = _transformer_param_words(blk, st, b, l)
             var open_p: List[Int] = [ss]
             for j in range(len(p)):  # driver-loop: over layer shape parameters
                 if j != 1:
                     open_p.append(p[j])
-            _ = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_DECODE_OPEN15 if int15 else CAUSAL_SESSION_DECODE_OPEN,
+            _ = _session_call_ref(owner[].entry, CAUSAL_SESSION_DECODE_OPEN15 if int15 else CAUSAL_SESSION_DECODE_OPEN,
                 open_a, open_p, List[Float64]())
             mods.released()
         # A model without a final norm passes 0 (admitted only under
@@ -1852,7 +1863,7 @@ def _resident_open_all(mut mods: NativeModules,
         else:
             top.append(0 if model._head is model._embed else _weight_addr(model._head, keep))
         var tp: List[Int] = [owner[].primary, b, Int(py=model.vocab_size), Int(py=model.d_model)]
-        _ = _session_call(e, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSION_LM_OPEN15 if int15 else CAUSAL_SESSION_LM_OPEN,
+        _ = _session_call_ref(owner[].entry, CAUSAL_SESSION_LM_OPEN15 if int15 else CAUSAL_SESSION_LM_OPEN,
             top, tp, [Float64(py=model.norm_eps)])
         mods.released()
     except error:

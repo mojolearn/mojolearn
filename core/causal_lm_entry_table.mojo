@@ -34,11 +34,10 @@ Extending a table's layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import (
     NativeDescriptorCall, PRIMITIVE_ABI_NAME, TRANSFORMER_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME,
 )
-from core.native_descriptor_call import native_descriptor_call
 
 comptime CAUSAL_TABLE_LINALG = 0
 comptime CAUSAL_TABLE_PRIMITIVES = 1
@@ -406,13 +405,18 @@ def causal_table_entry[family: Int](key: CausalEntryKey) raises -> NativeDescrip
     raise Error("native CausalLM entries: unsupported execution key")
 
 
-def causal_entry_call[family: Int](key: CausalEntryKey, operation: Int, addresses: List[Int],
+def causal_ref[family: Int](key: CausalEntryKey) raises -> EntryRef:
+    """The `family` entry of the image `key` names, resolved once (lane
+    entry-table-zero-alloc); the table refusals raise here."""
+    return EntryRef(causal_table_entry[family](key), entry_ref_word(key.mode, key.vendor, _causal_operations[family]()))
+
+
+def causal_entry_call(entry: EntryRef, operation: Int, addresses: List[Int],
     ints: List[Int], floats: List[Float64]) raises -> Int:
-    """One synchronous descriptor call into the image `key` names. The caller
-    owns every buffer the addresses name until this returns. The entry reports
-    a refusal with its former Python entry's text."""
-    var entry = causal_table_entry[family](key)
-    return native_descriptor_call(entry, operation, addresses, ints, floats)
+    """One synchronous descriptor call through a resolved entry: one indirect
+    call. The caller owns every buffer the addresses name until this returns.
+    The entry reports a refusal with its former Python entry's text."""
+    return entry_ref_call(entry, operation, addresses, ints, floats)
 
 
 def causal_tables_admit(key: CausalEntryKey, block_family: Int, packed: Bool) raises:

@@ -29,8 +29,8 @@ from bindings.classical_arrays import classical_array, classical_typed, classica
 from bindings.admitted_input import admit_x, admitted_finite_refuse
 from std.python._cpython import GILReleased
 from core.linear_entry_table import LinearEntryKey
-from core.decomp_entry_table import decomp_table_entry
-from core.native_descriptor_call import native_descriptor_call
+from core.entry_table import EntryRef, entry_ref_unresolved
+from core.decomp_entry_table import decomp_ref, decomp_table_call
 from x_decomp.descriptor_schema import (
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_MOVE, XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD,
     XD_DEV_EW, XD_DEV_GEMM, XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE, XD_DEV_UPLOAD_FINITE, XD_FLAGS, XD_ORDER,
@@ -290,6 +290,9 @@ struct DecompKit(Movable):
     # `x_decomp_native_key`); `keyed` False when the image published none.
     var key: LinearEntryKey
     var keyed: Bool
+    # The image's dispatch, resolved once at kit construction (lane
+    # entry-table-zero-alloc); every kit operation calls through it.
+    var entry: EntryRef
 
     def __init__(out self, entries: PythonObject, context: PythonObject) raises:
         self.entries = entries
@@ -303,6 +306,9 @@ struct DecompKit(Movable):
             vendor = Int(py=key[1])
         self.key = LinearEntryKey(mode, vendor)
         self.keyed = key is not None
+        self.entry = entry_ref_unresolved()
+        if key is not None:
+            self.entry = decomp_ref(LinearEntryKey(mode, vendor))
         self.owner = PythonObject(None)
         self.flag_names = List[String]()
         self.flag_words = List[Int]()
@@ -329,14 +335,13 @@ struct DecompKit(Movable):
         it. The caller keeps every addressed buffer alive."""
         if not self.keyed:
             raise Error("ImportError: mojolearn: the x_decomp binding publishes no native entry table")
-        var entry = decomp_table_entry(self.key)
         var result = 0
         if release:
             var py = Python()
             with GILReleased(py):
-                result = native_descriptor_call(entry, op, addresses, ints, floats)
+                result = decomp_table_call(self.entry, op, addresses, ints, floats)
         else:
-            result = native_descriptor_call(entry, op, addresses, ints, floats)
+            result = decomp_table_call(self.entry, op, addresses, ints, floats)
         return result
 
     def dev_alloc(self, n: Int) raises -> Int:
@@ -1578,26 +1583,27 @@ def decomp_resident_drop(owner: PythonObject) raises:
     prepared_drop(mods, _DK_RESIDENT_SLOT, owner)
 
 
-def _decomp_key(entries: PythonObject) raises -> LinearEntryKey:
-    """The table key of a connected x_decomp entries dict (the bridge's
-    `x_decomp_native_key`), read at the boundary."""
+def _decomp_key(entries: PythonObject) raises -> EntryRef:
+    """The dispatch of a connected x_decomp entries dict, keyed by the
+    bridge's `x_decomp_native_key` read at the boundary and resolved once per
+    operation (lane entry-table-zero-alloc)."""
     var key = py_get(entries, "x_decomp_native_key")
     if key is None:
         raise Error("ImportError: mojolearn: the x_decomp binding publishes no native entry table")
-    return LinearEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return decomp_ref(LinearEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
-def _decomp_dev(key: LinearEntryKey, op: Int, addresses: List[Int], ints: List[Int], release: Bool) raises -> Int:
+def _decomp_dev(key: EntryRef, op: Int, addresses: List[Int], ints: List[Int], release: Bool) raises -> Int:
     """One pool operation (XD_DEV_ALLOC / _FREE / _UPLOAD) of the image `key`
     names, outside a kit; `release` as the door the call replaces."""
-    var entry = decomp_table_entry(key)
     var result = 0
+    var floats = List[Float64]()
     if release:
         var py = Python()
         with GILReleased(py):
-            result = native_descriptor_call(entry, op, addresses, ints, List[Float64]())
+            result = decomp_table_call(key, op, addresses, ints, floats)
     else:
-        result = native_descriptor_call(entry, op, addresses, ints, List[Float64]())
+        result = decomp_table_call(key, op, addresses, ints, floats)
     return result
 
 

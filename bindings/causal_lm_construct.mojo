@@ -30,7 +30,7 @@ from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
 from core.causal_lm_entry_table import (
-    CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_table_entry, CAUSAL_TABLE_LINALG,
+    CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_ref, causal_table_entry, CAUSAL_TABLE_LINALG,
     CAUSAL_LIN_TO_BF16, CAUSAL_LIN_QUANTIZE_INT8, CAUSAL_LIN_FROM_BF16, CAUSAL_LIN_DEQUANTIZE_INT8,
     CAUSAL_LIN_QUANTIZE_INT15,
 )
@@ -124,9 +124,10 @@ def _model_linalg(mut mods: NativeModules, key: CausalEntryKey, operation: Int, 
     # The GIL is released around the numerical work as that entry released it;
     # the module admission cache is reset after the release window.
     var floats = List[Float64]()
+    var lin = causal_ref[CAUSAL_TABLE_LINALG](key)
     try:
         with GILReleased(Python()):
-            _ = causal_entry_call[CAUSAL_TABLE_LINALG](key, operation, addresses, params, floats)
+            _ = causal_entry_call(lin, operation, addresses, params, floats)
     finally:
         mods.released()
     _ = floats

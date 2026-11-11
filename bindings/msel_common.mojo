@@ -29,7 +29,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_warn
 from bindings.native_torch_admission import native_torch_exact
 from bindings.msel_helpers_key import msel_helpers_key
-from core.msel_entry_table import MselEntryKey
+from core.entry_table import EntryRef
 from bindings.msel_helpers_released import (
     msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8, msel_fold_ids,
     msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32,
@@ -612,7 +612,7 @@ struct MselGroups(Movable):
     # This group plan belongs to one native public operation. Keep the
     # constructor's admitted entries and private storage addresses through
     # all group/fold calls; a later operation constructs a fresh plan.
-    var key: MselEntryKey
+    var key: EntryRef
     var codes_address: Int
     var scratch_address: Int
 

@@ -21,7 +21,7 @@ arguments as plain words (sequence/opt_public.mojo documents them):
 The result is the entry's count. The caller owns every buffer until the
 synchronous call returns; nothing is retained and no Python object crosses.
 """
-from core.native_descriptor_call import native_descriptor_call
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_entry, BYTE_LM_TABLE_SEQ_OPT
 
 comptime SEQ_OPT_ABI = "mojolearn.sequence.optimizer.v1"
@@ -47,8 +47,15 @@ def seq_opt_rest(p: List[Int], first: Int) raises -> List[Int]:
     return rest^
 
 
-def seq_opt_call(key: ByteLmEntryKey, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    """Caller side: one optimizer operation in the x_sequence image `key`
-    names (a lock-free acquire load and a schema compare, then the pointer)."""
-    var entry = byte_lm_table_entry[BYTE_LM_TABLE_SEQ_OPT](key, 0, String(SEQ_OPT_ABI), SO_OP_COUNT)
-    return native_descriptor_call(entry, op, a, p, f)
+def seq_opt_ref(key: ByteLmEntryKey) raises -> EntryRef:
+    """Caller side: the optimizer entry of the x_sequence image `key` names,
+    resolved once (lane entry-table-zero-alloc); the table refusals raise
+    here."""
+    return EntryRef(byte_lm_table_entry[BYTE_LM_TABLE_SEQ_OPT](key, 0, String(SEQ_OPT_ABI), SO_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, SO_OP_COUNT))
+
+
+def seq_opt_call(entry: EntryRef, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    """Caller side: one optimizer operation through the resolved entry: one
+    indirect call."""
+    return entry_ref_call(entry, op, a, p, f)

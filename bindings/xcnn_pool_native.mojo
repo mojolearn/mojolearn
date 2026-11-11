@@ -25,7 +25,7 @@ from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.xcnn_common import (
-    XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_key, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn,
+    XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn,
     xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_module_entries, xcnn_is_t, xcnn_on_dev, xcnn_new,
     xcnn_out_new, xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_host_i32, xcnn_f32, xcnn_reshape,
     xcnn_addr, xcnn_dev_get,
@@ -98,7 +98,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         var shape = pool_run_out_words(prm, xs)
         var out = xcnn_out_new(entries, shape, context)   # the pool stores every word
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h), xcnn_word(h)]
         var py = Python()
         with GILReleased(py):
@@ -117,7 +117,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var out = xcnn_host_f32(shape, context)
     if xcnn_mixed(entries):
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out), xcnn_word(h)]
         var py = Python()
         with GILReleased(py):
@@ -130,7 +130,7 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         _set(fields, "_idx_shape", xcnn_tuple(shape))
         return out
     var idx = xcnn_host_i32(shape, context)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out), xcnn_ptr(idx)]
     var py = Python()
     with GILReleased(py):
@@ -157,7 +157,7 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
             return xcnn_wrap(entries, xcnn_avgpool_forward(model, xcnn_host_of(x, context), context), context)
         var prm = _pool_words(fields, xs, context)
         var out = xcnn_out_new(entries, pool_run_out_words(prm, xs), context)   # the pool stores every word
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h)]
         var py = Python()
         with GILReleased(py):
@@ -170,7 +170,7 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var entries = xcnn_entries(fields, context)
     var prm = _pool_words(fields, xs, context)
     var out = xcnn_host_f32(pool_run_out_words(prm, xs), context)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out)]
     var py = Python()
     with GILReleased(py):
@@ -324,7 +324,7 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
         pool_run_check_shape(xcnn_shape(source), expected)
         if xcnn_on_dev(entries, source, context) and (not maxed or resident_idx):
             var out = xcnn_out_new(entries, shape, context)
-            var key = xcnn_key(entries)
+            var key = xcnn_ref(entries)
             var g_word = xcnn_word(source.h)
             var out_word = xcnn_word(out.h)
             var h_word = xcnn_word(h) if maxed else 0
@@ -340,13 +340,13 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
     pool_run_check_shape(xcnn_shape(g), expected)
     var out = xcnn_host_f32(shape, context)
     if not maxed:
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(g), xcnn_ptr(out)]
         var py = Python()
         with GILReleased(py):
             pool_run_avg_backward(key, addrs[0], addrs[1], prm)
     elif resident_idx:
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(g), xcnn_word(h), xcnn_ptr(out)]
         var py = Python()
         with GILReleased(py):
@@ -360,7 +360,7 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
         if Int(py=idx.dtype.num) != 5 or not Bool(py=idx.dtype.isnative) or not Bool(py=idx.flags.c_contiguous):
             raise Error("TypeError: pool indices must be contiguous native int32")
         pool_run_check_shape(xcnn_shape(idx), expected)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(g), xcnn_ptr(idx), xcnn_ptr(out)]
         var py = Python()
         with GILReleased(py):
@@ -456,7 +456,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
             var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
             var y = xcnn_new(bt, xs, True, context)   # every path stores each mask and y word
             var h = xcnn_dev_get(model, bt, "mask", xcnn_size(xs), context)
-            var key = xcnn_key(bt)
+            var key = xcnn_ref(bt)
             var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(y.h), xcnn_word(h)]
             var py = Python()
             with GILReleased(py):
@@ -478,7 +478,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var entries = xcnn_entries(fields, context)
     if xcnn_mixed(entries):
         var h = xcnn_dev_get(model, entries, "mask", xcnn_size(s4), context)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(x4), xcnn_ptr(y), xcnn_word(h)]
         var py = Python()
         with GILReleased(py):
@@ -490,7 +490,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         _set(fields, "_mask_shape", xcnn_tuple(xs))
         return xcnn_reshape(y, xs, context)
     var mask = xcnn_host_f32(s4, context)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_ptr(x4), xcnn_ptr(y), xcnn_ptr(mask)]
     var py = Python()
     with GILReleased(py):
@@ -561,7 +561,7 @@ def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonO
         if owner is None:
             raise Error("RuntimeError: a resident array of a binding this process did not connect")
         var handle = _pool_int(d["_idx_dev"], context)
-        var key = xcnn_key(owner)
+        var key = xcnn_ref(owner)
         var dst = xcnn_ptr(idx)
         var py = Python()
         with GILReleased(py):
@@ -609,7 +609,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
         var out = xcnn_out_new(entries, oshape, context) if xt else xcnn_host_f32(oshape, context)
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(oshape), context) if maxed else PythonObject(0)
         var bits = (3 if xt else 0) | (4 if maxed else 0)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_word(value.h) if xt else xcnn_ptr(value), xcnn_word(out.h) if xt else xcnn_ptr(out),
                                 xcnn_word(h)]
         var py = Python()
@@ -623,7 +623,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
         return out
     var out = xcnn_host_f32(oshape, context)
     var idx = xcnn_host_i32(oshape, context)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_ptr(value), xcnn_ptr(out), xcnn_ptr(idx)]
     var py = Python()
     with GILReleased(py):
@@ -683,7 +683,7 @@ def xcnn_dropout_mask(model: PythonObject, context: PythonObject) raises -> Pyth
         var shape = _pool_shape_words(fields["_mask_shape"], "_mask_shape", context)
         mask = xcnn_host_f32(shape, context)
         var entries = xcnn_module_entries(_fields(fields["_dev"])["b"], context)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var handle_word = _pool_int(handle, context)
         var dst = xcnn_ptr(mask)
         var py = Python()
@@ -709,7 +709,7 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
                 pool_run_check_count(xcnn_size(shape),
                                      xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)))
                 var out = xcnn_new(entries, shape, True, context)
-                var key = xcnn_key(entries)
+                var key = xcnn_ref(entries)
                 var addrs: List[Int] = [xcnn_word(source.h), _pool_int(handle, context), xcnn_word(out.h)]
                 var py = Python()
                 with GILReleased(py):
@@ -725,7 +725,7 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     var dev = py_get(fields, "_dev")
     if handle is not None and xcnn_mixed(entries) and dev is not None and _fields(dev)["b"] is entries["module"]:
         pool_run_check_count(count, xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)))
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(g), _pool_int(handle, context), xcnn_ptr(out)]
         var py = Python()
         with GILReleased(py):
@@ -733,7 +733,7 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     else:
         var mask = xcnn_f32(xcnn_dropout_mask(model, context), "mask_", context)
         pool_run_check_count(xcnn_size(xcnn_shape(mask)), count)
-        var key = xcnn_key(entries)
+        var key = xcnn_ref(entries)
         var addrs: List[Int] = [xcnn_ptr(g), xcnn_ptr(mask), xcnn_ptr(out)]
         var py = Python()
         with GILReleased(py):
@@ -859,7 +859,7 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
     elif not mixed:
         idx = xcnn_host_i32(expected, context)
         handle = xcnn_addr(idx)
-    var key = xcnn_key(entries)
+    var key = xcnn_ref(entries)
     var addrs: List[Int] = [xcnn_word(g.h) if tensor else xcnn_ptr(g), xcnn_word(out.h) if tensor else xcnn_ptr(out),
                             xcnn_word(handle)]
     var py = Python()

@@ -19,13 +19,15 @@ from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_optimizer_inputs import sequence_optimizer_cast
 from core.scaler_fit_impl import scaler_fill
 from core.byte_lm_entry_table import ByteLmEntryKey
+from core.entry_table import EntryRef
 from sequence.opt_entry_abi import (
-    seq_opt_call, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE, SO_EXPORT, SO_IMPORT, SO_CLOSE,
+    seq_opt_ref, seq_opt_call, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE, SO_EXPORT, SO_IMPORT, SO_CLOSE,
 )
 
 
-def seq_key(entries: PythonObject) raises -> ByteLmEntryKey:
-    """The optimizer table key (core/byte_lm_entry_table.mojo) of the
+def seq_key(entries: PythonObject) raises -> EntryRef:
+    """The optimizer entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the table key (core/byte_lm_entry_table.mojo) of the
     x_sequence image these connected entries name: the bridge records it at
     import as `native_key` (python/mojolearn/_native_optimizer_bridge.py).
     The optimizer operations run through that image's published native
@@ -34,7 +36,7 @@ def seq_key(entries: PythonObject) raises -> ByteLmEntryKey:
     var key = py_get(entries, "native_key")
     if key is None:
         raise Error("ImportError: the sequence optimizer binding publishes no native entry table")
-    return ByteLmEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return seq_opt_ref(ByteLmEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def seq_class(owner: PythonObject, context: PythonObject) raises -> Int:

@@ -46,7 +46,7 @@ from bindings.trees_public_forest import (
     _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
 )
 from bindings.trees_public_boost import (
-    _mode, _xt, _xk, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
+    _mode, _xt, _xr, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
 from bindings.trees_public_score import (
@@ -79,7 +79,7 @@ from bindings.base_helpers_released import (
     base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
 )
 from core.linear_entry_table import LinearEntryKey
-from core.linear_multi_calls import ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
+from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
@@ -310,7 +310,8 @@ def _one_col(xt: PythonObject, p: AdmittedX, j: Int, context: PythonObject) rais
 def _acc_cols_w(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: PythonObject, n: Int, k: Int,
                 weight: Float64, context: PythonObject) raises:
     var xa = admit_f32(x, 2, "sub-estimator output", context, finite=False)
-    _ = xt_accumulate_cols(_xk(xt), trees_address(acc), xa.address, trees_address(cols), n, k,
+    var glue = _xr(xt)
+    _ = xt_accumulate_cols(glue, trees_address(acc), xa.address, trees_address(cols), n, k,
                            Int(py=cols.shape[0]), weight)
     _ = cols
     _ = xa  # keep the Python object alive through the native call above
@@ -320,13 +321,15 @@ def _acc_cols_w(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: Pyth
 def _acc_w(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, weight: Float64,
            context: PythonObject) raises:
     var xa = admit_f32(x, 1, "sub-estimator output", context, finite=False)
-    _ = xt_accumulate(_xk(xt), trees_address(acc), xa.address, n, weight)
+    var glue = _xr(xt)
+    _ = xt_accumulate(glue, trees_address(acc), xa.address, n, weight)
     _ = xa  # keep the Python object alive through the native call above
     _ = xa^
 
 
 def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int, k: Int, on: Float64) raises:
-    _ = xt_accumulate_onehot(_xk(xt), trees_address(acc), trees_address(codes), n, k, on, 0.0)
+    var glue = _xr(xt)
+    _ = xt_accumulate_onehot(glue, trees_address(acc), trees_address(codes), n, k, on, 0.0)
     _ = acc
     _ = codes
 
@@ -335,7 +338,8 @@ def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: A
            col0: Int) raises -> Int:
     """`_TreesWrapperBase._place`: the block's columns into dst (an Array)
     at col0, at the rows of `rows` (an int32 Array)."""
-    _ = xt_scatter(_xk(xt), trees_address(dst), blk.address, trees_address(rows), n_rows, n_cols,
+    var glue = _xr(xt)
+    _ = xt_scatter(glue, trees_address(dst), blk.address, trees_address(rows), n_rows, n_cols,
                    Int(py=rows.shape[0]), blk.cols, col0)
     _ = dst
     _ = rows
@@ -538,7 +542,8 @@ def _native_folds(xt: PythonObject, n_splits: Int, n: Int, codes: PythonObject, 
     if codes is not None:
         c32 = codes
         k = n_classes
-    var status = xt_device_folds(_xk(xt), trees_address(c32), trees_address(rows), trees_address(counts),
+    var glue = _xr(xt)
+    var status = xt_device_folds(glue, trees_address(c32), trees_address(rows), trees_address(counts),
                                  n, n_splits, k)
     _ = c32  # keep the Python object alive through the native call above
     _ = rows  # keep the Python object alive through the native call above
@@ -721,7 +726,8 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
         ints.append(0)
         floats.append(Float64(py=w[i]))
         _ = xa^
-    _ = xt_accumulate_cols_many(_xk(xt), addrs, ints, floats)
+    var glue = _xr(xt)
+    _ = xt_accumulate_cols_many(glue, addrs, ints, floats)
     _ = keep  # keep the members' blocks alive through the native call above
     _ = acc  # keep the Python object alive through the native call above
     _scale(xt, acc, _fsum(w, context))
@@ -1112,7 +1118,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var m = _cols(Ya)
     var est = _attr(model, "estimator", PythonObject(None))
     var intercept = _truthy(_attr(est, "fit_intercept", PythonObject(True)))
-    var key = _estimators_key(table)
+    var key = ridge_multi_ref(_estimators_key(table))  # resolved once for the fit
     var xm: PythonObject
     var work_x = Xa
     if intercept:
@@ -1225,7 +1231,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
-        var rm_key = _estimators_key(table)
+        var rm_key = ridge_multi_ref(_estimators_key(table))
         var p_x = trees_address(Xa)
         var p_coef = trees_address(mr[0])
         var p_icpt = trees_address(mr[1])
@@ -1276,6 +1282,7 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
     if k != "f" and k != "i" and k != "u":
         return PythonObject(None)
     var target = String("<f8") if k == "f" else String("<i8")
+    var glue = _xr(xt)
     try:
         # Y in C order (admit_c_view: an F-ordered or strided Y is one
         # C-order copy, so the column-major arm is gone).
@@ -1292,7 +1299,7 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
         trees_cast(Int(py=classical_address(view)), vt, trees_address(W), target, n * m, context)
         _ = W  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
-        _ = xt_transpose_f64(_xk(xt), trees_address(W), trees_address(T), n, m)
+        _ = xt_transpose_f64(glue, trees_address(W), trees_address(T), n, m)
         _ = W  # keep the Python object alive through the native call above
         _ = T  # keep the Python object alive through the native call above
         _ = view^
@@ -1397,6 +1404,7 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
             all_int = False
             if String(col.dtype) != "<f8":
                 stacked = False
+    var glue = _xr(xt)
     if stacked:
         var kind = String("<i8") if all_int else String("<f8")
         var addrs = List[Int]()
@@ -1416,7 +1424,7 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
         var stack_addrs: List[Int] = [trees_address(out)]
         for j in range(len(addrs)):  # driver-loop: over the column address words
             stack_addrs.append(addrs[j])
-        _ = xt_stack_w64(_xk(xt), stack_addrs, n)
+        _ = xt_stack_w64(glue, stack_addrs, n)
         _ = out  # keep the Python object alive through the native call above
         _ = keep
         return trees_reshape(out, Python.tuple(n, len(cols)), context)
@@ -1528,7 +1536,8 @@ def _multioutput_rows_score(model: PythonObject, eq: PythonObject, n: Int, m: In
     score bits."""
     var xt = _xt(py_fields(model), context)
     var miss = admitted_vector(n, "<i4", context)
-    _ = xt_rows_any_unset(_xk(xt), Int(py=py_call(eq.buffer_info)[0]), trees_address(miss), n, m,
+    var glue = _xr(xt)
+    _ = xt_rows_any_unset(glue, Int(py=py_call(eq.buffer_info)[0]), trees_address(miss), n, m,
                           1 if col_major else 0)
     _ = eq  # keep the flag store alive through the native call above
     _ = miss  # keep the Python object alive through the native call above
@@ -1583,7 +1592,8 @@ def _indicator(xt: PythonObject, codes: PythonObject, j: Int, context: PythonObj
     the encoder's int32 Array)."""
     var n = Int(py=codes.shape[0])
     var yj = admitted_vector(n, "<i4", context)
-    _ = xt_indicator_codes(_xk(xt), trees_address(codes), trees_address(yj), 0, n, j)
+    var glue = _xr(xt)
+    _ = xt_indicator_codes(glue, trees_address(codes), trees_address(yj), 0, n, j)
     _ = codes
     _ = yj  # keep the owners alive through the native call above
     return yj
@@ -1676,7 +1686,8 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
         floats.append(Float64(bc))
         ints.append(at)
         floats.append(Float64(at))
-    _ = xt_ovr_assemble(_xk(xt), addrs, ints, floats)
+    var glue = _xr(xt)
+    _ = xt_ovr_assemble(glue, addrs, ints, floats)
     _ = out  # keep the Python object alive through the native call above
     _ = keep  # keep the members' blocks alive through the native call above
     return out
@@ -1714,11 +1725,12 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var n = _rows(Xa)
     var k = len(_attr(model, "classes_", Python.list()))
     var members = _attr(model, "estimators_", Python.list())
+    var glue = _xr(xt)
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
         var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)
         var out = admitted_vector(2 * n, "<f8", context)
-        _ = xt_binary_proba(_xk(xt), trees_address(p), trees_address(out), n)
+        _ = xt_binary_proba(glue, trees_address(p), trees_address(out), n)
         _ = out  # keep the Python object alive through the native call above
         _ = p  # keep the Python object alive through the native call above
         return trees_reshape(out, Python.tuple(n, 2), context)
@@ -1730,7 +1742,7 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
         var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
         _ = _place(xt, acc, n, k, blk, rows, j)
         _ = blk^
-    _ = xt_normalize_rows(_xk(xt), trees_address(acc), n, k)
+    _ = xt_normalize_rows(glue, trees_address(acc), n, k)
     _ = acc  # keep the Python object alive through the native call above
     return trees_reshape(acc, Python.tuple(n, k), context)
 
@@ -1761,10 +1773,11 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     else:
         out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
     var blk = _out2d(out, n, context)
+    var glue = _xr(xt)
     if k == 2:
         var acc = _zeros(n, context)
         if blk.cols == 1:
-            _ = xt_accumulate(_xk(xt), trees_address(acc), blk.address, n, 1.0)
+            _ = xt_accumulate(glue, trees_address(acc), blk.address, n, 1.0)
             _ = acc  # keep the Python object alive through the native call above
             _ = blk  # keep the Python object alive through the native call above
         else:
@@ -1772,7 +1785,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
             if at < 0:
                 raise Error("1 is not in list")
             var col = _one_col(xt, blk, at, context)
-            _ = xt_accumulate(_xk(xt), trees_address(acc), trees_address(col), n, 1.0)
+            _ = xt_accumulate(glue, trees_address(acc), trees_address(col), n, 1.0)
             _ = col  # keep the Python object alive through the native call above
             _ = acc  # keep the Python object alive through the native call above
         _ = blk^
@@ -1781,7 +1794,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     # Keep the freshly allocated class-index array until accumulate_cols has
     # consumed it. _A(_sub_cols(...)) returned only an address to a temporary.
     var sub_cols = _sub_cols(e, context)
-    _ = xt_accumulate_cols(_xk(xt), trees_address(acc), blk.address, trees_address(sub_cols), n, k,
+    _ = xt_accumulate_cols(glue, trees_address(acc), blk.address, trees_address(sub_cols), n, k,
                            len(_attr(e, "classes_", Python.list())), 1.0)
     _ = sub_cols
     _ = acc  # keep the Python object alive through the native call above
@@ -1797,9 +1810,10 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
     var c = _cols(S)
     var sigmoid = String(_attr(model, "method", PythonObject("sigmoid"))) == "sigmoid"
     var St = S
+    var glue = _xr(xt)
     if c > 1:
         St = admitted_vector(c * n, "<f8", context)
-        _ = xt_transpose_f64(_xk(xt), trees_address(S), trees_address(St), n, c)
+        _ = xt_transpose_f64(glue, trees_address(S), trees_address(St), n, c)
         _ = St  # keep the Python object alive through the native call above
     var yj = admitted_vector(n, "<i4", context)
     var y64 = PythonObject(None)
@@ -1810,13 +1824,13 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         var cls = 1 if c == 1 else j
         var f = trees_address(St) + 8 * j * n
         _ = St  # keep the Python object alive through the native call above
-        _ = xt_indicator_codes(_xk(xt), trees_address(codes), trees_address(yj),
+        _ = xt_indicator_codes(glue, trees_address(codes), trees_address(yj),
                                trees_address(y64) if y64 is not None else 0, n, cls)
         _ = yj  # keep the Python object alive through the native call above
         _ = y64  # keep the Python object alive through the native call above
         if sigmoid:
             var ab = admitted_vector(2, "<f8", context)
-            _ = xt_platt_fit(_xk(xt), f, trees_address(yj), trees_address(ab), n)
+            _ = xt_platt_fit(glue, f, trees_address(yj), trees_address(ab), n)
             _ = ab  # keep the Python object alive through the native call above
             _ = yj  # keep the Python object alive through the native call above
             _ = St  # keep the Python object alive through the native call above
@@ -1825,7 +1839,7 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         else:
             var kx = admitted_vector(n, "<f8", context)
             var ky = admitted_vector(n, "<f8", context)
-            var m = xt_isotonic_fit(_xk(xt), f, trees_address(y64), trees_address(kx), trees_address(ky), n)
+            var m = xt_isotonic_fit(glue, f, trees_address(y64), trees_address(kx), trees_address(ky), n)
             _ = ky  # keep the Python object alive through the native call above
             _ = kx  # keep the Python object alive through the native call above
             _ = y64  # keep the Python object alive through the native call above
@@ -1849,29 +1863,30 @@ def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, ca
     var c = _cols(S)
     var w = 2 if k == 2 else k
     var acc = admitted_vector(n * w, "<f8", context)
+    var glue = _xr(xt)
     for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
         var entry = cals[j]
         var col = 1 if k == 2 else j
         var par = entry[1]
         if String(entry[0]) == "sigmoid":
-            _ = xt_platt_apply_strided(_xk(xt), trees_address(S), trees_address(acc), n, Float64(py=par[0]),
+            _ = xt_platt_apply_strided(glue, trees_address(S), trees_address(acc), n, Float64(py=par[0]),
                                        Float64(py=par[1]), n * c, c, j, n * w, w, col)
             _ = acc  # keep the Python object alive through the native call above
             _ = S  # keep the Python object alive through the native call above
         else:
             var knots_x = par[0]
             var knots_y = par[1]
-            _ = xt_isotonic_predict_strided(_xk(xt), trees_address(knots_x), trees_address(knots_y), trees_address(S),
+            _ = xt_isotonic_predict_strided(glue, trees_address(knots_x), trees_address(knots_y), trees_address(S),
                                             trees_address(acc), Int(py=par[2]), n, n * c, c, j, n * w, w, col)
             _ = knots_x
             _ = knots_y
             _ = acc  # keep the Python object alive through the native call above
             _ = S  # keep the Python object alive through the native call above
     if k == 2:
-        _ = xt_complement_pairs(_xk(xt), trees_address(acc), n)
+        _ = xt_complement_pairs(glue, trees_address(acc), n)
         _ = acc  # keep the Python object alive through the native call above
         return acc
-    _ = xt_normalize_rows(_xk(xt), trees_address(acc), n, k)
+    _ = xt_normalize_rows(glue, trees_address(acc), n, k)
     _ = acc  # keep the Python object alive through the native call above
     return acc
 
@@ -2096,7 +2111,8 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
                 keep.append(knots_y)
                 program.isotonic(trees_address(knots_x), trees_address(knots_y), Int(py=par[2]))
         _ = blk^
-    _ = xt_calibrated_proba(_xk(xt), program.addrs, program.ints, program.floats)
+    var glue = _xr(xt)
+    _ = xt_calibrated_proba(glue, program.addrs, program.ints, program.floats)
     _ = acc  # keep the Python object alive through the native call above
     _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
     return trees_reshape(acc, Python.tuple(n, k), context)

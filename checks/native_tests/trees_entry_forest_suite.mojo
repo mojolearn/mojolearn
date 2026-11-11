@@ -18,18 +18,19 @@ publication, then the probe publishes under the cpu keys of both families.
 The cases are independent units and run across the native host worker
 pool. Run in a fresh process (the first check needs an unpublished table).
 """
+from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.trees_entry_table import TreesEntryKey
-from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
+from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET, forest_table_entry
 from core.forest_fit_request import (
-    ForestFitArgs, FOREST_ARG_NO_INT, FOREST_ARG_NO_FLOAT, XF_CAP_STRICT, XF_CAP_DART, XF_CAP_DEVICE_SCAN,
+    ForestFitArgs, FOREST_ENTRY_ABI, XF_OP_COUNT, FOREST_ARG_NO_INT, FOREST_ARG_NO_FLOAT, XF_CAP_STRICT, XF_CAP_DART, XF_CAP_DEVICE_SCAN,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE, forest_export_sizes_into, forest_export_verify_lists,
 )
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_calls import (
-    xf_caps, xf_numeric_mode, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
+    xf_ref, xf_caps, xf_numeric_mode, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
     xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
@@ -155,8 +156,8 @@ def _args(var ints: List[Int], var floats: List[Float64], var bad: List[UInt8], 
 
 
 def case(unit: Int) raises:
-    var rf = _key(FOREST_TABLE_RF)
-    var et = _key(FOREST_TABLE_ET)
+    var rf = xf_ref(_key(FOREST_TABLE_RF))
+    var et = xf_ref(_key(FOREST_TABLE_ET))
     if unit == 0:
         # XF_CAPS, XF_NUMERIC_MODE, XF_DT_DEFAULT_BINS in both families
         require(xf_caps(rf) == _PROBE_CAPS and xf_caps(et) == _PROBE_CAPS, "capability bits lost")
@@ -302,14 +303,30 @@ def case(unit: Int) raises:
         require("unknown or released strict forest handle" in String(problem), String(problem))
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: the table resolves once into a ref that a
+    connection owner reuses (the same pointer and layout word every time),
+    and a layout mismatch refuses at resolution, never at a call."""
+    var first = xf_ref(_key(FOREST_TABLE_RF))
+    var second = xf_ref(_key(FOREST_TABLE_RF))
+    require(entry_ref_same(first, second), "forest: a second resolution returned another entry")
+    try:
+        _ = forest_table_entry(_key(FOREST_TABLE_RF), 0, String(FOREST_ENTRY_ABI), XF_OP_COUNT + 1)
+        raise Error("forest: a layout mismatch did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+        require("ABI schema differs" in String(problem), "forest: unexpected refusal: " + String(problem))
+
+
 def run_checks() raises:
     try:
-        _ = xf_caps(_key(FOREST_TABLE_RF))
+        _ = xf_caps(xf_ref(_key(FOREST_TABLE_RF)))
         raise Error("an unpublished forest table did not refuse")
     except problem:
         require("provider is not published" in String(problem), String(problem))
     forest_entry_publish["MojolearnForestEntryOwnerProbeRfV1"](FOREST_TABLE_RF, "cpu", _probe_entry)
     forest_entry_publish["MojolearnForestEntryOwnerProbeEtV1"](FOREST_TABLE_ET, "cpu", _probe_entry)
+    ref_resolution()
     var failures = List[Int](length=TREES_FOREST_CASES, fill=0)
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:

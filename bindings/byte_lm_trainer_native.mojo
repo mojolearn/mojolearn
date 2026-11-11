@@ -49,10 +49,11 @@ from bindings.native_model_records import records_get, records_put, RECORDS_PREP
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
 from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
 from bindings.byte_lm_session_owner import ByteLmSessionOwner, byte_lm_session_owner_new
+from core.entry_table import EntryRef
 from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_ABSENT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX,
     BG_CONFIG_PROFILE, BG_ATTENTION_ARM, BG_MEMORY_PROFILE, BG_STEP_GLUE_ARM,
-    byte_lm_trainer_call, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
+    byte_lm_trainer_ref, byte_lm_glue_ref, byte_lm_trainer_call, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
 )
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -252,15 +253,15 @@ def _shape_words(shape: _Shape) -> List[Int]:
     return words^
 
 
-def _glue_text_words(key: ByteLmEntryKey, op: Int, var words: List[Int]) raises -> String:
-    var text = byte_lm_glue_read_text(key, op, words^)
+def _glue_text_words(gl: EntryRef, op: Int, var words: List[Int]) raises -> String:
+    var text = byte_lm_glue_read_text(gl, op, words^)
     if not text:
         raise Error("ImportError: Byte-LM binding lacks its native metadata entry; rebuild bindings/build_byte_lm.sh")
     return text.value().copy()
 
 
-def _glue_text(key: ByteLmEntryKey, op: Int) raises -> String:
-    return _glue_text_words(key, op, List[Int]())
+def _glue_text(gl: EntryRef, op: Int) raises -> String:
+    return _glue_text_words(gl, op, List[Int]())
 
 
 def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, String, PythonObject, ByteLmEntryKey]:
@@ -271,23 +272,24 @@ def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject
     if py_type(binding) is _b(mods).str:
         raise Error(String(py=binding))
     var key = _native_key(mode, context)
-    var suffix = _glue_text(key, BG_SUFFIX)
-    var code = byte_lm_glue_read_int(key, BG_NUMERIC_MODE, List[Int]())
+    var gl = byte_lm_glue_ref(key)  # resolved once for the admission reads below
+    var suffix = _glue_text(gl, BG_SUFFIX)
+    var code = byte_lm_glue_read_int(gl, BG_NUMERIC_MODE, List[Int]())
     var expected = 1 if String(py=mode) == "identical" else 0
-    var vendor = _glue_text(key, BG_VENDOR)
+    var vendor = _glue_text(gl, BG_VENDOR)
     var vendors = context["byte_lm_vendors"]
     var vendor_ok = False
     for i in range(len(vendors)):  # small-loop(the admitted vendor names)
         vendor_ok = vendor_ok or String(py=vendors[i]) == vendor
     var profile = String(py=context["byte_lm_profile"])
-    if code != expected or _glue_text(key, BG_PROFILE) != profile + suffix or not vendor_ok:
+    if code != expected or _glue_text(gl, BG_PROFILE) != profile + suffix or not vendor_ok:
         raise Error(_PROFILE_REFUSAL)
     # The table's trainer entry carries the run and runtime-shape operations
     # the former `byte_lm_run` / `byte_lm_run_configured` presence checks
     # asked for; `_native_key` refused an image without it.
     var shape_profile = shape.profile(profile)
     if shape_profile != profile:
-        if _glue_text_words(key, BG_CONFIG_PROFILE, _shape_words(shape)) != shape_profile + suffix:
+        if _glue_text_words(gl, BG_CONFIG_PROFILE, _shape_words(shape)) != shape_profile + suffix:
             raise Error("RuntimeError: Byte-LM native runtime shape/profile mismatch")
     var snapshot = _b(mods).dict()
     py_setitem(snapshot, "native_profile", profile + suffix)
@@ -331,14 +333,14 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
     releases the GIL as the provider route did; callers that ran with it
     held keep `release_gil=False`."""
     var native = session.downcast_value_ptr[ByteLmSessionOwner]()
-    var key = native[].key()
+    var entry = native[].entry  # resolved once, at the owner's construction
     var handle = native[].handle()
     var result = 0
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_resident_run(key, handle, operation, addresses, ints, floats)
+            result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats)
     else:
-        result = byte_lm_resident_run(key, handle, operation, addresses, ints, floats)
+        result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats)
     _ = session  # the owner (and so the handle) is live through the synchronous native call
     return result
 
@@ -358,7 +360,7 @@ def _session_ensure(fields: PythonObject) raises:
         py_setitem(fields, "_grad_step", -1)
 
 
-def _table_execute(key: ByteLmEntryKey, operation: Int, addresses: List[Int], ints: List[Int],
+def _table_execute(trainer: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
                    floats: List[Float64], release_gil: Bool = True) raises -> Int:
     """One trainer operation through the image's table entry (no Python
     provider object): computation releases the GIL as the provider did;
@@ -366,9 +368,9 @@ def _table_execute(key: ByteLmEntryKey, operation: Int, addresses: List[Int], in
     var result = 0
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_trainer_call(key, operation, addresses, ints, floats)
+            result = byte_lm_trainer_call(trainer, operation, addresses, ints, floats)
     else:
-        result = byte_lm_trainer_call(key, operation, addresses, ints, floats)
+        result = byte_lm_trainer_call(trainer, operation, addresses, ints, floats)
     return result
 
 
@@ -643,16 +645,18 @@ def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: Python
         descriptors.append(Int(py=classical_address(by_name[keys[i]])))
     var locked_teardown = byte_lm_teardown_with_gil()
     var plan = _native_plan(shape, state, train, 0, 0, locked_teardown)
-    var session = byte_lm_session_new(key)
+    var gl = byte_lm_glue_ref(key)
+    var trainer = byte_lm_trainer_ref(key)
+    var session = byte_lm_session_new(gl)
     var completed = PythonObject(None)
     try:
         descriptors[0] = session
-        completed = PythonObject(_table_execute(key, 8, descriptors, plan[0], plan[1]))
+        completed = PythonObject(_table_execute(trainer, 8, descriptors, plan[0], plan[1]))
         if locked_teardown:
             var finalize: List[Int] = [session]
-            _ = _table_execute(key, 9, finalize, List[Int](), List[Float64](), False)
+            _ = _table_execute(trainer, 9, finalize, List[Int](), List[Float64](), False)
     finally:
-        byte_lm_session_free(key, session)
+        byte_lm_session_free(gl, session)
     mods.released()
     _ = out_p  # keep the Python objects alive through the native calls above
     _ = out_m
@@ -926,7 +930,7 @@ def _validated_state(mut mods: NativeModules, source: PythonObject, context: Pyt
     var binding = context["byte_lm_bindings"][mode]
     if py_type(binding) is bi.str:
         raise Error("ImportError: " + String(py=binding))
-    var suffix = _glue_text(_native_key(mode, context), BG_SUFFIX)
+    var suffix = _glue_text(byte_lm_glue_ref(_native_key(mode, context)), BG_SUFFIX)
     var expected_profile = shape.profile(String(py=context["byte_lm_profile"])) + suffix
     var registry = _registry(mods, shape)
     var names = Python.list()
@@ -1461,7 +1465,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             # Operation 7 (stateless logits) takes no session: the image's
             # table entry runs it with plain words, no provider object.
             var plan = _native_plan(shape, state, False, batch, length)
-            written = _table_execute(_key(fields), 7, addresses, plan[0], plan[1])
+            written = _table_execute(byte_lm_trainer_ref(_key(fields)), 7, addresses, plan[0], plan[1])
             mods.released()
         _ = tokens
         _ = row_lengths  # keep the Python object alive through the native call above
@@ -1573,29 +1577,30 @@ def _runtime_metadata(mut mods: NativeModules, fields: PythonObject, shape: _Sha
         # Build read-backs through the image's glue entry; an image without
         # them (the CPU image) answers BG_ABSENT, as its missing entry did.
         var key = _key(fields)
+        var gl = byte_lm_glue_ref(key)
         var attention = PythonObject(None)
-        var arm_name = byte_lm_glue_read_text(key, BG_ATTENTION_ARM, [0])
+        var arm_name = byte_lm_glue_read_text(gl, BG_ATTENTION_ARM, [0])
         if arm_name:
             attention = _b(mods).dict()
             py_setitem(attention, "arm", PythonObject(arm_name.value()))
-            py_setitem(attention, "default", _glue_text_words(key, BG_ATTENTION_ARM, [1]))
-            py_setitem(attention, "trial_build", byte_lm_glue_read_int(key, BG_ATTENTION_ARM, [2]) != 0)
-            py_setitem(attention, "resolved_hd64", _glue_text_words(key, BG_ATTENTION_ARM, [3]))
+            py_setitem(attention, "default", _glue_text_words(gl, BG_ATTENTION_ARM, [1]))
+            py_setitem(attention, "trial_build", byte_lm_glue_read_int(gl, BG_ATTENTION_ARM, [2]) != 0)
+            py_setitem(attention, "resolved_hd64", _glue_text_words(gl, BG_ATTENTION_ARM, [3]))
             var profile_words: List[Int] = [0]
             profile_words.extend(_shape_words(shape))
-            var memory = byte_lm_glue_read_text(key, BG_MEMORY_PROFILE, profile_words^)
+            var memory = byte_lm_glue_read_text(gl, BG_MEMORY_PROFILE, profile_words^)
             if memory:
                 var bytes_words: List[Int] = [1]
                 bytes_words.extend(_shape_words(shape))
                 py_setitem(attention, "memory_profile", PythonObject(memory.value()))
-                py_setitem(attention, "retained_exp_bytes_per_layer", byte_lm_glue_read_int(key, BG_MEMORY_PROFILE, bytes_words^))
+                py_setitem(attention, "retained_exp_bytes_per_layer", byte_lm_glue_read_int(gl, BG_MEMORY_PROFILE, bytes_words^))
         py_setitem(runtime, "native_attention_arm", attention)
         var glue = PythonObject(None)
-        var glue_name = byte_lm_glue_read_text(key, BG_STEP_GLUE_ARM, [0])
+        var glue_name = byte_lm_glue_read_text(gl, BG_STEP_GLUE_ARM, [0])
         if glue_name:
             glue = _b(mods).dict()
             py_setitem(glue, "arm", PythonObject(glue_name.value()))
-            py_setitem(glue, "trial_build", byte_lm_glue_read_int(key, BG_STEP_GLUE_ARM, [1]) != 0)
+            py_setitem(glue, "trial_build", byte_lm_glue_read_int(gl, BG_STEP_GLUE_ARM, [1]) != 0)
         py_setitem(runtime, "native_step_glue_arm", glue)
         py_setitem(runtime, "source_sha256", inventory)
         py_setitem(runtime, "source_scope", "available direct source files; binding SHA identifies the compiled artifact")

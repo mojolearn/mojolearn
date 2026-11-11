@@ -40,7 +40,7 @@ Extending a table's layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 
 comptime XSEQ_GLUE_ABI = "mojolearn.sequence.x_sequence.glue.v1"
@@ -141,6 +141,12 @@ def xseq_table_entry(key: XseqEntryKey, index: Int, schema: String, operations: 
 
 def xseq_glue_entry(key: XseqEntryKey) raises -> NativeDescriptorCall:
     return xseq_table_entry(key, XSEQ_ENTRY_GLUE, String(XSEQ_GLUE_ABI), XS_OP_COUNT)
+
+
+def xseq_glue_ref(key: XseqEntryKey) raises -> EntryRef:
+    """The glue entry resolved once (lane entry-table-zero-alloc): the
+    caller holds it for the operation; every glue call is one indirect call."""
+    return EntryRef(xseq_glue_entry(key), entry_ref_word(key.mode, key.vendor, XS_OP_COUNT))
 
 
 def xseq_glue_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int, result: Int) raises:

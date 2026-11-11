@@ -12,7 +12,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import XL_OP_FIT, XL_OP_FIT_FOLD
 from core.admitted_refusals import admitted_finite_refuse
-from core.base_entry_table import BaseEntryKey
+from core.entry_table import EntryRef
 from core.base_helpers_calls import (
     base_assign_fold_i64, base_check_indices_i64, base_count_fold_hits_i64, base_mark_split_roles_f32,
 )
@@ -186,7 +186,7 @@ struct XlSplitWords(Movable):
     var test_sizes: List[Int]
 
 
-def xl_cv_fold_ids_run(key: BaseEntryKey, splits: XlSplitWords, n: Int, fold_ids: Int) raises -> Bool:
+def xl_cv_fold_ids_run(key: EntryRef, splits: XlSplitWords, n: Int, fold_ids: Int) raises -> Bool:
     """`_cv_fold_ids(splits, n)` on the base helper table: write each row's
     int32 fold into the n words at `fold_ids` (filled with -1 by the caller) and
     return True when the test sides partition the rows and every train side
@@ -218,7 +218,7 @@ def xl_cv_roles_limit(n: Int, name: String) raises:
                     + "to 16,777,215 rows")
 
 
-def xl_cv_roles_run(key: BaseEntryKey, splits: XlSplitWords, n: Int, roles: Int, name: String) raises:
+def xl_cv_roles_run(key: EntryRef, splits: XlSplitWords, n: Int, roles: Int, name: String) raises:
     """`_cv_roles_f32`: mark each split's train (1) and test (2) rows in its
     n float32 words of `roles` (x_linear/cv_roles.mojo), refusing an index
     outside the rows, a repeated row, or an empty side."""
