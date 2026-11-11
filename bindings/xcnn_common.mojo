@@ -11,13 +11,11 @@ layer methods are one call each into `xcnn_native_call`, which runs the same
 compiled entries with the same argument words and residency bits as the
 Python bodies it replaces.
 """
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from std.python._cpython import GILReleased
-from core.native_descriptor_call import native_descriptor_call
 from core.xcnn_entry_table import (
-    XcnnEntryKey, xcnn_table_entry, XC_ENTRY_ABI, XC_OP_COUNT, XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_RES_FREE,
+    XcnnEntryKey, XC_RES_ALLOC, XC_RES_ALLOC_NOFILL, XC_RES_FREE,
     XC_RES_UPLOAD, XC_RES_DOWNLOAD,
 )
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -35,15 +33,14 @@ from bindings.sequential_admission import sequential_admit_value
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 
 # lane fam-neural switch bits (`x_cnn_idn_flags`)
-comptime XCNN_F_ADAPT = 1
-comptime XCNN_F_GRAPH = 2
-comptime XCNN_F_PAD = 4
-comptime XCNN_F_GROUP = 8
-comptime XCNN_F_LAYER_IO = 16
-comptime XCNN_F_PIN = 32
-comptime XCNN_F_RESIDENT = 128
-# lane fam2-neural switch bits (`x_cnn_idn2_flags`)
-comptime XCNN_F2_ALL_OFF = 16
+# The lane switch bits, the size/shape-text words and the native call moved
+# to the RUN half, x_cnn/door_run.mojo (lane doorsplit-cnn-xseq); they are
+# imported here so the doors keep one import site.
+from x_cnn.door_run import (
+    XCNN_F_ADAPT, XCNN_F_GRAPH, XCNN_F_PAD, XCNN_F_GROUP, XCNN_F_LAYER_IO, XCNN_F_PIN, XCNN_F_RESIDENT,
+    XCNN_F2_ALL_OFF, XcnnRoute, xcnn_run_call_f, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
+    xcnn_run_copy_f32,
+)
 
 
 def xcnn_builtins() raises -> PythonObject:
@@ -133,17 +130,23 @@ def xcnn_key(entries: PythonObject) raises -> XcnnEntryKey:
 
 def xcnn_call_f(entries: PythonObject, op: Int, addrs: List[Int], ints: List[Int],
                 floats: List[Float64]) raises -> Int:
-    """One x_cnn operation (`XC_*`) in the layer's connected image, through
-    its published native entry, with the GIL released. Plain words only: the
-    caller converted every address and handle and keeps the buffers alive.
-    An image without the operation refuses with the text a missing Python
-    entry raised ("the CNN binding has no x_cnn_<name>")."""
-    var entry = xcnn_table_entry(xcnn_key(entries), 0, String(XC_ENTRY_ABI), XC_OP_COUNT)
+    """UNPACK the layer's native table key, then one RUN call
+    (`x_cnn/door_run.mojo` `xcnn_run_call_f`) with the GIL released. Plain
+    words only: the caller converted every address and handle and keeps the
+    buffers alive. An image without the operation refuses with the text a
+    missing Python entry raised ("the CNN binding has no x_cnn_<name>")."""
+    var key = xcnn_key(entries)
     var result = 0
     var py = Python()
     with GILReleased(py):
-        result = native_descriptor_call(entry, op, addrs, ints, floats)
+        result = xcnn_run_call_f(key, op, addrs, ints, floats)
     return result
+
+
+def xcnn_route(entries: PythonObject, context: PythonObject) raises -> XcnnRoute:
+    """UNPACK: the connected image's route as typed words for RUN."""
+    return XcnnRoute(xcnn_key(entries), xcnn_mixed(entries), Int(py=entries["idn"]), Int(py=entries["idn2"]),
+                     Bool(py=context["xcnn_device_io_off"]))
 
 
 def xcnn_call(entries: PythonObject, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
@@ -212,13 +215,6 @@ def xcnn_shape(value: PythonObject) raises -> List[Int]:
     return out^
 
 
-def xcnn_size(shape: List[Int]) -> Int:
-    var n = 1
-    for i in range(len(shape)):  # driver-loop: over shape words
-        n *= shape[i]
-    return n
-
-
 def xcnn_tuple(shape: List[Int]) raises -> PythonObject:
     var b = xcnn_builtins()
     var out = Python.list()
@@ -228,19 +224,6 @@ def xcnn_tuple(shape: List[Int]) raises -> PythonObject:
         _ = py_call(append, PythonObject(shape[i]))
     return py_call(b.tuple, out)
 
-
-def xcnn_shape_text(shape: List[Int]) -> String:
-    var text = String("(")
-    for i in range(len(shape)):  # driver-loop: over shape words of a refusal message
-        if i > 0:
-            text += ", "
-        text += String(shape[i])
-    if len(shape) == 1:
-        text += ","
-    return text + ")"
-
-
-# ---------------------------------------------------------------- resident tensors
 
 def xcnn_is_t(value: PythonObject, context: PythonObject) raises -> Bool:
     """`isinstance(value, DeviceTensor)`."""
@@ -399,9 +382,7 @@ def xcnn_out_new(entries: PythonObject, shape: List[Int], context: PythonObject)
 def xcnn_reshape_t(value: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
     """`DeviceTensor.reshape(shape)`: the same resident words under another
     shape, the view keeping `value` alive."""
-    var old = xcnn_shape(value)
-    if xcnn_size(old) != xcnn_size(shape):
-        raise Error("mojolearn: cannot reshape " + xcnn_shape_text(old) + " to " + xcnn_shape_text(shape))
+    xcnn_run_reshape_check(xcnn_shape(value), shape)
     # One layout check covers the three reads and the five writes.
     xcnn_tensor_layout(context)
     var module = _xcnn_slot_raw(value, "b", context)
@@ -453,9 +434,8 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
             raise Error("ValueError: CNN tensor host storage has the wrong size")
         var out = xcnn_host_f32(shape, context)
         var size = xcnn_size(shape)
-        if size:
-            unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(out)),
-                   src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(source)), count=size)
+        xcnn_run_copy_f32(native_buffer_address(out), native_buffer_address(source), size)
+        _ = source  # keep the Python object alive through the copy above
         return out
     var out = xcnn_host_f32(shape, context)
     var size = xcnn_size(shape)
@@ -540,9 +520,7 @@ def xcnn_writable_copy(value: PythonObject, context: PythonObject) raises -> Pyt
     var shape = xcnn_shape(value)
     var out = xcnn_host_f32(shape, context)
     var count = xcnn_size(shape)
-    if count:
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(value))), count=count)
+    xcnn_run_copy_f32(Int(py=xcnn_addr(out)), Int(py=xcnn_addr(value)), count)
     _ = value
     return out
 
@@ -720,9 +698,7 @@ def xcnn_slice_f32(source: PythonObject, offset: Int, count: Int, context: Pytho
     """`a[offset:offset + count].copy()` of a C-ordered float32 array."""
     var out = xcnn_host_f32([count], context)
     if count:
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(source))) + offset,
-               count=count)
+        xcnn_run_copy_f32(Int(py=xcnn_addr(out)), Int(py=xcnn_addr(source)) + 4 * offset, count)
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -735,7 +711,5 @@ def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: I
     if Int(py=a.size) != count:
         raise Error("ValueError: could not broadcast " + name + " into shape (" + String(count) + ",)")
     if count:
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(dest))) + offset,
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(a))),
-               count=count)
+        xcnn_run_copy_f32(Int(py=xcnn_addr(dest)) + 4 * offset, Int(py=xcnn_addr(a)), count)
         _ = a  # keep the Python object alive through the native call above
