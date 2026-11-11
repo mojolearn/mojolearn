@@ -348,10 +348,9 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
         for name in ["weight_grad", "bias_grad", "_x", "_stats"]:  # driver-loop: over initial native state fields
             py_setitem(fields, name, PythonObject(None))
         return PythonObject(None)
-    if operation == "seqln_device_binding" or operation == "seqln_device_io":
+    if operation == "seqln_device_io":
         var entries = _ln_device_entries(fields, context)
-        return PythonObject(entries is not None) if operation == "seqln_device_io" else (
-            PythonObject(None) if entries is None else entries["module"])
+        return PythonObject(entries is not None)
     if operation == "seqln_to_device":
         var input = LayerInput(values[0], context)
         if input.absent:

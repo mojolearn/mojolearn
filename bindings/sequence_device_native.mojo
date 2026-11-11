@@ -134,16 +134,6 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
             return PythonObject(py_type(values[0]) is context["sequence_device_class"])
         if operation == "seqdev_size_of":
             return PythonObject(shape_count(device_shape(values[0], context)))
-        if operation == "seqdev_resident":
-            return PythonObject(seq_device_entries(values[0], context, False) is not None)
-        if operation == "seqdev_on":
-            var tensors = values[1]
-            if py_type(tensors) is not b.tuple:
-                raise Error("TypeError: native device owner arguments require a tuple")
-            for i in range(len(tensors)):  # driver-loop: over device operand owners
-                if not seq_device(tensors[i], context) or seq_device_get(tensors[i], "b", context) is not values[0]:
-                    return PythonObject(False)
-            return PythonObject(True)
         if operation == "seqdev_construct":
             if py_type(owner) is not context["sequence_device_class"]:
                 raise Error("TypeError: sequence device constructor requires its exact owner")
