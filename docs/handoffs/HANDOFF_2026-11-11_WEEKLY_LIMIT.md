@@ -1,5 +1,82 @@
 # Mojolearn handoff — weekly limit, 2026-11-11
 
+## READ FIRST: status update and plan for the next agent (2026-11-11 15:25 ET)
+
+Added by the Claude orchestrator session after Codex reached its weekly limit. The original Codex handoff follows
+below, unchanged; where the two differ, the live status files win over both.
+
+### Where things stand
+
+- **main** = product code of `c6dbe7ced4` (Mojo 1.0.0 / MAX 26.5.0 pins) plus documentation commits only. None of
+  the 2026-11-11 product work is on main.
+- **All new product work** is on `preinteg/native-consolidated-20261111` (`33b043de8b`): the Mojo 1.2.0 / MAX 26.7.0
+  upgrade, 54 more migrated roles (GP, SVM incl. OneClassSVM, Ridge/OLS), the first native entry table
+  (Ridge/OLS only), the IPCA workaround removal, the OPTICS capture fix, `docs/MODULAR_ASKS.md` updates, and the
+  small-tooling merge (`%2B` wheel-install fix, istella_rank staging, lane_select pandas-gate fixes).
+- **The r2 build under Mojo 1.2.0 is still running** (controller PIDs 96835/96837; status
+  `~/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/result.json`). At 15:22 ET:
+  **8 of 25 units compiled, 10 failed, 7 unfinished.** The controller merges only if all 25 compile, so it will
+  stop without merging. Let it finish; do not start a second build.
+- Failure classes in the r2 logs (count of error lines across the failed logs):
+  - 1.2.0 API changes the source has not caught up with: `module 'intrinsics' does not contain 'ldg'` (14),
+    `top_k` `k` argument no longer accepts `None` (`knn_brute_force.mojo:1648`, units `identical-_mojolearn_native`
+    and `_m1`), `matmul` `elementwise_lambda_fn` type change (`fast_trsm.mojo:344`, unit `identical-..._trees`),
+    indentation errors in two `except` blocks (orchestration and tokenizer host units). Ordinary source fixes.
+  - `_cpython.mojo:2208:24: error: operand #1 does not dominate this use` (12, units byte_trainer, classical_trees,
+    classical_family, classical_prep, classical_decomp hosts). Raised inside Mojo's own CPython layer around a
+    `kgen.call_indirect`: possibly a new Mojo 1.2.0 compiler bug. Not reduced yet.
+
+### Plan, in order (each step names the test that decides it)
+
+1. **Finish r2, then fix the compile errors in one batch** on a new frozen SHA; rerun as attempt `r3` through the
+   same controller and builder (reuse compiled units). Done when: 25/25 Mac units compile.
+   - For "does not dominate": reduce to the smallest standalone file. If it reproduces on Mojo 1.2.0 with only
+     stdlib/MAX imports, search `modular/modular` issues and file it (format of #7543). Do not add a Python
+     fallback, lower optimization or patch the toolchain (AGENTS.md "Wait for Mojo and Modular").
+2. **Merge to main** after 25/25 compile, the packed wheel imports, and the light smoke passes on the Mac
+   (AGENTS.md "Compile-green is not a gate"). Rebase the controller's base check onto the current main head.
+   Done when: `import mojolearn` from the main wheel succeeds.
+3. **Run the prepared native batch** (`~/mojolearn-evidence/python-mojo-migration-20261110/native-upgrade-120/combined-native/`,
+   179 CPU / 127 GPU cases; GPU groups ordered because of modular/modular#7544). Then the entry-table proofs
+   (`docs/plans/native_entry_table/native-proof.json`). Done when: the suite manifest's counts all pass.
+4. **Measure** current main on NVIDIA (L40S) and AMD (MI300X) against 0.8.55 and 0.8.66 with
+   `docs/plans/PRE_0867_MEASUREMENT.md`. The last measurement (AMD only, Nov 9 main `cd02a3f6fe`) had 50 of 102
+   recipes timed, geomean 0.92x vs 0.8.55, 13 still slower (iforest fit 1.94x, GBDT pairlogit 1.83x, Samba forward
+   1.69x, byte-LM forward/train ~1.2x); 52 recipes did not run because 78 of 174 smoke cells failed (mostly trees),
+   and NVIDIA produced nothing (every smoke cell "not run"). Fix the smoke failures first. Done when: both vendors
+   have every recipe timed, the toolchain change included.
+5. **Native call table across modules** (the largest Python removal per hour): brief
+   `~/mojolearn-evidence/briefs-20261111/codex-native-call-table.md`. Main still has about 7,226
+   `py_call`/`py_call_typed` sites (Mojo calling Mojo through CPython) and 206 of 207 `bindings/*_native.mojo`
+   doors touching Python. Ridge/OLS has the first entry table on the branch; extend family by family, worst first
+   (trees meta/boost/gbdt fit, causal LM, byte LM trainer, prep encode, x_linear), deleting each `py_call` site
+   and its packing. Done when: the runtime crossing observer shows only UNPACK/PACK crossings per family.
+6. **Continue the boundary migration** (original handoff step 7): 26 of 170 estimators reviewed, 144 not reviewed.
+7. **Branch and worktree cleanup.** Audit: `~/mojolearn-evidence/branch-audit-20261111.tsv` (341 unmerged refs,
+   about 210 branch names older than 2026-11-05; 91 worktrees). Before any deletion, record each losing experiment
+   with branch@sha in `docs/TOMBSTONES.md` / `docs/apple-fast/EXPERIMENTS.md` per AGENTS.md "Deleting an
+   experiment" (code that never reached main gets branch@sha, no patch). Then delete only refs that are merged or
+   recorded. Worktree removal needs Andrew's OK. `lane/nvidia-one-wheel*` look superseded (main ships PTX at
+   `cuda/sm_80`); confirm before recording them.
+
+### Modular status (verified 2026-11-11 on Mojo 1.2.0 / MAX 26.7; `~/mojolearn-evidence/modular-check-20261111/SUMMARY.md`)
+
+- Fixed upstream in 1.2.0: IPCA nested-capture segfault, DBSCAN field-capture diagnostic, DeadArgumentElimination
+  (#7164). OPTICS is a rule violation in our code, fixed on the branch.
+- Filed: modular/modular#7543 (PythonObject runtime default evaluated at compile time), #7544 (Metal: concurrent
+  submission through one shared DeviceContext aborts; `num_streams()` is 1 on Apple).
+- Not filed (no small reproducer): the compiler deadlock (mutual recursion + default) and "compile offload result
+  missing kernelId". The 11 older asks in `docs/MODULAR_ASKS.md` need NVIDIA/AMD/Linux to recheck.
+
+### Standing constraints the next agent must keep
+
+No release, tag, PyPI publish or identity run (Andrew decides releases). Laptop is shared with mambik: compile
+through `tools/compile_slot.sh`, at most 4 test workers, never a test during a build. Hand-tuned kernels are not
+touched. No Python fallbacks. Do not restore the retired source-count guards. Never delete a worktree without
+Andrew's OK.
+
+---
+
 Andrew requested that all worktrees be saved to Git and that running work remain
 in flight. Do not interrupt or restart the active build. No release was requested.
 
