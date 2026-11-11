@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Copyright 2026 Andrew Hendel. Part of Mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Compile-time accelerator predicates for the selected Mojolearn build target.
 
 Mojo 1.2 replaced the vendor ``has_*_gpu_accelerator`` functions with
