@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The neural-blocks entry table's four families, reached natively (lane
+"""The neural-blocks entry table's six families, reached natively (lane
 calltable-neural-blocks, 2026-11-11; core/neural_entry_table.mojo).
 
 Ordered preconditions first (they share the one process table): a caller
-refuses before publication; then the CPU publications the four host images
+refuses before publication; then the CPU publications the six host images
 make at module init (`_mojolearn_neural_host`, `_mojolearn_transformer_host`,
-`_mojolearn_mamba_host`, `_mojolearn_x_sequence_host`), repeated as a second
+`_mojolearn_mamba_host`, `_mojolearn_x_sequence_host`, `_mojolearn_embedding_host`,
+`_mojolearn_embedding_infer_host`), repeated as a second
 module init repeats them; a mismatched tier or an invalid vendor key refuses.
 Then one case per operation the neural block and SmallMLPTrainer callers
 make through each published entry, each checked against the entry's own
@@ -25,14 +26,18 @@ from core.neural_entry_table import (
     NEURAL_TABLE_MAMBA_TRAIN, NEURAL_TABLE_MLP_PROGRAM, NEURAL_BLOCK_FORWARD_FRESH,
     NEURAL_BLOCK_SESSION_FORWARD_FRESH, NEURAL_BLOCK_BACKWARD, NEURAL_MAMBA1_BACKWARD,
     NEURAL_MAMBA2_BACKWARD, NEURAL_MAMBA3_BACKWARD, NEURAL_MLP_PROGRAM_OPERATIONS,
+    NEURAL_TABLE_EMBEDDING, NEURAL_TABLE_EMBEDDING_INFER, EMB_OP_FORWARD, EMB_OP_BACKWARD,
+    EMB_OP_TENSOR_ALLOC,
 )
 from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_CLOSE
 from core.neural_entry_neural_host import publish_neural_block_neural_host
 from transformer.host.neural_entry_host import publish_neural_transformer_host
 from mamba.host.neural_entry_host import publish_neural_mamba_host
 from sequence.small_mlp_entry_host import publish_neural_small_mlp_host
+from bindings._mojolearn_embedding_host import publish_neural_embedding_host
+from bindings._mojolearn_embedding_infer_host import publish_neural_embedding_infer_host
 
-comptime NEURAL_ENTRY_CASES = 9
+comptime NEURAL_ENTRY_CASES = 12
 
 
 def require(ok: Bool, message: String) raises:
@@ -130,27 +135,56 @@ def case(unit: Int) raises:
         # program image, OPEN: the program's own arity admission
         _expect_refusal[NEURAL_TABLE_MLP_PROGRAM](SMALL_MLP_PROGRAM_OPEN, none, none, no_floats,
             "small MLP program open takes 6 addresses, 1 integer and 5 floats")
+    elif unit == 8:
+        _program_bounds()
+    elif unit == 9:
+        # Embedding training host, FORWARD: the forward's arity admission
+        _expect_refusal[NEURAL_TABLE_EMBEDDING](EMB_OP_FORWARD, none, [3, 2, 1], no_floats,
+            "embedding_forward: addrs must contain 3 addresses")
+    elif unit == 10:
+        # Embedding training host, BACKWARD: the backward's arity admission;
+        # the host image serves no resident tensors
+        _expect_refusal[NEURAL_TABLE_EMBEDDING](EMB_OP_BACKWARD, [0, 0, 0], [3, 2], no_floats,
+            "embedding_backward: params must contain 5 or 6 values")
+        _expect_refusal[NEURAL_TABLE_EMBEDDING](EMB_OP_TENSOR_ALLOC, none, [1, 0], no_floats,
+            "embedding host entry: unavailable operation")
+    elif unit == 11:
+        # Embedding inference host: FORWARD admission; no backward
+        _expect_refusal[NEURAL_TABLE_EMBEDDING_INFER](EMB_OP_FORWARD, [0, 0], [3, 2, 1], no_floats,
+            "embedding_forward: addrs must contain 3 addresses")
+        _expect_refusal[NEURAL_TABLE_EMBEDDING_INFER](EMB_OP_BACKWARD, none, none, no_floats,
+            "embedding host entry: unavailable operation")
     else:
-        # program image: an operation past the table's count, then CLOSE
-        # without a handle
-        _expect_refusal[NEURAL_TABLE_MLP_PROGRAM](NEURAL_MLP_PROGRAM_OPERATIONS, none, none, no_floats,
-            "small MLP program: unknown operation")
-        _expect_refusal[NEURAL_TABLE_MLP_PROGRAM](SMALL_MLP_PROGRAM_CLOSE, none, none, no_floats,
-            "small MLP program: the handle comes first")
+        raise Error("unknown neural entry case")
+
+
+def _program_bounds() raises:
+    var none = List[Int]()
+    var no_floats = List[Float64]()
+    # program image: an operation past the table's count, then CLOSE without
+    # a handle
+    _expect_refusal[NEURAL_TABLE_MLP_PROGRAM](NEURAL_MLP_PROGRAM_OPERATIONS, none, none, no_floats,
+        "small MLP program: unknown operation")
+    _expect_refusal[NEURAL_TABLE_MLP_PROGRAM](SMALL_MLP_PROGRAM_CLOSE, none, none, no_floats,
+        "small MLP program: the handle comes first")
 
 
 def run_checks() raises:
     precondition_unpublished()
-    # The publications the four CPU images make at module init; a second
+    # The publications the six CPU images make at module init; a second
     # init publishes the same pointers.
     publish_neural_block_neural_host()
     publish_neural_transformer_host()
     publish_neural_mamba_host()
     publish_neural_small_mlp_host()
+    publish_neural_embedding_host()
+    publish_neural_embedding_infer_host()
     publish_neural_block_neural_host()
     publish_neural_transformer_host()
     publish_neural_mamba_host()
     publish_neural_small_mlp_host()
+    publish_neural_embedding_host()
+    publish_neural_embedding_infer_host()
     preconditions_published()
     var failures = List[Int](length=NEURAL_ENTRY_CASES, fill=0)
     var flags = failures.unsafe_ptr()
