@@ -719,6 +719,16 @@ def x_neighbors_numeric_mode_binding() raises -> PythonObject:
     reg = "".join(f'    m.def_function[{name}_binding]("xn_{name}")\n' for name in [o[0] for o in OPS] + [c[0] for c in CUSTOM_OPS] + list(OWN_DRIVERS))
     s.append(f"""
 
+comptime _KPCA_NEIGHBOR_API_NAME = (("MojolearnKPCANeighborDevice" if KPCA_NEIGHBOR_DEVICE else "MojolearnKPCANeighborHost")
+    + ("IdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "FastV1"))
+comptime KPCA_NEIGHBOR_API = SharedSlot[KPCAProviderAPI[KPCANeighborInfo[KPCA_NEIGHBOR_DEVICE, KPCA_NEIGHBOR_RESIDENT]], _KPCA_NEIGHBOR_API_NAME]
+
+
+def kpca_neighbors_native_api_binding() raises -> PythonObject:
+    var table = KPCA_NEIGHBOR_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def x_neighbors_native_api_binding() raises -> PythonObject:
     var table = XN_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -726,12 +736,16 @@ def x_neighbors_native_api_binding() raises -> PythonObject:
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[x_neighbors_native_api_binding]("x_neighbors_native_api_v1")
+    m.def_function[kpca_neighbors_native_api_binding]("kpca_neighbors_native_api_v1")
 {reg}    m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 """)
     return "".join(s)
 
 
-BIND_HEAD = """from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
+BIND_HEAD = """from core.shared_slot import SharedSlot
+from core.kpca_native_api import KPCAProviderAPI
+from core.kpca_native_info import KPCANeighborInfo
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
@@ -753,6 +767,7 @@ def gpu_binding():
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding\n"
+            + "from x_neighbors.kapprox_dev import XN_KPCA_RESIDENT\ncomptime KPCA_NEIGHBOR_DEVICE = True\ncomptime KPCA_NEIGHBOR_RESIDENT = XN_KPCA_RESIDENT\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
             + "from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding\n"
             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
@@ -798,6 +813,7 @@ def host_binding():
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from providers.python.x_neighbors_host_pyapi import kpca_resident_binding\n"
+            + "comptime KPCA_NEIGHBOR_DEVICE = False\ncomptime KPCA_NEIGHBOR_RESIDENT = False\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:

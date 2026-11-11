@@ -9,6 +9,13 @@ from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NO
 
 from x_neighbors.native_descriptor_device import XN_NATIVE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from core.shared_slot import SharedSlot
+from core.kpca_native_api import KPCAProviderAPI
+from core.kpca_native_info import KPCANeighborInfo
+from x_neighbors.kapprox_dev import XN_KPCA_RESIDENT
+comptime KPCA_NEIGHBOR_DEVICE = True
+comptime KPCA_NEIGHBOR_RESIDENT = XN_KPCA_RESIDENT
+
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -1086,6 +1093,16 @@ def louvain_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
     return PythonObject(None)
 
 
+comptime _KPCA_NEIGHBOR_API_NAME = (("MojolearnKPCANeighborDevice" if KPCA_NEIGHBOR_DEVICE else "MojolearnKPCANeighborHost")
+    + ("IdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "FastV1"))
+comptime KPCA_NEIGHBOR_API = SharedSlot[KPCAProviderAPI[KPCANeighborInfo[KPCA_NEIGHBOR_DEVICE, KPCA_NEIGHBOR_RESIDENT]], _KPCA_NEIGHBOR_API_NAME]
+
+
+def kpca_neighbors_native_api_binding() raises -> PythonObject:
+    var table = KPCA_NEIGHBOR_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def x_neighbors_native_api_binding() raises -> PythonObject:
     var table = XN_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -1093,6 +1110,7 @@ def x_neighbors_native_api_binding() raises -> PythonObject:
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[x_neighbors_native_api_binding]("x_neighbors_native_api_v1")
+    m.def_function[kpca_neighbors_native_api_binding]("kpca_neighbors_native_api_v1")
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[device_plan_enter_binding]("device_plan_enter")
     m.def_function[device_plan_exit_binding]("device_plan_exit")

@@ -22,3 +22,24 @@ adding a new inverse algorithm.
 
 No compile, execution, performance or cross-vendor identity result is claimed.
 Root owns the combined build and the native test lane owns standalone fixtures.
+
+## Additive query plans and exports
+
+`core/kpca_native_plan.mojo` adds `KPCAKernelOptions`, `KPCAFitRoute`,
+`KPCAScratch`, `KPCAEigenRoom`, `KPCAAlphaRequest`, `KPCAQueryRequest`,
+`KPCANeighborDriver(XnDriver)` and `KPCACenteredQuery`. Fused queries call the
+existing `kpca_transform` once; the old-items owner retains kernel/rowsum/divide/
+center/matmul in order. All private buffers are native zero-filled stores, and
+the existing eigen rooms retain their capacities and prefix-copy contract.
+A fieldwise request consumes a local options value with `options^`.
+
+The neighbor images export `kpca_neighbors_native_api_v1`; the decomp images
+export `kpca_decomp_native_api_v1`. Host inventories and the neighbor generator
+template include these exports. No unrelated kernel was regenerated. The
+public boundary is not switched yet.
+
+Dense centering has a separately identified inherited driver error; the frozen
+`checks/kpca_dense_centering_repro.mojo` is assigned to root for execution before
+a separate numerical repair. The completed migration will include that repair
+using existing reduction kernels. Native correctness fixtures remain owned by
+the test lane; no lane compilation or execution has occurred.
