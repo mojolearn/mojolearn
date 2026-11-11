@@ -33,3 +33,18 @@ def record(module, vendor):
 def key_of(module):
     """The recorded key of a loaded image, or None (import-time glue)."""
     return KEYS.get(module)
+
+
+def connected_key(name):
+    """The key of the IDENTICAL image `name` the binding loader connects
+    (a CPU install's host twin included), or None when it is not built
+    (import-time glue; the native caller then refuses by the table's word)."""
+    from . import _backend
+    try:
+        with _backend.host_helper_scope():
+            module = _backend.binding(name, "identical")
+        if type(module) is _backend._HostBinding:
+            module = _backend.load_host_module(module._HostBinding__basename)  # import-time: resolve the CPU-only proxy
+    except (ImportError, AttributeError):
+        return None
+    return KEYS.get(module)

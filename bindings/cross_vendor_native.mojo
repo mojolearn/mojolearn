@@ -25,6 +25,8 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from core.shared_slot import SharedSlot
+from core.parallel_entry_table import ParallelEntryKey, parallel_fold_pair_f32
+from std.python._cpython import GILReleased
 
 
 struct CrossVendorBoundary(Defaultable, Movable):
@@ -32,7 +34,8 @@ struct CrossVendorBoundary(Defaultable, Movable):
     var arrays: PythonObject
     var array_cls: PythonObject
     var mismatch_cls: PythonObject
-    var fold_pair: PythonObject
+    var fold_mode: Int
+    var fold_vendor: Int
     var parallel_cls: PythonObject
     var feed_cls: PythonObject
     var rate_cls: PythonObject
@@ -48,7 +51,8 @@ struct CrossVendorBoundary(Defaultable, Movable):
         self.arrays = PythonObject(None)
         self.array_cls = PythonObject(None)
         self.mismatch_cls = PythonObject(None)
-        self.fold_pair = PythonObject(None)
+        self.fold_mode = -1
+        self.fold_vendor = -1
         self.parallel_cls = PythonObject(None)
         self.feed_cls = PythonObject(None)
         self.rate_cls = PythonObject(None)
@@ -60,22 +64,26 @@ struct CrossVendorBoundary(Defaultable, Movable):
         self.console_write = PythonObject(None)
 
 
-comptime CROSS_VENDOR_BOUNDARY = SharedSlot[CrossVendorBoundary, "MojolearnCrossVendorBoundaryV1"]
+# V2: the fold entry is the base image's parallel table key, not a Python door.
+comptime CROSS_VENDOR_BOUNDARY = SharedSlot[CrossVendorBoundary, "MojolearnCrossVendorBoundaryV2", 2]
 
 
-def cross_vendor_initialize(array_cls: PythonObject, mismatch_cls: PythonObject, fold_pair: PythonObject) raises:
+def cross_vendor_initialize(array_cls: PythonObject, mismatch_cls: PythonObject, fold_key: PythonObject) raises:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     c[].bi = Python.import_module("builtins")
     c[].arrays = Python.import_module("array").array
     c[].array_cls = array_cls
     c[].mismatch_cls = mismatch_cls
-    c[].fold_pair = fold_pair
+    # UNPACK: the base image's (tier, vendor) table key the loader recorded
+    # (python/mojolearn/_native_table_key.py); None when the base binding is
+    # not built, and then the first fold refuses by the table's word.
+    if fold_key is not None:
+        c[].fold_mode = Int(py=fold_key[0])
+        c[].fold_vendor = Int(py=fold_key[1])
     cv_types_initialize(array_cls)
     byte_checkpoint_initialize(array_cls)
     c[].argv = Python.import_module("sys").argv
     c[].console_write = Python.import_module("posix").write
-    if py_type(c[].fold_pair) is not py_type(c[].bi.len):
-        raise Error("cross_vendor: fold must be a native extension entry")
     transport_initialize()
 
 
@@ -104,7 +112,8 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
     var store = py_call(c[].arrays, "f")
     _ = py_call(store.frombytes, py_call(cross_vendor_f32(source).cast, "B"))
     var n = len(store)
-    var total = store.buffer_info()[0]
+    var total = Int(py=store.buffer_info()[0])
+    var key = ParallelEntryKey(c[].fold_mode, c[].fold_vendor)
     for k in range(first, len(parts)):  # driver-loop: over logical shard gradient buffers in immutable order
         # pass 3 (rank 36): the shard's received float32 view is folded in
         # place (one read-only buffer export); it was copied into a new
@@ -120,7 +129,11 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
             # Retain the selected operation's existing GPU/CPU execution route.
             # Mojo owns the immutable fold; the cached compiled entry owns its
             # arithmetic, including FTZ and the one float32 rounding per add.
-            _ = py_call(c[].fold_pair, total, PythonObject(layout.address), n)
+            # The base image's fold_pair_f32 through its parallel table entry
+            # (core/parallel_entry_table.mojo), with the GIL released.
+            var py = Python()
+            with GILReleased(py):
+                _ = parallel_fold_pair_f32(key, total, layout.address, n)
         finally:
             pin.release()  # the export pins the received bytes through the fold above
         _ = view^
