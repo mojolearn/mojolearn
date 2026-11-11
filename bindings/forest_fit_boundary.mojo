@@ -27,3 +27,13 @@ def forest_fit_args_py(x_addr: PythonObject, y_addr: PythonObject, params: Pytho
     gbdt_fit_params_py(params, ints, floats, bad)
     var crit = -1 if criterion is None else Int(py=criterion)
     return ForestFitArgs(Int(py=x_addr), Int(py=y_addr), ints^, floats^, bad^, crit)
+
+
+def forest_params_py(params: PythonObject) raises -> ForestFitArgs:
+    """A params list alone as native views (the session, DART and AdaBoost
+    Python entries, whose other arguments they read themselves)."""
+    var ints = List[Int]()
+    var floats = List[Float64]()
+    var bad = List[UInt8]()
+    gbdt_fit_params_py(params, ints, floats, bad)
+    return ForestFitArgs(0, 0, ints^, floats^, bad^, -1)
