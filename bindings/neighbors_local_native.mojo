@@ -40,13 +40,14 @@ from bindings.family_common import (
 )
 from bindings.classical_labels import (
     labels_cast, classical_encode_labels,
-    classical_decode_labels, classical_accuracy,
+    labels_decode_i32_codes, classical_accuracy,
 )
 from bindings.labels_descriptor_boundary import labels_class_ratio_f64
 from bindings.nearest_centroid_provider import NcConnection
 from bindings.lof_provider import LofConnection
 from core.lof_plan import LofPlan, LofLabelsPlan, lof_f32_address, lof_offset
 from core.nearest_centroid_plan import (
+    NcLabelCodes,
     NcFitPlan, NcQueryPlan, nc_uniform, nc_normalize_priors, nc_narrow_priors, nc_binary_decision, nc_scratch_address,
 )
 from core.admitted_weights import admitted_fill
@@ -457,7 +458,7 @@ def _lof_predict(model: PythonObject, args: PythonObject, context: PythonObject)
 # ------------------------------------------------------------ NearestCentroid
 
 
-def _class_array(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+def _class_array(classes: PythonObject, codes: List[Int32], context: PythonObject) raises -> PythonObject:
     """`_class_array(classes, codes)`: int or bool classes an int64 Array,
     real classes a float64 Array, other labels a list (`decode_labels`)."""
     # Perf (perf2-neighbors): an exact int/bool/float label answers the kind
@@ -476,7 +477,7 @@ def _class_array(classes: PythonObject, codes: PythonObject, context: PythonObje
         for i in range(k):  # driver-loop: over the k class values
             var label = classes[i]
             _ = py_call(ints.append, label if py_type(label) is b.int else family_call(b.int, label))
-        return classical_decode_labels(ints, codes, context)
+        return labels_decode_i32_codes(ints, codes, context)
     var all_real = True
     for i in range(k):  # driver-loop: over the k class labels (kind test)
         var cls = py_type(classes[i])
@@ -488,8 +489,8 @@ def _class_array(classes: PythonObject, codes: PythonObject, context: PythonObje
         for i in range(k):  # driver-loop: over the k class labels as floats
             var label = classes[i]
             _ = py_call(reals.append, label if py_type(label) is b.float else family_call(b.float, label))
-        return classical_decode_labels(reals, codes, context)
-    return classical_decode_labels(classes, codes, context)
+        return labels_decode_i32_codes(reals, codes, context)
+    return labels_decode_i32_codes(classes, codes, context)
 
 
 def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
@@ -636,8 +637,8 @@ def _nc_predict_values(model: PythonObject, binding: PythonObject, source: Pytho
     var connection = NcConnection(binding)
     var rows = _rows(q)
     var fused = rows > 0 and connection.fused
-    var codes = admitted_storage_native([rows], "<i4", context, as_array=True)
-    var code_address = Int(py=classical_address(codes))
+    var codes = NcLabelCodes(rows)
+    var code_address = codes.address()
     if _nc_uniform(fields, context):
         var cent = family_field(fields, "centroids_")
         var query_address = Int(py=classical_address(q))
@@ -666,7 +667,9 @@ def _nc_predict_values(model: PythonObject, binding: PythonObject, source: Pytho
         _ = inputs^
     _ = connection^
     _ = q
-    return _class_array(classes, codes, context)
+    var result = _class_array(classes, codes.values, context)
+    _ = codes^  # code storage survives kernels, widening/gather and final label packing
+    return result
 
 
 def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,

@@ -10,10 +10,23 @@ from core.admitted_cast_elements import admitted_cast_elements
 from core.array_helpers_impl import fsum_f64
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.native_array_layout import NativeArrayLayout
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64 = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I64 = Pointer[Int64, ImmUntrackedOrigin]
+
+
+struct NcLabelCodes(Movable):
+    var values: List[Int32]
+
+    def __init__(out self, rows: Int) raises:
+        var layout = NativeArrayLayout([rows], 4)
+        self.values = List[Int32](length=layout.count, fill=0)
+
+    def address(self) -> Int:
+        # Preserve the old private Array's empty-code descriptor refusal.
+        return Int(self.values.unsafe_ptr()) if len(self.values) else 0
 
 
 def nc_scratch_address(values: List[Float32]) -> Int:
