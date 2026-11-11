@@ -1,0 +1,71 @@
+{
+  "suite": "ipca_native",
+  "cpu_fixtures": 15,
+  "gpu_fixtures": 17,
+  "dependencies": [
+    "e97482b20b",
+    "769351665c"
+  ],
+  "execution": "uncompiled and unrun; root CPU/GPU bundles owed",
+  "coverage": {
+    "0": "actual provider mode/vendor/fit-partial-query-resident capabilities",
+    "1-2": "original 6x3, count2, fit batch3; whiten false/true; state, query and inverse",
+    "3": "count3/full-rank fit batch6 and original-data reconstruction",
+    "4": "automatic requested count -1, original batch3",
+    "5-6": "first3 then second3 typed partial updates; whiten false/true",
+    "7": "first6 then repeated6 partial update; preserve rank-two incremental approximation",
+    "8-13": "exact batch-zero, requested count, changed previous width, minimum samples, invalid resident id and Int32 dimension refusals; outputs untouched",
+    "14": "host prepare refusal; GPU actual prepare of mean, mixed resident/borrowed query and inverse, free once",
+    "15_gpu": "kept fit state, resident query/inverse, all five state fields released",
+    "16_gpu": "kept partial generations; query new and old resident states after update, release both once"
+  },
+  "oracle": {
+    "path": "checks/native_tests/fixtures/ipca/metadata.json",
+    "files": 22,
+    "method": "Independent Float64 covariance update/eigh; retain only rank2 covariance between repeated batches; mean/population variance from all observations. Each component checked by its sign-invariant rank-one projector. Query/inverse checked against Float64 mathematical equations. No product or legacy code execution.",
+    "mean_population_bounds": {
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    "spectrum_noise_bounds": {
+      "rtol": 0.001,
+      "atol": 0.0001
+    },
+    "ratio_bounds": {
+      "rtol": 0.001,
+      "atol": 1e-05
+    },
+    "component_projector_bounds": {
+      "rtol": 0.002,
+      "atol": 0.0002
+    },
+    "query_inverse_bounds": {
+      "rtol": 0.0002,
+      "atol": 0.0002
+    },
+    "limits": "New independent correctness bounds follow existing PCA/TSVD native spectral/query conventions. No previous failing expectation changed; all fixtures unrun. Not a full-PCA substitute for repeated truncated updates."
+  },
+  "ownership": "Every native input/output room remains named through raw-address calls. All six output fields and query/inverse/failed publication buffers guarded. Real kept state ids >=0, including zero, released once; both partial generations drained even if cleanup fails. Fake contract handles never used here.",
+  "parallel": "CPU 15 independent graphs via host_parallelize; GPU 17 graphs ordered over shared DeviceContexts on one physical GPU; tuned kernels and independent oracle cells parallel. No concurrency clearance.",
+  "reviewed_python": [
+    "test_ipca_native_boundary.py (pilot-owned public admission/publication/mutation/lifetime seams)",
+    "test_native_decomp_params.py",
+    "test_native_declared_params_setter.py",
+    "test_ne2_g_decomp_entries.py"
+  ],
+  "python_removed": [],
+  "remaining_python": "Reviewed tests are public parameter/storage/descriptor/refusal/owner-lifetime seams. In-place/rebound query-change assertion must retain its Python array boundary. No pure numerical controller identified for further deletion.",
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_COLUMN_CPU=1 for CPU only"
+  ],
+  "product_files_changed": [],
+  "static_checks": [
+    "generator Python AST",
+    "pixi TOML parse",
+    "JSON parse",
+    "saved artifact hashes",
+    "Mojo source/ABI/lifetime review",
+    "git diff --check"
+  ]
+}

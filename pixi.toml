@@ -150,6 +150,8 @@ check-native-lof-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_C
 check-native-lof-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/lof_native_gpu.mojo"
 check-native-ipca-state = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_state.mojo"
 check-native-ipca-contract = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_contract.mojo"
+check-native-ipca-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/ipca_native_cpu.mojo"
+check-native-ipca-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_native_gpu.mojo"
 check-native-tsvd-fit-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_fit_cpu.mojo"
 check-native-tsvd-fit-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_fit_gpu.mojo"
 check-native-device-concurrency = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/native_device_concurrency.mojo"
