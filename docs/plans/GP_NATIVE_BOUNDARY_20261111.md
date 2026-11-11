@@ -62,3 +62,21 @@ The provider export chunk changes the three GP binding roots above. No A/B defin
 or default changes; no intended numerical changes. No kernels or old paths
 deleted yet because public switching is pending. The separate Modular shared
 context submission problem is neither fixed nor worked around here.
+
+GPR request switch (staged public chunk): fit, mean/std query, covariance,
+sampling, optimizer, likelihood-gradient and theta-map execution now use
+`GPConnection` / `GPDriver`. GIL-free calls retain the admitted image and all
+buffer owners. Fit and gradient scalars, predictive variance, optimizer
+theta/value/run scratch, free flags/bounds and likelihood return metadata use
+native owners. Python gradient lists and optimizer records are created only
+while packing public results. Post-RUN namespace keys are re-admitted before
+publication. A fit snapshots the normalization setting and owns its ridge
+retry scalar; the same tenfold retry rule and warning remain.
+
+This is not a completed whole-family switch. Kernel-array packing/cache
+records, fitted resident lease records, StandardScaler normalization, GPC and
+cross-interpreter GP workers are still staged dependencies. Existing missing
+legacy-entry checks temporarily preserve boundary refusal positions; they
+do not execute those numerical entry callables. They will be replaced by
+native capability admission with the complete provider switch. Source-only
+review is not runtime, performance or identity evidence.

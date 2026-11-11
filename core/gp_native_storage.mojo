@@ -88,6 +88,24 @@ struct GPRGradientScratch(Movable):
         self.scalars = List[Float64](length=2, fill=0.0)
 
 
+@fieldwise_init
+struct GPRGradientResult(Movable):
+    var info: Int
+    var likelihood: Float64
+    var gradient: List[Float64]
+
+
+struct GPFreeParameters(Movable):
+    var flags: List[Int32]
+    var values: List[Float64]
+    var bounds: List[Float32]
+
+    def __init__(out self):
+        self.flags = List[Int32]()
+        self.values = List[Float64]()
+        self.bounds = List[Float32]()
+
+
 struct GPOptimizerScratch(Movable):
     var theta: List[Float64]
     var values: List[Float64]

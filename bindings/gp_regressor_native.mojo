@@ -1,16 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-# GaussianProcessRegressor `fit`, `predict`, `sample_y`, `log_marginal_likelihood`
-# and `score`, one native call each (python/mojolearn/_gp_impl.py). The shell hands
-# over raw arguments; the shared native provider resolves the binding. This owner makes the
-# methods' refusals in their wording and order, cross-checks the binary's
-# compile-time mode, runs normalize_y through StandardScaler's own native fit and
-# transform (bindings/scaler_native.mojo, bindings/scaler_lifecycle_native.mojo),
-# packs the kernel from its fields, runs the binding's gpr_optimize, gpr_fit(_ptr),
-# gpr_predict(_ptr), gpr_predict_cov, gpr_sample_y, gp_theta_params and gpr_lml_grad
-# with the argument lists bindings/_mojolearn_gp.mojo documents, in the order the
-# Python made them, and stores the fit. score is the same single-output R^2
-# program `linear_model._r2_sums` ran (bindings/metrics_reg_native.mojo's `_Reg`).
-# The same entries on the same inputs: the bits do not move.
+# GaussianProcessRegressor boundary admission, storage/image pins and public
+# result packing. Fit/query/covariance/sample/optimizer/gradient/parameter
+# execution uses typed GP requests and the existing numerical providers.
+# Kernel packing, resident admission records and StandardScaler normalization
+# are staged boundary dependencies, migrated in the following chunk.
+from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest
+from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
+from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_owned
@@ -23,6 +19,7 @@ from bindings.py_attr import py_attr
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
 from bindings.classical_arrays import classical_address
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
 from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
@@ -30,13 +27,12 @@ from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_shape_repr, family_field,
     family_is_real, FAMILY_F32P, FAMILY_F64P,
 )
-from bindings.archive_schema_native import _schema_label_store
 from bindings.scaler_native import scaler_fit
 from bindings.scaler_lifecycle_native import scaler_initialize, scaler_transform
 from bindings.metrics_reg_native import _reg_new, _reg_run, _arena_double, _RE_DIV
 from bindings.gp_common_native import gp_fit_owned
 from bindings.gp_common_native import (
-    gp_extension, gp_caps, gp_entry, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
+    gp_extension, gp_entry, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
     gp_free, gp_n_dims, gp_with_free_values, gp_f32,
 )
 
@@ -154,8 +150,15 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "_random_state", PythonObject(None) if random_state is None else family_call(b.int, random_state))
 
 
+@fieldwise_init
+struct GPRNormalizedTargets(Movable):
+    var targets: PythonObject
+    var mean: Float64
+    var stddev: Float64
+
+
 def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonObject, n: Int,
-                   context: PythonObject) raises -> PythonObject:
+                   context: PythonObject) raises -> GPRNormalizedTargets:
     """sklearn `_gpr.py:275-280` through StandardScaler in this estimator's
     tier: `(targets, y_mean, y_std)`, the transformed targets a new (n,)
     float32 Array."""
@@ -184,120 +187,76 @@ def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonOb
     _ = scaled^
     _ = column^
     _ = scaler^
-    return Python.tuple(flat, PythonObject(y_mean), PythonObject(y_std))
+    return GPRNormalizedTargets(flat, y_mean, y_std)
 
 
 def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObject, x: PythonObject,
-                  targets: PythonObject, n_rows: Int, n_cols: Int, context: PythonObject) raises -> PythonObject:
-    """`_lml_grad`: (info, lml, grad list) at `kernel` through `gpr_lml_grad`."""
-    var b = native_loaded_module("builtins")
+                  targets: PythonObject, n_rows: Int, n_cols: Int, context: PythonObject) raises -> GPRGradientResult:
     var arrays = gp_kernel_arrays(kernel, context)
-    var flags = Python.list()
-    var values = Python.list()
-    var bounds = Python.list()
-    gp_free(kernel, flags, values, bounds, context)
-    var free = _schema_label_store(flags, "i", "<i4", context)
-    var n_free = len(values)
-    var grad = family_array(Python.tuple(max(n_free, 1)), "<f8", context)
-    var scalars = family_array(Python.tuple(2), "<f8", context)
+    var free = GPFreeParameters()
+    gp_free(kernel, free, context)
+    var scratch = GPRGradientScratch(len(free.values))
     var fields = py_fields(model)
     var ext = _gpr_ext(model, binding, context)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_lml_grad_binding.
-    # x, y, kinds, kparams, ls_len, ls, free, grad_out, scalars_out;
-    # n_train, n_features, n_nodes, n_ls, alpha
-    var info = family_call(gp_entry(ext, "gpr_lml_grad"),
-        Python.list(classical_address(x), classical_address(targets), classical_address(arrays[0]),
-                    classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
-                    classical_address(free), classical_address(grad), classical_address(scalars)),
-        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
-                    fields["_alpha"]))
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = grad  # keep the Python object alive through the native call above
-    _ = free  # keep the Python object alive through the native call above
-    var gp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(grad)))
-    _ = grad  # keep the Python object alive through the native call above
-    var out = Python.list()
-    for i in range(n_free):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-        _ = py_call(out.append, PythonObject(gp[i]))
-        _ = grad  # keep the Python object alive through the native call above
-    var lml = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))[1]
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = free^
-    _ = arrays^
-    return Python.tuple(family_call(b.int, info), PythonObject(lml), out, grad, scalars)
+    _ = gp_entry(ext, "gpr_lml_grad")
+    var connection = GPConnection(ext)
+    var view = gp_kernel_view(arrays)
+    var request = GPRGradientRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
+        Int(free.flags.unsafe_ptr()), Int(scratch.gradient.unsafe_ptr()), Int(scratch.scalars.unsafe_ptr()),
+        n_rows, n_cols, view^, Float64(py=fields["_alpha"]))
+    var info = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
+    _ = arrays
+    _ = free
+    _ = x
+    _ = targets
+    var likelihood = scratch.scalars[1]
+    var gradient = scratch.gradient^
+    # Scratch owns one unused word when there are no free parameters; the
+    # public gradient has always been empty in that case.
+    if len(free.values) == 0:
+        gradient = List[Float64]()
+    return GPRGradientResult(info, likelihood, gradient^)
 
 
 def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, targets: PythonObject,
-                  n_rows: Int, n_cols: Int, context: PythonObject) raises -> PythonObject:
-    """`_optimize`: every start in ONE `gpr_optimize` call; each run recorded
-    in `_optimizer_runs` as (n_iter, n_eval, stop, -f); returns the fitted
-    kernel, whose theta is the winning run's."""
+                   n_rows: Int, n_cols: Int, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var base = fields["_kernel"]
     var arrays = gp_kernel_arrays(base, context)
-    var flags = Python.list()
-    var values = Python.list()
-    var pairs = Python.list()
-    gp_free(base, flags, values, pairs, context)
-    var free = _schema_label_store(flags, "i", "<i4", context)
-    var n_theta = len(values)
-    var flat = Python.list()
-    for i in range(len(pairs)):  # driver-loop: over the free hyperparameters' bound pairs
-        _ = py_call(flat.append, pairs[i][0])
-        _ = py_call(flat.append, pairs[i][1])
-    var bounds = _schema_label_store(flat, "f", "<f4", context)
+    var free = GPFreeParameters()
+    gp_free(base, free, context)
+    var n_theta = len(free.values)
     var n_runs = 1 + Int(py=fields["_n_restarts_optimizer"])
-    var theta_out = family_array(Python.tuple(n_theta), "<f8", context)
-    var values_out = family_array(Python.tuple(n_theta), "<f8", context)
-    var runs_out = family_array(Python.tuple(n_runs * 4), "<f8", context)
-    # random_state may be None only with no restarts (checked in
-    # _validate_params); the kernel then draws no restart point.
+    var scratch = GPOptimizerScratch(n_theta, n_runs)
     var seed = PythonObject(0) if fields["_random_state"] is None else fields["_random_state"]
     var b = native_loaded_module("builtins")
-    var low = py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF))
-    var high = py_call(py_attr(b.int, "__and__"), py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)), PythonObject(0xFFFFFFFF))
+    var bits = gp_seed_word(family_call(b.int, seed))
     var ext = _gpr_ext(model, binding, context)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
-    # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out, values_out, runs_out;
-    # n_train, n_features, n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi
-    _ = family_call(gp_entry(ext, "gpr_optimize"),
-        Python.list(classical_address(x), classical_address(targets), classical_address(arrays[0]),
-                    classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
-                    classical_address(free), classical_address(bounds), classical_address(theta_out),
-                    classical_address(values_out), classical_address(runs_out)),
-        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
-                    fields["_alpha"], PythonObject(n_runs - 1), low, high))
-    _ = theta_out  # keep the Python object alive through the native call above
-    _ = bounds  # keep the Python object alive through the native call above
-    _ = free  # keep the Python object alive through the native call above
-    _ = runs_out  # keep the Python object alive through the native call above
-    _ = values_out  # keep the Python object alive through the native call above
+    _ = gp_entry(ext, "gpr_optimize")
+    var connection = GPConnection(ext)
+    var kernel = gp_kernel_view(arrays)
+    var request = GPROptimizeRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
+        Int(free.flags.unsafe_ptr()), Int(free.bounds.unsafe_ptr()), Int(scratch.theta.unsafe_ptr()),
+        Int(scratch.values.unsafe_ptr()), Int(scratch.runs.unsafe_ptr()), n_rows, n_cols, kernel^,
+        Float64(py=fields["_alpha"]), n_runs - 1, Int(bits & UInt64(0xFFFFFFFF)), Int(bits >> 32))
+    _ = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
+    _ = arrays
+    _ = free
+    _ = x
+    _ = targets
     var runs = fields["_optimizer_runs"]
+    if py_type(runs) is not b.list:
+        raise Error("TypeError: native GP optimizer history requires an exact list")
     var stops = context["family_gp_opt_stops"]
-    var rp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(runs_out)))
-    _ = runs_out  # keep the Python object alive through the native call above
-    for r in range(n_runs):  # driver-loop: over the optimizer restarts
-        _ = py_call(runs.append, Python.tuple(PythonObject(Int(rp[r * 4])), PythonObject(Int(rp[r * 4 + 1])),
-                                              stops[Int(rp[r * 4 + 2])], PythonObject(-rp[r * 4 + 3])))
-        _ = runs_out  # keep the Python object alive through the native call above
-    var tp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(theta_out)))
-    _ = theta_out  # keep the Python object alive through the native call above
-    var vp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values_out)))
-    _ = values_out  # keep the Python object alive through the native call above
-    var theta = Python.list()
-    var params = Python.list()
-    for i in range(n_theta):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-        _ = py_call(theta.append, PythonObject(tp[i]))
-        _ = theta_out  # keep the Python object alive through the native call above
-        _ = py_call(params.append, PythonObject(vp[i]))
-        _ = values_out  # keep the Python object alive through the native call above
-    _ = arrays^
-    _ = free^
-    _ = bounds^
-    _ = theta_out^
-    _ = values_out^
-    _ = runs_out^
-    return gp_with_free_values(base, params, theta, context)
+    if py_type(stops) is not b.tuple and py_type(stops) is not b.list:
+        raise Error("TypeError: native GP optimizer stop metadata requires an exact sequence")
+    for run in range(n_runs):  # driver-loop: pack public optimizer restart records
+        _ = py_call(runs.append, Python.tuple(PythonObject(Int(scratch.runs[run * 4])),
+            PythonObject(Int(scratch.runs[run * 4 + 1])), stops[Int(scratch.runs[run * 4 + 2])],
+            PythonObject(-scratch.runs[run * 4 + 3])))
+    return gp_with_free_values(base, scratch.values, scratch.theta, context)
 
 
 def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
@@ -328,11 +287,12 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + " entries, X has " + String(n_rows) + " rows")
     var y_mean = Float64(0.0)
     var y_std = Float64(1.0)
-    if Bool(py=fields["_normalize_y"]):
+    var normalize_y = Bool(py=fields["_normalize_y"])
+    if normalize_y:
         var scaled = _gpr_normalize(model, args[0], targets, n_rows, context)
-        targets = scaled[0]
-        y_mean = Float64(py=scaled[1])
-        y_std = Float64(py=scaled[2])
+        targets = scaled.targets
+        y_mean = scaled.mean
+        y_std = scaled.stddev
     var kernel_fit = fields["_kernel"]
     py_setitem(fields, "_optimizer_runs", Python.list())
     if fields["_optimizer"] is not None and gp_n_dims(fields["_kernel"], context) > 0:
@@ -342,24 +302,24 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var l_out = family_array(Python.tuple(n_rows, n_rows), "<f4", context)
     var dual = family_array(Python.tuple(n_rows), "<f4", context)
     # info, nb, logdet, ydotalpha, lml -- in that order.
-    var scalars = family_array(Python.tuple(5), "<f8", context)
+    var scratch = GPRFitScratch()
     var ext = _gpr_ext(model, args[0], context)
-    var fit_fn = gp_entry(ext, String("gpr_fit_ptr") if (gp_caps(ext) & 2) == 2 else String("gpr_fit"))
+    var connection = GPConnection(ext)
+    var kernel = gp_kernel_view(arrays)
     var info = 0
+    var alpha = Float64(py=fields["_alpha"])
     while True:  # driver-loop: over the tenfold ridge retries (alpha up to 1.0)
-        var alpha = Float64(py=fields["_alpha"])
         # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
         # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out;
         # n_train, n_features, n_nodes, n_ls, alpha
-        info = Int(py=family_call(b.int, family_call(fit_fn,
-            Python.list(classical_address(x), classical_address(targets), classical_address(arrays[0]),
-                        classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
-                        classical_address(l_out), classical_address(dual), classical_address(scalars)),
-            Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
-                        fields["_alpha"]))))
+        var request = GPRFitRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
+            Int(py=classical_address(l_out)), Int(py=classical_address(dual)), scratch.address(),
+            n_rows, n_cols, kernel.copy(), alpha, (connection.capabilities & 2) == 2)
+        info = gp_run(connection, request)
+        lifecycle_admit_fields(fields)
         _ = targets  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
-        _ = scalars  # keep the Python object alive through the native call above
+        _ = scratch  # keep the Python object alive through the native call above
         _ = dual  # keep the Python object alive through the native call above
         _ = l_out  # keep the Python object alive through the native call above
         # A ridge too small for float32: a positive alpha is raised tenfold
@@ -374,28 +334,29 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                        + "; refitting with alpha=" + String(py_call(b.format, PythonObject(raised), "g"))
                        + ". Pass a larger alpha to skip this step.")
         metric_warn(message, b.RuntimeWarning, context)
-    var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
-    _ = scalars  # keep the Python object alive through the native call above
+        alpha = raised
+    var sp = scratch.scalars.unsafe_ptr()
+    _ = scratch  # keep the Python object alive through the native call above
     py_setitem(fields, "X_train_", x)
     py_setitem(fields, "y_train_", targets)
     py_setitem(fields, "_y_train_mean", PythonObject(y_mean))
     py_setitem(fields, "_y_train_std", PythonObject(y_std))
-    py_setitem(fields, "normalize_y_", PythonObject(Bool(py=fields["_normalize_y"])))
+    py_setitem(fields, "normalize_y_", PythonObject(normalize_y))
     py_setitem(fields, "kernel_", kernel_fit)
     py_setitem(fields, "n_features_in_", PythonObject(n_cols))
     py_setitem(fields, "L_", l_out)
     py_setitem(fields, "alpha_", dual)
     py_setitem(fields, "info_", PythonObject(info))
     py_setitem(fields, "nb_", PythonObject(Int(sp[1])))
-    _ = scalars  # keep the Python object alive through the native call above
+    _ = scratch  # keep the Python object alive through the native call above
     py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(sp[4]))
-    _ = scalars  # keep the Python object alive through the native call above
+    _ = scratch  # keep the Python object alive through the native call above
     py_setitem(fields, "_logdet", PythonObject(sp[2]))
-    _ = scalars  # keep the Python object alive through the native call above
+    _ = scratch  # keep the Python object alive through the native call above
     py_setitem(fields, "_ydotalpha", PythonObject(sp[3]))
-    _ = scalars  # keep the Python object alive through the native call above
+    _ = scratch  # keep the Python object alive through the native call above
     _ = arrays^
-    _ = scalars^
+    _ = scratch^
 
 
 def _gpr_fitted(fields: PythonObject, message: String) raises:
@@ -420,13 +381,20 @@ def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject
     return q^
 
 
-def _gpr_tail(fields: PythonObject, params: PythonObject) raises:
-    """normalize_y's `[1, y_std, y_mean]` tail: the binding un-normalizes."""
+@fieldwise_init
+struct GPRNormalization(Copyable, Movable):
+    var enabled: Bool
+    var stddev: Float64
+    var mean: Float64
+
+
+def _gpr_normalization(fields: PythonObject) raises -> GPRNormalization:
     var b = native_loaded_module("builtins")
-    if Bool(py=py_call(b.bool, py_get(fields, PythonObject("normalize_y_"), PythonObject(False)))):
-        _ = py_call(params.append, PythonObject(1))
-        _ = py_call(params.append, family_call(b.float, fields["_y_train_std"]))
-        _ = py_call(params.append, family_call(b.float, fields["_y_train_mean"]))
+    var enabled = Bool(py=py_call(b.bool, py_get(fields, PythonObject("normalize_y_"), PythonObject(False))))
+    if enabled:
+        return GPRNormalization(True, Float64(py=family_call(b.float, fields["_y_train_std"])),
+            Float64(py=family_call(b.float, fields["_y_train_mean"])))
+    return GPRNormalization(False, 1.0, 0.0)
 
 
 def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -443,7 +411,8 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         return _gpr_predict_cov(model, args, context)
     _gpr_fitted(fields, "call fit() first (the unfitted-prior arm of sklearn's predict is not implemented)")
     var ext = _gpr_ext(model, args[0], context)
-    var caps = gp_caps(ext)
+    var connection = GPConnection(ext)
+    var caps = connection.capabilities
     var resident = (caps & 4) == 4
     var gq = _gpr_query(fields, args[1], context, resident)
     var q = gq.q
@@ -455,26 +424,24 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     # The variance, std and clamp outputs exist only for return_std (lane
     # p3-svm-gp-kernel, row 628): every binding leaves their addresses
     # untouched when return_std is 0, so a mean-only predict passes 0.
-    var var_out = PythonObject(None)
+    var variance = List[Float32]()
     var std = PythonObject(None)
     var clamped = PythonObject(None)
-    var var_address = PythonObject(0)
-    var std_address = PythonObject(0)
-    var clamped_address = PythonObject(0)
+    var var_address = 0
+    var std_address = 0
+    var clamped_address = 0
     if return_std:
-        var_out = family_array(Python.tuple(n_star), "<f4", context)
+        variance = List[Float32](length=n_star, fill=0.0)
         std = family_array(Python.tuple(n_star), "<f4", context)
         clamped = family_array(Python.tuple(n_star), "<i4", context)
-        var_address = classical_address(var_out)
-        std_address = classical_address(std)
-        clamped_address = classical_address(clamped)
+        var_address = Int(variance.unsafe_ptr())
+        std_address = Int(py=classical_address(std))
+        clamped_address = Int(py=classical_address(clamped))
     var lf = gp_f32(fields, "L_", -1, context)
     var dual = gp_f32(fields, "alpha_", -1, context)
-    var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
-                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(1 if return_std else 0),
-                             fields["info_"])
-    _gpr_tail(fields, params)
-    var predict_name = String("gpr_predict_ptr") if (caps & 2) == 2 else String("gpr_predict")
+    var normalization = _gpr_normalization(fields)
+    var route = 1 if (caps & 2) == 2 else 0
+    var lease = 0
     if not resident:
         # These entries return no status word: the query is tested here.
         gp_query_scan(gq, "GaussianProcessRegressor", context)
@@ -484,37 +451,33 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         # follows the pointer route's params. Lease 0 (an array the binding
         # reads is not the field itself, or cannot be made read-only) uploads
         # per call, as before.
-        var lease = 0
         if xt is fields["X_train_"] and lf is fields["L_"] and dual is fields["alpha_"]:
             lease = fitted_resident_lease(model, _GPR_RESIDENT_SLOT, ext, "gp_resident_lease",
                                           Python.list(xt, dual, lf))
         else:
             fitted_resident_drop(model, _GPR_RESIDENT_SLOT)
-        _ = py_call(params.append, PythonObject(lease))
-        predict_name = String("gpr_predict_resident")
+        route = 2
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
     # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out, std_out, clamped_out;
     # n_train, n_features, n_star, n_nodes, n_ls, return_std, info (+ normalize_y, y_std, y_mean)
     # (+ lease: gpr_predict_resident_binding)
-    var addrs = Python.list(classical_address(xt), classical_address(lf), classical_address(dual), gp_query_address(gq),
-                            classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
-                            classical_address(arrays[3]), classical_address(mean), var_address,
-                            std_address, clamped_address)
-    if gq.store.active():
-        # then the fold's store ids (gpr_predict_resident gathers the rows)
-        _ = py_call(addrs.append, PythonObject(gq.store.base_id))
-        _ = py_call(addrs.append, PythonObject(gq.store.base_rows))
-        _ = py_call(addrs.append, PythonObject(gq.store.index_id))
-    var n_clamped = family_call(gp_entry(ext, predict_name), addrs, params)
+    var kernel = gp_kernel_view(arrays)
+    var request = GPRQueryRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
+        Int(py=classical_address(dual)), Int(py=gp_query_address(gq)), Int(py=classical_address(mean)),
+        var_address, std_address, clamped_address, n_train, Int(py=fields["n_features_in_"]), n_star,
+        kernel^, Int(py=fields["info_"]), return_std, normalization.enabled, normalization.stddev,
+        normalization.mean, route, lease, gq.store.base_id if gq.store.active() else -1,
+        gq.store.base_rows if gq.store.active() else 0, gq.store.index_id if gq.store.active() else -1)
+    var answer = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
     if resident:
-        # [n_clamped, finite word, range word] (lane a7a)
-        gp_query_refuse(Int(py=n_clamped[1]), Int(py=n_clamped[2]), gq, "GaussianProcessRegressor")
-        n_clamped = n_clamped[0]
+        gp_query_refuse(answer.finite, answer.range_status, gq, "GaussianProcessRegressor")
+    var n_clamped = answer.value
     _ = dual  # keep the Python object alive through the native call above
     _ = lf  # keep the Python object alive through the native call above
     _ = xt  # keep the Python object alive through the native call above
     _ = q  # keep the Python object alive through the native call above
-    _ = var_out  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
     _ = mean  # keep the Python object alive through the native call above
     _ = clamped  # keep the Python object alive through the native call above
     _ = std  # keep the Python object alive through the native call above
@@ -523,10 +486,10 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     _ = dual^
     _ = q^
     _ = arrays^
-    _ = var_out^
+    _ = variance^
     if return_std:
         py_setitem(fields, "clamped_", clamped)
-        py_setitem(fields, "n_clamped_", family_call(b.int, n_clamped))
+        py_setitem(fields, "n_clamped_", PythonObject(n_clamped))
         _ = clamped  # keep the Python object alive through the native call above
         _ = std  # keep the Python object alive through the native call above
         _ = mean  # keep the Python object alive through the native call above
@@ -552,22 +515,20 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     if entry is None:
         raise Error("ImportError: " + String(_GPR) + ": " + String(py_fields(ext)["__name__"])
                     + " does not export gpr_predict_cov, so return_cov=True cannot run on it; rebuild the GP binding")
+    var connection = GPConnection(ext)
     # n_star >= 1 (as_f32_c refuses an empty X), so max(n, 1) is n.
     var mean = family_array(Python.tuple(n_star), "<f4", context)
     var cov = family_array(Python.tuple(n_star, n_star), "<f4", context)
     var lf = gp_f32(fields, "L_", -1, context)
     var dual = gp_f32(fields, "alpha_", -1, context)
-    var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
-                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], fields["info_"])
-    _gpr_tail(fields, params)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_cov_binding.
-    # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, cov_out;
-    # n_train, n_features, n_star, n_nodes, n_ls, info (+ normalize_y, y_std, y_mean)
-    _ = family_call(entry,
-        Python.list(classical_address(xt), classical_address(lf), classical_address(dual), classical_address(q),
-                    classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
-                    classical_address(arrays[3]), classical_address(mean), classical_address(cov)),
-        params)
+    var normalization = _gpr_normalization(fields)
+    var kernel = gp_kernel_view(arrays)
+    var request = GPRCovarianceRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
+        Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(mean)),
+        Int(py=classical_address(cov)), n_train, Int(py=fields["n_features_in_"]), n_star,
+        kernel^, Int(py=fields["info_"]), normalization.enabled, normalization.stddev, normalization.mean)
+    _ = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
     _ = dual  # keep the Python object alive through the native call above
     _ = lf  # keep the Python object alive through the native call above
     _ = xt  # keep the Python object alive through the native call above
@@ -616,19 +577,19 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var lf = gp_f32(fields, "L_", -1, context)
     var dual = gp_f32(fields, "alpha_", -1, context)
     var ext = _gpr_ext(model, args[0], context)
-    var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
-                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], fields["info_"], PythonObject(n),
-                             py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF)),
-                             py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)))
-    _gpr_tail(fields, params)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
-    # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out;
-    # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi (+ normalize_y tail)
-    _ = family_call(gp_entry(ext, "gpr_sample_y"),
-        Python.list(classical_address(xt), classical_address(lf), classical_address(dual), classical_address(q),
-                    classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
-                    classical_address(arrays[3]), classical_address(out)),
-        params)
+    var seed_bits = gp_seed_word(seed)
+    var normalization = _gpr_normalization(fields)
+    # Keep the missing-entry refusal at this original boundary position.
+    _ = gp_entry(ext, "gpr_sample_y")
+    var connection = GPConnection(ext)
+    var kernel = gp_kernel_view(arrays)
+    var request = GPRSampleRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
+        Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(out)),
+        n_train, Int(py=fields["n_features_in_"]), n_star, kernel^, Int(py=fields["info_"]),
+        n, Int(seed_bits & UInt64(0xFFFFFFFF)), Int(seed_bits >> 32), normalization.enabled,
+        normalization.stddev, normalization.mean)
+    _ = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
     _ = dual  # keep the Python object alive through the native call above
     _ = lf  # keep the Python object alive through the native call above
     _ = xt  # keep the Python object alive through the native call above
@@ -644,28 +605,28 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     return out
 
 
-def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> List[Float64]:
     """`[float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]`."""
     var b = native_loaded_module("builtins")
-    var out = Python.list()
+    var values = List[Float64]()
     if py_type(theta) is b.int or py_type(theta) is b.float:
-        _ = py_call(out.append, family_call(b.float, theta))
-        return out
+        values.append(Float64(py=family_call(b.float, theta)))
+        return values^
     var view = classical_view(theta, context, "theta")
     if Int(py=view.ndim) == 0:
         host_inference_scalar(theta, context)
-        _ = py_call(out.append, family_call(b.float, theta))
-        return out
+        values.append(Float64(py=family_call(b.float, theta)))
+        return values^
     var wide = admit_family_f64(view, "theta", context)
     var count = Int(py=wide.size)
     var wp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide)))
     _ = wide  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-        _ = py_call(out.append, PythonObject(wp[i]))
+        values.append(wp[i])
         _ = wide  # keep the Python object alive through the native call above
     _ = wide^
     _ = view^
-    return out
+    return values^
 
 
 def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -686,26 +647,32 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, contex
             raise Error(String(_GPR) + ": theta has " + String(len(theta)) + " entries, "
                         + "kernel_ has " + String(n_dims) + " free hyperparameters")
         var ext = _gpr_ext(model, args[0], context)
-        var exp_values = family_call(gp_entry(ext, "gp_theta_params"), theta)
-        var params = Python.list()
-        for i in range(len(exp_values)):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-            _ = py_call(params.append, family_call(b.float, exp_values[i]))
+        _ = gp_entry(ext, "gp_theta_params")
+        var connection = GPConnection(ext)
+        var params = List[Float64](length=len(theta), fill=0.0)
+        var request = GPThetaRequest(Int(theta.unsafe_ptr()), Int(params.unsafe_ptr()), len(theta))
+        _ = gp_run(connection, request)
+        lifecycle_admit_fields(fields)
+        _ = theta
+        _ = params
         var xt = gp_f32(fields, "X_train_", 2, context)
         var yt = gp_f32(fields, "y_train_", 1, context)
-        var at = gp_with_free_values(kern, params, PythonObject(None), context)
+        var at = gp_with_free_values(kern, params, List[Float64](), context)
         var result = _gpr_lml_grad(model, args[0], at, xt, yt, Int(py=xt.shape[0]), Int(py=xt.shape[1]), context)
-        var lml = result[1]
-        var grad = result[2]
-        if Int(py=result[0]) != 0:
-            lml = py_call(b.float, PythonObject("-inf"))
-            grad = Python.list()
-            for _ in range(len(theta)):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-                _ = py_call(grad.append, PythonObject(Float64(0.0)))
+        var lml = result.likelihood
+        var info = result.info
+        var grad = result.gradient^
+        if info != 0:
+            lml = Float64(py=py_call(b.float, PythonObject("-inf")))
+            grad = List[Float64](length=len(theta), fill=0.0)
         _ = xt^
         _ = yt^
         if Bool(py=py_call(b.bool, eval_gradient)):
-            return Python.tuple(lml, grad)
-        return lml
+            var packed = Python.list()
+            for i in range(len(grad)):  # driver-loop: pack the public hyperparameter gradient
+                _ = py_call(packed.append, PythonObject(grad[i]))
+            return Python.tuple(PythonObject(lml), packed)
+        return PythonObject(lml)
     if Bool(py=family_call(b.bool, eval_gradient)):
         raise Error(String(_GPR) + ": eval_gradient=True needs a theta, "
                     + "scikit-learn's rule (_gpr.py:582)")
