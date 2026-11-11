@@ -72,6 +72,10 @@ from core.hostptr import f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import i32_ptr
+from core.native_descriptor_abi import NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
+from core.shared_slot import SharedSlot as _R2SharedSlot
+from core.metrics_entry_table import MetricsEntryKey, MetricsR2Owner, MR_R2, metrics_r2_check_spans, metrics_r2_publish
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
     host_spectral_embedding_coo,
@@ -353,12 +357,12 @@ def r2_score_weighted_binding(
     """Weighted R2 on the host (`force_finite=True`). `params`: `0 n`."""
     _want(String("r2_score_weighted"), params, 1)
     var n = _index(params[0])
-    var y = read_f32(_index(y_addr), n)
-    var yh = read_f32(_index(y_hat_addr), n)
-    var w = read_f32(_index(w_addr), n)
+    var y_word = _index(y_addr)
+    var yh_word = _index(y_hat_addr)
+    var w_word = _index(w_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        out = host_weighted_r2(y, yh, w, n)
+        out = _r2_weighted_value(y_word, yh_word, w_word, n)
     return PythonObject(Float64(out))
 
 
@@ -491,13 +495,58 @@ def r2_score_binding(
     (DEVIATIONS 653, 657). `params`: `0 n`."""
     _want(String("r2_score"), params, 1)
     var n = _index(params[0])
-    var y = read_f32(_index(y_true_addr), n)
-    var yh = read_f32(_index(y_pred_addr), n)
+    var y_word = _index(y_true_addr)
+    var yh_word = _index(y_pred_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        _check_float_pair(y, yh, n)
-        out = host_r2_score(y, yh, n)
+        out = _r2_value(y_word, yh_word, n)
     return PythonObject(Float64(out))
+
+
+def _r2_value(y_addr: Int, yh_addr: Int, n: Int) raises -> Float32:
+    """`r2_score`'s host body over plain addresses: the Python entry above
+    and the native table entry `metrics_r2_host_v1`."""
+    var y = read_f32(y_addr, n)
+    var yh = read_f32(yh_addr, n)
+    _check_float_pair(y, yh, n)
+    return host_r2_score(y, yh, n)
+
+
+def _r2_weighted_value(y_addr: Int, yh_addr: Int, w_addr: Int, n: Int) raises -> Float32:
+    """`r2_score_weighted`'s host body over plain addresses (both entries)."""
+    var y = read_f32(y_addr, n)
+    var yh = read_f32(yh_addr, n)
+    var w = read_f32(w_addr, n)
+    return host_weighted_r2(y, yh, w, n)
+
+
+def metrics_r2_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """The R^2 entry of the host image's metrics table (`METRICS_R2_ABI`)."""
+    try:
+        var n = metrics_r2_check_spans(operation, aa, na, pp, np, nf, result)
+        var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+        var value: Float32
+        if operation == MR_R2:
+            value = _r2_value(a[0], a[1], n)
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
+        else:
+            value = _r2_weighted_value(a[0], a[1], a[2], n)
+            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[3])[] = Float64(value)
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = 0
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+comptime METRICS_R2_HOST_OWNER = _R2SharedSlot[MetricsR2Owner, "MojolearnMetricsR2HostOwnerV1"]
+
+
+def publish_metrics_r2_host() raises:
+    """Publish the host R^2 entry at module init (vendor word 0)."""
+    var owner = METRICS_R2_HOST_OWNER.get_or_create_ptr()
+    metrics_r2_publish(MetricsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(owner), metrics_r2_host_v1)
 
 
 # ===========================================================================
@@ -1360,6 +1409,9 @@ def build__mojolearn_metrics_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_metrics_host")
+        # R^2 for native callers in other modules (core/metrics_entry_table.mojo);
+        # the Python r2_score entries below stay for mojolearn.metrics.
+        publish_metrics_r2_host()
         module.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         module.def_function[metrics_host_numeric_mode_binding]("metrics_host_numeric_mode")
         module.def_function[metrics_host_vendor_binding]("metrics_host_vendor")

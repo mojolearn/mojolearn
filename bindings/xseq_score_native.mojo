@@ -15,7 +15,9 @@ The same kernels in the same order, so the score keeps its bits.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
+from core.native_descriptor_call import native_descriptor_call
+from core.metrics_entry_table import MetricsEntryKey, MR_R2, MR_R2_WEIGHTED, metrics_r2_entry
 from bindings.xseq_native_common import xseq_addr, xseq_f32p, xseq_reshape
 from bindings.xseq_neural_native import xseq_as_f32_c
 from core.xseq_marshal import xseq_min_max_f32
@@ -45,9 +47,10 @@ def _vector(value: PythonObject, name: String) raises -> PythonObject:
     return out
 
 
-def _metrics_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_metrics_impl._get_binding(model.numeric_mode)`: the metrics binding
-    of that mode (or the process default), checked against its compiled mode."""
+def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEntryKey:
+    """`_metrics_impl._get_binding(model.numeric_mode)`: the metrics image of
+    that mode (or the process default), as its native R^2 table key (the
+    bridge records it at import), checked against its compiled mode."""
     var b = native_loaded_module("builtins")
     var mode = py_get(py_fields(model), "numeric_mode")
     if mode is not None:
@@ -59,16 +62,33 @@ def _metrics_entries(model: PythonObject, context: PythonObject) raises -> Pytho
     var expected = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
     expected = py_call(py_call(expected.strip).lower)
     var table = context["xseq_metrics"]
-    var entries = table[expected]
-    if py_type(entries) is b.str:
-        raise Error("ImportError: " + String(py=entries))
-    if py_contains(entries, "metrics_numeric_mode"):
-        var actual = Int(py=py_call_typed(entries["metrics_numeric_mode"]))
-        var name = String("fast") if actual == 0 else String("identical")
-        if name != String(py=expected):
-            raise Error("RuntimeError: mojolearn metrics: requested " + String(py=expected) + ", binary reports "
-                        + name + "; rebuild it")
-    return entries
+    var record = table[expected]
+    if py_type(record) is b.str:
+        raise Error("ImportError: " + String(py=record))
+    # The compiled-mode word the bridge read once at import replaced the
+    # per-call `metrics_numeric_mode` Python call (lane calltable-xseq).
+    var actual = Int(py=record[0])
+    var name = String("fast") if actual == 0 else String("identical")
+    if name != String(py=expected):
+        raise Error("RuntimeError: mojolearn metrics: requested " + String(py=expected) + ", binary reports "
+                    + name + "; rebuild it")
+    return MetricsEntryKey(actual, Int(py=record[1]))
+
+
+def _r2_native(key: MetricsEntryKey, operation: Int, var addresses: List[Int], n: Int) raises -> Float64:
+    """One call of the metrics image's R^2 entry with the GIL released; the
+    value lands in a native word (core/metrics_entry_table.mojo layouts).
+    The caller keeps the addressed arrays alive."""
+    var entry = metrics_r2_entry(key)
+    var value = List[Float64](length=1, fill=0.0)
+    addresses.append(Int(value.unsafe_ptr()))
+    var words: List[Int] = [n]
+    var py = Python()
+    with GILReleased(py):
+        _ = native_descriptor_call(entry, operation, addresses, words, List[Float64]())
+    var result = value[0]
+    _ = value^
+    return result
 
 
 def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -108,6 +128,8 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
             raise Error("NotImplementedError: mojolearn: the multi-output score needs the native metrics owner "
                         + "(family_metric_r2_options); this install does not carry it")
         var mode = py_get(py_fields(model), "numeric_mode")
+        # call-table: door-to-door (the native metrics family owner's public door; its operands are the
+        # caller's Python label/array objects, which that owner admits in its own UNPACK; open item)
         return py_call(options[0], PythonObject(None), "family_metric_r2_options",
                        Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode), options[1])
     var y = _vector(truth, "y_true")
@@ -116,24 +138,24 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     if Int(py=yh.shape[0]) != n:
         raise Error("ValueError: mojolearn metrics: y_true has " + String(n) + " entries and y_pred has "
                     + String(Int(py=yh.shape[0])) + "; they must be the same length")
-    var entries = _metrics_entries(model, context)
+    var key = _metrics_key(model, context)
     if sample_weight is not None:
         var w = _weights(sample_weight, n, context)
-        var weighted = py_call_typed(entries["r2_score_weighted"], xseq_addr(y), xseq_addr(yh), xseq_addr(w), Python.list(n))
+        var weighted = _r2_native(key, MR_R2_WEIGHTED, [Int(py=xseq_addr(y)), Int(py=xseq_addr(yh)), Int(py=xseq_addr(w))], n)
         _ = w  # keep the Python object alive through the native call above
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w^
-        var _keep_ret_y = PythonObject(Float64(py=weighted))
+        var _keep_ret_y = PythonObject(weighted)
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         return _keep_ret_y^
-    var r2 = py_call_typed(entries["r2_score"], xseq_addr(y), xseq_addr(yh), Python.list(n))
+    var r2 = _r2_native(key, MR_R2, [Int(py=xseq_addr(y)), Int(py=xseq_addr(yh))], n)
     _ = yh  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = y^
     _ = yh^
-    return PythonObject(Float64(py=r2))
+    return PythonObject(r2)
 
 
 def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: PythonObject,
@@ -150,5 +172,7 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
         raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "
                     + "(family_mcls_accuracy_fraction); this install does not carry it")
     var mode = py_get(py_fields(model), "numeric_mode")
+    # call-table: door-to-door (the native metrics family owner's public door; its operands are the
+    # caller's Python label/array objects, which that owner admits in its own UNPACK; open item)
     return py_call(owner[0], PythonObject(None), "family_mcls_accuracy_fraction",
                    Python.tuple(args[1], prediction, args[2], mode), owner[1])

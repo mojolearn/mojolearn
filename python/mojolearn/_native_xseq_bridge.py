@@ -84,12 +84,12 @@ def connect():
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_metrics", mode)
-            symbols = {}
-            for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode"):  # glue: fixed compiled entry names
-                symbol = getattr(module, name, None)
-                if isinstance(symbol, BuiltinFunctionType):
-                    symbols[name] = symbol
-            metrics[mode] = symbols
+            # glue: once at import, the metrics image's (tier, vendor) key of its
+            # native R^2 table (core/metrics_entry_table.mojo, lane
+            # calltable-xseq); the sequence scores call that entry, not the
+            # image's Python r2_score entries. The module is kept to pin the image.
+            vendor = _NATIVE_VENDORS.get(str(module.metrics_vendor()), -1)  # import-time: the image's vendor
+            metrics[mode] = (int(module.metrics_numeric_mode()), vendor, module)  # import-time: the compiled tier
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError) as error:
             metrics[mode] = type(error).__name__ + ": " + str(error)
     r2_options = None
