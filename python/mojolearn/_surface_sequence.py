@@ -82,9 +82,7 @@ FAMILIES = (
             # the model-description trainer (autograd/model.mojo)
             "model_native_api_v1", "model_fit", "model_predict", "model_n_params", "model_labels", "model_gather_labels",
             "model_fit_labels", "model_predict_labels",
-            "moe_backward", "seq_adafactor_step", "seq_lamb_step",
-            "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
-            "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
+            "moe_backward",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
             "ops_session_create", "session_public_api_v1", "ops_session_public_connect",
             "ops_shape",

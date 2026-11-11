@@ -34,16 +34,6 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.opt_entry_host import publish_seq_opt_host_entries
 from sequence.exec import HostExec
-from providers.python.sequence_opt_public_host_pyapi import (
-    seq_optimizer_init_host_py,
-    seq_optimizer_step_host_py,
-    seq_lamb_step_host_py,
-    seq_adafactor_step_host_py,
-    seq_optimizer_state_host_py,
-    seq_optimizer_export_host_py,
-    seq_optimizer_import_host_py,
-    seq_optimizer_close_host_py,
-)
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
@@ -697,14 +687,6 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[optimizer_step_binding]("optimizer_step")
         # the public optimizers' one native call per method (sequence/opt_public*.mojo)
-        m.def_function[seq_optimizer_init_host_py]("seq_optimizer_init")
-        m.def_function[seq_optimizer_step_host_py]("seq_optimizer_step")
-        m.def_function[seq_lamb_step_host_py]("seq_lamb_step")
-        m.def_function[seq_adafactor_step_host_py]("seq_adafactor_step")
-        m.def_function[seq_optimizer_state_host_py]("seq_optimizer_state")
-        m.def_function[seq_optimizer_export_host_py]("seq_optimizer_export")
-        m.def_function[seq_optimizer_import_host_py]("seq_optimizer_import")
-        m.def_function[seq_optimizer_close_host_py]("seq_optimizer_close")
         m.def_function[stl_binding]("stl")
         m.def_function[var_fit_binding]("var_fit")
         m.def_function[var_forecast_binding]("var_forecast")

@@ -171,8 +171,10 @@ def connect_sequence_device(training, device):
     context["sequence_device_getters"] = {name: vars(device.SequenceDeviceTensor)[name].__get__ for name in slots}  # glue: retain native slot getters at import
     context["sequence_device_setters"] = {name: vars(device.SequenceDeviceTensor)[name].__set__ for name in slots if name != "__weakref__"}  # glue: retain native slot setters at import
     bindings = {}
-    required = ("seq_optimizer_init", "seq_optimizer_step", "seq_lamb_step", "seq_adafactor_step",
-                "seq_optimizer_state", "seq_optimizer_export", "seq_optimizer_import", "seq_optimizer_close")
+    # The optimizer operations run through the image's native entry table
+    # (core/byte_lm_entry_table.mojo, sequence/opt_entry_abi.mojo); the former
+    # seq_optimizer_* Python entries are deleted (lane calltable-byte-lm).
+    required = ()
     optional = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "seq_tensor_copy",
                 "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move", "optimizer_resident_step", "optimizer_resident_step_dev",
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
@@ -183,6 +185,7 @@ def connect_sequence_device(training, device):
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)
             cells = {"module": binding}
+            _sequence_native_key(cells, binding)
             for name in required + optional:  # glue: retain fixed compiled symbols at import
                 entry = getattr(binding, name, None)
                 if entry is None and name in optional:
@@ -213,6 +216,24 @@ def connect_sequence_device(training, device):
     context["sequence_extra_bindings"] = tuple(extra)
     context["sequence_device_io_off"] = device._DEVICE_IO_OFF
     return training._OPT_NATIVE, context
+
+
+#: The native entry tables' vendor words (core/byte_lm_entry_table.mojo).
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def _sequence_native_key(cells, binding):
+    # glue: once at import, the connected x_sequence image's (tier, vendor)
+    # key, which the native optimizer door reads instead of looking entries
+    # up by name. An image without one leaves the key absent and the door
+    # refuses.
+    try:
+        mode = int(binding.x_sequence_numeric_mode())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(binding.x_sequence_vendor()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        cells["native_key"] = (mode, vendor)
 
 
 def connect_embedding(training, embedding_cls, archive_context):
