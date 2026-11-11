@@ -6,6 +6,8 @@ ordered. Independent input decoding and numerical oracle cells use the host
 pool; the numerical device operations retain their existing parallel kernels.
 """
 from core.hostptr import f32_ptr
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from decomposition.linalg_door_impl import qr_r_device_into, svdvals_device_into
 from x_decomp.cells import F32Ptr
 from x_decomp.device import DevExec
@@ -28,6 +30,7 @@ struct DeviceLinalgNumerical(LinalgNumericalCalls):
 
 
 def run_checks() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
     var failed = 0
     for index in range(LINALG_NUMERICAL_FIXTURES):
         try:

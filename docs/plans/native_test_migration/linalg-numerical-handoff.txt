@@ -41,13 +41,13 @@ Genuine Python split
 Fixture provenance
   fixtures/linalg_numerical/generate.py imports NumPy only and never imports
   or executes Mojolearn. Four independent variants run through a host-sized
-  pool. It records four original Float32 inputs and one Float64 NumPy spectrum;
+  pool; each resulting file write is also a parallel unit. It records four original Float32 inputs and one Float64 NumPy spectrum;
   metadata.json records NumPy2.5.3, source commit, seed and file/generator hashes.
   This data-generation execution is not native/runtime correctness evidence.
 
 Root queue / RUN OWED
-  CPU: mojo run -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/linalg_numerical_cpu.mojo
-  GPU: mojo run -I . checks/native_tests/linalg_numerical_gpu.mojo
+  CPU: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/linalg_numerical_cpu.mojo
+  GPU: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/linalg_numerical_gpu.mojo
   Importable suites expose run_checks(); small wrappers and pixi tasks included.
   Run from repository root so recorded fixture paths resolve. Bundle these
   with the PCA native request/state suites when ready; do not start an identity
@@ -57,3 +57,8 @@ Root queue / RUN OWED
 Static checks only: Python AST, TOML/JSON parse, git diff whitespace check.
 Full generation/adoption evidence:
   ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/
+
+Follow-up: task flags and suite assertions now explicitly require identical
+mode (GPU also rejects CPU column). Root already supplies these flags. The
+parallel writer refactor regenerated unchanged fixture bytes; metadata only
+updates the generator hash. No prior green suite needs rebuilding for this.

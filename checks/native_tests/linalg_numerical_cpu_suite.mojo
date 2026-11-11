@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Five original numerical fixtures over the actual CPU linalg entry bodies."""
 from core.host_parallel import host_parallelize
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr
 from decomposition.linalg_host_impl import qr_r_host_run, svdvals_host_run
 from x_decomp.cells import F32Ptr
@@ -24,6 +25,7 @@ struct HostLinalgNumerical(LinalgNumericalCalls):
 
 
 def run_checks() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var failures = List[Int](length=LINALG_NUMERICAL_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
     def task(index: Int) {imm fp}:

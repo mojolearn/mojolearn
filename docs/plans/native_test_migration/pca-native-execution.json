@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "source_commit": "e53128fe7f9206abe748dbe32052a81ed864ef3c",
+  "product_dependency": "e8958ae5e2",
+  "status": "source reviewed; uncompiled and unrun",
+  "fixture_counts": {
+    "cpu": 10,
+    "gpu": 13
+  },
+  "providers": {
+    "cpu": "core.pca_native_host.pca_host_native_v1",
+    "gpu": "core.pca_native_device.pca_device_native_v1",
+    "gpu_fold": "core.pca_native_fold.pca_fold_native_v1"
+  },
+  "common_fixtures": [
+    {
+      "id": 0,
+      "case": "actual mode, vendor and capability metadata"
+    },
+    {
+      "id": 1,
+      "case": "21x4 exact covariance fit-only, count 2, then typed transform and inverse"
+    },
+    {
+      "id": 2,
+      "case": "21x4 exact variance-fraction 0.8 fused fit-transform, count 4 capacity"
+    },
+    {
+      "id": 3,
+      "case": "original literal 8x3 full fit-transform and full inverse; reconstruction rtol=atol=2e-4"
+    },
+    {
+      "id": 4,
+      "case": "original 4x7 full-wide fit-transform; preserve explicit CPU wide refusal"
+    },
+    {
+      "id": 5,
+      "case": "original rank-deficient 20x5 randomized fit-transform/inverse; count 3, oversamples 2, iterations 1, seed 17, reconstruction rtol=atol=1e-3"
+    },
+    {
+      "id": 6,
+      "case": "literal planted 4x3 query state, forward/inverse exact equations, copied request and rebound components"
+    },
+    {
+      "id": 7,
+      "case": "NaN fit/query deferred finite status and unchanged input storage"
+    },
+    {
+      "id": 8,
+      "case": "host/estimator rejection of foreign active resident-fold request before pointer access"
+    },
+    {
+      "id": 9,
+      "case": "whitening fit_rows=1 refusal through actual provider; no duplicate whitening numerical suite"
+    }
+  ],
+  "gpu_fold_fixtures": [
+    {
+      "id": 0,
+      "case": "8x3 resident full fit and reverse-index transform, source/index mutation after store put; independent Float64 spectrum and query oracle"
+    },
+    {
+      "id": 1,
+      "case": "resident NaN fit/query finite status, distinct from range status"
+    },
+    {
+      "id": 2,
+      "case": "resident out-of-range index fit/query range status, distinct from finite status"
+    }
+  ],
+  "oracles": {
+    "files": "checks/native_tests/fixtures/pca_native/metadata.json",
+    "generator": "NumPy only, independent Float64 mean/SVD/variance/ratio/subspace; no Mojolearn import or execution",
+    "inputs": 19,
+    "query": "defining projection/inverse equations from actual fitted state; literal planted case",
+    "tolerances": "Original 8x3 spectrum 2e-4/2e-5, variance 4e-4/2e-5 and reconstruction 2e-4; original rank-20x5 reconstruction 1e-3. Other exact spectra 4e-3/4e-4, variance 5e-3/5e-4, projector 3e-3/3e-4 and query 5e-3/5e-4."
+  },
+  "ownership": "guarded outputs; source and fitted-state storage checked after synchronous calls; resident handles freed in finally; named raw-pointer owners remain live",
+  "parallelism": "CPU independent graphs and oracle/input cells use host_parallelize; GPU fixture graphs ordered because production contexts/store are shared, existing kernels parallel; reference variant generation and each file write use host-sized pool",
+  "python_split": [
+    {
+      "path": "python/mojolearn/tests/test_pca_exact_native_owner.py",
+      "moved": "20x5 randomized rank-deficient inverse reconstruction",
+      "removed": "second fit, state comparison and transformed-output repeat bits in this case",
+      "retained": "native-call audit, fitted/output array shapes/dtypes and consumed inverse return; all other public/NumPy checks"
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_full_surface.py",
+      "moved": "literal 8x3 inverse reconstruction",
+      "removed": "second fit and repeated fitted-state bit comparisons in this case",
+      "retained": "independent NumPy singular/variance oracle, public consumed-output shape/dtype and caller-input ownership; vendor gate unchanged"
+    }
+  ],
+  "compile_flags": {
+    "all": "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "cpu_additional": "-D MOJOLEARN_COLUMN_CPU=1"
+  },
+  "limits": [
+    "No native compile/runtime evidence",
+    "No installed-wheel, timing or cross-vendor identity run",
+    "No product/kernel/default changes",
+    "Existing 3 CPU and 3 GPU whitening fixtures not duplicated",
+    "Typed PCAQueryState/PCAQueryIdentity follow-up depends on pilot b2b211b86c"
+  ]
+}
