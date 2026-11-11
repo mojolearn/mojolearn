@@ -111,23 +111,6 @@ class _AnnResident:
         """Arrays held only on the device come to numpy (none by default)."""
         return None
 
-    def _resident_search(self, native, owner, filter, q, dist, idx, cand, params):
-        """The IVF kinds' search through the handle; False where there is
-        none (the caller then takes the per-call door)."""
-        handle = self._resident_handle(native)
-        if handle is None:
-            return False
-        addrs = [addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices"),
-                 addr(cand, name="n_candidates_")]
-        mask = None
-        if filter is not None:
-            mask = _ann_mask(owner, filter, self.n_rows_)   # held: the binding reads it below
-            addrs.append(addr_ro(mask, name="filter"))
-        # queries, out_d, out_i, out_n[, filter]; m, k, n_probes (x_ann/resident.mojo)
-        native.x_ann_index_search(handle, addrs, params)
-        self.n_candidates_ = cand
-        return True
-
     def _release_resident(self):
         cached = self.__dict__.pop("_resident", None)
         if cached is None:
