@@ -27,7 +27,7 @@ Python still appears in UNPACK/PACK files: public attribute values, array/storag
 
 ## Source evidence and checks owed
 
-Source-only audit: `~/mojolearn-evidence/python-mojo-migration-20261110/kde-native-owner/source-audit.json` records **142 native transitive sources, zero Python imports**, and **26 unchanged KDE/host executor files** relative to the independently reviewed registry repair `8a624987ef`. The earlier registry repair is intentionally outside that unchanged-source comparison. Full originals, patches and normal hook logs remain beside the report.
+Source-only audit: `~/mojolearn-evidence/python-mojo-migration-20261110/kde-native-owner/source-audit.json` records **142 native transitive sources, zero Python imports**, and **24 unchanged KDE/host executor Mojo sources** relative to the independently reviewed registry repair `8a624987ef`. The earlier registry repair is intentionally outside that unchanged-source comparison. Full originals, patches and normal hook logs remain beside the report.
 
 `python/mojolearn/tests/test_kde_native_boundary.py` adds **11 definitions / 22 expanded cases** covering legacy-entry bypass, descriptor refusal, rebound scalar/dictionary callback traps, formatter refusal, copied fit storage, mutable public owners/settings, pickle/release/reuse and model lifetime. AST parsing and `git diff --check` succeeded. **No lane compilation, runtime tests, timing or cross-vendor identity were run.** The native-test lane owns pure contracts and the original native numerical/ownership workloads.
 
