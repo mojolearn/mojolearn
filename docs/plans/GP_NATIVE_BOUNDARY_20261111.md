@@ -319,3 +319,16 @@ The native content fast path retains the original eligibility and model-field
 identity test. Public references are pins, not algorithm state or claimed
 removals. Shared transient dictionary/class admission snapshots and mixed real/
 NumPy label ordering remain explicit boundary work. No numerical files changed.
+
+GP cache field capture and nested dictionary keys now share
+`gp_mapping_snapshot`, an exact-dictionary C-API capture into native owning
+key/value vectors. Packed and fitted GP cache keys no longer construct Python
+`list(dict.items())` records. The same helper removes temporary Python class/
+layout key lists from ordinary kernel capture and archive layout admission;
+every layout key is still admitted before any keyed layout lookup. Insertion
+order and the original referenced objects are retained. This is UNPACK metadata
+work under the GIL, with no user iterator, hashing, comparison or conversion
+hook. The numerical RUN closure remains unchanged. Broader shared kernel
+construction/release boundaries and mixed real/NumPy label ordering still need
+review; this bounded change does not assert that every GP-related Python object
+or callback-sensitive boundary has been eliminated.

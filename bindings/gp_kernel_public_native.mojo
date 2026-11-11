@@ -11,6 +11,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_instance_item import native_instance_item
+from bindings.gp_mapping_boundary import gp_mapping_snapshot
 from x_metrics.epilogue import portable_log_c
 
 
@@ -48,9 +49,9 @@ def _kernel_class_table(kernel: PythonObject, table: PythonObject) raises -> Pyt
     var cls = py_type(kernel)
     # Identity comparison precedes keyed lookup: an application metaclass may
     # otherwise execute __hash__ or __eq__ through a table membership test.
-    var classes = py_call(native_loaded_module("builtins").list, table.keys())
-    for i in range(len(classes)):  # driver-loop: fixed import-connected kernel types
-        if cls is classes[i]:
+    var classes = gp_mapping_snapshot[False](table)
+    for i in range(len(classes.keys)):  # driver-loop: fixed import-connected kernel types
+        if cls is classes.keys[i]:
             return cls
     raise Error("TypeError: native GP kernels require a connected built-in kernel without Python subclass protocols")
 

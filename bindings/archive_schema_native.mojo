@@ -156,6 +156,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_attributes import _type_mro
 from providers.python.array_metadata_pyapi import array_shape_once
 from bindings.gp_kernel_public_native import gp_kernel_nodes
+from bindings.gp_mapping_boundary import gp_mapping_snapshot
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_label_snapshot_native import gp_label_list as _label_list
 from bindings.gp_state_admission_native import _gp_scalar_fields, _gp_array_fields, _gp_admit_binary_class
@@ -778,12 +779,12 @@ def _schema_kernel_layouts(table: PythonObject) raises:
     var b = native_loaded_module("builtins")
     if py_type(table) is not b.dict:
         raise Error("TypeError: saved kernel layouts require native dictionary/list storage")
-    var keys = py_call(b.list, table)
-    for i in range(len(keys)):  # driver-loop: all key identities before dictionary lookup can compare one
-        if py_type(keys[i]) is not b.type:
+    var captured = gp_mapping_snapshot[False](table)
+    for i in range(len(captured.keys)):  # driver-loop: all key identities before dictionary lookup can compare one
+        if py_type(captured.keys[i]) is not b.type:
             raise Error("TypeError: saved kernel layout keys require native classes")
-    for i in range(len(keys)):  # driver-loop: fixed layout words before shared GP node capture
-        var layout = table[keys[i]]
+    for i in range(len(captured.keys)):  # driver-loop: fixed layout words before shared GP node capture
+        var layout = table[captured.keys[i]]
         if py_type(layout) is not b.tuple or len(layout) == 0 or py_type(layout[0]) is not b.str:
             raise Error("TypeError: saved kernel layouts require exact tuples and native names")
         var how = String(layout[0])
