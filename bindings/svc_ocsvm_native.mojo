@@ -6,39 +6,39 @@
 # `xn_variance`, `xn_kernel`, `xn_ocsvm`, `x_neighbors_ocsvm_alpha_init`, the
 # resident solve `x_neighbors_ocsvm_resident[_idn]`, `xn_kernel_matmul`,
 # `xn_matmul`, `xn_unary`, `xn_p2m_sign_label`) with the same buffers and the
-# same int and float parameter lists, in the same order, plus the base
-# binding's `gather_i32` and `cast_elements`: the bits do not move.
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
+# same integer/float words and launch order through native descriptors.
+# Private scratch is Mojo-owned; public arrays remain at the boundary.
+# Numerical implementations are unchanged; execution is owed to integration.
+from providers.python.x_neighbors_descriptor_pyapi import xn_admit, xn_module, xn_is_module, xn_capabilities
+from providers.python.estimator_binding_pyapi import estimator_binding
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family, admitted_array
-from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
-from bindings.classical_arrays import classical_address, classical_wrap_array
+from std.python._cpython import GILReleased
+from std.memory import memcpy
+from bindings.ocsvm_provider import OcConnection
+from bindings.labels_descriptor_boundary import labels_gather
+from core.ocsvm_plan import (OcMatrix, OcWeights, OcFitState, oc_f32_address, oc_i32_address,
+    oc_take_rows, oc_take_rows_into, oc_take_cols, oc_kernel, oc_variance, OcQueryState,
+    oc_kernel_product, oc_fused_labels, oc_product, oc_decision, oc_sign)
+from bindings.ocsvm_output_boundary import OcOutput
+from bindings.ocsvm_scalar_boundary import oc_dictionary, oc_name, oc_kernel_admit, oc_parameter_repr, oc_mode_value
+from bindings.admitted_family import admit_family
+from bindings.native_loaded_module import _loaded_fields
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.py_balanced import py_type, py_get, py_setitem, py_fields
+from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_isinstance, family_call, family_entry, family_array, family_min,
+    family_call, family_array, family_min,
 )
-from core.admitted_weights import admitted_fill
 from core.admitted_convert import admitted_convert_vector
 from bindings.gp_svm_records import ocsvm_coef_reused, ocsvm_coef_remember
 from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
-    svc_builtins, svc_field, svc_has, svc_float, svc_int, svc_truthy, svc_base, svc_prefix, svc_scalar_array,
-    svc_read_f32, svc_read_i32,
+    svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_prefix, svc_scalar_array,
 )
-
-# `_expansion_neighbors._U_IDENTITY`
-comptime _U_IDENTITY = 6
-
 
 def _a(value: PythonObject) raises -> PythonObject:
     return classical_address(value)
-
-
-def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,
-        context: PythonObject) raises:
-    """`_XNeighbors._op`: the binding's `xn_<name>(addresses, ints, floats)`."""
-    xn_execute(binding, name, addrs, ints, floats)
 
 
 def _f32_scalar(value: Float64) -> Float64:
@@ -46,276 +46,218 @@ def _f32_scalar(value: Float64) -> Float64:
     return Float64(Float32(value))
 
 
-def _dims(*values: Int) raises -> PythonObject:
-    """A Python list of ints."""
-    var out = Python.list()
-    for i in range(len(values)):  # small-loop(op ints: at most six parameters)
-        _ = py_call(out.append, PythonObject(values[i]))
-    return out
-
-
-def _take_rows(binding: PythonObject, x: PythonObject, rows: PythonObject, count: Int,
-               context: PythonObject) raises -> PythonObject:
-    var cols = Int(py=x.shape[1])
-    var out = family_array(Python.tuple(PythonObject(count), PythonObject(cols)), "<f4", context)
-    _op(binding, "take_rows", Python.list(_a(x), _a(rows), _a(out)), _dims(count, cols, Int(py=x.shape[0])),
-        Python.list(), context)
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _take_cols(binding: PythonObject, x: PythonObject, cols: PythonObject, count: Int,
-               context: PythonObject) raises -> PythonObject:
-    var rows = Int(py=x.shape[0])
-    var out = family_array(Python.tuple(PythonObject(rows), PythonObject(count)), "<f4", context)
-    _op(binding, "take_cols", Python.list(_a(x), _a(cols), _a(out)), _dims(rows, Int(py=x.shape[1]), count),
-        Python.list(), context)
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _kernel(binding: PythonObject, a: PythonObject, b: PythonObject, code: Int, gamma: Float64, coef0: Float64,
-            degree: Int, context: PythonObject) raises -> PythonObject:
-    var n = Int(py=a.shape[0])
-    var d = Int(py=a.shape[1])
-    var m = Int(py=b.shape[0])
-    var out = family_array(Python.tuple(PythonObject(n), PythonObject(m)), "<f4", context)
-    _op(binding, "kernel", Python.list(_a(a), _a(b), _a(out)), _dims(n, m, d, code, degree),
-        Python.list(PythonObject(_f32_scalar(gamma)), PythonObject(_f32_scalar(coef0))), context)
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _i32_of(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`as_i32_c(value, ndim=1)` for the fitted int32 index Arrays."""
-    if String(value.dtype) == "<i4":
-        return value
-    var b = svc_builtins()
-    var store = family_call(context["array_type"], PythonObject("i"), family_call(b.map, b.int, family_call(value.tolist)))
-    return classical_wrap_array(store, Python.tuple(PythonObject(len(store))), "<i4", "C", context)
-
-
-def _fast_tier(binding: PythonObject, context: PythonObject) -> Bool:
-    """`_XNeighbors._fast_tier`: the bound binary's compile-time numeric
-    mode (`numeric_mode_used`) is 'fast'; False when it cannot be read."""
-    try:
-        if not xn_is_module(binding):
-            return False
-    except:
-        pass
-    try:
-        var b = svc_builtins()
-        var full = String(xn_module(binding).__name__)
-        var parts = family_call(PythonObject(full).split, PythonObject("."))
-        var name = String(parts[len(parts) - 1])
-        var prefix = String("mojolearn") if name == "_mojolearn" else String(
-            py_call(PythonObject(name).removeprefix, PythonObject("_mojolearn_")))
-        var getter = py_call(b.getattr, xn_module(binding), PythonObject(prefix + "_numeric_mode"), PythonObject(None))
-        if getter is not None:
-            var mode = py_get(context["backend_fields"]["_CODE_MODE"], py_call(getter), PythonObject(None))
-            return mode is not None and String(mode) == "fast"
-        if len(parts) < 2:
-            return False
-        return String(parts[len(parts) - 2]) == "fast"
-    except:
+def _fast_tier_native(mut connection: OcConnection, binding: PythonObject, context: PythonObject) raises -> Bool:
+    if not xn_is_module(binding):
         return False
+    var module = xn_module(binding)
+    var full_value = py_get(_loaded_fields(module), "__name__")
+    if py_type(full_value) is not svc_builtins().str:
+        return False
+    var parts = String(full_value).split(".")
+    var name = String(parts[len(parts) - 1])
+    var prefix = String("mojolearn") if name == "_mojolearn" else String(name.removeprefix("_mojolearn_"))
+    var getter = neural_descriptor_entry(module, prefix + "_numeric_mode", False)
+    if getter is not None:
+        var mode = oc_mode_value(context, connection.resident_driver().metadata(0))
+        return mode is not None and oc_name(mode, "fast", context)
+    if len(parts) < 2:
+        return False
+    return String(parts[len(parts) - 2]) == "fast"
 
 
-def _resolve_gamma(binding: PythonObject, gamma: PythonObject, x: PythonObject, context: PythonObject) raises -> Float64:
-    """`_expansion_neighbors._resolve_gamma`."""
-    var operator = native_loaded_module("operator")
-    var d = Int(py=x.shape[1])
-    if gamma is None or Bool(py=family_call(operator.eq, gamma, PythonObject("auto"))):
-        return 1.0 / Float64(d)
-    if Bool(py=family_call(operator.eq, gamma, PythonObject("scale"))):
-        var out = family_array(Python.tuple(PythonObject(1)), "<f4", context)
-        _op(binding, "variance", Python.list(_a(x), _a(out)), _dims(Int(py=x.size)), Python.list(), context)
-        _ = out  # keep the Python object alive through the native call above
-        var var_value = svc_read_f32(out, 0)
-        return 1.0 / (Float64(d) * var_value) if var_value != 0 else 1.0
+def _resolve_gamma_native(mut connection: OcConnection, gamma: PythonObject,
+    address: Int, rows: Int, columns: Int, context: PythonObject) raises -> Float64:
+    if gamma is None or oc_name(gamma, "auto", context):
+        return 1.0 / Float64(columns)
+    if oc_name(gamma, "scale", context):
+        var driver = connection.driver()
+        var value = Float64(0)
+        with GILReleased(Python()):
+            value = oc_variance(driver, address, rows * columns)
+        return 1.0 / (Float64(columns) * value) if value != 0 else 1.0
     return svc_float(gamma)
 
 
-def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject, sample_weight: PythonObject,
-               context: PythonObject) raises:
-    """`OneClassSVM.fit(X, y, sample_weight)`."""
+def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: PythonObject,
+    sample_weight: PythonObject, context: PythonObject, mut connection: OcConnection) raises:
     var b = svc_builtins()
     var fields = py_fields(model)
     var kernel = svc_field(fields, "kernel")
-    var names = Python.tuple(PythonObject("linear"), PythonObject("poly"), PythonObject("rbf"), PythonObject("sigmoid"),
-                             PythonObject("precomputed"))
-    if Bool(py=family_call(b.callable, kernel)) or not py_contains(names, kernel):
-        raise Error("NotImplementedError: OneClassSVM: kernel=" + family_repr(kernel) + " is not implemented")
+    if Bool(py=family_call(b.callable, kernel)):
+        raise Error("NotImplementedError: OneClassSVM callable kernels require a native kernel name")
+    if not oc_kernel_admit(kernel, context):
+        raise Error("NotImplementedError: OneClassSVM: kernel=" + oc_parameter_repr(kernel, context) + " is not implemented")
     var nu = svc_float(svc_field(fields, "nu"))
     if not (0.0 < nu and nu <= 1.0):
         raise Error("nu must be in (0, 1]")
-    # Perf (lane perf3-cluster-gp-gate): X the public door already admitted
-    # (2-D, non-empty, finite, C-order float32; registered for the operation
-    # by bindings/svm_mixture_native.mojo) is used as is, without a second
-    # metadata snapshot. Any other caller's X is converted as before.
     var x = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var name = String(kernel)
-    var precomputed = name == "precomputed"
+    var x_address = Int(py=_a(x))
+    var precomputed = oc_name(kernel, "precomputed", context)
     if precomputed and n != d:
         raise Error("Precomputed matrix must be a square matrix.")
-    var rows = PythonObject(None)
-    var cv: PythonObject
-    var m = n
+    var weights = OcWeights()
     if sample_weight is None:
-        cv = admitted_array(Python.tuple(PythonObject(n)), "<f4", context)
-        admitted_fill[DType.float32](FAMILY_F32P(unsafe_from_address=Int(py=_a(cv))), n, Float32(1.0))
+        weights.unit(n)
     else:
         var wv = admit_family(sample_weight, 1, "sample_weight", context, False).array
         if Int(py=wv.shape[0]) != n:
             raise Error("sample_weight and X have different numbers of samples")
         if n > 0 and family_min(wv) < 0:
             raise Error("negative sample_weight is not supported")
-        # libsvm's remove_zero_weight as a device compaction (pos_compact)
-        var prow = family_array(Python.tuple(PythonObject(n)), "<i4", context)
-        var pval = family_array(Python.tuple(PythonObject(n)), "<f4", context)
-        var pinfo = family_array(Python.tuple(PythonObject(1)), "<i4", context)
-        _op(binding, "pos_compact", Python.list(_a(wv), _a(prow), _a(pval), _a(pinfo)), _dims(n), Python.list(), context)
-        _ = pinfo  # keep the Python object alive through the native call above
-        _ = pval  # keep the Python object alive through the native call above
-        _ = prow  # keep the Python object alive through the native call above
-        _ = wv  # keep the Python object alive through the native call above
-        var kept = svc_read_i32(pinfo, 0)
-        if kept == 0:
-            raise Error("Invalid input - all samples have zero or negative weights.")
-        rows = svc_prefix(prow, kept, Python.tuple(PythonObject(kept)), "<i4", context)
-        cv = svc_prefix(pval, kept, Python.tuple(PythonObject(kept)), "<f4", context)
-        m = kept
-        _ = wv^
-    var q = PythonObject(None)
-    var xw = x
-    var res_fn = PythonObject(None)
+        var weight_address = Int(py=_a(wv))
+        var driver = connection.driver()
+        with GILReleased(Python()):
+            weights.compact(driver, weight_address, n)
+        _ = wv
+    var m = weights.count
+    var q = OcMatrix(0, 0)
+    var xw = OcMatrix(n, d, x_address)
+    var has_gram = False
     var resident_available = False
+    var resident_fast = False
     var degree = 0
-    var coef0 = Float64(0.0)
+    var coef0 = Float64(0)
     if precomputed:
         py_setitem(fields, PythonObject("_gamma"), PythonObject(0.0))
-        if rows is None:
-            q = x
+        if not weights.selected:
+            q = OcMatrix(n, d, x_address)
         else:
-            q = _take_cols(binding, _take_rows(binding, x, rows, m, context), rows, m, context)
+            var driver = connection.driver()
+            with GILReleased(Python()):
+                var selected_rows = oc_take_rows(driver, x_address, n, d, oc_i32_address(weights.rows), m)
+                q = oc_take_cols(driver, selected_rows.address(), m, d, oc_i32_address(weights.rows), m)
+                _ = selected_rows
+        has_gram = True
     else:
         degree = svc_int(svc_field(fields, "degree"))
         coef0 = svc_float(svc_field(fields, "coef0"))
-        var gamma = _f32_scalar(_resolve_gamma(binding, svc_field(fields, "gamma"), x, context))
+        var gamma = _f32_scalar(_resolve_gamma_native(connection, svc_field(fields, "gamma"), x_address, n, d, context))
         py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
-        if rows is not None:
-            xw = _take_rows(binding, x, rows, m, context)
-        # the resident solve: the Gram on the device, solved there
+        if weights.selected:
+            var driver = connection.driver()
+            with GILReleased(Python()):
+                xw = oc_take_rows(driver, x_address, n, d, oc_i32_address(weights.rows), m)
         if xn_is_module(binding):
-            var entry = "x_neighbors_ocsvm_resident" if _fast_tier(binding, context) else "x_neighbors_ocsvm_resident_idn"
-            res_fn = py_call(b.getattr, xn_module(binding), PythonObject(entry), PythonObject(None))
-            resident_available = res_fn is not None
+            resident_fast = _fast_tier_native(connection, binding, context)
+            var entry = "x_neighbors_ocsvm_resident" if resident_fast else "x_neighbors_ocsvm_resident_idn"
+            resident_available = neural_descriptor_entry(xn_module(binding), entry, False) is not None
         else:
             resident_available = (xn_capabilities(binding) & 1) != 0
         if not resident_available:
-            q = _kernel(binding, xw, xw, Int(py=context["family_svc_xn_kernels"][kernel]), gamma, coef0, degree, context)
-    # libsvm's start (solve_one_class), three device launches
-    var alpha = family_array(Python.tuple(PythonObject(m)), "<f4", context)
-    xn_execute(binding, "ocsvm_alpha_init", Python.list(_a(cv), _a(alpha)),
-               _dims(m), Python.list(PythonObject(nu)))
-    _ = alpha  # keep the Python object alive through the native call above
-    var info = family_array(Python.tuple(PythonObject(1)), "<f4", context)
-    var iters = family_array(Python.tuple(PythonObject(1)), "<i4", context)
+            var code = Int(py=context["family_svc_xn_kernels"][kernel])
+            var driver = connection.driver()
+            with GILReleased(Python()):
+                q = oc_kernel(driver, xw.address(), xw.address(), m, m, d, code, degree, gamma, coef0)
+            has_gram = True
+    var state = OcFitState(m)
+    var driver = connection.driver()
+    with GILReleased(Python()):
+        state.initialize(driver, oc_f32_address(weights.values), nu)
+    state.prepare_metadata()
     var max_iter = svc_int(svc_field(fields, "max_iter"))
     var cap = 10000000 if max_iter < 0 else max_iter
     var tol = _f32_scalar(svc_float(svc_field(fields, "tol")))
-    if q is None:
-        var addresses = Python.list(_a(xw), _a(cv), _a(alpha), _a(info), _a(iters))
-        var dims = _dims(m, d, Int(py=context["family_svc_xn_kernels"][kernel]), degree, cap)
-        var scalars = Python.list(PythonObject(svc_float(svc_field(fields, "_gamma"))),
-                                  PythonObject(_f32_scalar(coef0)), PythonObject(tol))
+    if not has_gram:
+        var code = Int(py=context["family_svc_xn_kernels"][kernel])
+        var gamma = svc_float(svc_field(fields, "_gamma"))
         if xn_is_module(binding):
-            _ = family_call(res_fn, addresses, dims, scalars)
+            var resident = connection.resident_driver()
+            with GILReleased(Python()):
+                state.solve_resident(resident, xw.address(), oc_f32_address(weights.values),
+                    d, code, degree, cap, resident_fast, gamma, coef0, tol)
         else:
-            xn_execute(binding, "ocsvm_resident", addresses, dims, scalars)
-        _ = iters  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = alpha  # keep the Python object alive through the native call above
-        _ = xw  # keep the Python object alive through the native call above
+            with GILReleased(Python()):
+                state.solve_descriptor(driver, xw.address(), oc_f32_address(weights.values),
+                    d, code, degree, cap, gamma, coef0, tol)
     else:
-        _op(binding, "ocsvm", Python.list(_a(q), _a(cv), _a(alpha), _a(info), _a(iters)), _dims(m, cap),
-            Python.list(PythonObject(tol)), context)
-        _ = iters  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = alpha  # keep the Python object alive through the native call above
-        _ = q  # keep the Python object alive through the native call above
-    var rho = svc_read_f32(info, 0)
-    # the support (alpha > 0, in order) and its coefficients by pos_compact
-    var srow = family_array(Python.tuple(PythonObject(max(m, 1))), "<i4", context)
-    var sval = family_array(Python.tuple(PythonObject(max(m, 1))), "<f4", context)
-    var sinfo = family_array(Python.tuple(PythonObject(1)), "<i4", context)
-    if m > 0:
-        _op(binding, "pos_compact", Python.list(_a(alpha), _a(srow), _a(sval), _a(sinfo)), _dims(m), Python.list(), context)
-        _ = sinfo  # keep the Python object alive through the native call above
-        _ = sval  # keep the Python object alive through the native call above
-        _ = srow  # keep the Python object alive through the native call above
-        _ = alpha  # keep the Python object alive through the native call above
-    var n_sv = svc_read_i32(sinfo, 0) if m > 0 else 0
-    var support = svc_prefix(srow, n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
-    if rows is not None and n_sv > 0:
-        var mapped = family_array(Python.tuple(PythonObject(n_sv)), "<i4", context)
-        _ = family_call(svc_base("gather_i32", context), _a(rows), PythonObject(m), _a(support), PythonObject(n_sv),
-                        _a(mapped))
-        _ = support  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
-        _ = mapped  # keep the Python object alive through the native call above
-        support = mapped
+        with GILReleased(Python()):
+            state.solve_gram(driver, q.address(), oc_f32_address(weights.values), cap, tol)
+    var rho = Float64(state.info[0])
+    with GILReleased(Python()):
+        state.compact_support(driver)
+    var n_sv = state.supports
+    var support = PythonObject(None)
+    if weights.selected and n_sv > 0:
+        # The former first prefix Array was private. Preserve its copy in a
+        # native owner before allocating the final mapped public support.
+        var prefix = List[Int32](length=n_sv, fill=0)
+        memcpy(dest=prefix.unsafe_ptr(), src=state.support_rows.unsafe_ptr(), count=n_sv)
+        support = family_array(Python.tuple(PythonObject(n_sv)), "<i4", context)
+        labels_gather(context, 0, oc_i32_address(weights.rows), m, oc_i32_address(prefix), n_sv, Int(py=_a(support)))
+        _ = prefix
+    else:
+        support = svc_prefix(oc_i32_address(state.support_rows), n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
     py_setitem(fields, PythonObject("support_"), support)
     if precomputed:
         py_setitem(fields, PythonObject("support_vectors_"),
-                   family_array(Python.tuple(PythonObject(n_sv), PythonObject(0)), "<f4", context))
+            family_array(Python.tuple(PythonObject(n_sv), PythonObject(0)), "<f4", context))
     else:
-        py_setitem(fields, PythonObject("support_vectors_"), _take_rows(binding, x, support, n_sv, context))
+        var vectors = family_array(Python.tuple(PythonObject(n_sv), PythonObject(d)), "<f4", context)
+        var support_address = Int(py=_a(support))
+        var vectors_address = Int(py=_a(vectors))
+        with GILReleased(Python()):
+            oc_take_rows_into(driver, x_address, n, d, support_address, n_sv, vectors_address)
+        _ = support
+        _ = vectors
+        py_setitem(fields, PythonObject("support_vectors_"), vectors)
     py_setitem(fields, PythonObject("dual_coef_"),
-               svc_prefix(sval, n_sv, Python.tuple(PythonObject(1), PythonObject(n_sv)), "<f4", context))
+        svc_prefix(oc_f32_address(state.support_values), n_sv,
+            Python.tuple(PythonObject(1), PythonObject(n_sv)), "<f4", context))
     py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(-rho, "<f4", context))
     py_setitem(fields, PythonObject("offset_"), PythonObject(rho))
-    py_setitem(fields, PythonObject("n_iter_"), PythonObject(svc_read_i32(iters, 0)))
+    py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(state.iterations[0])))
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(d))
     py_setitem(fields, PythonObject("fit_status_"), PythonObject(0))
-    _ = x^
-    _ = xw^
-    _ = q^
-    _ = cv^
-    _ = rows^
-    _ = alpha^
+    _ = x
+    _ = xw
+    _ = q
+    _ = weights
+    _ = state
+    _ = connection
 
 
-def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
-    """`OneClassSVM.score_samples`: (n,) float32."""
-    return _ocsvm_run(model, binding, source, False, context)
+@fieldwise_init
+struct OcIndexPin(Movable):
+    var owner: PythonObject
+    var words: List[Int32]
+    var address: Int
+    var count: Int
+
+
+def _oc_indices(value: PythonObject) raises -> OcIndexPin:
+    var typestr = String(value.dtype)
+    var shape = value.shape
+    if typestr == "<i4":
+        # Original exact-int32 storage bypassed conversion and used shape[0].
+        var count = Int(py=shape[0])
+        return OcIndexPin(value, List[Int32](), Int(py=_a(value)), count)
+    if len(shape) == 0:
+        var kind = String("float") if typestr.startswith("<f") else String("int")
+        raise Error("TypeError: '" + kind + "' object is not iterable")
+    if len(shape) != 1:
+        raise Error("TypeError: int() argument must be a string, a bytes-like object or a real number, not 'list'")
+    var count = Int(py=shape[0])
+    var words = List[Int32](length=count, fill=0)
+    var address = oc_i32_address(words)
+    _ = admitted_convert_vector(Int(py=_a(value)), typestr, address, "<i4", count)
+    _ = value
+    return OcIndexPin(value, words^, address, count)
 
 
 def _ocsvm_labels_available(binding: PythonObject) raises -> Bool:
-    """The binding carries `ocsvm_labels` (export on a loaded module,
-    capability bit 4 on the native descriptor route)."""
     if xn_is_module(binding):
-        return py_call(svc_builtins().getattr, xn_module(binding), PythonObject("x_neighbors_ocsvm_labels"),
-                       PythonObject(None)) is not None
+        return neural_descriptor_entry(xn_module(binding), "x_neighbors_ocsvm_labels", False) is not None
     return (xn_capabilities(binding) & 16) != 0
 
 
-def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject, labels: Bool,
-               context: PythonObject) raises -> PythonObject:
-    """`score_samples` as (n,) float32 scores; with `labels`, `predict`'s
-    (n,) int32 labels when the fused device chain applies (the caller then
-    finishes the int64 cast), the scores otherwise."""
+def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
+    labels: Bool, public_output: Bool, context: PythonObject, mut connection: OcConnection) raises -> OcOutput:
     var fields = py_fields(model)
-    # The door's admitted X is used as is (see _ocsvm_fit).
     var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
     var dual = svc_field(fields, "dual_coef_")
     var n_sv = Int(py=dual.shape[1])
-    # the (n_sv, 1) column of the C-order float32 coefficients. The fitted
-    # coefficient Array is already one: its snapshot is skipped while it is
-    # the same object it was last call (bindings/gp_svm_records.mojo).
     var coef: PythonObject
     if ocsvm_coef_reused(model, dual):
         coef = dual
@@ -323,126 +265,156 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
         coef = admit_family(dual, 2, "dual_coef_", context, False).array
         ocsvm_coef_remember(model, dual, coef)
     var kernel = svc_field(fields, "kernel")
-    var precomputed = String(kernel) == "precomputed"
+    var precomputed = oc_name(kernel, "precomputed", context)
     var nq = Int(py=q.shape[0])
     var sv = svc_field(fields, "support_vectors_")
     if not precomputed and n_sv > 0 and nq > 0 and not svc_truthy(context["family_svc_xn_old_items"]):
         var degree = svc_int(svc_field(fields, "degree"))
         var gamma = svc_float(svc_field(fields, "_gamma"))
         var coef0 = svc_float(svc_field(fields, "coef0"))
-        # the fused chain: kernel then matmul per row tile on the device
         var d = Int(py=q.shape[1])
         if labels and _ocsvm_labels_available(binding):
-            # N369 (lane ne3-g-svc-gp-neighbors): kernel_matmul, the offset
-            # step (`xn_unary` U_IDENTITY 1.0, -offset_) and the sign
-            # (`p2m_sign_label` mode 2, threshold 0) in one native session
-            # (x_neighbors op_ocsvm_labels): the same launches with the same
-            # parameter words, the n scores never come to the host.
             var offset = svc_float(svc_field(fields, "offset_"))
-            var lab = family_array(Python.tuple(PythonObject(nq)), "<i4", context)
-            _op(binding, "ocsvm_labels", Python.list(_a(q), _a(sv), _a(coef), _a(lab)),
-                _dims(nq, n_sv, d, Int(py=context["family_svc_xn_kernels"][kernel]), degree, 2),
-                Python.list(PythonObject(_f32_scalar(gamma)), PythonObject(_f32_scalar(coef0)), PythonObject(1.0),
-                            PythonObject(-offset), PythonObject(0.0)), context)
-            _ = lab  # keep the Python object alive through the native call above
-            _ = sv  # keep the Python object alive through the native call above
-            _ = coef  # keep the Python object alive through the native call above
-            _ = q  # keep the Python object alive through the native call above
-            _ = q^
-            _ = coef^
-            return lab
-        var s = family_array(Python.tuple(PythonObject(nq)), "<f4", context)
-        _op(binding, "kernel_matmul", Python.list(_a(q), _a(sv), _a(coef), _a(s)),
-            _dims(nq, n_sv, d, 1, Int(py=context["family_svc_xn_kernels"][kernel]), degree),
-            Python.list(PythonObject(_f32_scalar(gamma)), PythonObject(_f32_scalar(coef0))), context)
-        _ = s  # keep the Python object alive through the native call above
-        _ = sv  # keep the Python object alive through the native call above
-        _ = coef  # keep the Python object alive through the native call above
-        _ = q  # keep the Python object alive through the native call above
-        _ = q^
-        _ = coef^
-        return s
-    var k: PythonObject
+            var result = OcOutput(nq, True, False, context)
+            var query_address = Int(py=_a(q))
+            var reference_address = Int(py=_a(sv))
+            var coefficient_address = Int(py=_a(coef))
+            var code = Int(py=context["family_svc_xn_kernels"][kernel])
+            var driver = connection.driver()
+            with GILReleased(Python()):
+                oc_fused_labels(driver, query_address, reference_address, coefficient_address,
+                    result.state.address(), nq, n_sv, d, code, degree, gamma, coef0, offset)
+            _ = q
+            _ = sv
+            _ = coef
+            return result^
+        var result = OcOutput(nq, False, public_output, context)
+        var query_address = Int(py=_a(q))
+        var reference_address = Int(py=_a(sv))
+        var coefficient_address = Int(py=_a(coef))
+        var code = Int(py=context["family_svc_xn_kernels"][kernel])
+        var driver = connection.driver()
+        with GILReleased(Python()):
+            oc_kernel_product(driver, query_address, reference_address, coefficient_address,
+                result.state.address(), nq, n_sv, d, code, degree, gamma, coef0)
+        _ = q
+        _ = sv
+        _ = coef
+        return result^
+    var gram = OcMatrix(0, 0)
     if precomputed:
-        var support = _i32_of(svc_field(fields, "support_"), context)
-        k = _take_cols(binding, q, support, Int(py=support.shape[0]), context)
-        _ = support^
+        var support = _oc_indices(svc_field(fields, "support_"))
+        var query_address = Int(py=_a(q))
+        var columns = Int(py=q.shape[1])
+        var driver = connection.driver()
+        with GILReleased(Python()):
+            gram = oc_take_cols(driver, query_address, nq, columns, support.address, support.count)
+        _ = support
     else:
-        k = _kernel(binding, q, sv, Int(py=context["family_svc_xn_kernels"][kernel]), svc_float(svc_field(fields, "_gamma")),
-                    svc_float(svc_field(fields, "coef0")), svc_int(svc_field(fields, "degree")), context)
-    var s = family_array(Python.tuple(PythonObject(nq)), "<f4", context)
-    _op(binding, "matmul", Python.list(_a(k), _a(coef), _a(s)), _dims(Int(py=k.shape[0]), Int(py=k.shape[1]), 1),
-        Python.list(), context)
-    _ = s  # keep the Python object alive through the native call above
-    _ = q^
-    _ = k^
-    _ = coef^
-    return s
+        var code = Int(py=context["family_svc_xn_kernels"][kernel])
+        var gamma = svc_float(svc_field(fields, "_gamma"))
+        var coef0 = svc_float(svc_field(fields, "coef0"))
+        var degree = svc_int(svc_field(fields, "degree"))
+        var features = Int(py=q.shape[1])
+        var references = Int(py=sv.shape[0])
+        var query_address = Int(py=_a(q))
+        var reference_address = Int(py=_a(sv))
+        var driver = connection.driver()
+        with GILReleased(Python()):
+            gram = oc_kernel(driver, query_address, reference_address, nq, references, features,
+                code, degree, gamma, coef0)
+    var result = OcOutput(nq, False, public_output, context)
+    var coefficient_address = Int(py=_a(coef))
+    var driver = connection.driver()
+    with GILReleased(Python()):
+        oc_product(driver, gram.address(), coefficient_address, result.state.address(), gram.rows, gram.columns)
+    _ = q
+    _ = sv
+    _ = gram
+    _ = coef
+    return result^
+
+
+def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
+    context: PythonObject, mut connection: OcConnection) raises -> PythonObject:
+    var result = _ocsvm_run(model, binding, source, False, True, context, connection)
+    var public_value = result.public_value
+    _ = result
+    return public_value
 
 
 def _ocsvm_decision(model: PythonObject, binding: PythonObject, source: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
-    """`OneClassSVM.decision_function`: score_samples(X) - offset_ (`xn_unary`)."""
-    return _ocsvm_decision_of(model, binding, _ocsvm_scores(model, binding, source, context), context)
-
-
-def _ocsvm_decision_of(model: PythonObject, binding: PythonObject, scores: PythonObject,
-                       context: PythonObject) raises -> PythonObject:
-    """score_samples - offset_ (`xn_unary`) over computed scores."""
-    var out = family_array(Python.tuple(PythonObject(Int(py=scores.size))), "<f4", context)
+    context: PythonObject, mut connection: OcConnection) raises -> PythonObject:
+    var scores = _ocsvm_run(model, binding, source, False, False, context, connection)
+    var result = family_array(Python.tuple(PythonObject(scores.state.count)), "<f4", context)
     var offset = svc_float(svc_field(py_fields(model), "offset_"))
-    _op(binding, "unary", Python.list(_a(scores), _a(out)), _dims(Int(py=scores.size), _U_IDENTITY),
-        Python.list(PythonObject(1.0), PythonObject(-offset)), context)
-    _ = out  # keep the Python object alive through the native call above
-    _ = scores  # keep the Python object alive through the native call above
-    return out
+    var address = Int(py=_a(result))
+    var driver = connection.driver()
+    with GILReleased(Python()):
+        oc_decision(driver, scores.state.address(), address, scores.state.count, offset)
+    _ = scores
+    _ = result
+    return result
 
 
 def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
-                   context: PythonObject) raises -> PythonObject:
-    """`OneClassSVM.predict`: 1 inliers, -1 outliers, int64."""
-    var first = _ocsvm_run(model, binding, source, True, context)
-    var dec = PythonObject(None)
-    var lab: PythonObject
-    var n = Int(py=first.size)
-    if String(first.dtype) == "<i4":
-        lab = first  # the fused chain's labels (op_ocsvm_labels)
-    else:
-        dec = _ocsvm_decision_of(model, binding, first, context)
-        lab = family_array(Python.tuple(PythonObject(n)), "<i4", context)
+    context: PythonObject, mut connection: OcConnection) raises -> PythonObject:
+    var first = _ocsvm_run(model, binding, source, True, False, context, connection)
+    var n = first.state.count
+    var decision = OcQueryState(0, False, False)
+    var labels = OcQueryState(0, True, False)
+    var label_address = first.state.address()
+    if not first.state.labels:
+        decision = OcQueryState(n, False, True)
+        var offset = svc_float(svc_field(py_fields(model), "offset_"))
+        var driver = connection.driver()
+        with GILReleased(Python()):
+            oc_decision(driver, first.state.address(), decision.address(), n, offset)
+        labels = OcQueryState(n, True, True)
         if n > 0:
-            _op(binding, "p2m_sign_label", Python.list(_a(dec), _a(lab)), _dims(n, 2), Python.list(PythonObject(0.0)),
-                context)
-            _ = lab  # keep the Python object alive through the native call above
-            _ = dec  # keep the Python object alive through the native call above
-    var out = family_array(Python.tuple(PythonObject(n)), "<i8", context)
+            with GILReleased(Python()):
+                oc_sign(driver, decision.address(), labels.address(), n)
+        label_address = labels.address()
+    var result = family_array(Python.tuple(PythonObject(n)), "<i8", context)
     if n > 0:
-        # The labels widened int32 -> int64 by the typed parallel conversion
-        # (core/admitted_convert.mojo), not a py_call into the base binding.
-        _ = admitted_convert_vector(Int(py=classical_address(lab)), "<i4", Int(py=classical_address(out)), "<i8", n)
-        _ = out  # keep the Python object alive through the native call above
-        _ = lab  # keep the Python object alive through the native call above
-    _ = dec^
-    _ = lab^
-    return out
+        _ = admitted_convert_vector(label_address, "<i4", Int(py=_a(result)), "<i8", n)
+    _ = first
+    _ = decision
+    _ = labels
+    _ = result
+    return result
 
 
-def svc_ocsvm_operation(model: PythonObject, operation: String, var args: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
-    """OneClassSVM; args[0] is the resolved `_mojolearn_x_neighbors` binding."""
-    args = xn_admit_arguments(args, context)
+def _oc_binding(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    oc_dictionary(context)
+    var backend = context["backend_fields"]
+    oc_dictionary(backend)
+    var binding = source
+    if py_type(source) is backend["_HostBinding"] or py_type(source) is backend["_NoGpuBinding"]:
+        binding = estimator_binding(PythonObject(None), "_mojolearn_x_neighbors", context)
+    return xn_admit(binding)
+
+
+def svc_ocsvm_operation(model: PythonObject, operation: String, args: PythonObject,
+    context: PythonObject) raises -> PythonObject:
+    var binding = _oc_binding(args[0], context)
     classical_connect_numpy(context)
-    if operation == "family_svc_ocsvm_fit":
-        _ocsvm_fit(model, args[0], args[1], args[2], context)
-        return model
-    if operation == "family_svc_ocsvm_score_samples":
-        return _ocsvm_scores(model, args[0], args[1], context)
-    if operation == "family_svc_ocsvm_decision":
-        return _ocsvm_decision(model, args[0], args[1], context)
-    if operation == "family_svc_ocsvm_predict":
-        return _ocsvm_predict(model, args[0], args[1], context)
-    if operation == "family_svc_ocsvm_fit_predict":
-        # `fit(X).predict(X)`
-        _ocsvm_fit(model, args[0], args[1], PythonObject(None), context)
-        return _ocsvm_predict(model, args[0], args[1], context)
-    raise Error("RuntimeError: unknown OneClassSVM operation " + operation)
+    var connection = OcConnection(binding)
+    try:
+        if operation == "family_svc_ocsvm_fit":
+            _ocsvm_fit_native(model, binding, args[1], args[2], context, connection)
+            return model
+        if operation == "family_svc_ocsvm_score_samples":
+            return _ocsvm_scores(model, binding, args[1], context, connection)
+        if operation == "family_svc_ocsvm_decision":
+            return _ocsvm_decision(model, binding, args[1], context, connection)
+        if operation == "family_svc_ocsvm_predict":
+            return _ocsvm_predict(model, binding, args[1], context, connection)
+        if operation == "family_svc_ocsvm_fit_predict":
+            _ocsvm_fit_native(model, binding, args[1], PythonObject(None), context, connection)
+            return _ocsvm_predict(model, binding, args[1], context, connection)
+        raise Error("RuntimeError: unknown OneClassSVM operation " + operation)
+    finally:
+        _ = connection
+        _ = args
+        _ = binding
