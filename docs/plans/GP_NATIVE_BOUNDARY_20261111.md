@@ -361,3 +361,10 @@ former dictionary did. Publication reads the plan directly, removing the
 extra field-name snapshot. Every replaced owner is still admitted before the
 first mutation; the actual public numeric/list/kernel values remain PACK
 objects. No numerical algorithm, tensor copy or public kernel layout changed.
+
+The follow-up through `884722eab6` anchors **five further shared kernel boundary
+roles** separately in `python-object-typed-gp-kernel-tail.json`: release stack,
+retained children, connected-class inventory, publication field names and
+constructor update plan. These do not overlap the preceding 13 rows or the
+frozen 51 rows. All five before/after anchors are present. Their compilation
+and execution are pending; public/lifetime pins remain excluded.
