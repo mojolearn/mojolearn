@@ -73,7 +73,7 @@ def svc_used_classes(codes: List[Int64], classes: Int) raises -> SvcUsedClasses:
     var first_p = first.unsafe_ptr()
     var class_units = host_predict_task_count_work(classes, classes * units)
     var class_chunk = host_predict_chunk(classes, class_units)
-    def reduce(unit: Int) {imm fp, imm first_p, imm units, imm classes, imm class_chunk, imm count}:
+    def earliest_unit(unit: Int) {imm fp, imm first_p, imm units, imm classes, imm class_chunk, imm count}:
         for c in range(unit * class_chunk, min((unit + 1) * class_chunk, classes)):
             var earliest = count
             for u in range(units):  # small-loop(host pool units: the earliest unit that saw the class)
@@ -81,7 +81,7 @@ def svc_used_classes(codes: List[Int64], classes: Int) raises -> SvcUsedClasses:
                     earliest = fp[u * classes + c]
                     break
             first_p[c] = earliest
-    host_parallelize(reduce, class_units)
+    host_parallelize(earliest_unit, class_units)
     # Units own ascending row ranges, so the first unit that saw a class holds
     # its first row. Order the used classes by that row: the rows are
     # distinct, so `row * classes + class` sorts by row alone.
