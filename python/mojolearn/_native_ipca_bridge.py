@@ -12,30 +12,20 @@ def connect(ipca_class):
 
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
-    names = ("x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",
-             # the pool entries the resident running state is held through
-             # (GPU bindings only; bindings/ipca_native.mojo, lane
-             # ne1-a-decomp-resident): a build without them uploads per call
-             "x_decomp_dev_alloc", "x_decomp_dev_upload", "x_decomp_dev_free", "x_decomp_dev_ew")
     decomp = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_x_decomp", mode)
-            entries = {}
-            for name in names:  # glue: retain checked compiled decomp symbols
-                try:
-                    entry = getattr(binding, name)
-                except (AttributeError, ImportError):
-                    continue
-                if isinstance(entry, BuiltinFunctionType):
-                    entries[name] = entry
-            decomp[mode] = entries
+            factory = getattr(binding, "ipca_native_api_v1", None)
+            if factory is not None and not isinstance(factory, BuiltinFunctionType):
+                raise TypeError("IncrementalPCA requires a compiled native descriptor factory")
+            decomp[mode] = factory
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             decomp[mode] = type(error).__name__ + ": " + str(error)
     # Fitted arrays and projections are mojolearn Arrays, as `_M.out` made them.
     context["output_context"] = _numpy_free_context()
-    context.update(ipca_class=ipca_class, ipca_decomp=decomp)
+    context.update(ipca_class=ipca_class, ipca_bindings=decomp)
     entry = _binding()._module.ipca_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("IncrementalPCA owner requires a compiled ipca_native_call")

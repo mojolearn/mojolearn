@@ -1,0 +1,37 @@
+Mojolearn IncrementalPCA native tests (2026-11-10)
+
+Dependencies e97482b20b additive API and 769351665c typed state/public owner.
+Do not cherry-pick their adoption ancestry. No product files changed here.
+
+First chunk: 26 typed state fixtures. Six output buffers with original zeroed
+capacity and nonnull empty dummies, vector/matrix shapes including zero dims,
+parallel complete storage writes/reads and move ownership. Native resident
+matching, pending generation adoption, valid-zero handle/generation, take once,
+move retaining driver and replacement independence. Fake values never reach a
+real pool, and pure IPCAResidentState has no destructor callback.
+
+Entry ipca_state_suite.run_checks(), wrapper ipca_state.mojo, pixi task.
+All independent cases/word checks run via host_parallelize. Fixed six-field
+metadata comparisons are serial. Address lists and room owners remain named
+after raw pointer use. No borrowed-pointer early destruction in error paths.
+
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_state.mojo
+Uncompiled/unrun. Source/JSON/TOML/whitespace review only; no lane builds/tests,
+boxes, timing or identity. Wire and actual numerical fixtures follow.
+Nothing removed yet: new internal typed state has no former direct Python
+state assertions; public array mutation/refusal/interoperability seams stay.
+No algorithm/kernel/default changes and no A/B define.
+
+Second chunk: 34 typed request/wire fixtures, dependency e97482b20b.
+  Metadata; fit keep flags; partial resident/keep combinations; all eight
+  query inverse/whiten/resident combinations; six output addresses, previous
+  arrays, dimensions, five state IDs; seven integer result words plus signed
+  zero Float64 noise; valid-zero and positive prepare/free handles; nested
+  copies; unknown/metadata/operation envelope refusals; every missing fit/
+  partial result span; heap-owned missing global result error.
+  No numerical solver in the test oracle. Backing and output Lists pinned
+  through refusal/error paths. No fake handle touches a real resident pool.
+  All independent cases parallel. State26 + wire34 =60 pure CPU fixtures.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_contract.mojo
+  Entry ipca_contract_suite.run_checks(). Uncompiled/unrun; JSON/TOML/source/
+  whitespace checks only. Nothing removed: these are new internal wire tests.

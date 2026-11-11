@@ -1,0 +1,43 @@
+Mojolearn LOF native numerical test migration (2026-11-10)
+
+Dependency a9acd91a2c62aa0d3fa73178f85498e2a575fc2d, not its adoption parent.
+Root already owns it; this lane did not modify product/API sources.
+20 actual host + 20 ordered device descriptor fixtures: original 12 fit parameter combinations,
+original 2 novelty combinations, 3 hand-derived all-route examples and 3
+NaN all-route cases. Full original 60x5/25x5 inputs, seeds 0/3, every ninth
+row scaled by 6; k=1/7/59 (public 200 clamp kept in Python), k=6 novelty.
+Offsets auto/.1/.25/.5 and auto/.2 preserved. Kernels/settings unchanged.
+
+Independent saved NumPy Float64 mathematical references use norms/full sort
+and vectorized reachability-density/LOF equations. No Mojolearn/legacy import,
+no mirrored optimizer/kernel code, no native-generated reference or bit run.
+22 binary fixture files plus generator/provenance. Hand-derived 4x2 points
+0,1,2,9 and query .5,8 independently give fitted scores -7/8,-4/3,-7/8,-35/8,
+query scores -7/8,-14/5, and quartile -67/32 (epsilon differences within bound).
+Tolerances 2e-6 relative/absolute, taken from existing public LOF decision
+relationship coverage. No executions occurred and no failing bound changed.
+
+Python migration: two definitions/14 parameter cases retain actual public
+metadata/dtype/call-admission seams. Four legacy numerical comparisons move
+to native fixtures. Removed 167-line LegacyLocalOutlierFactor duplicate
+Python algorithm and unused zeros/_p2m_sort_rows/_U_IDENTITY imports. Five
+refusal cases now assert the same exact full old error strings directly.
+Other NC/Imputer legacy paths and all finite-lane mutation/refusal hooks stay.
+
+Parallel CPU graphs use host_parallelize, as do independent oracle cells.
+Owners remain pinned through native calls/error paths; output labels guarded.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/lof_native_cpu.mojo
+Importable entry lof_native_cpu_suite.run_checks(). No lane compilation,
+product/test execution, boxes, timing or identity. No A/B define.
+This is independent of finite lane's 28 pure LOF contract fixtures (9f6b19b245).
+Only AST/TOML/JSON/artifact-hash/whitespace and source checks performed.
+
+GPU entry lof_native_gpu_suite.run_checks() calls the identical 20 fixture
+graphs through xn_native_v1 device. All nine required ABI operations exist:
+sqdist, knn_select, knn_sq, knn_sq_tiled, unary, lof_lrd, lof_score,
+p2m_row_sort, p2m_sign_label. No algorithm/setting/tolerance fork or fallback.
+One graph at a time on one physical GPU over shared DeviceContexts; kernels
+and oracle cells remain parallel. This does not clear concurrent submission
+failures, which remain separately recorded and unresolved.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/lof_native_gpu.mojo
+Root bundle: CPU 48 including finite lane contracts; GPU 20 ordered actual.

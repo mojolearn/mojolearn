@@ -205,7 +205,7 @@ def fixture(unit: Int) raises:
         labels.classify(driver, 101, unit - 8, -0.5 if unit == 8 else 0.0)
         var destination = List[Int64](length=3, fill=0)
         labels.write_i64(Int(destination.unsafe_ptr()))
-        require(destination[0] == -1 and destination[1] == 1 and destination[2] == (-1 if unit == 8 else 1), "native label widening")
+        require(destination[0] == -1 and destination[1] == 1 and destination[2] == Int64(-1 if unit == 8 else 1), "native label widening")
         _ = labels^
     elif unit == 10:
         var labels = LofLabelsPlan(0)

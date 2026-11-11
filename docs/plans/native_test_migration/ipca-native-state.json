@@ -1,0 +1,24 @@
+{
+  "suite": "ipca_state",
+  "fixtures": 26,
+  "dependencies": [
+    "e97482b20b",
+    "769351665c"
+  ],
+  "execution": "uncompiled and unrun; root bundle owed",
+  "coverage": {
+    "0-3": "rank-one vector versus rank-two matrix shape, zero extent retained",
+    "4-7": "six independent zeroed output rooms, exact capacities for 0/1/3/17 features and nonnull empty dummies",
+    "8-9": "complete parallel writes, independent storage, moved owner retains allocation/data",
+    "10-14": "valid handle 0/positive, invalid -1, exact provider/source identity",
+    "15-16": "pending generation adopts once, fixed generation refuses mutations",
+    "17-20": "zero/positive/empty take-once and invalidated matching",
+    "21-23": "move keeps driver/shape/identity, replacement owner independent, take changes only handle",
+    "24-25": "generation 0 is valid, pending-generation match does not adopt"
+  },
+  "parallel": "all independent cases and output word checks/writes use host_parallelize; only fixed six-field metadata comparisons are serial",
+  "lifetime": "Native output-room owner and address list named after every parallel raw-pointer use. Mock state handles never reach real pool prepare/free and pure state has no destructor callback.",
+  "python_removed": [],
+  "product_files_changed": [],
+  "limitations": "Pure typed state coverage; request-wire and actual incremental SVD/update/query numerical coverage follow. No compilation, runtime, performance or identity claim."
+}
