@@ -200,7 +200,7 @@ def _minmax_fit_direct_cls2(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx: DeviceBuffer[DType.float32]
     comptime if PREP_CLS2_MINMAX_POOL:
-        dx = pool_take["MojolearnPrepCls2MinmaxXV1"](ctx,n*d)
+        dx = pool_take["MojolearnPrepCls2MinmaxXV2"](ctx,n*d)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     else:
         dx = _upload_direct(ctx,x,n*d)
@@ -222,7 +222,7 @@ def _minmax_fit_direct_cls2(
             res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
             f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
     comptime if PREP_CLS2_MINMAX_POOL:
-        pool_give["MojolearnPrepCls2MinmaxXV1"](dx^)
+        pool_give["MojolearnPrepCls2MinmaxXV2"](dx^)
     else:
         _ = dx^
     if not ok:
@@ -416,7 +416,7 @@ def minmax_fit_transform_direct(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx: DeviceBuffer[DType.float32]
     comptime if PREP_CLS2_MINMAX_POOL:
-        dx = pool_take["MojolearnPrepCls2MinmaxXV1"](ctx,n*d)
+        dx = pool_take["MojolearnPrepCls2MinmaxXV2"](ctx,n*d)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     else:
         dx = _upload_direct(ctx,x,n*d)
@@ -438,7 +438,7 @@ def minmax_fit_transform_direct(
             f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
     if not ok or f[0] != 0 or f[1] != 0:
         comptime if PREP_CLS2_MINMAX_POOL:
-            pool_give["MojolearnPrepCls2MinmaxXV1"](dx^)
+            pool_give["MojolearnPrepCls2MinmaxXV2"](dx^)
         else:
             _ = dx^
         _ = res^
@@ -463,7 +463,7 @@ def minmax_fit_transform_direct(
         ctx.synchronize()
     _ = dout^; _ = dm^; _ = ds^; _ = res^
     comptime if PREP_CLS2_MINMAX_POOL:
-        pool_give["MojolearnPrepCls2MinmaxXV1"](dx^)
+        pool_give["MojolearnPrepCls2MinmaxXV2"](dx^)
     else:
         _ = dx^
     _ = ctx^

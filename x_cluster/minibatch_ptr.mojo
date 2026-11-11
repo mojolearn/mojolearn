@@ -194,7 +194,7 @@ def minibatch_entry_ptr(
         var xbuf: DeviceBuffer[DType.float32]
         comptime if MBK_CLS2_POOL:
             # lane/apple-fast-gap-cls2: a pooled buffer, returned below
-            xbuf = pool_take["MojolearnXClusterCls2MbkXV1"](ops.ctx, nx)
+            xbuf = pool_take["MojolearnXClusterCls2MbkXV2"](ops.ctx, nx)
         else:
             xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
@@ -204,7 +204,7 @@ def minibatch_entry_ptr(
                 if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:
                     ops.ctx.synchronize()
                     comptime if MBK_CLS2_POOL:
-                        pool_give["MojolearnXClusterCls2MbkXV1"](xbuf^)
+                        pool_give["MojolearnXClusterCls2MbkXV2"](xbuf^)
                     raise Error(MBK_NONFINITE_MSG)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
@@ -287,7 +287,7 @@ def minibatch_entry_ptr(
             # nearest_all read its labels back (a synchronize): no launch
             # still reads X; the slot's later entries are not used again
             ops.ctx.synchronize()
-            pool_give["MojolearnXClusterCls2MbkXV1"](ops.f.pop(xs))
+            pool_give["MojolearnXClusterCls2MbkXV2"](ops.f.pop(xs))
         var n_iter = (steps_done * batch + n - 1) // n
         var inertia = sum_f64(dist, n)
         out.f.append(c^)

@@ -247,7 +247,7 @@ def orth_ws_on_device(
 ) raises:
     """dst = the orthonormalized columns of a (both m x l, a unchanged):
     `orth_on_device`'s two passes with pooled work buffers, enqueued."""
-    comptime NAME = "MojolearnXDecompOrthWSV1"
+    comptime NAME = "MojolearnXDecompOrthWSV2"
     var cells = m * l
     var ns = qr_slice_count(m, l)
     var dw = pool_take[NAME](ctx, cells)

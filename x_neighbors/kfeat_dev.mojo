@@ -153,7 +153,7 @@ def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
         st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
     var blocks = _scan_blocks(cnt)
-    var buf = pool_take["MojolearnXNeighborsKfeatScanV1"](ctx, cnt)
+    var buf = pool_take["MojolearnXNeighborsKfeatScanV2"](ctx, cnt)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
     ctx.enqueue_function[negative_partial_kernel](
         st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
@@ -168,7 +168,7 @@ def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
         var v = hp[i]
         if v < best:
             best = v
-    pool_give["MojolearnXNeighborsKfeatScanV1"](buf^)
+    pool_give["MojolearnXNeighborsKfeatScanV2"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 
@@ -251,8 +251,8 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
         st[].z_cap = count
     var hz = st[].z.value().unsafe_ptr()
     _schi2_draw(seed, count, nc, FP(unsafe_from_address=Int(hz)), op)
-    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV1"](ctx, count)
-    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV1"](ctx, count)
+    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV2"](ctx, count)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV2"](ctx, count)
     ctx.enqueue_copy(dst_buf=dz, src_ptr=hz)
     ctx.enqueue_function[skew_weights_kernel](
         dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
@@ -260,8 +260,8 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
     )
     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
     ctx.synchronize()
-    pool_give["MojolearnXNeighborsKfeatSkewZV1"](dz^)
-    pool_give["MojolearnXNeighborsKfeatSkewWV1"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewZV2"](dz^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV2"](dw^)
 
 
 # ---------------------------------------------------------------- SCHI2_LAZYW
@@ -307,8 +307,8 @@ def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     var zp = FP(unsafe_from_address=z_addr)
     var wp = FP(unsafe_from_address=w_addr)
     var ctx = xn_ctx()
-    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV1"](ctx, count)
-    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV1"](ctx, count)
+    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV2"](ctx, count)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV2"](ctx, count)
     ctx.enqueue_copy(dst_buf=dz, src_ptr=zp)
     ctx.enqueue_function[skew_weights_kernel](
         dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
@@ -316,8 +316,8 @@ def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     )
     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
     ctx.synchronize()
-    pool_give["MojolearnXNeighborsKfeatSkewZV1"](dz^)
-    pool_give["MojolearnXNeighborsKfeatSkewWV1"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewZV2"](dz^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV2"](dw^)
 
 
 def kfeat_schi2_transform(
@@ -344,11 +344,11 @@ def kfeat_schi2_transform(
     var outp = FP(unsafe_from_address=out_addr)
     var skew = Float32(skewedness)
     var ctx = xn_ctx()
-    var dx = pool_take["MojolearnXNeighborsKfeatSkewTXV1"](ctx, nx)
-    var dl = pool_take["MojolearnXNeighborsKfeatSkewTLV1"](ctx, nx)
-    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV1"](ctx, nw)
-    var doff = pool_take["MojolearnXNeighborsKfeatSkewTOV1"](ctx, nc)
-    var dres = pool_take["MojolearnXNeighborsKfeatSkewTRV1"](ctx, nz)
+    var dx = pool_take["MojolearnXNeighborsKfeatSkewTXV2"](ctx, nx)
+    var dl = pool_take["MojolearnXNeighborsKfeatSkewTLV2"](ctx, nx)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV2"](ctx, nw)
+    var doff = pool_take["MojolearnXNeighborsKfeatSkewTOV2"](ctx, nc)
+    var dres = pool_take["MojolearnXNeighborsKfeatSkewTRV2"](ctx, nz)
     ctx.enqueue_copy(dst_buf=dx, src_ptr=xp)
     # main's `_unary(X, _U_LOG, 1.0, skewedness)`: log(1 * x + skewedness)
     ctx.enqueue_function[unary_kernel](
@@ -356,7 +356,7 @@ def kfeat_schi2_transform(
         grid_dim=_grid(nx), block_dim=(BLOCK if nx > 1 else 1),
     )
     if pending:
-        var dz = pool_take["MojolearnXNeighborsKfeatSkewZV1"](ctx, nw)
+        var dz = pool_take["MojolearnXNeighborsKfeatSkewZV2"](ctx, nw)
         ctx.enqueue_copy(dst_buf=dz, src_ptr=wzp)
         ctx.enqueue_function[skew_weights_kernel](
             dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(nw),
@@ -370,7 +370,7 @@ def kfeat_schi2_transform(
         )
         ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
         ctx.synchronize()
-        pool_give["MojolearnXNeighborsKfeatSkewZV1"](dz^)
+        pool_give["MojolearnXNeighborsKfeatSkewZV2"](dz^)
     else:
         ctx.enqueue_copy(dst_buf=dw, src_ptr=wzp)
         ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
@@ -380,11 +380,11 @@ def kfeat_schi2_transform(
         )
         ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
         ctx.synchronize()
-    pool_give["MojolearnXNeighborsKfeatSkewTXV1"](dx^)
-    pool_give["MojolearnXNeighborsKfeatSkewTLV1"](dl^)
-    pool_give["MojolearnXNeighborsKfeatSkewWV1"](dw^)
-    pool_give["MojolearnXNeighborsKfeatSkewTOV1"](doff^)
-    pool_give["MojolearnXNeighborsKfeatSkewTRV1"](dres^)
+    pool_give["MojolearnXNeighborsKfeatSkewTXV2"](dx^)
+    pool_give["MojolearnXNeighborsKfeatSkewTLV2"](dl^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV2"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewTOV2"](doff^)
+    pool_give["MojolearnXNeighborsKfeatSkewTRV2"](dres^)
 
 
 # ------------------------------------------------------- IDENTICAL sketch draws

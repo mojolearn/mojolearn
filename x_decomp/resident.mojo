@@ -1001,7 +1001,7 @@ def grp_fit_fused_run(
         st[].part = ctx.enqueue_create_buffer[DType.int32](513)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
     var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-    var buf = pool_take["MojolearnXDecompCls2ScanV1"](ctx, max(cnt, 1))
+    var buf = pool_take["MojolearnXDecompCls2ScanV2"](ctx, max(cnt, 1))
     if cnt > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
         ctx.enqueue_function[nonfinite_partial_kernel](
@@ -1034,7 +1034,7 @@ def grp_fit_fused_run(
     ctx.synchronize()
     if cnt > 0:
         best = st[].host.value().unsafe_ptr()[0]
-    pool_give["MojolearnXDecompCls2ScanV1"](buf^)
+    pool_give["MojolearnXDecompCls2ScanV2"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 

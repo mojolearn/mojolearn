@@ -101,7 +101,7 @@ comptime X_PREP_POOL_ARENA_IDN = (GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_ac
                                  and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]())
 comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                              and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
-comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV1" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV1"
+comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV2" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV2"
 #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
 comptime _XP_POOL_MIN_WORDS = 1 << 24
 

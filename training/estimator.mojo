@@ -1337,7 +1337,7 @@ comptime _CE_STAGE_POOL = "MojolearnDownloadStagesTrainingIdenticalV1" if GLOBAL
 # cell, ignored rows included), the logits are uploaded whole, and the
 # workspace is gated dirty-safe (`identical_ce_workspace_max_floats`): a
 # buffer's previous words never reach a result. Storage only: no bit moves.
-comptime _CE_DEV_POOL = "MojolearnDevPoolCeIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDevPoolCeFastV1"
+comptime _CE_DEV_POOL = "MojolearnDevPoolCeIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDevPoolCeFastV2"
 
 
 #: lane fam-neural (2026-10-04): THE LOGITS GO UP THROUGH THE PIPELINED
