@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from python_crossing_probe import PythonCalls, visibility_control
+from python_crossing_probe import PythonCalls, visibility_control, compare_observations
 
 
 def test_nested_python_callback_is_visible_and_report_never_qualifies_zero():
@@ -40,3 +40,19 @@ def test_known_c_api_call_is_reported_separately_from_observed_calls():
     # the blind spot rather than infer zero invocations from zero events.
     assert control["c_api_blind_spot_demonstrated"] == (control["c_api_to_builtin_observed"] != 1)
     assert control["qualification"] == "visibility control only; never an estimator pass"
+
+
+def test_failed_or_different_fixtures_cannot_claim_a_reduction():
+    prior = dict(status="observed", estimator="Ridge", requested_backend="cpu", rows=32,
+                 input_sha256="fixture", parameters={"alpha": 1.0},
+                 operations=[dict(operation="fit", profile=dict(python_calls=3,
+                                  mojolearn_python_calls=2, visible_c_calls=4))])
+    after = dict(prior, operations=[dict(operation="fit", profile=dict(python_calls=1,
+                                       mojolearn_python_calls=1, visible_c_calls=0))])
+    comparison = compare_observations(prior, after)
+    assert comparison["operations"][0]["python_calls"] == {"before": 3, "after": 1}
+    assert comparison["python_free_qualification"] == "not established"
+    for changed in ({"status": "failed"}, {"input_sha256": "other"},
+                    {"requested_backend": "cuda"}, {"parameters": {"alpha": 2.0}},
+                    {"operations": []}):
+        assert compare_observations(prior, dict(after, **changed))["status"] == "incomparable"

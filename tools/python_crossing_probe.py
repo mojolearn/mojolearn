@@ -104,7 +104,7 @@ def visibility_control():
             "qualification": "visibility control only; never an estimator pass"}
 
 
-def _model(ml, name):
+def model_parameters(name):
     parameters = {
         "Ridge": {"alpha": 1.0}, "LinearRegression": {},
         "LogisticRegression": {"max_iter": 20},
@@ -114,7 +114,26 @@ def _model(ml, name):
         "GradientBoosting": {"loss": "RMSE", "n_estimators": 3, "max_depth": 2,
                              "random_state": 0},
     }
-    return getattr(ml, name)(numeric_mode="identical", **parameters[name])
+    return dict(numeric_mode="identical", **parameters[name])
+
+
+def compare_observations(before, after):
+    """Compare observed counts only for successful, matching fixture cases."""
+    fields = ("estimator", "requested_backend", "rows", "input_sha256", "parameters")
+    if before.get("status") != "observed" or after.get("status") != "observed":
+        return {"status": "incomparable", "reason": "a public operation failed"}
+    if any(key not in before or before[key] != after.get(key) for key in fields):
+        return {"status": "incomparable", "reason": "fixture, parameters or requested backend differ"}
+    old = {row["operation"]: row for row in before["operations"]}
+    new = {row["operation"]: row for row in after["operations"]}
+    if old.keys() != new.keys():
+        return {"status": "incomparable", "reason": "operation coverage differs"}
+    metrics = ("python_calls", "mojolearn_python_calls", "visible_c_calls")
+    return {"status": "observed_counts_only", "python_free_qualification": "not established",
+            "operations": [{"operation": operation,
+                            **{key: {"before": old[operation]["profile"][key],
+                                     "after": new[operation]["profile"][key]} for key in metrics}}
+                           for operation in old]}
 
 
 def run_case(case):
@@ -134,7 +153,8 @@ def run_case(case):
         if name in ("LogisticRegression", "RandomForestClassifier"):
             y = (y > 0).astype(np.int64)
         result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
-        model = _model(ml, name)
+        result["parameters"] = model_parameters(name)
+        model = getattr(ml, name)(**result["parameters"])
         query = "transform" if name == "PCA" else "predict"
         operations = [("fit", model.fit, (x,) if name in ("PCA", "KMeans") else (x, y)),
                       (query, getattr(model, query), (x[:min(7, rows)],))]
@@ -177,9 +197,11 @@ def main(argv=None):
     parser.add_argument("--rows", nargs="+", type=int, default=[32, 96])
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--label", required=True, help="Source/wheel identifier for before/after attribution")
+    parser.add_argument("--before", type=Path, help="Previous observation summary.json for count comparison")
     args = parser.parse_args(argv)
     if any(rows < 8 for rows in args.rows):
         parser.error("each case needs at least eight rows")
+    args.evidence = args.evidence.resolve()
     args.evidence.mkdir(parents=True, exist_ok=True)
     cases = [(name, args.backend, rows, str(args.evidence))
              for name in dict.fromkeys(args.estimators) for rows in dict.fromkeys(args.rows)]
@@ -200,6 +222,17 @@ def main(argv=None):
               "cases": results, "failed": sum(row["status"] != "observed" for row in results),
               "python_free_qualification": "pending independent native execution evidence",
               "timing": "not measured"}
+    if args.before:
+        previous = json.loads(args.before.read_text())
+        lookup = {(row["estimator"], row["backend"], row["rows"]): row for row in previous["cases"]}
+        report["before_label"] = previous["label"]
+        report["comparisons"] = []
+        for row in results:
+            earlier = lookup.get((row["estimator"], row["backend"], row["rows"]))
+            comparison = ({"status": "incomparable", "reason": "no matching prior case"} if earlier is None
+                          else compare_observations(json.loads(Path(earlier["evidence"]).read_text()),
+                                                    json.loads(Path(row["evidence"]).read_text())))
+            report["comparisons"].append(dict(estimator=row["estimator"], rows=row["rows"], **comparison))
     (args.evidence / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({key: report[key] for key in ("label", "workers", "allocation", "failed")}))
     return int(report["failed"] != 0)
