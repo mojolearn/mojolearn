@@ -1,0 +1,71 @@
+Mojolearn GP native fixture handoff, 2026-11-11
+
+No lane compilation, native execution, product tests, boxes, timing or identity run.
+Authored: CPU106 = storage32 + request transport57 + actual CPU17; ordered actual GPU20.
+All are unbuilt/unrun until the root orchestrator records execution.
+
+Required product producers:
+  7f5f0bf795  fixed native requests, storage and device/full-host/inference-host providers
+  5f8a2d28a9  production gp_native_v1[K] descriptor entry used by actual suites
+Do not collect local adoption e48735da53 or bb8e66ccc9.
+
+Fixture producers, in order:
+  eeaccc7b7e  original Python/native workload inventory
+  b469feccbe  independent references: 14 GPR profiles and 3 classifier input profiles
+  3a42d6d768  32 pure native storage/ownership/span fixtures
+  815666f228  first actual GPR posterior/covariance/sampling/singular/inference/pointer/resident graphs
+  3ccd7f5aaa  original four gradients and two optimizer/restart workloads
+  3ee72b3434  original binary/OVR GPC, inference, fused and resident graphs; production descriptor entry
+  afe0962a8d  57 prescribed request transport/native error fixtures
+  25647db924  retain original inclusive <=2^-14 recovery predicate (caught in source review, before execution)
+  This handoff accompanies only documentation of the prepared, unapplied Python cleanup.
+
+Root entries:
+  checks/native_tests/gp_state.mojo
+  checks/native_tests/gp_contract.mojo
+  checks/native_tests/gp_native_cpu.mojo
+  checks/native_tests/gp_native_gpu.mojo
+Use -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I .; actual CPU additionally -D MOJOLEARN_COLUMN_CPU=1.
+GPU fixtures expect the existing default pointer/OVR switches enabled. No new A/B define.
+CPU graphs/member fits/member queries/gradient perturbations and oracle cells use host_parallelize.
+GPU graphs/perturbations/member calls run one at a time on the physical device because the separate
+shared-DeviceContext concurrency failure remains open. Product kernels remain parallel and unchanged.
+
+Preserved original oracles/settings:
+  Surface16x2/quarter-length ARD RBF/alpha2^-20/inclusive2^-14 recovery;
+  covariance60x3/q20/seed2/std agreement1e-3+1e-4;
+  sample96x3/5draws-key1 and4000draws-key3/6SE+1e-4 and8percent;
+  gradients40x3/seed4/four kernel expressions/h1e-2/FD5e-3/analytic1e-3;
+  optimizer48x3/seed5 and2 restarts/key7/seed6/original bounds;
+  classifier48x3/Python random.gauss0/original labels before Float32 admission/
+  binary default and Constant2*Matern1 nu1.5/max100/probability1e-12/latent sign+positive variance.
+Additional NumPy Float64 posterior equations and analytic derivatives are independent references.
+No native output became an oracle, no mirrored optimizer/Newton algorithm, no original-bit campaign.
+
+Reference evidence:
+  E/pca-native-tests/gp-reference-preparation.log
+  E/pca-native-tests/gp-reference-source-check.json (32 original input byte comparisons,100 artifact hashes,0 mismatches)
+  E/pca-native-tests/gp-{state,native-first,learning,classifier,contract}-static.json
+  Full commit/push logs remain under E/pca-native-tests; manifests distinguish authored from executed.
+
+Prepared cleanup, NOT APPLIED:
+  E/pca-native-tests/gp-native-python-cleanup.patch
+  E/pca-native-tests/gp-native-python-cleanup.py/.json
+  Five reviewed files, one pure moments definition removed,11 net assert/Report.check sites,
+  42 net lines. The patch passes AST parsing and git apply --check only.
+  Root must accept relevant actual native execution and recheck source hashes before applying.
+  External sklearn tests, normalized covariance numerics, normalization preparation, public
+  Array/state/packing/refusal/seed/save-load/partition and existing repeatability coverage remain.
+  Original Python files are unchanged now.
+
+Remaining dependencies/coverage:
+  Pilot's final normalization path and native public-boundary query/lease owner state.
+  Fixed-kernel/no-free optimizer bypass remains a public boundary assertion until a native plan exists.
+  Source-only old wrapper/import/fold spelling tests are inventoried separately, not preserved
+  as a requirement to keep obsolete wrappers and not replaced by a source guard.
+  Prepared partition9/classifier64 inputs are not claimed as native execution coverage;
+  their multi-device/partition Python interfaces remain in place.
+
+Removed: three temporary test-local descriptor wrappers, superseded by production gp_native_v1[K].
+No Python numerical assertions deleted yet. No product/kernel/algorithm/interface changes by this lane.
+No performance, cross-vendor identity or installed-wheel claim. RUN OWED: root native CPU106/GPU20.

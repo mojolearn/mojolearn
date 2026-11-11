@@ -125,5 +125,16 @@
   "product_or_kernel_changes": 0,
   "removals": "Removed three temporary test-local descriptor wrappers now that production gp_native_v1[K] is frozen. Original Python coverage remains unchanged until replacement native execution passes.",
   "identity_or_performance_claim": "None; no lane compilation/test/identity/timing/box job.",
-  "transport_companion": "gp-native-contract.json:57 authored/unrun transport and provider-error fixtures"
+  "transport_companion": "gp-native-contract.json:57 authored/unrun transport and provider-error fixtures",
+  "python_cleanup_pending": {
+    "patch": "E/pca-native-tests/gp-native-python-cleanup.patch",
+    "report": "E/pca-native-tests/gp-native-python-cleanup.json",
+    "status": "Prepared/AST checked and git apply --check only; not applied",
+    "files": 5,
+    "definitions_removed": 1,
+    "net_assert_or_Report_check_sites_removed": 11,
+    "net_lines_removed": 42,
+    "condition": "Apply only after root accepts the relevant actual native CPU/GPU replacements. Recheck the original file hashes and patch against the integration base.",
+    "preserved": "External sklearn oracles; normalize_y=True covariance numerics and all normalization tests pending native preparation; public Array shapes/dtypes/state/refusals/seed behavior/save-load/partition; existing repeatability controllers. Unchanged top-level AST outside named reviewed functions."
+  }
 }
