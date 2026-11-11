@@ -1,16 +1,17 @@
 {
   "schema": "mojolearn.kmeans-variants-native-tests.v1",
-  "dependency": "49c35f2a97",
+  "dependency": "public-fit producer contains core/kmeans_variants_plan; additive API 49c35f2a97",
   "status": "authored; uncompiled and unrun",
   "contracts": {
     "root": "checks/native_tests/kmeans_variants_contract.mojo",
-    "fixtures": 17,
+    "fixtures": 23,
     "coverage": [
       "legacy request layout",
       "native result slot ownership and move/reuse",
       "RNG halves above signed Int32 range",
       "resident routing",
-      "malformed metadata/numerical/null-result refusal"
+      "malformed metadata/numerical/null-result refusal",
+      "auxiliary owned copies, empty/moved storage and invalid allocation/span refusal"
     ]
   },
   "numerical": {
@@ -35,5 +36,16 @@
     "Actual GPU provider cases remain pending root scheduling.",
     "Witness cases prove wire/layout only, numerical cases call actual CPU provider.",
     "Bisect root center is the existing zero placeholder, not the dataset mean."
-  ]
+  ],
+  "boundary": {
+    "file": "python/mojolearn/tests/test_kmeans_variants_native_boundary.py",
+    "definitions": 4,
+    "parameterized_cases": 5,
+    "coverage": [
+      "failed-first-partial publication",
+      "float refusal before native integer overflow",
+      "legacy serialized/rebound stream forms",
+      "tree identity/mutation/pickle/detached exporter lifetime"
+    ]
+  }
 }

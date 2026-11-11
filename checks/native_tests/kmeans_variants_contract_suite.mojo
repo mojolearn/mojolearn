@@ -17,8 +17,9 @@ from core.kmeans_variants_api import (
 from x_cluster.variants_dispatch import KMeansVariantsBackend, kmeans_variants_dispatch
 from x_cluster.entries import ENTRY_MINIBATCH, ENTRY_MINIBATCH_PARTIAL, ENTRY_BISECT, ENTRY_NEAREST, ENTRY_DISTANCES
 from x_cluster.out import ClusterOut
+from core.kmeans_variants_plan import VariantsAuxiliary
 
-comptime KMEANS_VARIANTS_CONTRACT_FIXTURES = 17
+comptime KMEANS_VARIANTS_CONTRACT_FIXTURES = 23
 
 
 def require(ok: Bool, message: String) raises:
@@ -135,7 +136,51 @@ def fit_request() -> MiniBatchFitRequest:
         2, 3, 5, 7, 11, -1, 13, 17, True, 19, False, True, True, 0.125, 0.25)
 
 
+def auxiliary_case(unit: Int) raises:
+    if unit == 17:
+        var auxiliary = VariantsAuxiliary(0)
+        var parts = List[VariantsSpan]()
+        auxiliary.copy_parts(parts)
+        require(auxiliary.span().address == 0 and auxiliary.span().count == 0, "empty auxiliary has no address")
+    elif unit == 18 or unit == 19:
+        var first: List[Float32] = [3, -5]
+        var last: List[Float32] = [7, 11, 13]
+        var parts: List[VariantsSpan] = [VariantsSpan(Int(first.unsafe_ptr()), 2),
+            VariantsSpan(0, 0), VariantsSpan(Int(last.unsafe_ptr()), 3)]
+        var auxiliary = VariantsAuxiliary(5)
+        auxiliary.copy_parts(parts)
+        first[0] = 99
+        last[2] = 101
+        require(auxiliary.values[0] == 3 and auxiliary.values[1] == -5 and auxiliary.values[2] == 7
+                and auxiliary.values[3] == 11 and auxiliary.values[4] == 13,
+                "ordered disjoint copies skip empty span and own detached values")
+        if unit == 19:
+            var moved = auxiliary^
+            require(moved.span().count == 5 and moved.values[0] == 3 and moved.values[4] == 13,
+                    "auxiliary move preserves owned storage")
+        _ = first^
+        _ = last^
+        _ = parts^
+    else:
+        var caught = False
+        try:
+            if unit == 20:
+                var invalid = VariantsAuxiliary(-1)
+            elif unit == 21:
+                var invalid = VariantsAuxiliary(0)
+                var parts: List[VariantsSpan] = [VariantsSpan(0, 1)]
+                invalid.copy_parts(parts)
+            else:
+                var invalid = VariantsAuxiliary(9223372036854775807 // 4 + 1)
+        except problem:
+            caught = String(problem).find("cluster auxiliary") >= 0
+        require(caught, "invalid auxiliary refuses before pointer access/allocation")
+
+
 def fixture(unit: Int) raises:
+    if unit >= 17:
+        auxiliary_case(unit)
+        return
     var driver = KMeansVariantsDriver(entry)
     var output = VariantsResultSlot()
     if unit == 0:
