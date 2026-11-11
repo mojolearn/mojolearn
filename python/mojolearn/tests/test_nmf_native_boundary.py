@@ -15,6 +15,36 @@ def _model(**settings):
     return ml.NMF(**options)
 
 
+@pytest.mark.parametrize("method", ["fit", "fit_transform", "transform", "inverse_transform"])
+@pytest.mark.parametrize("subclass", [False, True])
+def test_nmf_fit_depth_is_admitted_before_numeric_hooks(method, subclass):
+    called = []
+
+    class Depth:
+        def __int__(self):
+            called.append("int")
+            raise AssertionError("Python fitting-depth integer hook executed")
+
+        def __index__(self):
+            called.append("index")
+            raise AssertionError("Python fitting-depth index hook executed")
+
+        def __bool__(self):
+            called.append("bool")
+            raise AssertionError("Python fitting-depth truth hook executed")
+
+    class NativeSubclass(ml.NMF):
+        pass
+
+    model = NativeSubclass(n_components=2) if subclass else _model()
+    model._mojolearn_fitting = Depth()
+    # The exact-int guard precedes fitted-state and source checks on every
+    # method. No fit is needed to exercise this boundary refusal.
+    with pytest.raises(TypeError, match="native fitting depth requires an exact integer"):
+        getattr(model, method)(_data())
+    assert called == []
+
+
 @pytest.mark.parametrize("init", ["random", "nndsvd", "nndsvda", "nndsvdar", "custom"])
 @pytest.mark.parametrize("solver", ["cd", "mu"])
 def test_nmf_public_methods_do_not_call_legacy_python_entries(init, solver, monkeypatch):
