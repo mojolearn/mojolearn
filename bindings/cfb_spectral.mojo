@@ -28,6 +28,7 @@ from bindings.family_common import (
 from bindings.cluster_native import _reference_queries
 from core.spectral_assignment_api import SpectralAssignmentRequest
 from bindings.spectral_assignment_boundary import spectral_assignment_run, spectral_assignment_pack
+from bindings.spectral_affinity_boundary import spectral_rbf_run
 from bindings.cluster_resident_table import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
 from bindings.spectral_resident_boundary import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
@@ -35,7 +36,6 @@ from bindings.spectral_resident_boundary import (
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.spectral_umap_routes import (
     spectral_umap_route, spectral_umap_entry as family_entry,
-    spectral_umap_optional_entry as cfb_optional_entry,
 )
 from bindings.cfb_dbscan import cfb_borrow_copy
 from bindings.cfb_sparse_read import cfb_sparse_triples
@@ -54,9 +54,6 @@ from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 comptime _DENSE_EMPTY = -1
 comptime _DENSE_NONFINITE = -2
 comptime _DENSE_NEGATIVE = -3
-#: x_decomp/cells.mojo op codes (`_expansion_decomp._OP`).
-comptime _OP_EXP = 9
-comptime _OP_SCALE = 14
 
 
 def _builtins() raises -> PythonObject:
@@ -270,97 +267,13 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
     return a
 
 
-def _cells_free(free: PythonObject, ids: PythonObject):
-    """Return the affinity cells' device buffers to the binding's pool
-    (`_DevBuf.__del__`); quiet, as there."""
-    var count = 0
-    try:
-        count = len(ids)
-    except:
-        return
-    for i in range(count):  # driver-loop: over the device buffers of the affinity cells
-        try:
-            _ = py_call(free, ids[i])
-        except:
-            pass
-
-
 def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`kit.ew("exp", kit.ew("scale", kit.sqdist(xm, xm), s=-gamma)).out()`:
-    the decomp lane's cells, exp(-gamma ||x_i - x_j||^2), as an n x n
-    float32 Array. The resident cells where the binding has them (`_Kit._use`
-    with `_RES_MIN` = 1: every nonempty call), else the host cells, as the
-    Python kit chose."""
+    """The existing sqdist → scale → exp cells, with native scratch/handles."""
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var out = family_array(Python.tuple(n, n), "<f4", context)
-    var nn = n * n
-    var scale = PythonObject(-gamma)
-    var resident = cfb_optional_entry(xdecomp, "x_decomp_dev_ew", context) is not None
-    if resident:
-        var alloc = family_entry(xdecomp, "x_decomp_dev_alloc", context)
-        var free = family_entry(xdecomp, "x_decomp_dev_free", context)
-        var upload = family_entry(xdecomp, "x_decomp_dev_upload", context)
-        var ew = family_entry(xdecomp, "x_decomp_dev_ew", context)
-        var ids = Python.list()
-        try:
-            # sqdist: the output, then X uploaded once (A and B are one matrix).
-            var dsq = family_call(alloc, PythonObject(max(nn, 1)))
-            _ = py_call(ids.append, dsq)
-            var dx = family_call(alloc, PythonObject(max(n * d, 1)))
-            _ = py_call(ids.append, dx)
-            _ = family_call(upload, dx, classical_address(x), PythonObject(n * d))
-            _ = family_call(family_entry(xdecomp, "x_decomp_dev_sqdist", context), dx, dx, dsq,
-                            Python.list(PythonObject(n), PythonObject(n), PythonObject(d)))
-            # the unused broadcast operand: one 0.0 on the device (_M._dev_one)
-            var zero = family_array(Python.tuple(1), "<f4", context)
-            var done = family_call(alloc, PythonObject(1))
-            _ = py_call(ids.append, done)
-            _ = family_call(upload, done, classical_address(zero), PythonObject(1))
-            _ = zero  # keep the Python object alive through the native call above
-            var params_scale = Python.list(PythonObject(_OP_SCALE), PythonObject(nn), PythonObject(n), PythonObject(1),
-                                           PythonObject(3), PythonObject(1), PythonObject(3))
-            var dscaled = family_call(alloc, PythonObject(max(nn, 1)))
-            _ = py_call(ids.append, dscaled)
-            _ = family_call(ew, dsq, done, done, dscaled, params_scale, scale)
-            var params_exp = Python.list(PythonObject(_OP_EXP), PythonObject(nn), PythonObject(n), PythonObject(1),
-                                         PythonObject(3), PythonObject(1), PythonObject(3))
-            var dexp = family_call(alloc, PythonObject(max(nn, 1)))
-            _ = py_call(ids.append, dexp)
-            _ = family_call(ew, dscaled, done, done, dexp, params_exp, PythonObject(0.0))
-            _ = family_call(family_entry(xdecomp, "x_decomp_dev_download", context), dexp, classical_address(out),
-                            PythonObject(nn))
-            _ = out  # keep the Python object alive through the native call above
-        except error:
-            _cells_free(free, ids)
-            raise error^
-        _cells_free(free, ids)
-        return out
-    var sq = family_array(Python.tuple(n, n), "<f4", context)
-    _ = family_call(family_entry(xdecomp, "x_decomp_sqdist", context), classical_address(x), classical_address(x),
-                    classical_address(sq), Python.list(PythonObject(n), PythonObject(n), PythonObject(d)))
-    _ = sq  # keep the Python object alive through the native call above
-    var one = family_array(Python.tuple(1), "<f4", context)
-    var host_ew = family_entry(xdecomp, "x_decomp_ew", context)
-    var scaled = family_array(Python.tuple(n, n), "<f4", context)
-    _ = family_call(host_ew, classical_address(sq), classical_address(one), classical_address(one),
-                    classical_address(scaled),
-                    Python.list(PythonObject(_OP_SCALE), PythonObject(nn), PythonObject(n), PythonObject(1),
-                                PythonObject(3), PythonObject(1), PythonObject(3)), scale)
-    _ = one  # keep the Python object alive through the native call above
-    _ = sq  # keep the Python object alive through the native call above
-    _ = scaled  # keep the Python object alive through the native call above
-    _ = sq^
-    _ = family_call(host_ew, classical_address(scaled), classical_address(one), classical_address(one),
-                    classical_address(out),
-                    Python.list(PythonObject(_OP_EXP), PythonObject(nn), PythonObject(n), PythonObject(1),
-                                PythonObject(3), PythonObject(1), PythonObject(3)), PythonObject(0.0))
-    _ = scaled  # keep the Python object alive through the native call above
-    _ = one  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = scaled^
-    _ = one^
-    return out
+    var affinity = family_array(Python.tuple(n, n), "<f4", context)
+    spectral_rbf_run(xdecomp, x, affinity, n, d, gamma)
+    return affinity
 
 
 def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, base: PythonObject,
