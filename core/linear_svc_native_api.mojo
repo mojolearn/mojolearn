@@ -186,7 +186,7 @@ def linear_svc_dispatch[K: QnNativeKernels, Ovr: LinearSvcOvrKernels](operation:
             var state = MutPointer[LinearSvcFitState, MutUntrackedOrigin](unsafe_from_address=_word(aa, 3))
             if len(state[].coefficients) != options.fits * (options.features + Int(options.intercept)) or len(state[].info) != 3 * options.fits:
                 raise Error("LinearSVC native ABI: OVR owner shape differs from request")
-            Ovr.fit(LinearSvcFitRequest(_word(aa, 0), _word(aa, 1), _word(aa, 2), options), state[])
+            Ovr.fit(LinearSvcFitRequest(_word(aa, 0), _word(aa, 1), _word(aa, 2), options.copy()), state[])
         else:
             raise Error("LinearSVC native ABI: unknown operation")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = answer
