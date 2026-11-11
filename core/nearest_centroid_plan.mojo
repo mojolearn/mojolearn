@@ -5,13 +5,11 @@ Public buffers are borrowed descriptors; only private scratch lives here. Each
 request uses fixed native words. The fused/split kernel choices are unchanged.
 """
 from std.math import isinf
-from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_fixed_call import native_descriptor_call_fixed
+from core.neighbors_native_driver import XnDriver as NcDriver
 from core.admitted_cast_elements import admitted_cast_elements
 from core.array_helpers_impl import fsum_f64
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from x_neighbors.descriptor_schema import xn_operation_id
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64 = MutPointer[Float64, MutUntrackedOrigin]
@@ -146,16 +144,6 @@ def nc_class_offsets(counts: Int, count: Int) raises -> List[Int32]:
     host_parallelize(write_block, tasks)
     _ = sums^
     return result^
-
-
-@fieldwise_init
-struct NcDriver(Copyable, Movable):
-    var entry: NativeDescriptorCall
-
-    def run[NA: Int, NP: Int, NF: Int](self, name: String,
-        a: InlineArray[Int, NA], p: InlineArray[Int, NP], f: InlineArray[Float64, NF],
-    ) raises -> Int:
-        return native_descriptor_call_fixed(self.entry, xn_operation_id(name), a, p, f)
 
 
 struct NcFitPlan(Movable):
