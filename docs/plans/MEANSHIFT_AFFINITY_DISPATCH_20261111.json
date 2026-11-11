@@ -1,5 +1,5 @@
 {
-  "status": "source-reviewed; uncompiled and unrun",
+  "status": "Public fit/query and preference paths use typed requests/state; source-only pending compilation/runtime",
   "base": "fc8a09b92243d71ad5306f2f7f8d7ee066aeff6f",
   "unchanged_numerical_files": [
     "x_cluster/entries.mojo",
@@ -17,13 +17,8 @@
     "_optics_fit",
     "_hdbscan_fit"
   ],
-  "completed_private_roles": 8,
-  "pending_private_roles": [
-    {
-      "role": 4,
-      "description": "AP iterable preference staging still uses its old Python nested lists and temporary Array; native sequence capture dependency is ready, exact unpack remains in progress"
-    }
-  ],
+  "completed_private_roles": 9,
+  "pending_private_roles": [],
   "removed_helpers": [
     "cluster_native._xc_call",
     "cluster_native._xc_optional_entry",
@@ -40,10 +35,11 @@
     "_mojolearn_x_cluster_host"
   ],
   "tests": "authoring owed; no execution by lane",
-  "completed_family_scope_roles": 8,
-  "new_distinct_aggregate_roles": 6,
+  "completed_family_scope_roles": 9,
+  "new_distinct_aggregate_roles": 7,
   "shared_roles_already_counted_by_variants": [
     "nearest query integer/float lists and nested result envelope",
     "resident query tuple/objects tuple and compiled Python dispatch"
-  ]
+  ],
+  "preference_source_evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/preference-final-source-review.json"
 }
