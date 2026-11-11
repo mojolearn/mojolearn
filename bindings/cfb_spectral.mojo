@@ -21,6 +21,8 @@ from bindings.admitted_input import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f32
+from core.family_cast_impl import family_min_f32
+from bindings.admitted_family import admit_family_refuse_empty
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_call, family_array,
     family_field, family_is_str, family_min,
@@ -30,7 +32,7 @@ from core.spectral_assignment_api import SpectralAssignmentRequest
 from bindings.spectral_assignment_boundary import spectral_assignment_run, spectral_assignment_pack
 from bindings.spectral_affinity_boundary import spectral_rbf_run
 from core.spectral_preparation_api import (
-    SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest, SpectralAffinityStatus,
+    SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest, SpectralAffinityStatus, SpectralCOOStorage,
 )
 from bindings.spectral_preparation_boundary import (
     SpectralPreparationConnection, spectral_coo_count_run, spectral_coo_fill_run, spectral_knn_run,
@@ -137,16 +139,48 @@ def _densified(source: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 struct _Coo(Movable):
+    # Array pins are needed only for admitted sparse inputs and the public
+    # triples boundary. Dense fit intermediates use the native storage owner.
     var rows: PythonObject
     var cols: PythonObject
     var vals: PythonObject
     var n: Int
+    var native: Optional[SpectralCOOStorage]
 
     def __init__(out self, rows: PythonObject, cols: PythonObject, vals: PythonObject, n: Int):
         self.rows = rows
         self.cols = cols
         self.vals = vals
         self.n = n
+        self.native = None
+
+    def __init__(out self, n: Int, count: Int):
+        self.rows = PythonObject(None)
+        self.cols = PythonObject(None)
+        self.vals = PythonObject(None)
+        self.n = n
+        self.native = SpectralCOOStorage(count)
+
+    def count(self) raises -> Int:
+        return len(self.native.value().values) if self.native else Int(py=self.vals.size)
+
+    def row_address(self) raises -> Int:
+        return Int(self.native.value().rows.unsafe_ptr()) if self.native else Int(py=classical_address(self.rows))
+
+    def column_address(self) raises -> Int:
+        return Int(self.native.value().columns.unsafe_ptr()) if self.native else Int(py=classical_address(self.cols))
+
+    def value_address(self) raises -> Int:
+        return Int(self.native.value().values.unsafe_ptr()) if self.native else Int(py=classical_address(self.vals))
+
+
+def _coo_room(n: Int, count: Int, public_storage: Bool, context: PythonObject) raises -> _Coo:
+    if not public_storage:
+        return _Coo(n, count)
+    var rows = family_array(Python.tuple(count), "<i4", context)
+    var columns = family_array(Python.tuple(count), "<i4", context)
+    var values = family_array(Python.tuple(count), "<f4", context)
+    return _Coo(rows, columns, values, n)
 
 
 def _coo_of_triples(rows: PythonObject, cols: PythonObject, vals: PythonObject, shape: PythonObject,
@@ -169,7 +203,7 @@ def _sparse_triples(source: PythonObject, context: PythonObject) raises -> Pytho
     return cfb_sparse_triples(source, context)
 
 
-def _coo_triples(source: PythonObject, who: String, base: PythonObject, context: PythonObject) raises -> _Coo:
+def _coo_triples(source: PythonObject, who: String, base: PythonObject, context: PythonObject, public_storage: Bool = False) raises -> _Coo:
     """`_coo_triples(A, who)`: an exact SciPy COO/CSR/CSC input's stored
     triples (read natively), another SciPy format densified natively, a
     dense one through the base
@@ -196,30 +230,18 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
         connection = SpectralPreparationConnection(base, context)
         nnz = spectral_coo_count_run(connection.value(), SpectralCOOCountRequest(Int(py=classical_address(dense)), size, True))
         _ = dense  # keep the Python object alive through the native call above
-    var rows = family_array(Python.tuple(nnz), "<i4", context)
-    var cols = family_array(Python.tuple(nnz), "<i4", context)
-    var vals = family_array(Python.tuple(nnz), "<f4", context)
+    var room = _coo_room(n, nnz, public_storage, context)
     if nnz == 0:
-        return _Coo(rows, cols, vals, n)
+        return room^
     var request = SpectralCOOFillRequest(Int(py=classical_address(dense)),
-        Int(py=classical_address(rows)), Int(py=classical_address(cols)), Int(py=classical_address(vals)),
-        n, n, nnz, True)
+        room.row_address(), room.column_address(), room.value_address(), n, n, nnz, True)
     var wrote = spectral_coo_fill_run(connection.value(), request)
-    _ = dense  # keep the Python object alive through the native call above
-    _ = vals  # keep the Python object alive through the native call above
-    _ = cols  # keep the Python object alive through the native call above
-    _ = rows  # keep the Python object alive through the native call above
-    _ = dense^
+    _ = dense
+    _ = room
     if wrote != nnz:
         raise Error("RuntimeError: mojolearn " + who + ": nonzero_f64_fill wrote "
                     + String(wrote) + " of " + String(nnz) + " entries")
-        _ = vals  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
-    _ = vals  # keep the Python object alive through the native calls above
-    _ = cols  # keep the Python object alive through the native calls above
-    _ = rows  # keep the Python object alive through the native calls above
-    return _Coo(rows, cols, vals, n)
+    return room^
 
 
 def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: PythonObject) raises -> _Coo:
@@ -233,28 +255,24 @@ def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: Python
     if n_r * n_c:
         connection = SpectralPreparationConnection(base, context)
         nnz = spectral_coo_count_run(connection.value(), SpectralCOOCountRequest(Int(py=classical_address(m)), n_r * n_c, False))
-    var rows = family_array(Python.tuple(nnz), "<i4", context)
-    var cols = family_array(Python.tuple(nnz), "<i4", context)
-    var data = family_array(Python.tuple(nnz), "<f4", context)
+    var room = _Coo(n_r, nnz)
     if nnz:
         var request = SpectralCOOFillRequest(Int(py=classical_address(m)),
-            Int(py=classical_address(rows)), Int(py=classical_address(cols)), Int(py=classical_address(data)),
-            n_r, n_c, nnz, False)
+            room.row_address(), room.column_address(), room.value_address(), n_r, n_c, nnz, False)
         var wrote = spectral_coo_fill_run(connection.value(), request)
         _ = m
-        _ = data  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
+        _ = room
         if wrote != nnz:
             raise Error("RuntimeError: mojolearn: nonzero_f32_fill wrote " + String(wrote) + " of "
                         + String(nnz) + " entries")
-            _ = data  # keep the Python object alive through the native call above
-            _ = cols  # keep the Python object alive through the native call above
-            _ = rows  # keep the Python object alive through the native call above
-        _ = data  # keep the Python object alive through the native calls above
-        _ = cols  # keep the Python object alive through the native calls above
-        _ = rows  # keep the Python object alive through the native calls above
-    return _coo_of_triples(rows, cols, data, Python.tuple(n_r, n_c), who, context)
+    # The old _coo_of_triples checked squareness, then rejected the first
+    # empty rows vector. Known native output dtypes need no second admission.
+    if n_r != n_c:
+        raise Error("mojolearn " + who + ": a precomputed affinity matrix "
+                    + "must be square, got shape " + family_repr(Python.tuple(n_r, n_c)))
+    if nnz == 0:
+        admit_family_refuse_empty("rows", List[Int](length=1, fill=0))
+    return room^
 
 
 def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -594,17 +612,17 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         else:
             coo = _coo_triples(coo_source, "SpectralClustering", args[2], context)
         n = coo.n
-        var nnz = Int(py=coo.vals.size)
+        var nnz = coo.count()
         if nnz == 0:
             raise Error("mojolearn SpectralClustering: the precomputed affinity "
                         + "matrix has no nonzero entries")
-        var vp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coo.vals)))
+        var vp = FAMILY_F32P(unsafe_from_address=coo.value_address())
         if not host_all_finite_f32(vp, nnz):
             raise Error("mojolearn SpectralClustering: the precomputed affinity "
                         + "matrix has a non-finite entry (the implemented path refuses "
                         + "it by name, because sqrt of a non-finite degree is a "
                         + "NaN and no NaN may reach a recorded value)")
-        if family_min(coo.vals) < 0:
+        if family_min_f32(FAMILY_F32P(unsafe_from_address=coo.value_address()), nnz) < 0:
             raise Error("mojolearn SpectralClustering: the precomputed affinity "
                         + "matrix has a negative entry (refused by name: sqrt of a "
                         + "negative degree is a NaN in cuVS too)")
@@ -614,16 +632,14 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         if predicting:
             state.allocate(n, k, clusters, context)
         var request = SpectralFitRequest(
-            SpectralInput(0, Int(py=classical_address(coo.rows)), Int(py=classical_address(coo.cols)),
-                Int(py=classical_address(coo.vals)), SPECTRAL_GRAPH, n, 0, nnz),
+            SpectralInput(0, coo.row_address(), coo.column_address(),
+                coo.value_address(), SPECTRAL_GRAPH, n, 0, nnz),
             Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(), options)
         n_out = spectral_fit_run(connection.value(), request)
         _ = state
         _ = labels
         _ = embedding
-        _ = coo.rows
-        _ = coo.cols
-        _ = coo.vals
+        _ = coo
     else:
         # Lane a8d: the admission's finite test (see `_x_decomp_input`).
         var x = admit_family(source, 2, "X", context, finite=True,
@@ -938,17 +954,17 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         else:
             coo = _coo_triples(source, "SpectralEmbedding", args[2], context)
         var n = coo.n
-        var nnz = Int(py=coo.vals.size)
+        var nnz = coo.count()
         if nnz == 0:
             raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
                         + "matrix has no nonzero entries")
         # the rbf affinity is exp of a finite value, finite and >= 0 by
         # construction (`exp_c` clamps), so its two scans are skipped
         if affinity == "precomputed":
-            if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coo.vals))), nnz):
+            if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=coo.value_address()), nnz):
                 raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
                             + "matrix has a non-finite entry")
-            if family_min(coo.vals) < 0:
+            if family_min_f32(FAMILY_F32P(unsafe_from_address=coo.value_address()), nnz) < 0:
                 raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
                             + "matrix has a negative entry (refused by name: sqrt of a "
                             + "negative degree is a NaN)")
@@ -956,15 +972,13 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         py_setitem(fields, "n_neighbors_", PythonObject(_resolved_neighbors(fields, n, False)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         var request = SpectralEmbeddingRequest(
-            SpectralInput(0, Int(py=classical_address(coo.rows)), Int(py=classical_address(coo.cols)),
-                Int(py=classical_address(coo.vals)), SPECTRAL_GRAPH, n, 0, nnz),
+            SpectralInput(0, coo.row_address(), coo.column_address(),
+                coo.value_address(), SPECTRAL_GRAPH, n, 0, nnz),
             Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, 0,
                 norm_laplacian, drop_first, seed, tolerance))
         n_out = spectral_embedding_run(connection.value(), request)
         _ = embedding
-        _ = coo.rows
-        _ = coo.cols
-        _ = coo.vals
+        _ = coo
     else:
         # Lane a8d: the admission's finite test (see `_x_decomp_input`).
         var x = admit_family(source, 2, "X", context, finite=True,
@@ -1070,7 +1084,7 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
         return _knn_affinity(py_fields(model), args[0], False, base, context)
     if operation == "family_cfb_coo_triples":
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
-        var coo = _coo_triples(args[0], String(py=args[1]), base, context)
+        var coo = _coo_triples(args[0], String(py=args[1]), base, context, True)
         return Python.tuple(coo.rows, coo.cols, coo.vals, PythonObject(coo.n))
     if operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform":
         var routed = Python.tuple(
