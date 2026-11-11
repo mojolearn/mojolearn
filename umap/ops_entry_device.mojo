@@ -25,9 +25,9 @@ from umap.ops_entry_words import (
     UmapWordPtr, UmapFloatPtr, umap_fit_config, umap_fit_ex_config, umap_transform_config,
 )
 
-#: The metrics binding's ONE process-lifetime DeviceContext: the same slot
-#: name bindings/_mojolearn_metrics.mojo `_DEVCTX_SLOT` names, so the table
-#: entry and the binding's other exports share the one context.
+#: The metrics image's ONE process-lifetime DeviceContext: the same slot name
+#: metrics/estimator.mojo and the spectral modules use, so UMAP and the other
+#: metrics entries share the one context.
 comptime UMAP_DEVCTX_SLOT = "MojolearnMetricsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMetricsContextFastV3"
 
 
