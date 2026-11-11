@@ -796,9 +796,15 @@ def mamba2_session_open_binding(session: PythonObject, addrs: PythonObject,
     owner[].busy = True
     owner[].usable = False
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111:
+        # they were converted inside the released block before).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
+        var p2 = Int(py=params[2])
+        var p3 = Float32(Float64(py=params[3]))
+        var p4 = Float32(Float64(py=params[4]))
         with GILReleased(Python()):
-            _m2_session_open_run(owner[], a, Int(py=params[0]), Int(py=params[1]),
-                Int(py=params[2]), Float32(Float64(py=params[3])), Float32(Float64(py=params[4])))
+            _m2_session_open_run(owner[], a, p0, p1, p2, p3, p4)
     except error:
         owner[].busy = False
         owner[].release()
@@ -1435,9 +1441,13 @@ def mamba3_session_open_binding(session: PythonObject, addrs: PythonObject,
     owner[].busy = True
     owner[].usable = False
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
+        var p2 = Int(py=params[2])
+        var p3 = Int(py=params[3])
         with GILReleased(Python()):
-            _m3_session_open_run(owner[], a, Int(py=params[0]), Int(py=params[1]),
-                                 Int(py=params[2]), Int(py=params[3]))
+            _m3_session_open_run(owner[], a, p0, p1, p2, p3)
     except error:
         owner[].busy = False; owner[].release(); raise error
     owner[].busy = False
@@ -1522,8 +1532,11 @@ def mamba3_session_load_state_binding(session: PythonObject, addrs: PythonObject
     _m3_require_session_open(owner[])
     owner[].busy = True
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
         with GILReleased(Python()):
-            _m3_session_copy_in(owner[], a, Int(py=params[0]), Int(py=params[1]))
+            _m3_session_copy_in(owner[], a, p0, p1)
     except error:
         owner[].busy = False; owner[].usable = False; raise error
     owner[].busy = False
