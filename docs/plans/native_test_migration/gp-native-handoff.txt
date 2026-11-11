@@ -69,3 +69,18 @@ Remaining dependencies/coverage:
 Removed: three temporary test-local descriptor wrappers, superseded by production gp_native_v1[K].
 No Python numerical assertions deleted yet. No product/kernel/algorithm/interface changes by this lane.
 No performance, cross-vendor identity or installed-wheel claim. RUN OWED: root native CPU106/GPU20.
+
+Final additive coverage checkpoint, 2026-11-11:
+  gp_owner_suite.run_checks:32 pure lease/query scratch fixtures.
+  gp_normalization_cpu_suite.run_checks:13 actual normalization/GP graphs.
+  gp_normalization_gpu_suite.run_checks:26 ordered graphs, direct off/on.
+  Dependencies159305c12b/f89da9c5ab/5b76b30e67; packed boundary e7857a3625
+  adds no pure core API beyond the already-covered GPKernelStorage.
+  Original cov60norm/normalize96/constant96 references, dimensions, kernel,
+  alpha and tolerances retained. See gp-native-final.json for exact inventory.
+  No compilation/execution, no product changes and no Python deletions.
+  Do not collect adoption merge3b7739ccff. It adopted frozen root7f2b50463123,
+  resolving20 historical conflicts to root versions; full evidence retained.
+  Whole-campaign semantic/boxed-export inventory is incomplete at
+  E/pca-native-tests/migration-inventory/checkpoint.json. Structural old-name
+  absences are not promoted to numerical definitions removed.
