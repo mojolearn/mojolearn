@@ -57,7 +57,7 @@ from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
     gpc_validate, _gpc_fit_binary, _gpc_binary, _gpc_set_fitted, _gpc_latent, _gpc_ovr_combine,
 )
-from bindings.gp_common_native import gp_kernel_arrays
+from bindings.gp_common_native import gp_kernel_arrays_transport
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
@@ -372,7 +372,7 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     else:
         for k in range(len(classes)):  # driver-loop: over the one-vs-rest classes
             _ = py_call(columns.append, PythonObject(k))
-    var arrays = gp_kernel_arrays(work["_kernel"], context)
+    var arrays = gp_kernel_arrays_transport(work["_kernel"], context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
@@ -433,7 +433,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var out_kind = 0
     if n_classes == 2:
         out_kind = 2 if proba_method else 1
-    var arrays = gp_kernel_arrays(work["_kernel"], context)
+    var arrays = gp_kernel_arrays_transport(work["_kernel"], context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])

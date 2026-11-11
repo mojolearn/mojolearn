@@ -3,6 +3,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_type
+from bindings.native_loaded_module import native_loaded_module
+from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.classical_arrays import classical_address
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_once
@@ -71,6 +73,9 @@ def gp_require(connection: GPConnection, capability: Int, entry: String) raises:
 
 
 def gp_kernel_view(arrays: PythonObject) raises -> GPKernelView:
+    var b = native_loaded_module("builtins")
+    if py_type(arrays) is not b.tuple and py_type(arrays) is not b.list:
+        return arrays.downcast_value_ptr[GPPackedKernel]()[].storage.view()
     # The packed storage remains pinned by the caller. This adapter also
     # serves the explicit cross-interpreter transport unpack boundary.
     return GPKernelView(Int(py=classical_address(arrays[0])), Int(py=classical_address(arrays[1])),

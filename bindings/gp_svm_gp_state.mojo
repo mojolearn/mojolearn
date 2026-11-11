@@ -19,7 +19,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_kernel_public_native import gp_kernel_snapshot, gp_admit_kernel
-from bindings.gp_common_native import gp_kernel_arrays
+from bindings.gp_kernel_cache_boundary import gp_packed_kernel_reused
 from bindings.gp_svm_records import gpsvm_builtin_scalar, gpsvm_key_fields, gpsvm_context_key
 from core.shared_slot import SharedSlot
 
@@ -64,19 +64,6 @@ def _gp_kernel_nodes(kernel: PythonObject, context: PythonObject, nodes: PythonO
     return True
 
 
-def _gp_kernel_key(mut mods: NativeModules, key: PythonObject, nodes: PythonObject) raises:
-    """Every recorded kernel node, its class and its instance fields. A node
-    replaced anywhere in the tree changes its parent's fields, so the
-    recorded node list stays complete while the key matches."""
-    var none = List[String]()
-    records_key_append(key, PythonObject(len(nodes)))
-    for i in range(len(nodes)):  # driver-loop: over the recorded kernel nodes (identity only)
-        var node = nodes[i]
-        records_key_append(key, node)
-        records_key_append(key, py_type(node))
-        gpsvm_key_fields(mods, key, _fields(mods, node), none)
-
-
 def _gp_kernel_classes_admitted(mut mods: NativeModules, classes: PythonObject) raises -> Bool:
     for i in range(len(classes)):  # driver-loop: over the recorded kernel classes
         if class_record(mods, _KERNEL_CLASS_SLOT, classes[i]) is None:
@@ -91,59 +78,10 @@ def _gp_kernel_classes_admit(mut mods: NativeModules, classes: PythonObject) rai
 
 
 def gp_kernel_arrays_reused(owner: PythonObject, kernel: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`gp_kernel_arrays(kernel)` (the read-only packed kernel the GP bindings
-    take), packed once per kernel state of `owner` and reused while every node
-    of the tree and its fields are the same objects."""
-    var mods = NativeModules()
-    var held = gpsvm_side_get(_GP_PACK_SLOT, owner)
-    if held is not None and held[0] is kernel:
-        # Generation fast path (lane ne1-e-records, row N320): the nodes'
-        # generation words and native content words instead of the key list.
-        var key = Python.list()
-        gpsvm_context_key(key, context, _gp_pack_context())
-        var stamped = records_stamped_get(RECORDS_GP_SVM, owner, _GP_PACK_STAMP)
-        var same = stamped is not None and stamped[0] is held and trees_key_same(stamped[1], key)
-        if not same:
-            _gp_kernel_key(mods, key, held[1])
-            same = trees_key_same(held[2], key)
-            if same:
-                var context_key = Python.list()
-                gpsvm_context_key(context_key, context, _gp_pack_context())
-                _gp_nodes_stamp(owner, _GP_PACK_STAMP, held[1], Python.tuple(held, context_key))
-        # A kernel class change (or no type watchers) repacks: the packing
-        # refuses class-level descriptors for the fields it reads.
-        if same and _gp_kernel_classes_admitted(mods, held[4]):
-            return held[3]
-    var arrays = gp_kernel_arrays(kernel, context)
-    var nodes = Python.list()
-    var classes = Python.list()
-    if _gp_kernel_nodes(kernel, context, nodes, classes):
-        _gp_kernel_classes_admit(mods, classes)
-        var key = Python.list()
-        gpsvm_context_key(key, context, _gp_pack_context())
-        _gp_kernel_key(mods, key, nodes)
-        var record = Python.tuple(kernel, nodes, key, arrays, classes)
-        if gpsvm_side_put(_GP_PACK_SLOT, owner, record):
-            var context_key = Python.list()
-            gpsvm_context_key(context_key, context, _gp_pack_context())
-            _gp_nodes_stamp(owner, _GP_PACK_STAMP, nodes, Python.tuple(record, context_key))
-    return arrays
+    return gp_packed_kernel_reused(owner, kernel, context)
 
 
-comptime _GP_PACK_STAMP = "gp_kernel_pack_stamp_v1"
 comptime _GP_STATE_STAMP = "gp_fitted_state_stamp_v1"
-
-
-def _gp_nodes_stamp(owner: PythonObject, name: String, nodes: PythonObject, payload: PythonObject) raises:
-    """Stamp a kernel-node record of `owner`: each node's class, generation
-    word and field contents (a node replaced anywhere changes its parent's
-    generation). The owner's own fields are not part of a pack record."""
-    if not records_stampable(owner):
-        return
-    var content = ContentRecord()
-    for i in range(len(nodes)):  # driver-loop: over the recorded kernel nodes (content words, once per record)
-        content_object(content, nodes[i], 4)
-    _ = records_stamped_put(RECORDS_GP_SVM, owner, name, content^, payload)
 
 
 def _gp_state_stamp(model: PythonObject, fields: PythonObject, held: PythonObject, context: PythonObject) raises:
@@ -188,12 +126,6 @@ def _gp_state_context() -> List[String]:
     names.append("array_class")
     names.append("mapping_types")
     names.append("buffer_owner_types")
-    return names^
-
-
-def _gp_pack_context() -> List[String]:
-    var names = List[String]()
-    names.append("family_gp_kernel_nodes")
     return names^
 
 
@@ -269,7 +201,6 @@ def gp_state_forget(model: PythonObject) raises:
     gpsvm_side_drop(_GP_STATE_SLOT, model)
     gpsvm_side_drop(_GP_PACK_SLOT, model)
     records_drop(RECORDS_GP_SVM, model, _GP_STATE_STAMP)
-    records_drop(RECORDS_GP_SVM, model, _GP_PACK_STAMP)
 
 
 def gp_state_admitted(model: PythonObject, fields: PythonObject, scalar_names: PythonObject,
