@@ -27,8 +27,8 @@ from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_shape_repr, family_field,
     family_is_real, FAMILY_F32P, FAMILY_F64P,
 )
-from bindings.scaler_native import scaler_fit
-from bindings.scaler_lifecycle_native import scaler_initialize, scaler_transform
+from bindings.gp_normalization_boundary import GPNormalizationConnection, gp_normalization_run
+from core.gp_native_normalization import GPRNormalizeRequest
 from bindings.metrics_reg_native import _reg_new, _reg_run, _arena_double, _RE_DIV
 from bindings.gp_common_native import gp_fit_owned
 from bindings.gp_common_native import (
@@ -159,35 +159,18 @@ struct GPRNormalizedTargets(Movable):
 
 def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonObject, n: Int,
                    context: PythonObject) raises -> GPRNormalizedTargets:
-    """sklearn `_gpr.py:275-280` through StandardScaler in this estimator's
-    tier: `(targets, y_mean, y_std)`, the transformed targets a new (n,)
-    float32 Array."""
-    var b = native_loaded_module("builtins")
-    var scaler_cls = context["family_gp_scaler"][0]
     var scaler_context = context["family_gp_scaler"][1]
     classical_connect_numpy(scaler_context)
     var mode = gp_numeric_mode_used(binding, context)
-    var scaler = family_call(b.object.__new__, scaler_cls)
-    _ = scaler_initialize(scaler, Python.tuple(PythonObject(True), PythonObject(True), PythonObject(True), mode))
-    # `targets.reshape((n_rows, 1))`: the same float32 bytes as one column.
-    var column = family_array(Python.tuple(n, 1), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(column))),
-           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(targets))), count=n)
-    _ = column  # keep the Python object alive through the native call above
-    _ = scaler_fit(scaler, column, PythonObject(None), scaler_context)
-    var sf = py_fields(scaler)
-    var y_mean = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(sf["mean_"])))[0])
-    var y_std = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(sf["scale_"])))[0])
-    var scaled = scaler_transform(scaler, column, False, PythonObject(None), scaler_context)
+    var connection = GPNormalizationConnection(scaler_context["scaler_bindings"][mode], 1 if String(mode) == "identical" else 0)
+    # Only the normalized targets become public y_train_ storage. Column,
+    # statistics, transformed targets and programs belong to native RUN.
     var flat = family_array(Python.tuple(n), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))),
-           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(scaled))), count=n)
-    _ = flat  # keep the Python object alive through the native call above
-    _ = scaled  # keep the Python object alive through the native call above
-    _ = scaled^
-    _ = column^
-    _ = scaler^
-    return GPRNormalizedTargets(flat, y_mean, y_std)
+    var request = GPRNormalizeRequest(Int(py=classical_address(targets)), Int(py=classical_address(flat)), n, connection.direct)
+    var answer = gp_normalization_run(connection, request)
+    _ = targets
+    _ = flat
+    return GPRNormalizedTargets(flat, answer.mean, answer.stddev)
 
 
 def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObject, x: PythonObject,
@@ -290,6 +273,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var normalize_y = Bool(py=fields["_normalize_y"])
     if normalize_y:
         var scaled = _gpr_normalize(model, args[0], targets, n_rows, context)
+        lifecycle_admit_fields(fields)
         targets = scaled.targets
         y_mean = scaled.mean
         y_std = scaled.stddev

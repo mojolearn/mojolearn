@@ -29,6 +29,10 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.shared_slot import SharedSlot
+from core.scaler_native_api import ScalerProviderAPI
+from core.scaler_native_host import ScalerHostKernels
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
@@ -192,10 +196,19 @@ def standard_transform_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_preprocessing_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime SCALER_HOST_NATIVE_API = SharedSlot[ScalerProviderAPI[ScalerHostKernels], "MojolearnScalerHostNativeV1"]
+
+
+def scaler_native_api_v1_binding() raises -> PythonObject:
+    var api = SCALER_HOST_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_preprocessing_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing_host")
+        m.def_function[scaler_native_api_v1_binding]("scaler_native_api_v1")
         m.def_function[preprocessing_host_numeric_mode_binding]("preprocessing_host_numeric_mode")
         m.def_function[preprocessing_host_vendor_binding]("preprocessing_host_vendor")
         m.def_function[preprocessing_host_column_binding]("preprocessing_host_column")

@@ -10,6 +10,10 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.shared_slot import SharedSlot
+from core.scaler_native_api import PrepProgramAPI
+from core.prep_program_native_host import PrepProgramHostKernels
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.common import X_PREP_HOST_SABOTAGE
@@ -140,10 +144,19 @@ def idn_fam2_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_prep_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime PREPPROGRAM_HOST_NATIVE_API = SharedSlot[PrepProgramAPI[PrepProgramHostKernels], "MojolearnPrepProgramHostNativeV1"]
+
+
+def x_prep_native_api_v1_binding() raises -> PythonObject:
+    var api = PREPPROGRAM_HOST_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_x_prep_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep_host")
+        m.def_function[x_prep_native_api_v1_binding]("x_prep_native_api_v1")
         m.def_function[x_prep_host_numeric_mode_binding]("x_prep_host_numeric_mode")
         m.def_function[x_prep_host_vendor_binding]("x_prep_host_vendor")
         m.def_function[x_prep_host_column_binding]("x_prep_host_column")

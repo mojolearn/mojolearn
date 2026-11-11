@@ -128,3 +128,24 @@ The shared legacy resident helper remains used by SVM compatibility paths.
 
 The lease addition is source-reviewed only. Compilation and native lifetime
 fixtures are queued to the integration owner; no lane execution occurred.
+
+GP normalization now runs `gp_normalize_targets` with a typed request/result
+and native column, statistics, program, missing-value and output scratch.
+The public normalized target Array is retained as `y_train_` storage. Two
+separate descriptors pin the original preprocessing and x_prep images. The
+plan uses the existing direct switch, separate fit/transform kernels, exact
+264/248 validation stages, 1/101/102 missing-fit stages, 1/24 missing-fill
+stages and 10/103 restoration stages. Input-to-column and output-to-flat
+copies remain; the temporary Python StandardScaler, fitted-field dictionary,
+private Arrays and one-use prepared-row cache are removed. The cache's unused
+12-word retained-row copy is removed with it. No numerical source changes.
+
+Additive factories: `scaler_native_api_v1` in preprocessing device/full-host,
+`x_prep_native_api_v1` in x_prep device/host. Existing scaler callers and raw
+exports remain intact. Import-time scaler context now retains their owning
+modules; native connection admits actual factories and verifies mode before
+RUN. Required groups include preprocessing, x_prep, runtime family and its
+parallel consumers; affected image roots are listed by the export inventory.
+Source audit only: the orchestrator still owes compilation, normalization
+fixtures (including missing/refusal paths) and installed behavior. No timing
+or cross-vendor identity claim is made.
