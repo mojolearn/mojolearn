@@ -4,7 +4,7 @@ expansion's estimators (bindings/decomp_native.mojo)."""
 
 #: The compiled decomp drivers the owners call (a build without one refuses
 #: that operation by name).
-ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project",
+ENTRY_NAMES = ("x_decomp_native_api_v1", "x_decomp_ica_fit", "x_decomp_ica_project",
                "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig",
                "x_decomp_rp_fit", "x_decomp_rp_project",
                # the pool entries a resident fitted matrix is held through
@@ -14,7 +14,7 @@ ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project",
 
 #: The x_neighbors entries KernelPCA's kernel matrix steps call (connected
 #: only for a caller that asks, `neighbors=True`).
-NEIGHBOR_NAMES = ("x_neighbors_vendor", "x_neighbors_numeric_mode", "x_neighbors_kpca_resident", "xn_kernel",
+NEIGHBOR_NAMES = ("x_neighbors_native_api_v1", "x_neighbors_vendor", "x_neighbors_numeric_mode", "x_neighbors_kpca_resident", "xn_kernel",
                   "xn_colsum", "xn_rowsum", "xn_scale_div", "xn_kpca_center", "xn_kpca_alpha_scale",
                   "xn_kpca_transform", "xn_matmul")
 

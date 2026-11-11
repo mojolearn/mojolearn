@@ -2,6 +2,9 @@
 """KernelPCA typed options and scratch plans over the unchanged Xn operations."""
 from core.neighbors_native_driver import XnDriver
 from core.native_array_layout import NativeArrayLayout
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_fixed_call import native_descriptor_call_fixed
+from x_decomp.descriptor_schema import XD_COLSUM
 
 comptime KPCA_PRECOMPUTED = 100
 
@@ -174,3 +177,19 @@ struct KPCACenteredQuery(Movable):
     def finish(self, driver: KPCANeighborDriver, alphas: Int, dst: Int, count: Int) raises:
         driver.matmul(self.centered.address(), alphas, dst, self.centered.rows, self.centered.cols, count)
         _ = self.centered
+
+
+def kpca_fit_global_mean(driver: KPCANeighborDriver, decomp: NativeDescriptorCall,
+                         columns: Int, total: Int, rows: Int) raises:
+    # Correctness repair (2026-11-10): reduce the n column means as an
+    # n x 1 vector, then divide ONE result by n. The old colsum(1,n)
+    # copied every mean and later read only columns[0]/n. Use the existing
+    # blocked x_decomp reduction, not Xn's single-row serial item fold;
+    # the final Xn divide retains its original Float32 divisor rounding.
+    var summed = KPCAScratch(1, 1)
+    var a: InlineArray[Int, 2] = [columns, summed.address()]
+    var p: InlineArray[Int, 2] = [rows, 1]
+    var f: InlineArray[Float64, 0] = []
+    _ = native_descriptor_call_fixed(decomp, XD_COLSUM, a, p, f)
+    driver.divide(summed.address(), total, 1, Float64(rows))
+    _ = summed

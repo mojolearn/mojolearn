@@ -8,6 +8,12 @@
 # reports); transform's fused (or itemized) x_neighbors chain. Same bits.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from core.neighbors_native_driver import XnDriver
+from core.kpca_native_plan import KPCANeighborDriver, kpca_fit_global_mean
+from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -77,6 +83,27 @@ def _op(near: PythonObject, name: String, addrs: PythonObject, ints: PythonObjec
     _ = py_call_typed(near["xn_" + name], addrs, ints, floats)
 
 
+def _fit_global_mean(near: PythonObject, decomp: PythonObject, columns: PythonObject, total: PythonObject, rows: Int) raises:
+    # Shared with the typed fit plan; pin the original neighbor image and
+    # public output buffers throughout the two existing native operations.
+    var provider = neural_descriptor_connect_factory_once(near["x_neighbors_native_api_v1"],
+        String(XN_ABI_NAME), XN_OPERATION_COUNT)
+    var driver = KPCANeighborDriver(XnDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+    var decomp_provider = neural_descriptor_connect_factory_once(decomp["x_decomp_native_api_v1"],
+        String(XD_ABI_NAME), XD_OPERATION_COUNT)
+    var decomp_entry = decomp_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var source = Int(py=classical_address(columns))
+    var dst = Int(py=classical_address(total))
+    try:
+        with GILReleased(Python()):
+            kpca_fit_global_mean(driver, decomp_entry, source, dst, rows)
+    finally:
+        _ = provider
+        _ = decomp_provider
+        _ = columns
+        _ = total
+
+
 def _kind(kernel: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=context["kpca_kernels"][kernel])
 
@@ -132,17 +159,8 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
             Python.list(Float64(n)))
         _ = colsum  # keep the Python object alive through the native call above
         _ = cols  # keep the Python object alive through the native call above
-        # K_fit_all_: the colsum of cols seen as 1 x n, scaled (the shell's shapes)
-        var colsum2 = decomp_f32(Python.tuple(n), context)
-        _op(near, "colsum", Python.list(classical_address(cols), classical_address(colsum2)), Python.list(1, n),
-            Python.list())
-        _ = colsum2  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        all_ = decomp_f32(Python.tuple(n), context)
-        _op(near, "scale_div", Python.list(classical_address(colsum2), classical_address(all_)), Python.list(n),
-            Python.list(Float64(n)))
-        _ = colsum2  # keep the Python object alive through the native call above
-        _ = all_  # keep the Python object alive through the native call above
+        # One global mean of the column means, into the one-word all_.
+        _fit_global_mean(near, decomp, cols, all_, n)
         kc = decomp_f32(Python.tuple(n, n), context)
         _op(near, "kpca_center", Python.list(classical_address(k), classical_address(cols), classical_address(cols),
                                             classical_address(all_), classical_address(kc)), Python.list(n, n),
