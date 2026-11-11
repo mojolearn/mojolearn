@@ -4,9 +4,8 @@
   "target": "b7dad887992de15110b50b71227c2b2cbcc20394",
   "status": "bounded source mapping; no compilation/execution and no whole-project numerical-deletion count",
   "counts": {
-    "unresolved": 1,
+    "native_numerical_replacement_existing_boundaries_retained": 9,
     "native_numerical_split_and_boundary_rename": 43,
-    "native_numerical_replacement_existing_boundaries_retained": 8,
     "native_replacement_with_separate_boundary_test": 4,
     "boundary_redesign_or_rename": 4
   },
@@ -19,13 +18,45 @@
       "baseline_ast_sha256": "4c37ae9f32163ced4bd6399a0ce1643bd23f85e0b0301fbd670c1c2bb6c602ee",
       "index": 0,
       "source_status": "name absent from immutable target; classification is source mapping, not runtime evidence",
-      "classification": "unresolved",
-      "mapping_reason": "Unresolved: original large native-layout arithmetic checked n_tensors110, n_total162147840 and final parameter-registry offset for Shape(1,2048,768,12,12,64,2048,12,50257). No replacement identified in this bounded audit.",
-      "native_modules": [],
-      "python_targets": [],
-      "uncertainties": [
-        "Replacement for the exact large-layout arithmetic assertions not located."
-      ]
+      "classification": "native_numerical_replacement_existing_boundaries_retained",
+      "mapping_reason": "Deletion producer caa4df57ae moved the exact large ByteConfig(1,2048,768,12,12,64,2048,12,50257) case into existing native fixture4:110tensors,162147840parameters and every prefix/final offset. Only metadata is allocated; public dict/checkpoint/array/admission tests remain.",
+      "native_modules": [
+        "training/checks/byte_lm_config_check.mojo"
+      ],
+      "python_targets": [
+        {
+          "name": "test_default_registry_and_serialization_stay_v1",
+          "line": 31,
+          "relation": "retained family public boundary; not a rename"
+        },
+        {
+          "name": "test_invalid_shapes_refused_before_binding",
+          "line": 43,
+          "relation": "retained family public boundary; not a rename"
+        },
+        {
+          "name": "test_runtime_abi_registry_full_gradient_and_eval",
+          "line": 48,
+          "relation": "retained family public boundary; not a rename"
+        },
+        {
+          "name": "test_configured_checkpoint_roundtrip_and_shape_integrity",
+          "line": 69,
+          "relation": "retained family public boundary; not a rename"
+        },
+        {
+          "name": "test_named_runtime_parameters_and_snapshot_ownership",
+          "line": 91,
+          "relation": "retained family public boundary; not a rename"
+        }
+      ],
+      "uncertainties": [],
+      "native_exact_anchor": {
+        "path": "training/checks/byte_lm_config_check.mojo",
+        "line": 83,
+        "end": 92
+      },
+      "resolved_from": "Initial scoped search only covered checks/native_tests; deletion history located training/checks. Prior unresolved record preserved in commit350118bb1433."
     },
     {
       "path": "python/mojolearn/tests/test_classical_native_owner.py",
@@ -1920,6 +1951,36 @@
         {
           "name": "run_theta_state_fixture",
           "line": 82
+        }
+      ]
+    },
+    "training/checks/byte_lm_config_check.mojo": {
+      "sha256": "c82b8b34eb1fef2bea9431bc41d56c2a09d13cdcd92356421485baed319f2a93",
+      "anchor": "training/checks/byte_lm_config_check.mojo:83",
+      "review_symbols": [
+        {
+          "name": "require",
+          "line": 14
+        },
+        {
+          "name": "refused",
+          "line": 19
+        },
+        {
+          "name": "refused_naming",
+          "line": 28
+        },
+        {
+          "name": "check_fixture",
+          "line": 47
+        },
+        {
+          "name": "main",
+          "line": 148
+        },
+        {
+          "name": "task",
+          "line": 151
         }
       ]
     }
