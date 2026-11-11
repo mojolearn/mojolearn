@@ -1,0 +1,52 @@
+Mojolearn AgglomerativeClustering native tests (2026-11-10)
+
+First chunk:103 pure native options/tree-plan/reference-state/scratch fixtures.
+Dependency2121167e8471, additive typed solver/cluster/zero-row APIs/state.
+All uncompiled/unrun. Root alone compiles/executes; no lane tests or box jobs.
+
+Exact existing linkage/metric/connectivity mappings and prediction admission;
+solver route options with prediction-data/full-tree invariants;16 independently
+specified tree-plan scenarios. These cover strict100 and2-percent boundaries,
+neighboring5000/5001 rows and explicit/automatic/full/partial/threshold plans.
+Expected merges/cuts are literal tables, not a reimplementation of the helper.
+Native owner identity and copy/move/take-once semantics include zero and
+>2^53 handles/owners. Scratch result words preserve solver rounds-1 sentinel;
+zero-row flags cover empty/33 rows, first/middle/last positive and negative
+flags, and a moved allocation. No fake handle reaches a real device registry.
+
+Independent fixtures parallel; ordinary typed scratch access. This does not
+modify or replace the blocked DBSCAN pointer-capture fixture or its probes.
+No casts, product algorithms/kernels/settings, Python fallback or A/B define.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_state.mojo
+Importable agglo_state_suite.run_checks(). Static JSON/TOML/source/whitespace
+checks only. Nothing removed: original Python coverage stays until native
+replacements pass and actual public seams stay Python.
+
+Numerical inventory for next chunk:
+  test_transductive_predict.py::arm_agglomerative: original18x2 grid, duplicate
+  36x2, n_clusters2 and17; train/tie/near queries and18 individual queries.
+  Prediction ties choose the lowest fitted cluster label, unlike DBSCAN's
+  original-row key. Save/load, flags, packing and refusals remain Python.
+  test_parallel_public_drivers.py::_graph: original200x4 seed0/n_clusters3;
+  multi-device controller remains a Python seam.
+  test_x_cluster_twice.py::_CHILD: original180x3 seed7,60 normal rows at each
+  center0/4/8 withsigma0.4, ward/n_clusters3/compute_distances=True. A new
+  numerical fit may use this workload; the old mixed-family repeated-bits
+  campaign is not rerun or recreated.
+  Existing hierarchy/x_cluster checks are old seam/identity campaigns; retain
+  them without development reruns. Public attribute/host archive seams stay.
+
+Second chunk:28 typed request/wire contracts, dependency2121167e8471.
+  Existing solver4-address/5-integer ABI; cluster6-address/11-integer/2-scalar
+  ABI; Xn row_all_zero operation36. Prescribed metadata distinguishes all
+  slots, flags and sqrt-Euclidean solver1 versus general-tree Euclidean-1.
+  Binary64 precision and signed zero retained; solver Int result >2^53.
+  Guarded owned marker outputs prove actual mock invocation. Shared reference
+  requests use labels as both tie keys/values, Euclidean0, no radius, and exact
+  large native handles. Copy independence and all driver errors covered.
+  Fake tensor addresses never dereferenced; no algorithm/provider/device work.
+  Independent cases parallel; marker owners remain pinned through native calls.
+  State103 +wire28 =131 pure CPU fixtures authored, all uncompiled/unrun.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/agglo_contract.mojo
+  Importable agglo_contract_suite.run_checks(). Static source/JSON/TOML/
+  whitespace checks only; no lane execution. No Python/product removals yet.

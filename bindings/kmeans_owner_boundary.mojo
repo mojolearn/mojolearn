@@ -136,3 +136,21 @@ def kmeans_owner_setstate(model: PythonObject, state: PythonObject) raises:
         var failure = stash_python_error()
         raise failure^
     py_setitem(fields, "_resident_holder", PythonObject(None))
+
+
+def kmeans_resident_owner_pins(value: Int, index: Int) abi("C") -> Int:
+    # Native registry inspection only; the caller retains the exact owner.
+    if value == 0 or index < -1 or index >= 2:
+        return -1
+    try:
+        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var native = owner.downcast_value_ptr[KMeansResidentOwner]()
+        var result = 2
+        if index == 0:
+            result = Int(native[].provider._obj_ptr)
+        elif index == 1:
+            result = Int(native[].centers._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1

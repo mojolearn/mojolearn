@@ -67,6 +67,7 @@ tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
 it; the `break_ties_high` flag in `dims` is the Python door's environment
 spelling of the same arm.
 """
+from bindings.native_owner_registry import register_native_owner
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import memcpy
 from std.os import abort
@@ -207,7 +208,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from providers.python.generation_session_pyapi import GenerationNativeProvider, GenerationNativeSession
-from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info
+from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info, neural_descriptor_provider_pins, native_descriptor_resource_pins
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.causal_lm_public import (
@@ -1371,7 +1372,9 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
+        register_native_owner(lookup_py_type_object[NeuralDescriptorProvider](), module.module, neural_descriptor_provider_pins)
         _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
+        register_native_owner(lookup_py_type_object[NativeDescriptorResource](), module.module, native_descriptor_resource_pins)
         _ = module.add_type[ProviderOperationLock]("_NativeOperationLockOwner")
         module.def_function[operation_lock_connect]("operation_lock_connect")
         module.def_py_c_function(operation_lock_c[0], "operation_lock_init")

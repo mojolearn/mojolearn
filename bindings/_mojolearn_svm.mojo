@@ -45,6 +45,8 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from std.python.bindings import lookup_py_type_object
+from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.device_plan import device_plan_current
@@ -975,6 +977,7 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svc_dual_gemv_binding]("svc_dual_gemv")
         # Device-resident fitted state (lane ne1-a-gp-svm).
         _ = m.add_type[SvmResidentLease]("_SvmResidentLease")
+        register_native_owner(lookup_py_type_object[SvmResidentLease](), m.module, native_owner_no_pins)
         m.def_function[svm_resident_lease_binding]("svm_resident_lease")
         m.def_function[svm_resident_stats_binding]("svm_resident_stats")
         m.def_function[svc_predict_resident_binding]("svc_predict_resident")

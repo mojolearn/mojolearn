@@ -11,6 +11,7 @@
 # _mojolearn_runtime_linear_host), each its own merged group. The Python types
 # their code allocates stay registered HERE, unchanged: import setup loads this
 # owner before them (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES order).
+from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -21,7 +22,7 @@ from std.sys.compile import is_defined
 from std.python.bindings import lookup_py_type_object
 from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.trees_lifetime import TreesResident
+from bindings.trees_lifetime import TreesResident, trees_resident_pins
 from bindings.trees_resident_table import TreesResidentDeath
 from bindings.trees_explainer_native import TreeShapOwner
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
@@ -67,8 +68,10 @@ def register_trees_resident(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[TreesResident].name())):
             raise error
         _ = module.add_type[TreesResident]("_TreesResident")
+        register_native_owner(lookup_py_type_object[TreesResident](), module.module, trees_resident_pins)
         return
     py_type_attach(module.module, "_TreesResident", existing)
+    register_native_owner(existing, module.module, trees_resident_pins)
 
 
 def register_trees_resident_death(mut module: PythonModuleBuilder) raises:
@@ -79,8 +82,10 @@ def register_trees_resident_death(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[TreesResidentDeath].name())):
             raise error
         _ = module.add_type[TreesResidentDeath]("_TreesResidentDeath")
+        register_native_owner(lookup_py_type_object[TreesResidentDeath](), module.module, native_owner_no_pins)
         return
     py_type_attach(module.module, "_TreesResidentDeath", existing)
+    register_native_owner(existing, module.module, native_owner_no_pins)
 
 
 def register_tree_shap_owner(mut module: PythonModuleBuilder) raises:

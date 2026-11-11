@@ -1,0 +1,1778 @@
+{
+  "profiles": [
+    {
+      "name": "grid_brute",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 10,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 48,
+      "minimum_nonzero_radius_gap": 0.41421356237309515,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 20
+        },
+        {
+          "name": "at_eps",
+          "rows": 2
+        },
+        {
+          "name": "past_eps",
+          "rows": 1
+        },
+        {
+          "name": "far",
+          "rows": 2
+        },
+        {
+          "name": "reverse",
+          "rows": 20
+        }
+      ],
+      "single_row_queries_from_train": true,
+      "files": [
+        {
+          "file": "grid_brute-source.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_brute-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_brute-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "3b5484e98e6eb2f30b05c45ddf78fb32f54c369419ef85764d034e624c429a1f"
+        },
+        {
+          "file": "grid_brute-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "205b9cb358fad8b55e189a690b4c2e913bbde31d7a30eb65e5fb75974cf68815"
+        },
+        {
+          "file": "grid_brute-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "6608725f8219a9a31f5f75468ab46bb661b415c7ecbc3bf8b9dd63b4a331ff3b"
+        },
+        {
+          "file": "grid_brute-allowed.u8",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 40,
+          "sha256": "7786594fda7728860fedce4c8e60064de04f8e10ecc800183470300eede33a7e"
+        },
+        {
+          "file": "grid_brute-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "bd34447d3c397358d7a53216f3607e20b32e5f04de4478b5c46511fb3565d9db"
+        },
+        {
+          "file": "grid_brute-core-indices.i32",
+          "shape": [
+            10
+          ],
+          "bytes": 40,
+          "sha256": "b615107cee30a77765cfaf3722c4f12b9109657d1d4328ad7c6d0bb38114ac8f"
+        },
+        {
+          "file": "grid_brute-query-train.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_brute-query-train-core.i32",
+          "shape": [
+            20
+          ],
+          "bytes": 80,
+          "sha256": "9e5a761592a26c8b4d84ef9bf42f959f8beee61f4ec585fecbceb1408b2e08c0"
+        },
+        {
+          "file": "grid_brute-query-at_eps.f32",
+          "shape": [
+            2,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "7f6d3ef3aebfc92a962926e9a80281a8875f46f0e1b3a992d5c93133ccab4fb6"
+        },
+        {
+          "file": "grid_brute-query-at_eps-core.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "f255c93387bdf3a779e90824f09c87490aa3367914ff982a1e8f13c321b06217"
+        },
+        {
+          "file": "grid_brute-query-past_eps.f32",
+          "shape": [
+            1,
+            2
+          ],
+          "bytes": 8,
+          "sha256": "3a8299189fd92f78d7b86d2af6ad5cf65c29eb8848fed03f82aa9a34a0d2eea8"
+        },
+        {
+          "file": "grid_brute-query-past_eps-core.i32",
+          "shape": [
+            1
+          ],
+          "bytes": 4,
+          "sha256": "ad95131bc0b799c0b1af477fb14fcf26a6a9f76079e48bf090acb7e8367bfd0e"
+        },
+        {
+          "file": "grid_brute-query-far.f32",
+          "shape": [
+            2,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "0ad9e94595f48fa4d5b9c193fd6593732b7ecfccc7c7ff745ec5f41521413838"
+        },
+        {
+          "file": "grid_brute-query-far-core.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "12a3ae445661ce5dee78d0650d33362dec29c4f82af05e7e57fb595bbbacf0ca"
+        },
+        {
+          "file": "grid_brute-query-reverse.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "c993da89faab9c90f057a9b708afd1965905d964cbeed7ac8109f5bea2041c45"
+        },
+        {
+          "file": "grid_brute-query-reverse-core.i32",
+          "shape": [
+            20
+          ],
+          "bytes": 80,
+          "sha256": "5c2a28d2bf5a8303abe82f35ca0f61ba55d60bb1bdeb2454f1b262dccb7bbe4e"
+        }
+      ]
+    },
+    {
+      "name": "grid_rbc",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 4,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 10,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 48,
+      "minimum_nonzero_radius_gap": 0.41421356237309515,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 20
+        }
+      ],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "grid_rbc-source.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_rbc-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_rbc-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "3b5484e98e6eb2f30b05c45ddf78fb32f54c369419ef85764d034e624c429a1f"
+        },
+        {
+          "file": "grid_rbc-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "205b9cb358fad8b55e189a690b4c2e913bbde31d7a30eb65e5fb75974cf68815"
+        },
+        {
+          "file": "grid_rbc-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "6608725f8219a9a31f5f75468ab46bb661b415c7ecbc3bf8b9dd63b4a331ff3b"
+        },
+        {
+          "file": "grid_rbc-allowed.u8",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 40,
+          "sha256": "7786594fda7728860fedce4c8e60064de04f8e10ecc800183470300eede33a7e"
+        },
+        {
+          "file": "grid_rbc-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "bd34447d3c397358d7a53216f3607e20b32e5f04de4478b5c46511fb3565d9db"
+        },
+        {
+          "file": "grid_rbc-core-indices.i32",
+          "shape": [
+            10
+          ],
+          "bytes": 40,
+          "sha256": "b615107cee30a77765cfaf3722c4f12b9109657d1d4328ad7c6d0bb38114ac8f"
+        },
+        {
+          "file": "grid_rbc-query-train.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_rbc-query-train-core.i32",
+          "shape": [
+            20
+          ],
+          "bytes": 80,
+          "sha256": "9e5a761592a26c8b4d84ef9bf42f959f8beee61f4ec585fecbceb1408b2e08c0"
+        }
+      ]
+    },
+    {
+      "name": "grid_wide",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 3.0,
+      "effective_float32_eps": 3.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 18,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.1715728752538097,
+      "queries": [
+        {
+          "name": "tie",
+          "rows": 1
+        }
+      ],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "grid_wide-source.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_wide-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_wide-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "a40e71eda67415ada22be6315fb5a39c703ba9d911447a99b1c5efa1993a15b7"
+        },
+        {
+          "file": "grid_wide-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "205b9cb358fad8b55e189a690b4c2e913bbde31d7a30eb65e5fb75974cf68815"
+        },
+        {
+          "file": "grid_wide-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "d8e0873e07dc7ad50a18300157d1aa293f9c3f70d2271ba00489647275af9c2f"
+        },
+        {
+          "file": "grid_wide-allowed.u8",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 40,
+          "sha256": "7786594fda7728860fedce4c8e60064de04f8e10ecc800183470300eede33a7e"
+        },
+        {
+          "file": "grid_wide-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "bec1b13176e9e6acfad24bd373657ae10bb6789808612a55721988a86b880f04"
+        },
+        {
+          "file": "grid_wide-core-indices.i32",
+          "shape": [
+            18
+          ],
+          "bytes": 72,
+          "sha256": "0c71fc3f18400ecf8fa74830da62797b5b360ef3c5d4b43ac52c7eab57233865"
+        },
+        {
+          "file": "grid_wide-query-tie.f32",
+          "shape": [
+            1,
+            2
+          ],
+          "bytes": 8,
+          "sha256": "80b8fd6d60fa85fd14a38b5295cb92abd80dfec5ca406c9f969609a79d36809d"
+        },
+        {
+          "file": "grid_wide-query-tie-core.i32",
+          "shape": [
+            1
+          ],
+          "bytes": 4,
+          "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450"
+        }
+      ]
+    },
+    {
+      "name": "grid_duplicates",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 40,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 36,
+      "noise_count": 4,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 192,
+      "minimum_nonzero_radius_gap": 0.41421356237309515,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 40
+        }
+      ],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "grid_duplicates-source.f32",
+          "shape": [
+            40,
+            2
+          ],
+          "bytes": 320,
+          "sha256": "bdf9da26c5f398901d95b4a45d276cc14064c4b71e4e98fde37e89a3ab48816b"
+        },
+        {
+          "file": "grid_duplicates-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_duplicates-core.u8",
+          "shape": [
+            40
+          ],
+          "bytes": 40,
+          "sha256": "4cedd49d1c368fd87824a6ed15e12c75550a8eedb28ff3b8bd0e97464d7b207a"
+        },
+        {
+          "file": "grid_duplicates-noise.u8",
+          "shape": [
+            40
+          ],
+          "bytes": 40,
+          "sha256": "e4341c1254e1907b058c5a63f414a1eb99403d5a0d0d0332120893099b508483"
+        },
+        {
+          "file": "grid_duplicates-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "d8e0873e07dc7ad50a18300157d1aa293f9c3f70d2271ba00489647275af9c2f"
+        },
+        {
+          "file": "grid_duplicates-allowed.u8",
+          "shape": [
+            40,
+            2
+          ],
+          "bytes": 80,
+          "sha256": "38d77912a00a8cc7f0d27934119a84c5025c0d48b1caa290939b6086e5d609e9"
+        },
+        {
+          "file": "grid_duplicates-degree.f64",
+          "shape": [
+            40
+          ],
+          "bytes": 320,
+          "sha256": "45c54929306d539126fa2fead85ad91a00416547055e78a83b5485f7ab43449c"
+        },
+        {
+          "file": "grid_duplicates-core-indices.i32",
+          "shape": [
+            36
+          ],
+          "bytes": 144,
+          "sha256": "6e67432fb285add104a680250cbd05a031189215b6e86a7aaa8575b6d8b04510"
+        },
+        {
+          "file": "grid_duplicates-query-train.f32",
+          "shape": [
+            40,
+            2
+          ],
+          "bytes": 320,
+          "sha256": "bdf9da26c5f398901d95b4a45d276cc14064c4b71e4e98fde37e89a3ab48816b"
+        },
+        {
+          "file": "grid_duplicates-query-train-core.i32",
+          "shape": [
+            40
+          ],
+          "bytes": 160,
+          "sha256": "6ef76c5e5b58f5d636d0d75f30a2c90e8b0a5e7b201556d0543f26e417572747"
+        }
+      ]
+    },
+    {
+      "name": "grid_manhattan",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "manhattan",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 10,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 48,
+      "minimum_nonzero_radius_gap": 1.0,
+      "queries": [
+        {
+          "name": "boundary",
+          "rows": 3
+        }
+      ],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "grid_manhattan-source.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_manhattan-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_manhattan-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "3b5484e98e6eb2f30b05c45ddf78fb32f54c369419ef85764d034e624c429a1f"
+        },
+        {
+          "file": "grid_manhattan-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "205b9cb358fad8b55e189a690b4c2e913bbde31d7a30eb65e5fb75974cf68815"
+        },
+        {
+          "file": "grid_manhattan-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "6608725f8219a9a31f5f75468ab46bb661b415c7ecbc3bf8b9dd63b4a331ff3b"
+        },
+        {
+          "file": "grid_manhattan-allowed.u8",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 40,
+          "sha256": "7786594fda7728860fedce4c8e60064de04f8e10ecc800183470300eede33a7e"
+        },
+        {
+          "file": "grid_manhattan-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "bd34447d3c397358d7a53216f3607e20b32e5f04de4478b5c46511fb3565d9db"
+        },
+        {
+          "file": "grid_manhattan-core-indices.i32",
+          "shape": [
+            10
+          ],
+          "bytes": 40,
+          "sha256": "b615107cee30a77765cfaf3722c4f12b9109657d1d4328ad7c6d0bb38114ac8f"
+        },
+        {
+          "file": "grid_manhattan-query-boundary.f32",
+          "shape": [
+            3,
+            2
+          ],
+          "bytes": 24,
+          "sha256": "fdce693a0490d0e6eab456787a7eab60d239dd64a1c6a3a5972a4e6e0c3a83c2"
+        },
+        {
+          "file": "grid_manhattan-query-boundary-core.i32",
+          "shape": [
+            3
+          ],
+          "bytes": 12,
+          "sha256": "c0175bf86b93d99368fc14800ba7acd0dca0ed5aab6f248629d8a9eea6a478f0"
+        }
+      ]
+    },
+    {
+      "name": "grid_ones",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 10,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 48,
+      "minimum_nonzero_radius_gap": 0.41421356237309515,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 20
+        }
+      ],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "grid_ones-source.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_ones-weights.f32",
+          "shape": [
+            20
+          ],
+          "bytes": 80,
+          "sha256": "822d06342bcaebfe6cffcbf978ac916b9b7e7fc9e7b788b5e9d74af71c2e5eef"
+        },
+        {
+          "file": "grid_ones-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "3b5484e98e6eb2f30b05c45ddf78fb32f54c369419ef85764d034e624c429a1f"
+        },
+        {
+          "file": "grid_ones-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "205b9cb358fad8b55e189a690b4c2e913bbde31d7a30eb65e5fb75974cf68815"
+        },
+        {
+          "file": "grid_ones-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "6608725f8219a9a31f5f75468ab46bb661b415c7ecbc3bf8b9dd63b4a331ff3b"
+        },
+        {
+          "file": "grid_ones-allowed.u8",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 40,
+          "sha256": "7786594fda7728860fedce4c8e60064de04f8e10ecc800183470300eede33a7e"
+        },
+        {
+          "file": "grid_ones-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "bd34447d3c397358d7a53216f3607e20b32e5f04de4478b5c46511fb3565d9db"
+        },
+        {
+          "file": "grid_ones-core-indices.i32",
+          "shape": [
+            10
+          ],
+          "bytes": 40,
+          "sha256": "b615107cee30a77765cfaf3722c4f12b9109657d1d4328ad7c6d0bb38114ac8f"
+        },
+        {
+          "file": "grid_ones-query-train.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_ones-query-train-core.i32",
+          "shape": [
+            20
+          ],
+          "bytes": 80,
+          "sha256": "9e5a761592a26c8b4d84ef9bf42f959f8beee61f4ec585fecbceb1408b2e08c0"
+        }
+      ]
+    },
+    {
+      "name": "grid_empty",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 0.1,
+      "effective_float32_eps": 0.10000000149011612,
+      "min_samples": 50,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 0,
+      "core_count": 0,
+      "noise_count": 20,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.10000000149011612,
+      "queries": [
+        {
+          "name": "first_three",
+          "rows": 3
+        }
+      ],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "grid_empty-source.f32",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 160,
+          "sha256": "84cd464efcb659c3f7c639dc82c40e5869e2f016b9858f2a978f7088208a8035"
+        },
+        {
+          "file": "grid_empty-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_empty-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "de47c9b27eb8d300dbb5f2c353e632c393262cf06340c4fa7f1b40c4cbd36f90"
+        },
+        {
+          "file": "grid_empty-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "9b8f65607d891ebc9ee18add4f866748456ebce2d8f0bd9c9a8e508871617f27"
+        },
+        {
+          "file": "grid_empty-anchors.i32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_empty-allowed.u8",
+          "shape": [
+            20,
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_empty-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "44a2420d6f45ff8516f66bbad47077a221eef78b5aa4e7df63d1f19ab1893f7f"
+        },
+        {
+          "file": "grid_empty-core-indices.i32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "grid_empty-query-first_three.f32",
+          "shape": [
+            3,
+            2
+          ],
+          "bytes": 24,
+          "sha256": "4c7eeed72460e1e2fc5a57f7611813840069f75278f96b120533c2763f71904f"
+        },
+        {
+          "file": "grid_empty-query-first_three-core.i32",
+          "shape": [
+            3
+          ],
+          "bytes": 12,
+          "sha256": "8688d249e9d047b4fc2fb89ce05afe9ec89252ffccdd969de6eef260dd7ffb21"
+        }
+      ]
+    },
+    {
+      "name": "host512",
+      "origin": "test_cpu_training_e.py::test_host_fits_run_and_repeat_on_a_cpu_only_install (fit workload only; no repeated-bits campaign)",
+      "rows": 512,
+      "features": 5,
+      "eps": 0.9,
+      "effective_float32_eps": 0.8999999761581421,
+      "min_samples": 5,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 5,
+      "core_count": 130,
+      "noise_count": 290,
+      "ambiguous_border_rows": 4,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 1.7756047063333114e-05,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "host512-source.f32",
+          "shape": [
+            512,
+            5
+          ],
+          "bytes": 10240,
+          "sha256": "d8a94b616f5367aadf4f1d26ccbd4d194bce0125ed73760140a7ac0cdbed905c"
+        },
+        {
+          "file": "host512-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "host512-core.u8",
+          "shape": [
+            512
+          ],
+          "bytes": 512,
+          "sha256": "5ca547b9c0118be9a476ec012d0bee4042f7bd0a8abe16744d8d2e5b2ee46583"
+        },
+        {
+          "file": "host512-noise.u8",
+          "shape": [
+            512
+          ],
+          "bytes": 512,
+          "sha256": "98f07f89593861d71c6dfae0d355dda0440b56c39c2d5e10336362ae80b076e4"
+        },
+        {
+          "file": "host512-anchors.i32",
+          "shape": [
+            5
+          ],
+          "bytes": 20,
+          "sha256": "8c640b633730e715280e7624e86e6e412f73524d360547cbb64e6494aac0bae5"
+        },
+        {
+          "file": "host512-allowed.u8",
+          "shape": [
+            512,
+            5
+          ],
+          "bytes": 2560,
+          "sha256": "8339b52ee1af351b636f0c6f20d4199c4afde1e4ad6a4c735d56d4f6824ebf02"
+        },
+        {
+          "file": "host512-degree.f64",
+          "shape": [
+            512
+          ],
+          "bytes": 4096,
+          "sha256": "af89f147692a1c2aca4785c6d824d2960a430aca4d2273aa0f7c5c359a424772"
+        },
+        {
+          "file": "host512-core-indices.i32",
+          "shape": [
+            130
+          ],
+          "bytes": 520,
+          "sha256": "86aad0000d2c6189a31e3daa79a99e7b63f765eb0a21759a8f5709c7e89a3412"
+        }
+      ]
+    },
+    {
+      "name": "parallel400",
+      "origin": "test_parallel_public_drivers.py::_dbscan (single native mathematical fit; external multi-device seam retained)",
+      "rows": 400,
+      "features": 4,
+      "eps": 0.9,
+      "effective_float32_eps": 0.8999999761581421,
+      "min_samples": 5,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 1,
+      "core_count": 257,
+      "noise_count": 75,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 2.637376440672856e-05,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "parallel400-source.f32",
+          "shape": [
+            400,
+            4
+          ],
+          "bytes": 6400,
+          "sha256": "3a374c0d47c23b1a0010ad059a4612425bcb6bb523c8804aa5734a9140f1995d"
+        },
+        {
+          "file": "parallel400-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "parallel400-core.u8",
+          "shape": [
+            400
+          ],
+          "bytes": 400,
+          "sha256": "59e5cfd9c90eadb25f0c7355965be07bccf402ba3f3745c92c43415a7a6b5d9c"
+        },
+        {
+          "file": "parallel400-noise.u8",
+          "shape": [
+            400
+          ],
+          "bytes": 400,
+          "sha256": "8d6d0ce4aaadbc93bf789d81a78f11d1ae091f1b205c09d0360db01d76650c81"
+        },
+        {
+          "file": "parallel400-anchors.i32",
+          "shape": [
+            1
+          ],
+          "bytes": 4,
+          "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+        },
+        {
+          "file": "parallel400-allowed.u8",
+          "shape": [
+            400,
+            1
+          ],
+          "bytes": 400,
+          "sha256": "07a3b030fd340b66ab006318b13c7a6e8f2d5f81679a803f53830beee4b96cf1"
+        },
+        {
+          "file": "parallel400-degree.f64",
+          "shape": [
+            400
+          ],
+          "bytes": 3200,
+          "sha256": "bb662228a0aeed325382fa87ea756f57bdd1de53c261d0e21db7631e5c5efda3"
+        },
+        {
+          "file": "parallel400-core-indices.i32",
+          "shape": [
+            257
+          ],
+          "bytes": 1028,
+          "sha256": "5fa48578206ec200da13274fba8dd0a8630244a22e13d3d0720bc31e28c0b8e6"
+        }
+      ]
+    },
+    {
+      "name": "weighted2_brute",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 8,
+      "noise_count": 0,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.09999847412109375,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "weighted2_brute-source.f32",
+          "shape": [
+            8,
+            2
+          ],
+          "bytes": 64,
+          "sha256": "f67789dd138b007142ad23e2a25a9167387e2317cc081663dd079fa3aa9451ff"
+        },
+        {
+          "file": "weighted2_brute-weights.f32",
+          "shape": [
+            8
+          ],
+          "bytes": 32,
+          "sha256": "2db45925724314b8d9db31dfe5826da402d7ad320015ba238ab0c454c769284e"
+        },
+        {
+          "file": "weighted2_brute-core.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "04abc8821a06e5a30937967d11ad10221cb5ac3b5273e434f1284ee87129a061"
+        },
+        {
+          "file": "weighted2_brute-noise.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+        },
+        {
+          "file": "weighted2_brute-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "2fcd151b8295e8b3bf8ec64ede173523417960a8db6cbc569de9a25a458f9135"
+        },
+        {
+          "file": "weighted2_brute-allowed.u8",
+          "shape": [
+            8,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "b9e68e09774c62e8354e79b290746698cce1118d5917ff661e10a0738ed5bf13"
+        },
+        {
+          "file": "weighted2_brute-degree.f64",
+          "shape": [
+            8
+          ],
+          "bytes": 64,
+          "sha256": "2135cfeb270fdd7fe479bf5a6834c39099dddf722d9f96cba68842ec349c5bb5"
+        },
+        {
+          "file": "weighted2_brute-core-indices.i32",
+          "shape": [
+            8
+          ],
+          "bytes": 32,
+          "sha256": "ff1f6ee5d67458cfac950f62e93042e21fcb867e2234dcc8721801231064ad40"
+        }
+      ]
+    },
+    {
+      "name": "weighted15_brute",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 1,
+      "core_count": 6,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.09999847412109375,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "weighted15_brute-source.f32",
+          "shape": [
+            8,
+            2
+          ],
+          "bytes": 64,
+          "sha256": "f67789dd138b007142ad23e2a25a9167387e2317cc081663dd079fa3aa9451ff"
+        },
+        {
+          "file": "weighted15_brute-weights.f32",
+          "shape": [
+            8
+          ],
+          "bytes": 32,
+          "sha256": "bc91396a492150fcf72d53b1ce5375033bf0372b64fb73b97b7cf0520bb3d266"
+        },
+        {
+          "file": "weighted15_brute-core.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "f8d99382bf477bf90064cc4b24e87cdac996b949a7dd72a042dc517744f495f6"
+        },
+        {
+          "file": "weighted15_brute-noise.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "4adeb4453cb2e0d4f186667f3052bf6c34b102cf0fa25910f6964f4f8a55ab84"
+        },
+        {
+          "file": "weighted15_brute-anchors.i32",
+          "shape": [
+            1
+          ],
+          "bytes": 4,
+          "sha256": "26b25d457597a7b0463f9620f666dd10aa2c4373a505967c7c8d70922a2d6ece"
+        },
+        {
+          "file": "weighted15_brute-allowed.u8",
+          "shape": [
+            8,
+            1
+          ],
+          "bytes": 8,
+          "sha256": "f8d99382bf477bf90064cc4b24e87cdac996b949a7dd72a042dc517744f495f6"
+        },
+        {
+          "file": "weighted15_brute-degree.f64",
+          "shape": [
+            8
+          ],
+          "bytes": 64,
+          "sha256": "98f3eaeba6335db3de39a76e756d2fffcc5be2bab027a3f7f6b76309af8da4ea"
+        },
+        {
+          "file": "weighted15_brute-core-indices.i32",
+          "shape": [
+            6
+          ],
+          "bytes": 24,
+          "sha256": "4ba701952eedc19088f529500d3dc367a4e5091c0df14113b650eb85d30be463"
+        }
+      ]
+    },
+    {
+      "name": "duplicated_brute",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 9,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 9,
+      "noise_count": 0,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.09999847412109375,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "duplicated_brute-source.f32",
+          "shape": [
+            9,
+            2
+          ],
+          "bytes": 72,
+          "sha256": "98cc6ad2ab8f8196b737e79d4a934f5389251dc5160df510f5b6a472cc2ff2ba"
+        },
+        {
+          "file": "duplicated_brute-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "duplicated_brute-core.u8",
+          "shape": [
+            9
+          ],
+          "bytes": 9,
+          "sha256": "040a5a009f9b9d5e4771742174142e74fa2d3e0aaa3df5717f01ade338d75d0e"
+        },
+        {
+          "file": "duplicated_brute-noise.u8",
+          "shape": [
+            9
+          ],
+          "bytes": 9,
+          "sha256": "3e7077fd2f66d689e0cee6a7cf5b37bf2dca7c979af356d0a31cbc5c85605c7d"
+        },
+        {
+          "file": "duplicated_brute-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "2fcd151b8295e8b3bf8ec64ede173523417960a8db6cbc569de9a25a458f9135"
+        },
+        {
+          "file": "duplicated_brute-allowed.u8",
+          "shape": [
+            9,
+            2
+          ],
+          "bytes": 18,
+          "sha256": "cf8a47ec09c6ff05e05e2733d581d69641685dc5299ace316e70ae1e43f26549"
+        },
+        {
+          "file": "duplicated_brute-degree.f64",
+          "shape": [
+            9
+          ],
+          "bytes": 72,
+          "sha256": "85e31eea1dec2a8fb8fa874d3a3934836f8f7cc53ee4025d615374715429774c"
+        },
+        {
+          "file": "duplicated_brute-core-indices.i32",
+          "shape": [
+            9
+          ],
+          "bytes": 36,
+          "sha256": "921c803abfa6ac88f44f7ab19198e5c137d1c7183e8e6912757a6263e8dee0a5"
+        }
+      ]
+    },
+    {
+      "name": "weighted2_rbc",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 3,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": true,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 8,
+      "noise_count": 0,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.09999847412109375,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "weighted2_rbc-source.f32",
+          "shape": [
+            8,
+            2
+          ],
+          "bytes": 64,
+          "sha256": "f67789dd138b007142ad23e2a25a9167387e2317cc081663dd079fa3aa9451ff"
+        },
+        {
+          "file": "weighted2_rbc-weights.f32",
+          "shape": [
+            8
+          ],
+          "bytes": 32,
+          "sha256": "2db45925724314b8d9db31dfe5826da402d7ad320015ba238ab0c454c769284e"
+        },
+        {
+          "file": "weighted2_rbc-core.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "04abc8821a06e5a30937967d11ad10221cb5ac3b5273e434f1284ee87129a061"
+        },
+        {
+          "file": "weighted2_rbc-noise.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+        },
+        {
+          "file": "weighted2_rbc-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "2fcd151b8295e8b3bf8ec64ede173523417960a8db6cbc569de9a25a458f9135"
+        },
+        {
+          "file": "weighted2_rbc-allowed.u8",
+          "shape": [
+            8,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "b9e68e09774c62e8354e79b290746698cce1118d5917ff661e10a0738ed5bf13"
+        },
+        {
+          "file": "weighted2_rbc-degree.f64",
+          "shape": [
+            8
+          ],
+          "bytes": 64,
+          "sha256": "2135cfeb270fdd7fe479bf5a6834c39099dddf722d9f96cba68842ec349c5bb5"
+        },
+        {
+          "file": "weighted2_rbc-core-indices.i32",
+          "shape": [
+            8
+          ],
+          "bytes": 32,
+          "sha256": "ff1f6ee5d67458cfac950f62e93042e21fcb867e2234dcc8721801231064ad40"
+        }
+      ]
+    },
+    {
+      "name": "weighted15_rbc",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 3,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": true,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 1,
+      "core_count": 6,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.09999847412109375,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "weighted15_rbc-source.f32",
+          "shape": [
+            8,
+            2
+          ],
+          "bytes": 64,
+          "sha256": "f67789dd138b007142ad23e2a25a9167387e2317cc081663dd079fa3aa9451ff"
+        },
+        {
+          "file": "weighted15_rbc-weights.f32",
+          "shape": [
+            8
+          ],
+          "bytes": 32,
+          "sha256": "bc91396a492150fcf72d53b1ce5375033bf0372b64fb73b97b7cf0520bb3d266"
+        },
+        {
+          "file": "weighted15_rbc-core.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "f8d99382bf477bf90064cc4b24e87cdac996b949a7dd72a042dc517744f495f6"
+        },
+        {
+          "file": "weighted15_rbc-noise.u8",
+          "shape": [
+            8
+          ],
+          "bytes": 8,
+          "sha256": "4adeb4453cb2e0d4f186667f3052bf6c34b102cf0fa25910f6964f4f8a55ab84"
+        },
+        {
+          "file": "weighted15_rbc-anchors.i32",
+          "shape": [
+            1
+          ],
+          "bytes": 4,
+          "sha256": "26b25d457597a7b0463f9620f666dd10aa2c4373a505967c7c8d70922a2d6ece"
+        },
+        {
+          "file": "weighted15_rbc-allowed.u8",
+          "shape": [
+            8,
+            1
+          ],
+          "bytes": 8,
+          "sha256": "f8d99382bf477bf90064cc4b24e87cdac996b949a7dd72a042dc517744f495f6"
+        },
+        {
+          "file": "weighted15_rbc-degree.f64",
+          "shape": [
+            8
+          ],
+          "bytes": 64,
+          "sha256": "98f3eaeba6335db3de39a76e756d2fffcc5be2bab027a3f7f6b76309af8da4ea"
+        },
+        {
+          "file": "weighted15_rbc-core-indices.i32",
+          "shape": [
+            6
+          ],
+          "bytes": 24,
+          "sha256": "4ba701952eedc19088f529500d3dc367a4e5091c0df14113b650eb85d30be463"
+        }
+      ]
+    },
+    {
+      "name": "duplicated_rbc",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 9,
+      "features": 2,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 3,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 9,
+      "noise_count": 0,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.09999847412109375,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "duplicated_rbc-source.f32",
+          "shape": [
+            9,
+            2
+          ],
+          "bytes": 72,
+          "sha256": "98cc6ad2ab8f8196b737e79d4a934f5389251dc5160df510f5b6a472cc2ff2ba"
+        },
+        {
+          "file": "duplicated_rbc-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "duplicated_rbc-core.u8",
+          "shape": [
+            9
+          ],
+          "bytes": 9,
+          "sha256": "040a5a009f9b9d5e4771742174142e74fa2d3e0aaa3df5717f01ade338d75d0e"
+        },
+        {
+          "file": "duplicated_rbc-noise.u8",
+          "shape": [
+            9
+          ],
+          "bytes": 9,
+          "sha256": "3e7077fd2f66d689e0cee6a7cf5b37bf2dca7c979af356d0a31cbc5c85605c7d"
+        },
+        {
+          "file": "duplicated_rbc-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "2fcd151b8295e8b3bf8ec64ede173523417960a8db6cbc569de9a25a458f9135"
+        },
+        {
+          "file": "duplicated_rbc-allowed.u8",
+          "shape": [
+            9,
+            2
+          ],
+          "bytes": 18,
+          "sha256": "cf8a47ec09c6ff05e05e2733d581d69641685dc5299ace316e70ae1e43f26549"
+        },
+        {
+          "file": "duplicated_rbc-degree.f64",
+          "shape": [
+            9
+          ],
+          "bytes": 72,
+          "sha256": "85e31eea1dec2a8fb8fa874d3a3934836f8f7cc53ee4025d615374715429774c"
+        },
+        {
+          "file": "duplicated_rbc-core-indices.i32",
+          "shape": [
+            9
+          ],
+          "bytes": 36,
+          "sha256": "921c803abfa6ac88f44f7ab19198e5c137d1c7183e8e6912757a6263e8dee0a5"
+        }
+      ]
+    },
+    {
+      "name": "negative_inhibit",
+      "origin": "Additional analytic admitted-negative-weight case: coincident sum2<3 stays noise; far three unit weights sum3 are core",
+      "rows": 6,
+      "features": 2,
+      "eps": 0.75,
+      "effective_float32_eps": 0.75,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 1,
+      "core_count": 3,
+      "noise_count": 3,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 0,
+      "minimum_nonzero_radius_gap": 0.25,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "negative_inhibit-source.f32",
+          "shape": [
+            6,
+            2
+          ],
+          "bytes": 48,
+          "sha256": "a790e864efe075652b50ef4437fd060490cf2e6bb6b1edfb8fa196b0fee0cae7"
+        },
+        {
+          "file": "negative_inhibit-weights.f32",
+          "shape": [
+            6
+          ],
+          "bytes": 24,
+          "sha256": "67cf43f08a2d3f0d977eb11618cf00ba19f4bb01e6b79d5b1a3df273d3076d4a"
+        },
+        {
+          "file": "negative_inhibit-core.u8",
+          "shape": [
+            6
+          ],
+          "bytes": 6,
+          "sha256": "d9c64be4b84dab66e02471e36d45ca034ab68d5b58efd776bdd4a628e8e48bd6"
+        },
+        {
+          "file": "negative_inhibit-noise.u8",
+          "shape": [
+            6
+          ],
+          "bytes": 6,
+          "sha256": "7051ecc1a9790222b2988eb7282318b43c7ec26eae9b269910137991b599aea7"
+        },
+        {
+          "file": "negative_inhibit-anchors.i32",
+          "shape": [
+            1
+          ],
+          "bytes": 4,
+          "sha256": "9d9f290527a6be626a8f5985b26e19b237b44872b03631811df4416fc1713178"
+        },
+        {
+          "file": "negative_inhibit-allowed.u8",
+          "shape": [
+            6,
+            1
+          ],
+          "bytes": 6,
+          "sha256": "d9c64be4b84dab66e02471e36d45ca034ab68d5b58efd776bdd4a628e8e48bd6"
+        },
+        {
+          "file": "negative_inhibit-degree.f64",
+          "shape": [
+            6
+          ],
+          "bytes": 48,
+          "sha256": "faa21f8822f06c711bdf26b026d47d816839f89a4e28190d930fcc0b9506e476"
+        },
+        {
+          "file": "negative_inhibit-core-indices.i32",
+          "shape": [
+            3
+          ],
+          "bytes": 12,
+          "sha256": "ce99ae045c8b2a2a8a58fd1a2120956e74e90322eef45f7dfe1ca73eefe655d4"
+        }
+      ]
+    },
+    {
+      "name": "precomputed_grid",
+      "origin": "Additional precomputed form of the original20x2 grid; no prediction feature added",
+      "rows": 20,
+      "features": 20,
+      "eps": 1.0,
+      "effective_float32_eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "precomputed",
+      "weighted": false,
+      "max_iterations": 0,
+      "budget_mb": 0,
+      "clusters": 2,
+      "core_count": 10,
+      "noise_count": 2,
+      "ambiguous_border_rows": 0,
+      "exact_radius_pairs": 48,
+      "minimum_nonzero_radius_gap": 0.41421353816986084,
+      "queries": [],
+      "single_row_queries_from_train": false,
+      "files": [
+        {
+          "file": "precomputed_grid-source.f32",
+          "shape": [
+            20,
+            20
+          ],
+          "bytes": 1600,
+          "sha256": "a594671178474eb0b7d3354148c6a00701b32fa09c0389ed136010673fc5cff4"
+        },
+        {
+          "file": "precomputed_grid-weights.f32",
+          "shape": [
+            0
+          ],
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "file": "precomputed_grid-core.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "3b5484e98e6eb2f30b05c45ddf78fb32f54c369419ef85764d034e624c429a1f"
+        },
+        {
+          "file": "precomputed_grid-noise.u8",
+          "shape": [
+            20
+          ],
+          "bytes": 20,
+          "sha256": "205b9cb358fad8b55e189a690b4c2e913bbde31d7a30eb65e5fb75974cf68815"
+        },
+        {
+          "file": "precomputed_grid-anchors.i32",
+          "shape": [
+            2
+          ],
+          "bytes": 8,
+          "sha256": "6608725f8219a9a31f5f75468ab46bb661b415c7ecbc3bf8b9dd63b4a331ff3b"
+        },
+        {
+          "file": "precomputed_grid-allowed.u8",
+          "shape": [
+            20,
+            2
+          ],
+          "bytes": 40,
+          "sha256": "7786594fda7728860fedce4c8e60064de04f8e10ecc800183470300eede33a7e"
+        },
+        {
+          "file": "precomputed_grid-degree.f64",
+          "shape": [
+            20
+          ],
+          "bytes": 160,
+          "sha256": "bd34447d3c397358d7a53216f3607e20b32e5f04de4478b5c46511fb3565d9db"
+        },
+        {
+          "file": "precomputed_grid-core-indices.i32",
+          "shape": [
+            10
+          ],
+          "bytes": 40,
+          "sha256": "b615107cee30a77765cfaf3722c4f12b9109657d1d4328ad7c6d0bb38114ac8f"
+        }
+      ]
+    }
+  ],
+  "numpy": "2.5.2",
+  "workers": 10,
+  "generator_sha256": "035e52c0c55123e2c8aebad79cfe3dff3dc475829ea63421e065206599389199",
+  "oracle": "Independent Float64 radius graph; mathematical weighted neighborhood core criterion; queue-connected core components; all valid border memberships; nearest core with lowest original-index tie.",
+  "label_policy": "Native labels may be renumbered. Core component anchors must map injectively; border assignments must belong to a radius-adjacent core component; noise/core flags exact.",
+  "execution": "Reference preparation only; no Mojolearn import, product fitting, compile/test/timing or same-bits campaign."
+}

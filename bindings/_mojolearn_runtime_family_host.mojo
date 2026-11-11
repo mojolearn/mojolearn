@@ -18,8 +18,8 @@ from std.sys.compile import is_defined
 from bindings.classical_family_door import classical_family_c
 from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
-from bindings.kmeans_owner_boundary import KMeansResidentOwner
-from bindings.kde_native_boundary import KDEResidentOwner
+from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
+from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
 from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
 from bindings.native_owner_registry import register_native_owner
 from bindings.agglo_native_boundary import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
@@ -58,10 +58,12 @@ def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[KMeansResidentOwner].name())):
             raise error
         _ = module.add_type[KMeansResidentOwner]("_KMeansResidentOwner")
+        register_native_owner(lookup_py_type_object[KMeansResidentOwner](), module.module, kmeans_resident_owner_pins)
         return
     # The same initializer can be reached through both package namespaces.
     # Attach the canonical type; never create a second native Python type.
     py_type_attach(module.module, "_KMeansResidentOwner", existing)
+    register_native_owner(existing, module.module, kmeans_resident_owner_pins)
 
 
 
@@ -73,8 +75,10 @@ def register_KDEResidentOwner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[KDEResidentOwner].name())):
             raise error
         _ = module.add_type[KDEResidentOwner]("_KDEResidentOwner")
+        register_native_owner(lookup_py_type_object[KDEResidentOwner](), module.module, kde_resident_owner_pins)
         return
     py_type_attach(module.module, "_KDEResidentOwner", existing)
+    register_native_owner(existing, module.module, kde_resident_owner_pins)
 
 
 def register_KDEAdmissionOwner(mut module: PythonModuleBuilder) raises:

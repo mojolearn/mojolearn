@@ -1,0 +1,131 @@
+Mojolearn DBSCAN native tests (2026-11-10)
+
+Current partial execution and blocked state fixtures:
+  Root passed CPU103 (contract45/options41/actual17) atbda409162a and GPU20
+  (actual17/ownership3) at4583aac78f. State28 remains blocked: both the original
+  same-scope capture/move and scoped mutable-helper correction compiled1 with
+  the same contradictory tracked-origin/ref diagnostic. Neither failed CPU
+  bundle reached runtime. No further fixture rearrangements/casts are being
+  attempted; all original workloads/assertions remain. The pending Python
+  numerical cleanup is withheld for root's coverage review.
+  E/pca-native-tests/dbscan-minimize contains three standalone compile-only
+  candidates (struct-field capture, flat-list capture, field/no-capture),
+  hashes/commands/platform record and an unsent upstream draft. No repository
+  imports or product changes. Candidates await root compilation; there is no
+  standalone compiler-bug verdict yet. Original full failure logs are
+  E/wave15-cpu-build.log and E/wave15r2-cpu-build.log. The IPCA test-layout
+  exception does not authorize a workaround for this distinct issue.
+
+Typed API/state/provider dependency a446091b7a. Registry ownership repair
+6b3832cfc7 is needed by eventual device lease coverage. Pilot owns the
+public boundary and all product files; this lane owns new fixtures only.
+First fixture chunk:28 native scratch/reference-state contracts. Flat
+zeroed core-mask storage, sizes0/1/17/1025, independent allocations, complete
+parallel writes, move/pointer lifetime. Every key owner/address/dimension/
+metric word matters. Valid handle0 and exact integer>2^53, nonconsuming
+match, take once/invalidation, independent key copies and retained driver.
+Mock permits only mode metadata; no fake handle device callback.
+RUN OWED: dbscan_state_suite.run_checks()(28); root compiles/runs.
+No lane tests, timing, boxes, identity or IPCA workaround.
+Nothing removed; all existing Python coverage remains.
+
+Inventory correction: initial substring scan included HDBSCAN. Exact scan
+finds9 existing Python files/19 functions including arms/helpers, not19
+pure test candidates. E/pca-native-tests/dbscan-python-inventory-exact.json.
+The main numerical controller is arm_dbscan in test_transductive_predict.py:
+20x2 original grids, B first; eps1/min4 brute and RBC; wide eps3 tie;
+duplicate40 rows; Manhattan boundaries; uniform weights; empty-core
+eps.1/min50. Preserve original query batches, one-ULP and exact-radius
+queries, lowest-original-core-index tie, and independent batch/single/reverse
+expectations. Python float64 admission, array dtype/shape, save/load,
+prediction-data/refusal and multi-device controller seams remain Python.
+Other original fits:512x5 seed7 eps.9/min5 method1 from host training test;
+400x4 seed0 eps.9/min5 defaultRBC from parallel controller. No repeated-bits
+campaign or external device controller is recreated in native execution.
+
+Independent references prepared for17 profiles, held with upcoming actual
+fixtures: the original grids/larger inputs; original8/9-row duplicate vs
+weights2/1.5 threshold case on both brute/RBC arms; additional exact
+negative-weight inhibition and precomputed-grid form. Float64 mathematical
+radius graph, weighted degree, queue-connected core components. Label
+numbering is arbitrary: component anchors must map injectively; border
+labels may use any adjacent core component; core/noise masks exact. The
+512-row workload has4 ambiguous border rows, explicitly represented.
+Nearest-core reference returns original row indices, including stable
+lowest-index ties, so prediction is compared through fitted labels rather
+than requiring arbitrary cluster IDs. Original20-row grid has10 core rows,
+2 clusters/2noise; duplicate40 has36 cores/4noise; empty-core has0cores.
+Preparation imports no Mojolearn/legacy implementation and runs no product.
+
+All old Python assertions stay until root executes actual replacements.
+CPU numerical units parallel; GPU graphs and ownership checks ordered on
+one physical GPU/shared contexts; kernels remain unchanged/parallel.
+The reproduced shared-context concurrency issue remains separate.
+
+Second chunk: 45 wire +41 options/empty-label fixtures, all uncompiled/unrun.
+  Dependencies a446091b7a, db68d9d7db and helper correction5205c33160.
+  Every fixed operation and field, optional weights, exact Int results/handles
+  including zero and >2^53, Float64 precision/signed zero, copy independence,
+  native provider errors, missing spans and all malformed envelope classes.
+  Native output/error fields are heap-owned and pinned; tensor addresses in
+  the wire oracle are never dereferenced or sent to a real provider.
+  Original alias/method table includes RBC/precomputed admission; the public
+  fit force-to-brute seam remains in Python. Empty-core label fill covers
+  0/1/17/1025 words with guards, plus a null zero-length span.
+  Independent fixtures/output words parallel; flat native List owners.
+  Total pure CPU fixtures: state28 +wire45 +options41 =114.
+RUN OWED: checks/native_tests/dbscan_contract.mojo and dbscan_options.mojo,
+  -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I .; importable *_suite.run_checks().
+  No lane compile/run/box; static source/JSON/TOML/whitespace checks only.
+  No Python/product/kernel/default changes or deletions. Actual numerical
+  references/fixtures and resident lease coverage are separate pending work.
+
+Third chunk: 17 actual CPU +17 ordered GPU numerical graphs and3 GPU
+  reference ownership graphs. Dependencies6b3832cfc7/a446091b7a/db68d9d7db/
+  5205c33160. Source-only, all uncompiled/unrun. Pure114 plus actual17 =CPU131;
+  actual17 plus ownership3 =GPU20. Standard identical flags; no new A/B define.
+
+  Original20x2 grid including brute/RBC, eps1/3, duplicates40x2, L1,
+  uniform weights, empty core; original512x5 seed7 and400x4 seed0 inputs.
+  Original native weighted8x2 two-cluster example: weights2 and1.5, plus
+  duplicated9x2, both brute/RBC. Added negative-weight inhibition and native
+  precomputed grid. Original query shapes/order, exact radius, nextafter,
+  tie, far, reversed and twenty individual queries preserved.
+  Actual fit -> count -> gather -> borrowed query and GPU resident query;
+  no Python provider/controller. Empty-core fill uses the same native helper.
+
+  Independent NumPy Float64 radius graph and weighted degree; core graph
+  connectivity, permissible border components, exact noise and nearest-core
+  original-index tie. Label numbers may permute; core component map must be
+  injective. The512x5 oracle admits all valid memberships for its4 ambiguous
+  border rows. Source and reference158 binary artifacts hashed; no product
+  outputs used as expected values. Every copied component/index/label and
+  query output checked with guarded native buffers; no input/weight mutation.
+
+  GPU ownership3 covers live query after host storage poisoning, two native
+  leases retaining original buffers after registry release, missing lookup
+  refusal, and replacement independence. Native metadata overlap only;
+  submissions ordered. This does not clear the recorded MAX concurrency bug.
+  Flat typed buffers, explicit raw-address pins and take-once cleanup.
+RUN OWED: dbscan_native_cpu.mojo, dbscan_native_gpu.mojo,
+  dbscan_ownership_gpu.mojo; importable corresponding *_suite.run_checks().
+  -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I .; CPU adds-D MOJOLEARN_COLUMN_CPU=1.
+  JSON/TOML/generator AST/artifact hash/source/whitespace checks only.
+  No Python assertions removed before native passes. Public dtype/shape,
+  float64 admission, core array packing, empty branch, save/load, prefit and
+  protocol/nonfinite/refusal tests remain meaningful Python seams. Exact
+  post-pass numerical cleanup is pending, not silently treated as complete.
+
+CPU state borrow-scope correction (root wave15 compile1; no CPU runtime):
+  Unit4 captured a workspace.core pointer and then consumed the owner in the
+  same enclosing scope. The unchanged pointer capture and33 parallel writes
+  now finish inside fill_workspace(mut workspace); its borrow returns before
+  move_workspace(workspace^). Allocation identity, length33, post-move checks,
+  byte formula and all other fixture source remain unchanged. No casts,
+  serial path, reduced coverage or product changes. This is an explicit
+  ownership scope correction, not a compiler-bug workaround or an extension
+  of the separate IPCA authorization. Original source/log retained; inverse
+  mechanical transformation is exact in E/pca-native-tests/
+  dbscan-state-scoped-borrow-static.json. Corrected state28 subsequently compiled1 with the same diagnostic; no runtime.
+  Root separately passed GPU20 at4583aac78f; those files are unchanged here.
+  CPU131 remains owed, and the pending Python numerical cleanup is held.
