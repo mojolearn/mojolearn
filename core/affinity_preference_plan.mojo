@@ -52,6 +52,11 @@ struct AffinityPreferencePlan(Movable):
             finite = admitted_cast_f32(Int(self.inferred.unsafe_ptr()), plan.itemsize, plan.itemsize,
                 self.count, 1, plan.itemsize, sequence_kind_code(plan.kind),
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](self.values.unsafe_ptr()))
+            # The raw address does not retain its List. Keep the inferred
+            # bytes alive until every parallel cast task has returned before
+            # replacing their owner; otherwise ASAP destruction can free them
+            # at their pointer's last use before admitted_cast_f32 reads them.
+            _ = self.inferred
             self.inferred = List[UInt8]()
         if not finite:
             raise Error("mojolearn: preference contains NaN or infinity")
