@@ -10,14 +10,17 @@ copy, the model checks in the Python bodies' words, the compiled
 attributes or the forecast dict. The stored-forecast reuse of theta and ETS
 (a repeated `predict` on the same fitted series returns the stored arrays)
 is kept as it was.
+
+UNPACK/PACK only (lane doorsplit-cnn-xseq, 2026-11-11): the checks, setting
+words, code words, word copies and glue calls run in
+`sequence/xseq_forecast_run.mojo`; this file reads the fields, admits and
+owns the buffers, releases the GIL around each glue call and publishes the
+fitted state.
 """
-from std.math import floor
-from std.memory import unsafe_memcpy
 from std.ffi import c_int
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_reduce_stat
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.classical_attributes import classical_connect_numpy
@@ -33,12 +36,21 @@ from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
-    XF32P, XI64P, xseq_key, xseq_glue, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
+    XF32P, XI64P, xseq_key, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth, xseq_mode,
 )
 from core.xseq_marshal import xseq_var_blocks
-from core.xseq_entry_table import XS_THETA, XS_THETA_FORECAST, XS_CROSTON, XS_CROSTON_FORECAST, XS_ETS, XS_GARCH
+from sequence.xseq_forecast_run import (
+    forecast_run_letter, forecast_run_copy_f32_words, forecast_run_theta_check_n, forecast_run_theta_mask,
+    forecast_run_theta, forecast_run_theta_forecast, forecast_run_theta_codes, forecast_run_croston_check_n,
+    forecast_run_croston_check_h, forecast_run_croston, forecast_run_croston_forecast, forecast_run_ets_check_n,
+    forecast_run_ets_season, forecast_run_ets_needs_positive, forecast_run_min_above_zero,
+    forecast_run_ets_check_positive, forecast_run_ets_check_tiny, forecast_run_ets_check_counts,
+    forecast_run_ets_mask, forecast_run_ets_words,
+    forecast_run_ets, forecast_run_garch_check_n, forecast_run_garch_check_finite, forecast_run_garch_horizon,
+    forecast_run_garch_words, forecast_run_garch_stall, forecast_run_garch,
+)
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence import admitted_ndarray_f32
 from bindings.native_loaded_module import NativeModules
@@ -108,12 +120,8 @@ def _store(fields: PythonObject, name: String, value: PythonObject) raises:
     py_setitem(fields, PythonObject(name), value)
 
 
-def _letter(text: String, index: Int) raises -> String:
-    return String(text[byte=index:index + 1])
-
-
-def _flag(value: PythonObject) -> Int:
-    return 0 if value is None else 1
+def _set(value: PythonObject) -> Bool:
+    return value is not None
 
 
 def _float_or_zero(value: PythonObject) raises -> Float64:
@@ -152,9 +160,8 @@ def _cache_record(value: PythonObject, context: PythonObject) raises:
 def _cache_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var captured = _stored_buffer(value, "forecast cache", 2, context)
     var result = xseq_zeros(Python.tuple(captured.shape[0], captured.shape[1]), context)
-    if captured.count:
-        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=xseq_addr(result))),
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=captured.address), count=captured.count * 4)
+    forecast_run_copy_f32_words(Int(py=xseq_addr(result)), captured.address, captured.count)
+    _ = result  # keep the Python object alive through the native copy above
     _ = captured
     return result
 
@@ -167,8 +174,7 @@ def _theta_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     _store(fields, "_one", series[0])
     _store(fields, "_y", series[1])
     var y = series[1]
-    if Int(py=series[3]) <= 3:
-        raise Error("Theta: each series needs more than 3 observations")
+    forecast_run_theta_check_n(Int(py=series[3]))
     _store(fields, "_fitted_h", PythonObject(None))
     return model
 
@@ -209,16 +215,23 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         # words are the full call's (sequence/theta.mojo op_theta_forecast).
         # Every image publishes it in the sequence table, so the former
         # "entry present" test is gone (lane calltable-xseq).
-        var key = xseq_key(fields, context)
+        # The table key is `entry_key`: `key` stays the stored-forecast cache
+        # key stored in `_fitted_h` below (the former inner `var key` of the
+        # table key shadowed it there).
+        var entry_key = xseq_key(fields, context)
         var captured = _stored_buffer(fields["_y"], "Theta observations", 2, context)
         var y = captured.keep
         var batch = captured.shape[0]
         var n = captured.shape[1]
         var info = _cache_copy(fitted[2], context)
         forecast = xseq_zeros(Python.tuple(batch, h), context)
-        var addresses: List[Int] = [captured.address, Int(py=xseq_addr(info)), Int(py=xseq_addr(forecast))]
-        var words: List[Int] = [batch, n, h, Int(py=fields["season_length"])]
-        _ = xseq_glue(key, XS_THETA_FORECAST, addresses, words, List[Float64]())
+        var y_addr = captured.address
+        var info_addr = Int(py=xseq_addr(info))
+        var forecast_addr = Int(py=xseq_addr(forecast))
+        var season = Int(py=fields["season_length"])
+        var py = Python()
+        with GILReleased(py):
+            forecast_run_theta_forecast(entry_key, y_addr, info_addr, forecast_addr, batch, n, h, season)
         _ = forecast  # keep the Python object alive through the native call above
         _ = info  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
@@ -227,7 +240,8 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         _store(fields, "model_", names)
         _store(fields, "_fitted_h", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
     else:
-        var key = xseq_key(fields, context)
+        # `entry_key`, not `key`: see the forecast-only branch above.
+        var entry_key = xseq_key(fields, context)
         if not py_contains(fields, "_y"):
             raise Error("AttributeError: Theta: call fit before predict")
         var captured = _stored_buffer(fields["_y"], "Theta observations", 2, context)
@@ -236,14 +250,20 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         var n = captured.shape[1]
         forecast = xseq_zeros(Python.tuple(batch, h), context)
         var info = xseq_zeros(Python.tuple(batch, 8), context)
-        var mask = (_flag(fields["initial_smoothed"]) | 2 * _flag(fields["alpha"]) | 4 * _flag(fields["theta"]))
+        var mask = forecast_run_theta_mask(_set(fields["initial_smoothed"]), _set(fields["alpha"]),
+                                           _set(fields["theta"]))
         var fp: List[Float64] = [_float_or_zero(fields["initial_smoothed"]), _float_or_zero(fields["alpha"]),
                                  _float_or_zero(fields["theta"])]
         var code = -1 if chosen is None else Int(py=context["xseq_theta_codes"][chosen])
-        var additive = 0 if Bool(py=fields["decomposition_type"] == PythonObject("multiplicative")) else 1
-        var addresses: List[Int] = [captured.address, Int(py=xseq_addr(forecast)), Int(py=xseq_addr(info))]
-        var words: List[Int] = [batch, n, h, Int(py=fields["season_length"]), code, additive, mask]
-        _ = xseq_glue(key, XS_THETA, addresses, words, fp)
+        var additive = not Bool(py=fields["decomposition_type"] == PythonObject("multiplicative"))
+        var y_addr = captured.address
+        var forecast_addr = Int(py=xseq_addr(forecast))
+        var info_addr = Int(py=xseq_addr(info))
+        var season = Int(py=fields["season_length"])
+        var py = Python()
+        with GILReleased(py):
+            forecast_run_theta(entry_key, y_addr, forecast_addr, info_addr, batch, n, h, season, code, additive,
+                               mask, fp)
         _ = forecast  # keep the Python object alive through the native call above
         _ = info  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
@@ -270,13 +290,13 @@ def _theta_model_names(models: PythonObject, info: PythonObject, batch: Int) rai
     # Own the NULL-filled list at once: a failure releases every stored slot.
     var names = PythonObject(from_owned=raw)
     var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
-    var words = xseq_f32p(info)
+    var codes = forecast_run_theta_codes(Int(py=xseq_addr(info)), batch)
+    _ = info  # keep the code words alive through the native read above
     for row in range(batch):  # driver-loop: over the fitted series (one selected model name each)
-        var name = models[Int(Int64(words[row * 8 + 4]))]
+        var name = models[codes[row]]
         # SetItem steals the reference on both success and failure.
         if set_item(names._obj_ptr, row, name.steal_data()) != 0:
             raise cpy.unsafe_get_error()
-    _ = info  # keep the code words alive through the reads above
     return names
 
 
@@ -288,16 +308,18 @@ def _croston_fit(model: PythonObject, fields: PythonObject, args: PythonObject, 
     _store(fields, "_one", series[0])
     _store(fields, "_y", series[1])
     var y = series[1]
-    if Int(py=series[3]) < 1:
-        raise Error("Croston: y must hold at least one observation per series")
+    forecast_run_croston_check_n(Int(py=series[3]))
     var batch = Int(py=series[2])
     var n = Int(py=series[3])
     var mean = xseq_zeros(Python.tuple(batch), context)
     _store(fields, "mean_", mean)
     var key = xseq_key(fields, context)
-    var addresses: List[Int] = [Int(py=series[4]), Int(py=xseq_addr(mean))]
-    var words: List[Int] = [batch, n, Int(py=_croston_variant(model, context))]
-    _ = xseq_glue(key, XS_CROSTON, addresses, words, List[Float64]())
+    var y_addr = Int(py=series[4])
+    var mean_addr = Int(py=xseq_addr(mean))
+    var variant = Int(py=_croston_variant(model, context))
+    var py = Python()
+    with GILReleased(py):
+        forecast_run_croston(key, y_addr, mean_addr, batch, n, variant)
     _ = mean  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     return model
@@ -307,8 +329,7 @@ def _croston_predict(model: PythonObject, fields: PythonObject, args: PythonObje
     if args[2] is not None:
         raise Error("NotImplementedError: Croston: prediction intervals are not implemented")
     var h = xseq_int(args[0])
-    if h < 0:
-        raise Error("Croston: h must be >= 0")
+    forecast_run_croston_check_h(h)
     if not py_contains(fields, "mean_"):
         raise Error("AttributeError: Croston: call fit before predict")
     var captured = _stored_buffer(fields["mean_"], "Croston means", 1, context)
@@ -318,9 +339,11 @@ def _croston_predict(model: PythonObject, fields: PythonObject, args: PythonObje
     # every row its series' mean (`croston_forecast`)
     if h:
         var key = xseq_key(fields, context)
-        var addresses: List[Int] = [captured.address, Int(py=xseq_addr(forecast))]
-        var words: List[Int] = [batch, h]
-        _ = xseq_glue(key, XS_CROSTON_FORECAST, addresses, words, List[Float64]())
+        var mean_addr = captured.address
+        var forecast_addr = Int(py=xseq_addr(forecast))
+        var py = Python()
+        with GILReleased(py):
+            forecast_run_croston_forecast(key, mean_addr, forecast_addr, batch, h)
         _ = forecast  # keep the Python object alive through the native call above
         _ = mean  # keep the Python object alive through the native call above
     return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
@@ -334,50 +357,33 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     _store(fields, "_one", series[0])
     _store(fields, "_y", series[1])
     var y = series[1]
-    if Int(py=series[3]) < 4:
-        raise Error("ETS: each series needs at least 4 observations")
+    forecast_run_ets_check_n(Int(py=series[3]))
     var spec = String(py=fields["model"])
-    var e = _letter(spec, 0)
-    var tr = _letter(spec, 1)
-    var s = _letter(spec, 2)
     var n = Int(py=series[3])
     var m = xseq_int(fields["season_length"])
-    if s != "N" and n <= m:
-        s = "N"  # the reference drops the season (ets_f)
-    if e == "M" or s == "M":
+    var s = forecast_run_ets_season(spec, n, m)
+    if forecast_run_ets_needs_positive(spec, s):
         # every value > 0: finite (`all_finite_f32`) and a first-wins minimum above zero (`reduce_stat` 0)
         var size = Int(py=series[2]) * Int(py=series[3])
         # call-table: base helper
         var positive = Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4], PythonObject(size)))
         _ = y  # keep the Python object alive through the native call above
         if positive:
-            var low = base_reduce_stat(base_helpers_key(context["xseq_base"]), Int(py=series[4]), 0, size, 0)
+            positive = forecast_run_min_above_zero(base_helpers_key(context["xseq_base"]), Int(py=series[4]), size)
             _ = y  # keep the Python object alive through the native call above
-            positive = low.f > 0.0
-            _ = y  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native calls above
-        if not positive:
-            raise Error("ETS: Inappropriate model for data with negative or zero values")
-        _ = y  # keep the Python object alive through the native calls above
+        forecast_run_ets_check_positive(positive)
     var damped = xseq_truth(fields["damped"])
-    var trend = 1 if tr != "N" else 0
-    var season = 1 if s != "N" else 0
-    var npars = 2 + 2 * trend + 2 * season + (1 if damped else 0)
-    if n <= npars + 4:
-        raise Error("NotImplementedError: ETS: tiny datasets (n <= parameter count + 4) are not implemented")
-    var n_smooth = (1 if fields["alpha"] is None else 0) + (1 if trend == 1 and fields["beta"] is None else 0)
-    n_smooth += (1 if season == 1 and fields["gamma"] is None else 0) + (1 if damped and fields["phi"] is None else 0)
-    var n_par = n_smooth + 1 + trend + (m - 1 if season == 1 else 0)
-    if n_par >= n - 1:
-        raise Error("ETS: " + String(n_par) + " parameters for " + String(n)
-                    + " observations (the reference needs n > parameters + 1)")
+    forecast_run_ets_check_tiny(spec, s, n, damped)
+    # The free settings, read in the reference's order (a setting the model
+    # does not use is not read).
+    var alpha_free = fields["alpha"] is None
+    var beta_free = forecast_run_letter(spec, 1) != "N" and fields["beta"] is None
+    var gamma_free = s != "N" and fields["gamma"] is None
+    var phi_free = damped and fields["phi"] is None
+    forecast_run_ets_check_counts(spec, s, n, m, damped, alpha_free, beta_free, gamma_free, phi_free)
     _store(fields, "_season", PythonObject(s))
     _store(fields, "_last", PythonObject(None))
     return model
-
-
-def _index(letters: String, letter: String) -> Int:
-    return letters.find(letter)
 
 
 def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -394,11 +400,11 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
     var m = xseq_int(fields["season_length"]) if s != "N" else 1
     var h = xseq_int(args[0])
     var spec = String(py=fields["model"])
-    var mask = (_flag(fields["alpha"]) | 2 * _flag(fields["beta"]) | 4 * _flag(fields["phi"]) | 8 * _flag(fields["gamma"]))
+    var mask = forecast_run_ets_mask(_set(fields["alpha"]), _set(fields["beta"]), _set(fields["phi"]),
+                                     _set(fields["gamma"]))
     var fp = Python.list(_float_or_zero(fields["alpha"]), _float_or_zero(fields["beta"]),
                          _float_or_zero(fields["phi"]), _float_or_zero(fields["gamma"]))
-    var words: List[Int] = [batch, n, h, _index("AM", _letter(spec, 0)), _index("NA", _letter(spec, 1)),
-                            1 if xseq_truth(fields["damped"]) else 0, mask, _index("NAM", s), m]
+    var words = forecast_run_ets_words(batch, n, h, spec, xseq_truth(fields["damped"]), mask, s, m)
     var floats: List[Float64] = [_float_or_zero(fields["alpha"]), _float_or_zero(fields["beta"]),
                                  _float_or_zero(fields["phi"]), _float_or_zero(fields["gamma"])]
     var ip = Python.list(batch, n, h, words[3], words[4], words[5], mask, words[7], m)
@@ -428,9 +434,14 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
         forecast = xseq_zeros(Python.tuple(batch, h), context)
         info = xseq_zeros(Python.tuple(batch, 10), context)
         states = xseq_zeros(Python.tuple(batch, m), context)
-        var addresses: List[Int] = [captured.address, Int(py=xseq_addr(forecast)), Int(py=xseq_addr(info)),
-                                    Int(py=xseq_addr(states))]
-        _ = xseq_glue(xseq_key(fields, context), XS_ETS, addresses, words, floats)
+        var y_addr = captured.address
+        var forecast_addr = Int(py=xseq_addr(forecast))
+        var info_addr = Int(py=xseq_addr(info))
+        var states_addr = Int(py=xseq_addr(states))
+        var entry_key = xseq_key(fields, context)
+        var py = Python()
+        with GILReleased(py):
+            forecast_run_ets(entry_key, y_addr, forecast_addr, info_addr, states_addr, words, floats)
         _ = forecast  # keep the Python objects alive through the native call above
         _ = info
         _ = states
@@ -445,38 +456,20 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
 
 # ---------------------------------------------------------------- GARCH
 
-def _xseq_round_half_even(x: Float64) raises -> Int:
-    """Python's `round(x)` of a float as its integer: ties to even, its
-    refusals of NaN and infinity. Plain arithmetic on one scalar word."""
-    if x != x:
-        raise Error("ValueError: cannot convert float NaN to integer")
-    if x > 9.2e18 or x < -9.2e18:
-        raise Error("OverflowError: round() of the GARCH stall drop exceeds the integer word")
-    var f = floor(x)
-    var whole = Int(f)
-    var d = x - f
-    if d > 0.5:
-        return whole + 1
-    if d < 0.5:
-        return whole
-    return whole + (whole & 1)
-
-
 def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var series = _series(args[0], "GARCH", False, context)
     var one = Bool(py=series[0])
     _store(fields, "_one", series[0])
     var y = series[1]
-    if Int(py=series[3]) < 10:
-        raise Error("GARCH: each series needs at least 10 observations")
+    forecast_run_garch_check_n(Int(py=series[3]))
     # the finiteness scan (the base binding's `all_finite_f32`)
     # call-table: base helper
-    if not Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4], PythonObject(Int(py=series[2]) * Int(py=series[3])))):
-        raise Error("GARCH: y holds a non-finite value")
+    forecast_run_garch_check_finite(Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4],
+                                                          PythonObject(Int(py=series[2]) * Int(py=series[3])))))
     _ = y  # keep the Python object alive through the native calls above
     var batch = Int(py=series[2])
     var n = Int(py=series[3])
-    var h = max(1, xseq_int(args[1]))
+    var h = forecast_run_garch_horizon(xseq_int(args[1]))
     var p = Int(py=fields["p"])
     var o = Int(py=fields["o"])
     var q = Int(py=fields["q"])
@@ -485,16 +478,21 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     var info = xseq_zeros(Python.tuple(batch, 4), context)
     var sigma = xseq_zeros(Python.tuple(batch, n), context)
     var forecast = xseq_zeros(Python.tuple(batch, h), context)
-    var words: List[Int] = [batch, n, h, p, o, q, 1 if Bool(py=fields["mean"] == PythonObject("Constant")) else 0]
+    var words = forecast_run_garch_words(batch, n, h, p, o, q, Bool(py=fields["mean"] == PythonObject("Constant")))
     var stall = py_get(fields, "_fast_stall")  # (iterations, relative drop): the FAST stop's quality sweep
     if stall is not None:
-        words.append(xseq_int(stall[0]))
         # Python's round() of the drop in parts per 1e9: its exact integer
-        # (ties to even), as `_xseq_round_half_even` (the former b.round call).
-        words.append(_xseq_round_half_even(xseq_float(stall[1]) * 1e9))
-    var addresses: List[Int] = [Int(py=series[4]), Int(py=xseq_addr(params)), Int(py=xseq_addr(info)),
-                                Int(py=xseq_addr(sigma)), Int(py=xseq_addr(forecast))]
-    _ = xseq_glue(xseq_key(fields, context), XS_GARCH, addresses, words, List[Float64]())
+        # (ties to even), as `forecast_run_round_half_even` (the former b.round call).
+        forecast_run_garch_stall(words, xseq_int(stall[0]), xseq_float(stall[1]))
+    var y_addr = Int(py=series[4])
+    var params_addr = Int(py=xseq_addr(params))
+    var info_addr = Int(py=xseq_addr(info))
+    var sigma_addr = Int(py=xseq_addr(sigma))
+    var forecast_addr = Int(py=xseq_addr(forecast))
+    var entry_key = xseq_key(fields, context)
+    var py = Python()
+    with GILReleased(py):
+        forecast_run_garch(entry_key, y_addr, params_addr, info_addr, sigma_addr, forecast_addr, words)
     _ = sigma  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
