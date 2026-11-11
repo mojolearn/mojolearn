@@ -77,17 +77,19 @@ def case(unit: Int) raises:
         _ = mu
         _ = dst
     elif unit == 3:
-        # Centered X [[-1], [1]], Y [[1], [5]]: ymean 3, coef 4 / (2 + 2) = 1,
-        # intercept 3 - 2 * 1 = 1 with xmean [2].
-        var x: List[Float32] = [-1.0, 1.0]
+        # Centered X [[-1, 0], [1, 0]], Y [[1], [5]]: ymean 3, coef
+        # (X'X + 2 I)^-1 X'y_c = [4 / 4, 0 / 2] = [1, 0], intercept
+        # 3 - (2 * 1 + 5 * 0) = 1 with xmean [2, 5].
+        var x: List[Float32] = [-1.0, 0.0, 1.0, 0.0]
         var y: List[Float32] = [1.0, 5.0]
-        var coef: List[Float32] = [0.0]
+        var coef: List[Float32] = [9.0, 9.0]
         var ymean: List[Float32] = [0.0]
-        var xmean: List[Float32] = [2.0]
+        var xmean: List[Float32] = [2.0, 5.0]
         var icpt: List[Float32] = [0.0]
         rm_fit(k, Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(coef.unsafe_ptr()), Int(ymean.unsafe_ptr()),
-               2, 1, 1, 2.0, True, Int(xmean.unsafe_ptr()), Int(icpt.unsafe_ptr()))
-        require(ymean[0] == 3.0 and coef[0] == 1.0 and icpt[0] == 1.0, "ridge_fit_multi")
+               2, 2, 1, 2.0, True, Int(xmean.unsafe_ptr()), Int(icpt.unsafe_ptr()))
+        require(ymean[0] == 3.0 and abs(coef[0] - 1.0) < 1e-5 and abs(coef[1]) < 1e-5
+                and abs(icpt[0] - 1.0) < 1e-5, "ridge_fit_multi")
         _ = x
         _ = y
         _ = coef
@@ -95,13 +97,13 @@ def case(unit: Int) raises:
         _ = xmean
         _ = icpt
     elif unit == 4:
-        var x: List[Float32] = [0.0, 1.0]
-        var coef: List[Float32] = [1.0]
+        var x: List[Float32] = [0.0, 0.0, 1.0, 0.0]
+        var coef: List[Float32] = [1.0, 0.0]
         var icpt: List[Float32] = [1.0]
         var dst: List[Float32] = [9.0, 9.0]
         rm_predict(k, Int(x.unsafe_ptr()), Int(coef.unsafe_ptr()), Int(icpt.unsafe_ptr()), Int(dst.unsafe_ptr()),
-                   2, 1, 1)
-        require(dst[0] == 1.0 and dst[1] == 2.0, "ridge_predict_multi")
+                   2, 2, 1)
+        require(abs(dst[0] - 1.0) < 1e-6 and abs(dst[1] - 2.0) < 1e-6, "ridge_predict_multi")
         _ = x
         _ = coef
         _ = icpt
