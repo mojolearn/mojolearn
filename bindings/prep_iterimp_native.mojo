@@ -13,6 +13,7 @@
 # estimator's connected native plan (bindings/prep_native_estimator.mojo); its
 # Python fit, predict, get_params or constructor is never called.
 from std.math import isfinite
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -143,11 +144,11 @@ def _floats_from(value: PythonObject) raises -> List[Float64]:
     var words = user_objects_call(Python.tuple("floats", value))
     var n = len(words)
     var src = F64P(unsafe_from_address=Int(py=py_call(words.buffer_info)[0]))
-    var out = List[Float64]()
-    _ = words  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: the user estimator's answer, read once
-        out.append(src[i])
-        _ = words  # keep the Python object alive through the native call above
+    # One native copy of the float64 words (no per-entry append).
+    var out = List[Float64](length=n, fill=0.0)
+    if n > 0:
+        unsafe_memcpy(dest=F64P(unsafe_from_address=Int(out.unsafe_ptr())), src=src, count=n)
+    _ = words  # keep the Python object alive through the native copy above
     return out^
 
 
@@ -167,14 +168,15 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
             var t = classical_dtype_str(view, context)
             var size = Int(py=view.shape[0]) if Int(py=view.ndim) == 1 else 0
             if Int(py=view.ndim) == 1 and (t == "<f4" or t == "<f8") and size > 0:
-                var out = List[Float64]()
+                var out = List[Float64](length=size, fill=0.0)
                 var step = Int(py=view.strides[0])
                 var addr = Int(py=classical_address(view))
-                for i in range(size):  # cpu-route: the user estimator's predictions, widened once
-                    if t == "<f4":
-                        out.append(Float64(F32P(unsafe_from_address=addr + i * step)[0]))
+                var wide = t == "<f8"
+                for i in range(size):  # driver-loop: typed widening of the native prediction buffer (no CPython call)
+                    if wide:
+                        out[i] = F64P(unsafe_from_address=addr + i * step)[0]
                     else:
-                        out.append(F64P(unsafe_from_address=addr + i * step)[0])
+                        out[i] = Float64(F32P(unsafe_from_address=addr + i * step)[0])
                 _ = view  # keep the Python object alive through the reads above
                 return out^
     var listed = py_call(v.tolist) if Bool(py=py_call(b.hasattr, v, "tolist")) else v
@@ -222,7 +224,7 @@ def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
         for _ in range(d):  # driver-loop: over the columns (one bound argument each)
             _ = py_call(vals.append, v)
     var out = List[Float64]()
-    for i in range(len(vals)):  # cpu-route: converts the min_value / max_value arguments once
+    for i in range(len(vals)):  # driver-loop: over the columns' min_value / max_value parameters (one per feature)
         out.append(_float(vals[i]))
     return out^
 
@@ -484,10 +486,11 @@ def _truncnorm(mus: PythonObject, sig: PythonObject, lo: Float64, hi: Float64, m
                                        Python.tuple(lo, hi), state, py_call(out.buffer_info)[0])
     rng = (UInt64(Int(py=hi_lo[0])) << 32) | UInt64(Int(py=hi_lo[1]))
     var src = F64P(unsafe_from_address=Int(py=py_call(out.buffer_info)[0]))
-    var vals = List[Float64]()
-    for i in range(k):  # cpu-route: read the completed posterior result
-        vals.append(src[i])
-        _ = out
+    # One native copy of the completed posterior draws.
+    var vals = List[Float64](length=k, fill=0.0)
+    if k > 0:
+        unsafe_memcpy(dest=F64P(unsafe_from_address=Int(vals.unsafe_ptr())), src=src, count=k)
+    _ = out  # keep the draw store alive through the native copy above
     _ = mb
     _ = sb
     return vals^
@@ -687,10 +690,10 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         var xt = xf
         var seq = Python.list()
         var done = 0
-        for r in range(len(orders)):  # cpu-route: the user estimator, fitted once per imputation round (user code)
+        for r in range(len(orders)):  # driver-loop: over the imputation rounds (one native estimator fit per feature each)
             var check = not posterior and len(orders[r]) > 0
             var prev = xt
-            for i in range(len(orders[r])):  # cpu-route: the user estimator, fitted once per feature (user code)
+            for i in range(len(orders[r])):  # driver-loop: over the round's features (one native estimator fit each)
                 var j = orders[r][i]
                 var nbl = draws.next(rng) if draws.on else _others(dk, j)
                 var est = prep_estimator_clone(estimator, context)
@@ -830,7 +833,7 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     if fields["estimator"] is not None:
         var mask = _mask_arr(values, keep, fields["missing_values"], context)
         var xt = xf
-        for s in range(len(sequence)):  # cpu-route: the fitted user estimators, one predict per step (user code)
+        for s in range(len(sequence)):  # driver-loop: over the fitted imputation steps (one native predict each)
             var step = sequence[s]
             var j = Int(py=step[0])
             var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), mode, False, context)

@@ -37,6 +37,12 @@ comptime BOUNDARY_KIND_FLOAT = 1
 comptime BOUNDARY_KIND_INT = 2
 comptime BOUNDARY_KIND_UINT = 3
 comptime BOUNDARY_KIND_BOOL = 4
+#: Fixed-width text storage, admitted only by `text_format_kind` (a text
+#: view, bindings/boundary_read.mojo `text_buffer_view`): NumPy 'U' (UCS4
+#: code points, NUL padded, struct format "w" / "<Nw") and NumPy 'S' (bytes,
+#: NUL padded, "s" / "Ns"). The numeric gathers refuse both.
+comptime BOUNDARY_KIND_UCS4 = 5
+comptime BOUNDARY_KIND_BYTES = 6
 
 #: Elements per conversion task: one task moves at least 256 KB of f32, so
 #: the pool's dispatch cost is amortized whatever the array's shape (cost
@@ -158,6 +164,31 @@ def format_kind(format: String, itemsize: Int) raises -> Int:
     return _unsupported(format)
 
 
+def text_format_kind(format: String) -> Int:
+    """`BOUNDARY_KIND_UCS4` for a little-endian or native UCS4 text format
+    ("w", "<10w", "=3w", "@w"), `BOUNDARY_KIND_BYTES` for a bytes format
+    ("s", "8s"), 0 for anything else (a numeric format, a big-endian UCS4
+    run, a compound format)."""
+    var bytes = format.as_bytes()
+    var n = len(bytes)
+    if n == 0:
+        return 0
+    var start = 0
+    var prefix = bytes[0]
+    if prefix == UInt8(ord("<")) or prefix == UInt8(ord("=")) or prefix == UInt8(ord("@")):
+        start = 1
+    var letter = bytes[n - 1]
+    for k in range(start, n - 1):  # driver-loop: over the format's repeat-count digits (metadata)
+        if bytes[k] < UInt8(ord("0")) or bytes[k] > UInt8(ord("9")):
+            return 0
+    if n - 1 >= start:
+        if letter == UInt8(ord("w")):
+            return BOUNDARY_KIND_UCS4
+        if letter == UInt8(ord("s")):
+            return BOUNDARY_KIND_BYTES
+    return 0
+
+
 def _unsupported(format: String) raises -> Int:
     raise Error("TypeError: unsupported buffer format '" + format + "'")
 
@@ -236,6 +267,8 @@ def _load_i64(address: Int, kind: Int, itemsize: Int) -> Int64:
 
 
 def _check_width(kind: Int, itemsize: Int) raises:
+    if kind == BOUNDARY_KIND_UCS4 or kind == BOUNDARY_KIND_BYTES:
+        raise Error("TypeError: a numeric buffer is required, got fixed-width text storage")
     var ok = itemsize == 1 or itemsize == 2 or itemsize == 4 or itemsize == 8
     if kind == BOUNDARY_KIND_FLOAT:
         ok = itemsize == 2 or itemsize == 4 or itemsize == 8
@@ -321,3 +354,96 @@ def gather_i64(layout: BufferLayout, kind: Int, dst_address: Int) raises:
             dst[flat] = _load_i64(lp[].address + element_offset(flat, lp[]), kind, itemsize)
     host_parallelize(task, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
+
+
+struct TextRows(Movable):
+    """The elements of a fixed-width text buffer, in C order: element `i` is
+    the code units `points[starts[i] : starts[i] + lengths[i]]` (UCS4 code
+    points, or the bytes of an 'S' element widened), trailing NULs dropped,
+    which is the value NumPy's `tolist()` / `str()` gives the element."""
+    var points: List[UInt32]
+    var starts: List[Int]
+    var lengths: List[Int]
+    var count: Int
+
+    def __init__(out self, var points: List[UInt32], var starts: List[Int], var lengths: List[Int], count: Int):
+        self.points = points^
+        self.starts = starts^
+        self.lengths = lengths^
+        self.count = count
+
+
+@always_inline
+def _text_length(at: Int, kind: Int, width: Int) -> Int:
+    var m = width
+    if kind == BOUNDARY_KIND_UCS4:
+        var wide = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)
+        while m > 0 and wide[m - 1] == 0:
+            m -= 1
+    else:
+        var narrow = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at)
+        while m > 0 and narrow[m - 1] == 0:
+            m -= 1
+    return m
+
+
+def text_rows(layout: BufferLayout, kind: Int) raises -> TextRows:
+    """Every element of a 'U' or 'S' buffer as one contiguous run of code
+    units (`TextRows`); see `text_rows_into`."""
+    var points = List[UInt32]()
+    var starts = List[Int]()
+    var lengths = List[Int]()
+    var n = text_rows_into(layout, kind, points, starts, lengths)
+    return TextRows(points^, starts^, lengths^, n)
+
+
+def text_rows_into(layout: BufferLayout, kind: Int, mut points: List[UInt32], mut starts: List[Int],
+                   mut lengths: List[Int]) raises -> Int:
+    """`text_rows` into the caller's three lists (replaced), returning the
+    element count. Two native passes split across the host pool in
+    `BOUNDARY_COPY_CHUNK` runs (the lengths, then the copies), one prefix
+    sum between them; no Python object per element."""
+    if kind != BOUNDARY_KIND_UCS4 and kind != BOUNDARY_KIND_BYTES:
+        raise Error("TypeError: a fixed-width text buffer is required")
+    var width = layout.itemsize // 4 if kind == BOUNDARY_KIND_UCS4 else layout.itemsize
+    var n = layout.count
+    lengths = List[Int](length=n, fill=0)
+    starts = List[Int](length=n, fill=0)
+    if n == 0:
+        points = List[UInt32]()
+        return 0
+    var units = (n + BOUNDARY_COPY_CHUNK - 1) // BOUNDARY_COPY_CHUNK
+    var lp = UnsafePointer(to=layout)
+    var lengths_address = Int(lengths.unsafe_ptr())
+    def measure(unit: Int) {imm lp, imm kind, imm width, imm n, imm lengths_address}:
+        var lens = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lengths_address)
+        var stop = min(n, (unit + 1) * BOUNDARY_COPY_CHUNK)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one text chunk (native, no Python)
+            lens[flat] = _text_length(lp[].address + element_offset(flat, lp[]), kind, width)
+    host_parallelize(measure, units)
+    var total = 0
+    for i in range(n):  # driver-loop: prefix sum of the element lengths (native, no Python)
+        starts[i] = total
+        total += lengths[i]
+    points = List[UInt32](length=total, fill=0)
+    var points_address = Int(points.unsafe_ptr())
+    var starts_address = Int(starts.unsafe_ptr())
+    def fill_points(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address}:
+        var lens = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lengths_address)
+        var firsts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=starts_address)
+        var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=points_address)
+        var stop = min(n, (unit + 1) * BOUNDARY_COPY_CHUNK)
+        for flat in range(unit * BOUNDARY_COPY_CHUNK, stop):  # driver-loop: elements of one text chunk (native, no Python)
+            var at = lp[].address + element_offset(flat, lp[])
+            var first = firsts[flat]
+            if kind == BOUNDARY_KIND_UCS4:
+                var wide = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)
+                for k in range(lens[flat]):  # driver-loop: over one element's code points (native)
+                    dst[first + k] = wide[k]
+            else:
+                var narrow = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at)
+                for k in range(lens[flat]):  # driver-loop: over one element's bytes (native)
+                    dst[first + k] = UInt32(narrow[k])
+    host_parallelize(fill_points, units)
+    _ = layout  # the layout's shape/stride lists are read by every task above
+    return n

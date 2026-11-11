@@ -64,7 +64,9 @@ CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
          # pairs and pairs_weight (one buffer view each), the GBDT adapter's
          # classifier score and MultiOutputClassifier's str-label score (one
          # dict lookup per distinct label, per-row codes native).
-         "GradientBoosting_pairs", "GradientBoostingClassifier_score", "MultiOutputClassifier_str")
+         "GradientBoosting_pairs", "GradientBoostingClassifier_score", "MultiOutputClassifier_str",
+         # Label doors (lane loops-prep-host).
+         "LabelEncoder_str", "LabelBinarizer_str")
 
 # Neural cases (lane loops-neural): one `forward` operation, no fit/query.
 NEURAL_CASES = ("Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
@@ -72,6 +74,15 @@ NEURAL_CASES = ("Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
 # Tokenizer cases: no fit/query pair; each counts its one operation.
 TOKENIZER_CASES = {"BpeTokenizer_decode_array": ("decode_bytes",),
                    "BpeTokenizer_decode_list": ("decode_bytes",)}
+
+# Label cases (lane loops-prep-host): a 1-D NumPy 'U' label vector of `rows`
+# labels over three classes, every operation full-size, so a door that reads
+# the labels with one buffer export (not one Python str per row) has the same
+# count at both shapes. (class in mojolearn.preprocessing, operations in run order)
+LABEL_CASES = {
+    "LabelEncoder_str": ("LabelEncoder", ("fit", "transform", "inverse_transform", "fit_transform")),
+    "LabelBinarizer_str": ("LabelBinarizer", ("fit", "transform", "inverse_transform")),
+}
 
 # Cases that run a public class under another name (lane thin-unpack-svm):
 # LinearSVC with string labels and a full-size score (the score UNPACK is
@@ -286,6 +297,84 @@ def _perf_toggle(command):
         os.close(ack)
 
 
+def _label_case(name, rows, result):
+    """The operations of a label case: (name, callable, arguments) in order.
+    inverse_transform reads int64 codes (LabelEncoder) or a 0/1 indicator
+    (LabelBinarizer) drawn independently of the fit, at the same size."""
+    import numpy as np
+    from mojolearn import preprocessing
+
+    random = np.random.default_rng(0)
+    codes = random.integers(0, 3, size=rows).astype(np.int64)
+    y = np.array(["mid", "neg", "pos"])[codes]
+    result["label_dtype"] = str(y.dtype)
+    result["input_sha256"] = hashlib.sha256(y.tobytes() + codes.tobytes()).hexdigest()
+    result["parameters"] = {}
+    model = getattr(preprocessing, LABEL_CASES[name][0])()
+    inverse = codes if name == "LabelEncoder_str" else np.eye(3, dtype=np.float32)[codes]
+    arguments = {"fit": (y,), "transform": (y,), "fit_transform": (y,), "inverse_transform": (inverse,)}
+    return [(operation, getattr(model, operation), arguments[operation]) for operation in LABEL_CASES[name][1]]
+
+
+def _label_check(operation, value, rows):
+    """The output shape of a label operation; refuses a result of another length."""
+    import numpy as np
+
+    if operation == "fit":
+        return None
+    output = np.asarray(value)
+    if output.shape[0] != rows:
+        raise AssertionError(f"{operation} returned {output.shape[0]} rows, expected {rows}")
+    return list(output.shape)
+
+
+def _estimator_operations(name, rows, result, np, ml):
+    """The operations of an estimator case: fit, then its query (and score)."""
+    random = np.random.default_rng(0)
+    x = random.normal(size=(rows, 4)).astype(np.float32)
+    y = (x[:, 0] + x[:, 1] * np.float32(0.3)).astype(np.float32)
+    if name in CLASSIFIERS:
+        # --label-dtype (default int64): another integer width exercises
+        # the label reads that are not the contiguous int64 fast path.
+        y = (y > 0).astype(os.environ.get("MOJOLEARN_PROBE_LABEL_DTYPE", "int64"))
+        result["label_dtype"] = str(y.dtype)
+    result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
+    parameters = model_parameters(name)
+    result["parameters"] = {key: (value if isinstance(value, (int, float, str, type(None))) else repr(value))
+                            for key, value in parameters.items()}
+    model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**parameters)
+    query = query_operation(name)
+    fit_x, query_x = x, x[:min(7, rows)]
+    if name.endswith("_precomputed"):
+        # Linear Gram matrices: train (rows, rows), query (7, rows).
+        fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
+    if name == "LinearSVC_str":
+        y = np.where(y > 0, "pos", "neg").astype(object)
+    if name == "MultiOutputClassifier_str":
+        # Two str-label outputs: the score encodes each column against
+        # that output's classes (bindings/trees_public_meta.mojo).
+        y = np.stack([np.where(y > 0, "pos", "neg"), np.where(x[:, 2] > 0, "up", "down")], axis=1).astype(object)
+    fit_kwargs = {}
+    if name == "GradientBoosting_pairs":
+        # Groups of four consecutive rows; two pairs per group, as int64
+        # and float32 ndarrays (the one-buffer-view route).
+        group_id = np.repeat(np.arange(rows // 4 + 1), 4)[:rows]
+        starts = np.arange(0, rows - rows % 4, 4)
+        pairs = np.concatenate([np.stack([starts, starts + 1], axis=1),
+                                np.stack([starts + 2, starts + 3], axis=1)]).astype(np.int64)
+        fit_kwargs = {"group_id": group_id, "pairs": pairs,
+                      "pairs_weight": np.ones(len(pairs), dtype=np.float32)}
+    # Lane loops-trees-ab: one list (a second assignment used to replace
+    # this one, dropping the precomputed Gram inputs and the score).
+    fit_call = model.fit if not fit_kwargs else (lambda *a: model.fit(*a, **fit_kwargs))
+    operations = [("fit", fit_call, (x,) if name in UNSUPERVISED else (fit_x, y)),
+                  (query, getattr(model, query), (query_x,))]
+    if name in SCORED:
+        # The full-size score: its CPython count must not grow with rows.
+        operations.append(("score", model.score, (x, y)))
+    return operations
+
+
 def run_case(case):
     name, backend, rows, evidence = case[:4]
     # `--cpython-count perf`: the one operation counted in this process.
@@ -299,54 +388,15 @@ def run_case(case):
 
         result["package"] = {"path": ml.__file__, "version": getattr(ml, "__version__", None)}
         result["visibility_control"] = visibility_control()
-        random = np.random.default_rng(0)
-        x = random.normal(size=(rows, 4)).astype(np.float32)
-        y = (x[:, 0] + x[:, 1] * np.float32(0.3)).astype(np.float32)
-        if name in CLASSIFIERS:
-            # --label-dtype (default int64): another integer width exercises
-            # the label reads that are not the contiguous int64 fast path.
-            y = (y > 0).astype(os.environ.get("MOJOLEARN_PROBE_LABEL_DTYPE", "int64"))
-            result["label_dtype"] = str(y.dtype)
-        result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
-        if name in TOKENIZER_CASES:
+        if name in LABEL_CASES:
+            operations = _label_case(name, rows, result)
+        elif name in TOKENIZER_CASES:
             result["parameters"] = {}
             operations = tokenizer_operations(name, rows, np)
         elif name in NEURAL_CASES:
             operations = _neural_operations(name, rows, np, ml, result)
         else:
-            parameters = model_parameters(name)
-            result["parameters"] = {key: (value if isinstance(value, (int, float, str, type(None))) else repr(value))
-                                    for key, value in parameters.items()}
-            model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**parameters)
-            query = query_operation(name)
-            fit_x, query_x = x, x[:min(7, rows)]
-            if name.endswith("_precomputed"):
-                # Linear Gram matrices: train (rows, rows), query (7, rows).
-                fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
-            if name == "LinearSVC_str":
-                y = np.where(y > 0, "pos", "neg").astype(object)
-            if name == "MultiOutputClassifier_str":
-                # Two str-label outputs: the score encodes each column against
-                # that output's classes (bindings/trees_public_meta.mojo).
-                y = np.stack([np.where(y > 0, "pos", "neg"), np.where(x[:, 2] > 0, "up", "down")], axis=1).astype(object)
-            fit_kwargs = {}
-            if name == "GradientBoosting_pairs":
-                # Groups of four consecutive rows; two pairs per group, as int64
-                # and float32 ndarrays (the one-buffer-view route).
-                group_id = np.repeat(np.arange(rows // 4 + 1), 4)[:rows]
-                starts = np.arange(0, rows - rows % 4, 4)
-                pairs = np.concatenate([np.stack([starts, starts + 1], axis=1),
-                                        np.stack([starts + 2, starts + 3], axis=1)]).astype(np.int64)
-                fit_kwargs = {"group_id": group_id, "pairs": pairs,
-                              "pairs_weight": np.ones(len(pairs), dtype=np.float32)}
-            # Lane loops-trees-ab: one list (a second assignment used to replace
-            # this one, dropping the precomputed Gram inputs and the score).
-            fit_call = model.fit if not fit_kwargs else (lambda *a: model.fit(*a, **fit_kwargs))
-            operations = [("fit", fit_call, (x,) if name in UNSUPERVISED else (fit_x, y)),
-                          (query, getattr(model, query), (query_x,))]
-            if name in SCORED:
-                # The full-size score: its CPython count must not grow with rows.
-                operations.append(("score", model.score, (x, y)))
+            operations = _estimator_operations(name, rows, result, np, ml)
         for operation, function, arguments in operations:
             # These two dependent operations cannot run concurrently: query
             # consumes the fitted state produced by this exact fit.
@@ -367,7 +417,9 @@ def run_case(case):
                     record["cpython_counted"] = True
                 else:
                     value = function(*arguments)
-                if operation == "forward":
+                if name in LABEL_CASES:
+                    record["output_shape"] = _label_check(operation, value, rows)
+                elif operation == "forward":
                     output = np.asarray(value)
                     if output.shape != (rows, 8, 32) or not np.isfinite(output).all():
                         raise AssertionError("forward returned invalid shape or nonfinite output")
@@ -485,6 +537,8 @@ def query_operation(name):
 
 def case_operations(name):
     """Every operation counted for a case, in run order."""
+    if name in LABEL_CASES:
+        return LABEL_CASES[name][1]
     if name in NEURAL_CASES:
         return ("forward",)
     if name in TOKENIZER_CASES:

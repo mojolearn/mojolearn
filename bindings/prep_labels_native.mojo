@@ -29,10 +29,15 @@ from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
-from bindings.str_labels_native import str_lookup
+from bindings.str_labels_native import str_lookup, StrTable, _is_str, _sorted as _str_order
+from bindings.boundary_read import text_buffer_view, read_text_rows_into, read_str_points, pack_ucs4_str, admitted_buffer_view
+from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT
+from bindings.classical_pandas import classical_admit_value
+from bindings.label_admission_native import LabelTypeKinds
+from core.host_parallel import host_parallelize
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
 from bindings.cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes
+from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
 from core.label_words_impl import label_codes_i32_to_f64
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -395,7 +400,7 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     # cannot read): main's recorded input-step debt
     # (tools/hooks/compute_in_shells_baseline.txt), its body made native
     # for exact int / float labels by lane P2.
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
+    for i in range(n):  # list-input: one borrowed read per label of the flattened Python label list (one pass; 'U' vectors take _text_labels)
         var x: Float64
         var is_int: Bool
         if exact:
@@ -471,7 +476,7 @@ def _label_codes(mut p: EncProg, words: List[Float64], cats: PythonObject, conte
 def _object_index(classes: PythonObject) raises -> PythonObject:
     # {c: i for i, c in enumerate(classes)}: a duplicated class keeps its last index.
     var index = Python.dict()
-    for i in range(len(classes)):  # cpu-route: non-str object labels, the explicit label input step
+    for i in range(len(classes)):  # driver-loop: over the fitted classes (one dict entry each)
         py_setitem(index, classes[i], PythonObject(i))
     return index
 
@@ -531,7 +536,7 @@ def _int64_codes(values: PythonObject) raises -> List[Int]:
     var lo = PythonObject(-9223372036854775807 - 1)
     var hi = PythonObject(9223372036854775807)
     var out = List[Int]()
-    for i in range(len(values)):  # cpu-route: Python code objects read once, the explicit label input step
+    for i in range(len(values)):  # list-input: one int() per entry of the caller's Python code list (an integer code array takes _code_buffer)
         var x = py_call(b.int, values[i])
         if Bool(py=x < lo) or Bool(py=hi < x):
             _raise_python(b.OverflowError, "Python int too large to convert to C long")
@@ -539,18 +544,251 @@ def _int64_codes(values: PythonObject) raises -> List[Int]:
     return out^
 
 
-def _take_classes(classes: PythonObject, codes: List[Int]) raises -> PythonObject:
-    # `_user_objects.take(classes, codes)`: [classes[i] for i in codes], a
-    # negative index from the end, IndexError out of range.
+def _class_list(classes: PythonObject, codes: List[Int], context: PythonObject) raises -> PythonObject:
+    """`_classes_array([classes[i] for i in codes])` with no Python call per
+    label: the codes range-checked natively (a negative index from the end,
+    IndexError out of range, as the list indexing did), the result kind
+    (`labels_label_kind` of the taken labels) read from the USED classes,
+    each class read once; int / real classes gathered as int64 / float64
+    words into ONE Array, any other class objects placed by ONE presized
+    list (`p3_decode_list`, new references filled in C)."""
+    var b = _builtins()
     var k = len(classes)
-    var out = Python.list()
-    for t in range(len(codes)):  # cpu-route: one class object per code, the explicit label output step
+    var n = len(codes)
+    if py_type(classes) is not b.list and py_type(classes) is not b.tuple:
+        raise Error("TypeError: class labels require an exact native list or tuple")
+    var is_tuple = py_type(classes) is b.tuple
+    var slots = List[Int64](length=n, fill=0)
+    var used = List[Bool](length=k, fill=False)
+    for t in range(n):  # driver-loop: native range check of the code words (no CPython call)
         var i = codes[t]
         var j = i + k if i < 0 else i
         if j < 0 or j >= k:
-            _raise_python(_builtins().IndexError, "list index out of range")
-        _ = py_call(out.append, classes[j])
-    return out
+            _raise_python(b.IndexError, "list index out of range")
+        slots[t] = Int64(j)
+        used[j] = True
+    var all_int = True
+    var all_real = True
+    var kinds = LabelTypeKinds()
+    for j in range(k):  # driver-loop: over the fitted classes (one kind read each)
+        if used[j]:
+            var kind = kinds.admit_raw(p3_item(classes, j, is_tuple), context)
+            all_int = all_int and kind == 3
+            all_real = all_real and (kind == 3 or kind == 4)
+    _ = kinds^
+    if all_int:
+        var words = List[Int64](length=k, fill=0)
+        for j in range(k):  # driver-loop: over the fitted classes (int(c) of each used one)
+            if used[j]:
+                words[j] = Int64(Int(py=py_call(b.int, classes[j])))
+        var out = admitted_vector(n, "<i8", _out(context))
+        var dest = I64P(unsafe_from_address=labels_address(out))
+        for t in range(n):  # driver-loop: native gather of the class words (no CPython call)
+            dest[t] = words[Int(slots[t])]
+        _ = out  # keep the Python object alive through the native writes above
+        return out
+    if all_real:
+        var reals = List[Float64](length=k, fill=0.0)
+        for j in range(k):  # driver-loop: over the fitted classes (float(c) of each used one)
+            if used[j]:
+                reals[j] = Float64(py=py_call(b.float, classes[j]))
+        var out = admitted_vector(n, "<f8", _out(context))
+        var dest = F64P(unsafe_from_address=labels_address(out))
+        for t in range(n):  # driver-loop: native gather of the class words (no CPython call)
+            dest[t] = reals[Int(slots[t])]
+        _ = out  # keep the Python object alive through the native writes above
+        return out
+    var placed = p3_decode_list(classes, Int(slots.unsafe_ptr()), 8, n)
+    _ = slots  # read by the native fill above
+    return placed
+
+
+# ---------------------------------------------------------------- 'U' label vectors
+# A NumPy str label vector crosses as ONE buffer export (bindings/
+# boundary_read.mojo `text_buffer_view`): its code points are read natively
+# and only the distinct classes (fit) or the first five unseen labels (a
+# refusal) become Python str objects. `tolist()` made one str per row and the
+# lookups then read each back.
+
+comptime _TEXT_LOOKUP_CHUNK = 4096  # labels per lookup task: each task runs thousands of binary searches, so the pool's dispatch cost is amortized whatever the label count
+
+
+def _text_labels(y: PythonObject, context: PythonObject, mut table: StrTable) raises -> Bool:
+    """A one-dimensional, non-empty NumPy 'U' label vector read ONCE into
+    `table` (every label's code points, trailing NULs dropped, which is the
+    str `tolist()` gives). False for anything else (a list, another dtype, an
+    empty or multi-dimensional array), which keeps the label input step."""
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is None or not (py_type(y) is ndarray):
+        return False
+    if String(py=y.dtype.kind) != "U" or Int(py=y.ndim) != 1 or Int(py=y.size) == 0:
+        return False
+    if String(py=y.dtype.byteorder) == ">":
+        return False  # big-endian UCS4: the label input step reads it
+    # The label input step's admission of y, before its read.
+    classical_admit_value(y, context)
+    var view = text_buffer_view(y)
+    if view.kind != BOUNDARY_KIND_UCS4:
+        return False
+    _ = read_text_rows_into(view, table.points, table.starts, table.lengths)
+    view.release()
+    return True
+
+
+def _text_cross(rows: StrTable, i: Int, known: StrTable, j: Int) -> Int:
+    # Code-point order of label i of `rows` against label j of `known`.
+    var la = rows.lengths[i]
+    var lb = known.lengths[j]
+    var sa = rows.starts[i]
+    var sb = known.starts[j]
+    for q in range(min(la, lb)):  # driver-loop: over one label's code points (native)
+        var x = rows.points[sa + q]
+        var y = known.points[sb + q]
+        if x != y:
+            return -1 if x < y else 1
+    if la == lb:
+        return 0
+    return -1 if la < lb else 1
+
+
+def _text_find(rows: StrTable, i: Int, known: StrTable, distinct: List[Int], index: List[Int]) -> Int:
+    # Binary search of the distinct sorted classes; the class index or -1.
+    var lo = 0
+    var hi = len(distinct)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var c = _text_cross(rows, i, known, distinct[mid])
+        if c == 0:
+            return index[mid]
+        if c > 0:
+            lo = mid + 1
+        else:
+            hi = mid
+    return -1
+
+
+def _text_fit(table: StrTable, context: PythonObject) raises -> LabelFit:
+    """`_label_classes` of a 'U' label vector and its codes: the ORDER RULE
+    for str labels (the distinct values in code-point order) by the native
+    stable sort, ONE str per distinct class, each label's int32 code
+    written natively."""
+    var n = len(table.starts)
+    var order = _str_order(table, n)
+    var codes = classical_wrap_array(native_array_zeros("i", n), Python.tuple(n), "<i4", "C", _out(context))
+    var dest = I32P(unsafe_from_address=Int(py=classical_address(codes)))
+    var firsts = List[Int](length=n, fill=0)
+    var k = 0
+    for t in range(n):  # driver-loop: native run scan of the sorted labels (no CPython call)
+        var i = order[t]
+        if t == 0 or table.compare(order[t - 1], i) != 0:
+            firsts[k] = i
+            k += 1
+        dest[i] = Int32(k - 1)
+    _ = codes  # keep the Python object alive through the native writes above
+    var classes = Python.list()
+    var base = Int(table.points.unsafe_ptr())
+    for c in range(k):  # driver-loop: over the distinct classes (one str each)
+        var first = firsts[c]
+        _ = py_call(classes.append, pack_ucs4_str(base + table.starts[first] * 4, table.lengths[first]))
+    _ = table  # the code points are read by the packs above
+    return LabelFit(classes, PythonObject(None), codes)
+
+
+def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context: PythonObject) raises -> PythonObject:
+    """`_str_codes(classes, y.tolist(), as_float)` of a 'U' label vector:
+    (codes Array, the first five unseen labels, the unseen count), each
+    label's int32 (float32 with `as_float`) index among the str classes or
+    -1 (a duplicated class keeps its LAST index, as the dict comprehension
+    does); None when a class is not a str (the label input step answers).
+    The classes are read once each; the labels never become Python objects
+    (only the first five unseen ones, for the refusal text). The lookups run
+    across the host pool."""
+    var k = len(classes)
+    if k == 0:
+        return PythonObject(None)
+    var known = StrTable()
+    for c in range(k):  # driver-loop: over the fitted classes (one code-point copy each)
+        var cls = classes[c]
+        if not _is_str(cls):
+            return PythonObject(None)
+        var points = read_str_points(cls)
+        known.starts.append(len(known.points))
+        known.lengths.append(len(points))
+        for q in range(len(points)):  # driver-loop: over one class's code points (native)
+            known.points.append(points[q])
+    var order = _str_order(known, k)
+    var distinct = List[Int]()
+    var index = List[Int]()
+    for t in range(k):  # driver-loop: over the sorted classes
+        if t == 0 or known.compare(order[t - 1], order[t]) != 0:
+            distinct.append(order[t])
+            index.append(order[t])
+        else:
+            index[len(index) - 1] = max(index[len(index) - 1], order[t])
+    var n = len(table.starts)
+    var codes = classical_wrap_array(native_array_zeros("f" if as_float else "i", n), Python.tuple(n),
+                                     "<f4" if as_float else "<i4", "C", _out(context))
+    var address = Int(py=classical_address(codes))
+    var tp = UnsafePointer(to=table)
+    var kp = UnsafePointer(to=known)
+    var dp = UnsafePointer(to=distinct)
+    var ip = UnsafePointer(to=index)
+    var units = (n + _TEXT_LOOKUP_CHUNK - 1) // _TEXT_LOOKUP_CHUNK
+    def lookup(unit: Int) {imm tp, imm kp, imm dp, imm ip, imm n, imm address, imm as_float}:
+        var stop = min(n, (unit + 1) * _TEXT_LOOKUP_CHUNK)
+        for i in range(unit * _TEXT_LOOKUP_CHUNK, stop):  # driver-loop: labels of one lookup chunk (native, no Python)
+            var found = _text_find(tp[], i, kp[], dp[], ip[])
+            if as_float:
+                F32P(unsafe_from_address=address)[i] = Float32(found)
+            else:
+                I32P(unsafe_from_address=address)[i] = Int32(found)
+    host_parallelize(lookup, units)
+    _ = table  # read by every lookup task above
+    _ = known
+    _ = distinct
+    _ = index
+    var unseen = List[Int](length=5, fill=0)
+    var count = 0
+    for i in range(n):  # driver-loop: native scan for unseen labels (no CPython call)
+        var missing = F32P(unsafe_from_address=address)[i] < 0 if as_float else I32P(unsafe_from_address=address)[i] < 0
+        if missing:
+            if count < 5:
+                unseen[count] = i
+            count += 1
+    _ = codes  # keep the Python object alive through the native reads above
+    var first = Python.list()
+    var base = Int(table.points.unsafe_ptr())
+    for u in range(min(count, 5)):  # driver-loop: over the first five unseen labels
+        var row = unseen[u]
+        _ = py_call(first.append, pack_ucs4_str(base + table.starts[row] * 4, table.lengths[row]))
+    _ = table
+    return Python.tuple(codes, first, count)
+
+
+def _code_buffer(y: PythonObject, context: PythonObject, mut codes: List[Int]) raises -> Bool:
+    """An integer or bool NumPy code array (any rank, C order) read ONCE
+    into `codes` (the `int(v)` of each entry `_int64_codes` read from its
+    `tolist()`). False for anything else, including uint64 storage (whose
+    words past int64 the list path refuses with OverflowError)."""
+    var ndarray = py_get(context, "ndarray")
+    if ndarray is None or not (py_type(y) is ndarray):
+        return False
+    var kind = String(py=y.dtype.kind)
+    if kind != "i" and kind != "u" and kind != "b":
+        return False
+    if String(py=y.dtype.byteorder) == ">" or Int(py=y.ndim) == 0:
+        return False  # big-endian words or a 0-d array: the list path reads (or refuses) them
+    classical_admit_value(y, context)
+    var view = admitted_buffer_view(y)
+    if view.kind == BOUNDARY_KIND_UINT and view.itemsize == 8:
+        return False
+    var n = view.count()
+    var source = I64P(unsafe_from_address=view.as_i64_c())
+    codes = List[Int](length=n, fill=0)
+    if n > 0:
+        unsafe_memcpy(dest=I64P(unsafe_from_address=Int(codes.unsafe_ptr())), src=source, count=n)
+    view.release()
+    return True
 
 
 # ---------------------------------------------------------------- multilabel indicators
@@ -612,7 +850,7 @@ def _multilabel_indicator(y: PythonObject, context: PythonObject) raises -> Opti
     if not Bool(py=py_call(b.isinstance, y, Python.tuple(b.list, b.tuple))) or len(y) == 0:
         return None
     var seq = Python.tuple(b.list, b.tuple)
-    for i in range(len(y)):  # cpu-route: Python list-of-lists y, the explicit label input step
+    for i in range(len(y)):  # list-input: one type check per row of the caller's Python list-of-lists y (no buffer form)
         if not Bool(py=py_call(b.isinstance, y[i], seq)):
             return None
     if len(y[0]) < 2:
@@ -641,6 +879,10 @@ def _fit_labels(fields: PythonObject, mode: PythonObject, y: PythonObject, conte
         if got:
             _set_fit(fields, got.value(), context)
             return
+    var text = StrTable()
+    if _text_labels(y, context, text):
+        _set_fit(fields, _text_fit(text, context), context)
+        return
     _set_fit(fields, _label_classes(mode, _flatten_labels(y, context), context), context)
 
 
@@ -666,6 +908,15 @@ def _le_fit_transform(model: PythonObject, y: PythonObject, context: PythonObjec
             _set_fit(fields, fit, context)
             py_setitem(fields, "classes_", _classes_array(fit.classes, context))
             return fit.codes
+    var text = StrTable()
+    if _text_labels(y, context, text):
+        # A 'U' label vector: the classes and the codes from ONE read.
+        var fields = py_fields(model)
+        py_setitem(fields, "numeric_mode_", _default_mode(context))
+        var fit = _text_fit(text, context)
+        _set_fit(fields, fit, context)
+        py_setitem(fields, "classes_", _classes_array(fit.classes, context))
+        return fit.codes
     _ = _le_fit(model, y, context)
     return _le_transform(model, y, context)
 
@@ -703,6 +954,14 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
             if done:
                 return done.value()
             # an unknown label: the label input step names the refusal
+    if cats is None:
+        var text = StrTable()
+        if _text_labels(y, context, text):
+            var looked = _text_codes(classes, text, False, context)
+            if looked is not None:
+                if Int(py=looked[2]) != 0:
+                    raise Error(String(UNSEEN) + ": " + _text(looked[1]))
+                return looked[0]
     var values = _flatten_labels(y, context)
     var n = len(values)
     if n == 0:
@@ -715,23 +974,29 @@ def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
             if Int(py=native[2]) != 0:
                 raise Error(String(UNSEEN) + ": " + _text(native[1]))
             return native[0]
+        # One borrowed read and one C dict probe per label into the result
+        # (p3_dict_codes, as `_object_codes`), -1 for an unseen label; the
+        # refusal names the first five unseen labels in label order. No
+        # Python `in` / subscript call per label.
         var index = _object_index(classes)
-        var missing = Python.list()
-        for i in range(n):  # cpu-route: non-str object labels, the explicit label input step
-            if not py_contains(index, values[i]):
-                _ = py_call(missing.append, values[i])
-        if len(missing) > 0:
-            var first = Python.list()
-            for i in range(min(5, len(missing))):  # driver-loop: over the first five unseen labels
-                _ = py_call(first.append, missing[i])
-            raise Error(String(UNSEEN) + ": " + _text(first))
         var store = native_array_zeros("i", n)
         var codes = classical_wrap_array(store, Python.tuple(n), "<i4", "C", _out(context))
-        var dest = I32P(unsafe_from_address=Int(py=classical_address(codes)))
-        _ = codes  # keep the Python object alive through the native call above
-        for i in range(n):  # cpu-route: non-str object labels, the explicit label input step
-            dest[i] = Int32(Int(py=index[values[i]]))
-            _ = codes  # keep the Python object alive through the native call above
+        var address = Int(py=classical_address(codes))
+        p3_dict_codes(index, values, address, -1)
+        var dest = I32P(unsafe_from_address=address)
+        var unseen = List[Int](length=5, fill=0)
+        var count = 0
+        for i in range(n):  # driver-loop: native scan for unseen labels (no CPython call)
+            if dest[i] < 0:
+                if count < 5:
+                    unseen[count] = i
+                count += 1
+        _ = codes  # keep the Python object alive through the native reads above
+        if count > 0:
+            var first = Python.list()
+            for u in range(min(count, 5)):  # driver-loop: over the first five unseen labels
+                _ = py_call(first.append, values[unseen[u]])
+            raise Error(String(UNSEEN) + ": " + _text(first))
         return codes
     var entries = _entries(mode, context)
     var p = EncProg()
@@ -771,12 +1036,15 @@ def _le_inverse(model: PythonObject, y: PythonObject, context: PythonObject) rai
         if lb:
             return _le_inverse_device(fields, lb.value(), cats, classes, context)
     # str classes or a Python code list: the codes read once, range-checked
-    var codes = _int64_codes(_flatten_labels(y, context))
+    # (an integer code array by ONE buffer read, a list by the label input step)
+    var codes = List[Int]()
+    if not _code_buffer(y, context, codes):
+        codes = _int64_codes(_flatten_labels(y, context))
     var k = len(classes)
-    for i in range(len(codes)):  # cpu-route: Python code objects read once, the explicit label input step
+    for i in range(len(codes)):  # driver-loop: native range check of the code words (no CPython call)
         if codes[i] < 0 or codes[i] >= k:
             raise Error(UNSEEN)
-    return _classes_array(_take_classes(classes, codes), context)
+    return _class_list(classes, codes, context)
 
 
 # ---------------------------------------------------------------- LabelBinarizer
@@ -862,9 +1130,19 @@ def _lb_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
         if lb:
             # the raw words up, the codes and the dense output on the device
             return _lb_transform_device(mode, lb.value(), cats, K, W, neg, pos, context)
+    var entries = _entries(mode, context)
+    if cats is None:
+        var text = StrTable()
+        if _text_labels(y, context, text):
+            # A 'U' label vector: one buffer read, the float codes natively.
+            var looked = _text_codes(classes, text, True, context)
+            if looked is not None:
+                var tn = len(text.starts)
+                var tp = EncProg()
+                var tc = tp.put(looked[0], tn)
+                return _lb_binarize(tp, tc, tn, K, W, neg, pos, entries, context)
     var values = _flatten_labels(y, context)
     var n = len(values)
-    var entries = _entries(mode, context)
     var p = EncProg()
     var codes = NONE
     var words = List[Float64]()
@@ -877,13 +1155,16 @@ def _lb_transform(model: PythonObject, y: PythonObject, context: PythonObject) r
             codes = _object_codes(p, classes, values, context)
     else:
         codes = _label_codes(p, words, cats, context)[0]
+    return _lb_binarize(p, codes, n, K, W, neg, pos, entries, context)
+
+
+def _lb_binarize(mut p: EncProg, var codes: Int, n: Int, K: Int, W: Int, neg: Int, pos: Int, entries: PythonObject,
+                 context: PythonObject) raises -> PythonObject:
+    # The dense label_binarize output of n float codes (one class: every code absent).
     if K == 1:
-        var none = List[Float64]()
-        for _ in range(n):  # driver-loop: one absent code per label (one class)
-            none.append(-1.0)
-        codes = p.put_floats(none, context)
+        codes = p.put_floats(List[Float64](length=n, fill=-1.0), context)
     var out = p.output(n * W, entries)
-    _stage(p.program, OP_LABEL_BINARIZE, n * W, codes, n, K, 1 if binary else 0, neg, pos, W, out)
+    _stage(p.program, OP_LABEL_BINARIZE, n * W, codes, n, K, 1 if K <= 2 else 0, neg, pos, W, out)
     var ran = p.run(entries, context)
     return _take_i32(ran, out, n, W, context)
 
@@ -957,10 +1238,15 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
     if cats is None:
         # str classes: the codes come back for the explicit object-label decode
         var ran_obj = p.run(entries, context)
-        var idx = List[Int]()
-        for i in range(n):  # driver-loop: over one code per row read back
-            idx.append(Int(_word(ran_obj, codes + i)) if K != 1 else 0)
-        return _classes_array(_take_classes(classes, idx), context)
+        # The code words read natively from the program's float32 result
+        # (its address read once, not one `ran[0][1]` lookup per row).
+        var idx = List[Int](length=n, fill=0)
+        if K != 1:
+            var words = F32P(unsafe_from_address=Int(py=ran_obj[0][1]))
+            for i in range(n):  # driver-loop: native read of one code per row (no CPython call)
+                idx[i] = Int(words[codes + i])
+            _ = ran_obj  # keep the result alive through the native reads above
+        return _class_list(classes, idx, context)
     # numeric classes: each code's class gathered on the device; one class: both codes name it
     var ints = labels_label_kind(classes, context) == "int"
     var table = cats
@@ -968,7 +1254,7 @@ def _lb_inverse(model: PythonObject, y: PythonObject, threshold: PythonObject, c
         var both = List[Float64]()
         var source = F32P(unsafe_from_address=Int(py=classical_address(cats)))
         _ = cats  # keep the Python object alive through the native call above
-        for _ in range(2):  # small-loop(2: the one class named by both codes)
+        for _ in range(2):  # driver-loop: over the two codes that name the one class
             for i in range(Int(py=cats.size)):  # driver-loop: over the fitted category words
                 both.append(Float64(source[i]))
                 _ = cats  # keep the Python object alive through the native call above
@@ -1003,16 +1289,16 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     if nrows == 0:
         return None
     var rows = Python.list()
-    for i in range(nrows):  # cpu-route: the user's Python label rows, the explicit label input step
+    for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
         var row = y[i]
         var t = py_type(row)
         if t is not b.list and t is not b.tuple and t is not b.set and t is not b.frozenset:
             return None
         _ = py_call(rows.append, row if (t is b.list or t is b.tuple) else py_call(b.list, row))
     var total = 0
-    for i in range(nrows):  # cpu-route: the user's Python label rows, the explicit label input step
+    for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
         var row = rows[i]
-        for j in range(len(row)):  # cpu-route: Python label objects, the explicit label input step
+        for j in range(len(row)):  # list-input: one read per label of a ragged Python label set
             if py_type(row[j]) is not b.int:
                 return None
         total += len(row)
@@ -1031,9 +1317,9 @@ def _mlb_flat(y: PythonObject, context: PythonObject) raises -> Optional[MLBFlat
     _ = words  # keep the Python object alive through the native call above
     _ = offs  # keep the Python object alive through the native call above
     var at = 0
-    for i in range(nrows):  # cpu-route: the user's Python label rows, the explicit label input step
+    for i in range(nrows):  # list-input: one read per row of the caller's Python label rows (ragged, no buffer form)
         var row = rows[i]
-        for j in range(len(row)):  # cpu-route: Python label objects, the explicit label input step
+        for j in range(len(row)):  # list-input: one read per label of a ragged Python label set
             var v = row[j]
             var word = table[].PyLong_AsLongLong(v._obj_ptr)
             if word == -1 and cpy.PyErr_Occurred():
@@ -1079,7 +1365,7 @@ def _rows_lists(y: PythonObject) raises -> PythonObject:
     var b = _builtins()
     var out = Python.list()
     var rows = py_call(b.list, y)
-    for i in range(len(rows)):  # cpu-route: Python iterables of labels, the explicit label input step
+    for i in range(len(rows)):  # list-input: one read per row of the caller's ragged label sets (no buffer form)
         _ = py_call(out.append, py_call(b.list, rows[i]))
     return out
 
@@ -1098,7 +1384,7 @@ def _mlb_fit(model: PythonObject, y: PythonObject, context: PythonObject) raises
     elif not _fit_flat(fields, mode, _mlb_flat(y, context), context):
         var rows = _rows_lists(y)
         var flat = Python.list()
-        for i in range(len(rows)):  # cpu-route: Python iterables of labels, the explicit label input step
+        for i in range(len(rows)):  # list-input: one read per row of the caller's ragged label sets (no buffer form)
             _ = py_call(flat.extend, rows[i])
         if len(flat) > 0:
             _set_fit(fields, _label_classes(mode, flat, context), context)
@@ -1139,9 +1425,9 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
     var K = len(classes)
     var flat = Python.list()
     var owner = List[Float64]()
-    for i in range(n):  # cpu-route: Python iterables of labels, the explicit label input step
+    for i in range(n):  # list-input: one read per row of the caller's ragged label sets (no buffer form)
         var row = rows[i]
-        for j in range(len(row)):  # cpu-route: Python label objects, the explicit label input step
+        for j in range(len(row)):  # list-input: one read per label of a ragged Python label set
             _ = py_call(flat.append, row[j])
             owner.append(Float64(i))
     var entries = _entries(fields["numeric_mode_"], context)
@@ -1201,9 +1487,9 @@ def _mlb_inverse_direct(classes: PythonObject, k: Int, yt: PythonObject, context
     var n = Int(py=yt.shape[0])
     var address = Int(py=classical_address(yt))
     var out = Python.list()
-    for i in range(n):  # cpu-route: builds the user list of Python label tuples (object output)
+    for i in range(n):  # list-output: one tuple per row of the public list-of-tuples result
         var picked = Python.list()
-        for j in range(k):  # cpu-route: one native read per indicator cell; Python objects only for the hits
+        for j in range(k):  # list-output: one native read per indicator cell; Python objects only for the hits
             var at = i * k + j
             var hit: Bool
             if code == 1:
@@ -1233,10 +1519,10 @@ def _mlb_inverse(model: PythonObject, yt: PythonObject, context: PythonObject) r
         return direct
     var rows = py_call(yt.tolist) if Bool(py=py_call(b.hasattr, yt, "tolist")) else py_call(b.list, yt)
     var out = Python.list()
-    for i in range(len(rows)):  # cpu-route: builds the user list of Python label tuples (object output)
+    for i in range(len(rows)):  # list-output: one tuple per row of the public list-of-tuples result
         var row = py_call(b.list, rows[i])
         var picked = Python.list()
-        for j in range(len(row)):  # cpu-route: builds the user list of Python label tuples (object output)
+        for j in range(len(row)):  # list-output: one tuple per row of the public list-of-tuples result
             if _truth(row[j]):
                 if j >= k:
                     _raise_python(b.IndexError, "list index out of range")
