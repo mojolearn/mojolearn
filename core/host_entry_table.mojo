@@ -70,8 +70,8 @@ def host_table_publish[family: Int](key: HostEntryKey, publisher: Int,
         comptime NAME = "MojolearnEntriesForestHostIdenticalCPUV1"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
-    comptime NAME = "MojolearnEntriesForestHostFastCPUV1"
-    entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+    comptime FAST_NAME = "MojolearnEntriesForestHostFastCPUV1"
+    entry_table_publish[FAST_NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
 
 
 def host_table_entry[family: Int](key: HostEntryKey, index: Int,
@@ -81,5 +81,5 @@ def host_table_entry[family: Int](key: HostEntryKey, index: Int,
     if key.mode == 1:
         comptime NAME = "MojolearnEntriesForestHostIdenticalCPUV1"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
-    comptime NAME = "MojolearnEntriesForestHostFastCPUV1"
-    return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
+    comptime FAST_NAME = "MojolearnEntriesForestHostFastCPUV1"
+    return entry_table_read[FAST_NAME](key.mode, key.vendor, index, schema, operations)
