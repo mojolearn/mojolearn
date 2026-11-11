@@ -348,18 +348,6 @@ class IVFIndex(NumericModeMixin):
         build's list vectors are exported first, so the copy carries them."""
         return _NATIVE_QUERY(self, "getstate", (), _QUERY_CONTEXT)
 
-    @staticmethod
-    def _search_filter(filter, n):
-        if filter is None:
-            return None
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_ivf_impl')
-        f = np.asarray(filter)
-        if f.shape != (n,) or f.dtype != np.bool_:
-            raise ValueError(f"mojolearn IVFIndex: filter must be a boolean array of shape ({n},), "
-                             "one flag per indexed row")
-        return np.ascontiguousarray(f.astype(np.int32))
-
     # filter: cuVS's sample filter, applied to the merged candidates of the
     # probed lists before any distance (DEVIATION 5863); a short query is
     # short-filled in Mojo (their kOutOfBoundsRecord, DEVIATION 1794 lifted).
