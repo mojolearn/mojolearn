@@ -17,7 +17,7 @@ def test_validation_precedes_session_mutation_and_uses_shared_admission():
     source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
     restore = source.split('def byte_lm_load_state(')[1].split('def byte_lm_train_step(')[0]
     assert restore.index('_validated_state(') < restore.index('_forget(') < restore.index('"_state", replacement')
-    assert 'neural_descriptor_execute(provider, 4,' in restore
+    assert '_session_call(session, 4,' in restore
     admission = source.split('def _validated_state(')[1].split('def byte_lm_load_state(')[0]
     assert admission.index('classical_admit_value(source, context)') < admission.index('_shape_of(source)')
     assert 'training_f32_owned' in admission and 'training_i32_owned' in admission
@@ -59,7 +59,7 @@ def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
 def test_attention_report_uses_one_native_status_snapshot():
     source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
     report = source.split('def _attention_stage_report(')[1].split('def byte_lm_consume(')[0]
-    assert 'neural_descriptor_execute(provider, 11,' in report
+    assert '_session_call(fields["_native_session"], 11,' in report
     assert 'var info = List[Int]()' in report
     owner = (ROOT / 'training/byte_lm_native_status.mojo').read_text()
     assert owner.count('byte_attention_eager_cells(owner.trainer.value())') == 1

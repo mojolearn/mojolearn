@@ -51,8 +51,13 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
     mode=door.split('def _mode(')[1].split('def _has(')[0]
     assert 'backend["_DEFAULT_MODE"]' in mode
     assert 'py_call_typed' not in mode
-    assert 'neural_descriptor_handle(provider, factory, session)' in door
-    assert 'neural_descriptor_reuse' in door
+    # lane byte-lm-sessions-native: the resident session is a native registry
+    # handle owned by a thin native object; no Python provider or handle factory
+    assert 'neural_descriptor' not in door
+    assert 'byte_lm_session_owner_new(_key(fields))' in door
+    sessions=(ROOT/'core/byte_lm_entry_table_sessions.mojo').read_text()
+    for forbidden in ('PythonObject','std.python','bindings.','providers.'):
+        assert forbidden not in sessions
     table=(ROOT/'training/byte_lm_native_dispatch.mojo').read_text()
     for forbidden in ('PythonObject','std.python','bindings.','providers.'):
         assert forbidden not in table

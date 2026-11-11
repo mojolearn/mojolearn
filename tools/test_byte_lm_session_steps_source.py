@@ -47,7 +47,9 @@ def test_both_columns_take_n_steps_through_operation_1():
 
 def test_binding_admits_once_and_runs_every_step_in_one_call():
     native = _read('bindings/byte_lm_trainer_native.mojo')
-    assert '"mojolearn.training.byte_lm.v1", 13)' in native
+    # lane byte-lm-sessions-native: the resident session runs through the
+    # image's native session entry (core/byte_lm_entry_table_sessions.mojo)
+    assert 'byte_lm_resident_run(key, handle, operation,' in native
     entry = native.split('def byte_lm_train_steps(')[1].split('def _logits_input(')[0]
     assert entry.count('py_call(lock.acquire)') == 1
     assert entry.count('byte_state_admit(') == 1 and entry.count('_admitted_shape(') == 1
@@ -62,7 +64,7 @@ def test_binding_admits_once_and_runs_every_step_in_one_call():
 def test_step_descriptors_are_native_words():
     native = _read('bindings/byte_lm_trainer_native.mojo')
     resident = native.split('def _run_resident(')[1].split('def _run_stateless(')[0]
-    assert '_native_execute_words(fields, binding, provider, 1, a,' in resident
+    assert '_native_execute(fields, 1, a,' in resident
     assert 'var a = List[Int]()' in resident
 
 
