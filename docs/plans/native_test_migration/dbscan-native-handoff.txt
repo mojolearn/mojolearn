@@ -63,3 +63,39 @@ RUN OWED: checks/native_tests/dbscan_contract.mojo and dbscan_options.mojo,
   No lane compile/run/box; static source/JSON/TOML/whitespace checks only.
   No Python/product/kernel/default changes or deletions. Actual numerical
   references/fixtures and resident lease coverage are separate pending work.
+
+Third chunk: 17 actual CPU +17 ordered GPU numerical graphs and3 GPU
+  reference ownership graphs. Dependencies6b3832cfc7/a446091b7a/db68d9d7db/
+  5205c33160. Source-only, all uncompiled/unrun. Pure114 plus actual17 =CPU131;
+  actual17 plus ownership3 =GPU20. Standard identical flags; no new A/B define.
+
+  Original20x2 grid including brute/RBC, eps1/3, duplicates40x2, L1,
+  uniform weights, empty core; original512x5 seed7 and400x4 seed0 inputs.
+  Original native weighted8x2 two-cluster example: weights2 and1.5, plus
+  duplicated9x2, both brute/RBC. Added negative-weight inhibition and native
+  precomputed grid. Original query shapes/order, exact radius, nextafter,
+  tie, far, reversed and twenty individual queries preserved.
+  Actual fit -> count -> gather -> borrowed query and GPU resident query;
+  no Python provider/controller. Empty-core fill uses the same native helper.
+
+  Independent NumPy Float64 radius graph and weighted degree; core graph
+  connectivity, permissible border components, exact noise and nearest-core
+  original-index tie. Label numbers may permute; core component map must be
+  injective. The512x5 oracle admits all valid memberships for its4 ambiguous
+  border rows. Source and reference158 binary artifacts hashed; no product
+  outputs used as expected values. Every copied component/index/label and
+  query output checked with guarded native buffers; no input/weight mutation.
+
+  GPU ownership3 covers live query after host storage poisoning, two native
+  leases retaining original buffers after registry release, missing lookup
+  refusal, and replacement independence. Native metadata overlap only;
+  submissions ordered. This does not clear the recorded MAX concurrency bug.
+  Flat typed buffers, explicit raw-address pins and take-once cleanup.
+RUN OWED: dbscan_native_cpu.mojo, dbscan_native_gpu.mojo,
+  dbscan_ownership_gpu.mojo; importable corresponding *_suite.run_checks().
+  -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I .; CPU adds-D MOJOLEARN_COLUMN_CPU=1.
+  JSON/TOML/generator AST/artifact hash/source/whitespace checks only.
+  No Python assertions removed before native passes. Public dtype/shape,
+  float64 admission, core array packing, empty branch, save/load, prefit and
+  protocol/nonfinite/refusal tests remain meaningful Python seams. Exact
+  post-pass numerical cleanup is pending, not silently treated as complete.
