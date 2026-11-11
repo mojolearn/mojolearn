@@ -6,6 +6,7 @@ from std.collections import Dict
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, shared_dict_watch, shared_dict_epoch
@@ -736,7 +737,7 @@ def neural_descriptor_provider_pins(value: Int, index: Int) abi("C") -> Int:
     if value == 0 or index < -1 or index >= 2:
         return -1
     try:
-        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var owner = borrowed_native_owner(value)
         var native = owner.downcast_value_ptr[NeuralDescriptorProvider]()
         if index == -1:
             # Mojolearn descriptor capsules borrow native table/name storage;
@@ -762,7 +763,7 @@ def native_descriptor_resource_pins(value: Int, index: Int) abi("C") -> Int:
     if value == 0 or index < -1 or index >= 1:
         return -1
     try:
-        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var owner = borrowed_native_owner(value)
         var native = owner.downcast_value_ptr[NativeDescriptorResource]()
         var result = 1
         if index == 0:

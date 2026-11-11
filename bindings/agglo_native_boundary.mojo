@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Agglomerative provider, buffer and retained-reference unpack/pack boundary."""
 from std.python import Python, PythonObject
+from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr, ExternalFunction
 from bindings.py_balanced import py_get, py_setitem, py_type
 from bindings.native_loaded_module import native_interpreter_finalizing
@@ -228,7 +229,7 @@ def agglo_reference_owner_pins(value: Int, index: Int) abi("C") -> Int:
     if value == 0 or index < -1 or index >= 3:
         return -1
     try:
-        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var owner = borrowed_native_owner(value)
         var native = owner.downcast_value_ptr[AggloReferenceOwner]()
         var result = 3
         if index == 0:
@@ -247,7 +248,7 @@ def agglo_holder_pins(value: Int, index: Int) abi("C") -> Int:
     if value == 0 or index < -1 or index >= 1:
         return -1
     try:
-        var owner = PythonObject(from_borrowed=PyObjectPtr(unsafe_from_address=value))
+        var owner = borrowed_native_owner(value)
         var native = owner.downcast_value_ptr[AggloHolder]()
         var result = 1 if index == -1 else Int(native[].resident._obj_ptr)
         _ = owner
