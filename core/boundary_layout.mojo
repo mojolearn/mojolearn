@@ -416,7 +416,7 @@ def text_rows(layout: BufferLayout, kind: Int) raises -> TextRows:
     var points = List[UInt32](length=total, fill=0)
     var points_address = Int(points.unsafe_ptr())
     var starts_address = Int(starts.unsafe_ptr())
-    def copy(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address}:
+    def fill_points(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address}:
         var lens = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=lengths_address)
         var firsts = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=starts_address)
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=points_address)
@@ -432,7 +432,7 @@ def text_rows(layout: BufferLayout, kind: Int) raises -> TextRows:
                 var narrow = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at)
                 for k in range(lens[flat]):  # driver-loop: over one element's bytes (native)
                     dst[first + k] = UInt32(narrow[k])
-    host_parallelize(copy, units)
+    host_parallelize(fill_points, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
     _ = lengths  # written and read by the tasks above through their addresses
     _ = starts

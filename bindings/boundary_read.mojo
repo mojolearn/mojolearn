@@ -51,6 +51,7 @@ from core.shared_slot import SharedSlot
 from core.boundary_layout import (
     BufferLayout, buffer_layout_from_words, layout_is_c_contiguous, format_kind, format_matches,
     gather_f32, gather_f64, gather_i64, PY_BUFFER_WORDS, PyBUF_RECORDS_RO, PyBUF_RECORDS, PyBUF_FORMAT,
+    text_format_kind, text_rows, TextRows,
 )
 
 
@@ -280,7 +281,9 @@ struct BufferView(Movable):
     var kind: Int
     var converted: List[UInt8]
 
-    def __init__(out self, obj: PythonObject, flags: Int) raises:
+    def __init__(out self, obj: PythonObject, flags: Int, text: Bool = False) raises:
+        # `text`: a fixed-width text format ('U' / 'S') is admitted with the
+        # text kinds; without it the numeric admission refuses it as before.
         var words = List[Int](length=PY_BUFFER_WORDS, fill=0)
         var words_ptr = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
         if cpython_table()[].PyObject_GetBuffer(obj._obj_ptr, words_ptr, Int32(flags)) != 0:
@@ -293,7 +296,8 @@ struct BufferView(Movable):
             if words[5] != 0:
                 format = unsafe_string_from_utf8_cstr(
                     Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=words[5]))
-            kind = format_kind(format, layout.itemsize)
+            var text_kind = text_format_kind(format) if text else 0
+            kind = text_kind if text_kind != 0 else format_kind(format, layout.itemsize)
         except problem:
             cpython_table()[].PyBuffer_Release(words_ptr)
             raise problem
@@ -391,6 +395,54 @@ def admitted_buffer_view(obj: PythonObject, writable: Bool = False) raises -> Bu
     reads, never a buffer hook)."""
     admit_native_buffer_exporter(obj)
     return BufferView(obj, PyBUF_RECORDS if writable else PyBUF_RECORDS_RO)
+
+
+def text_buffer_view(obj: PythonObject) raises -> BufferView:
+    """`admitted_buffer_view` that also admits fixed-width text storage
+    (NumPy 'U' / 'S'; `view.kind` is `BOUNDARY_KIND_UCS4` /
+    `BOUNDARY_KIND_BYTES`, read with `read_text_rows`). A numeric buffer
+    comes back as `admitted_buffer_view` gives it. CPython calls: the
+    admission's identity reads, PyObject_GetBuffer, PyBuffer_Release."""
+    admit_native_buffer_exporter(obj)
+    return BufferView(obj, PyBUF_RECORDS_RO, True)
+
+
+def read_text_rows(view: BufferView) raises -> TextRows:
+    """Every element of a text view as code units (`core.boundary_layout.
+    text_rows`): no CPython call at all, one native pass pair over the
+    buffer whatever its strides."""
+    return text_rows(view.layout, view.kind)
+
+
+def read_str_points(obj: PythonObject) raises -> List[UInt32]:
+    """The code points of an exact `str` (lone surrogates included, as
+    PyUnicode_ReadChar reads them): CPython calls PyUnicode_GetLength +
+    PyUnicode_AsUCS4Copy + PyMem_Free, whatever the length; the copy into
+    the returned list is native."""
+    ref cpy = Python().cpython()
+    var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(obj._obj_ptr)
+    if count < 0:
+        raise _pending_error()
+    var result = List[UInt32](length=count, fill=0)
+    if count == 0:
+        return result^
+    var address = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")(obj._obj_ptr)
+    if address == 0:
+        raise _pending_error()
+    unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(result.unsafe_ptr())),
+        src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), count=count * 4)
+    cpy.lib.get_function[NoneType]("PyMem_Free")(address)
+    _ = obj
+    return result^
+
+
+def pack_ucs4_str(points_address: Int, count: Int) raises -> PythonObject:
+    """ONE new `str` from `count` UCS4 code points at `points_address` (PyUnicode_FromKindAndData,
+    which picks the narrowest storage, as `str()` of a NumPy 'U' element does)."""
+    var raw = cpython_table()[].PyUnicode_FromKindAndData(Int32(4), points_address, count)
+    if not raw:
+        raise _pending_error()
+    return PythonObject(from_owned=raw)
 
 
 # ------------------------------------------------------------ results
