@@ -24,6 +24,7 @@ from bindings.native_loaded_module import native_loaded_module
 from std.math import isfinite
 from core.native_array_layout import NativeArrayLayout
 from std.memory import bitcast, memcpy
+from core.native_label_codes import NativeLabelCodes
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
@@ -668,7 +669,60 @@ def _flat_list_labels(y: PythonObject, context: PythonObject) raises -> Optional
     return _native_labels(array, kind == LABELS_LIST_BOOL, context)
 
 
-def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+trait _TextCodeStorage(Copyable, Movable):
+    def __init__(out self, count: Int, context: PythonObject) raises: ...
+    @staticmethod
+    def from_values(var values: List[Int32], context: PythonObject) raises -> Self: ...
+    def address(self) raises -> Int: ...
+
+
+struct _PythonTextCodes(Copyable, Movable, _TextCodeStorage):
+    var values: PythonObject
+
+    def __init__(out self, count: Int, context: PythonObject) raises:
+        self.values = admitted_vector(count, "<i4", context)
+
+    @staticmethod
+    def from_values(var values: List[Int32], context: PythonObject) raises -> Self:
+        var result = Self(len(values), context)
+        memcpy(dest=_I32P(unsafe_from_address=result.address()), src=values.unsafe_ptr(), count=len(values))
+        _ = values
+        return result^
+
+    def address(self) raises -> Int:
+        return labels_address(self.values)
+
+
+struct _NativeTextCodes(Copyable, Movable, _TextCodeStorage):
+    var values: NativeLabelCodes
+
+    def __init__(out self, count: Int, context: PythonObject) raises:
+        self.values = NativeLabelCodes(count)
+
+    @staticmethod
+    def from_values(var values: List[Int32], context: PythonObject) raises -> Self:
+        var result = Self(0, context)
+        result.values = NativeLabelCodes(values^)
+        return result^
+
+    def address(self) raises -> Int:
+        return self.values.address()
+
+
+@fieldwise_init
+struct _TextLabels[S: _TextCodeStorage](Copyable, Movable):
+    var classes: PythonObject
+    var codes: S
+    var count: Int
+
+
+@fieldwise_init
+struct NativeTextLabels(Movable):
+    var classes: PythonObject
+    var codes: NativeLabelCodes
+
+
+def _text_buffer_labels_into[S: _TextCodeStorage](y: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """An exact ndarray of native unicode ('<U', rank >= 1, nonempty)
     encoded from its buffer: each element's UCS4 code points are read in C
     order (trailing NULs dropped, as `tolist()` drops them), the distinct
@@ -719,8 +773,8 @@ def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Option
     _ = y  # the caller's ndarray owns the buffer read above
     var order = _sorted(table, n)
     var classes = Python.list()
-    var codes = admitted_vector(n, "<i4", context)
-    var out = _I32P(unsafe_from_address=labels_address(codes))
+    var codes = S(n, context)
+    var out = _I32P(unsafe_from_address=codes.address())
     var item = ndarray.item
     var current = -1
     for t in range(n):  # driver-loop: over the sorted labels; a Python str only per distinct class
@@ -730,10 +784,10 @@ def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Option
             _ = py_call(classes.append, py_call(item, y, PythonObject(i)))
         out[i] = Int32(current)
     _ = codes  # keep the Python object alive through the native writes above
-    return ClassicalLabels(classes, codes, n)
+    return _TextLabels[S](classes, codes^, n)
 
 
-def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+def _text_list_labels_into[S: _TextCodeStorage](flat: PythonObject, context: PythonObject) raises -> Optional[_TextLabels[S]]:
     """A flat list of admitted str labels (exact str or NumPy's str scalar,
     the only text kinds the flatten admits) encoded by the native str-label
     reader: code points read once per label through the C API, ordered by
@@ -752,19 +806,17 @@ def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optio
     if fast.status == P3_TEXT_NOT_STR:
         return None
     if fast.status == P3_TEXT_OK:
-        var fast_codes = admitted_vector(n, "<i4", context)
-        var target = _I32P(unsafe_from_address=labels_address(fast_codes))
-        for i in range(n):  # driver-loop: native copy of the n codes
-            target[i] = fast.codes[i]
-        _ = fast_codes  # keep the Python object alive through the native writes above
-        return ClassicalLabels(p3_text_classes(flat, fast.first), fast_codes, n)
+        var codes = S.from_values(fast.codes^, context)
+        var classes = p3_text_classes(flat, fast.first)
+        return _TextLabels[S](classes, codes^, n)
+
     var table = StrTable()
     if not _read(flat, table):
         return None
     var order = _sorted(table, n)
     var classes = Python.list()
-    var codes = admitted_vector(n, "<i4", context)
-    var out = _I32P(unsafe_from_address=labels_address(codes))
+    var codes = S(n, context)
+    var out = _I32P(unsafe_from_address=codes.address())
     var current = -1
     for t in range(n):  # driver-loop: over the sorted labels
         var i = order[t]
@@ -773,7 +825,40 @@ def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optio
             _ = py_call(classes.append, flat[i])
         out[i] = Int32(current)
     _ = codes  # keep the Python object alive through the native writes above
-    return ClassicalLabels(classes, codes, n)
+    return _TextLabels[S](classes, codes^, n)
+
+
+
+def _text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+    var found = _text_buffer_labels_into[_PythonTextCodes](y, context)
+    if not found:
+        return None
+    var result = found.take()
+    return ClassicalLabels(result.classes, result.codes.values, result.count)
+
+
+def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:
+    var found = _text_list_labels_into[_PythonTextCodes](flat, context)
+    if not found:
+        return None
+    var result = found.take()
+    return ClassicalLabels(result.classes, result.codes.values, result.count)
+
+
+def native_text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Optional[NativeTextLabels]:
+    var found = _text_buffer_labels_into[_NativeTextCodes](y, context)
+    if not found:
+        return None
+    var result = found.take()
+    return NativeTextLabels(result.classes, result.codes.values^)
+
+
+def native_text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optional[NativeTextLabels]:
+    var found = _text_list_labels_into[_NativeTextCodes](flat, context)
+    if not found:
+        return None
+    var result = found.take()
+    return NativeTextLabels(result.classes, result.codes.values^)
 
 
 def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:

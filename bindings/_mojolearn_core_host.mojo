@@ -181,6 +181,7 @@ from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
 # (bindings/classical_labels.mojo) runs the same host body in-process on a
 # CPU-only install instead of calling back into this module through Python.
 from bindings.labels_host_ops import unique_inverse_binding, prepare_targets_binding
+from core.labels_native_host_provider import LabelsHostNativeAPI
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -1118,10 +1119,19 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_core_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime LABELS_HOST_NATIVE_API = SharedSlot[LabelsHostNativeAPI, "MojolearnLabelsHostNativeV2"]
+
+
+def labels_native_api_v2_binding() raises -> PythonObject:
+    var api = LABELS_HOST_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_core_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
+        module.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
         module.def_function[core_host_vendor_binding]("core_host_vendor")
         module.def_function[core_host_column_binding]("core_host_column")
