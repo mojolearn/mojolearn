@@ -36,7 +36,7 @@ from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from neighbors.neighbors_graph_run import (
-    XnOpRequest, xn_i32_word, xn_rows_match_check, xn_relabel_request, xn_relabel_decode, xn_fill_request,
+    XnOpRequest, xn_rows_match_check, xn_relabel_request, xn_relabel_decode, xn_fill_request,
     xn_iota_request, xn_graph_square_check, xn_graph_triples_check, xn_graph_weights_check,
     xn_graph_merge_triples, xn_graph_merged_copy, xn_graph_dense_counts, xn_graph_dense_fill, xn_graph_csr_check,
     xn_unit_length_check, xn_unit_request, xn_unit_check, xn_unit_missing, xn_pagerank_csr_request,
