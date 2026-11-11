@@ -12,11 +12,10 @@ from std.python.bindings import PythonModuleBuilder
 from hierarchy.cluster_descriptor_host import HIERARCHY_CLUSTER_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
-from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_cluster.entries import run_entry
-from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
+from x_cluster.host.execution import cluster_host_execute
+from x_cluster.host.host_ops import X_CLUSTER_HOST_SABOTAGE
 from x_cluster.out import ClusterOut
 from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 
@@ -33,15 +32,16 @@ def call_binding(
     var w = Int(py=which)
     var nx = Int(py=x_len)
     var na = Int(py=a_len)
-    var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
-    var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
+    var source = Int(py=x_addr) if nx > 0 else 0
+    var auxiliary = Int(py=a_addr) if na > 0 else 0
     var ints = py_ints(ip)
     var floats = py_floats(fp)
-    var res = ClusterOut()
+    var result = ClusterOut()
     with GILReleased(Python()):
-        var ops = HostOps()
-        res = run_entry(ops, w, x, a, ints, floats)
-    return cluster_out_to_py(res)
+        result = cluster_host_execute(w, source, nx, auxiliary, na, ints, floats)
+    _ = ints^
+    _ = floats^
+    return cluster_out_to_py(result)
 
 
 def x_cluster_host_numeric_mode_binding() raises -> PythonObject:
