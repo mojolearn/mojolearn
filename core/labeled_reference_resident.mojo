@@ -33,7 +33,7 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
     dbscan_metric_threshold,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 #: The estimators binding's ONE process-lifetime DeviceContext slot (the
 #: same name `bindings/_mojolearn_estimators.mojo` uses).
@@ -107,13 +107,15 @@ struct ResidentLabeledReference(Movable):
 struct LabeledReferenceRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentLabeledReference]
     var next_id: Int
+    var metadata_lock: List[Int64]
 
     def __init__(out self):
         self.entries = Dict[Int, ResidentLabeledReference]()
         self.next_id = 1
+        self.metadata_lock = List[Int64](length=1, fill=0)
 
 
-comptime LABELED_REFERENCE_REGISTRY = SharedSlot[LabeledReferenceRegistry, ( "MojolearnLabeledReferenceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnLabeledReferenceFastV1" )]
+comptime LABELED_REFERENCE_REGISTRY = SharedSlot[LabeledReferenceRegistry, ( "MojolearnLabeledReferenceIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnLabeledReferenceFastV2" ), 2]
 
 
 def labeled_reference_prepare(
@@ -127,21 +129,65 @@ def labeled_reference_prepare(
     """Upload a reference set once; the handle every later predict names."""
     var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
     var entry = ResidentLabeledReference(refs_ptr, n_refs, keys_ptr, labels_ptr, n_features, metric)
-    if state[].next_id == 9223372036854775807:
-        raise Error("resident labeled reference handle space exhausted")
-    var handle = state[].next_id
-    state[].next_id += 1
-    state[].entries[handle] = entry^
-    return handle
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if state[].next_id == 9223372036854775807:
+            raise Error("resident labeled reference handle space exhausted")
+        var handle = state[].next_id
+        state[].next_id += 1
+        state[].entries[handle] = entry^
+        return handle
+    finally:
+        shared_slot_unlock(lock)
 
 
 def labeled_reference_release(handle: Int) raises:
     """Drop the device copy; a released handle is refused by every later call."""
     var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident labeled reference handle")
-    var released = state[].entries.pop(handle)
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var released: Optional[ResidentLabeledReference] = None
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident labeled reference handle")
+        released = state[].entries.pop(handle)
+    finally:
+        shared_slot_unlock(lock)
+    # Device frees and the existing context drain run after unlocking.
     _ = released^
+
+
+@fieldwise_init
+struct LabeledReferenceLease(Movable):
+    """Owning references to one registry entry; no tensor bytes are copied."""
+    var ctx: DeviceContext
+    var refs: DeviceBuffer[DType.float32]
+    var keys: DeviceBuffer[DType.int32]
+    var labels: DeviceBuffer[DType.int32]
+    var n_refs: Int
+    var n_features: Int
+    var metric: Int
+
+    def __deinit__(deinit self):
+        _ = self.labels^
+        _ = self.keys^
+        _ = self.refs^
+        _ = self.ctx^
+
+
+def labeled_reference_lease(handle: Int) raises -> LabeledReferenceLease:
+    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident labeled reference handle")
+        ref entry = state[].entries[handle]
+        return LabeledReferenceLease(entry.ctx.copy(), entry.refs.copy(), entry.keys.copy(), entry.labels.copy(),
+                                      entry.n_refs, entry.n_features, entry.metric)
+    finally:
+        shared_slot_unlock(lock)
 
 
 def labeled_reference_predict_resident(
@@ -156,10 +202,7 @@ def labeled_reference_predict_resident(
 ) raises:
     """`labeled_reference_predict` over a resident reference set: the same
     refusals, the same kernel and launch chunks; only the queries cross."""
-    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident labeled reference handle")
-    ref entry = state[].entries[handle]
+    var entry = labeled_reference_lease(handle)
     if entry.n_features != n_features or entry.metric != metric:
         raise Error(
             "labeled_reference_predict_resident: the handle was prepared with "
@@ -247,3 +290,4 @@ def labeled_reference_predict_resident(
     _ = queries^
     _ = out_labels^
     _ = out_refs^
+    _ = entry^  # Retain all registry-owned handles through the final download.
