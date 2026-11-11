@@ -63,3 +63,10 @@ struct KDEDeviceKernels(KDENativeKernels):
         var total = kde_score_samples_resident(r.handle, query, r.rows, r.features,
             bandwidth, r.kernel, r.metric, dst, want_total=r.want_total, status_addr=r.status)
         return Float64(total)
+
+
+from core.shared_slot import SharedSlot
+from core.kde_native_api import KDEProviderAPI
+
+comptime _KDE_DEVICE_NAME = "MojolearnKDEDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKDEDeviceFastV1"
+comptime KDE_DEVICE_API = SharedSlot[KDEProviderAPI[KDEDeviceKernels], _KDE_DEVICE_NAME]

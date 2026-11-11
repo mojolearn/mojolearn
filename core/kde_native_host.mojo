@@ -42,3 +42,10 @@ struct KDEHostKernels(KDENativeKernels):
     @staticmethod
     def resident(request: KDEResidentQuery) raises -> Float64:
         raise Error("KDE host provider does not retain a device fit")
+
+
+from core.shared_slot import SharedSlot
+from core.kde_native_api import KDEProviderAPI
+
+comptime _KDE_HOST_NAME = "MojolearnKDEHostIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKDEHostFastV1"
+comptime KDE_HOST_API = SharedSlot[KDEProviderAPI[KDEHostKernels], _KDE_HOST_NAME]
