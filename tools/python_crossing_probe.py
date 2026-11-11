@@ -214,7 +214,10 @@ def run_case(case):
         x = random.normal(size=(rows, 4)).astype(np.float32)
         y = (x[:, 0] + x[:, 1] * np.float32(0.3)).astype(np.float32)
         if name in CLASSIFIERS:
-            y = (y > 0).astype(np.int64)
+            # --label-dtype (default int64): another integer width exercises
+            # the label reads that are not the contiguous int64 fast path.
+            y = (y > 0).astype(os.environ.get("MOJOLEARN_PROBE_LABEL_DTYPE", "int64"))
+            result["label_dtype"] = str(y.dtype)
         result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
         result["parameters"] = model_parameters(name)
         model = getattr(ml, name)(**result["parameters"])
@@ -413,6 +416,8 @@ def main(argv=None):
     parser.add_argument("--label", required=True, help="Source/wheel identifier for before/after attribution")
     parser.add_argument("--before", type=Path, help="Previous observation summary.json for count comparison")
     parser.add_argument("--seconds", type=float, default=600, help="Per-case execution deadline, never a speed score")
+    parser.add_argument("--label-dtype", default="int64",
+                        help="NumPy integer dtype of classifier targets (e.g. int16)")
     parser.add_argument("--cpython-count", choices=("off", "perf"), default="off",
                         help="perf: count CPython C-API calls per public operation with uprobes (Linux, root)")
     args = parser.parse_args(argv)
@@ -420,6 +425,7 @@ def main(argv=None):
         parser.error("--seconds must be finite and positive")
     if any(rows < 8 for rows in args.rows):
         parser.error("each case needs at least eight rows")
+    os.environ["MOJOLEARN_PROBE_LABEL_DTYPE"] = args.label_dtype
     args.evidence = args.evidence.resolve()
     args.evidence.mkdir(parents=True, exist_ok=True)
     cases = [(name, args.backend, rows, str(args.evidence))
