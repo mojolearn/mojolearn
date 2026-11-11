@@ -36,15 +36,15 @@ from core.kmeans_variants_api import (
     MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VARIANTS_CAP_DEVSCAN,
 )
 from core.kmeans_variants_plan import MiniBatchStreamState
+from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest, CentroidFitResultSlot
+from bindings.cluster_centroid_fit_boundary import centroid_fit_connection, CentroidPackedResult
 from bindings.kmeans_variants_boundary import (
     variants_connection, variants_span, VariantsAuxiliaryPins, VariantsPackedResult,
 )
 from providers.python.estimator_binding_pyapi import _estimator_mode_word
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-comptime _E_MEANSHIFT = 5
 comptime _E_OPTICS = 6
-comptime _E_AFFINITY = 7
 # OPTICS metric codes (x_cluster/optics.mojo)
 comptime _OPTICS_PRECOMPUTED = 5
 
@@ -468,22 +468,27 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
     # ORDER MATCHES x_cluster/entries.mojo::meanshift_entry: n, d, n_seeds,
     # cluster_all, max_iter, bin_seeding, min_bin_freq.
     var n_seeds = 0 if seeds is None else Int(py=seeds.shape[0])
-    var cluster_all = _flag(_truthy(_attr(model, "cluster_all")))
+    var cluster_all = _truthy(_attr(model, "cluster_all"))
     var max_iter = _int(_attr(model, "max_iter"))
-    var bin_seeding = _flag(_truthy(_attr(model, "bin_seeding")))
-    var ints = Python.list(PythonObject(n), PythonObject(d), PythonObject(n_seeds), cluster_all, max_iter,
-                           bin_seeding, _int(_attr(model, "min_bin_freq")))
-    var result = xc_call_floats(binding, _E_MEANSHIFT, x, seeds, ints, Python.list(bw), context)
-    _ = x^
-    _ = seeds^
-    var f = result[0]
-    var i = result[1]
-    var s = result[2]
-    var kc = Int(py=_int(s[2]))
-    _set(model, "cluster_centers_", _xc_array(f[0], Python.tuple(kc, d), "<f4", "f", context))
-    _set(model, "labels_", _xc_array(i[0], Python.tuple(n), "<i4", "i", context))
-    _set(model, "bandwidth_", _float(s[0]))
-    _set(model, "n_iter_", _int(s[1]))
+    var bin_seeding = _truthy(_attr(model, "bin_seeding"))
+    var min_bin_freq = _int(_attr(model, "min_bin_freq"))
+    var connection = centroid_fit_connection(binding)
+    var request = MeanShiftFitRequest(variants_span(x), variants_span(seeds), n, d, n_seeds,
+        cluster_all, Int(py=max_iter), bin_seeding, Int(py=min_bin_freq), Float64(py=bw))
+    var result = CentroidFitResultSlot()
+    try:
+        with GILReleased(Python()):
+            connection.driver.meanshift(request, result)
+    finally:
+        _ = connection.provider
+        _ = x
+        _ = seeds
+    var packed = CentroidPackedResult(result, False)
+    var kc = result.storage[0].clusters
+    _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(kc, d), "<f4", "f", context))
+    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
+    _set(model, "bandwidth_", PythonObject(result.storage[0].bandwidth))
+    _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
     _set(model, "n_features_in_", PythonObject(d))
 
 
@@ -631,26 +636,29 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
     var max_iter = _int(_attr(model, "max_iter"))
     var conv = _int(_attr(model, "convergence_iter"))
     var seed = _seed(_attr(model, "random_state"))
-    var ints = Python.list(PythonObject(n), PythonObject(d), _flag(pre), PythonObject(mode), max_iter, conv,
-                           PythonObject(seed))
-    var floats = Python.list(_float(damping_field), scalar)
-    var result = xc_call_floats(binding, _E_AFFINITY, x, pref_arr, ints, floats, context)
-    _ = x^
-    _ = pref_arr^
-    var f = result[0]
-    var i = result[1]
-    var s = result[2]
-    var k = Int(py=py_call(b.len, i[0]))
-    _set(model, "cluster_centers_indices_", _xc_array(i[0], Python.tuple(k), "<i4", "i", context))
-    _set(model, "labels_", _xc_array(i[1], Python.tuple(n), "<i4", "i", context))
-    _set(model, "affinity_matrix_", _xc_array(f[0], Python.tuple(n, n), "<f4", "f", context))
-    # the final availability and responsibility diagonals (a diagnostic the
-    # verifier lanes hash; scikit-learn keeps no such attribute)
-    _set(model, "_message_diag", _xc_array(f[1], Python.tuple(Int(py=py_call(b.len, f[1]))), "<f4", "f", context))
-    _set(model, "n_iter_", _int(s[0]))
+    var repeated_damping = _float(damping_field)
+    var connection = centroid_fit_connection(binding)
+    var request = AffinityFitRequest(variants_span(x), variants_span(pref_arr), n, d, pre, mode,
+        Int(py=max_iter), Int(py=conv), seed, Float64(py=repeated_damping), Float64(py=scalar))
+    var result = CentroidFitResultSlot()
+    try:
+        with GILReleased(Python()):
+            connection.driver.affinity(request, result)
+    finally:
+        _ = connection.provider
+        _ = x
+        _ = pref_arr
+    var packed = CentroidPackedResult(result, True)
+    var k = len(result.storage[0].center_indices)
+    _set(model, "cluster_centers_indices_", _xc_array(packed.center_indices, Python.tuple(k), "<i4", "i", context))
+    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
+    _set(model, "affinity_matrix_", _xc_array(packed.affinity, Python.tuple(n, n), "<f4", "f", context))
+    # Observable final availability/responsibility diagonals stay public.
+    _set(model, "_message_diag", _xc_array(packed.message_diagonal, Python.tuple(len(result.storage[0].message_diagonal)), "<f4", "f", context))
+    _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
     _set(model, "n_features_in_", PythonObject(d))
     if not pre:
-        _set(model, "cluster_centers_", _xc_array(f[2], Python.tuple(k, d), "<f4", "f", context))
+        _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
 
 
 # ---------------------------------------------------------------- HDBSCAN

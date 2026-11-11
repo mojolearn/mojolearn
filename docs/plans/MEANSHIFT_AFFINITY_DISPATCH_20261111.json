@@ -1,0 +1,43 @@
+{
+  "status": "source-reviewed; uncompiled and unrun",
+  "base": "fc8a09b92243d71ad5306f2f7f8d7ee066aeff6f",
+  "unchanged_numerical_files": [
+    "x_cluster/entries.mojo",
+    "x_cluster/meanshift.mojo",
+    "x_cluster/affinity.mojo",
+    "x_cluster/device_execution.mojo",
+    "x_cluster/host/execution.mojo",
+    "x_cluster/device_ops.mojo",
+    "x_cluster/host/host_ops.mojo"
+  ],
+  "other_fit_bodies_unchanged": [
+    "_mbk_fit",
+    "_mbk_partial_fit",
+    "_bisect_fit",
+    "_optics_fit",
+    "_hdbscan_fit"
+  ],
+  "completed_private_roles": 8,
+  "pending_private_roles": [
+    {
+      "role": 4,
+      "description": "AP iterable preference staging still uses its old Python nested lists and temporary Array; native sequence capture dependency is ready, exact unpack remains in progress"
+    }
+  ],
+  "removed_helpers": [
+    "cluster_native._xc_call",
+    "cluster_native._xc_optional_entry",
+    "cluster_native._xc_resident",
+    "cluster_native._xc_resident_run",
+    "cluster_native._xc_nearest"
+  ],
+  "retained_shared_legacy_api": "cres_lookup/store remain live for cfb_spectral; xc_call_floats remains live for OPTICS/other fits",
+  "public_pack": "same result exporter allocations/copies/order before publication; observable AP message diagonal and precomputed stale centers behavior retained",
+  "query_pack": "same nearest kernels; unobserved distance Python copy omitted as in existing typed variants query",
+  "affected_roots": [
+    "_mojolearn_runtime_family_host",
+    "_mojolearn_x_cluster",
+    "_mojolearn_x_cluster_host"
+  ],
+  "tests": "authoring owed; no execution by lane"
+}
