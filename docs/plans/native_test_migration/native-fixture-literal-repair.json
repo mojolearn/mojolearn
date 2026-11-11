@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "cause": "Current compiler rejects positional variadic List[Float32](...) constructors in native fixtures.",
+  "reported_failures": {
+    "cpu_sites": 10,
+    "gpu_sites": 12,
+    "logs": [
+      "~/mojolearn-evidence/python-mojo-migration-20261110/wave8-cpu-build.log",
+      "~/mojolearn-evidence/python-mojo-migration-20261110/wave8-gpu-build.log"
+    ]
+  },
+  "repair": "Ordinary explicitly typed List[Float32] literals; identical constants, shapes, assertions and calls. No internal constructor keyword or product changes.",
+  "changed_sites": {
+    "pca_native_cases.mojo": 4,
+    "pca_native_fold_cases.mojo": 2,
+    "tsvd_native_cases.mojo": 6
+  },
+  "fixture_counts_changed": false,
+  "numerical_oracle_changed": false,
+  "status": "Repair source-reviewed only; root batches next compile. No fixture executed; no lane compile/test."
+}

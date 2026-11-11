@@ -53,12 +53,15 @@ def fixture(driver: TSVDNativeDriver, unit: Int, host: Bool) raises:
     var dst = List[Float32](length=6, fill=TSVD_GUARD)
     var request = TSVDQueryRequest(Int(source.unsafe_ptr()), Int(components.unsafe_ptr()),
         Int(dst.unsafe_ptr()) + 4, 2, 3, 2, False, False, False, 0)
+    var forward_expected: List[Float32] = [4, 1, 1, 0]
+    var changed_expected: List[Float32] = [5, 1, 0, 0]
+    var inverse_expected: List[Float32] = [4, 2, 3, 1, 0, 1]
     if unit == 1:
         require(driver.query(request) == 0, "TSVD literal transform status")
-        check_words(dst, List[Float32](4, 1, 1, 0), 1, "TSVD original 2x3 transform")
+        check_words(dst, forward_expected, 1, "TSVD original 2x3 transform")
         components[0] = 2
         require(driver.query(request) == 0, "TSVD current borrowed component status")
-        check_words(dst, List[Float32](5, 1, 0, 0), 1, "TSVD current borrowed component values")
+        check_words(dst, changed_expected, 1, "TSVD current borrowed component values")
         components[0] = 1
     elif unit == 2:
         var projected: List[Float32] = [4, 1, 1, 0]
@@ -67,7 +70,7 @@ def fixture(driver: TSVDNativeDriver, unit: Int, host: Bool) raises:
         var inverse = TSVDQueryRequest(Int(projected.unsafe_ptr()), Int(components.unsafe_ptr()),
             Int(inverse_dst.unsafe_ptr()) + 4, 2, 3, 2, True, False, False, 0)
         require(driver.query(inverse) == 0, "TSVD literal inverse status")
-        check_words(inverse_dst, List[Float32](4, 2, 3, 1, 0, 1), 1, "TSVD literal inverse")
+        check_words(inverse_dst, inverse_expected, 1, "TSVD literal inverse")
         check_words(projected, original, 0, "TSVD inverse source")
         guards(inverse_dst)
         _ = projected^
@@ -76,7 +79,7 @@ def fixture(driver: TSVDNativeDriver, unit: Int, host: Bool) raises:
         var copied = request.copy()
         copied.components = Int(replacement.unsafe_ptr())
         require(driver.query(copied) == 0, "TSVD rebound component status")
-        check_words(dst, List[Float32](5, 1, 0, 0), 1, "TSVD rebound component values")
+        check_words(dst, changed_expected, 1, "TSVD rebound component values")
         require(request.components == Int(components.unsafe_ptr()), "TSVD original query record unchanged")
         _ = replacement^
     elif unit == 4:
@@ -120,12 +123,12 @@ def fixture(driver: TSVDNativeDriver, unit: Int, host: Bool) raises:
             request.resident = True
             request.lease = lease
             require(driver.query(request) == 0, "TSVD resident transform status")
-            check_words(dst, List[Float32](4, 1, 1, 0), 1, "TSVD resident transform")
+            check_words(dst, forward_expected, 1, "TSVD resident transform")
             var restored = List[Float32](length=8, fill=TSVD_GUARD)
             var inverse = TSVDQueryRequest(Int(dst.unsafe_ptr()) + 4, Int(components.unsafe_ptr()),
                 Int(restored.unsafe_ptr()) + 4, 2, 3, 2, True, False, True, lease)
             require(driver.query(inverse) == 0, "TSVD resident inverse status")
-            check_words(restored, List[Float32](4, 2, 3, 1, 0, 1), 1, "TSVD resident inverse")
+            check_words(restored, inverse_expected, 1, "TSVD resident inverse")
             guards(restored)
         finally:
             driver.close(lease)
