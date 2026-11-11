@@ -11,118 +11,24 @@
 4. The RNN's row order is int32: its length is no longer capped at 2^24.
 """
 import ast
-import decimal
 import random
-import struct
-import sys
-from fractions import Fraction
 from pathlib import Path
 
 import pytest
 
-from mojolearn import _portable_math as pm
-
 PKG = Path(__file__).resolve().parents[1]
 
 
-def _ulps(a, b):
-    ia = struct.unpack("<q", struct.pack("<d", a))[0]
-    ib = struct.unpack("<q", struct.pack("<d", b))[0]
-    return abs(ia - ib)
-
-
 # ------------------------------------------------------------- 1. the helpers
-
-@pytest.mark.skipif(sys.version_info < (3, 12), reason="the builtin is a plain fold before 3.12")
-def test_nsum_is_the_builtin_sum_of_312():
-    rng = random.Random(1)
-    cases = [[-0.0], [-0.0, -0.0], [1e100, 1.0, -1e100], [float("inf"), 1.0], [3.0], [0.1] * 10]
-    for _ in range(5000):
-        cases.append([rng.choice([rng.uniform(-1, 1), rng.gauss(0, 1) * 10 ** rng.randint(-30, 30), -0.0, 0.0])
-                      for _ in range(rng.randint(1, 30))])
-    for c in cases:
-        a, b = sum(c), pm.nsum(c)
-        assert struct.pack("<d", a) == struct.pack("<d", b), c
-
-
-def test_nsum_is_not_a_plain_fold():
-    # 3.10/3.11's builtin gives 0.0 here; the twin gives 3.12+'s 1.0 everywhere
-    assert pm.nsum([1e100, 1.0, -1e100]) == 1.0
-
-
-def test_powi_is_correctly_rounded():
-    rng = random.Random(2)
-    for _ in range(2000):
-        x = rng.choice([rng.random(), rng.uniform(0.9, 0.99999), 0.9, 0.999, rng.uniform(1, 2), -rng.random()])
-        n = rng.randint(0, 60)
-        assert pm.powi(x, n) == float(Fraction(x) ** n), (x, n)
-    # large steps (the Adam bias correction) against an exact reference
-    for x, n in [(0.9, 1000), (0.999, 5000), (0.99, 777)]:
-        assert pm.powi(x, n) == float(Fraction(x) ** n)
-    assert pm.powi(10.0, 6) == 1e6 and pm.powi(2.0, 0) == 1.0 and pm.powi(0.0, 3) == 0.0
-    with pytest.raises(OverflowError):
-        pm.powi(10.0, 400)
-
-
-def test_powr_rounds_the_logspace_grid_once():
-    ctx = decimal.Context(prec=90)
-    for m in range(2, 40):
-        for i in range(m):
-            y = -4 + 8 * i / (m - 1)
-            ref = float(ctx.power(decimal.Decimal(10), decimal.Decimal(y)))
-            assert pm.powr(10.0, y) == ref, (m, i)
-    # the case a Mac's pow misrounds (one ulp low): LogisticRegressionCV(Cs=16)
-    assert pm.powr(10.0, -2.9333333333333336) == 0.0011659144011798312
-
-
-ERFC = [  # mpmath.erfc at 200 bits, rounded to binary64
-    (-5.5, 1.9999999999999927), (-3.0, 1.9999779095030015), (-1.1, 1.8802050695740817),
-    (-0.5, 1.5204998778130465), (-0.001, 1.0011283787909693), (0.0, 1.0), (1e-20, 1.0),
-    (0.2, 0.7772974107895215), (0.3, 0.6713732405408726), (0.6, 0.3961439091520741),
-    (0.9, 0.20309178757716786), (1.0, 0.15729920705028513), (1.2, 0.08968602177036464),
-    (1.5, 0.033894853524689274), (2.0, 0.004677734981047266), (2.8, 7.501319466545911e-05),
-    (2.9, 4.109787809945886e-05), (3.5, 7.430983723414128e-07), (5.0, 1.537459794428035e-12),
-    (5.9, 7.190409783550478e-17), (6.5, 3.8421483271206475e-20), (10.0, 2.088487583762545e-45),
-    (20.0, 5.395865611607901e-176), (27.5, 0.0),
-]
-
-
-def test_erfc_is_fdlibm_accurate():
-    for x, ref in ERFC:
-        assert _ulps(pm.erfc(x), ref) <= 2, x
-    assert pm.erfc(float("inf")) == 0.0 and pm.erfc(float("-inf")) == 2.0
-
-
-def test_normal_inv_cdf_is_as241():
-    # statistics' pure-Python AS241, run on the same pinned log and sqrt
-    import statistics
-    src = Path(statistics.__file__).read_text()
-    i = src.index("def _normal_dist_inv_cdf")
-    j = src.index("return mu + (x * sigma)", src.index("r = p if q <= 0.0", i))
-    ns = {"fabs": abs, "sqrt": pm.sqrt, "log": pm.log}
-    exec(src[i:j] + "return mu + (x * sigma)\n", ns)
-    rng = random.Random(3)
-    for _ in range(3000):
-        p = rng.choice([rng.random(), rng.random() * 1e-10, 1 - rng.random() * 1e-10])
-        if 0.0 < p < 1.0:
-            assert pm.normal_inv_cdf(p) == ns["_normal_dist_inv_cdf"](p, 0.0, 1.0), p
-
-
-def test_exp_array_is_the_scalar_exp():
-    xs = [-800.0, -700.0, -1.5, -0.0, 0.0, 1e-300, 0.5, 3.0, 700.0, float("-inf"), float("nan")]
-    out = pm.exp_array(xs)
-    for x, y in zip(xs, out):
-        e = pm.exp(x)
-        assert (y != y and e != e) or struct.pack("<d", y) == struct.pack("<d", e), x
-    with pytest.raises(OverflowError):
-        pm.exp_array([1.0, 710.0])
+# The pinned erfc / normal_inv_cdf / powi / nsum checks moved to the native
+# suite checks/native_tests/portable_math_suite.mojo with the deleted Python
+# helpers (lane pyout-runtime-boundary, 2026-11-11).
 
 
 # The modules whose float math the lane pinned: a `**` there must be an
 # integer power (exact: an int base), an exact constant power of two, or one
 # of the integer expressions below, never the platform pow.
-_POW_OK = {"max(pp, 1) ** 2", "max(ka, kb) ** 2", "b_n ** 2",
-           "x ** n", "num ** n"}  # the last two: powi's exact special cases and exact integer power
+_POW_OK = {"max(pp, 1) ** 2", "max(ka, kb) ** 2", "b_n ** 2"}
 
 
 def _exact_pow(node):
