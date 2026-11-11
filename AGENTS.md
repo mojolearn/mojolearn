@@ -449,6 +449,8 @@ them for you.
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
 - `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
   Put `comptime assert` inside a function body, never at module scope.
+- A Python-registered native owner with non-`Writable` state implements both `write_to` and
+  `write_repr_to`. Otherwise the binding derives repr through the state fields and fails compilation.
 - Construct a native list with a typed literal (`var values: List[Float32] = [1.0, 2.0]`),
   keyword length/fill, or explicit appends. Positional `List[T](a, b, ...)` is not supported.
   A one-element native shape uses `List[Int](length=1, fill=n)`; `List[Int](n)` is not a
