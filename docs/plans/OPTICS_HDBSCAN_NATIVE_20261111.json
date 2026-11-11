@@ -230,5 +230,71 @@
       "MojolearnHdbscanQueryDeviceIdenticalV1"
     ],
     "slot_reason": "fit-host and infer-host images must not borrow each others first-published function pointers"
+  },
+  "hdbscan_tests": {
+    "status": "authored; source reviewed only; not compiled or executed in lane",
+    "dependency": "e9c7817540",
+    "native_plan": {
+      "suite": "checks/native_tests/hdbscan_plan_suite.mojo",
+      "cases": 15,
+      "parallel": "independent cases via host_parallelize",
+      "coverage": [
+        "fit tree allocation staging and stable moved owner address",
+        "host fit snapshot independence",
+        "six prediction snapshots, deferred PACK result lifetime, shape-before-pointer refusal",
+        "CPU and GPU approximate/membership/all-points copy versus borrow contracts",
+        "query shape, row range, batch and pointer refusal order"
+      ]
+    },
+    "native_execution": {
+      "cases_per_target": 8,
+      "numerical_cases_per_target": 6,
+      "abi_refusal_cases_per_target": 2,
+      "cpu": "checks/native_tests/hdbscan_native_cpu.mojo",
+      "gpu": "checks/native_tests/hdbscan_native_gpu.mojo",
+      "cpu_parallel": "independent cases plus row fill/assertion partitions via host_parallelize",
+      "gpu_order": "ordered numerical cases; shared-DeviceContext concurrency remains parked",
+      "workloads": [
+        "6x1 two separated unit-spaced chains; EOM and leaf selection, prediction_data off/on",
+        "120x2 two separated 60-point chains; existing random120x2 Python inputs remain separately retained"
+      ],
+      "oracles": [
+        "analytic nearest-neighbor core distances: endpoint2, interior1",
+        "two separated components with label permutation allowed",
+        "three-point-chain membership strengths1; long-chain endpoints1/2 and interior1",
+        "exact interior exemplar approximate labels and probability1; distant approximate noise probability0",
+        "soft exact exemplar one-hot membership; long-chain endpoint total probability1/2"
+      ],
+      "routes": [
+        "dedicated HDBSCAN fit host/device descriptors",
+        "dedicated prediction-data preparation host/device descriptors",
+        "approximate query host/device descriptors",
+        "membership query host/device descriptors",
+        "sliced all-points query host/device descriptors with GPU batch tail"
+      ],
+      "not_qualified": [
+        "cross-vendor identity",
+        "performance",
+        "shared DeviceContext concurrent GPU submission",
+        "equivalence to every original random/duplicate/2000-row workload"
+      ]
+    },
+    "python_boundary": {
+      "file": "python/mojolearn/tests/test_hdbscan_native_boundary.py",
+      "definitions": 7,
+      "parametrized_cases": 8,
+      "coverage": [
+        "prepared record stays outside public model dictionary",
+        "public fitted/prediction Array identity preserved",
+        "tree count and fitted dimension rebinding invalidates prepared cache",
+        "foreign metadata key hooks refused before invocation",
+        "rebound Python query factory refused without invocation",
+        "public exporter lifetime after native plan/model teardown and pickle",
+        "training copy-on-borrow retained"
+      ]
+    },
+    "deletions": "none: all prior numerical, public boundary and independent Python oracles retained until native equivalents are accepted",
+    "compiled": false,
+    "executed": false
   }
 }
