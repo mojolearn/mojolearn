@@ -37,7 +37,7 @@ struct GPRScoreProgram(Movable):
         self.arena = List[Float32](length=self.layout.program.size, fill=0.0)
         self.inputs = List[Int32]()
 
-    def input(mut self, offset: Int, count: Int, source: Int, slot: Int):
+    def input(mut self, offset: Int, count: Int, source: Int, slot: Int) raises:
         if count == 0:
             return
         if slot < 0:
