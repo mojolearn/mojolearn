@@ -57,6 +57,16 @@ def check_bytes(value: List[UInt8], written: Bool) raises:
     _ = value
 
 
+def fill_workspace(mut workspace: DBSCANFitWorkspace):
+    # This mutable borrow owns the captured pointer's entire parallel lifetime.
+    # Returning ends the borrow before the caller transfers the workspace.
+    var pointer = workspace.core.unsafe_ptr()
+    def cell(index: Int) {imm pointer}:
+        pointer.unsafe_store(index, UInt8(index % 251 + 1))
+    host_parallelize(cell, 33)
+    _ = workspace
+
+
 def fixture(unit: Int) raises:
     if unit <= 3:
         var rows = 0 if unit == 0 else (1 if unit == 1 else (17 if unit == 2 else 1025))
@@ -68,10 +78,7 @@ def fixture(unit: Int) raises:
     elif unit == 4:
         var workspace = DBSCANFitWorkspace(33)
         var before = workspace.address()
-        var pointer = workspace.core.unsafe_ptr()
-        def cell(index: Int) {imm pointer}:
-            pointer.unsafe_store(index, UInt8(index % 251 + 1))
-        host_parallelize(cell, 33)
+        fill_workspace(workspace)
         var moved = move_workspace(workspace^)
         require(moved.address() == before and len(moved.core) == 33, "DBSCAN move retains scratch allocation")
         check_bytes(moved.core, True)
