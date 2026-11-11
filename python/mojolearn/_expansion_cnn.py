@@ -74,34 +74,15 @@ class _Layer:
         return binding
 
 
-def _mixed(b):
-    """Whether binding `b` has the mixed-residency entries (`x_cnn_*_m`,
-    lane gap-neural-overhead2): the GPU binding does; a CPU install's twin
-    runs the host entries, the same words."""
-    return hasattr(b, "x_cnn_map2_m")
-
-
 # lane fam-neural (2026-10-04): the binding's `x_cnn_idn_flags` names the
 # lane's IDENTICAL switches this build has on (x_cnn/device.mojo "lane
 # fam-neural: `_m` forms"; each has a `-D ..._OFF` before arm and all are off
 # under MOJOLEARN_IDN_ALL_OFF, in FAST, and on the CPU twin, which has no
 # such entry). The glue takes a new path only when its bit is set; otherwise
 # every layer runs exactly the calls it ran before.
-_F_ADAPT, _F_GRAPH, _F_PAD, _F_GROUP, _F_LAYER_IO = 1, 2, 4, 8, 16
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: _F_BN_FUSE = 64, the fused BatchNorm flag bit.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
-_IDN_FLAGS = {}
-
-
-def _idn(b, bit):
-    """Whether mixed binding `b` has lane fam-neural switch `bit` on."""
-    hit = _IDN_FLAGS.get(id(b))
-    if hit is None or hit[0] is not b:
-        f = getattr(b, "x_cnn_idn_flags", None)
-        hit = (b, int(f()) if f is not None and _mixed(b) else 0)
-        _IDN_FLAGS[id(b)] = hit
-    return (hit[1] & bit) != 0
 
 
 # lane fam2-neural (2026-10-04): `x_cnn_idn2_flags` (BOTH bindings export it:
@@ -113,20 +94,15 @@ def _idn(b, bit):
 # `x_cnn_gcn_loops` (a stable device sort and two gathers; the host twin on a
 # CPU-only install), not host NumPy. Copies only: no bit moves.
 # Bit 3: the candidate fold block 256. Bit 4 (lane/review-fixes): the binding
-# was built with -D MOJOLEARN_IDN_ALL_OFF (read by `_device_io_off`).
-_F2_XENT_FOLD, _F2_GCN_LOOPS = 1, 4
-_F2_FOLD_BLOCK_256, _F2_ALL_OFF = 8, 16
-_IDN2_FLAGS = {}
-
-
-def _idn2(b, bit):
-    """Whether binding `b` (either column) has lane fam2-neural switch `bit` on."""
-    hit = _IDN2_FLAGS.get(id(b))
-    if hit is None or hit[0] is not b:
-        f = getattr(b, "x_cnn_idn2_flags", None)
-        hit = (b, int(f()) if f is not None else 0)
-        _IDN2_FLAGS[id(b)] = hit
-    return (hit[1] & bit) != 0
+# was built with -D MOJOLEARN_IDN_ALL_OFF.
+# Both flag words are read natively (python/mojolearn/_native_xcnn_bridge.py connects them;
+# bindings/xcnn_common.mojo decides each route).
+# TOMBSTONE: the Python layer glue `_mixed`, `_idn`, `_idn2`, `_dev_of`, `_device_io_off`, `_size`,
+# `_pin_weights`, `_pinned`, `_resident`, `_out_new`, `_auto_pin`, `_is_t`, `_on_dev`, `_host`,
+# `Conv2d._res_w/_backward_res/_padded_shape/_out_shape/_group/_res_ok`, `CNNClassifier._build`,
+# `BatchNorm2d._res_bn/_backward_res/_backward_dev` and `BasicBlock._conv_back_dev/_backward_chain`
+# (dead copies of bindings/xcnn_conv_native.mojo, xcnn_bn_native.mojo and xcnn_classifier_native.mojo;
+# lane pyout-metrics-cnn) deleted 2026-11-11; code recoverable at 6f82d0255d.
 
 
 class _Dev:
@@ -181,17 +157,6 @@ class _Dev:
         self.free()
 
 
-def _dev_of(layer, b):
-    """`layer`'s `_Dev` on binding `b` (a new one if the binding changed)."""
-    d = layer.__dict__.get("_dev")
-    if d is None or d.b is not b:
-        if d is not None:
-            d.free()
-        d = _Dev(b)
-        layer._dev = d
-    return d
-
-
 # lane idn-cnn-resident (2026-10-04): DEVICE-RESIDENT TENSORS IN AND OUT.
 # A layer handed host arrays uploads its input and downloads its output on
 # every call, so a full activation crosses the bus both ways per forward and
@@ -217,20 +182,6 @@ _DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "
                   or __import__("os").environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1")
 
 
-def _device_io_off(b):
-    """Whether the resident I/O route is off for binding `b`: the env switches
-    above, or a `-D MOJOLEARN_IDN_ALL_OFF` build of `b`."""
-    return _DEVICE_IO_OFF or _idn2(b, _F2_ALL_OFF)
-
-
-def _size(shape):
-    """The element count of a shape tuple."""
-    n = 1
-    for v in shape:  # glue: a shape tuple's few ints
-        n *= int(v)
-    return n
-
-
 # lane fam2-neural (2026-10-04): PINNED LAYER WEIGHTS. A layer given a
 # `DeviceTensor` still uploaded its `weight_` (and `bias_`) on every forward
 # and every backward. `layer.pin_weights()` uploads them once into the
@@ -243,41 +194,6 @@ def _size(shape):
 # in-place edit raises instead of running on the stale device copy.
 # `x_cnn_idn_flags` bit 5 (`-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`); with it off,
 # on FAST or on the CPU twin `pin_weights()` does nothing.
-_F_PIN = 32
-
-
-def _pin_weights(layer, names):
-    """Upload `layer`'s float32 arrays `names` once; returns the layer."""
-    np = _np()
-    b = layer._binding()
-    layer._pins = None
-    if not _idn(b, _F_PIN):
-        return layer
-    dev = _dev_of(layer, b)
-    handles = {}
-    for name in names:  # glue: one upload per named weight array
-        arr = getattr(layer, name, None)
-        if arr is None:
-            continue
-        a = np.ascontiguousarray(arr, np.float32)
-        handles[name] = (dev.upload("pin_" + name, a), int(a.size))
-    layer._pins = (b, handles)
-    # lane cnn-resident-glue: the array objects pinned, so the G3 auto-pin
-    # sees a reassigned `weight_` / `bias_` and uploads again
-    layer._pin_src = tuple(getattr(layer, name, None) for name in names)  # glue: the named weight arrays
-    return layer
-
-
-def _pinned(layer, b, name, size):
-    """The resident handle of `layer`'s pinned array `name` (holding `size`
-    words) on binding `b`, or None when it is not pinned there."""
-    p = layer.__dict__.get("_pins")
-    if not p or p[0] is not b:
-        return None
-    hit = p[1].get(name)
-    if hit is None or hit[1] != int(size):
-        return None
-    return hit[0]
 
 
 # lane cnn-resident-glue (2026-10-11, G3): CNN resident grads,
@@ -295,32 +211,6 @@ def _pinned(layer, b, name, size):
 # ownership only: the same entries and operands, so no bit moves. In-place
 # edits of a weight array (not a reassignment) need `pin_weights()` again,
 # as they always did for a pinned layer.
-_F_RESIDENT = 128
-
-
-def _resident(b):
-    """Whether binding `b` runs the G3 resident glue."""
-    return _mixed(b) and _idn(b, _F_RESIDENT) and not _device_io_off(b)
-
-
-def _out_new(b, shape):
-    """A resident output whose every word the entry stores: unfilled under
-    G3 (`DeviceTensor._new_out`), the filled `_new` otherwise."""
-    return DeviceTensor._new_out(b, shape) if _resident(b) else DeviceTensor._new(b, shape)
-
-
-def _auto_pin(layer, b, names):
-    """G3: `layer`'s arrays `names` pinned on binding `b` (uploaded now when
-    unpinned or reassigned since); whether they are pinned."""
-    if not (_resident(b) and _idn(b, _F_PIN)):
-        return False
-    d = layer.__dict__
-    p, src = d.get("_pins"), d.get("_pin_src")
-    if (p and p[0] is b and src is not None and len(src) == len(names)
-            and all(a is getattr(layer, n, None) for a, n in zip(src, names))):  # glue: the named weight arrays
-        return True
-    _pin_weights(layer, names)
-    return bool(d.get("_pins"))
 
 
 class DeviceTensor:
@@ -381,19 +271,6 @@ def to_device(x, numeric_mode=None):
     return _XCNN(None, "tensor_to", (x, numeric_mode), _XCNN_CONTEXT)
 
 
-def _is_t(x):
-    return isinstance(x, DeviceTensor)
-
-
-def _on_dev(b, *ts):
-    """Whether every one of `ts` is a tensor resident on mixed binding `b`."""
-    return _mixed(b) and all(_is_t(t) and t.h is not None and t.b is b for t in ts)  # glue: the call's arguments
-
-
-def _host(x):
-    return x.numpy() if _is_t(x) else x
-
-
 class Conv2d(_Layer):
     """2-D convolution, PyTorch `nn.Conv2d` semantics: im2col onto the pinned
     GEMM (mojolearn.identical.gemm.fp32.v1) forward and backward. `padding`
@@ -444,32 +321,6 @@ class Conv2d(_Layer):
     def grad_bias_(self, v):
         return _XCNN(self, "conv_grad_bias_set", (v,), _XCNN_CONTEXT)
 
-    def _res_w(self, b):
-        """G3: (weight handle, bias handle) of the auto-pinned weights on
-        binding `b`, or (None, None) when the switch is off or not pinned."""
-        if self.groups != 1 or not _auto_pin(self, b, ("weight_", "bias_")):
-            return None, None
-        return _pinned(self, b, "weight_", self.weight_.size), _pinned(self, b, "bias_", self.bias_.size)
-
-    def _backward_res(self, b, xh, gh, dxh, prm):
-        """G3: the groups == 1 resident backward with dW / db left in this
-        layer's resident arrays; False when the switch is off here."""
-        if not _resident(b) or self.groups != 1:
-            return False
-        np = _np()
-        dev = _dev_of(self, b)
-        pw, _ = self._res_w(b)
-        w = None if pw is not None else np.ascontiguousarray(self.weight_, np.float32)
-        gwh = dev.get("gw", self.weight_.size)
-        gbh = dev.get("gb", self.out_channels)
-        b.x_cnn_conv2d_backward_m([xh, pw if pw is not None else w.ctypes.data, gh, dxh, gwh, gbh],
-                                  0b111111 if pw is not None else 0b111101, prm)
-        self.__dict__.update(_gw_dev=(dev, gwh), _gw_1d=False)
-        if self.bias:
-            self.__dict__["_gb_dev"] = (dev, gbh)
-        else:
-            self.grad_bias_ = np.zeros(self.out_channels, np.float32)
-        return True
 
     def _params(self, shape):
         """The binding block for ONE group's conv over the (padded) input `shape`."""
@@ -478,32 +329,9 @@ class Conv2d(_Layer):
         return [n, c // self.groups, h, w, self.out_channels // self.groups, kh, kw, *self.stride, *self._conv_pad,
                 *self.dilation, 0, 0, 1 if self.bias else 0, 0]
 
-    def _padded_shape(self, shape):
-        n, c, h, w = shape
-        if not self._explicit:
-            return shape
-        return (n, c, h + self._pads[0] + self._pads[1], w + self._pads[2] + self._pads[3])
-
-    def _out_shape(self, shape):
-        oh, ow = self._binding().x_cnn_conv_shape(self._params(self._padded_shape(shape)))
-        return (shape[0], self.out_channels, int(oh), int(ow))
-
-    def _group(self, a, g, per):
-        return _np().ascontiguousarray(a[:, g * per:(g + 1) * per]) if self.groups > 1 else a
 
     _device_io = True
 
-    def _res_ok(self, b, *ts):
-        """Whether the resident entries serve this layer on tensors `ts`.
-        lane fam-neural: an explicit pad (IDN_PAD_M) and groups (IDN_GROUP_M)
-        have resident forms too when the binding has them on."""
-        if not _on_dev(b, *ts):
-            return False
-        if self.groups != 1 and not _idn(b, _F_GROUP):
-            return False
-        if self._explicit and not _idn(b, _F_PAD):
-            return False
-        return True
 
     def forward(self, x):
         return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
@@ -728,29 +556,6 @@ class CNNClassifier(_Layer):
                  numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8):
         return _XCNN(self, "cnnclf_init", (input_shape, conv_channels, kernel_size, pool_size, learning_rate, momentum, weight_decay, batch_size, max_iter, shuffle, random_state, numeric_mode, optimizer, dampening, nesterov, betas, eps), _XCNN_CONTEXT)
 
-    def _build(self, n_classes):
-        seed = 0 if self.random_state is None else int(self.random_state)
-        c, h, w = self.input_shape
-        layers = []
-        for i, oc in enumerate(self.conv_channels):  # glue: builds one layer per conv_channels entry
-            layers.append(Conv2d(c, oc, self.kernel_size, padding=self.kernel_size // 2, random_state=seed + 101 * i,
-                                 numeric_mode=self.numeric_mode))
-            h = h + 2 * (self.kernel_size // 2) - self.kernel_size + 1
-            w = w + 2 * (self.kernel_size // 2) - self.kernel_size + 1
-            layers.append(_ReLU(self.numeric_mode))
-            if h >= self.pool_size and w >= self.pool_size and self.pool_size > 1:
-                layers.append(MaxPool2d(self.pool_size, numeric_mode=self.numeric_mode))
-                h, w = h // self.pool_size, w // self.pool_size
-            c = oc
-        self._flat = c * h * w
-        self.head_ = _Linear(self._flat, n_classes, random_state=seed + 997, numeric_mode=self.numeric_mode)
-        self.layers_ = layers
-        # (conv, pool or None) per block, the native fit's layer stack
-        self._blocks = []
-        for i, layer in enumerate(layers):  # glue: walks the built layer list
-            if isinstance(layer, Conv2d):
-                nxt = layers[i + 2] if i + 2 < len(layers) else None
-                self._blocks.append((layer, nxt if isinstance(nxt, MaxPool2d) else None))
 
     def fit(self, X, y):
         """Train the classifier on images X and labels y; returns self."""
@@ -827,37 +632,6 @@ class BatchNorm2d(_Layer):
     def grad_bias_(self, v):
         return _XCNN(self, "bn_grad_set", ("grad_bias_", v), _XCNN_CONTEXT)
 
-    def _res_bn(self, b):
-        return self.track_running_stats and _resident(b)
-
-    def _backward_res(self, b, xh, gh, dxh, dev_dx, dev_g):
-        """G3: the backward into the forward's resident aux; dgamma / dbeta
-        stay there until read. False when that forward was not resident."""
-        ad = self.__dict__.get("_aux_dev")
-        if ad is None or ad[0].b is not b or not self._res_bn(b):
-            return False
-        n, c, hw = self._x3shape
-        self.__dict__["_g_dev"] = None   # superseded by this backward (no download)
-        b.x_cnn_batchnorm_backward_m([xh, gh, dxh, ad[1]], 0b1001 | (0b0010 if dev_g else 0) | (0b0100 if dev_dx else 0),
-                                     [n, c, hw, 1 if self._mode else 0])
-        self.__dict__["_g_dev"] = ad
-        return True
-
-    def _backward_dev(self, b, xh, gh, dxh, dev_dx=True):
-        """The backward from resident g (`gh`) into resident dx (`dxh`, or a
-        host array's address with `dev_dx` False); sets the gradients."""
-        if self._backward_res(b, xh, gh, dxh, dev_dx, True):
-            return
-        n, c, hw = self._x3shape
-        C = self.num_features
-        aux = self._aux.copy()
-        b.x_cnn_batchnorm_backward_m([xh, gh, dxh, aux.ctypes.data], 0b0111 if dev_dx else 0b0011,
-                                     [n, c, hw, 1 if self._mode else 0])
-        self.grad_bias_ = aux[2 + 3 * C:2 + 4 * C].copy()
-        self.grad_weight_ = aux[2 + 4 * C:2 + 5 * C].copy()
-        if not self.affine:
-            self.grad_weight_[:] = 0
-            self.grad_bias_[:] = 0
 
     # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
     # Tried: BatchNorm2d._forward_dev_fused / _backward_dev_relu (the fused entries' glue).
@@ -1026,56 +800,6 @@ class BasicBlock(_Layer):
     # counters, running statistics and gradients; their own host-array
     # state (`_x`) is not filled by the block.
 
-    def _conv_back_dev(self, b, conv, xh, xshape, gh, oshape, name, dev):
-        """conv's backward from resident g into resident dx `name`; sets its
-        weight gradients (the same words `Conv2d.backward` sets)."""
-        np = _np()
-        dxh = dev.get(name, int(np.prod(xshape)))  # glue: product of the input shape entries
-        if conv._backward_res(b, xh, gh, dxh, conv._params(xshape)):
-            return dxh   # G3: dW / db stay in the conv's resident arrays
-        w = np.ascontiguousarray(conv.weight_)
-        dw = np.empty(conv.weight_.shape, np.float32)
-        db = np.empty(conv.out_channels, np.float32)
-        b.x_cnn_conv2d_backward_m([xh, w.ctypes.data, gh, dxh, dw.ctypes.data, db.ctypes.data], 0b001101,
-                                  conv._params(xshape))
-        conv.grad_weight_ = dw
-        conv.grad_bias_ = db if conv.bias else np.zeros_like(db)
-        return dxh
-
-    def _backward_chain(self, b, grad_out):
-        np = _np()
-        dev, k = self._dev, self._chain
-        gt = _is_t(grad_out)
-        if gt and not _on_dev(b, grad_out):
-            return DeviceTensor._wrap(b, self._backward_chain(b, grad_out.numpy()))
-        g = grad_out if gt else _f32(grad_out, "grad_out")
-        if tuple(g.shape) != tuple(k["s2"]):
-            raise ValueError(f"mojolearn: grad_out shape {g.shape}, expected {tuple(k['s2'])}")
-        n2 = g.size
-        gh = g.h if gt else dev.upload("g", g)
-        gs = dev.get("gs", n2)
-        b.x_cnn_map2_m([k["s"], gh, gs], 0b111, [1, n2])              # relu2
-        gb2 = dev.get("gb2", n2)
-        self.bn2._backward_dev(b, k["c2"], gs, gb2)
-        gr1 = self._conv_back_dev(b, self.conv2, k["r1"], k["s1"], gb2, k["s2"], "gr1", dev)
-        n1 = int(np.prod(k["s1"]))  # glue: product of the saved shape entries
-        gc1 = dev.get("gc1", n1)
-        gb1 = dev.get("gb1", n1)
-        b.x_cnn_map2_m([k["b1"], gr1, gb1], 0b111, [1, n1])           # relu1
-        self.bn1._backward_dev(b, k["c1"], gb1, gc1)
-        gx1 = self._conv_back_dev(b, self.conv1, k["xh"], k["x"], gc1, k["s1"], "gx1", dev)
-        gi = gs
-        if self.downsample:
-            gd = dev.get("gd", n2)
-            self.downsample[1]._backward_dev(b, k["d1"], gs, gd)
-            gi = self._conv_back_dev(b, self.downsample[0], k["xh"], k["x"], gd, k["sd"], "gdx", dev)
-        if gt:
-            dxt = _out_new(b, k["x"])   # the add stores every word
-            b.x_cnn_map2_m([gx1, gi, dxt.h], 0b111, [2, dxt.size])
-            return dxt
-        dx = np.empty(k["x"], np.float32)
-        b.x_cnn_map2_m([gx1, gi, dx.ctypes.data], 0b011, [2, dx.size])
-        return dx
 
     def forward(self, x):
         return _XCNN(self, "block_forward", (x,), _XCNN_CONTEXT)

@@ -15,6 +15,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.xseq_neural_native import xseq_rnn, xseq_mlp
 from bindings.xseq_forecast_native import xseq_forecast
 from bindings.xseq_score_native import xseq_regressor_score, xseq_classifier_score
@@ -29,6 +30,9 @@ from providers.python.estimator_lifecycle_pyapi import estimator_fit_begin, esti
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
     """The Python exception a native refusal names in its prefix."""
     var text = String(error)
+    if text == PYTHON_ERROR_PENDING:
+        # A Python exception the natively called metrics owner left set (its warnings, its admission).
+        return optimizer_python_error(error)
     if text.startswith("NotFittedError:"):
         try:
             ref cpy = Python().cpython()

@@ -52,10 +52,11 @@ from bindings.trees_public_score import (
 )
 from bindings.prep_native_estimator import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
-    prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
+    prep_estimator_plan, prep_native_context, prep_native_split,
 )
 from bindings.classical_labels import _label_list, classical_score_from_codes
 from bindings.p3_labels_metrics_native import p3_interleave_columns
+from bindings.metrics_cls_native import metrics_cls_operation
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
@@ -2171,12 +2172,14 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
         # program), on the same float32 blocks.
         var metrics = context["native_meta_metrics"]
         var selected = mode if mode is not None else context["backend_fields"]["_DEFAULT_MODE"]
-        var binding = metrics[2][selected]
+        var binding = metrics[1][selected]
         if py_type(binding) is trees_builtins().str:
             raise Error(String(binding))
-        var result = prep_entry_call(metrics[0], Python.tuple(PythonObject(None), "family_mcls_r2",
-                                     Python.tuple(binding, truth.array, pred.array, sample_weight,
-                                                  "uniform_average", True, mode), metrics[1]))
+        # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of
+        # its family door through `prep_entry_call`); metrics[0] is the family context that door received.
+        var result = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
+                                           Python.tuple(binding, truth.array, pred.array, sample_weight,
+                                                        "uniform_average", True, mode), metrics[0])
         _ = truth^
         _ = pred^
         return result

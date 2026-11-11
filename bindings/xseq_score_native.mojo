@@ -22,6 +22,8 @@ from bindings.xseq_native_common import xseq_addr, xseq_f32p, xseq_reshape
 from bindings.xseq_neural_native import xseq_as_f32_c
 from core.xseq_marshal import xseq_min_max_f32
 from core.host_finite_scan import host_all_finite_f32
+from bindings.metrics_reg_native import metrics_reg_operation
+from bindings.metrics_cls_native import metrics_cls_operation
 
 
 def _shape_text(value: PythonObject) raises -> String:
@@ -128,10 +130,12 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
             raise Error("NotImplementedError: mojolearn: the multi-output score needs the native metrics owner "
                         + "(family_metric_r2_options); this install does not carry it")
         var mode = py_get(py_fields(model), "numeric_mode")
-        # call-table: door-to-door (the native metrics family owner's public door; its operands are the
-        # caller's Python label/array objects, which that owner admits in its own UNPACK; open item)
-        return py_call(options[0], PythonObject(None), "family_metric_r2_options",
-                       Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode), options[1])
+        # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of
+        # its family door); the operands are this call's own admitted arrays, which that owner admits in
+        # its UNPACK, and options[1] is the metrics family context the door would have received.
+        return metrics_reg_operation("family_metric_r2_options",
+                                     Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode),
+                                     options[1])
     var y = _vector(truth, "y_true")
     var yh = _vector(pred, "y_pred")
     var n = Int(py=y.shape[0])
@@ -172,7 +176,7 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
         raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "
                     + "(family_mcls_accuracy_fraction); this install does not carry it")
     var mode = py_get(py_fields(model), "numeric_mode")
-    # call-table: door-to-door (the native metrics family owner's public door; its operands are the
-    # caller's Python label/array objects, which that owner admits in its own UNPACK; open item)
-    return py_call(owner[0], PythonObject(None), "family_mcls_accuracy_fraction",
-                   Python.tuple(args[1], prediction, args[2], mode), owner[1])
+    # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of its
+    # family door); the labels are the caller's Python objects, admitted in that owner's UNPACK.
+    return metrics_cls_operation(PythonObject(None), "family_mcls_accuracy_fraction",
+                                 Python.tuple(args[1], prediction, args[2], mode), owner[1])

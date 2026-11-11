@@ -24,10 +24,8 @@ def cell(name):
     return deco
 
 
-@cell("linear_model._r2_sums (score of 6 regressors)")
-def _(n, r):
-    pred = arr(r.random(n, dtype=np.float32)); y = r.random(n)
-    return lambda: LM._r2_sums(pred, y)
+# linear_model._r2_sums cell removed 2026-11-11 (lane pyout-metrics-cnn): the Python R^2 program is gone; the
+# regressors' score is the native owners' R^2 program (core/linear_score_program.mojo, bindings/svc_common.mojo).
 
 
 @cell("linear_model._accuracy_host (LogisticRegression/SVC score), int64 y")
