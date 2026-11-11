@@ -16,7 +16,7 @@ struct GPMappingSnapshot(Movable):
         self.values = List[PythonObject]()
 
 
-def gp_mapping_snapshot[Values: Bool = True](value: PythonObject) raises -> GPMappingSnapshot:
+def gp_mapping_snapshot[Values: Bool = True, Keys: Bool = True](value: PythonObject) raises -> GPMappingSnapshot:
     # Only metadata references are read. Holding the GIL prevents mutation by
     # another interpreter thread; PyDict_Next and reference acquisition invoke
     # no key hash/equality, iterator or application callback. The finished native
@@ -29,7 +29,9 @@ def gp_mapping_snapshot[Values: Bool = True](value: PythonObject) raises -> GPMa
     var api = cpython_table()
     while api[].PyDict_Next(value._obj_ptr, Int(cursor.unsafe_ptr()),
                            Int(items.unsafe_ptr()), Int(items.unsafe_ptr() + 1)):
-        result.keys.append(PythonObject(from_borrowed=items[0]))
+        @parameter
+        if Keys:
+            result.keys.append(PythonObject(from_borrowed=items[0]))
         @parameter
         if Values:
             result.values.append(PythonObject(from_borrowed=items[1]))
