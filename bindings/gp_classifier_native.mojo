@@ -26,6 +26,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
+# thin-unpack-kit (2026-11-11): one C-API read per scalar parameter in place
+# of a call of the builtin bool/int (same semantics and exceptions).
+from bindings.boundary_read import read_bool, read_int_like
 from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_field, FAMILY_F64P,
 )
@@ -104,7 +107,7 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
                     + "are not pinned. scikit-learn's default is 'fmin_l_bfgs_b', "
                     + "so this default DIFFERS from theirs and the fitted kernel_ "
                     + "is the kernel you passed")
-    if family_isinstance(n_restarts, b.bool) or Int(py=family_call(b.int, n_restarts)) != 0:
+    if family_isinstance(n_restarts, b.bool) or read_int_like(n_restarts) != 0:
         raise Error("NotImplementedError: " + String(_NAME) + ": n_restarts_optimizer=" + family_repr(n_restarts)
                     + " is refused; it restarts the optimizer, which is refused "
                     + "(DEVIATION 1761)")
@@ -112,12 +115,12 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: " + String(_NAME) + ": max_iter_predict must be an int, got " + family_repr(max_iter))
     if Bool(py=py_call(py_attr(b.int, "__lt__"), max_iter, PythonObject(1))):
         raise Error(String(_NAME) + ": max_iter_predict must be at least 1, got " + String(py_call(b.str, max_iter)))
-    if Bool(py=family_call(b.bool, warm_start)):
+    if read_bool(warm_start):
         raise Error("NotImplementedError: " + String(_NAME) + ": warm_start=True is refused. It starts the Newton "
                     + "loop from the previous fit's latent values (_gpc.py:454-459), "
                     + "so a second fit would depend on the first; every fit here "
                     + "starts from zero")
-    if not Bool(py=family_call(b.bool, copy_x)):
+    if not read_bool(copy_x):
         raise Error("NotImplementedError: " + String(_NAME) + ": copy_X_train=False is refused; X always crosses to "
                     + "float32 C-order memory, so there is no reference to keep")
     if _gpc_equal(multi_class, "one_vs_one"):

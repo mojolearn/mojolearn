@@ -25,6 +25,9 @@ from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
 from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
+# thin-unpack-kit (2026-11-11): one C-API read per scalar parameter in place
+# of a call of the builtin bool/int/float (same semantics and exceptions).
+from bindings.boundary_read import read_bool, read_int_like, read_float_like
 from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_shape_repr, family_field,
     family_is_real, FAMILY_F32P, FAMILY_F64P,
@@ -107,15 +110,15 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     elif not (family_is_str(optimizer) and String(optimizer) == "fmin_l_bfgs_b"):
         raise Error(String(_GPR) + ": optimizer=" + family_repr(optimizer) + " is "
                     + "not one of None and 'fmin_l_bfgs_b'")
-    if not _is_integral(n_restarts, context) or Int(py=family_call(b.int, n_restarts)) < 0:
+    if not _is_integral(n_restarts, context) or read_int_like(n_restarts) < 0:
         raise Error(String(_GPR) + ": n_restarts_optimizer must "
                     + "be a non-negative int, got " + family_repr(n_restarts))
-    var restarts = Int(py=family_call(b.int, n_restarts))
+    var restarts = read_int_like(n_restarts)
     if (not family_isinstance(normalize_y, Python.tuple(b.bool, b.int))
             or not py_contains(Python.tuple(PythonObject(0), PythonObject(1)), normalize_y)):
         raise Error("TypeError: " + String(_GPR) + ": normalize_y must be a bool, "
                     + "got " + family_repr(normalize_y))
-    if not Bool(py=family_call(b.bool, copy_x)):
+    if not read_bool(copy_x):
         raise Error("NotImplementedError: " + String(_GPR) + ": copy_X_train=False is "
                     + "refused. sklearn's False stores a REFERENCE to X; this "
                     + "surface always copies -- X crosses to float32 C-order host "
@@ -147,7 +150,7 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "_alpha", family_call(b.float, alpha))
     py_setitem(fields, "_optimizer", optimizer)
     py_setitem(fields, "_n_restarts_optimizer", PythonObject(restarts))
-    py_setitem(fields, "_normalize_y", PythonObject(Bool(py=family_call(b.bool, normalize_y))))
+    py_setitem(fields, "_normalize_y", PythonObject(read_bool(normalize_y)))
     py_setitem(fields, "_random_state", PythonObject(None) if random_state is None else family_call(b.int, random_state))
 
 
@@ -378,8 +381,8 @@ def _gpr_normalization(fields: PythonObject) raises -> GPRNormalization:
     var b = native_loaded_module("builtins")
     var enabled = Bool(py=py_call(b.bool, py_get(fields, PythonObject("normalize_y_"), PythonObject(False))))
     if enabled:
-        return GPRNormalization(True, Float64(py=family_call(b.float, fields["_y_train_std"])),
-            Float64(py=family_call(b.float, fields["_y_train_mean"])))
+        return GPRNormalization(True, read_float_like(fields["_y_train_std"]),
+            read_float_like(fields["_y_train_mean"]))
     return GPRNormalization(False, 1.0, 0.0)
 
 
@@ -388,8 +391,8 @@ def _gpr_predict(model: PythonObject, args: GPArgumentPins, context: PythonObjec
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
-    var return_std = Bool(py=family_call(b.bool, args[2]))
-    var return_cov = Bool(py=family_call(b.bool, args[3]))
+    var return_std = read_bool(args[2])
+    var return_cov = read_bool(args[3])
     if return_cov and return_std:
         raise Error("RuntimeError: " + String(_GPR) + ": at most one of return_std "
                     + "or return_cov can be requested (scikit-learn's rule)")
@@ -558,7 +561,7 @@ def _gpr_sample_y(model: PythonObject, args: GPArgumentPins, context: PythonObje
                     + "be an int in [0, 2**64), got " + family_repr(seed) + "; it is the key of every "
                     + "draw (DEVIATION 2793)")
     seed = family_call(b.int, seed)
-    var n = Int(py=family_call(b.int, args[2]))
+    var n = read_int_like(args[2])
     # This entry returns no status word: the query is tested here (lane a7a).
     var gq = _gpr_query(fields, args[1], context)
     gp_query_scan(gq, "GaussianProcessRegressor", context)
@@ -606,12 +609,12 @@ def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> List[Float6
     var b = native_loaded_module("builtins")
     var values = List[Float64]()
     if py_type(theta) is b.int or py_type(theta) is b.float:
-        values.append(Float64(py=family_call(b.float, theta)))
+        values.append(read_float_like(theta))
         return values^
     var view = classical_view(theta, context, "theta")
     if Int(py=view.ndim) == 0:
         host_inference_scalar(theta, context)
-        values.append(Float64(py=family_call(b.float, theta)))
+        values.append(read_float_like(theta))
         return values^
     var wide = admit_family_f64(view, "theta", context)
     var count = Int(py=wide.size)
@@ -670,7 +673,7 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, cont
                 _ = py_call(packed.append, PythonObject(grad[i]))
             return Python.tuple(PythonObject(lml), packed)
         return PythonObject(lml)
-    if Bool(py=family_call(b.bool, eval_gradient)):
+    if read_bool(eval_gradient):
         raise Error(String(_GPR) + ": eval_gradient=True needs a theta, "
                     + "scikit-learn's rule (_gpr.py:582)")
     var info = Int(py=fields["info_"])
