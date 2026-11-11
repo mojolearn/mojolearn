@@ -151,5 +151,22 @@
   "ownership": "Pilot owns product and new Python boundary tests; this lane owns new gp_contract/state/native files and migration manifests. No DBSCAN blocked or completed Agglomerative source changes.",
   "planned_independent_references": "Original Float32 input bytes; NumPy Float64 kernel equations, covariance/linear solves/LML and analytic log-hyperparameter gradients. Original bounds remain unchanged. Classifier invariants retain declared tolerances. Existing external sklearn checks stay Python.",
   "python_removed": 0,
-  "reference_preparation": "Not started for GP; no product import or execution."
+  "reference_preparation": {
+    "status": "Independent NumPy preparation completed; no native compilation or execution",
+    "path": "checks/native_tests/fixtures/gp",
+    "gpr_profiles": 14,
+    "classifier_input_profiles": 3,
+    "artifacts": 100,
+    "bytes": 145008,
+    "numpy": "2.5.2",
+    "source_audit": {
+      "exact_original_input_byte_comparisons": 32,
+      "mismatches": 0,
+      "artifact_hashes": 100,
+      "bad_artifacts": 0,
+      "evidence": "E/pca-native-tests/gp-reference-source-check.json"
+    },
+    "derivation": "Float64 covariance equations, dense NumPy solves, log determinant/LML and analytic log-hyperparameter derivatives. No reference optimizer or classifier Newton implementation. Metadata preserves original bounds/settings and names.",
+    "execution": "No product imports, native calls, test execution or identity campaign. Python numerical/boundary coverage remains unchanged; typed Mojo request fixtures are pending the product API."
+  }
 }
