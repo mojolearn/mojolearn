@@ -209,6 +209,7 @@ from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_
 from checks.vendor import COMPILED_VENDOR
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_v1
 from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN_FOLD
+from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -2156,6 +2157,13 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
         # bindings/hotpath_helpers.mojo that stand in for per-row Python.
+        # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
+        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
+        # doors; their Python exports below remain for the Python package
+        # (`_buffer._native` users) and the doors not yet converted
+        # (bindings/trees_public_gbdt_fit.mojo, trees_public_forest.mojo and the
+        # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         m.def_function[cast_elements_binding]("cast_elements")
         m.def_function[reduce_stat_binding]("reduce_stat")
         m.def_function[equal_elements_binding]("equal_elements")
@@ -2218,6 +2226,9 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         var published_module = m.finalize()
         _publish_qn_fold_table()
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_device()
         return published_module
     except e:
         abort(String("failed to create _mojolearn module: ", e))

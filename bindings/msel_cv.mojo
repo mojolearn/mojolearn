@@ -13,6 +13,8 @@
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import base_check_indices_i64
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.ffi import c_int, external_call
 from std.sys.compile import is_defined
@@ -95,8 +97,8 @@ def msel_indices(value: PythonObject, n: Int, name: String, context: PythonObjec
     if Int(py=v.ndim) != 1 or (kind != ord("i") and kind != ord("u")) or Int(py=v.size) == 0:
         raise Error(name + " must be a nonempty 1-D integer index array")
     var as_i64 = msel_index_i64(v, context)
-    var status = msel_int(family_call(msel_entry("check_indices_i64", context), PythonObject(msel_addr(as_i64)),
-                                      as_i64.size, PythonObject(n)))
+    var status = base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(as_i64),
+                                        Int(py=as_i64.size), n)
     _ = as_i64  # keep the Python object alive through the native call above
     if status == 1:
         raise Error(name + " contains an out-of-range index")
@@ -1304,8 +1306,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
             _ = held  # keep the Python object alive through the native call above
         at += size
         _ = py_call(tests.append, t)
-    if msel_int(family_call(msel_entry("check_indices_i64", context), PythonObject(msel_addr(held)), PythonObject(n),
-                            PythonObject(n))) != 0:
+    if base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(held), n, n) != 0:
         raise Error("cross_val_predict only works for partitions")
     _ = held  # keep the Python object alive through the native calls above
     var method = args[6]

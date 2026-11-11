@@ -48,7 +48,7 @@ FAMILIES = (
             "trees-shap-kernel",
             "trees-shap-permutation",
             # lane verify-coverage-20261024: MultiOutputRegressor over Ridge,
-            # the fused multi-target ridge predict (ridge_predict_multi)
+            # the fused multi-target ridge predict (the ridge multi table's RM_PREDICT)
             "multioutput-ridge",
         ),
         inference_lanes=(),

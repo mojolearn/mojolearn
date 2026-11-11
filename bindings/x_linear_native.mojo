@@ -37,6 +37,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import base_row_means_f64, base_reduce_stat_int
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
@@ -2117,17 +2119,24 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
         # `_row_means(rows)`: fsum / len per alpha (`row_means_f64`), the
         # first best by `reduce_stat`
         var k = len(rows[0])
-        var flat = py_call(context["array_type"], PythonObject("d"))
+        # UNPACK: the alpha grid's Python score rows into one native float64
+        # (A, k) table (it was an array('d') extended per row and read back
+        # through buffer_info).
+        var flat = admitted_vector(max(A * k, 1), "<f8", context)
+        var flat_words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=labels_address(flat))
         for i in range(A):  # driver-loop: over the alpha grid
-            _ = py_call(flat.extend, rows[i])
+            var row = rows[i]
+            if len(row) != k:
+                raise Error("ValueError: every alpha needs one score per split")
+            for j in range(k):  # driver-loop: over the splits of one alpha (UNPACK of its Python floats)
+                flat_words[i * k + j] = Float64(py=row[j])
         var means = admitted_vector(max(A, 1), "<f8", context)
+        var bkey = base_helpers_key(context["xl_helpers"])
         if A > 0 and k > 0:
-            if _int(py_call_typed(_xl_helper(context, "row_means_f64"), py_call(flat.buffer_info)[0], PythonObject(A),
-                                  PythonObject(k), PythonObject(labels_address(means)))) != 0:
+            if base_row_means_f64(bkey, labels_address(flat), A, k, labels_address(means)) != 0:
                 raise Error("-inf + inf in fsum")
-            _ = means  # keep the Python object alive through the native calls above
-        best = _int(py_call_typed(_xl_helper(context, "reduce_stat"), PythonObject(labels_address(means)), PythonObject(1),
-                                  PythonObject(A), PythonObject(3)))
+        best = base_reduce_stat_int(bkey, labels_address(means), 1, A, 3)
+        _ = flat  # keep the score table alive through the native calls above
         _ = means  # keep the Python object alive through the native call above
         best_score = PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=labels_address(means))[best])
         _ = means  # keep the Python object alive through the native call above

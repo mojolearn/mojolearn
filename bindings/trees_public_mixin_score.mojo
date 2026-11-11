@@ -7,6 +7,8 @@
 # Python between the prediction and the metric. The metric kernels and their
 # order are the ones the mixins called, so the score keeps its bits.
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import base_reduce_stat_int
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.py_typed_call import py_call_typed
@@ -86,11 +88,11 @@ def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> Pyt
         raise Error("mojolearn metrics: y_pred must be an integer label array, got " + dtype
                     + "; the ported kernels take int32 labels")
     if n:
-        var low = py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(trees_address(codes)),
-                                PythonObject(3), PythonObject(n), PythonObject(0))
-        var high = py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(trees_address(codes)),
-                                 PythonObject(3), PythonObject(n), PythonObject(1))
-        if Bool(py=low < PythonObject(-2147483648)) or Bool(py=high > PythonObject(2147483647)):
+        var bkey = base_helpers_key(context["trees_helpers"])
+        var low = base_reduce_stat_int(bkey, trees_address(codes), 3, n, 0)
+        var high = base_reduce_stat_int(bkey, trees_address(codes), 3, n, 1)
+        _ = codes  # keep the code store alive through the native calls above
+        if low < -2147483648 or high > 2147483647:
             raise Error("mojolearn metrics: y_pred does not fit in int32; the implemented "
                         + "kernels are the int32 instantiation (the int64 overload of "
                         + "adjusted_rand_index is the same code at a wider type and is "

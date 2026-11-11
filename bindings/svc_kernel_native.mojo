@@ -24,6 +24,8 @@
 # no resident entry for them.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import base_bincount_i64
 from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array, admit_family_fold_meta
 from core.admitted_input import admitted_cast_f32
 from core.cast_in import CAST_KIND_SIGNED
@@ -409,8 +411,9 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
                 raise Error("mojolearn " + who + ": class_weight is a dict, 'balanced' or None, got "
                             + family_repr(class_weight))
             var cnt = family_array(Python.tuple(PythonObject(n_classes)), "<i8", context)
-            _ = family_call(svc_base("bincount_i64", context), classical_address(codes), PythonObject(2),
-                            codes.shape[0], PythonObject(n_classes), classical_address(cnt), PythonObject(0))
+            _ = base_bincount_i64(base_helpers_key(context["family_svc_base_helpers"]),
+                                  Int(py=classical_address(codes)), 2, Int(py=codes.shape[0]), n_classes,
+                                  Int(py=classical_address(cnt)), False)
             _ = codes  # keep the Python object alive through the native call above
             _ = cnt  # keep the Python object alive through the native call above
             cwa = family_array(Python.tuple(PythonObject(n_classes)), "<f8", context)

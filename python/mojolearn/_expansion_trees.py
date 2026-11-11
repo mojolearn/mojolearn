@@ -2236,8 +2236,8 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
 # 2-D buffer; a classifier's labels per column are encoded to codes.
 #: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off):
 #: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
-#: (glm/impl/ridge_multi.mojo) when the estimators binding exports
-#: ridge_fit_multi; the native owner takes that route (trees_public_meta.mojo
+#: (glm/impl/ridge_multi.mojo) when the estimators binding publishes the
+#: ridge multi table (core/linear_entry_table_multi.mojo); the native owner takes that route (trees_public_meta.mojo
 #: `_multioutput_ridge_fit`), every other binding the per-target route.
 class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapperBase):
     """Fit one regressor per target column.

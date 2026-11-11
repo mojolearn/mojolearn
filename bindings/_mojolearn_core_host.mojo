@@ -188,6 +188,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
 from core.core_host_impl import (
@@ -1205,6 +1206,13 @@ def build__mojolearn_core_host() -> PythonObject:
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
         # base binding has carried since DEVIATION 2500, so a CPU-only
         # install stops encoding labels in a Python loop.
+        # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
+        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
+        # doors; their Python exports below remain for the Python package
+        # (`_buffer._native` users) and the doors not yet converted
+        # (bindings/trees_public_gbdt_fit.mojo, trees_public_forest.mojo and the
+        # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         module.def_function[cast_elements_binding]("cast_elements")
         module.def_function[reduce_stat_binding]("reduce_stat")
         module.def_function[equal_elements_binding]("equal_elements")
@@ -1266,6 +1274,10 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
-        return module.finalize()
+        var published_module = module.finalize()
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_host()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

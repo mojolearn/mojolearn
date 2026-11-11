@@ -29,7 +29,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
 from bindings.trees_public_inputs import (
-    TreesLabels, trees_builtins, trees_table, trees_entry, trees_helper,
+    TreesLabels, trees_builtins, trees_table,
     trees_reshape, trees_address, trees_itemsize,
     trees_encode_labels, trees_decode_labels, trees_cast, trees_finite_f32,
 )
@@ -44,7 +44,7 @@ from bindings.trees_public_forest import (
     _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
 )
 from bindings.trees_public_boost import (
-    _mode, _xt, _xk, _P, _F, _A, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
+    _mode, _xt, _xk, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
 from bindings.trees_public_score import (
@@ -71,6 +71,12 @@ from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.trees_meta_admission import meta_admit_configuration
 from bindings.trees_staged_input import trees_stage_members, trees_unstage
 from bindings.trees_side_records import trees_side_get, trees_side_put
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import (
+    base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
+)
+from core.linear_entry_table import LinearEntryKey
+from core.linear_multi_calls import ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
@@ -584,8 +590,8 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
         pairs = prep_native_split(c, X, y, context)
     var out = Python.list()
     var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
-    var check = trees_helper(context, "check_indices_i64")
-    var bincount = trees_helper(context, "bincount_i64")
+    var seen_addr = trees_address(seen)
+    var bkey = base_helpers_key(context["trees_helpers"])
     for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair
         var both = py_call(b.tuple, pair)
         if len(both) != 2:
@@ -596,18 +602,16 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
         var nte = Int(py=te.size)
         if ntr == 0 or nte == 0:
             raise Error("every cv split needs train and test rows")
-        # call-table: base helper check (_mojolearn) has no native entry yet
-        if Int(py=py_call_typed(check, _A(tr), _P(ntr), _P(n))) == 1:
+        var tr_addr = trees_address(tr)
+        var te_addr = trees_address(te)
+        if base_check_indices_i64(bkey, tr_addr, ntr, n) == 1:
             raise Error("a cv index is outside [0, " + String(n) + ")")
-        _ = tr  # keep the Python object alive through the native calls above
-        # call-table: base helper check (_mojolearn) has no native entry yet
-        if Int(py=py_call_typed(check, _A(te), _P(nte), _P(n))) == 1:
+        if base_check_indices_i64(bkey, te_addr, nte, n) == 1:
             raise Error("a cv index is outside [0, " + String(n) + ")")
-        _ = te  # keep the Python object alive through the native calls above
-        # call-table: base helper bincount (_mojolearn) has no native entry yet
-        _ = py_call_typed(bincount, _A(te), _P(3), _P(nte), _P(n), _A(seen), _P(1))
-        _ = te  # keep the Python object alive through the native call above
-        _ = seen  # keep the Python object alive through the native call above
+        _ = base_bincount_i64(bkey, te_addr, 3, nte, n, seen_addr, True)
+        _ = tr  # keep the index store alive through the native calls above
+        _ = te  # keep the index store alive through the native calls above
+        _ = seen  # keep the count store alive through the native call above
         var tr32 = admitted_vector(ntr, "<i4", context)
         var te32 = admitted_vector(nte, "<i4", context)
         trees_cast(trees_address(tr), "<i8", trees_address(tr32), "<i4", ntr, context)
@@ -621,13 +625,8 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
         raise Error("cv produced no splits")
     if partition:
         var m = n if n > 1 else 1
-        var stat = trees_helper(context, "reduce_stat")
-        # call-table: base helper stat (_mojolearn) has no native entry yet
-        var low = Int(py=py_call_typed(stat, _A(seen), _P(3), _P(m), _P(0)))
-        _ = seen  # keep the Python object alive through the native call above
-        # call-table: base helper stat (_mojolearn) has no native entry yet
-        var high = Int(py=py_call_typed(stat, _A(seen), _P(3), _P(m), _P(1)))
-        _ = seen  # keep the Python object alive through the native call above
+        var low = base_reduce_stat_int(bkey, seen_addr, 3, m, 0)
+        var high = base_reduce_stat_int(bkey, seen_addr, 3, m, 1)
         if low != 1 or high != 1:
             raise Error("cross_val_predict only works for partitions: every row must be in exactly one test set")
         _ = seen  # keep the Python object alive through the native calls above
@@ -1086,11 +1085,20 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
         return PythonObject(None)
     try:
         var table = trees_table(context, _mode(py_fields(est), context), "_mojolearn_estimators")
-        if trees_entry(table, "ridge_fit_multi") is None:
+        if not ridge_multi_available(_estimators_key(table)):
             return PythonObject(None)
         return table
     except:
         return PythonObject(None)
+
+
+def _estimators_key(table: PythonObject) raises -> LinearEntryKey:
+    """UNPACK: the connected estimators image's ridge multi table key, which
+    the trees bridge recorded at import (`estimators_native_key`)."""
+    var key = py_get(table, PythonObject("estimators_native_key"))
+    if key is None:
+        raise Error("RuntimeError: mojolearn: the estimators binding has no native table key")
+    return LinearEntryKey(Int(py=key[0]), Int(py=key[1]))
 
 
 def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, Ya: PythonObject,
@@ -1102,39 +1110,34 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
     var m = _cols(Ya)
     var est = _attr(model, "estimator", PythonObject(None))
     var intercept = _truthy(_attr(est, "fit_intercept", PythonObject(True)))
+    var key = _estimators_key(table)
     var xm: PythonObject
     var work_x = Xa
     if intercept:
         # `_column_means(b, Xa, None)` (`_means`: lm_col_sums, lm_means_finish)
-        # then `_center` (lm_center).
+        # then `_center` (lm_center), through the ridge multi table.
         var sums = _zeros(d, context)
-        # call-table: member Ridge (multi-output lm_col_sums) has no native entry yet
-        _ = py_call_typed(trees_entry(table, "lm_col_sums"), _A(Xa), _A(sums), Python.list(_P(n), _P(d)))
-        _ = sums  # keep the Python object alive through the native call above
+        rm_col_sums(key, trees_address(Xa), trees_address(sums), n, d)
         var m64 = _zeros(d, context)
         xm = admitted_vector(d, "<f4", context)
-        # call-table: member Ridge (multi-output lm_means_finish) has no native entry yet
-        _ = py_call_typed(trees_entry(table, "lm_means_finish"), _A(sums), _A(m64), _A(xm),
-                          Python.list(_P(d), _P(n), _P(0)), _F(0.0))
-        _ = m64  # keep the Python object alive through the native call above
-        _ = sums  # keep the Python object alive through the native call above
+        rm_means_finish(key, trees_address(sums), trees_address(m64), trees_address(xm), d, n, False, 0.0)
+        _ = m64  # keep the store alive through the native call above
+        _ = sums  # keep the store alive through the native calls above
         work_x = admitted_array(Python.tuple(n, d), "<f4", context)
-        # call-table: member Ridge (multi-output lm_center) has no native entry yet
-        _ = py_call_typed(trees_entry(table, "lm_center"), _A(Xa), _A(xm), _A(work_x), Python.list(_P(n), _P(d)))
-        _ = work_x  # keep the Python object alive through the native call above
+        rm_center(key, trees_address(Xa), trees_address(xm), trees_address(work_x), n, d)
+        _ = work_x  # keep the store alive through the native call above
+        _ = Xa  # keep the store alive through the native calls above
     else:
         xm = admitted_vector(d, "<f4", context)
     var coef = admitted_vector(m * d, "<f4", context)
     var ymean = admitted_vector(m, "<f4", context)
     var icpt32 = admitted_vector(m, "<f4", context)
-    var params = Python.list(_P(n), _P(d), _P(m), py_call_typed(trees_builtins().float, _attr(est, "alpha", PythonObject(1.0))),
-                             _P(1 if intercept else 0))
-    if intercept:
-        _ = py_call(params.append, _A(xm))
-        _ = py_call(params.append, _A(icpt32))
-        _ = icpt32  # keep the Python object alive through the native call above
-    # call-table: member Ridge (multi-output ridge_fit_multi) has no native entry yet
-    _ = py_call_typed(trees_entry(table, "ridge_fit_multi"), _A(work_x), _A(Ya), _A(coef), _A(ymean), params)
+    # UNPACK: the member's alpha as Python's float() reads it.
+    var alpha = Float64(py=py_call_typed(trees_builtins().float, _attr(est, "alpha", PythonObject(1.0))))
+    rm_fit(key, trees_address(work_x), trees_address(Ya), trees_address(coef), trees_address(ymean), n, d, m, alpha,
+           intercept, trees_address(xm) if intercept else 0, trees_address(icpt32) if intercept else 0)
+    _ = xm  # keep the store alive through the native call above
+    _ = Ya  # keep the store alive through the native call above
     _ = icpt32  # keep the Python object alive through the native call above
     _ = ymean  # keep the Python object alive through the native call above
     _ = coef  # keep the Python object alive through the native call above
@@ -1206,9 +1209,9 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         var outputs = Int(py=mr[2])
         var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
-        # call-table: member Ridge (multi-output ridge_predict_multi) has no native entry yet
-        _ = py_call_typed(trees_entry(table, "ridge_predict_multi"), _A(Xa), _A(mr[0]), _A(mr[1]), _A(out),
-                          Python.list(_P(n), _P(_cols(Xa)), _P(outputs)))
+        rm_predict(_estimators_key(table), trees_address(Xa), trees_address(mr[0]), trees_address(mr[1]),
+                   trees_address(out), n, _cols(Xa), outputs)
+        _ = mr  # keep the coef and intercept stores alive through the native call above
         _ = out  # keep the Python object alive through the native call above
         _ = Xa  # keep the Python object alive through the native call above
         return out
@@ -1469,21 +1472,22 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     var p_int = pdt == "<i8"
     var size = n * m
     var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], size))
-    var equal = trees_helper(context, "equal_elements")
+    var eq_addr = Int(py=py_call(eq.buffer_info)[0])  # UNPACK: the flag store's address (Python array)
+    var bkey = base_helpers_key(context["trees_helpers"])
     var tc = admitted_vector(size, "<i8" if t_int else "<f8", context)
     trees_cast(Int(py=classical_address(truth)), tdt, trees_address(tc), "<i8" if t_int else "<f8", size, context)
     _ = tc  # keep the Python object alive through the native call above
     _ = truth  # keep the Python object alive through the native call above
     if t_int == p_int:
-        # call-table: base helper equal (_mojolearn) has no native entry yet
-        _ = py_call_typed(equal, _A(tc), _A(pred), _P(3 if p_int else 1), _P(size), py_call(eq.buffer_info)[0])
+        _ = base_equal_elements(bkey, trees_address(tc), trees_address(pred), 3 if p_int else 1, size, eq_addr)
+        _ = eq  # keep the flag store alive through the native call above
         _ = tc  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above
     else:
         var ints = tc if t_int else pred
         var flts = pred if t_int else tc
-        # call-table: base helper equal (_mojolearn) has no native entry yet
-        _ = py_call_typed(equal, _A(ints), _A(flts), _P(9), _P(size), py_call(eq.buffer_info)[0])
+        _ = base_equal_elements(bkey, trees_address(ints), trees_address(flts), 9, size, eq_addr)
+        _ = eq  # keep the flag store alive through the native call above
         _ = flts  # keep the Python object alive through the native call above
         _ = ints  # keep the Python object alive through the native call above
     _ = truth^
@@ -1533,7 +1537,7 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
                     + _repr(Python.tuple(n, m)))
     var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], n * m))
     var base = Int(py=py_call(eq.buffer_info)[0])
-    var equal = trees_helper(context, "equal_elements")
+    var bkey = base_helpers_key(context["trees_helpers"])
     var getter = native_loaded_module("operator").itemgetter
     for j in range(m):  # driver-loop: over the output columns (one member each)
         var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
@@ -1542,8 +1546,8 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
             listed = _label_list(listed, context)
         var truth = score_codes_into(score_classification_encoded(column, "y", context), listed, context)
         var pred = codes[j]
-        # call-table: base helper equal (_mojolearn) has no native entry yet
-        _ = py_call_typed(equal, _A(truth), _A(pred), _P(2), _P(n), _P(base + j * n))
+        _ = base_equal_elements(bkey, trees_address(truth), trees_address(pred), 2, n, base + j * n)
+        _ = eq  # keep the flag store alive through the native call above
         _ = truth  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above
     return _multioutput_rows_score(model, eq, n, m, True, sample_weight, context)

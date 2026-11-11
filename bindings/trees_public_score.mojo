@@ -25,6 +25,9 @@
 # before. What is gone is the Python between predict and score and the
 # re-materialization of y and the prediction.
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from bindings.labels_stat_boundary import labels_stat_pack
+from core.base_helpers_calls import base_reduce_stat
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
@@ -187,9 +190,9 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
 
 
 def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
-    """`Array.min()` (0) / `max()` (1) of a float32 vector: `reduce_stat`."""
-    return py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(addr), PythonObject(0),
-                         PythonObject(count), PythonObject(what))
+    """`Array.min()` (0) / `max()` (1) of a float32 vector: `reduce_stat`
+    through the base helper table; PACK of its answer as the Python float."""
+    return labels_stat_pack(base_reduce_stat(base_helpers_key(context["trees_helpers"]), addr, 0, count, what))
 
 
 def trees_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> AdmittedX:

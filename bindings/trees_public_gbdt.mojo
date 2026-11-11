@@ -19,6 +19,9 @@
 # `gbdt_sigmoid_pair` without a Python `astype`; the adapters' margins go
 # from the predict entry to the binary output kernel without a Python step.
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from bindings.labels_stat_boundary import labels_stat_pack
+from core.base_helpers_calls import base_reduce_stat, base_check_indices_i64, base_bincount_i64
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native import _resolved
 from bindings.native_instance_item import native_instance_item
@@ -599,9 +602,9 @@ def _type_or_value(error: Error) -> Bool:
 
 
 def _reduce(addr: Int, code: Int, n: Int, what: Int, context: PythonObject) raises -> PythonObject:
-    """The core helper `reduce_stat` (0 min, 1 max, 4 integral)."""
-    return py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(addr), PythonObject(code),
-                         PythonObject(n), PythonObject(what))
+    """The core helper `reduce_stat` (0 min, 1 max, 4 integral), through the
+    base helper table; PACK of its answer as the Python number."""
+    return labels_stat_pack(base_reduce_stat(base_helpers_key(context["trees_helpers"]), addr, code, n, what))
 
 
 def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonObject) raises -> AdmittedX:
@@ -695,8 +698,8 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
             raise Error(bijection)
         raise error^
     var m = Int(py=order64.size)
-    if m != n or n < 1 or _int(py_call_typed(trees_helper(context, "check_indices_i64"),
-                                             PythonObject(trees_address(order64)), PythonObject(n), PythonObject(n))) != 0:
+    if m != n or n < 1 or base_check_indices_i64(base_helpers_key(context["trees_helpers"]),
+                                                 trees_address(order64), n, n) != 0:
         raise Error(bijection)
     _ = order64  # keep the Python object alive through the native calls above
     var order = admitted_vector(n, "<u4", context)
@@ -787,8 +790,8 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
             _ = codes  # keep the Python object alive through the native call above
             _ = x  # keep the Python object alive through the native call above
             var counts = admitted_vector(k, "<i8", context)
-            _ = py_call_typed(trees_helper(context, "bincount_i64"), PythonObject(trees_address(codes)), PythonObject(3),
-                              PythonObject(n), PythonObject(k), PythonObject(trees_address(counts)), PythonObject(0))
+            _ = base_bincount_i64(base_helpers_key(context["trees_helpers"]), trees_address(codes), 3, n, k,
+                                  trees_address(counts), False)
             _ = codes  # keep the Python object alive through the native call above
             _ = counts  # keep the Python object alive through the native call above
             dense = Bool(py=_reduce(trees_address(counts), 3, k, 0, context) > PythonObject(0))
