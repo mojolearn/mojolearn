@@ -50,8 +50,9 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         raise Error("native Ridge weighted execution key differs")
     var weighted_entry = linear_table_entry[LINEAR_TABLE_X_LINEAR](weighted_connection.key, 0, String(RIDGE_FIT_ABI), 1)
     var result = LinearFitResult()
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = linear_ridge_run(entry, weighted_entry, request)
     finally:
         _ = x

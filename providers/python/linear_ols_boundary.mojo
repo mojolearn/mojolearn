@@ -31,8 +31,9 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     var key = connection.key.copy()
     var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
     var plan = LinearOlsPlan(0, False, 0)
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             plan = linear_ols_plan(entry, rows, cols, est)
     finally:
         _ = entries
@@ -59,7 +60,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     var vendor = xd_vendor_code(String(context["vendor"]))
     var result = LinearFitResult()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = linear_ols_run(entry, decomp_entry, request, plan, vendor)
     finally:
         _ = x

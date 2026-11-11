@@ -19,6 +19,14 @@ estimator operation. No numerical kernels or route-selection code is changed.
 Weighted/one-feature Ridge, Gram, resident Ridge/OLS, TSQR and metric ranges
 keep the existing native requests, kernels, defaults and copies.
 
+Score also checks the canonical metrics key against the selected metrics
+mode/vendor before table lookup and RUN. It intentionally uses the metrics
+selection: explicit CPU estimators may retain a GPU metrics connection. The
+boundary controls replace a real metrics owner after successful scoring and
+change only the selected metrics vendor. Every linear GIL-release scope now
+borrows a named interpreter owner, following the existing boundary pattern;
+the release scopes and native operations are unchanged.
+
 `core/state_registry.mojo` provides typed generation-checked handles, immutable
 Arc leases, replacement and release. Only registry metadata is locked. Native
 state destruction occurs after unlock. A lease acquired before replacement or

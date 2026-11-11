@@ -9,9 +9,10 @@
   "gpu_contract_cases": 0,
   "public_boundary": {
     "file": "python/mojolearn/tests/test_linear_entry_table_boundary.py",
-    "definitions": 9,
-    "cases": 22,
-    "conditional_other_tier_cases": 2
+    "definitions": 11,
+    "cases": 26,
+    "conditional_other_tier_cases": 4,
+    "metrics_mutation_controls": "Ridge and LinearRegression each refuse a replacement canonical metrics owner from another tier and a selected metrics vendor differing from the retained real owner, after successful prior scoring."
   },
   "cross_image": {
     "provider": "checks/native_tests/entry_table_image_provider.mojo",

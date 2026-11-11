@@ -52,8 +52,9 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var connection = linear_entry_connection(entries)
     var key = connection.key.copy()
     var destination = Int(py=classical_address(dst))
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             linear_lease_predict(key, lease, admitted_x.address, destination, rows, cols, wide, est)
     finally:
         # Raw addresses and the copied native function pointer do not retain
