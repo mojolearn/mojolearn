@@ -19,7 +19,7 @@ from .. import _numeric_profile
 from .. import lowbit as _lowbit
 from .._array import Array
 from .._buffer import _native, addr, addr_ro, all_finite, empty
-from .._bufcheck import is_integer, memcopy, probe
+from .._bufcheck import is_integer, probe
 from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
                      UnsupportedModel, plan_for)
 from .safetensors import Checkpoint
@@ -203,28 +203,6 @@ def _argmax_last(logits, b, l, v):
     if b:
         _native("argmax_last_rows_f32")(addr_ro(logits, name="logits"), [b, l, v], addr(out, name="next ids"))
     return out.astype("<i4")
-
-
-def _prompt_then_new(prompt, b, l, n_new, new_addr, new_step_major):
-    """`(b, l + n_new)` int32: each prompt row followed by its new ids, with
-    no Python loop over rows or tokens. The ids are assembled step-major
-    (`[l + n_new, b]`) by the base binding's `transpose_f32` (a pure 4-byte
-    move, every bit pattern unchanged, so int32 ids pass through it) and
-    transposed back to C order. `new_addr` holds the new ids as int32,
-    step-major `[n_new, b]` when `new_step_major`, else C-order
-    `[b, n_new]`."""
-    total = l + n_new
-    move = _native("transpose_f32")
-    steps = empty((total, b), "<i4")
-    at = addr(steps, name="ids")
-    move(addr_ro(prompt, name="ids"), at, b, l)
-    if new_step_major:
-        memcopy(at + l * b * 4, new_addr, n_new * b * 4)
-    else:
-        move(new_addr, at + l * b * 4, b, n_new)
-    out = empty((b, total), "<i4")
-    move(at, addr(out, name="ids_out"), total, b)
-    return out
 
 
 class CausalLM:
