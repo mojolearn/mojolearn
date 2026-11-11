@@ -96,16 +96,22 @@ def connect(tables, solver=None):
     return call, context
 
 
+#: The native tables' vendor words (core/solver_entry_table.mojo
+#: solver_vendor_word applies the same mapping at publication).
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
 def _connect_cd(solver):
-    # glue: retain the solver binding's two compiled entries at connection
-    from types import BuiltinFunctionType
+    # glue: once at import, the connected solver image's (tier, vendor) key
+    # of the solver operations table (core/solver_entry_table.mojo); the
+    # owner calls the image's published cd_fit / cd_predict entry with it,
+    # never the binding's Python exports (lane calltable-solver-estimators).
     try:
-        cd = {}
-        for name in ("cd_fit", "cd_predict"):  # glue: fixed native exports
-            entry = getattr(solver, name)
-            if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError(f"ElasticNet requires compiled {name}")
-            cd[name] = entry
-        return cd
+        mode_probe = getattr(solver, "solver_numeric_mode", None) or getattr(solver, "solver_host_numeric_mode")
+        mode = int(mode_probe())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(solver.solver_vendor()), -1)  # import-time: the image's vendor
+        if vendor < 0 or mode not in (0, 1):
+            raise ImportError("the coordinate-descent solver image publishes no native table")
+        return (mode, vendor)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         return _refusal(error)

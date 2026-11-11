@@ -6,8 +6,9 @@
 # labels (bindings/classical_labels.mojo), assembles the same int and float
 # parameter lists, makes the same fit / decision / class-prep calls through
 # the native x_linear operations table (core/linear_entry_table_ext.mojo, no
-# CPython between the two modules) and the `cd_fit` / `cd_predict` calls, with
-# the same operands in the same order, and
+# CPython between the two modules) and the `cd_fit` / `cd_predict` calls
+# through the native solver operations table (core/solver_entry_table.mojo),
+# with the same operands in the same order, and
 # writes the fitted attributes the Python wrote (same names, types, dtypes
 # and shapes). No kernel changes and no reduction order changes, so the bits
 # are the ones the Python path produced.
@@ -29,6 +30,7 @@ from core.linear_entry_table_ext import (
     XL_HAS_FIT_FOLD,
 )
 from core.native_descriptor_abi import NativeDescriptorCall
+from core.solver_entry_table import SolverEntryKey, solver_ops_entry, solver_cd_fit_call, solver_cd_predict_call
 from core.native_descriptor_call import native_descriptor_call
 from providers.python.linear_entry_boundary import linear_entry_connection
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -1516,11 +1518,14 @@ comptime _XL_HOST_ONLY_SLOT = "x_linear_host_inference_only_v1"
 comptime _XL_AFTER_FIT_SLOT = "x_linear_no_after_fit_v1"
 
 
-def _xl_cd_entries(context: PythonObject) raises -> PythonObject:
-    var entries = context["cd_solver"]
-    if py_type(entries) is _b().str:
-        raise Error(String(py=entries))
-    return entries
+def _xl_cd_entry(context: PythonObject) raises -> NativeDescriptorCall:
+    """The connected solver image's operations entry
+    (core/solver_entry_table.mojo), by the (tier, vendor) key the bridge
+    recorded at import, or the refusal recorded then."""
+    var key = context["cd_solver"]
+    if py_type(key) is _b().str:
+        raise Error(String(py=key))
+    return solver_ops_entry(SolverEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def _xl_cd_validate(fields: PythonObject, context: PythonObject) raises:
@@ -1602,24 +1607,32 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         sw_keep = w.array
         sw_addr = w.address
         _ = w  # keep the Python object alive through the native call above
-    var entries = _xl_cd_entries(context)
+    var entry = _xl_cd_entry(context)
     var coef = admitted_array(Python.tuple(n_cols), "<f4", context)
     py_setitem(fields, "coef_", coef)
     var info = admitted_vector(1, "<f4", context)
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_cols),
-                             PythonObject(1 if _truth(fields["fit_intercept"]) else 0), PythonObject(_int(fields["max_iter"])),
-                             PythonObject(_float(fields["alpha"])), PythonObject(_float(fields["l1_ratio"])),
-                             PythonObject(_float(fields["tol"])), context["cd_selection"][fields["selection"]],
-                             PythonObject(0 if sw_addr == 0 else 1), PythonObject(1 if row_major else 0))
-    if sw_addr != 0:
-        _ = py_call(params.append, PythonObject(sw_addr))
-    var n_iter = py_call_typed(entries["cd_fit"], PythonObject(x.address), PythonObject(target.address),
-                               PythonObject(labels_address(coef)), PythonObject(labels_address(info)), params)
+    # UNPACK: the settings as plain values, then one native call of the
+    # solver operations table with the GIL released (no CPython between the
+    # two modules).
+    var fit_intercept = _truth(fields["fit_intercept"])
+    var epochs = _int(fields["max_iter"])
+    var alpha = _float(fields["alpha"])
+    var l1_ratio = _float(fields["l1_ratio"])
+    var tol = _float(fields["tol"])
+    var shuffle = _int(context["cd_selection"][fields["selection"]]) != 0
+    var coef_addr = labels_address(coef)
+    var info_addr = labels_address(info)
+    var n_iter = 0
+    var py = Python()
+    with GILReleased(py):
+        n_iter = solver_cd_fit_call(entry, x.address, target.address, coef_addr, info_addr, sw_addr, n_rows, n_cols,
+                                    fit_intercept, epochs, shuffle, row_major, alpha, l1_ratio, tol)
     _ = target  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     _ = coef  # keep the Python object alive through the native call above
+    _ = sw_keep  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", _xl_float(info, 0))
-    py_setitem(fields, "n_iter_", PythonObject(_int(n_iter)))
+    py_setitem(fields, "n_iter_", PythonObject(n_iter))
     _ = info  # keep the Python object alive through the native call above
     _ = coef  # keep the Python object alive through the native call above
     _ = target  # keep the Python object alive through the native call above
@@ -1640,12 +1653,14 @@ def xl_cd_predict(model: PythonObject, source: PythonObject, context: PythonObje
     var x = admit_x_unrecorded(source, "ElasticNet", context, order="F", finite=False)
     if x.cols != _int(fields["n_features_in_"]):
         raise Error("mojolearn ElasticNet feature count differs from fit")
-    var entries = _xl_cd_entries(context)
+    var entry = _xl_cd_entry(context)
     var coef = _xl_words(fields["coef_"], "coef_", context)
     var out = admitted_vector(x.rows, "<f4", context)
-    _ = py_call_typed(entries["cd_predict"], PythonObject(x.address), PythonObject(coef.address),
-                      PythonObject(labels_address(out)),
-                      Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(_float(fields["intercept_"]))))
+    var intercept = _float(fields["intercept_"])
+    var out_addr = labels_address(out)
+    var py = Python()
+    with GILReleased(py):
+        solver_cd_predict_call(entry, x.address, coef.address, out_addr, x.rows, x.cols, intercept)
     _ = coef  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
