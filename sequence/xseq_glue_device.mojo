@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The device image's x_sequence glue entry and its publication (lane
 calltable-xseq, 2026-11-11). `_mojolearn_x_sequence` publishes
-`x_sequence_glue_device_v1` and its whole-model entry in the sequence table
+`x_sequence_glue_device_v1` in the sequence table
 (`core/xseq_entry_table.mojo`) at module init; the sequence owner calls it
 with plain spans instead of the former Python entries.
 
@@ -19,9 +19,6 @@ from core.xseq_entry_table import (
     XseqEntryKey, xseq_table_publish, xseq_vendor_word, xseq_glue_check_spans, xseq_glue_ints, xseq_glue_floats,
     XS_ETS, XS_GARCH, XS_PROPHET_FIT,
 )
-from autograd.model_descriptor import MODEL_ABI_NAME
-from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT
-from sequence.model_device_dispatch import NATIVE_MODEL_API
 from sequence.exec_device import DeviceExec
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_impl import ets_team_impl
@@ -83,13 +80,11 @@ comptime XSEQ_DEVICE_OWNER = SharedSlot[XSequenceDeviceOwner, "MojolearnXSequenc
 
 
 def publish_x_sequence_device() raises:
-    """Publish this image's glue and whole-model entries at module init. A
+    """Publish this image's glue entry at module init. A
     build with no GPU vendor publishes nothing; its callers refuse with the
     table's "provider is not published"."""
     var word = xseq_vendor_word(COMPILED_VENDOR)
     if word < 0:
         return
     var owner = XSEQ_DEVICE_OWNER.get_or_create_ptr()
-    var api = NATIVE_MODEL_API.get_or_create_ptr()
-    xseq_table_publish(XseqEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(owner), x_sequence_glue_device_v1,
-                       api[].entries[0], String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)
+    xseq_table_publish(XseqEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(owner), x_sequence_glue_device_v1)

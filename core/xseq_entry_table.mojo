@@ -11,11 +11,10 @@ reads the slot of the image its estimator's mode connected (the bridge
 records that image's `(mode, vendor)` as `xseq_native_keys`) and calls the
 pointer with plain spans; no Python object crosses.
 
-Two entries per table:
-  0  `XSEQ_GLUE_ABI`, `XS_OP_COUNT` operations: the forecaster bodies below.
-  1  the image's whole-model execution entry (`autograd/model_descriptor.mojo`
-     `MODEL_ABI_NAME`, `MODEL_OPERATION_COUNT` operations): the same thin C
-     pointer `model_native_api_v1` hands out in a capsule.
+One entry per table: `XSEQ_GLUE_ABI`, `XS_OP_COUNT` operations, the
+forecaster bodies below. (The recurrent/MLP doors still reach the image's
+whole-model entry through `model_native_api_v1`'s capsule, shared with the
+xcnn label encoder in `bindings/neural_labels_native.mojo`.)
 
 Glue request layouts (a: addresses, p: Int words, f: Float64 words). The
 words are exactly the former Python entry's `addrs`, `ip`, `fp` lists, in
@@ -57,7 +56,6 @@ comptime XS_PROPHET_PREDICT_DAYS = 11
 comptime XS_OP_COUNT = 12
 
 comptime XSEQ_ENTRY_GLUE = 0
-comptime XSEQ_ENTRY_MODEL = 1
 
 
 @fieldwise_init
@@ -86,12 +84,11 @@ def _xseq_key_check(key: XseqEntryKey) raises:
         raise Error("native x_sequence entries: invalid tier/vendor key")
 
 
-def xseq_table_publish(key: XseqEntryKey, publisher: Int, glue: NativeDescriptorCall,
-                       model: NativeDescriptorCall, model_schema: String, model_operations: Int) raises:
+def xseq_table_publish(key: XseqEntryKey, publisher: Int, glue: NativeDescriptorCall) raises:
     _xseq_key_check(key)
-    var schemas: List[String] = [String(XSEQ_GLUE_ABI), model_schema]
-    var operations: List[Int] = [XS_OP_COUNT, model_operations]
-    var entries: List[NativeDescriptorCall] = [glue, model]
+    var schemas: List[String] = [String(XSEQ_GLUE_ABI)]
+    var operations: List[Int] = [XS_OP_COUNT]
+    var entries: List[NativeDescriptorCall] = [glue]
     if key.mode == 1 and key.vendor == 0:
         entry_table_publish["MojolearnEntriesXSequenceIdenticalCPUV1"](key.mode, key.vendor, publisher, schemas, operations, entries)
     elif key.mode == 0 and key.vendor == 0:

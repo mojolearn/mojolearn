@@ -746,7 +746,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
-        # The forecaster operations and the whole-model entry, published in the
+        # The forecaster operations, published in the
         # sequence table (core/xseq_entry_table.mojo) for the sequence owner
         # (bindings/xseq_*_native.mojo); their former Python entries are gone.
         publish_x_sequence_device()
