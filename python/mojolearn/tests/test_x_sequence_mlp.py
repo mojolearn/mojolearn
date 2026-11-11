@@ -10,6 +10,37 @@ import numpy as np
 import mojolearn as ml
 
 
+class InitStream:
+    """The restatement of ours' seeded init stream (the native `XseqStream`,
+    bindings/xseq_native_common.mojo: the base binding's counter-based
+    `uniform_init_f32` draws plus a splitmix64 child seed), so the reference
+    starts from the SAME initial weights. Moved here from the product's
+    `_buffer.InitStream` (lane pyout-runtime-boundary, 2026-11-11), which no
+    product path called once the fits drew natively."""
+
+    def __init__(self, seed=None):
+        if seed is None:
+            import secrets
+            seed = secrets.randbits(64)
+        self.seed = int(seed) & 0xFFFFFFFFFFFFFFFF
+        self.offset = 0
+
+    def fill_uniform(self, address, n, low, high):
+        from mojolearn._buffer import _native
+        n = int(n)
+        if n:
+            _native("uniform_init_f32")(int(address), n, float(low), float(high),
+                                        self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
+        self.offset += n
+
+    def child_seed(self):
+        z = (self.seed + (self.offset + 1) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+        self.offset += 1
+        return (z ^ (z >> 31)) >> 1
+
+
 def _data():
     rng = np.random.default_rng(0)
     X = rng.standard_normal((200, 5)).astype(np.float32)
@@ -31,7 +62,6 @@ def test_against_sklearn():
         # Our Glorot draws come from the seeded Mojo stream (`_buffer.InitStream`,
         # 86b2bc254), not numpy's RandomState, so the reference starts from the
         # SAME initial weights: the curves then compare the optimisation alone.
-        from mojolearn._buffer import InitStream
         n_out = 1 if y.ndim == 1 and ours is ml.MLPRegressor else len(np.unique(y))
         sizes = [X.shape[1]] + list(kw["hidden_layer_sizes"]) + [n_out]
         # the fit's Glorot-uniform draws, restated: w then b of each layer from the seeded stream

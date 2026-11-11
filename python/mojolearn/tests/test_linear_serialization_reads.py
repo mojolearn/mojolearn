@@ -4,7 +4,7 @@
 import numpy as np
 
 from mojolearn import Ridge
-from mojolearn import linear_model
+from mojolearn import _serialize, linear_model
 
 
 def test_ridge_load_restores_exact_state_without_python_reader(tmp_path, monkeypatch):
@@ -18,7 +18,7 @@ def test_ridge_load_restores_exact_state_without_python_reader(tmp_path, monkeyp
     def refused(*args, **kwargs):
         raise AssertionError("the Python archive reader ran")
 
-    monkeypatch.setattr(linear_model._serialize, "read_npz", refused)
+    monkeypatch.setattr(_serialize, "read_npz", refused)
     restored = Ridge.load(path)
     assert restored.alpha == model.alpha
     assert restored.fit_intercept is model.fit_intercept

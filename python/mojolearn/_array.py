@@ -140,46 +140,12 @@ _ALIAS = {
 }
 
 
-def _c_strides(shape, itemsize):
-    strides = []
-    acc = itemsize
-    for n in reversed(shape):  # glue: one stride per array axis
-        strides.append(acc)
-        acc *= n
-    return tuple(reversed(strides))
-
-
-def _f_strides(shape, itemsize):
-    strides = []
-    acc = itemsize
-    for n in shape:  # glue: one stride per array axis
-        strides.append(acc)
-        acc *= n
-    return tuple(strides)
-
-
-def _prod(shape):
-    n = 1
-    for s in shape:  # glue: product of shape dimensions
-        n *= s
-    return n
-
-
-def _check_shape(shape):
-    if isinstance(shape, int):
-        shape = (shape,)
-    shape = tuple(int(s) for s in shape)  # glue: validates the shape argument
-    for s in shape:  # glue: validates the shape argument
-        if s < 0:
-            raise ValueError(f"mojolearn: negative dimension in shape {shape}")
-    return shape
-
-
-def _new_store(code, size):
-    """A zero-filled `array.array` of `size` elements, allocated once."""
-    if size == 0:
-        return array.array(code)
-    return array.array(code, [0]) * size
+# The shape, stride, size and layout arithmetic of an Array (C and F strides,
+# the element count, `_check_shape`, the zero-filled store and the C <-> F
+# reorder) is `bindings/array_native.mojo` (`_c_strides`, `_f_strides`,
+# `_prod`, `_checked_shape`, `_new_store`, `_reorder`); the Python copies are
+# the test oracle in python/mojolearn/tests/_array_reference.py (lane
+# pyout-runtime-boundary, 2026-11-11).
 
 
 def _to_py_values(mv, dtype):
@@ -188,34 +154,6 @@ def _to_py_values(mv, dtype):
         n = len(mv)
         return list(struct.unpack("<%de" % n, mv.tobytes())) if n else []
     return mv.tolist()
-
-
-def _strided_copy(src_addr, dst_addr, itemsize, shape, src_strides, dst_strides,
-                  src_base=0, dst_base=0):
-    """Element (i_0..i_k) of `shape`, in C order, moves from
-    src[src_base + sum i_j * src_strides[j]] to dst[dst_base + sum i_j *
-    dst_strides[j]] (strides and bases in elements, bits unchanged), in Mojo
-    (`strided_copy_bytes`, `bindings/array_helpers.mojo`; lane pyglue-sweep:
-    the per-row and per-column Python loops it replaces are gone). The GPU
-    base binding runs it on the device (lane cpu2-l1-input,
-    `core/input_device.mojo`); the host loop is the host column."""
-    from . import _buffer
-    dims = array.array("q", (*shape, *src_strides, *dst_strides, src_base, dst_base))
-    _buffer._native("strided_copy_bytes")(src_addr, dst_addr, dims.buffer_info()[0],
-                                          len(shape), itemsize)
-
-
-def _reorder(a, src_order, out):
-    """Copy the elements of `a` (laid out in `src_order`) into the store
-    `out` laid out in the other order: one Mojo strided copy."""
-    shape = a.shape
-    if len(shape) <= 1 or a.size == 0:
-        memoryview(out)[:] = a._mv
-        return
-    cs = _c_strides(shape, 1)
-    fs = _f_strides(shape, 1)
-    src, dst = (cs, fs) if src_order == "C" else (fs, cs)
-    _strided_copy(a._addr, out.buffer_info()[0], a.itemsize, shape, src, dst)
 
 
 class _ArrayInterface:
@@ -293,54 +231,17 @@ class Array:
         return _ARRAY_NATIVE("init", self, _ARRAY_CONTEXT, shape, dtype)
 
     # ------------------------------------------------------------ construction
-    def _init_owned(self, store, shape, dtype, order):
-        self._store = store
-        self._base = None
-        self._pin = None
-        self._mv = memoryview(store)
-        if self._mv.format != _CODE[dtype]:
-            self._mv = self._mv.cast("B").cast(_CODE[dtype])
-        self._addr = store.buffer_info()[0]
-        self._readonly = False
-        self._set_meta(shape, dtype, order)
-        return self
-
-    def _set_meta(self, shape, dtype, order):
-        self.shape = shape
-        self.dtype = dtype
-        self.ndim = len(shape)
-        self.size = _prod(shape)
-        self.itemsize = _ITEMSIZE[dtype]
-        self.nbytes = self.size * self.itemsize
-        self.order = order
-        if order == "C":
-            self.strides = _c_strides(shape, self.itemsize)
-        else:
-            self.strides = _f_strides(shape, self.itemsize)
-        if len(self._mv) != self.size:
-            raise ValueError(
-                f"mojolearn: buffer holds {len(self._mv)} elements, shape "
-                f"{shape} needs {self.size}"
-            )
-
     @classmethod
     def _owned(cls, store, shape, dtype, order="C"):
-        self = cls.__new__(cls)
-        return self._init_owned(store, shape, dtype, order)
+        """A `cls` that owns `store` (an `array.array`) as `shape`, `dtype`
+        and `order` (the shape, stride and size check are native)."""
+        return _ARRAY_NATIVE("owned", cls, _ARRAY_CONTEXT, store, shape, dtype, order)
 
-    @classmethod
-    def _view_of(cls, other, shape, order="C"):
+    def _view_of(self, shape, order="C"):
         """Another shape over the SAME memory (no copy, no ownership
-        transfer): `other` stays alive through `_base`."""
-        self = cls.__new__(cls)
-        self._store = other._store
-        self._base = other
-        self._pin = other._pin
-        self._mv = other._mv
-        self._addr = other._addr
-        self._readonly = other._readonly
-        self._set_meta(shape, other.dtype, order)
-        return self
+        transfer): `self` stays alive through the view's `_base`. Called as
+        `Array._view_of(other, shape, order)`."""
+        return _ARRAY_NATIVE("view_of", self, _ARRAY_CONTEXT, shape, order)
 
     @classmethod
     def from_buffer(cls, obj):
@@ -390,29 +291,14 @@ class Array:
 
     @classmethod
     def _from_flat(cls, flat, shape, dtype):
-        code = _CODE[dtype]
-        if dtype == "<f2":
-            store = array.array("H")
-            if len(flat):
-                store.frombytes(struct.pack("<%de" % len(flat), *flat))
-        else:
-            try:
-                store = array.array(code, flat)
-            except (TypeError, OverflowError) as e:
-                raise TypeError(
-                    f"mojolearn: cannot build a {dtype} Array from these "
-                    f"values: {e}"
-                ) from None
-        return cls._owned(store, shape, dtype, "C")
+        """A C-order `cls` of the Python values `flat` (native store build)."""
+        return _ARRAY_NATIVE("from_flat", cls, _ARRAY_CONTEXT, flat, shape, dtype)
 
     # ------------------------------------------------------------- interface
-    def _both_orders(self):
-        """True when C and F layouts coincide: at most one dimension is
-        larger than 1 (NumPy's rule), so either label is free."""
-        return sum(1 for s in self.shape if s != 1) <= 1  # glue: counts non-unit shape dimensions
-
     def _has_order(self, order):
-        return self.order == order or self._both_orders()
+        """True when the block is laid out as `order`, or when at most one
+        dimension is larger than 1 so either label is free (native)."""
+        return _ARRAY_NATIVE("has_order", self, _ARRAY_CONTEXT, order)
 
     def __array__(self, dtype=None, copy=None):
         """`numpy.asarray(a)` through the `__array__` protocol.
@@ -451,27 +337,14 @@ class Array:
         return _to_py_values(self._mv, self.dtype)
 
     def _as_c(self):
-        """Self if C-order, else a C-order copy."""
-        if self.order == "C":
-            return self
-        if self._both_orders():
-            return Array._view_of(self, self.shape, "C")
-        out = _new_store(_CODE[self.dtype], self.size)
-        _reorder(self, "F", out)
-        return Array._owned(out, self.shape, self.dtype, "C")
+        """Self if C-order, a relabeled view when both layouts coincide,
+        else a C-order copy (native)."""
+        return _ARRAY_NATIVE("as_c", self, _ARRAY_CONTEXT)
 
     def _as_order(self, order):
         """Self when already laid out as `order`, a relabeled view when
-        both layouts coincide, else a copy in `order`."""
-        if order == self.order:
-            return self
-        if self._both_orders():
-            return Array._view_of(self, self.shape, order)
-        if order == "C":
-            return self._as_c()
-        out = _new_store(_CODE[self.dtype], self.size)
-        _reorder(self, "C", out)
-        return Array._owned(out, self.shape, self.dtype, "F")
+        both layouts coincide, else a copy in `order` (native)."""
+        return _ARRAY_NATIVE("as_order", self, _ARRAY_CONTEXT, order)
 
     def tolist(self):
         """The values as nested Python lists (a scalar for a 0-d Array)."""
@@ -517,21 +390,6 @@ class Array:
     def ravel(self):
         """A 1-D view, same as ``reshape(-1)``."""
         return _ARRAY_NATIVE("ravel", self, _ARRAY_CONTEXT)
-
-    def _row_view(self, i, shape, step):
-        """Row `i` of a C-order Array as a zero-copy view (`shape` = the
-        trailing dimensions, `step` = their element count): the same
-        memory, kept alive through `_base`, as NumPy's iteration gives."""
-        v = Array.__new__(Array)
-        v._store = self._store
-        v._base = self
-        v._pin = self._pin
-        off = i * step
-        v._mv = self._mv[off:off + step]
-        v._addr = self._addr + off * self.itemsize
-        v._readonly = self._readonly
-        v._set_meta(shape, self.dtype, "C")
-        return v
 
     __hash__ = None
 

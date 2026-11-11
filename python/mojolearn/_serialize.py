@@ -50,7 +50,7 @@ import ast
 import struct
 import zipfile
 
-from ._array import Array, normalize_dtype, _ITEMSIZE, _prod
+from ._array import Array, normalize_dtype, _ITEMSIZE
 from . import _buffer
 
 MAGIC = b"\x93NUMPY"
@@ -235,7 +235,9 @@ def decode_npy(data):
     bytes (`'|S'`) from complete npy bytes."""
     descr, fortran, shape, offset = _parse_header(data)
     itemsize = _itemsize_of(descr)
-    n = _prod(shape)
+    # The element count of the member shape, from the native shape check
+    # (an empty Array of that shape; lane pyout-runtime-boundary).
+    n = Array(shape, "<u1").size
     # Keep the ZIP member's payload borrowed until `frombytes` makes the one
     # owned Array copy.  Slicing `bytes` here used to allocate and copy the
     # complete tensor once, only for `array.array.frombytes` to copy it again.
@@ -250,7 +252,7 @@ def decode_npy(data):
     if descr in _TYPESTR_OF:
         a = _buffer.frombytes(raw, _TYPESTR_OF[descr], shape)
         if fortran and a.ndim > 1:
-            a._set_meta(shape, a.dtype, "F")
+            a = Array._view_of(a, shape, "F")
         return a
     # Text decoding below needs byte slices (`memoryview` has no `decode` or
     # `rstrip`). String metadata is tiny; numeric model tensors took the
@@ -267,8 +269,7 @@ def decode_npy(data):
         # column-major text blocks never occur in model files; linearize
         # through an index map rather than mis-shape them
         idx = list(range(n))
-        tmp = Array.from_list(idx, "<i8")
-        tmp._set_meta(shape, "<i8", "F")
+        tmp = Array._view_of(Array.from_list(idx, "<i8"), shape, "F")
         items = [items[i] for i in tmp._as_c()._values()]
     if n == 1:
         return items[0]

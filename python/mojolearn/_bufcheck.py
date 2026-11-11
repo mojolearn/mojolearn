@@ -124,13 +124,6 @@ def dtype_name(obj, pb):
     return _FORMAT_NAMES.get(code, repr(pb.format))
 
 
-def nelems(shape):
-    n = 1
-    for s in shape:  # glue: product of shape dimensions
-        n *= int(s)
-    return n
-
-
 def memcopy(dst_addr, src_addr, nbytes):
     """`memmove` on raw addresses. Both buffers must be alive and
     contiguous for `nbytes`; the caller holds the owning objects."""

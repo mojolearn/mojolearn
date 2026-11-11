@@ -358,9 +358,9 @@ def _padded_tail(params: PythonObject) raises -> PythonObject:
 
 
 def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_labels.finite_integer_codes` of a float32 vector, as `(k, dense,
+    """The finite integer class codes of a float32 vector, as `(k, dense,
     top)`: the number of distinct values, whether they are exactly
-    0..k-1, and the largest; None where `finite_integer_codes` answers None
+    0..k-1, and the largest; None where a label is not a code
     (a value that is not a finite nonnegative integer)."""
     var classes = admitted_vector(n, "<f8", context)
     var codes = admitted_vector(n, "<i4", context)

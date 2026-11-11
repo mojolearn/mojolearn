@@ -420,41 +420,6 @@ def threshold_codes(scores, threshold=0.0, *, strict=True, below=0, above=1):
     return Array._owned(store, (n,), "<i8", "C")
 
 
-def finite_integer_codes(arr):
-    """Sorted distinct values of a float32 label `Array` as ints, or None
-    when any value is non-finite, negative or not an integer.
-
-    Lane cpu2-l2-labels: ONE pass over the rows, the device `unique_inverse`
-    (sort, flag/scan, gather; it refuses a NaN, which answers None here).
-    Every other test reads only the k sorted classes: finiteness and the sign
-    are the two ends (the classes are sorted), integrality is the core helper
-    `reduce_stat` over the k classes. The host `all_finite`, the integral
-    test and the minimum over all n rows that ran before are gone; Python
-    only converts the k class values."""
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import _native
-
-    if arr.size == 0:
-        return None
-    flat = arr._as_c()
-    try:
-        classes, _ = unique_inverse(flat.reshape((flat.size,)))
-    except ValueError:
-        return None  # a NaN label
-    k = int(classes.size)
-    ends = flat_view(classes)
-    lo, hi = ends[0], ends[k - 1]
-    if lo < 0:
-        return None
-    if classes.dtype == "<f8":
-        if not (hi < float("inf")):
-            return None
-        if not int(_native("reduce_stat")(classes._addr, _NATIVE_CODE["<f8"], k, _REDUCE_INTEGRAL)):
-            return None
-    del ends
-    return [int(v) for v in classes.tolist()]  # glue: reads the class table (classes-sized: distinct classes)
-
-
 def unique_inverse(y):
     """`(classes, codes)` for one NUMERIC label vector, both `Array`s:
     the sorted distinct values (float64 for real labels, int64 for integer

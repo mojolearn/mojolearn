@@ -18,12 +18,111 @@ import copyreg
 from mojolearn._array import (
     Array, _ArrayInterface, _EMPTY_ARRAY_STORAGE, _CODE, _NATIVE_CODE, _NATIVE_MIN, _EQ_I64_F64,
     _REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_ISUM, _NOT,
-    _INT_BOUNDS, normalize_dtype, _check_shape, _new_store, _prod,
-    _nest, _c_strides, _to_py_values,
-    _strided_copy, _flatten,
+    _INT_BOUNDS, normalize_dtype, _ITEMSIZE,
+    _nest, _to_py_values, _flatten,
 )
 import struct
 import sys
+
+
+# The Python definitions of the shape, stride and layout helpers whose product
+# copies moved to bindings/array_native.mojo (lane pyout-runtime-boundary,
+# 2026-11-11): oracles of `_c_strides`, `_f_strides`, `_prod`,
+# `_checked_shape`, `_new_store`, `_strided_copy`, `_set_meta`, `_init_owned`,
+# `_both_orders` and the `row` operation there.
+def _c_strides(shape, itemsize):
+    strides = []
+    acc = itemsize
+    for n in reversed(shape):
+        strides.append(acc)
+        acc *= n
+    return tuple(reversed(strides))
+
+
+def _f_strides(shape, itemsize):
+    strides = []
+    acc = itemsize
+    for n in shape:
+        strides.append(acc)
+        acc *= n
+    return tuple(strides)
+
+
+def _prod(shape):
+    n = 1
+    for s in shape:
+        n *= s
+    return n
+
+
+def _check_shape(shape):
+    if isinstance(shape, int):
+        shape = (shape,)
+    shape = tuple(int(s) for s in shape)
+    for s in shape:
+        if s < 0:
+            raise ValueError(f"mojolearn: negative dimension in shape {shape}")
+    return shape
+
+
+def _new_store(code, size):
+    if size == 0:
+        return array.array(code)
+    return array.array(code, [0]) * size
+
+
+def _strided_copy(src_addr, dst_addr, itemsize, shape, src_strides, dst_strides,
+                  src_base=0, dst_base=0):
+    from mojolearn import _buffer
+    dims = array.array("q", (*shape, *src_strides, *dst_strides, src_base, dst_base))
+    _buffer._native("strided_copy_bytes")(src_addr, dst_addr, dims.buffer_info()[0],
+                                          len(shape), itemsize)
+
+
+def _set_meta(a, shape, dtype, order):
+    a.shape = shape
+    a.dtype = dtype
+    a.ndim = len(shape)
+    a.size = _prod(shape)
+    a.itemsize = _ITEMSIZE[dtype]
+    a.nbytes = a.size * a.itemsize
+    a.order = order
+    a.strides = _c_strides(shape, a.itemsize) if order == "C" else _f_strides(shape, a.itemsize)
+    if len(a._mv) != a.size:
+        raise ValueError(
+            f"mojolearn: buffer holds {len(a._mv)} elements, shape "
+            f"{shape} needs {a.size}"
+        )
+
+
+def _init_owned(a, store, shape, dtype, order):
+    a._store = store
+    a._base = None
+    a._pin = None
+    a._mv = memoryview(store)
+    if a._mv.format != _CODE[dtype]:
+        a._mv = a._mv.cast("B").cast(_CODE[dtype])
+    a._addr = store.buffer_info()[0]
+    a._readonly = False
+    _set_meta(a, shape, dtype, order)
+    return a
+
+
+def _both_orders(a):
+    return sum(1 for s in a.shape if s != 1) <= 1
+
+
+def _row_view(a, i, shape, step):
+    v = Array.__new__(Array)
+    v._store = a._store
+    v._base = a
+    v._pin = a._pin
+    off = i * step
+    v._mv = a._mv[off:off + step]
+    v._addr = a._addr + off * a.itemsize
+    v._readonly = a._readonly
+    _set_meta(v, shape, a.dtype, "C")
+    return v
 
 _FLOAT = {"<f4", "<f8", "<f2"}
 _INT = {"<i4", "<i8", "<u4", "<u1", "<u2", "<i1"}
@@ -114,7 +213,7 @@ def _astype_reference(self, dtype):
         values = [int(v) for v in self._mv]
         out = Array._from_flat(values, self.shape, dtype)
     out.order = self.order
-    out._set_meta(self.shape, dtype, self.order)
+    _set_meta(out, self.shape, dtype, self.order)
     return out
 
 def _native_astype(self, dtype):
@@ -215,11 +314,11 @@ class _ArrayReference:
         dtype = normalize_dtype(dtype)
         shape = _check_shape(shape)
         store = _new_store(_CODE[dtype], _prod(shape))
-        self._init_owned(store, shape, dtype, "C")
+        _init_owned(self, store, shape, dtype, "C")
 
     def flags(self):
         """``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans."""
-        both = self._both_orders()
+        both = _both_orders(self)
         return {
             "C_CONTIGUOUS": self.order == "C" or both,
             "F_CONTIGUOUS": self.order == "F" or both,
@@ -664,7 +763,7 @@ class _RowIter:
         if i >= self._n:
             raise StopIteration
         self._i = i + 1
-        return self._a._row_view(i, self._shape, self._step)
+        return _row_view(self._a, i, self._shape, self._step)
 
     def __length_hint__(self):
         return self._n - self._i
