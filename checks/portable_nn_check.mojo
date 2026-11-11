@@ -38,7 +38,7 @@ Run: `pixi run check-portable-nn` (append `sabotage` for arm 3).
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp, log, rsqrt, sqrt
 from std.memory import bitcast
 from std.sys import argv

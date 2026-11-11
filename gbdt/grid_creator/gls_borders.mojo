@@ -34,7 +34,7 @@ same `border_sample_row`, `border_key`, `gls_log_table_entry` and
 `gls_column` on host memory, so the grids agree by construction.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz, pinned_mul_f32

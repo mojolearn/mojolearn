@@ -25,8 +25,8 @@ from core.classical_distance import direct_distance_step
 from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

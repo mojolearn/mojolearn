@@ -38,7 +38,7 @@ APPLE. The bounded QR's passes keep their waits on Apple (they read nothing;
 they pace a Metal queue, x_decomp/qr_bounded.mojo), as the sliced QR's
 `_Pace` does; off Apple nothing here waits.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

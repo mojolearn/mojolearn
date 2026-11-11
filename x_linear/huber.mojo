@@ -17,7 +17,7 @@ from x_linear.team import Team, team_at
 from x_linear.vfold import vdot
 from x_linear.tops import chain_fmad, fold_fa, fold_parts, fold_blocks, FOLD_BLOCK
 from std.memory import bitcast
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 
 
 comptime HUBER_U = 16

@@ -5,7 +5,7 @@ One launch copies nine disjoint tensor ranges. The y grid selects a tensor;
 no floating point arithmetic, barriers or atomics are involved. Each tensor
 buffer must remain alive until the caller synchronizes the context.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 

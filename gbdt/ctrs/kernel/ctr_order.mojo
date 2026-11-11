@@ -4,7 +4,7 @@
 cpu4-gbdt). The order itself is defined in `gbdt/ctrs/ctr_order.mojo`,
 which the host column shares."""
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gbdt.ctrs.ctr_order import ctr_order_key, ctr_order_row

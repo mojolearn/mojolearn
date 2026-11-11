@@ -29,7 +29,7 @@ optional root. This kernel writes the same `rows x cols` matrix:
 `-D MOJOLEARN_KNN_APPLE_MMA_OFF` keeps the register tile.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace

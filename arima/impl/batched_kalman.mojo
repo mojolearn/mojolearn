@@ -135,7 +135,7 @@ one (CONTRIBUTING.md (Non-default paths)).
 from experiments.classical_identical_ideas.stats_controls import C59_TRIAL_STATE
 from arima.impl.fast_kalman_scan import fast_kalman_scan
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from arima.impl.linalg.batched.matrix import (

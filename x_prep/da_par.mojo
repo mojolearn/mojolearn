@@ -22,7 +22,7 @@ DEC_TILE (FAST + Apple default; off: -D MOJOLEARN_LDAQDA_DEC_TILE_OFF):
     and R in 32 x 32 shared tiles, every (row, r) chain folds c ascending in
     a register, then a thread a row folds r ascending: the unit's chains.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

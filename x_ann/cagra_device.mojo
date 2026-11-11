@@ -7,7 +7,7 @@ compute `cagra_prune` / `cagra_reverse_merge` (the host column's functions)
 integer for integer (gap-fails2, 2026-10-02: the opt-in host prune and its
 64-entry bound are gone)."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace

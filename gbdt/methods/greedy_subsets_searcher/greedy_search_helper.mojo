@@ -4,7 +4,7 @@
 
 from core.device_plan import DevicePlan, plan_for_single
 from std.math import sqrt
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -3314,7 +3314,7 @@ def launch_histograms_for_blocks[
         ]()
         var run_fixed_bridge = _flush_is_fixed_point
 
-        @parameter
+        @__parameter
         if (
             (hist2_smem_mode == HIST_SMEM_SHARED2_I32 or _one_byte_fixed)
             and not _flush_is_fixed_point
@@ -3332,7 +3332,7 @@ def launch_histograms_for_blocks[
                 # the bridge for it would read an accumulator nothing wrote
                 # and skip the memset the float atomics need. Before 1947
                 # that shape refused, so the distinction could not arise.
-                @parameter
+                @__parameter
                 if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
                     run_fixed_bridge = True
                 else:
@@ -3597,7 +3597,7 @@ def launch_histograms_for_blocks[
                     )
                 else:
 
-                    @parameter
+                    @__parameter
                     if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
                         # lane trees-hist-ideas idea 4 (default off):
                         # SymmetricTree two-stat blocks may take FG cindex

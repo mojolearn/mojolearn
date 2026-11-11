@@ -122,7 +122,7 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 # =========================================================================
 """
 
-from std.gpu import thread_idx, lane_id, WARP_SIZE
+from max.gpu import thread_idx, lane_id, WARP_SIZE
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.info import size_of
@@ -131,7 +131,7 @@ from max.gpu.sync import barrier
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.gpu.primitives.warp import shuffle_up
+from max.gpu.primitives.warp import shuffle_up
 from std.sys.compile import is_defined
 
 comptime BLOCK_SCAN_SHUFFLE = (

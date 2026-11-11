@@ -8,7 +8,7 @@ the minibatch Perceptron's mean of its epoch-end iterates (x_linear/sgd.mojo
 result words. One thread a weight (and one for the intercept): a grid, no
 host step. FAST only, and since 2026-10-04 (rab5-perc: accuracy 0.76219 ->
 0.74097, worse) only with the opt-in -D MOJOLEARN_SGD_PERC_AVG."""
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from x_linear.ops import FP, IP, ld, ldi, st, fa, fm
 
 

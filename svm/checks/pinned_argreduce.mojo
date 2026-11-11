@@ -51,8 +51,8 @@ SABOTAGE ARMS (the foot of this file) are not called by the implementation; they
 the spellings the row-39 gate must reject.
 """
 
-from std.gpu import thread_idx, lane_id, WARP_SIZE
-from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
+from max.gpu import thread_idx, lane_id, WARP_SIZE
+from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.math import max
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

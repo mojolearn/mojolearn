@@ -162,7 +162,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.split import (
 from extratrees.checks.pcg_rng import key_for
 from extratrees.checks.pcg_rng import PCGenerator, uniform_int_u32
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.atomic import Atomic
 from std.memory import stack_allocation

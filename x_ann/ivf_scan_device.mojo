@@ -23,7 +23,7 @@ The old kernels ran ~1000 threads (one per query) that recomputed every
 coarse distance for every probe; this runs one thread per candidate.
 Queries go in chunks so the candidate buffer stays under CAND_BUDGET floats."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

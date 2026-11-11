@@ -4,7 +4,7 @@
 Other columns' software FMA may flush before rounding at the same boundary;
 this scoped regression does not certify cross-column numerical equivalence.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add

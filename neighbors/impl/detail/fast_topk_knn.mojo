@@ -24,7 +24,7 @@ other build keeps the dispatch it had. `-D MOJOLEARN_KNN_FAST_TOPK_OFF`
 turns it off.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import sqrt, inf
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

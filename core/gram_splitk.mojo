@@ -151,7 +151,7 @@ from core.gram_multi_gpu import (
     gram_splitk_launch_centered_dispatch,
     gram_splitk_launch_dispatch,
 )
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

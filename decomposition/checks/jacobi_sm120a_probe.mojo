@@ -46,7 +46,7 @@ written with `X.tofile(...)` (12345 x 17 float32 row-major, 839,460 bytes,
 sha256 595dda3a45cf8a3e...).
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import sqrt
 from std.memory import bitcast, unsafe_memcpy
 from std.sys import argv

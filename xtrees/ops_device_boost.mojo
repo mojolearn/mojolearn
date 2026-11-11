@@ -34,7 +34,7 @@ before the result is written; the messages are the host loops'. When both a
 bad row and a bad node occur, the row message wins (the host loop raises the
 first bad position's)."""
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
 from std.sys import is_defined

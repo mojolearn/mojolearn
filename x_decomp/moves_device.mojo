@@ -4,7 +4,7 @@
 apple-fast-py2mojo-decomp, 2026-10-03): one thread per moved element, the
 same source and destination index functions as the host loop, so the copies
 are the host's exactly. GPU binding only."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from x_decomp.cells import F32Ptr

@@ -43,7 +43,7 @@ pointers cross only `@always_inline` callees.
 """
 
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int

@@ -55,7 +55,7 @@ USER-SUPPLIED PAIRS keep main's path even under the define: a caller's pair
 list is not a function of the grades.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from std.math import isfinite
 from std.memory import stack_allocation

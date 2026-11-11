@@ -12,8 +12,8 @@ from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DIST
 from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
 # SPDX-License-Identifier: Apache-2.0
 
-from std.gpu import block_idx,thread_idx,lane_id
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx,thread_idx,lane_id
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_FAST
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import WARP_SIZE,_key,_kless

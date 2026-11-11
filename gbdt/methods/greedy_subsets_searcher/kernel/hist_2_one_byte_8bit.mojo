@@ -46,10 +46,10 @@ the same dual-branch flush every histogram kernel in this package uses.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
-from std.gpu.primitives import warp
-from std.gpu.primitives.warp import vote
-from std.gpu.intrinsics import ldg
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
+from max.gpu.primitives import warp
+from max.gpu.primitives.warp import vote
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -138,7 +138,7 @@ def h8_add_point(
     arms of the other kernels dropped theirs: atomics make the
     serialization protect nothing, and associativity keeps the bits."""
 
-    @parameter
+    @__parameter
     for i in range(4):
         var f = (tid + i) & 3
         var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
@@ -300,7 +300,7 @@ def h8_reduce_and_flush(
     while start < H8_SLICE:
         var acc = smem[start]
 
-        @parameter
+        @__parameter
         for s in range(1, H8_SLICES):
             acc += smem[start + s * H8_SLICE]
         smem[start] = acc
@@ -323,7 +323,7 @@ def h8_reduce_and_flush(
             var device_offset = group_offset * stat_count * leaf_count
             var entries_per_leaf = stat_count * group_size
 
-            @parameter
+            @__parameter
             for stat in range(2):
                 var q = smem[(fold << 3) + (fid << 1) + stat]
                 if q != Int32(0):
@@ -509,7 +509,7 @@ def hist2_8bit_kernel[
         var lq1 = InlineArray[Int32, H8_POINTS](fill=0)
         var lq2 = InlineArray[Int32, H8_POINTS](fill=0)
 
-        @parameter
+        @__parameter
         for k in range(H8_UNROLL):
             if active:
                 comptime if preq:
@@ -537,7 +537,7 @@ def hist2_8bit_kernel[
                         s2_ptr + H8_LANE * H8_LOAD * k
                     )
 
-                    @parameter
+                    @__parameter
                     for e in range(H8_LOAD):
                         var u = hist2_dither(
                             pos_base + H8_LANE * H8_LOAD * k + e
@@ -559,7 +559,7 @@ def hist2_8bit_kernel[
         else:
             if active:
 
-                @parameter
+                @__parameter
                 for k in range(H8_POINTS):
                     h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
         b_ptr += stripe_size
@@ -702,7 +702,7 @@ def hist2_8bit_gather_kernel[
             var hs1: Float32
             var hs2: Float32
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 hs1 = ldg(stats + hrow)
                 hs2 = ldg(stats + (stat_line_size + hrow))
@@ -719,7 +719,7 @@ def hist2_8bit_gather_kernel[
             var ts1: Float32
             var ts2: Float32
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
                 ts1 = ldg(stats + trow)
@@ -761,7 +761,7 @@ def hist2_8bit_gather_kernel[
         var lq1 = InlineArray[Int32, H8_POINTS](fill=0)
         var lq2 = InlineArray[Int32, H8_POINTS](fill=0)
 
-        @parameter
+        @__parameter
         for k in range(H8_UNROLL):
             if active and preq:
                 var wi = ldg[width=H8_LOAD, alignment=4](
@@ -784,7 +784,7 @@ def hist2_8bit_gather_kernel[
                 var v1 = SIMD[DType.float32, H8_LOAD](0.0)
                 var v2 = SIMD[DType.float32, H8_LOAD](0.0)
 
-                @parameter
+                @__parameter
                 if not ridx_stats:
                     v1 = ldg[width=H8_LOAD, alignment=4](
                         s1_ptr + H8_LANE * H8_LOAD * k
@@ -793,14 +793,14 @@ def hist2_8bit_gather_kernel[
                         s2_ptr + H8_LANE * H8_LOAD * k
                     )
 
-                @parameter
+                @__parameter
                 for e in range(H8_LOAD):
                     var u = hist2_dither(
                         pos_base + H8_LANE * H8_LOAD * k + e
                     )
                     lb[k * H8_LOAD + e] = ldg(cindex_p + Int(vi[e]))
 
-                    @parameter
+                    @__parameter
                     if ridx_stats:
                         # DEVIATION 1902: both stats join the bins' scalar
                         # gather through the same loaded row id; the wide
@@ -825,7 +825,7 @@ def hist2_8bit_gather_kernel[
         else:
             if active:
 
-                @parameter
+                @__parameter
                 for k in range(H8_POINTS):
                     h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
         i_ptr += stripe_size

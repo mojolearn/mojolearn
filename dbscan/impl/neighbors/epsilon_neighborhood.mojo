@@ -174,8 +174,8 @@ from experiments.classical_identical_ideas.graph_controls import DBSCAN_DIRECT_D
 
 from checks.numerics import ftz_simd, identical_mul_add_simd
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum

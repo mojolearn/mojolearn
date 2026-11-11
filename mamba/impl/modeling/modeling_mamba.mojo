@@ -164,7 +164,7 @@ Everything, with the pins compiled away, on the same code and the same
 launches. FAST makes no identity claim (contract section 8's last sentence).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.step_phase import step_count_sync

@@ -12,7 +12,7 @@ column c's partials (`cs_fold_kernel`, a threadgroup tree per digit: an
 integer sum, so any order is the same total) and its thread 0 rounds the
 total once to float64 bits. Center and scale: one thread per cell."""
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

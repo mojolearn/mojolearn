@@ -18,7 +18,7 @@ first iteration scatters the keys; later ones run a thread per group (sum,
 count), a thread per ISO_CHUNK groups (PAVA), a thread per pair of runs per
 tree level (`iso_merge`), a max scan of the block heads (log2(G) launches),
 a thread per group (its block mean) and a thread per pair (the scatter)."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from x_decomp.cells import F32Ptr, I32Ptr

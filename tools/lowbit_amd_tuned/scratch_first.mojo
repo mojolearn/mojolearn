@@ -15,7 +15,7 @@ store it checks. `tools/lowbit_amd_tuned/scratch_first.sh` runs each binary
 in many fresh processes and counts the faults.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceContext
 

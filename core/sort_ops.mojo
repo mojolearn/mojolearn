@@ -22,7 +22,7 @@ The caller's outputs are written only while it is open; the radix passes
 run on the op's own scratch either way (a stable re-sort of stale scratch
 changes nothing the caller sees). Nothing is read back or drained.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

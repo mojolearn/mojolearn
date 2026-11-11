@@ -16,7 +16,7 @@ from std.atomic import Atomic
 from std.memory import bitcast
 from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
 from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 

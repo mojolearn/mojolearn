@@ -46,8 +46,8 @@ since 8 warps times 1024 floats is 8192 floats.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 
 from checks.kernel_matrix import (
     replication_lanes_for,
@@ -231,7 +231,7 @@ def one_byte_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     # ===================================================
     var warp_offset: Int
 
-    @parameter
+    @__parameter
     if smem_mode == HIST_SMEM_SHARED2_I32:
         warp_offset = 1024 * (tid // 64)
     else:
@@ -332,7 +332,7 @@ def add_one_byte_point[
     costs nothing.
     """
 
-    @parameter
+    @__parameter
     for i in range(4):
         var slot = slice_base + one_byte_bin_offset[bits](ci, tid, i)
         comptime inner_bits = bits - 5
@@ -372,7 +372,7 @@ def add_one_byte_point[
         # CPU pays nothing extra; measured standings live in RESUME.
         # NVIDIA/AMD float columns compile the pass loop unchanged.
         # ===================================================
-        @parameter
+        @__parameter
         if dt == DType.int32:
             hist2_smem_add[dt](smem, slot, stat_to_add, q_to_add)
         elif inner_bits == 0:
@@ -385,7 +385,7 @@ def add_one_byte_point[
             var higher = one_byte_higher_bin[bits](ci, tid, i)
             comptime mask = (1 << inner_bits) - 1
 
-            @parameter
+            @__parameter
             for kk in range(1 << inner_bits):
                 var p = ((tid >> 2) + kk) & mask
                 # See the note above: `syncwarp` on a 32-wide column, a
@@ -562,7 +562,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
             hb = ldg(bins_p + (p_offset + pe))
             hs = ldg(stats_p + (p_offset + pe))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 hq = hist2_quantize(
                     hs, fixed_scale, hist2_dither(p_offset + pe)
@@ -578,7 +578,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
             tb = ldg(bins_p + (tail_start + pe))
             ts = ldg(stats_p + (tail_start + pe))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 tq = hist2_quantize(
                     ts, fixed_scale, hist2_dither(tail_start + pe)
@@ -606,7 +606,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
     # each carrying its own workaround.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
+    @__parameter
     if not uniform:
         # Deliberately unimplemented rather than silently wrong: the literal
         # CatBoost loop needs a lane-local sync, and reaching here means the
@@ -656,7 +656,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
         # the entire reason `AlignMemoryAccess` exists, and it is what makes
         # a 4-wide load legal as well as fast. Only the uniform-iteration
         # guard remains, and that one is ours.
-        @parameter
+        @__parameter
         for k in range(UNROLL):
             if active:
                 # `Ldg((uint4*) bins, warpSize * k)` and
@@ -675,12 +675,12 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                     s_ptr + LANE_WIDTH * LOAD_SIZE * k
                 )
 
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = vb[e]
                     local_stats[k * LOAD_SIZE + e] = vs[e]
 
-                    @parameter
+                    @__parameter
                     if DT == DType.int32:
                         var u = hist2_dither(
                             pos_base + LANE_WIDTH * LOAD_SIZE * k + e
@@ -691,7 +691,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
             else:
                 # No row: contribute zero. Harmless, and it keeps this lane
                 # inside every barrier below.
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
@@ -699,7 +699,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
 
         # `hist.AddPoints<loadSize * N>(...)`: every point the batch loaded,
         # through the same `AddPoint` the peel calls.
-        @parameter
+        @__parameter
         for k in range(POINTS_PER_ITER):
             add_one_byte_point[bits, DT](
                 local_bins[k], local_stats[k], local_q[k], tid, slice_base,
@@ -752,10 +752,10 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
         var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
         var src = WARP_HIST_SIZE + lower_bits_offset + 4 * higher_bin
 
-        @parameter
+        @__parameter
         for blk in range(warp_hist_block_count):
 
-            @parameter
+            @__parameter
             for i in range(4):
                 sums[i] += smem[src + i + blk * sub_block]
 
@@ -765,7 +765,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
     barrier()
     if fold_r < hist_size_bins:
 
-        @parameter
+        @__parameter
         for i in range(4):
             smem[hist_size_bins * i + fold_r] = sums[i]
     barrier()
@@ -791,7 +791,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
 
             var cell = smem[fid * hist_size_bins + fold]
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 # The shared-Int32 arm: the cell is already fixed point at
                 # `fixed_scale`, and the flush follows
@@ -834,7 +834,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
                         TARGET_COLUMN, PIN_DETERMINISM
                     ]()
 
-                    @parameter
+                    @__parameter
                     if det:
                         if active_block_count > 1:
                             # `NUMERIC_IDENTICAL`. Partials sum as Int32
@@ -1017,7 +1017,7 @@ def one_byte_hist_gather_kernel[
             var hrow = Int(ldg(indices + (p_offset + pe)))
             hb = ldg(cindex_p + hrow)
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902: the stat plane is stationary and the
                 # stat rides the SAME gathered row id as the bin. Same
@@ -1027,7 +1027,7 @@ def one_byte_hist_gather_kernel[
             else:
                 hs = ldg(stats_p + (p_offset + pe))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 hq = hist2_quantize(
                     hs, fixed_scale, hist2_dither(p_offset + pe)
@@ -1044,14 +1044,14 @@ def one_byte_hist_gather_kernel[
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb = ldg(cindex_p + trow)
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
                 ts = ldg(stats_p + trow)
             else:
                 ts = ldg(stats_p + (tail_start + pe))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 tq = hist2_quantize(
                     ts, fixed_scale, hist2_dither(tail_start + pe)
@@ -1078,7 +1078,7 @@ def one_byte_hist_gather_kernel[
     # each carrying its own workaround.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
+    @__parameter
     if not uniform:
         # Deliberately unimplemented rather than silently wrong: the literal
         # CatBoost loop needs a lane-local sync, and reaching here means the
@@ -1129,7 +1129,7 @@ def one_byte_hist_gather_kernel[
         # the BINS are gathered, one at a time, because a gather has no
         # vector form. That asymmetry is theirs and it is the point: two of
         # the three streams still get the wide load.
-        @parameter
+        @__parameter
         for k in range(UNROLL):
             if active:
                 # `Ldg((int4*) indices, warpSize * k)` and
@@ -1146,13 +1146,13 @@ def one_byte_hist_gather_kernel[
                 )
                 var vs = SIMD[DType.float32, LOAD_SIZE](0.0)
 
-                @parameter
+                @__parameter
                 if not ridx_stats:
                     vs = ldg[width=LOAD_SIZE, alignment=4](
                         s_ptr + LANE_WIDTH * LOAD_SIZE * k
                     )
 
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     # The compressed index is never permuted, so after a
                     # reorder a position no longer names a row and the index
@@ -1165,7 +1165,7 @@ def one_byte_hist_gather_kernel[
                         cindex_p + Int(vi[e])
                     )
 
-                    @parameter
+                    @__parameter
                     if ridx_stats:
                         # DEVIATION 1902: the stat plane is stationary too,
                         # so the stat joins the bins' scalar gather through
@@ -1175,7 +1175,7 @@ def one_byte_hist_gather_kernel[
                         vs[e] = ldg(stats_p + Int(vi[e]))
                     local_stats[k * LOAD_SIZE + e] = vs[e]
 
-                    @parameter
+                    @__parameter
                     if DT == DType.int32:
                         var u = hist2_dither(
                             pos_base + LANE_WIDTH * LOAD_SIZE * k + e
@@ -1184,14 +1184,14 @@ def one_byte_hist_gather_kernel[
                             vs[e], fixed_scale, u
                         )
             else:
-                @parameter
+                @__parameter
                 for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
                     local_q[k * LOAD_SIZE + e] = Int32(0)
 
         # `hist.AddPoints<loadSize * N>(...)`
-        @parameter
+        @__parameter
         for k in range(POINTS_PER_ITER):
             add_one_byte_point[bits, DT](
                 local_bins[k], local_stats[k], local_q[k], tid, slice_base,
@@ -1244,10 +1244,10 @@ def one_byte_hist_gather_kernel[
         var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
         var src = WARP_HIST_SIZE + lower_bits_offset + 4 * higher_bin
 
-        @parameter
+        @__parameter
         for blk in range(warp_hist_block_count):
 
-            @parameter
+            @__parameter
             for i in range(4):
                 sums[i] += smem[src + i + blk * sub_block]
 
@@ -1257,7 +1257,7 @@ def one_byte_hist_gather_kernel[
     barrier()
     if fold_r < hist_size_bins:
 
-        @parameter
+        @__parameter
         for i in range(4):
             smem[hist_size_bins * i + fold_r] = sums[i]
     barrier()
@@ -1283,7 +1283,7 @@ def one_byte_hist_gather_kernel[
 
             var cell = smem[fid * hist_size_bins + fold]
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 # The shared-Int32 arm: the cell is already fixed point at
                 # `fixed_scale`, and the flush follows
@@ -1326,7 +1326,7 @@ def one_byte_hist_gather_kernel[
                         TARGET_COLUMN, PIN_DETERMINISM
                     ]()
 
-                    @parameter
+                    @__parameter
                     if det:
                         if active_block_count > 1:
                             # `NUMERIC_IDENTICAL`. Partials sum as Int32

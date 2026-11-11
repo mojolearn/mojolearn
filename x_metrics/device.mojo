@@ -3,7 +3,7 @@
 """The metrics lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.memory import bitcast

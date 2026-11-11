@@ -41,7 +41,7 @@ factor is the same blocked Cholesky. IDENTICAL and every other vendor
 compile main's route unchanged (CHOL_FAST_TALL is False there).
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import sqrt
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

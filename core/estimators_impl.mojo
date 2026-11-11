@@ -10,7 +10,7 @@ in the binding (lane thin-core, 2026-10-21: a pure move, no bit change).
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.py2mojo_rows import rows_log_device_buffers
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import (
     SF64_ONE, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_gt, sf64_neg,
     sf64_sub, sf64_mul, sf64_to_f32,

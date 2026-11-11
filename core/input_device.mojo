@@ -33,7 +33,7 @@ below 2^31 (`IND_MAX_N`).
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -43,7 +43,7 @@ second shape for the same property would be a second thing to get wrong.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import bitcast
 

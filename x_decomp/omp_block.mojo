@@ -18,7 +18,7 @@ and the Cholesky extension and the two triangular solves on the active set
 (at most nnz rows) run on thread 0 in threadgroup memory. Same selection,
 same refit (`omp_row`'s spellings, x_decomp/cells.mojo), no device scratch.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

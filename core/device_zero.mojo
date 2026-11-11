@@ -23,7 +23,7 @@ carved prefixes are 16-byte aligned or better; a start that is not 4-byte
 aligned takes the byte kernel for the whole span.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.sys.compile import is_defined
 from std.sys.info import size_of

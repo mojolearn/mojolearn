@@ -93,7 +93,7 @@ time.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import unsafe_memcpy
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from training.maximize import maximize_negate
 from std.os import getenv
 from std.sys.compile import is_defined

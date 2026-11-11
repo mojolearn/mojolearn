@@ -8,7 +8,7 @@ cell, leaf or merge; every count an atomic integer. `DeviceOps` enqueues them;
 the host column runs the same steps in loops (`x_cluster/host/host_ops.mojo`).
 Only the GPU binding imports this file."""
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from x_cluster.bodies import FPtr, IPtr
 

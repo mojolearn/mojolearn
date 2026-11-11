@@ -30,7 +30,7 @@ show the probe can tell the orders apart.
 """
 
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import bitcast
 from std.sys.info import has_apple_gpu_accelerator

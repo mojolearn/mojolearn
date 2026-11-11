@@ -18,7 +18,7 @@ single-matrix driver (`DevExec._eigh_par_on`) gets. The tail is
 Launch: grid = batch, block = RR_OFF_TPB. Scratch per problem: cs 2 h
 (h = ceil(n / 2)), part 2 ceil(n / RR_OFF_TPB), diag n, v n x n.
 info[2 b] = 1 converged / 0 not, info[2 b + 1] = sweeps run."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 

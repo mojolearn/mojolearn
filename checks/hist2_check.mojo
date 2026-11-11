@@ -789,7 +789,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     )
     var f32_moved = diff_cells(sf_f32, m_f32, total)
 
-    @parameter
+    @__parameter
     if FLUSH_IS_FIXED:
         if len(f32_moved) == 0:
             raise Error(
@@ -814,7 +814,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32 or FLUSH_IS_FIXED
     )
 
-    @parameter
+    @__parameter
     if DISPATCH_QUANTIZES:
         if len(disp_moved) == 0:
             raise Error(
@@ -1404,7 +1404,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
     )
     var f32_moved = diff_cells(sf_f32, p_f32, total)
 
-    @parameter
+    @__parameter
     if FLUSH_IS_FIXED:
         if len(f32_moved) == 0:
             raise Error("under the integer flush the PASS float arm must"
@@ -1425,7 +1425,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
         HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32 or FLUSH_IS_FIXED
     )
 
-    @parameter
+    @__parameter
     if DISPATCH_QUANTIZES:
         if len(disp_moved) == 0:
             raise Error("THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX"

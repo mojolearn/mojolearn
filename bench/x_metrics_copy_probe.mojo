@@ -9,7 +9,7 @@ memory directly. Prints `XMCOPY <path> <words> <us>` (the best of 5).
 
     pixi run -e default mojo run -I . bench/x_metrics_copy_probe.mojo
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext

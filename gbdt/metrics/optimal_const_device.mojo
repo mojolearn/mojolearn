@@ -31,7 +31,7 @@ THE ORDER IS THE HOST TWIN'S (`gbdt/metrics/sample_quantile.mojo`,
     host's serial accumulation in sorted order.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import ceildiv, inf
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext

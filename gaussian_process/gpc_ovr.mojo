@@ -81,7 +81,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_TN
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
 #: (`-D MOJOLEARN_IDN_GPC_OVR_OFF` restores the per-class binding calls).

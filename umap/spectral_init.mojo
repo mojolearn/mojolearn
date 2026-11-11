@@ -4,7 +4,7 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace

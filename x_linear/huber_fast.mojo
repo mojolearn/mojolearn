@@ -35,7 +35,7 @@ over 512-row blocks instead of FOLD_BLOCK: eight times the threads of the
 partials launch (taxi: 21 tasks x 366 blocks under FOLD_BLOCK), a
 different fold order (FAST bits only).
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

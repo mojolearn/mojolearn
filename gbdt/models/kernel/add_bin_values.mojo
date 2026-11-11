@@ -27,7 +27,7 @@ total is preserved and every individual prediction is wrong. Conservation
 cannot see it; comparing against the learn cursor can.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

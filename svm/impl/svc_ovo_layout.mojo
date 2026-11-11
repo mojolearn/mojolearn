@@ -30,7 +30,7 @@ from +0.0, rounded once to float32: one thread per feature, the chain in
 (two float32 significands fit binary64), so the SAME bits as the Python loop.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

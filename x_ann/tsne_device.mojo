@@ -4,7 +4,7 @@
 symmetrization runs on the device too (`x_ann/tsne_sym_device.mojo`, the
 host function `tsne_symmetrize`'s CSR and words)."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
@@ -12,7 +12,7 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.atomic import Atomic, Ordering, fence
-from std.gpu import grid_dim
+from max.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
 from core.admitted_finite_status import enqueue_finite_status

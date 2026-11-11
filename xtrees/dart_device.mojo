@@ -42,7 +42,7 @@ float64), the leaf sums fold per 8192-row chunk then across chunks instead
 of one row-order chain, and the dropped trees come off and go back as one
 gathered sum per row instead of one add per tree. The drop set, the shrink
 factors and the tree shapes are main's."""
-from std.gpu import block_idx, block_dim, grid_dim, thread_idx
+from max.gpu import block_idx, block_dim, grid_dim, thread_idx
 from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T30
 from std.sys import has_accelerator
@@ -147,7 +147,7 @@ def dart_row_kernel(
     var e = Int(block_idx.x) * TPB * AFT_DART_ROWS + Int(thread_idx.x)
     var stride = _tstride() * AFT_DART_ROWS
     while e < Int(units):
-        @parameter
+        @__parameter
         for tile in range(AFT_DART_ROWS):
             var item = e + tile * TPB
             if item < Int(units):
@@ -234,7 +234,7 @@ def dart_add_kernel(
     var e = Int(block_idx.x) * TPB * AFT_DART_ADD_ROWS + Int(thread_idx.x)
     var stride = _tstride() * AFT_DART_ADD_ROWS
     while e < Int(units):
-        @parameter
+        @__parameter
         for tile in range(AFT_DART_ADD_ROWS):
             var item = e + tile * TPB
             if item < Int(units):
@@ -261,7 +261,7 @@ def dart_predict_kernel(
     var e = Int(block_idx.x) * TPB * AFT_DART_ROWS + Int(thread_idx.x)
     var stride = _tstride() * AFT_DART_ROWS
     while e < Int(units):
-        @parameter
+        @__parameter
         for tile in range(AFT_DART_ROWS):
             var item = e + tile * TPB
             if item < Int(units):

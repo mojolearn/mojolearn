@@ -6,7 +6,7 @@ not a benchmark. All owners remain live through synchronization and checks.
 """
 from max.gpu.host import DeviceContext
 from max.algorithm import sync_parallelize
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.info import num_logical_cores
 from std.os import getenv
 

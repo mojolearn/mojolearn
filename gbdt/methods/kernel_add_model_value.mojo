@@ -37,7 +37,7 @@ point it at. Recorded so that gap is visible.
 ===================================================
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import identical_mul_add
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G08

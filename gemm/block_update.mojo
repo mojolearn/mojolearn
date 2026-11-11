@@ -47,7 +47,7 @@ a later GEMM-lane change; it would move no bits (the subtraction would still
 be one rounding after the fold).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz

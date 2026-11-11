@@ -47,7 +47,7 @@ glm/host/gram_solve_host.mojo, runs the same cells in the same order:
 `centered_gram_v1_cell` / `centered_cross_v1_cell` (the reference cells the
 leaf kernels reproduce), `chol_serial`, and the same solve statements.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

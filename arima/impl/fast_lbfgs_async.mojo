@@ -33,7 +33,7 @@ in `ist` (field-major, `ist[f * bs + b]`), the per-series floats in `fst`.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isinf, isnan
 from std.sys.compile import is_defined
 

@@ -6,7 +6,7 @@ backward stack under them and their bias-gradient fold. Moved unchanged out
 of x_cnn/device.mojo; the per-cell bodies stay in x_cnn/ops.mojo and the
 shared device plumbing (context, workspaces, GEMM) in x_cnn/device.mojo."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

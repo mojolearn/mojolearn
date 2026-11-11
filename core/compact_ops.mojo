@@ -18,7 +18,7 @@ Flags are bytes 0 / 1 (`compact_flag_*_kernel` build them). Gate: word 0 of
 `gate` (the loop's done word, or `step_gate_open_word`); out and count are
 written only while it is open, the scan writes only the scratch.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.step_gate import StepI32

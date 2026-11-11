@@ -125,8 +125,8 @@ algorithm does not select it.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import thread_idx, lane_id, WARP_SIZE
-from std.gpu.primitives import warp
+from max.gpu import thread_idx, lane_id, WARP_SIZE
+from max.gpu.primitives import warp
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.info import size_of

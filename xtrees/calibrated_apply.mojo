@@ -21,7 +21,7 @@ non-NaN value (the host cast's IEEE result), and the host cast's NaN rule
 (sign kept, quiet bit set, payload truncated) for a NaN, so the stored bits
 are the host cast's. The host binding (`XTREES_DEVICE_OPS` off) runs the
 host ops of `xtrees/ops.mojo` in the same order."""
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.soft_f64 import SF64_ONE, sf64_add, sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_to_f32

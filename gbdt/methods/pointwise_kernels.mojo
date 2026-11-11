@@ -185,7 +185,7 @@ from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.os import getenv
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G01, AFT_G02
 
 from gbdt.gpu_data.grid_policy import (

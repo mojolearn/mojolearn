@@ -39,7 +39,7 @@ CUB-shaped fold. Here it is the same ONE-BLOCK pinned shape as `dot` and
 through `ftz`, `pinned_block_sum`, thread 0 writes. DEVIATION 707.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB

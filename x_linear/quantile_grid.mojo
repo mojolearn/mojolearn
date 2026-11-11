@@ -20,7 +20,7 @@ launch reads first, so iterations are queued in batches and the host reads
 the state word once a batch. Off Apple nothing waits; on Apple each
 iteration's launches are one witness unit (in place, so a cut raises).
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, sti, i2f, row_dot
 from x_linear.tops import fold_parts, fold_blocks, fold_fa, fold_sq, FOLD_BLOCK, t_cholesky

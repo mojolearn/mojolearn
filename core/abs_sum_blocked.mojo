@@ -26,7 +26,7 @@ This order differs from the old serial loop, so the scale CAN move against
 the previous version (old bits do not matter); device and host column move
 together.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

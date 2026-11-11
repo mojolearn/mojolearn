@@ -5,7 +5,7 @@ I19 new candidate default off; native compilation and four-column identity
 qualification pending. Unsigned key decisions and stable original-position
 secondary keys are exact integers. No estimator/default profile changes.
 """
-from std.gpu import block_idx,thread_idx
+from max.gpu import block_idx,thread_idx
 from std.memory import stack_allocation,bitcast
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer,DeviceContext

@@ -21,7 +21,7 @@ ann-apple, 2026-09-28). SAME BITS as one thread per row running
 
 Rows wider than 64 features take the untiled cell."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

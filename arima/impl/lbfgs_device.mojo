@@ -29,7 +29,7 @@ axis (thousands per batch). Nothing folds ACROSS series.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isinf, isnan
 
 from checks.numerics import (

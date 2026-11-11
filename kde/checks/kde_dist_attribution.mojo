@@ -14,7 +14,7 @@ matrix is hashed against the tiled pass's.
 from std.math import fma
 from std.memory import bitcast, stack_allocation
 from std.time import perf_counter_ns
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

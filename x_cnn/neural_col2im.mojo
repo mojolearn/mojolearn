@@ -6,7 +6,7 @@ multiple output pixels would not remove useful loads. This arm instead loads
 adjacent tap words cooperatively, then serves each pixel's canonical gather
 from shared memory. It trades halo traffic/barriers for coalesced reads.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace

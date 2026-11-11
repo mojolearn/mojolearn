@@ -36,7 +36,7 @@ the counts and the index size only); a query's answer does not depend on
 its batch.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 

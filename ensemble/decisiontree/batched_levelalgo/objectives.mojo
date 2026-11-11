@@ -245,7 +245,7 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 from std.collections import InlineArray
 from ensemble.tree_identical_ideas import T06, T14, T14_EXACT
 from ensemble.tree_moments import balanced_mse_gain
-from std.gpu import block_dim, thread_idx
+from max.gpu import block_dim, thread_idx
 from max.gpu.memory import AddressSpace
 
 from checks.numerics import ftz, identical_mul_add

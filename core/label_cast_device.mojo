@@ -16,7 +16,7 @@ widening produced); the codes and the classes' bytes come down.
 The host twin is core/label_cast.mojo (the same element functions around
 `host_unique_inverse`), so both columns give the same bytes."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP

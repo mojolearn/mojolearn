@@ -20,7 +20,7 @@ Run under xctrace, then count Compute rows for this process:
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 
 def touch_kernel(p: MutPointer[Int32, MutAnyOrigin], n: Int32):

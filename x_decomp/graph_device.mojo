@@ -17,7 +17,7 @@ scan of the root flags.
 The scan: per-block Hillis-Steele scans of GS_TPB integers in threadgroup
 memory, the block totals scanned the same way (recursively), then added
 back. Integer sums: the same words in any order."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace

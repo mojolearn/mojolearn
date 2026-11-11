@@ -34,8 +34,8 @@ only as a stable 1-bit partition, so that is what is written.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
@@ -128,7 +128,7 @@ def split_and_make_sequence_kernel(
     var stride = SPLIT_UNROLL * SPLIT_BLOCK_SIZE * Int(grid_dim.x)
 
     while i < size:
-        @parameter
+        @__parameter
         for k in range(SPLIT_UNROLL):
             var at = i + k * SPLIT_BLOCK_SIZE
             if at < size:

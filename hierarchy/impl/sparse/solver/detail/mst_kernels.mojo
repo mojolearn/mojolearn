@@ -32,7 +32,7 @@ from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_ED
 
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

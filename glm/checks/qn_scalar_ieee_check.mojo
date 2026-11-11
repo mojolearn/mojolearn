@@ -20,7 +20,7 @@ flushes at all.
 Prints `PASS qn scalar ieee: ...` or `FAIL ...` (exit 1).
 """
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from glm.impl.qn.simple_mat.dense import ieee_div_f32, ieee_sub_f32

@@ -75,7 +75,7 @@ replacement.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import atanh, tanh
 
 from checks.numerics import (

@@ -7,7 +7,7 @@ arithmetic, the fold order and why the bits are the same on every vendor and
 in the host column). The kernel's shape is `fast_arma_ls.mojo`'s: no design
 matrix is built, each thread reads its rows straight from `y`."""
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

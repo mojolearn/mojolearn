@@ -67,7 +67,7 @@ NaN throw is the same sentence.
 
 from core.device_plan import DevicePlan
 from std.builtin.sort import sort
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isnan
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

@@ -165,7 +165,7 @@ def _sort_distinct(keys: KeyPointer, mut rows: List[Int]):
         if lo >= hi:
             return
         var part = Span(unsafe_ptr=rp + lo, length=hi - lo)
-        @parameter
+        @__parameter
         def less(a: Int, b: Int) -> Bool:
             return _less(keys, a, b)
         sort[cmp_fn=less](part)

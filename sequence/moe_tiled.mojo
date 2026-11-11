@@ -20,7 +20,7 @@ the same `+0.0`; the slabs only change where the operands are read from.
 `op_moe_out`'s weighted sum over the picks is `moe_combine_kernel`, the
 item's own `y = fma3(w_j, s_j, y)` in pick order from the stored chains.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

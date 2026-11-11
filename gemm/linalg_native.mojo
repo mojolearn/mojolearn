@@ -57,7 +57,7 @@ from gemm.afn_apple_fast import (
     afn_gemm_fused_into,
 )
 from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_into
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     dequantize_planes_int15_device,

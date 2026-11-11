@@ -38,7 +38,7 @@ from core.gram_splitk import (
 )
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.host_parallel import host_parallelize
 from core.multi_gpu import peer_clone, copy_columns_kernel

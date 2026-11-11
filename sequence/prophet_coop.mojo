@@ -29,7 +29,7 @@ Here, one block of PROPHET_COOP_TPB threads per series:
 Same model, priors, start, line search and stopping rules as lbfgs_steps;
 the folds' orders differ, so the bits differ: FAST only, Apple only. The
 fit is sliced over launches as prophet_fit_team (macOS long-launch rule)."""
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 

@@ -117,7 +117,7 @@ on the host for the CPU column.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.os import getenv
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
 from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from gbdt.methods.leaves_estimation.device_walker import enqueue_scale_in_place
@@ -2157,7 +2157,7 @@ def _launch_ord_bat_reduce(
     """The objective switch for `_ord_bat_reduce_kernel`: `n_tasks` tasks
     on one cursor buffer, grid `(chunks, n_tasks * n_leaves)`."""
 
-    @parameter
+    @__parameter
     def _go[obj: Int]() raises:
         ctx.enqueue_function[_ord_bat_reduce_kernel[obj]](
             y_p.unsafe_ptr(), w_p.unsafe_ptr(), cursor.unsafe_ptr(),

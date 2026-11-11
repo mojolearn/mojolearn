@@ -41,8 +41,8 @@ L2 only, `n_features <= 32`.
 
 from std.atomic import Atomic
 from std.bit import count_trailing_zeros
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

@@ -21,7 +21,7 @@ k smallest (value, column) candidates, never on the order they are visited:
 Compares, integers and the exact values 0, 0.5 and 1: the same bytes as the
 host body (`bindings/_mojolearn_core_host.mojo` keeps it)."""
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.fast_radix_sort import frs_exclusive_scan, frs_scan_blocks

@@ -11,8 +11,8 @@ FIRST cell's values. `coop_src` adds the cell's lane base. Where the warp is
 a 64-lane wave each cell reads only its own lanes, so every cell runs the
 values its own lanes loaded, the same chain as on the other columns. Only
 the communication scope changes, never the arithmetic or its order."""
-from std.gpu import WARP_SIZE
-from std.gpu.primitives.id import lane_id
+from max.gpu import WARP_SIZE
+from max.gpu.primitives.id import lane_id
 
 #: threads per COOP cell (the Apple simdgroup width)
 comptime COOP_CELL_W = 32

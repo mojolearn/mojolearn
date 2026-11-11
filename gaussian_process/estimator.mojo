@@ -152,7 +152,7 @@ from gaussian_process.checks.kernels import (
 from gaussian_process.checks.kernel_gradient import gp_kernel_matrix_grad
 from gaussian_process.host.gp_theta import gp_grad_half
 from gaussian_process.gp_grad_items import gp_free_count, gp_grad_blocks, gp_grad_part_item, gp_grad_fin_item
-from std.gpu import block_idx as _gb_idx, thread_idx as _gt_idx
+from max.gpu import block_idx as _gb_idx, thread_idx as _gt_idx
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,

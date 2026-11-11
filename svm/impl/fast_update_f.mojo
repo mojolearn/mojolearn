@@ -15,7 +15,7 @@ into the second half at `i + n_rows`, which shares the kernel row). FAST
 arithmetic: the natural j order, a plain fused multiply-add.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

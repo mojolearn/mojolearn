@@ -24,7 +24,7 @@ subspace in every launch. The order of every sum is fixed, so the result
 is the same on every run. FAST bits move against the old codebooks
 (another seeding, another sum order): paired recall check."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

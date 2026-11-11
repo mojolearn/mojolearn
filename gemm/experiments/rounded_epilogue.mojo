@@ -5,7 +5,7 @@ Both arms explicitly materialize the product's Float32/FTZ seam. Each thread
 owns one output; bias arithmetic follows that rounded product. This is an
 opt-in research adapter and never changes the production GEMM dispatcher.
 """
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
 from gemm.checks.gemm_identical import identical_gemm_flat_kernel,_flat_cell_body,contract_partition,gemm_operand_strides

@@ -69,7 +69,7 @@ caller divides by `scale` when it writes to global. Converting inside
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 

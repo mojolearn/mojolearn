@@ -6,7 +6,7 @@ pinned interpolation. Fractions remain device resident. Source values and
 output storage are distinct; only metadata descriptors come from host.
 No estimator default or numerical profile changes.
 """
-from std.gpu import block_idx,thread_idx
+from max.gpu import block_idx,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from x_prep.prims import quantile_unit
 from experiments.performance_ideas.I19.ragged_float import enqueue_ragged_float_sort

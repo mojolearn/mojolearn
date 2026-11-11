@@ -36,9 +36,9 @@ schedule change against the FAST path it replaces.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_tree_experiments import AFT_N05
-from std.gpu.intrinsics import ldg
+from max.gpu.intrinsics import ldg
 from std.memory import bitcast
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum

@@ -25,7 +25,7 @@ evaluations the serial run skips are simply not used. Lanes 4..31 repeat
 lane 0's point. Everything else (the ACF test, the decomposition, the
 final runs, the forecast) runs on every lane identically; lane 0 stores
 the outputs."""
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu.primitives.warp import shuffle_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 

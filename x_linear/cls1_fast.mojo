@@ -32,7 +32,7 @@ docs/apple-fast/notes/gap-cls1.md.
 
 FAST promises quality, not bits: the block trees are pairwise sums.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

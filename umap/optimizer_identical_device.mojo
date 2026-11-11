@@ -49,7 +49,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import unsafe_memcpy
 from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 from std.sys.compile import is_defined

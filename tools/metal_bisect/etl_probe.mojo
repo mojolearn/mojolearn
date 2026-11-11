@@ -8,7 +8,7 @@ compiler emit the metallib for kernel group `n` only (never run it). A
 """
 from std.sys.compile import is_defined
 from std.sys import get_defined_int
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from extratrees.impl.decisiontree.flatnode import SparseTreeNode

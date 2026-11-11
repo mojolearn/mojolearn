@@ -69,7 +69,7 @@ is to not write the cell at all.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_scan import device_first_nonfinite
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isfinite, isinf
 from std.memory import bitcast
 

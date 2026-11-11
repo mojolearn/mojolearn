@@ -15,7 +15,7 @@ It is a copy: no arithmetic, so the step's bytes are the bytes of N separate
 `step` calls. One thread per element; a launch covers rows * width elements.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 

@@ -6,7 +6,7 @@ The NLL derivative is n * Cov(y, dy/dlambda) / Var(y) - sum(J).
 Unlike differences of rounded NLL values, its zero is first order in the
 lambda error. All observations and reductions stay on the GPU.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -41,7 +41,7 @@ fit_intercept, shuffle, tol=None (no objective / no early stop), no sample
 weights, max_iter n > K, and every column's mean within SGDOC_CENTER_TOL of
 its standard deviation (`sgdoc_centered`, two grid kernels and one word home;
 a constant column must be exactly 0)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.atomic import Atomic
 from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, ld, st, fabs, fsqrt

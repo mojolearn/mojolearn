@@ -9,7 +9,7 @@ used to be a host loop over every pair; here the block goes up once, one
 thread per pair writes both halves, and the two halves come back. Pure
 moves: no arithmetic, so no bit can differ on any vendor.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 comptime PAIR_SPLIT_TPB = 256

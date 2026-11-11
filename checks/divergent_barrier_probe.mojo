@@ -54,7 +54,7 @@ WHY THE TWO RESULTS DO NOT CONFLICT, which is the useful part:
   this repository has produced that same symptom from a racing tally twice
   and from a reused async staging buffer once.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

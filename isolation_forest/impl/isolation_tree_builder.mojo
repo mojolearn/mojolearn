@@ -124,7 +124,7 @@ from std.sys import is_defined
 from std.sys.defines import get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.sync import barrier
 
 from isolation_forest.impl.rng.xorwow import (

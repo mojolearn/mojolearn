@@ -7,7 +7,7 @@ or verification has been run.
 """
 from gemm.experiments.neural_profile_device import neural_profile_kernel
 from std.sys.compile import is_defined
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add

@@ -92,7 +92,7 @@ from std.sys.info import (
     has_nvidia_gpu_accelerator,
     size_of,
 )
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from max.gpu.host import DeviceContext
 
 from extratrees.checks.fixed_point import (

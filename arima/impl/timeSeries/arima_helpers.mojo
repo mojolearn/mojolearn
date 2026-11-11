@@ -35,7 +35,7 @@ thing on the `trans = false` arm where theirs assigns the other pointers.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from arima.impl.timeSeries.jones_transform import jones_transform, jones_transform_host
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, ARIMAParamsHost

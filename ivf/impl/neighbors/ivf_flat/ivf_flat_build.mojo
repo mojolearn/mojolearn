@@ -96,7 +96,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_validate_data,
 )
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined

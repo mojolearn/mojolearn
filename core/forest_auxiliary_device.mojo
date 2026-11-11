@@ -3,7 +3,7 @@
 Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 """
 from std.atomic import Atomic
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 from core.forest_auxiliary_units import AuxI32, AuxF32, forest_auxiliary_row

@@ -14,7 +14,7 @@ answers the wrong question.
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx, block_idx
+from max.gpu import thread_idx, block_idx
 
 
 def double_kernel(

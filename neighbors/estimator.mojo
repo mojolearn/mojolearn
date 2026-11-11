@@ -116,7 +116,7 @@ The host sort below is unchanged and still does its own job: it fixes the
 ORDER of the set, which is a different property from WHICH set.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.sync import barrier
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace

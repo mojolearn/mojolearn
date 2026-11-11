@@ -55,7 +55,7 @@ candidate on the Armijo boundary can be decided the other way; the
 convergence tolerance is the solver's own.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 

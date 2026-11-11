@@ -25,7 +25,7 @@ sum over trees by `forest_add` from +0.0 in tree order and the
 plane, so a row's feature f is `x[f * n + row]`; the member's predict reads
 the same float32 values."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext

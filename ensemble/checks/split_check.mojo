@@ -48,8 +48,8 @@ The four arms:
      each other on purpose.
 """
 
-from std.gpu import WARP_SIZE, block_idx, block_dim, thread_idx
-from std.gpu.primitives.id import lane_id
+from max.gpu import WARP_SIZE, block_idx, block_dim, thread_idx
+from max.gpu.primitives.id import lane_id
 from max.gpu.host import DeviceContext
 from std.memory import stack_allocation
 from std.sys.info import size_of

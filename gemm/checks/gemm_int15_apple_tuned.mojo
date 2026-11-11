@@ -119,10 +119,10 @@ THE SABOTAGE ARMS.
       (DEVIATION 2973, the define every fifteen-bit plan reads).
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys import is_defined
-from std.gpu import MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu import MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

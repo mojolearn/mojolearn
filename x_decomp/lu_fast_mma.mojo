@@ -51,7 +51,7 @@ different f32 rounding of the same sums); pivots can differ only on a
 near-tie. IDENTICAL and every other vendor compile main's route unchanged.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int

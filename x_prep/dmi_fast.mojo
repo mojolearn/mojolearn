@@ -43,7 +43,7 @@ never compile a launch of these kernels.
 3. `mi_cd_device_rank` (MOJOLEARN_MI_CLF_RANKMAJOR): dmi.mojo's `mi_cd`
    stage with the point kernel in the rank-major mapping of (1).
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

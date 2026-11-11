@@ -14,7 +14,7 @@ scalars only to size grids: the event and down-event counts, and each pair
 chunk's kept count; then the clusters and the labels at the end. The host
 column (`optics_xi_cells.optics_xi_host`) runs the same cells in the same
 phases. Only the GPU binding imports this file."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_cluster.bodies import FPtr, IPtr

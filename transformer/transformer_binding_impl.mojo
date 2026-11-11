@@ -35,7 +35,7 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 from core.identity_trace import IdentityTrace
 from core.device_scan import device_first_nonfinite
 from core.device_nonfinite_pair import DeviceNonfinitePair
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

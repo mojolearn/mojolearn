@@ -45,7 +45,7 @@ NOT TESTED ON A DEVICE — IDENTITY NOT VERIFIED — NOT MEASURED (queued).
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.bit import count_trailing_zeros
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 
 #: The switch. Default off: absent define, incumbent path.

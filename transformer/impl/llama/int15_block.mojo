@@ -36,7 +36,7 @@ THE ENTRY POINTS are Lane C's (`gemm/checks/gemm_int15.mojo`):
 `identical_gemm_int15_planes_into`. This file adds no arithmetic.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 

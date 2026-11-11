@@ -57,7 +57,7 @@ calls `barrier()`, and an atomic fence made Metal refuse the pipeline
 (m4pro-b, 1790606245923). The svd kernel needs no device ordering at all.
 """
 from x_decomp.cells import svd_rotation_significant
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu

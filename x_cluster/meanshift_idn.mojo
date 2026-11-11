@@ -29,7 +29,7 @@ from experiments.classical_identical_ideas.graph_controls import C40_SEED_TILES,
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace

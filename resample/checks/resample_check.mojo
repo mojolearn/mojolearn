@@ -79,7 +79,7 @@ SABOTAGE TABLE (results are copied into resample/README.md when they exist)
                              position of a replicate draws the same index)
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv, sqrt as std_sqrt
 from std.memory import bitcast, stack_allocation
 from std.os import getenv

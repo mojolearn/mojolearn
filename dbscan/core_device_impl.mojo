@@ -14,7 +14,7 @@ is checked and turned into flags by one kernel, `device_compact_equal_i32`
 and one gather kernel writes the three arrays: integer moves and float32
 copies only, the same bytes as the host column on every vendor.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.device_fold import device_compact_equal_i32

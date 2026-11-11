@@ -2,7 +2,7 @@
 """Classical C20 pair-load gather and C22 symmetric orientation kernels.
 NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from svm.impl.classical_kernel_cells import CFP, classical_kernel_cell
 comptime CIP = MutPointer[Int32, MutAnyOrigin]
 

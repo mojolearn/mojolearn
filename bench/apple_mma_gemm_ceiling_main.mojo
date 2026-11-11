@@ -15,7 +15,7 @@ transposed 8x8 load.
 """
 
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from core.apple_air import simdgroup_load_legacy_air
 from std.time import perf_counter_ns

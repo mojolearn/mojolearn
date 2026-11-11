@@ -338,7 +338,7 @@ def _run_one_eps(
             ):
                 descents += 1
 
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         if descents != 0:
             raise Error(
@@ -376,7 +376,7 @@ def _run_one_eps(
     var digest = _csr_digest(hia.unsafe_ptr(), hja.unsafe_ptr(), n, nnz)
     var mode_name = String("FAST")
 
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         mode_name = String("IDENTICAL")
     print(
@@ -1354,7 +1354,7 @@ def check_ball_cover_max_k_wiring() raises:
     # where no cross-vendor promise is made. Inverting the expectation is the
     # same move `packaging/linux/smoke.py` makes for `gemm-pinned`: a designed
     # refusal that SUCCEEDS is the failure.
-    @parameter
+    @__parameter
     if PIN_CROSS_VENDOR:
         var refused = False
         try:

@@ -38,8 +38,8 @@ coalesced. Thirty-two lanes, not 64 or a block, so a cell is one warp /
 simdgroup / half-wave on every vendor with no shared memory or barrier and
 the tree shape never depends on the row width.
 """
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 

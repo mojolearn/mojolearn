@@ -107,7 +107,7 @@ WHAT IS NOT HERE, AND WHERE IT IS
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from kde.impl.distance.distance import pairwise_distance

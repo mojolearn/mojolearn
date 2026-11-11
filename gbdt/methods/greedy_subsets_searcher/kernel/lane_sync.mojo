@@ -89,7 +89,7 @@ def turn_sync():
     the same `syncwarp` that was there before.
     """
 
-    @parameter
+    @__parameter
     if TURN_SYNC_IS_LANE:
         syncwarp()
     else:

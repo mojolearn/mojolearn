@@ -85,8 +85,8 @@ DETERMINISTIC run to run, which CatBoost's own float path is not.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 
 from max.gpu.memory import AddressSpace
@@ -182,7 +182,7 @@ def hist2_acc_dtype[smem_mode: Int]() -> DType:
     """The shared accumulator's element type: theirs is float, the shared
     slice variant is Int32 fixed point (`hist2_smem_add`)."""
 
-    @parameter
+    @__parameter
     if smem_mode == HIST_SMEM_SHARED2_I32:
         return DType.int32
     else:
@@ -197,7 +197,7 @@ def hist2_smem_slots[smem_mode: Int]() -> Int:
     threads, or 4096 at 256."""
     comptime block = hist2_block_size[smem_mode]()
 
-    @parameter
+    @__parameter
     if smem_mode == HIST_SMEM_SHARED2_I32:
         return (block // (2 * LANE_WIDTH)) * 1024
     else:
@@ -281,7 +281,7 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
 
     var off: Int
 
-    @parameter
+    @__parameter
     if bits == 5:
         off = hist2_slice_offset_5(tid)
     elif bits == 6:
@@ -289,7 +289,7 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
     else:
         off = hist2_slice_offset_7(tid)
 
-    @parameter
+    @__parameter
     if smem_mode == HIST_SMEM_SHARED2_I32:
         # `1024 * (tid / 32)` becomes `1024 * (tid / 64)`; nothing else moves.
         return off - 1024 * (tid // 32) + 1024 * (tid // 64)
@@ -319,7 +319,7 @@ def hist2_add_points[
     the pre-quantized stats (`hist2_quantize` at the load sites); the
     per-bit bodies are mode-blind except the one `hist2_smem_add` call."""
 
-    @parameter
+    @__parameter
     if bits == 5:
         hist2_add_points_5[n, dt](ci, s1, s2, q1, q2, tid, slice_base, smem)
     elif bits == 6:
@@ -396,7 +396,7 @@ def hist2_reduce[bits: Int, dt: DType, smem_mode: Int](
     one; the tails leave it to this caller so it exists exactly once)."""
     hist2_reduce_to_one_warp[dt, smem_mode](tid, smem)
 
-    @parameter
+    @__parameter
     if bits == 5:
         hist2_reduce_tail_5[dt](tid, smem)
     elif bits == 6:
@@ -509,7 +509,7 @@ def hist2_add_to_global_memory[
                     is_second_stat * 4 * hist_size + fid * hist_size + fold
                 ]
 
-                @parameter
+                @__parameter
                 if dt == DType.int32:
                     # The shared-Int32 arm: the cell is already fixed point
                     # at `fixed_scale`. See the DEVIATION BLOCK above.
@@ -541,7 +541,7 @@ def hist2_add_to_global_memory[
                             TARGET_COLUMN, PIN_DETERMINISM
                         ]()
 
-                        @parameter
+                        @__parameter
                         if det:
                             if block_count > 1:
                                 # `NUMERIC_IDENTICAL`: partials sum as Int32.
@@ -731,7 +731,7 @@ def hist2_one_byte_kernel[
             hs1[0] = ldg(stats_p + (p_offset + pe))
             hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 var u = hist2_dither(p_offset + pe)
                 hq1[0] = hist2_quantize(hs1[0], fixed_scale, u)
@@ -756,7 +756,7 @@ def hist2_one_byte_kernel[
             ts1[0] = ldg(stats_p + (tail_start + pe))
             ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 var u = hist2_dither(tail_start + pe)
                 tq1[0] = hist2_quantize(ts1[0], fixed_scale, u)
@@ -787,7 +787,7 @@ def hist2_one_byte_kernel[
     # at this point, which applies verbatim.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
+    @__parameter
     if not uniform:
         return
 
@@ -820,7 +820,7 @@ def hist2_one_byte_kernel[
         # `Ldg((float4*) (stats + statsLineSize), ...)`
         # (`compute_hist_loop_two_stats.cuh:386-396`). Same element-space
         # stride and the same `alignment=4` note as `hist_one_byte.mojo`.
-        @parameter
+        @__parameter
         for k in range(HIST2_UNROLL):
             if active and preq:
                 var wb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
@@ -847,13 +847,13 @@ def hist2_one_byte_kernel[
                     s_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
                 )
 
-                @parameter
+                @__parameter
                 for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = vb[e]
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
 
-                    @parameter
+                    @__parameter
                     if DT == DType.int32:
                         var u = hist2_dither(
                             pos_base + LANE_WIDTH * HIST2_LOAD_SIZE * k + e
@@ -866,7 +866,7 @@ def hist2_one_byte_kernel[
                         )
             else:
                 # No row: contribute zero, stay inside every sync.
-                @parameter
+                @__parameter
                 for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = UInt32(0)
                     local_stats1[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
@@ -1041,7 +1041,7 @@ def hist2_one_byte_gather_kernel[
             var hrow = Int(ldg(indices + (p_offset + pe)))
             hb[0] = ldg(cindex_p + hrow)
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902: stationary planes, both stats ride the
                 # same gathered row id as the bin -- same bits as the
@@ -1052,7 +1052,7 @@ def hist2_one_byte_gather_kernel[
                 hs1[0] = ldg(stats_p + (p_offset + pe))
                 hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 var u = hist2_dither(p_offset + pe)
                 hq1[0] = hist2_quantize(hs1[0], fixed_scale, u)
@@ -1075,7 +1075,7 @@ def hist2_one_byte_gather_kernel[
             var trow = Int(ldg(indices + (tail_start + pe)))
             tb[0] = ldg(cindex_p + trow)
 
-            @parameter
+            @__parameter
             if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
                 ts1[0] = ldg(stats_p + trow)
@@ -1084,7 +1084,7 @@ def hist2_one_byte_gather_kernel[
                 ts1[0] = ldg(stats_p + (tail_start + pe))
                 ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
 
-            @parameter
+            @__parameter
             if DT == DType.int32:
                 var u = hist2_dither(tail_start + pe)
                 tq1[0] = hist2_quantize(ts1[0], fixed_scale, u)
@@ -1111,7 +1111,7 @@ def hist2_one_byte_gather_kernel[
 
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
+    @__parameter
     if not uniform:
         return
 
@@ -1143,7 +1143,7 @@ def hist2_one_byte_gather_kernel[
         # Their gather batch (`compute_hist_loop_two_stats.cuh:424-449`):
         # indices and BOTH stat columns load 4-wide; only the bins are
         # gathered one at a time, because a gather has no vector form.
-        @parameter
+        @__parameter
         for k in range(HIST2_UNROLL):
             if active and preq:
                 var wi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
@@ -1168,7 +1168,7 @@ def hist2_one_byte_gather_kernel[
                 var vs1 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
                 var vs2 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
 
-                @parameter
+                @__parameter
                 if not ridx_stats:
                     vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
                         s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
@@ -1179,13 +1179,13 @@ def hist2_one_byte_gather_kernel[
                         + LANE_WIDTH * HIST2_LOAD_SIZE * k
                     )
 
-                @parameter
+                @__parameter
                 for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
                         cindex_p + Int(vi[e])
                     )
 
-                    @parameter
+                    @__parameter
                     if ridx_stats:
                         # DEVIATION 1902: both stats join the bins' scalar
                         # gather through the same loaded row id; the wide
@@ -1197,7 +1197,7 @@ def hist2_one_byte_gather_kernel[
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
 
-                    @parameter
+                    @__parameter
                     if DT == DType.int32:
                         var u = hist2_dither(
                             pos_base + LANE_WIDTH * HIST2_LOAD_SIZE * k + e
@@ -1210,7 +1210,7 @@ def hist2_one_byte_gather_kernel[
                         )
             else:
 
-                @parameter
+                @__parameter
                 for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = UInt32(0)
                     local_stats1[k * HIST2_LOAD_SIZE + e] = Float32(0.0)

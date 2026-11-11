@@ -175,7 +175,7 @@ from gbdt.methods.leaves_estimation.device_walker import (
     weight_keep_mask_strided_kernel,
 )
 from std.memory import bitcast, unsafe_memcpy
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_neg, sf64_to_f32
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
@@ -4987,7 +4987,7 @@ def fit_with_test(
             # streamed than theirs.
             var compute_mags = False
 
-            @parameter
+            @__parameter
             if _needs_magnitudes:
                 compute_mags = True
             launch_bootstrap(
@@ -5083,7 +5083,7 @@ def fit_with_test(
         loop_times.stop_host("iter_gradients_enqueue", t_grad)
         var mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-        @parameter
+        @__parameter
         if _needs_magnitudes:
             mags_opt = Optional(mags.copy())
 
@@ -5147,11 +5147,11 @@ def fit_with_test(
             # DEVIATION 95), so this per-tree drain is not taken.
             var ns_mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-            @parameter
+            @__parameter
             if _needs_magnitudes and IDN_NS_SCALE_DEVICE:
                 ns_mags_opt = Optional(mags.copy())
 
-            @parameter
+            @__parameter
             if _needs_magnitudes and not IDN_NS_SCALE_DEVICE:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
@@ -5569,7 +5569,7 @@ def fit_with_test(
                     noise_sm if noise_sm > 0 else 1,
                 )
             var scale = Float32(1.0)
-            @parameter
+            @__parameter
             if _needs_magnitudes:
                 var sym_scale_ready = False
                 comptime if SYM_BUF_ARENA:
@@ -5606,7 +5606,7 @@ def fit_with_test(
             # lane/sym-quality: the gradient plane onto the tree's grid, as
             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
             # only where the scale above is a real one
-            @parameter
+            @__parameter
             if _needs_magnitudes:
                 var g_plane = planes[1].copy()
                 enqueue_snap_plane(ctx, g_plane, n_rows, scale)

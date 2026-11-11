@@ -79,7 +79,7 @@ host and device cannot drift.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from arima.impl.linalg.batched.least_squares import (
     LS_MAX_COLS,

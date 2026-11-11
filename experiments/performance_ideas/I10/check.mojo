@@ -5,7 +5,7 @@ returned field/index. Kernel outputs ordered integer contributions that can
 also be emitted directly by an update kernel while values are live.
 Opt-in OOP Adam now emits status while words are live and the full
 byte-LM step validates it before completion, preserving existing rollback."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -29,7 +29,7 @@ A PREDICTION UNTIL GATED. `tools/byte_lm_gpu_logits_sweep.py` compares these
 logits byte for byte with the CPU reference path on each GPU.
 """
 from std.memory import bitcast, stack_allocation
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined

@@ -6,7 +6,7 @@ their allocations; callers retain both contexts through every copy and join.
 """
 from core.device_plan import DevicePlan, device_plan_device
 from max.gpu.host import DeviceContext, DeviceBuffer
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.info import has_amd_gpu_accelerator
 

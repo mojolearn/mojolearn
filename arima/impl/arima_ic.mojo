@@ -23,7 +23,7 @@ The penalties are the wrapper's scalars (2N; log(T) N, T after
 differencing), handed over as binary64 bit patterns.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf
 
 from checks.soft_f64 import sf64_add, sf64_from_f32, sf64_mul

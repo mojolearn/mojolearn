@@ -32,7 +32,7 @@ Build (on an AMD box, column amd):
   pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_TARGET_COLUMN=amd \
       -I . gemm/checks/amd_excp_probe.mojo -o /tmp/amd_excp_probe
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys._assembly import inlined_assembly

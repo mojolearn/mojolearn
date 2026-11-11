@@ -18,9 +18,9 @@ in-kernel ordering of device writes. Same `L X = B` / `L^T X = B` in place
 over `B` (`n x nrhs` row-major), FAST arithmetic.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_idx, sum as warp_sum
-from std.gpu import lane_id
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_idx, sum as warp_sum
+from max.gpu import lane_id
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -325,7 +325,7 @@ def fast_gemm_nt_sub_lower(
         )
         return
 
-    @parameter
+    @__parameter
     @always_inline
     def epi[
         dtype: DType, width: SIMDLength, *, alignment: Int = 1

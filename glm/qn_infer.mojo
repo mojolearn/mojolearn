@@ -20,7 +20,7 @@ Numerics: none moved. The same kernels on the same words in the same order
 as before the split (the one synchronize between the uploads and the
 decision launch is gone: the launch follows the copies on the same stream).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.admitted_finite_status import enqueue_finite_status

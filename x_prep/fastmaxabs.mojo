@@ -19,7 +19,7 @@ in any order), `maxabs_fold_kernel` the largest partial and sklearn's
 `_handle_zeros_in_scale` of it (`zero_to_one`): the program route's
 max_abs_ and scale_ word for word.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
 from x_prep.common import FP, is_nan

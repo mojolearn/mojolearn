@@ -11,7 +11,7 @@ These are explicit component APIs. Public loss/clip wiring, all-vendor identity,
 task quality and full-model timing remain pending. Nothing has been compiled or
 verified. Caller owns both scratch planes and every input until its own drain.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul

@@ -28,7 +28,7 @@ does nothing once it is set, and the stop is a criterion kernel here
 read after every epoch. A gated kernel still writes its witness word, so a
 Metal witness check over an epoch past the stop passes.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace

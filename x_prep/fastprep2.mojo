@@ -45,7 +45,7 @@ the host at dispatch time):
       Up to 4 fractions per column (QS_MAXT / 2).
 """
 from std.atomic import Atomic
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys.compile import is_defined

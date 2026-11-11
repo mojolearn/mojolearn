@@ -17,7 +17,7 @@ degenerate arm, same `test_invparams` verdict. FAST arithmetic: the row
 order differs, so the values agree to rounding, not bitwise.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext

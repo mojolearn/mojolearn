@@ -40,7 +40,7 @@ same keys:
 `-D MOJOLEARN_KNN_CERTIFIED_MMA_OFF` keeps the tiled arm for every query.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from neighbors.checks.pinned_distance_tile import _rt_step

@@ -5,7 +5,7 @@ These kernels share canonical leaf boundaries, FMA/FTZ steps and balanced
 fold helpers with production GEMM. Physical tiles stage operands only. They
 do not use vendor-specific reduction collectives or reduced precision.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace

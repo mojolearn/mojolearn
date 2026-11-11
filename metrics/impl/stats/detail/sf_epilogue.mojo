@@ -3,7 +3,7 @@
 """LANE fam2-prep-metrics (2026-10-04): the device kernels and entries of the
 label metrics' binary64 epilogue. The arithmetic, the fold order and the
 switch (IDN_METRIC_EPI) are sf_epilogue_core.mojo's; read its header."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 

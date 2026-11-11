@@ -64,7 +64,7 @@ come back, and a hit is spelled with `ce_refuse_targets`'s own message.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 

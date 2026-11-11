@@ -112,7 +112,7 @@ The three DRIVER arms have no kernel here except `sabotage_mean_kernel`;
 in `gaussian_process/estimator.mojo` taken only when `sabotage` names them.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from std.memory import bitcast
 

@@ -36,7 +36,7 @@ forward 29-34 ms -> 8-12 ms on the 4090 class; A/B on nv and amd decides.
 Scratch: xg (T k D), gu (T k 2F), slot_of (T k) and the GEMM workspace are
 the executor's own buffers (they live to its sync).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_silu
 from gemm.contract import OP_NT

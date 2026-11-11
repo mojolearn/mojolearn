@@ -88,7 +88,7 @@ from experiments.classical_identical_ideas.graph_controls import C31_DEVICE_BUCK
 
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.atomic import Atomic
 from std.sys.compile import is_defined
 from core.device_zero import enqueue_fill
@@ -320,7 +320,7 @@ def rbc_canonicalize_row_order(
     is `comptime`, so FAST allocates nothing and launches nothing.
     """
 
-    @parameter
+    @__parameter
     if not PIN_CROSS_VENDOR:
         return
     if n_queries <= 0 or nnz <= 0:

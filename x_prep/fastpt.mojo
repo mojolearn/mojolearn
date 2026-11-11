@@ -33,7 +33,7 @@ Chan's formula. FAST promises quality, not bits: Welford + Chan is never
 less accurate than the serial two-pass fold. IDENTICAL never compiles a
 call to this file (x_prep/device.mojo gates every launch).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

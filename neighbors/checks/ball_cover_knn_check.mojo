@@ -548,7 +548,7 @@ def _knn_compare(
             if got_i != oi[s]:
                 var accepted = False
 
-                @parameter
+                @__parameter
                 if not PIN_CROSS_VENDOR:
                     if got_i >= Int32(0):
                         var alt = _host_cmp_dist(
@@ -583,7 +583,7 @@ def _knn_compare(
             if gap > worst_ulp:
                 worst_ulp = gap
 
-            @parameter
+            @__parameter
             if PIN_CROSS_VENDOR:
                 if got_d != want_d:
                     row_bad = True

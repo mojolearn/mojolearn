@@ -18,7 +18,7 @@ WHITE leaf reads its value from the device parameter table
 cell) and the length scales are read from the device table as they always
 were."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
