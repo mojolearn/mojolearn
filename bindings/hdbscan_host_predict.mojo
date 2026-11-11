@@ -12,6 +12,7 @@ function. The address and params contract is the GPU binding's
 (`bindings/_mojolearn_hdbscan.mojo`), word for word.
 """
 from std.python import Python, PythonObject
+from core.hdbscan_query_api import hdbscan_soft_shape_refusal as _soft_shape_refusal
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
@@ -82,21 +83,6 @@ def hdbscan_approximate_predict_binding(
     with GILReleased(Python()):
         approximate_predict_host_run(x, m, d, core, labels, lambdas, deaths, selected, iic, q, nq, min_samples, lo, po)
     return PythonObject(nq)
-
-
-def _soft_shape_refusal(where: String, vals: List[Int]) raises:
-    """The GPU binding's refusal: every count positive, m at least 2."""
-    var ok = vals[0] >= 2
-    for i in range(1, len(vals)):  # small-loop(the seven shape words)
-        if vals[i] < 1:
-            ok = False
-    if not ok:
-        var s = String(where) + ": shape refused by name ("
-        for i in range(len(vals)):  # small-loop(the seven shape words)
-            if i > 0:
-                s += ", "
-            s += String(vals[i])
-        raise Error(s + ")")
 
 
 def hdbscan_membership_vector_binding(

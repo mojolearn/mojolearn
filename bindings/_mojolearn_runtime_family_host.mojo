@@ -12,6 +12,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
+from bindings.hdbscan_query_boundary import HdbscanQueryRecord
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -53,6 +54,20 @@ def runtime_family_host_column_binding() raises -> PythonObject:
 
 def runtime_family_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(RUNTIME_FAMILY_SABOTAGE)
+
+
+def register_hdbscan_query_record(mut module: PythonModuleBuilder) raises:
+    # Prepared weak-table record only, not an estimator field owner. The same
+    # canonical native type is attached when another package alias initializes.
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[HdbscanQueryRecord]()
+    except error:
+        if not py_type_absent(error, String(reflect[HdbscanQueryRecord].name())):
+            raise error
+        _ = module.add_type[HdbscanQueryRecord]("_HdbscanQueryRecord")
+        return
+    py_type_attach(module.module, "_HdbscanQueryRecord", existing)
 
 
 def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
@@ -218,6 +233,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_family_host")
         register_kmeans_resident_owner(module)
+        register_hdbscan_query_record(module)
         register_KDEResidentOwner(module)
         register_KDEAdmissionOwner(module)
         register_GPPreparedLease(module)

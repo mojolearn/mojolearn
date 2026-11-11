@@ -35,10 +35,7 @@ Each raises `ValueError` for a clusterer fitted without
 `prediction_data=True`, as cuML does. Soft membership is computed in
 float32 throughout, where cuML uses float64 in some steps.
 """
-import warnings
-
-from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from . import _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
@@ -302,24 +299,6 @@ _native_archive_bridge.register(HDBSCAN, _HDBSCAN_FORMAT, (
 ))
 
 
-def _check_clusterer(clusterer, where):
-    """cuML `_check_clusterer` (`hdbscan.pyx:1098-1110`): a fitted HDBSCAN
-    with prediction data, else a refusal by name."""
-    if not isinstance(clusterer, HDBSCAN):
-        raise TypeError(
-            f"mojolearn {where}: clusterer must be a mojolearn HDBSCAN, got {type(clusterer).__name__}"
-        )
-    if not hasattr(clusterer, "labels_"):
-        raise ValueError(f"mojolearn {where}: this HDBSCAN instance is not fitted yet; call fit first")
-    pd = getattr(clusterer, "_prediction_data", None)
-    if pd is None:
-        raise ValueError(
-            f"mojolearn {where}: Prediction data not yet generated. Fit with "
-            "HDBSCAN(prediction_data=True); cuML refuses the same call the same way "
-            "(hdbscan.pyx:1104-1108)"
-        )
-    return pd
-
 
 # cuML `approximate_predict` (`hdbscan.pyx:1264`, `predict.cuh:220-262`).
 def approximate_predict(clusterer, points_to_predict):
@@ -363,22 +342,6 @@ def approximate_predict(clusterer, points_to_predict):
     return _NATIVE(clusterer, "family_hdbscan_public_approximate_predict", (points_to_predict,), _NATIVE_CONTEXT)
 
 
-def _check_batch_size(batch_size, where):
-    """cuML's `batch_size must be > 0` (`hdbscan.pyx:1147`, `:1230`)."""
-    if isinstance(batch_size, bool) or not isinstance(batch_size, int):
-        raise TypeError(f"mojolearn {where}: batch_size must be an int, got {type(batch_size).__name__}")
-    if batch_size <= 0:
-        raise ValueError(f"mojolearn {where}: batch_size must be > 0, got {batch_size}")
-
-
-def _soft_tree_addrs(pd):
-    """parents, lambdas, deaths, selected_clusters, index_into_children,
-    exemplar_idx, exemplar_label_offsets: the order both soft bindings read."""
-    return [addr_ro(pd["parents"], name="tree parents"), addr_ro(pd["lambdas"], name="tree lambdas"),
-            addr_ro(pd["deaths"], name="deaths"), addr_ro(pd["selected_clusters"], name="selected_clusters"),
-            addr_ro(pd["index_into_children"], name="index_into_children"),
-            addr_ro(pd["exemplar_idx"], name="exemplar_idx"),
-            addr_ro(pd["exemplar_label_offsets"], name="exemplar_label_offsets")]
 
 
 # cuML `membership_vector` (`hdbscan.pyx:1180`, `soft_clustering.cuh:501-627`).
