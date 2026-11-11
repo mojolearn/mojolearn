@@ -121,6 +121,7 @@ check-native-optimizer-device-gpu = "mojo run -I . checks/native_tests/optimizer
 check-native-optimizer-owner-cpu = "mojo run -I . checks/native_tests/optimizer_owner_cpu.mojo"
 check-native-optimizer-owner-gpu = "mojo run -I . checks/native_tests/optimizer_owner_gpu.mojo"
 check-native-theta-state-cpu = "mojo run -I . checks/native_tests/theta_state_cpu.mojo"
+check-native-xseq-entry-glue = "mojo run -I . checks/native_tests/xseq_entry_glue.mojo"
 check-native-theta-state-gpu = "mojo run -I . checks/native_tests/theta_state_gpu.mojo"
 check-native-arima-state-cpu = "mojo run -I . checks/native_tests/arima_state_cpu.mojo"
 check-native-arima-state-gpu = "mojo run -I . checks/native_tests/arima_state_gpu.mojo"

@@ -4,8 +4,11 @@
 from std.math import floor
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
-from bindings.xseq_native_common import xseq_entries, xseq_base, xseq_addr, xseq_column_i64, xseq_copy
+from bindings.xseq_native_common import xseq_key, xseq_glue, xseq_base, xseq_addr, xseq_column_i64, xseq_copy
+from core.xseq_entry_table import (
+    XseqEntryKey, XS_PROPHET_DAYS, XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT,
+    XS_PROPHET_PREDICT_DAYS,
+)
 from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_arrays import sequential_array
 from bindings.classical_pandas import classical_admit_value
@@ -80,7 +83,7 @@ def _contig(value: PythonObject, dtype: PythonObject, context: PythonObject) rai
     return prophet_contiguous(prophet_source(value, context), dtype is context["float64"], context)
 
 
-def _days(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _days(source: PythonObject, key: XseqEntryKey, context: PythonObject) raises -> PythonObject:
     """`_days(t, mode)`: (days float64 (N,), info [status, span, least
     spacing]), converted and checked by `prophet_days`."""
     var t = prophet_source(source, context)
@@ -95,8 +98,9 @@ def _days(source: PythonObject, entries: PythonObject, context: PythonObject) ra
     var days = sequential_array(Python.tuple(n), context["float64"], context)
     var info = sequential_array(Python.tuple(3), context["float64"], context)
     if n:
-        _ = py_call_typed(entries["prophet_days"], Python.list(xseq_addr(src), xseq_addr(days), xseq_addr(info)),
-                          Python.list(n, kind))
+        var addresses: List[Int] = [Int(py=xseq_addr(src)), Int(py=xseq_addr(days)), Int(py=xseq_addr(info))]
+        var words: List[Int] = [n, kind]
+        _ = xseq_glue(key, XS_PROPHET_DAYS, addresses, words, List[Float64]())
         _ = info  # keep the Python object alive through the native call above
         _ = days  # keep the Python object alive through the native call above
         _ = src  # keep the Python object alive through the native call above
@@ -118,7 +122,7 @@ def _periods(fields: PythonObject, context: PythonObject) raises -> PythonObject
     return _contig(periods, context["float64"], context)
 
 
-def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _features(fields: PythonObject, days: PythonObject, key: XseqEntryKey, context: PythonObject) raises -> PythonObject:
     """`_features(days)`: (t scaled float32 (N,), frac float32 (N, max(ns, 1)))."""
     var rows = _seasonal_rows(fields)
     var periods_a = _periods(fields, context)
@@ -126,10 +130,11 @@ def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, c
     var n = len(days)
     var tsc = sequential_array(Python.tuple(n), context["float32"], context)
     var frac = sequential_array(Python.tuple(n, max(ns, 1)), context["float32"], context)
-    _ = py_call_typed(entries["prophet_features"],
-                      Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(tsc), xseq_addr(frac)),
-                      Python.list(n, ns),
-                      Python.list(py_call(_b().float, fields["start_"]), py_call(_b().float, fields["t_scale_"])))
+    var addresses: List[Int] = [Int(py=xseq_addr(days)), Int(py=xseq_addr(periods_a)), Int(py=xseq_addr(tsc)), Int(py=xseq_addr(frac))]
+    var words: List[Int] = [n, ns]
+    var floats: List[Float64] = [Float64(py=py_call(_b().float, fields["start_"])), Float64(py=py_call(_b().float, fields["t_scale_"]))]
+    _ = xseq_glue(key, XS_PROPHET_FEATURES, addresses, words, floats)
+    _ = days  # keep the Python object alive through the native call above
     _ = frac  # keep the Python object alive through the native call above
     _ = tsc  # keep the Python object alive through the native call above
     _ = periods_a  # keep the Python object alive through the native call above
@@ -181,8 +186,8 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var b = _b()
     var original = prophet_fields(model, context)
     var fields = _state(original, context)
-    var entries = xseq_entries(fields, context)
-    var dd = _days(args[0], entries, context)
+    var key = xseq_key(fields, context)
+    var dd = _days(args[0], key, context)
     var days = dd[0]
     var info = dd[1]
     var status = Int(py=py_call(b.int, info[0]))
@@ -206,6 +211,7 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var N = Int(py=Y.shape[1])
     if N != len(days) or N < 2:
         raise Error("ValueError: " + _P + "y and t lengths differ, or fewer than 2 points")
+    # call-table: base helper
     if Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) != 1:
         raise Error("ValueError: " + _P + "y must be finite")
     _ = Y  # keep the Python object alive through the native calls above
@@ -214,13 +220,13 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _auto(fields, "daily", fields["daily_seasonality"], 4, span >= 2 and dmin < 1)
     py_setitem(fields, "start_", py_call(b.float, days[0]))
     py_setitem(fields, "t_scale_", span if span > 0 else 1.0)
-    var ft = _features(fields, days, entries, context)
+    var ft = _features(fields, days, key, context)
     var user = PythonObject(None)
     var n_user: Int
     var hist: Int
     var n_cp: Int
     if fields["changepoints"] is not None:
-        user = _days(fields["changepoints"], entries, context)[0]
+        user = _days(fields["changepoints"], key, context)[0]
         n_user = len(user)
         hist = 0
         n_cp = 0
@@ -231,10 +237,11 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         hist = Int(floor(Float64(N) * Float64(py=fields["changepoint_range"])))
         n_cp = max(min(Int(py=fields["n_changepoints"]), hist - 1), 0)
     var cpt = sequential_array(Python.tuple(max(n_user, max(n_cp, 1))), context["float32"], context)
-    var S = Int(py=py_call_typed(entries["prophet_changepoints"],  # cpu-route: changepoint plan over a handful of changepoints
-                                 Python.list(xseq_addr(days), xseq_addr(user), xseq_addr(cpt)),
-                                 Python.list(N, n_user, hist, n_cp),
-                                 Python.list(fields["start_"], fields["t_scale_"])))
+    var cp_addresses: List[Int] = [Int(py=xseq_addr(days)), Int(py=xseq_addr(user)), Int(py=xseq_addr(cpt))]
+    var cp_words: List[Int] = [N, n_user, hist, n_cp]
+    var cp_floats: List[Float64] = [Float64(py=fields["start_"]), Float64(py=fields["t_scale_"])]
+    # cpu-route: changepoint plan over a handful of changepoints
+    var S = xseq_glue(key, XS_PROPHET_CHANGEPOINTS, cp_addresses, cp_words, cp_floats)
     _ = cpt  # keep the Python object alive through the native call above
     _ = user  # keep the Python object alive through the native call above
     _ = days  # keep the Python object alive through the native call above
@@ -273,11 +280,11 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var params = sequential_array(Python.tuple(B, P), context["float32"], context)
     var info_out = sequential_array(Python.tuple(B, 4), context["float32"], context)
     var multiplicative = 1 if String(py=fields["seasonality_mode"]) == "multiplicative" else 0
-    _ = py_call_typed(entries["prophet_fit"],
-                      Python.list(xseq_addr(Y), xseq_addr(ft[0]), xseq_addr(ft[1]), xseq_addr(od[0]), xseq_addr(H),
-                                  xseq_addr(cpts), xseq_addr(sig_a), xseq_addr(params), xseq_addr(info_out)),
-                      Python.list(B, N, od[1], nh, K, S2, multiplicative, fields["max_iter"]),
-                      Python.list(fields["changepoint_prior_scale"]))
+    var fit_addresses: List[Int] = [Int(py=xseq_addr(Y)), Int(py=xseq_addr(ft[0])), Int(py=xseq_addr(ft[1])), Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)),
+                                    Int(py=xseq_addr(cpts)), Int(py=xseq_addr(sig_a)), Int(py=xseq_addr(params)), Int(py=xseq_addr(info_out))]
+    var fit_words: List[Int] = [B, N, Int(py=od[1]), nh, K, S2, multiplicative, Int(py=fields["max_iter"])]
+    var fit_floats: List[Float64] = [Float64(py=fields["changepoint_prior_scale"])]
+    _ = xseq_glue(key, XS_PROPHET_FIT, fit_addresses, fit_words, fit_floats)
     # Raw addresses do not retain the arrays owned by these two tuples.
     # Both feature buffers and Fourier orders must survive the native call.
     _ = ft
@@ -316,8 +323,8 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
         py_setitem(fields, stored[i], prophet_contiguous(value, False, context))
     if Int(py=fields["params_"].ndim) != 2 or Int(py=fields["info_"].ndim) != 2 or Int(py=fields["changepoints_t_"].ndim) != 1:
         raise Error("ValueError: ProphetForecaster fitted buffer ranks disagree")
-    var entries = xseq_entries(fields, context)
-    var days = _days(args[0], entries, context)[0]
+    var key = xseq_key(fields, context)
+    var days = _days(args[0], key, context)[0]
     var M = len(days)
     # lane ne1-a-decomp-tsa (N032): with `prophet_predict_days` the scaled
     # times and phases stay on the executor and the feature matrix is built
@@ -326,13 +333,15 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     # comes first as before; a non-positive seasonal period (refused by the
     # feature writer) is then met after the holiday and schema checks below
     # instead of before them.
-    var fused = M > 0 and py_get(entries, "prophet_predict_days") is not None
+    # Every image publishes `prophet_predict_days` in the sequence table, so
+    # the former "entry present" test is gone (lane calltable-xseq).
+    var fused = M > 0
     var ft = Python.tuple(PythonObject(None), PythonObject(None))
     var periods_a = PythonObject(None)
     if fused:
         periods_a = _periods(fields, context)
     else:
-        ft = _features(fields, days, entries, context)
+        ft = _features(fields, days, key, context)
     var nh = Int(py=fields["_nh"])
     var H = PythonObject(None)
     if nh:
@@ -364,18 +373,18 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     var cpts = fields["changepoints_t_"]
     var multiplicative = 1 if String(py=fields["seasonality_mode"]) == "multiplicative" else 0
     if fused:
-        _ = py_call_typed(entries["prophet_predict_days"],
-                          Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(params), xseq_addr(fields["info_"]),
-                                      xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
-                          Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative),
-                          Python.list(py_call(b.float, fields["start_"]), py_call(b.float, fields["t_scale_"])))
+        var fused_addresses: List[Int] = [Int(py=xseq_addr(days)), Int(py=xseq_addr(periods_a)), Int(py=xseq_addr(params)), Int(py=xseq_addr(fields["info_"])),
+                                          Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)), Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend))]
+        var fused_words: List[Int] = [B, M, Int(py=od[1]), nh, Int(py=fields["_K"]), len(cpts), multiplicative]
+        var fused_floats: List[Float64] = [Float64(py=py_call(b.float, fields["start_"])), Float64(py=py_call(b.float, fields["t_scale_"]))]
+        _ = xseq_glue(key, XS_PROPHET_PREDICT_DAYS, fused_addresses, fused_words, fused_floats)
         _ = days  # keep the Python objects alive through the native call above
         _ = periods_a
     else:
-        _ = py_call_typed(entries["prophet_predict"],
-                          Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
-                                      xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
-                          Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
+        var addresses: List[Int] = [Int(py=xseq_addr(params)), Int(py=xseq_addr(fields["info_"])), Int(py=xseq_addr(ft[0])), Int(py=xseq_addr(ft[1])),
+                                    Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)), Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend))]
+        var words: List[Int] = [B, M, Int(py=od[1]), nh, Int(py=fields["_K"]), len(cpts), multiplicative]
+        _ = xseq_glue(key, XS_PROPHET_PREDICT, addresses, words, List[Float64]())
     # Prediction has independently allocated feature and order owners too.
     _ = ft
     _ = od

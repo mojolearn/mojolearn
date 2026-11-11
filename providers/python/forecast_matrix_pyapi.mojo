@@ -4,14 +4,14 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from bindings.sequential_admission import _one_of
 from providers.python.arima_buffer_pyapi import ArimaBuffer, arima_buffer
 from providers.python.autoarima_lifecycle_pyapi import _integer, _number
 from providers.python.forecast_initialize_pyapi import _scalar
 from providers.python.forecast_owner_pyapi import forecast_commit
-from bindings.xseq_native_common import xseq_zeros, xseq_addr, xseq_f32p, xseq_entries, xseq_first
+from bindings.xseq_native_common import xseq_zeros, xseq_addr, xseq_f32p, xseq_first, xseq_key, xseq_glue
+from core.xseq_entry_table import XS_VAR_FIT, XS_VAR_FORECAST, XS_STL
 from core.xseq_marshal import xseq_var_blocks
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence import admitted_ndarray_f32
@@ -159,8 +159,12 @@ def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var params = xseq_zeros(Python.tuple(m, k), context)
     var sigma = xseq_zeros(Python.tuple(k, k), context)
     var resid = xseq_zeros(Python.tuple(n - p, k), context)
-    var entries = xseq_entries(route, context)
-    var code = Int(py=py_call_typed(entries["var_fit"], Python.list(y.address, xseq_addr(params), xseq_addr(sigma), xseq_addr(resid)), Python.list(n, k, p, kt)))
+    var addresses: List[Int] = [y.address, Int(py=xseq_addr(params)), Int(py=xseq_addr(sigma)), Int(py=xseq_addr(resid))]
+    var words: List[Int] = [n, k, p, kt]
+    var code = xseq_glue(xseq_key(route, context), XS_VAR_FIT, addresses, words, List[Float64]())
+    _ = params  # keep the Python objects alive through the native call above
+    _ = sigma
+    _ = resid
     if code:
         raise Error("LinAlgError: VAR.fit: the lagged design is rank deficient (Cholesky pivot of column " + String(code - 1) + ")")
     var result = _new_result("xseq_var_results", context)
@@ -187,10 +191,13 @@ def _var_forecast(model: PythonObject, args: PythonObject, context: PythonObject
     var mode = fields["_numeric_mode"]
     _mode(mode)
     py_setitem(state, "numeric_mode", mode)
-    var entries = xseq_entries(state, context)
+    var key = xseq_key(state, context)
     var result = xseq_zeros(Python.tuple(steps, k), context)
     var history = y.address + (y.shape[0] - p) * k * 4
-    _ = py_call_typed(entries["var_forecast"], Python.list(history, params.address, xseq_addr(result)), Python.list(k, p, kt, steps))
+    var addresses: List[Int] = [history, params.address, Int(py=xseq_addr(result))]
+    var words: List[Int] = [k, p, kt, steps]
+    _ = xseq_glue(key, XS_VAR_FORECAST, addresses, words, List[Float64]())
+    _ = result  # keep the Python object alive through the native call above
     _ = y
     _ = params
     return result
@@ -288,13 +295,24 @@ def _stl_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var trend = xseq_zeros(shape, context)
     var weights = xseq_zeros(shape, context)
     var resid = xseq_zeros(shape, context)
-    var plan = Python.list(batch, n)
-    var names = Python.tuple("period", "seasonal", "trend", "low_pass")
-    for i in range(len(names)):  # driver-loop: four fixed smoother length words
-        _ = py_call(plan.append, _integer(fields[names[i]], lifecycle))
+    # The STL plan words, in the former Python list's order: batch, n, the
+    # four smoother lengths, the degree bits, the three jumps, inner, outer.
+    var plan: List[Int] = [batch, n, _integer(fields["period"], lifecycle), _integer(fields["seasonal"], lifecycle),
+                           _integer(fields["trend"], lifecycle), _integer(fields["low_pass"], lifecycle)]
     var degree = _integer(fields["seasonal_deg"], lifecycle) + 2 * _integer(fields["trend_deg"], lifecycle) + 4 * _integer(fields["low_pass_deg"], lifecycle)
-    _ = py_call(plan.extend, Python.tuple(degree, _integer(fields["seasonal_jump"], lifecycle), _integer(fields["trend_jump"], lifecycle), _integer(fields["low_pass_jump"], lifecycle), inner, outer))
-    _ = py_call_typed(xseq_entries(route, context)["stl"], Python.list(y.address, xseq_addr(season), xseq_addr(trend), xseq_addr(weights), xseq_addr(resid)), plan)
+    plan.append(degree)
+    plan.append(_integer(fields["seasonal_jump"], lifecycle))
+    plan.append(_integer(fields["trend_jump"], lifecycle))
+    plan.append(_integer(fields["low_pass_jump"], lifecycle))
+    plan.append(inner)
+    plan.append(outer)
+    var addresses: List[Int] = [y.address, Int(py=xseq_addr(season)), Int(py=xseq_addr(trend)), Int(py=xseq_addr(weights)),
+                                Int(py=xseq_addr(resid))]
+    _ = xseq_glue(xseq_key(route, context), XS_STL, addresses, plan, List[Float64]())
+    _ = season  # keep the Python objects alive through the native call above
+    _ = trend
+    _ = weights
+    _ = resid
     var result = _new_result("xseq_decompose_result", context)
     _ = _decompose_initialize(result, Python.tuple(xseq_first(y.keep, one), xseq_first(season, one), xseq_first(trend, one), xseq_first(resid, one), xseq_first(weights, one)), context)
     _ = y
