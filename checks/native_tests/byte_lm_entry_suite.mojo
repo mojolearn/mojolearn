@@ -26,8 +26,18 @@ from training.byte_lm_glue_abi import (
     byte_lm_trainer_call,
 )
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
+from core.native_descriptor_call import native_descriptor_call
+from core.state_registry import StateHandle
+from core.byte_lm_entry_table_sessions import (
+    BS_CREATE, BS_RUN, BS_CLOSE, byte_lm_sessions_entry, byte_lm_sessions_published,
+    byte_lm_resident_open, byte_lm_resident_run, byte_lm_resident_close,
+)
 
-comptime BYTE_LM_ENTRY_CASES = 11
+# Units 0-10: the glue operations and the trainer dispatch; units 11-13 the
+# resident session entry (lane byte-lm-sessions-native): 11 + BS_CREATE,
+# 11 + BS_RUN, 11 + BS_CLOSE.
+comptime BYTE_LM_SESSION_CASE_FIRST = 11
+comptime BYTE_LM_ENTRY_CASES = 14
 
 
 def require(ok: Bool, message: String) raises:
@@ -61,6 +71,7 @@ def precondition_unpublished() raises:
         _refuses(problem, "provider is not published")
         require(not byte_lm_table_published[BYTE_LM_TABLE_TRAINER](_key(), 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT),
                 "an unpublished table probed as published")
+        require(not byte_lm_sessions_published(_key()), "an unpublished session entry probed as published")
         return
     raise Error("an unpublished byte LM table did not refuse")
 
@@ -83,6 +94,76 @@ def preconditions_published() raises:
         raise Error("an unknown operation did not refuse")
     except problem:
         _refuses(problem, "unknown operation")
+    require(byte_lm_sessions_published(_key()), "the published session entry did not probe as published")
+    require(not byte_lm_sessions_published(ByteLmEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)),
+            "a mismatched tier key probed a session entry as published")
+
+
+def _session_status(k: ByteLmEntryKey, handle: StateHandle) raises -> List[Int]:
+    """Trainer operation 5 (status) on a resident session through BS_RUN."""
+    var info = List[Int](length=4, fill=7)
+    var a: List[Int] = [Int(info.unsafe_ptr())]
+    require(byte_lm_resident_run(k, handle, 5, a, List[Int](), List[Float64]()) == 4, "session status count")
+    return info^  # the status output outlives the synchronous call
+
+
+def _stale_refuses(k: ByteLmEntryKey, handle: StateHandle) raises:
+    try:
+        _ = _session_status(k, handle)
+        raise Error("a released handle ran")
+    except problem:
+        _refuses(problem, "state is not fitted or was released")
+
+
+def session_case(op: Int) raises:
+    var k = _key()
+    if op == BS_CREATE:
+        # A new resident session is a live, closed handle; two creations
+        # give two distinct handles.
+        var first = byte_lm_resident_open(k)
+        var second = byte_lm_resident_open(k)
+        require(first.index != second.index or first.generation != second.generation, "two creations shared a handle")
+        var info = _session_status(k, first)
+        require(info[3] == 0 and info[0] == -1 and info[2] == 1, "a new resident session is not closed and usable")
+        byte_lm_resident_close(k, first)
+        byte_lm_resident_close(k, second)
+        try:
+            # create takes exactly one handle output
+            _ = native_descriptor_call(byte_lm_sessions_entry(k), BS_CREATE, List[Int](), List[Int](), List[Float64]())
+            raise Error("a create without an output did not refuse")
+        except problem:
+            _refuses(problem, "create takes one handle output")
+    elif op == BS_RUN:
+        # The trainer dispatch runs on the leased session: status, close
+        # (operation 4), status again; the handle stays live until BS_CLOSE.
+        var handle = byte_lm_resident_open(k)
+        try:
+            require(_session_status(k, handle)[3] == 0, "status on a new session")
+            _ = byte_lm_resident_run(k, handle, 4, List[Int](), List[Int](), List[Float64]())
+            require(_session_status(k, handle)[3] == 0, "status after a trainer close")
+            try:
+                var short: List[Int] = [handle.index, Int(handle.generation)]
+                _ = native_descriptor_call(byte_lm_sessions_entry(k), BS_RUN, List[Int](), short, List[Float64]())
+                raise Error("a run without a trainer operation did not refuse")
+            except problem:
+                _refuses(problem, "invalid run request")
+        finally:
+            byte_lm_resident_close(k, handle)
+    elif op == BS_CLOSE:
+        # Release retires the generation: the stale handle refuses to run
+        # and to close again; a reused slot gets a new generation.
+        var handle = byte_lm_resident_open(k)
+        byte_lm_resident_close(k, handle)
+        _stale_refuses(k, handle)
+        try:
+            byte_lm_resident_close(k, handle)
+            raise Error("a double close did not refuse")
+        except problem:
+            _refuses(problem, "state is not fitted or was released")
+        var forged = StateHandle(handle.index, handle.generation + 1000000)
+        _stale_refuses(k, forged)
+    else:
+        raise Error("unknown byte LM session case")
 
 
 def case(unit: Int) raises:
@@ -134,6 +215,8 @@ def case(unit: Int) raises:
     elif unit == 10:
         # Trainer dispatch operation 0: the image's compiled tier answer.
         require(byte_lm_trainer_call(k, 0, List[Int](), List[Int](), List[Float64]()) == 1, "trainer metadata")
+    elif unit >= BYTE_LM_SESSION_CASE_FIRST and unit < BYTE_LM_ENTRY_CASES:
+        session_case(unit - BYTE_LM_SESSION_CASE_FIRST)
     else:
         raise Error("unknown byte LM entry case")
 

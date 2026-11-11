@@ -18,6 +18,7 @@ from core.native_descriptor_call import native_descriptor_call, native_descripto
 from core.state_registry import StateRegistry
 from core.byte_lm_entry_table_sessions import (
     BS_CREATE, BS_RUN, BS_CLOSE, BS_OP_COUNT, byte_lm_sessions_handle, byte_lm_sessions_write_handle,
+    byte_lm_sessions_check_create,
     byte_lm_sessions_request, byte_lm_sessions_floats,
 )
 from training.byte_lm_binding_impl import ByteLMSession
@@ -59,6 +60,7 @@ comptime BYTE_LM_DEVICE_SESSIONS = StateRegistry[ByteLmDeviceSessionCell, _DEVIC
 
 def byte_lm_device_sessions_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if op == BS_CREATE:
+        byte_lm_sessions_check_create(a)
         var handle = BYTE_LM_DEVICE_SESSIONS.insert(ByteLmDeviceSessionCell())
         return byte_lm_sessions_write_handle(a, handle)
     var handle = byte_lm_sessions_handle(p)

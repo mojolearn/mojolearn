@@ -172,9 +172,15 @@ def byte_lm_sessions_handle(p: List[Int]) raises -> StateHandle:
     return StateHandle(p[0], UInt64(p[1]))
 
 
-def byte_lm_sessions_write_handle(a: List[Int], handle: StateHandle) raises -> Int:
+def byte_lm_sessions_check_create(a: List[Int]) raises:
+    """Checked before the session is inserted, so a refused create leaves
+    nothing in the registry."""
     if len(a) != 1 or a[0] == 0:
         raise Error("native byte LM sessions: create takes one handle output")
+
+
+def byte_lm_sessions_write_handle(a: List[Int], handle: StateHandle) raises -> Int:
+    byte_lm_sessions_check_create(a)
     var out = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[0])
     out[0] = handle.index
     out[1] = Int(handle.generation)
