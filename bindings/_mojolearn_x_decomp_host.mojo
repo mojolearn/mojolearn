@@ -58,10 +58,20 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.shared_slot import SharedSlot
 from core.tsvd_native_decomp import TSVDDecompAPI
+from core.nmf_native_provider import NMFProviderAPI
 from checks.numerics import NUMERIC_IDENTICAL
 
 comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompHostFastV1"
 comptime TSVD_DECOMP_API = SharedSlot[TSVDDecompAPI[HostExec, NoRDev, False], _TSVD_DECOMP_API_NAME]
+
+
+comptime _NMF_API_NAME = "MojolearnNMFHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNMFHostFastV1"
+comptime NMF_API = SharedSlot[NMFProviderAPI[HostExec, NoRDev, False, HostDecomp], _NMF_API_NAME]
+
+
+def nmf_native_api_v1_binding() raises -> PythonObject:
+    var api = NMF_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def tsvd_decomp_native_api_v1_binding() raises -> PythonObject:
@@ -85,6 +95,7 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_decomp_host")
         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
         m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
+        m.def_function[nmf_native_api_v1_binding]("nmf_native_api_v1")
         m.def_function[x_decomp_host_numeric_mode_binding]("x_decomp_host_numeric_mode")
         m.def_function[x_decomp_host_vendor_binding]("x_decomp_host_vendor")
         m.def_function[x_decomp_host_column_binding]("x_decomp_host_column")
