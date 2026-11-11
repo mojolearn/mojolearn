@@ -166,13 +166,13 @@ def connect(context, register, registry):
         'predict': ('family_kmeans_predict', (native, arg(0))),
         'transform': ('family_kmeans_transform', (native, arg(0))),
     })
-    for cls, fit, predict in ((xcluster.MiniBatchKMeans, 'family_cfa_mbk_fit', 'family_xc_predict'),  # glue: fixed ABI metadata connected once during package import
+    for cls, fit, predict in ((xcluster.MiniBatchKMeans, 'family_cfa_mbk_fit', 'family_xc_variants_predict'),  # glue: fixed ABI metadata connected once during package import
                               (xcluster.BisectingKMeans, 'family_cfa_bisect_fit', 'family_xc_bisect_predict')):
         add(cls, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
             'fit': (fit, (native, arg(0), keyword('sample_weight'), arg(1))),
             'predict': (predict, (native, arg(0))),
-            'transform': ('family_xc_transform', (native, arg(0))),
-            'score': ('family_xc_score', (native, arg(0))),
+            'transform': ('family_xc_variants_transform', (native, arg(0))),
+            'score': ('family_xc_variants_score', (native, arg(0))),
         })
     add(xcluster.MeanShift, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
         'fit': ('family_cfa_meanshift_fit', (native, arg(0), arg(1))),

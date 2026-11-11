@@ -975,7 +975,7 @@ def cluster_fit_a_operation(model: PythonObject, operation: String, args: Python
         return _attr(model, "labels_")
     if operation == "family_cfa_fit_transform":
         _centers_fit(model, binding, args[1], context)
-        return cluster_operation(model, "family_xc_transform", Python.tuple(binding, args[1]), context)
+        return cluster_operation(model, "family_xc_variants_transform", Python.tuple(binding, args[1]), context)
     if operation == "family_cfa_meanshift_fit":
         _meanshift_fit(model, binding, args[1], context)
         return model

@@ -40,6 +40,18 @@ def variants_span(value: PythonObject) raises -> VariantsSpan:
     return VariantsSpan(Int(py=classical_address(value)) if count else 0, count)
 
 
+def variants_pack_f32(values: List[Float32]) raises -> PythonObject:
+    var result = _py_array(native_loaded_module("array"), "f", values.unsafe_ptr().bitcast[UInt8](), len(values) * 4)
+    _ = values
+    return result
+
+
+def variants_pack_i32(values: List[Int32]) raises -> PythonObject:
+    var result = _py_array(native_loaded_module("array"), "i", values.unsafe_ptr().bitcast[UInt8](), len(values) * 4)
+    _ = values
+    return result
+
+
 struct VariantsAuxiliaryPins(Movable):
     # Boundary-only keepalive for admitted/repacked input buffers. RUN uses
     # the native span plan and never indexes these Python values.

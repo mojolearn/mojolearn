@@ -24,7 +24,7 @@ def span(values: List[Float32]) -> VariantsSpan:
     return VariantsSpan(Int(values.unsafe_ptr()), len(values))
 
 
-def fit_case(weighted: Bool) raises:
+def fit_case(driver: KMeansVariantsDriver, weighted: Bool) raises:
     # Each observation equals its supplied center. Random row selection can
     # change counts, but never these centers, predictions or zero objective.
     var x: List[Float32] = [1, 11]
@@ -32,7 +32,6 @@ def fit_case(weighted: Bool) raises:
     if weighted:
         auxiliary.append(1)
         auxiliary.append(3)
-    var driver = KMeansVariantsDriver(kmeans_variants_host_v1)
     var output = VariantsResultSlot()
     driver.minibatch_fit(MiniBatchFitRequest(span(x), span(auxiliary),
         2, 1, 2, 1, 2, 10, 2, 1, True, 7, False, weighted, False, 0, 0), output)
@@ -45,7 +44,7 @@ def fit_case(weighted: Bool) raises:
     _ = auxiliary^
 
 
-def partial_case(kind: Int) raises:
+def partial_case(driver: KMeansVariantsDriver, kind: Int) raises:
     var x: List[Float32] = [1, 11]
     var auxiliary: List[Float32] = [0, 10]
     var weighted = kind != 0
@@ -53,7 +52,6 @@ def partial_case(kind: Int) raises:
         x = [0, 2, 10, 14]
         auxiliary = [0, 10, 1, 3, 2, 2]
     var n = len(x)
-    var driver = KMeansVariantsDriver(kmeans_variants_host_v1)
     var output = VariantsResultSlot()
     driver.minibatch_partial(MiniBatchPartialRequest(span(x), span(auxiliary), n, 1, 2,
         True, 2, n, n, 0, 0, 7, weighted, 0), output)
@@ -90,9 +88,8 @@ def partial_case(kind: Int) raises:
     _ = auxiliary^
 
 
-def bisect_case(random_init: Bool) raises:
+def bisect_case(driver: KMeansVariantsDriver, random_init: Bool) raises:
     var x: List[Float32] = [0, 1, 10, 11]
-    var driver = KMeansVariantsDriver(kmeans_variants_host_v1)
     var output = VariantsResultSlot()
     driver.bisect_fit(BisectFitRequest(span(x), VariantsSpan(0, 0),
         4, 1, 2, 1, random_init, 100, 7, random_init, 0), output)
@@ -121,10 +118,9 @@ def bisect_case(random_init: Bool) raises:
     _ = x^
 
 
-def query_case(kind: Int) raises:
+def query_case(driver: KMeansVariantsDriver, kind: Int) raises:
     var x: List[Float32] = [0, 5, 10]
     var centers: List[Float32] = [0, 10]
-    var driver = KMeansVariantsDriver(kmeans_variants_host_v1)
     var output = VariantsResultSlot()
     driver.query(VariantsQueryRequest(span(x), span(centers), 3, 2, 1, kind == 1), kind == 2, output)
     if kind == 2:
@@ -143,15 +139,15 @@ def query_case(kind: Int) raises:
     _ = centers^
 
 
-def fixture(unit: Int) raises:
+def fixture(driver: KMeansVariantsDriver, unit: Int) raises:
     if unit < 2:
-        fit_case(unit == 1)
+        fit_case(driver, unit == 1)
     elif unit < 5:
-        partial_case(unit - 2)
+        partial_case(driver, unit - 2)
     elif unit < 7:
-        bisect_case(unit == 6)
+        bisect_case(driver, unit == 6)
     else:
-        query_case(unit - 7)
+        query_case(driver, unit - 7)
 
 
 def run_checks() raises:
@@ -159,7 +155,7 @@ def run_checks() raises:
     var fp = failures.unsafe_ptr()
     def run(unit: Int) {imm fp}:
         try:
-            fixture(unit)
+            fixture(KMeansVariantsDriver(kmeans_variants_host_v1), unit)
         except problem:
             fp[unit] = 1
             print("FAIL kmeans_variants_native_cpu fixture", unit, String(problem))

@@ -82,3 +82,22 @@ def test_bisect_tree_arrays_keep_identity_aliases_and_serialization():
     del restored, model, centers, nodes, view
     gc.collect()
     assert raw.tobytes() == expected
+
+
+@pytest.mark.parametrize("name", ["MiniBatchKMeans", "BisectingKMeans"])
+def test_variant_queries_consume_rebound_public_center_storage(name):
+    x = np.array([[0.0], [1.0], [10.0], [11.0]], dtype=np.float32)
+    model = getattr(ml, name)(n_clusters=2, random_state=7, numeric_mode="identical").fit(x)
+    # A query may have populated the resident cache before the public field is
+    # rebound. The next call must use this replacement, including dtype cast.
+    model.transform(x)
+    model.cluster_centers_ = np.array([[100.0], [200.0]], dtype=np.float64)
+    result = model.transform(np.array([[100.0], [200.0]], dtype=np.float32))
+    assert type(result) is np.ndarray
+    assert result.dtype == np.dtype("float32") and result.shape == (2, 2)
+    np.testing.assert_array_equal(result, [[0.0, 100.0], [100.0, 0.0]])
+    assert model.score(np.array([[100.0], [200.0]], dtype=np.float32)) == 0.0
+    if name == "MiniBatchKMeans":
+        predicted = model.predict(np.array([[100.0], [200.0]], dtype=np.float32))
+        assert type(predicted) is np.ndarray and predicted.dtype == np.dtype("int32")
+        np.testing.assert_array_equal(predicted, [0, 1])

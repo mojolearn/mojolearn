@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.kmeans-variants-native-tests.v1",
-  "dependency": "public-fit producer contains core/kmeans_variants_plan; additive API 49c35f2a97",
+  "dependency": "query producer follows fit943d8e3f7e; full producer chain in handoff",
   "status": "authored; uncompiled and unrun",
   "contracts": {
     "root": "checks/native_tests/kmeans_variants_contract.mojo",
@@ -33,19 +33,36 @@
   "unchanged_python_tests": "all existing Python tests retained; no deletion before replacement passes",
   "limits": [
     "No execution or performance claim.",
-    "Actual GPU provider cases remain pending root scheduling.",
     "Witness cases prove wire/layout only, numerical cases call actual CPU provider.",
-    "Bisect root center is the existing zero placeholder, not the dataset mean."
+    "Bisect root center is the existing zero placeholder, not the dataset mean.",
+    "GPU numerical wrapper is authored but unbuilt/unrun; upstream concurrent-submit failure remains parked."
   ],
   "boundary": {
     "file": "python/mojolearn/tests/test_kmeans_variants_native_boundary.py",
-    "definitions": 4,
-    "parameterized_cases": 5,
+    "definitions": 5,
+    "parameterized_cases": 7,
     "coverage": [
       "failed-first-partial publication",
       "float refusal before native integer overflow",
       "legacy serialized/rebound stream forms",
-      "tree identity/mutation/pickle/detached exporter lifetime"
+      "tree identity/mutation/pickle/detached exporter lifetime",
+      "center rebinding invalidates previous resident view and preserves public dtype/shape"
     ]
+  },
+  "resident_lease": {
+    "root": "checks/native_tests/kmeans_variants_lease.mojo",
+    "fixtures": 4,
+    "coverage": [
+      "single final release",
+      "active query survives cache retirement",
+      "two active leases",
+      "table pop/move retains active owner"
+    ]
+  },
+  "gpu_numerical": {
+    "root": "checks/native_tests/kmeans_variants_native_gpu.mojo",
+    "fixtures": 10,
+    "provider": "x_cluster.variants_device.kmeans_variants_device_v1",
+    "ordering": "ordered within shared device context; no concurrency qualification"
   }
 }
