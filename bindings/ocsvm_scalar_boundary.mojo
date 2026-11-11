@@ -71,7 +71,7 @@ def _oc_ndarray(context: PythonObject) raises -> PythonObject:
     return native
 
 
-def oc_scalar_admit(value: PythonObject, context: PythonObject) raises:
+def oc_scalar_admit[Numeric: Bool = False](value: PythonObject, context: PythonObject) raises:
     var current = value
     var visited = List[Int]()
     var b = native_loaded_module("builtins")
@@ -105,6 +105,11 @@ def oc_scalar_admit(value: PythonObject, context: PythonObject) raises:
         if size == 0:
             return  # no object comparison can run; native truth keeps its own refusal
         if size != 1:
+            comptime if Numeric:
+                # Exact ndarray numeric conversion rejects size != 1 before
+                # touching object elements. Let that native conversion retain
+                # its own TypeError; comparison truth retains ValueError.
+                return
             raise Error("ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()")
         var address = Int(current._obj_ptr)
         for previous in visited:  # scalar nesting identities, never tensor values

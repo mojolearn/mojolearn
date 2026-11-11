@@ -38,12 +38,12 @@ from bindings.svc_common import (
 )
 
 def _oc_float(value: PythonObject, context: PythonObject) raises -> Float64:
-    oc_scalar_admit(value, context)
+    oc_scalar_admit[True](value, context)
     return svc_float(value)
 
 
 def _oc_int(value: PythonObject, context: PythonObject) raises -> Int:
-    oc_scalar_admit(value, context)
+    oc_scalar_admit[True](value, context)
     return svc_int(value)
 
 

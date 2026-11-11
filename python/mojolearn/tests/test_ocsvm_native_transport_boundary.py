@@ -257,3 +257,34 @@ def test_ocsvm_native_numeric_options_keep_existing_conversion(storage):
     vars(model)["offset_"] = scalar((1 + np.exp(-2)) / 2)
     np.testing.assert_allclose(model.score_samples(_query()), _scores(0.5), rtol=0, atol=2e-4)
     np.testing.assert_array_equal(model.predict(_query()), [-1, 1, 1, -1])
+
+
+@pytest.mark.parametrize("field", ["nu", "degree", "coef0", "max_iter", "tol"])
+def test_ocsvm_multielement_object_numeric_options_keep_typeerror(field):
+    calls = []
+
+    class ConversionHook:
+        def __float__(self):
+            calls.append("float")
+            raise AssertionError("object element conversion invoked")
+
+        def __int__(self):
+            calls.append("int")
+            raise AssertionError("object element conversion invoked")
+
+    values = np.empty(2, dtype=object)
+    values[:] = [ConversionHook(), ConversionHook()]
+    model = _model(gamma="auto")
+    vars(model)[field] = values
+    with pytest.raises(TypeError):
+        model.fit(_train())
+    assert calls == []
+    assert ("_gamma" in vars(model)) is (field in {"max_iter", "tol"})
+    assert "support_" not in vars(model)
+
+
+def test_ocsvm_multielement_object_comparison_keeps_ambiguous_truth():
+    model = _model(gamma=np.array(["auto", "scale"], dtype=object))
+    with pytest.raises(ValueError, match="truth value.*ambiguous"):
+        model.fit(_train())
+    assert "_gamma" not in vars(model)

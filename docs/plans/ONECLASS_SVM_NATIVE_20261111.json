@@ -205,8 +205,8 @@
     "gpu_cases_default": 22,
     "gpu_cases_flag_off": 12,
     "gpu_skip_if_flag_off": 10,
-    "boundary_definitions": 13,
-    "boundary_cases": 29,
+    "boundary_definitions": 15,
+    "boundary_cases": 35,
     "status": "authored/uncompiled/unrun; original Python retained",
     "oracles": "closed-form two-point dual/rho; independent parallel Float64 kernels/KKT on original150x6/40x6 inputs"
   },
@@ -224,6 +224,7 @@
     "precomputed": "zero-dimensional native arrays preserve scalar text route; nonzero rank retains later unhashable-key refusal without invoking formatter",
     "conversions": "same-site exact scalar admission before nu/degree/coef0/max_iter/tol/_gamma/offset_ float/int conversion",
     "new_roles": 0,
-    "status": "source only; boundary seams authored/unrun"
+    "status": "source only; boundary seams authored/unrun",
+    "numeric_refusal_correction": "Numeric admission preserves native TypeError for multi-element object arrays; comparator truth retains ValueError; no element callbacks"
   }
 }
