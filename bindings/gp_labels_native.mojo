@@ -40,8 +40,8 @@ from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
 from bindings.gp_label_input_boundary import gp_label_input
 from bindings.gp_label_order_boundary import gp_integer_classes
+from bindings.gp_mixed_label_boundary import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
-from bindings.p3_labels_metrics_native import p3_dict_codes
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 
@@ -210,12 +210,12 @@ def _gp_sorted_classes[S: _TextCodeStorage](labels: PythonObject, context: Pytho
         return gp_integer_classes[S](labels, context)
     # Exact NumPy/mixed-real comparisons retain their existing native scalar
     # semantics; a mathematical integer/Float64 key would change those rules.
-    var classes = family_call(b.sorted, py_call(b.dict.fromkeys, labels))
-    var table = py_call(b.dict, py_call(b.zip, classes, py_call(b.range, PythonObject(len(classes)))))
+    var classes = gp_mixed_classes(labels)
+    var table = gp_mixed_index(classes)
     if len(classes) > 2147483648:
         raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
     var codes = S(len(labels), context)
-    p3_dict_codes(table, labels, codes.address(), -1)
+    gp_mixed_codes(table, labels, codes.address())
     _ = labels
     return _TextLabels[S](classes, codes^, len(labels))
 
