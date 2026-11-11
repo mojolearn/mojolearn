@@ -7,7 +7,7 @@ slot; independent fixtures execute concurrently with no shared mutable state.
 """
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_call_fixed
+from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from core.kmeans_variants_api import (
     KMeansVariantsDriver, VariantsSpan, VariantsResultSlot,
     MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest,
