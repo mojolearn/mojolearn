@@ -93,7 +93,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_type_module import native_type_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
-from bindings.admitted_finite_wording import admitted_finite_wording
+from bindings.admitted_finite_wording import admitted_finite_wording, admitted_finite_refuse
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
     classical_wrap_array, classical_wrap_layout, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
@@ -756,14 +756,6 @@ def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: 
     x.position = call.add_input(admitted_input_dense(position, source, x.array, x.address if x.c_order else 0,
                                                      x.rows, x.cols, ADMITTED_ITEM_F32, False))
     return x^
-
-
-def admitted_finite_refuse(status: Int, est: String, name: String = "X") raises:
-    """The refusal of a deferred finite test: `status` is the word the
-    kernel entry returned (core/admitted_finite_status.mojo; 0 = every word
-    finite). Raises scikit-learn's wording, as admit_x would have."""
-    if status != 0:
-        raise Error(admitted_finite_wording(est, name))
 
 
 def _entry_nonfinite(text: String, name: String) -> Bool:
