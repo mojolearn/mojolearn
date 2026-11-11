@@ -227,7 +227,10 @@ def entry_ref_case() raises:
     var second = entry_table_resolve[NAME](1, 0, 0, String("test.entry.v1"), 1)
     require(entry_ref_same(first, second), "a second resolution returned another entry")
     require(entry_ref_vendor(first) == 0 and entry_ref_mode(first) == 1, "the layout word lost the key")
-    require(entry_ref_call(first, 0, [], [7, 3], []) == 703, "List call through the ref")
+    var la = List[Int]()
+    var lp: List[Int] = [7, 3]
+    var lf = List[Float64]()
+    require(entry_ref_call(first, 0, la, lp, lf) == 703, "List call through the ref")
     var a: Array[Int, 0] = []
     var p: Array[Int, 2] = [4, 2]
     var f: Array[Float64, 0] = []
