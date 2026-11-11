@@ -1,0 +1,25 @@
+Mojolearn NMF native test lane (2026-11-10)
+
+Dependency9d39093e14 adds typed API/provider. Generic provider Self.E/D/RES/X
+repair7a4a338545 is adopted; local adoption commits are history, not picks.
+
+First chunk:28 native wire/regularization/state fixtures
+  nmf_contract_suite.run_checks(), standalone nmf_contract.mojo and pixi task.
+  Distinct fields cover five input/output addresses, typed NmfArgs Float64
+  options, Boolean combinations, returned integer/Float64 spans, inverse
+  shapes, copies and malformed envelopes. Six exact dyadic mathematical
+  regularization expectations independently exercise row/feature scaling,
+  L1/L2 endpoints, mixed ratio, zero alpha and asymmetric dimensions.
+  The test-only descriptor implements no NMF solver or algorithm.
+  Stable heap outputs and finally pins cover normal/refusal/error lifetime;
+  all independent cases use host_parallelize. Ordinary typed list literals.
+
+RUN OWED
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/nmf_contract.mojo
+  These NMF fixtures have not compiled or executed. Source/TOML/JSON and
+  whitespace checks only. No lane compiler/tests/boxes/timing/identity runs.
+  Actual CPU/GPU numerical provider fixtures and forthcoming options/scratch
+  state coverage follow; existing Python admission/clone seams remain.
+
+No kernel/default/experimental define changes. Nothing removed: this is new
+coverage of new typed API/state, not a replacement for Python boundaries.
