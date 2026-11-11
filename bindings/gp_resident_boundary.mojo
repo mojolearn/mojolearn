@@ -5,7 +5,7 @@ from bindings.gp_native_boundary import GPConnection
 from bindings.native_loaded_module import NativeModules, native_interpreter_finalizing
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_model_records import model_generation
-from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_any
+from bindings.p3nc_fitted_freeze import fitted_owns_store_any, fitted_freeze_any
 from core.gp_native_api import GPDriver
 from core.gp_native_state import GPLeaseState
 
@@ -65,7 +65,7 @@ def gp_resident_lease(model: PythonObject, slot: String, connection: GPConnectio
             # A record made by the former tuple envelope is replaced once.
             pass
     for i in range(len(mirrors)):  # driver-loop: keep the existing owning/read-only admission policy
-        if not fitted_is_freezable_any(mirrors[i]) or mirrors[i]._base is not None:
+        if not fitted_owns_store_any(mirrors[i]):
             if record is not None:
                 prepared_drop(mods, slot, model)
             return 0
