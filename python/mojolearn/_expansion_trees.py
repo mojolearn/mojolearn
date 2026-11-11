@@ -484,26 +484,6 @@ class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
 
-    def _arange(self, n):
-        """int32 0 .. n - 1, written by the binding (`x_trees_iota_i32`, a
-        device kernel on a GPU build), not a Python list of n ints."""
-        n = int(n)
-        out = empty((n,), "<i4")
-        if n > 0:
-            self._bind().x_trees_iota_i32(addr(out, name="iota"), [n])
-        return out
-
-    def _class_major(self, inits, n):
-        """K * n float64, class c's block all `inits[c]` (class-major), filled
-        by the binding (`x_trees_fill_class_major_f64`, a device kernel on a
-        GPU build); K = 1 is (n,)."""
-        K, n = len(inits), int(n)
-        vals = Array.from_list([float(v) for v in inits], "<f8")  # glue: the K class inits
-        out = empty((K * n,), "<f8")
-        if K * n > 0:
-            self._bind().x_trees_fill_class_major_f64(addr_ro(vals, name="inits"), addr(out, name="score"), [n, K])
-        return out
-
     def _indices(self, n_pool, n_draw, replace, seed, stream):
         """`n_draw` indices of [0, n_pool): with replacement in draw order;
         without, the drawn SET in ascending index order (xtrees/ops.mojo
@@ -540,17 +520,8 @@ class _TreesEnsembleBase(NumericModeMixin):
         xa, _ = as_f32_c(x, ndim=1, name="sub-estimator output")
         self._bind().x_trees_accumulate(addr(acc, name="acc"), addr_ro(xa, name="x"), [n, float(weight)])
 
-    def _acc_votes(self, acc, codes, n, k, on, off=0.0):
-        self._bind().x_trees_accumulate_onehot(addr(acc, name="acc"), addr_ro(codes, name="codes"),
-                                               [n, k, float(on), float(off)])
-
     def _scale(self, acc, divisor):
         self._bind().x_trees_scale(addr(acc, name="acc"), [len(acc), float(divisor)])
-
-    def _argmax(self, acc, n, k):
-        out = empty((n,), "<i4")
-        self._bind().x_trees_argmax_rows(addr_ro(acc, name="scores"), addr(out, name="argmax"), [n, k])
-        return out
 
 
 # ------------------------------------------------------------------ Bagging
