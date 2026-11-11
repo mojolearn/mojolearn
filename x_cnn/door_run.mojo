@@ -78,6 +78,24 @@ def xcnn_run_call(entry: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) r
     return result
 
 
+def xcnn_run_fixed[NA: Int](entry: EntryRef, op: Int, addrs: Array[Int, NA], ints: List[Int]) raises -> Int:
+    """`xcnn_run_call` with the operation's fixed address words in an inline
+    envelope on the caller's frame (no heap per layer op per batch); `ints`
+    is a word List the caller already built (a parameter plan)."""
+    var result = entry_ref_call(entry, op, Int(addrs.unsafe_ptr()), NA, Int(ints.unsafe_ptr()), len(ints), 0, 0)
+    # Integer addresses carry no lifetime: keep the request past the call.
+    _ = addrs
+    _ = ints
+    return result
+
+
+def xcnn_run_fixed2[NA: Int, NP: Int](entry: EntryRef, op: Int, addrs: Array[Int, NA],
+                                      ints: Array[Int, NP]) raises -> Int:
+    """`xcnn_run_call` with both fixed request envelopes inline: no heap."""
+    var floats: Array[Float64, 0] = []
+    return entry_ref_call(entry, op, addrs, ints, floats)
+
+
 # ---------------------------------------------------------------- shape words
 
 def xcnn_size(shape: List[Int]) -> Int:

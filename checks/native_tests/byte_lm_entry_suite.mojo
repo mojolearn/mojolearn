@@ -123,7 +123,11 @@ def _session_status(k: EntryRef, handle: StateHandle) raises -> List[Int]:
     """Trainer operation 5 (status) on a resident session through BS_RUN."""
     var info = List[Int](length=4, fill=7)
     var a: List[Int] = [Int(info.unsafe_ptr())]
-    require(byte_lm_resident_run(k, handle, 5, a, List[Int](), List[Float64]()) == 4, "session status count")
+    var words = List[Int]()
+    require(byte_lm_resident_run(k, handle, 5, a, List[Int](), List[Float64](), words) == 4, "session status count")
+    # The held request buffer is refilled in place on the next step.
+    require(byte_lm_resident_run(k, handle, 5, a, List[Int](), List[Float64](), words) == 4 and len(words) == 3,
+            "reused step words")
     return info^  # the status output outlives the synchronous call
 
 
@@ -159,7 +163,8 @@ def session_case(op: Int) raises:
         var handle = byte_lm_resident_open(k)
         try:
             require(_session_status(k, handle)[3] == 0, "status on a new session")
-            _ = byte_lm_resident_run(k, handle, 4, List[Int](), List[Int](), List[Float64]())
+            var close_words = List[Int]()
+            _ = byte_lm_resident_run(k, handle, 4, List[Int](), List[Int](), List[Float64](), close_words)
             require(_session_status(k, handle)[3] == 0, "status after a trainer close")
             try:
                 var short: List[Int] = [handle.index, Int(handle.generation)]

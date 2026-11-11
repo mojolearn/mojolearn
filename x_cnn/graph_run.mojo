@@ -24,7 +24,7 @@ from core.xcnn_entry_table import (
 )
 from core.xcnn_graph_impl import graph_bias_rows, graph_admit_edges
 from core.xseq_marshal import xseq_fill_f32
-from x_cnn.door_run import XcnnF32P, xcnn_run_call
+from x_cnn.door_run import xcnn_run_call, xcnn_run_fixed2, XcnnF32P
 
 comptime GraphU8P = MutPointer[UInt8, MutUntrackedOrigin]
 
@@ -187,104 +187,148 @@ def graph_run_bias_rows(bias: Int, dst: Int, rows: Int, cols: Int):
 # ---------------------------------------------------------------- native entries (GIL released by the caller)
 
 def graph_run_csr_build(entry: EntryRef, rows: Int, cols: Int, csr: Int, order: Int, n: Int, nnz: Int) raises:
-    _ = xcnn_run_call(entry, XC_CSR_BUILD, [rows, cols, csr, order], [n, nnz])
+    var req_addrs: Array[Int, 4] = [rows, cols, csr, order]
+    var req_words: Array[Int, 2] = [n, nnz]
+    _ = xcnn_run_fixed2(entry, XC_CSR_BUILD, req_addrs, req_words)
 
 
 def graph_run_gather(entry: EntryRef, values: Int, order: Int, dst: Int, size: Int, n: Int) raises:
-    _ = xcnn_run_call(entry, XC_PERM_GATHER, [values, order, dst], [size, n])
+    var req_addrs: Array[Int, 3] = [values, order, dst]
+    var req_words: Array[Int, 2] = [size, n]
+    _ = xcnn_run_fixed2(entry, XC_PERM_GATHER, req_addrs, req_words)
 
 
 def graph_run_vals_t(entry: EntryRef, vals_f: Int, order_f: Int, order_t: Int, dst: Int, nnz: Int) raises:
-    _ = xcnn_run_call(entry, XC_VALS_T, [vals_f, order_f, order_t, dst], [nnz])
+    var req_addrs: Array[Int, 4] = [vals_f, order_f, order_t, dst]
+    var req_words: Array[Int, 1] = [nnz]
+    _ = xcnn_run_fixed2(entry, XC_VALS_T, req_addrs, req_words)
 
 
 def graph_run_gemm(entry: EntryRef, a: Int, b: Int, dst: Int, m: Int, n: Int, k: Int, op: Int) raises:
-    _ = xcnn_run_call(entry, XC_GEMM, [a, b, dst], [m, n, k, op])
+    var req_addrs: Array[Int, 3] = [a, b, dst]
+    var req_words: Array[Int, 4] = [m, n, k, op]
+    _ = xcnn_run_fixed2(entry, XC_GEMM, req_addrs, req_words)
 
 
 def graph_run_spmm(entry: EntryRef, vals: Int, h: Int, dst: Int, csr: Int, n: Int, cols: Int, nnz: Int,
                    mode: Int) raises:
-    _ = xcnn_run_call(entry, XC_SPMM, [vals, h, dst, csr], [n, cols, nnz, mode])
+    var req_addrs: Array[Int, 4] = [vals, h, dst, csr]
+    var req_words: Array[Int, 4] = [n, cols, nnz, mode]
+    _ = xcnn_run_fixed2(entry, XC_SPMM, req_addrs, req_words)
 
 
 def graph_run_add(entry: EntryRef, a: Int, b: Int, dst: Int, count: Int) raises:
-    _ = xcnn_run_call(entry, XC_ADD, [a, b, dst], [count])
+    var req_addrs: Array[Int, 3] = [a, b, dst]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_ADD, req_addrs, req_words)
 
 
 def graph_run_linear_forward(entry: EntryRef, x: Int, w: Int, b: Int, dst: Int, rows: Int, d: Int, f: Int) raises:
-    _ = xcnn_run_call(entry, XC_LINEAR_FORWARD, [x, w, b, dst], [rows, d, f])
+    var req_addrs: Array[Int, 4] = [x, w, b, dst]
+    var req_words: Array[Int, 3] = [rows, d, f]
+    _ = xcnn_run_fixed2(entry, XC_LINEAR_FORWARD, req_addrs, req_words)
 
 
 def graph_run_linear_forward_m(entry: EntryRef, x: Int, w: Int, b: Int, dst: Int, flags: Int, n: Int, d: Int,
                                f: Int) raises:
-    _ = xcnn_run_call(entry, XC_LINEAR_FORWARD_M, [x, w, b, dst], [flags, n, d, f])
+    var req_addrs: Array[Int, 4] = [x, w, b, dst]
+    var req_words: Array[Int, 4] = [flags, n, d, f]
+    _ = xcnn_run_fixed2(entry, XC_LINEAR_FORWARD_M, req_addrs, req_words)
 
 
 def graph_run_linear_backward(entry: EntryRef, x: Int, w: Int, g: Int, dx: Int, dw: Int, db: Int, rows: Int,
                               d: Int, f: Int) raises:
-    _ = xcnn_run_call(entry, XC_LINEAR_BACKWARD, [x, w, g, dx, dw, db], [rows, d, f])
+    var req_addrs: Array[Int, 6] = [x, w, g, dx, dw, db]
+    var req_words: Array[Int, 3] = [rows, d, f]
+    _ = xcnn_run_fixed2(entry, XC_LINEAR_BACKWARD, req_addrs, req_words)
 
 
 def graph_run_relu_forward(entry: EntryRef, x: Int, dst: Int, count: Int) raises:
-    _ = xcnn_run_call(entry, XC_RELU_FORWARD, [x, dst], [count])
+    var req_addrs: Array[Int, 2] = [x, dst]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_RELU_FORWARD, req_addrs, req_words)
 
 
 def graph_run_res_free(entry: EntryRef, h: Int) raises:
-    _ = xcnn_run_call(entry, XC_RES_FREE, [h], List[Int]())
+    var req_addrs: Array[Int, 1] = [h]
+    var req_words: Array[Int, 0] = []
+    _ = xcnn_run_fixed2(entry, XC_RES_FREE, req_addrs, req_words)
 
 
 def graph_run_csr_upload(entry: EntryRef, csr: Int, n: Int, nnz: Int) raises -> Int:
     """One CSR view to a resident buffer; returns its handle."""
-    return xcnn_run_call(entry, XC_CSR_UPLOAD, [csr], [n, 1, nnz, 0])
+    var req_addrs: Array[Int, 1] = [csr]
+    var req_words: Array[Int, 4] = [n, 1, nnz, 0]
+    return xcnn_run_fixed2(entry, XC_CSR_UPLOAD, req_addrs, req_words)
 
 
 def graph_run_download(entry: EntryRef, h: Int, dst: Int, count: Int) raises:
-    _ = xcnn_run_call(entry, XC_RES_DOWNLOAD, [h, dst], [count])
+    var req_addrs: Array[Int, 2] = [h, dst]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_RES_DOWNLOAD, req_addrs, req_words)
 
 
 def graph_run_gcn_loops(entry: EntryRef, src: Int, dst: Int, w: Int, src_out: Int, dst_out: Int, w_out: Int,
                         n: Int, edges: Int, improved: Bool) raises -> Int:
     """GCN's self loops; returns the kept edge count (the loops follow)."""
-    return xcnn_run_call(entry, XC_GCN_LOOPS, [src, dst, w, src_out, dst_out, w_out], [n, edges, 1 if improved else 0])
+    var req_addrs: Array[Int, 6] = [src, dst, w, src_out, dst_out, w_out]
+    var req_words: Array[Int, 3] = [n, edges, 1 if improved else 0]
+    return xcnn_run_fixed2(entry, XC_GCN_LOOPS, req_addrs, req_words)
 
 
 def graph_run_gcn_norm(entry: EntryRef, wf: Int, vals: Int, csr: Int, n: Int, nnz: Int, graph_route: Bool) raises:
     """GCN's symmetric normalization: the `_m` entry on the graph lane
     switch, the host entry otherwise."""
     if graph_route:
-        _ = xcnn_run_call(entry, XC_GCN_NORM_M, [wf, vals, csr], [0, n, 1, nnz, 0])
+        var req_addrs: Array[Int, 3] = [wf, vals, csr]
+        var req_words: Array[Int, 5] = [0, n, 1, nnz, 0]
+        _ = xcnn_run_fixed2(entry, XC_GCN_NORM_M, req_addrs, req_words)
     else:
-        _ = xcnn_run_call(entry, XC_GCN_NORM, [wf, vals, csr], [n, 1, nnz, 0])
+        var req_addrs: Array[Int, 3] = [wf, vals, csr]
+        var req_words: Array[Int, 4] = [n, 1, nnz, 0]
+        _ = xcnn_run_fixed2(entry, XC_GCN_NORM, req_addrs, req_words)
 
 
 def graph_run_gemm_m(entry: EntryRef, a: Int, b: Int, dst: Int, flags: Int, m: Int, n: Int, k: Int,
                      op: Int) raises:
-    _ = xcnn_run_call(entry, XC_GEMM_M, [a, b, dst], [flags, m, n, k, op])
+    var req_addrs: Array[Int, 3] = [a, b, dst]
+    var req_words: Array[Int, 5] = [flags, m, n, k, op]
+    _ = xcnn_run_fixed2(entry, XC_GEMM_M, req_addrs, req_words)
 
 
 def graph_run_spmm_m(entry: EntryRef, vals: Int, h: Int, csr: Int, dst: Int, flags: Int, n: Int, cols: Int,
                      nnz: Int, mode: Int) raises:
-    _ = xcnn_run_call(entry, XC_SPMM_M, [vals, h, csr, dst], [flags, n, cols, nnz, mode])
+    var req_addrs: Array[Int, 4] = [vals, h, csr, dst]
+    var req_words: Array[Int, 5] = [flags, n, cols, nnz, mode]
+    _ = xcnn_run_fixed2(entry, XC_SPMM_M, req_addrs, req_words)
 
 
 def graph_run_bias_m(entry: EntryRef, a: Int, bias: Int, dst: Int, flags: Int, count: Int, cols: Int) raises:
     """map2 kind 4: the bias row added to every row."""
-    _ = xcnn_run_call(entry, XC_MAP2_M, [a, bias, dst], [flags, 4, count, cols])
+    var req_addrs: Array[Int, 3] = [a, bias, dst]
+    var req_words: Array[Int, 4] = [flags, 4, count, cols]
+    _ = xcnn_run_fixed2(entry, XC_MAP2_M, req_addrs, req_words)
 
 
 def graph_run_add_m(entry: EntryRef, a: Int, b: Int, dst: Int, flags: Int, count: Int) raises:
     """map2 kind 2: element-wise sum."""
-    _ = xcnn_run_call(entry, XC_MAP2_M, [a, b, dst], [flags, 2, count])
+    var req_addrs: Array[Int, 3] = [a, b, dst]
+    var req_words: Array[Int, 3] = [flags, 2, count]
+    _ = xcnn_run_fixed2(entry, XC_MAP2_M, req_addrs, req_words)
 
 
 def graph_run_graph_op(entry: EntryRef, a: Int, b: Int, aux: Int, dst: Int, csr: Int, n: Int, cols: Int,
                        nnz: Int, kind: Int) raises:
-    _ = xcnn_run_call(entry, XC_GRAPH_OP, [a, b, aux, dst, csr], [n, cols, nnz, kind])
+    var req_addrs: Array[Int, 5] = [a, b, aux, dst, csr]
+    var req_words: Array[Int, 4] = [n, cols, nnz, kind]
+    _ = xcnn_run_fixed2(entry, XC_GRAPH_OP, req_addrs, req_words)
 
 
 def graph_run_graph_op_m(entry: EntryRef, a: Int, b: Int, aux: Int, dst: Int, csr: Int, flags: Int, n: Int,
                          cols: Int, nnz: Int, kind: Int) raises:
-    _ = xcnn_run_call(entry, XC_GRAPH_OP_M, [a, b, aux, dst, csr], [flags, n, cols, nnz, kind])
+    var req_addrs: Array[Int, 5] = [a, b, aux, dst, csr]
+    var req_words: Array[Int, 5] = [flags, n, cols, nnz, kind]
+    _ = xcnn_run_fixed2(entry, XC_GRAPH_OP_M, req_addrs, req_words)
 
 
 def graph_run_gcn_backward(entry: EntryRef, addrs: List[Int], n: Int, d: Int, f: Int, nnz: Int, bias: Bool,

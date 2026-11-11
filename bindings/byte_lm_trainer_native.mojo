@@ -336,11 +336,13 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
     var entry = native[].entry  # resolved once, at the owner's construction
     var handle = native[].handle()
     var result = 0
+    # The owner's request buffer is reused across steps (one session is
+    # stepped by one caller at a time, as its native state requires).
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats)
+            result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats, native[].words)
     else:
-        result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats)
+        result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats, native[].words)
     _ = session  # the owner (and so the handle) is live through the synchronous native call
     return result
 

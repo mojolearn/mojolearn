@@ -30,11 +30,16 @@ struct ByteLmSessionOwner(Movable, Writable):
     # The sessions entry, resolved once at construction (lane
     # entry-table-zero-alloc): every step and the close call through it.
     var entry: EntryRef
+    # The step request words (handle, operation, plan), refilled in place by
+    # every step (`byte_lm_resident_run`): allocated once per session, not
+    # once per training step.
+    var words: List[Int]
 
     def __init__(out self, key: ByteLmEntryKey) raises:
         var entry = byte_lm_sessions_ref(key)
         var handle = byte_lm_resident_open(entry)
         self.entry = entry
+        self.words = List[Int]()
         self.mode = key.mode
         self.vendor = key.vendor
         self.index = handle.index

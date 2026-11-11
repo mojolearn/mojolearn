@@ -31,7 +31,7 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_reuse, neural_descriptor_reserved_execute, neural_descriptor_handle,
 )
 from bindings.causal_lm_public import _causal_array_guard
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
     NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_BLOCK_TRAIN, NEURAL_TABLE_MAMBA_TRAIN,
@@ -124,23 +124,25 @@ def _neural_table_reserved(entry: EntryRef, handle: Int, reserve: Int, release: 
     # image's busy/closed admission, as the provider ran them), the operation
     # with it released. The session handle leads the operation's words. The
     # caller pins the session owner until this returns.
-    var slot: List[Int] = [handle]
-    var words: List[Int] = [handle]
+    # The reserve/release requests are fixed one-word envelopes on this frame
+    # (no heap); the operation's words are sized once (handle + scalars).
+    var none: Array[Int, 0] = []
+    var slot: Array[Int, 1] = [handle]
+    var no_floats: Array[Float64, 0] = []
+    var words = List[Int](capacity=1 + len(ints))
+    words.append(handle)
     for i in range(len(ints)):  # small-loop(session operation scalar words)
         words.append(ints[i])
-    var none = List[Int]()
-    var no_floats = List[Float64]()
-    _ = neural_entry_call(entry, reserve, none, slot, no_floats)
+    _ = entry_ref_call(entry, reserve, none, slot, no_floats)
     var result = 0
     try:
         with GILReleased(Python()):
             result = neural_entry_call(entry, operation, addresses, words, floats)
     except problem:
-        _ = neural_entry_call(entry, release, none, slot, no_floats)
+        _ = entry_ref_call(entry, release, none, slot, no_floats)
         raise problem
-    _ = neural_entry_call(entry, release, none, slot, no_floats)
+    _ = entry_ref_call(entry, release, none, slot, no_floats)
     _ = words^
-    _ = slot^
     return result
 
 

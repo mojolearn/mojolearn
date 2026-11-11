@@ -18,7 +18,7 @@ from core.xcnn_entry_table import (
     XC_PAD2D_FORWARD, XC_PAD2D_BACKWARD, XC_PAD2D_M, XC_CONV2D_FORWARD, XC_CONV2D_FORWARD_M,
     XC_CONV2D_BACKWARD, XC_CONV2D_BACKWARD_M, XC_CHAN_COPY_M, XC_MAP2_M, XC_RELU_FORWARD, XC_RELU_BACKWARD, XC_ADD,
 )
-from x_cnn.door_run import XcnnF32P, xcnn_run_call, xcnn_size
+from x_cnn.door_run import xcnn_run_fixed, xcnn_run_fixed2, XcnnF32P, xcnn_size
 from x_cnn.shape_words import conv_params, CP_OH, CP_OW
 
 
@@ -270,53 +270,69 @@ def conv_run_copy_words(dst: Int, offset: Int, src: Int, count: Int):
 # ---------------------------------------------------------------- native entries (GIL released by the boundary)
 
 def conv_run_pad_forward(entry: EntryRef, x: Int, xp: Int, prm: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_PAD2D_FORWARD, [x, xp], prm)
+    var req_addrs: Array[Int, 2] = [x, xp]
+    _ = xcnn_run_fixed(entry, XC_PAD2D_FORWARD, req_addrs, prm)
 
 
 def conv_run_pad_backward(entry: EntryRef, dxp: Int, dx: Int, prm: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_PAD2D_BACKWARD, [dxp, dx], prm)
+    var req_addrs: Array[Int, 2] = [dxp, dx]
+    _ = xcnn_run_fixed(entry, XC_PAD2D_BACKWARD, req_addrs, prm)
 
 
 def conv_run_pad_m(entry: EntryRef, src: Int, dst: Int, dev: Int, prm: List[Int]) raises:
     """The mixed-residency pad entry; `dev` is its residency word."""
-    _ = xcnn_run_call(entry, XC_PAD2D_M, [src, dst], conv_run_mw(dev, prm))
+    var req_addrs: Array[Int, 2] = [src, dst]
+    _ = xcnn_run_fixed(entry, XC_PAD2D_M, req_addrs, conv_run_mw(dev, prm))
 
 
 def conv_run_forward(entry: EntryRef, x: Int, w: Int, b: Int, y: Int, prm: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_CONV2D_FORWARD, [x, w, b, y], prm)
+    var req_addrs: Array[Int, 4] = [x, w, b, y]
+    _ = xcnn_run_fixed(entry, XC_CONV2D_FORWARD, req_addrs, prm)
 
 
 def conv_run_forward_m(entry: EntryRef, x: Int, w: Int, b: Int, y: Int, dev: Int, prm: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_CONV2D_FORWARD_M, [x, w, b, y], conv_run_mw(dev, prm))
+    var req_addrs: Array[Int, 4] = [x, w, b, y]
+    _ = xcnn_run_fixed(entry, XC_CONV2D_FORWARD_M, req_addrs, conv_run_mw(dev, prm))
 
 
 def conv_run_backward(entry: EntryRef, x: Int, w: Int, g: Int, dx: Int, dw: Int, db: Int,
                       prm: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_CONV2D_BACKWARD, [x, w, g, dx, dw, db], prm)
+    var req_addrs: Array[Int, 6] = [x, w, g, dx, dw, db]
+    _ = xcnn_run_fixed(entry, XC_CONV2D_BACKWARD, req_addrs, prm)
 
 
 def conv_run_backward_m(entry: EntryRef, x: Int, w: Int, g: Int, dx: Int, dw: Int, db: Int, dev: Int,
                         prm: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_CONV2D_BACKWARD_M, [x, w, g, dx, dw, db], conv_run_mw(dev, prm))
+    var req_addrs: Array[Int, 6] = [x, w, g, dx, dw, db]
+    _ = xcnn_run_fixed(entry, XC_CONV2D_BACKWARD_M, req_addrs, conv_run_mw(dev, prm))
 
 
 def conv_run_chan_copy_m(entry: EntryRef, src: Int, dst: Int, shape: List[Int], channels: Int, groups: Int,
                          g: Int, direction: Int) raises:
-    _ = xcnn_run_call(entry, XC_CHAN_COPY_M, [src, dst], conv_run_group_prm(shape, channels, groups, g, direction))
+    var req_addrs: Array[Int, 2] = [src, dst]
+    _ = xcnn_run_fixed(entry, XC_CHAN_COPY_M, req_addrs, conv_run_group_prm(shape, channels, groups, g, direction))
 
 
 def conv_run_map2_m(entry: EntryRef, a: Int, b: Int, y: Int, dev: Int, op: Int, count: Int) raises:
     """`x_cnn_map2_m`: op 0 ReLU of a, 1 ReLU gradient (a, b), 2 a + b."""
-    _ = xcnn_run_call(entry, XC_MAP2_M, [a, b, y], [dev, op, count])
+    var req_addrs: Array[Int, 3] = [a, b, y]
+    var req_words: Array[Int, 3] = [dev, op, count]
+    _ = xcnn_run_fixed2(entry, XC_MAP2_M, req_addrs, req_words)
 
 
 def conv_run_relu_forward(entry: EntryRef, x: Int, y: Int, count: Int) raises:
-    _ = xcnn_run_call(entry, XC_RELU_FORWARD, [x, y], [count])
+    var req_addrs: Array[Int, 2] = [x, y]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_RELU_FORWARD, req_addrs, req_words)
 
 
 def conv_run_relu_backward(entry: EntryRef, x: Int, g: Int, dx: Int, count: Int) raises:
-    _ = xcnn_run_call(entry, XC_RELU_BACKWARD, [x, g, dx], [count])
+    var req_addrs: Array[Int, 3] = [x, g, dx]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_RELU_BACKWARD, req_addrs, req_words)
 
 
 def conv_run_add(entry: EntryRef, a: Int, b: Int, y: Int, count: Int) raises:
-    _ = xcnn_run_call(entry, XC_ADD, [a, b, y], [count])
+    var req_addrs: Array[Int, 3] = [a, b, y]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_ADD, req_addrs, req_words)

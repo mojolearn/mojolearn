@@ -10,7 +10,7 @@ slots and the caller's shape objects into words and releases the GIL around
 """
 from core.entry_table import EntryRef
 from core.xcnn_entry_table import XC_RES_FREE
-from x_cnn.door_run import xcnn_run_call, xcnn_run_infer_dims, xcnn_size
+from x_cnn.door_run import xcnn_run_fixed2, xcnn_run_infer_dims, xcnn_size
 
 
 def xcnn_tensor_run_check_dim(size: Int, infer: Bool) raises:
@@ -39,4 +39,6 @@ def xcnn_tensor_run_reshape_dims(var dims: List[Int], shape: List[Int]) raises -
 def xcnn_tensor_run_free(entry: EntryRef, handle: Int) raises:
     """Release one resident allocation handle of the image `entry` resolves to. The caller
     cleared every slot that named it and has released the GIL."""
-    _ = xcnn_run_call(entry, XC_RES_FREE, [handle], List[Int]())
+    var req_addrs: Array[Int, 1] = [handle]
+    var req_words: Array[Int, 0] = []
+    _ = xcnn_run_fixed2(entry, XC_RES_FREE, req_addrs, req_words)

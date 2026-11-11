@@ -19,7 +19,7 @@ from core.xcnn_entry_table import (
     XC_MAXPOOL2D_BACKWARD, XC_MAXPOOL2D_BACKWARD_M, XC_AVGPOOL2D_BACKWARD, XC_AVGPOOL2D_BACKWARD_M, XC_DROPOUT2D,
     XC_DROPOUT2D_M, XC_RES_DOWNLOAD, XC_ADAPTIVE_POOL, XC_ADAPTIVE_POOL_M, XC_MAP2_M, XC_MUL,
 )
-from x_cnn.door_run import xcnn_run_call, xcnn_run_call_f
+from x_cnn.door_run import xcnn_run_call_f, xcnn_run_fixed, xcnn_run_fixed2
 from x_cnn.shape_words import pool_params, PP_OH, PP_OW
 
 
@@ -244,35 +244,43 @@ def pool_run_cast_indices(code: Int, item: Int, src: Int, dst: Int, count: Int) 
 # `dev` is the `_m` residency word the door used.
 
 def pool_run_max_forward(entry: EntryRef, x: Int, y: Int, idx: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_MAXPOOL2D_FORWARD, [x, y, idx], words)
+    var req_addrs: Array[Int, 3] = [x, y, idx]
+    _ = xcnn_run_fixed(entry, XC_MAXPOOL2D_FORWARD, req_addrs, words)
 
 
 def pool_run_max_forward_m(entry: EntryRef, dev: Int, x: Int, y: Int, h: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_MAXPOOL2D_FORWARD_M, [x, y, h], pool_run_m(dev, words))
+    var req_addrs: Array[Int, 3] = [x, y, h]
+    _ = xcnn_run_fixed(entry, XC_MAXPOOL2D_FORWARD_M, req_addrs, pool_run_m(dev, words))
 
 
 def pool_run_avg_forward(entry: EntryRef, x: Int, y: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_AVGPOOL2D_FORWARD, [x, y], words)
+    var req_addrs: Array[Int, 2] = [x, y]
+    _ = xcnn_run_fixed(entry, XC_AVGPOOL2D_FORWARD, req_addrs, words)
 
 
 def pool_run_avg_forward_m(entry: EntryRef, dev: Int, x: Int, y: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_AVGPOOL2D_FORWARD_M, [x, y], pool_run_m(dev, words))
+    var req_addrs: Array[Int, 2] = [x, y]
+    _ = xcnn_run_fixed(entry, XC_AVGPOOL2D_FORWARD_M, req_addrs, pool_run_m(dev, words))
 
 
 def pool_run_max_backward(entry: EntryRef, g: Int, idx: Int, dx: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_MAXPOOL2D_BACKWARD, [g, idx, dx], words)
+    var req_addrs: Array[Int, 3] = [g, idx, dx]
+    _ = xcnn_run_fixed(entry, XC_MAXPOOL2D_BACKWARD, req_addrs, words)
 
 
 def pool_run_max_backward_m(entry: EntryRef, dev: Int, g: Int, h: Int, dx: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_MAXPOOL2D_BACKWARD_M, [g, h, dx], pool_run_m(dev, words))
+    var req_addrs: Array[Int, 3] = [g, h, dx]
+    _ = xcnn_run_fixed(entry, XC_MAXPOOL2D_BACKWARD_M, req_addrs, pool_run_m(dev, words))
 
 
 def pool_run_avg_backward(entry: EntryRef, g: Int, dx: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_AVGPOOL2D_BACKWARD, [g, dx], words)
+    var req_addrs: Array[Int, 2] = [g, dx]
+    _ = xcnn_run_fixed(entry, XC_AVGPOOL2D_BACKWARD, req_addrs, words)
 
 
 def pool_run_avg_backward_m(entry: EntryRef, dev: Int, g: Int, dx: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_AVGPOOL2D_BACKWARD_M, [g, dx], pool_run_m(dev, words))
+    var req_addrs: Array[Int, 2] = [g, dx]
+    _ = xcnn_run_fixed(entry, XC_AVGPOOL2D_BACKWARD_M, req_addrs, pool_run_m(dev, words))
 
 
 def pool_run_dropout(entry: EntryRef, x: Int, y: Int, mask: Int, words: List[Int], p: Float64) raises:
@@ -286,23 +294,31 @@ def pool_run_dropout_m(entry: EntryRef, dev: Int, x: Int, y: Int, h: Int, words:
 
 
 def pool_run_adaptive(entry: EntryRef, x: Int, y: Int, idx: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_ADAPTIVE_POOL, [x, y, idx], words)
+    var req_addrs: Array[Int, 3] = [x, y, idx]
+    _ = xcnn_run_fixed(entry, XC_ADAPTIVE_POOL, req_addrs, words)
 
 
 def pool_run_adaptive_m(entry: EntryRef, dev: Int, x: Int, y: Int, h: Int, words: List[Int]) raises:
-    _ = xcnn_run_call(entry, XC_ADAPTIVE_POOL_M, [x, y, h], pool_run_m(dev, words))
+    var req_addrs: Array[Int, 3] = [x, y, h]
+    _ = xcnn_run_fixed(entry, XC_ADAPTIVE_POOL_M, req_addrs, pool_run_m(dev, words))
 
 
 def pool_run_download(entry: EntryRef, handle: Int, dst: Int, count: Int) raises:
     """A resident array's `count` words read back into the host buffer."""
-    _ = xcnn_run_call(entry, XC_RES_DOWNLOAD, [handle, dst], [count])
+    var req_addrs: Array[Int, 2] = [handle, dst]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_RES_DOWNLOAD, req_addrs, req_words)
 
 
 def pool_run_mask_m(entry: EntryRef, dev: Int, g: Int, handle: Int, dx: Int, count: Int) raises:
     """The dropout backward against the resident mask (map2 op 3: multiply)."""
-    _ = xcnn_run_call(entry, XC_MAP2_M, [g, handle, dx], [dev, 3, count])
+    var req_addrs: Array[Int, 3] = [g, handle, dx]
+    var req_words: Array[Int, 3] = [dev, 3, count]
+    _ = xcnn_run_fixed2(entry, XC_MAP2_M, req_addrs, req_words)
 
 
 def pool_run_mul(entry: EntryRef, g: Int, mask: Int, dx: Int, count: Int) raises:
     """The dropout backward against the host mask."""
-    _ = xcnn_run_call(entry, XC_MUL, [g, mask, dx], [count])
+    var req_addrs: Array[Int, 3] = [g, mask, dx]
+    var req_words: Array[Int, 1] = [count]
+    _ = xcnn_run_fixed2(entry, XC_MUL, req_addrs, req_words)

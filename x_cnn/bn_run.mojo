@@ -13,7 +13,7 @@ from core.entry_table import EntryRef
 from core.xcnn_entry_table import (
     XC_BATCHNORM_FORWARD, XC_BATCHNORM_FORWARD_M, XC_BATCHNORM_BACKWARD, XC_BATCHNORM_BACKWARD_M,
 )
-from x_cnn.door_run import XcnnF32P, xcnn_run_call, xcnn_run_fill_f32, xcnn_size
+from x_cnn.door_run import xcnn_run_fixed2, XcnnF32P, xcnn_run_fill_f32, xcnn_size
 
 
 @fieldwise_init
@@ -103,14 +103,18 @@ def bn_run_check_nonneg(dim: Int) raises:
 def bn_run_forward(entry: EntryRef, x: Int, y: Int, running: Int, aux: Int, n: Int, c: Int, hw: Int,
                    batch_stats: Bool) raises:
     """The host batch-normalization forward entry."""
-    _ = xcnn_run_call(entry, XC_BATCHNORM_FORWARD, [x, y, running, aux], [n, c, hw, 1 if batch_stats else 0])
+    var req_addrs: Array[Int, 4] = [x, y, running, aux]
+    var req_words: Array[Int, 4] = [n, c, hw, 1 if batch_stats else 0]
+    _ = xcnn_run_fixed2(entry, XC_BATCHNORM_FORWARD, req_addrs, req_words)
 
 
 def bn_run_forward_m(entry: EntryRef, x: Int, y: Int, running: Int, aux: Int, dev: Int, n: Int, c: Int,
                      hw: Int, batch_stats: Bool) raises:
     """The mixed-residency forward entry; `dev` is the residency word (1 x
     resident, 2 y resident, 4 running resident, 8 aux resident)."""
-    _ = xcnn_run_call(entry, XC_BATCHNORM_FORWARD_M, [x, y, running, aux], [dev, n, c, hw, 1 if batch_stats else 0])
+    var req_addrs: Array[Int, 4] = [x, y, running, aux]
+    var req_words: Array[Int, 5] = [dev, n, c, hw, 1 if batch_stats else 0]
+    _ = xcnn_run_fixed2(entry, XC_BATCHNORM_FORWARD_M, req_addrs, req_words)
 
 
 def bn_run_backward(entry: EntryRef, x: Int, g: Int, dx: Int, aux: Int, flags: Int, mixed_call: Bool,
@@ -118,9 +122,13 @@ def bn_run_backward(entry: EntryRef, x: Int, g: Int, dx: Int, aux: Int, flags: I
     """The backward entry: `_m` with residency `flags` when any operand is
     resident (`mixed_call`), the host entry otherwise."""
     if mixed_call:
-        _ = xcnn_run_call(entry, XC_BATCHNORM_BACKWARD_M, [x, g, dx, aux], [flags, shape[0], c, shape[2], stats])
+        var req_addrs: Array[Int, 4] = [x, g, dx, aux]
+        var req_words: Array[Int, 5] = [flags, shape[0], c, shape[2], stats]
+        _ = xcnn_run_fixed2(entry, XC_BATCHNORM_BACKWARD_M, req_addrs, req_words)
     else:
-        _ = xcnn_run_call(entry, XC_BATCHNORM_BACKWARD, [x, g, dx, aux], [shape[0], c, shape[2], stats])
+        var req_addrs: Array[Int, 4] = [x, g, dx, aux]
+        var req_words: Array[Int, 4] = [shape[0], c, shape[2], stats]
+        _ = xcnn_run_fixed2(entry, XC_BATCHNORM_BACKWARD, req_addrs, req_words)
 
 
 def bn_run_flags(dev_x: Bool, dev_g: Bool, dev_dx: Bool) -> Int:

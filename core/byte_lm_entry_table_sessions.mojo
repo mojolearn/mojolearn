@@ -157,16 +157,19 @@ def byte_lm_resident_open(entry: EntryRef) raises -> StateHandle:
 
 
 def byte_lm_resident_run(entry: EntryRef, handle: StateHandle, operation: Int, addresses: List[Int],
-                         ints: List[Int], floats: List[Float64]) raises -> Int:
+                         ints: List[Int], floats: List[Float64], mut words: List[Int]) raises -> Int:
     """One trainer operation (the `byte_lm_trainer_api_v1` numbering) on the
     resident session `handle`. `addresses` are the descriptors after the
-    session word."""
-    var words = List[Int](capacity=3 + len(ints))
-    words.append(handle.index)
-    words.append(Int(handle.generation))
-    words.append(operation)
+    session word. `words` is the request buffer the session owner holds
+    across steps: it is refilled in place (its capacity survives, so a
+    training step allocates no request words after the first; only argument
+    values are rewritten, never reused)."""
+    words.resize(3 + len(ints), 0)
+    words[0] = handle.index
+    words[1] = Int(handle.generation)
+    words[2] = operation
     for i in range(len(ints)):  # small-loop(the trainer plan words)
-        words.append(ints[i])
+        words[3 + i] = ints[i]
     return entry_ref_call(entry, BS_RUN, addresses, words, floats)
 
 

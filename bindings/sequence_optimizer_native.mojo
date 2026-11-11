@@ -416,12 +416,17 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
         if len(grads) != len(params):
             raise Error("ValueError: sequence optimizer needs one gradient per parameter")
         var dev = py_get(fields, "_dev_b") is not None
-        var addrs = List[Int]()
-        var ga = List[Int]()
-        var kinds = List[Int]()
-        var sizes = List[Int]()
-        var rows = List[Int]()
-        var cols = List[Int]()
+        # Every request List is sized once for the step from the parameter
+        # count J (no growth reallocation per appended word): addrs holds the
+        # J parameters, J gradients and up to 2J + 1 slot words; ip holds the
+        # four head words, J kinds, J sizes and up to 2J shape words.
+        var count = len(params)
+        var addrs = List[Int](capacity=4 * count + 1)
+        var ga = List[Int](capacity=count)
+        var kinds = List[Int](capacity=count)
+        var sizes = List[Int](capacity=count)
+        var rows = List[Int](capacity=count if kind == 5 else 0)
+        var cols = List[Int](capacity=count if kind == 5 else 0)
         var keep = Python.list()
         var total = 0
         var input = context["input_context"]
@@ -472,7 +477,11 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
             raise Error("ValueError: sequence parameter size changed after construction")
         addrs.extend(ga)
         # p = [words, handles, ip...] with ip = [J, dev, kinds.., sizes.., (rows.., cols.. | kind, flags)]
-        var ip: List[Int] = [words, handles, len(params), Int(dev)]
+        var ip = List[Int](capacity=4 + 4 * count)
+        ip.append(words)
+        ip.append(handles)
+        ip.append(count)
+        ip.append(Int(dev))
         ip.extend(kinds)
         ip.extend(sizes)
         var slots = seq_slots(fields, kind, context, buffer_pins)
@@ -495,7 +504,8 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
             var t = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=words)[0]
             py_setitem(fields, "lr", schedule_operation("schedule_at", schedule, Python.tuple(Int(t) + 1), context))
         # fp: the same Float64 conversion of each value the Python entry made
-        var fp: List[Float64] = [Float64(py=fields["lr"])]
+        var fp = List[Float64](capacity=7)  # lr and at most six optimizer scalars
+        fp.append(Float64(py=fields["lr"]))
         if kind < 5:
             var stored = fields["_fp"]
             for i in range(len(stored)):  # small-loop(the six element-wise optimizer scalars)
