@@ -15,9 +15,12 @@ from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.xseq_native_common import XseqStream
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
+from core.xcnn_entry_table import (
+    XC_PAD2D_FORWARD, XC_PAD2D_BACKWARD, XC_PAD2D_M, XC_CONV2D_FORWARD, XC_CONV2D_FORWARD_M, XC_CONV2D_BACKWARD,
+    XC_CONV2D_BACKWARD_M, XC_CHAN_COPY_M, XC_MAP2_M, XC_RELU_FORWARD, XC_RELU_BACKWARD, XC_ADD,
+)
 from bindings.xcnn_common import (
-    XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed,
+    XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed,
     xcnn_idn, xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new,
     xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,
@@ -294,8 +297,7 @@ def _conv_backward_host(layer: PythonObject, fields: PythonObject, entries: Pyth
     var xp = x
     if _explicit(fields):
         xp = xcnn_host_f32(_padded(fields, xs), context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_forward"), xcnn_addr(x), xcnn_addr(xp),
-                          _pad_params(layer, fields, xs, -1))
+        _ = xcnn_call(entries, XC_PAD2D_FORWARD, [xcnn_ptr(x), xcnn_ptr(xp)], _pad_params(layer, fields, xs, -1))
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
     var groups = Int(py=fields["groups"])
@@ -309,7 +311,6 @@ def _conv_backward_host(layer: PythonObject, fields: PythonObject, entries: Pyth
     var dxp = xcnn_host_f32(ps, context)
     var dw = xcnn_host_f32(ws, context)
     var db = xcnn_host_f32([og * groups], context)
-    var conv = xcnn_entry(entries, "x_cnn_conv2d_backward")
     var per = xcnn_size(ws) // groups
     for group in range(groups):  # driver-loop: one numerical engine call per convolution group
         var xg = xp if groups == 1 else _channels(xp, group * cg, cg, context)
@@ -318,8 +319,10 @@ def _conv_backward_host(layer: PythonObject, fields: PythonObject, entries: Pyth
         var dxg = dxp if groups == 1 else xcnn_host_f32([ps[0], cg, ps[2], ps[3]], context)
         var dwg = xcnn_host_f32([per], context)
         var dbg = xcnn_host_f32([og], context)
-        _ = py_call_typed(conv, xcnn_addr(xg), xcnn_addr(wg), xcnn_addr(gg), xcnn_addr(dxg),
-                          xcnn_addr(dwg), xcnn_addr(dbg), prm)
+        _ = xcnn_call(entries, XC_CONV2D_BACKWARD, [xcnn_ptr(xg), xcnn_ptr(wg), xcnn_ptr(gg), xcnn_ptr(dxg),
+                      xcnn_ptr(dwg), xcnn_ptr(dbg)], prm)
+        _ = dwg
+        _ = dbg
         if groups > 1:
             _put_channels(dxp, group * cg, cg, dxg)
         _copy_words(dw, group * per, dwg, per)
@@ -331,8 +334,7 @@ def _conv_backward_host(layer: PythonObject, fields: PythonObject, entries: Pyth
     var dx = dxp
     if _explicit(fields):
         dx = xcnn_host_f32(xs, context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_backward"), xcnn_addr(dxp), xcnn_addr(dx),
-                          _pad_params(layer, fields, xs, -1))
+        _ = xcnn_call(entries, XC_PAD2D_BACKWARD, [xcnn_ptr(dxp), xcnn_ptr(dx)], _pad_params(layer, fields, xs, -1))
         # The raw address does not retain its padded-gradient buffer. Keep
         # its owner through the native upload/read before returning new dx.
         _ = dxp
@@ -371,14 +373,14 @@ def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: Py
         raise Error("mojolearn: weight_ shape differs from configured convolution")
     var dw = xcnn_host_f32(ws, context)
     var db = xcnn_host_f32([outc], context)
-    var conv = xcnn_entry(entries, "x_cnn_conv2d_backward_m")
     if groups == 1 and xcnn_resident(entries, context):
         var pair = _res_w_values(layer, fields, entries, values, context)
         var pw = pair[0]
         var gwh = xcnn_dev_get(layer, entries, "gw", xcnn_size(ws), context)
         var gbh = xcnn_dev_get(layer, entries, "gb", outc, context)
-        _ = py_call_typed(conv, Python.list(xp.h, pw if pw is not None else xcnn_addr(w), grad.h, dxp.h, gwh, gbh),
-                          PythonObject(63 if pw is not None else 61), prm)
+        _ = xcnn_call(entries, XC_CONV2D_BACKWARD_M, [xcnn_word(xp.h), xcnn_word(pw) if pw is not None else xcnn_ptr(w),
+                      xcnn_word(grad.h), xcnn_word(dxp.h), xcnn_word(gwh), xcnn_word(gbh)],
+                      _mw(63 if pw is not None else 61, prm))
         var dev = xcnn_dev(layer, entries, context)
         _set(fields, "_gw_dev", Python.tuple(dev, gwh))
         _set(fields, "_gw_1d", PythonObject(False))
@@ -387,8 +389,9 @@ def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: Py
             _set(fields, "grad_bias_", _zeros([outc], context))
     elif groups == 1:
         var pw = _pinned(fields, entries, "weight_", xcnn_size(ws))
-        _ = py_call_typed(conv, Python.list(xp.h, pw if pw is not None else xcnn_addr(w), grad.h, dxp.h,
-                                          xcnn_addr(dw), xcnn_addr(db)), PythonObject(15 if pw is not None else 13), prm)
+        _ = xcnn_call(entries, XC_CONV2D_BACKWARD_M, [xcnn_word(xp.h), xcnn_word(pw) if pw is not None else xcnn_ptr(w),
+                      xcnn_word(grad.h), xcnn_word(dxp.h), xcnn_ptr(dw), xcnn_ptr(db)],
+                      _mw(15 if pw is not None else 13, prm))
         _save_gradients(fields, dw, db, context)
     else:
         var og = outc // groups
@@ -396,15 +399,15 @@ def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: Py
         var xg = xcnn_dev_get(layer, entries, "xg", xcnn_size(ps) // groups, context)
         var gg = xcnn_dev_get(layer, entries, "gg", xcnn_size(shape) // groups, context)
         var dxg = xcnn_dev_get(layer, entries, "dxg", xcnn_size(ps) // groups, context)
-        var copy = xcnn_entry(entries, "x_cnn_chan_copy_m")
         for group in range(groups):  # driver-loop: one launch sequence per convolution group
             var wg = xcnn_slice_f32(w, group * per, per, context)
             var dwg = xcnn_host_f32([per], context)
             var dbg = xcnn_host_f32([og], context)
-            _ = py_call_typed(copy, Python.list(xp.h, xg), PythonObject(3), _group_prm(ps, inc, groups, group, 0))
-            _ = py_call_typed(copy, Python.list(grad.h, gg), PythonObject(3), _group_prm(shape, outc, groups, group, 0))
-            _ = py_call_typed(conv, Python.list(xg, xcnn_addr(wg), gg, dxg, xcnn_addr(dwg), xcnn_addr(dbg)), PythonObject(13), prm)
-            _ = py_call_typed(copy, Python.list(dxg, dxp.h), PythonObject(3), _group_prm(ps, inc, groups, group, 1))
+            _ = xcnn_call(entries, XC_CHAN_COPY_M, [xcnn_word(xp.h), xcnn_word(xg)], _group_prm(ps, inc, groups, group, 0))
+            _ = xcnn_call(entries, XC_CHAN_COPY_M, [xcnn_word(grad.h), xcnn_word(gg)], _group_prm(shape, outc, groups, group, 0))
+            _ = xcnn_call(entries, XC_CONV2D_BACKWARD_M, [xcnn_word(xg), xcnn_ptr(wg), xcnn_word(gg), xcnn_word(dxg),
+                          xcnn_ptr(dwg), xcnn_ptr(dbg)], _mw(13, prm))
+            _ = xcnn_call(entries, XC_CHAN_COPY_M, [xcnn_word(dxg), xcnn_word(dxp.h)], _group_prm(ps, inc, groups, group, 1))
             _copy_words(dw, group * per, dwg, per)
             _copy_words(db, group * og, dbg, og)
             _ = wg
@@ -412,8 +415,7 @@ def _conv_backward_tensor(layer: PythonObject, fields: PythonObject, entries: Py
     var dx = dxp
     if _explicit(fields):
         dx = xcnn_out_new(entries, xs, context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_m"), Python.list(dxp.h, dx.h), PythonObject(3),
-                          _pad_params(layer, fields, xs, 1))
+        _ = xcnn_call(entries, XC_PAD2D_M, [xcnn_word(dxp.h), xcnn_word(dx.h)], _mw(3, _pad_params(layer, fields, xs, 1)))
     _set(fields, "_x", source)
     _set(fields, "_xp", xp)
     _ = w
@@ -489,12 +491,18 @@ def _conv_words(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
             k[0], k[1], s[0], s[1], p[0], p[1], d[0], d[1], 0, 0, 1 if _truth(fields["bias"]) else 0, 0]
 
 
-def _conv_params(fields: PythonObject, shape: List[Int]) raises -> PythonObject:
-    """`Conv2d._params(shape)`: the launch words of `_conv_words` as the
-    entries' list argument."""
-    var w = _conv_words(fields, shape)
-    return Python.list(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10], w[11], w[12],
-                       w[13], w[14], w[15], w[16])
+def _conv_params(fields: PythonObject, shape: List[Int]) raises -> List[Int]:
+    """`Conv2d._params(shape)`: the launch words of `_conv_words`."""
+    return _conv_words(fields, shape)
+
+
+def _mw(dev: Int, words: List[Int]) -> List[Int]:
+    """A `_m` operation's integers: the residency word, then the launch words
+    (core/xcnn_entry_table.mojo)."""
+    var out: List[Int] = [dev]
+    for i in range(len(words)):  # small-loop(the launch parameter words)
+        out.append(words[i])
+    return out^
 
 
 def _pads(fields: PythonObject) raises -> List[Int]:
@@ -502,16 +510,15 @@ def _pads(fields: PythonObject) raises -> List[Int]:
     return [Int(py=v[0]), Int(py=v[1]), Int(py=v[2]), Int(py=v[3])]
 
 
-def _pad_params(layer: PythonObject, fields: PythonObject, shape: List[Int], last: Int) raises -> PythonObject:
+def _pad_params(layer: PythonObject, fields: PythonObject, shape: List[Int], last: Int) raises -> List[Int]:
     """`Conv2d._pad_params(shape) + [last]` (`last` < 0: none)."""
-    var b = xcnn_builtins()
     var p = _pads(fields)
     var mode = String(fields["padding_mode"])
     var code = 0 if mode == "zeros" else (1 if mode == "reflect" else (2 if mode == "replicate" else 3))
-    var out = Python.list(shape[0], shape[1], shape[2], shape[3], p[0], p[1], p[2], p[3], code)
+    var out: List[Int] = [shape[0], shape[1], shape[2], shape[3], p[0], p[1], p[2], p[3], code]
     if last >= 0:
-        _ = py_call(py_call(b.getattr, out, "append"), PythonObject(last))
-    return out
+        out.append(last)
+    return out^
 
 
 def _explicit(fields: PythonObject) raises -> Bool:
@@ -541,9 +548,11 @@ def _check_x(fields: PythonObject, shape: List[Int]) raises:
         raise Error("mojolearn: input has " + String(shape[1]) + " channels, the layer " + String(Int(py=fields["in_channels"])))
 
 
-def _group_prm(shape: List[Int], channels: Int, groups: Int, g: Int, direction: Int) raises -> PythonObject:
+def _group_prm(shape: List[Int], channels: Int, groups: Int, g: Int, direction: Int) raises -> List[Int]:
+    """`x_cnn_chan_copy_m`'s integers with its residency word 3 (both resident)."""
     var per = channels // groups
-    return Python.list(shape[0], channels, shape[2] * shape[3], per, g * per, direction)
+    var out: List[Int] = [3, shape[0], channels, shape[2] * shape[3], per, g * per, direction]
+    return out^
 
 
 def _host_rows(source: PythonObject, start: Int, stop: Int, context: PythonObject) raises -> PythonObject:
@@ -665,8 +674,7 @@ def _pad_t(layer: PythonObject, fields: PythonObject, entries: PythonObject, x: 
         return x
     var xs = xcnn_shape(x)
     var xp = xcnn_out_new(entries, _padded(fields, xs), context)   # the pad stores every word
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_m"), Python.list(x.h, xp.h), PythonObject(3),
-                      _pad_params(layer, fields, xs, 0))
+    _ = xcnn_call(entries, XC_PAD2D_M, [xcnn_word(x.h), xcnn_word(xp.h)], _mw(3, _pad_params(layer, fields, xs, 0)))
     return xp
 
 
@@ -686,7 +694,6 @@ def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonOb
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
     var groups = Int(py=fields["groups"])
-    var conv = xcnn_entry(entries, "x_cnn_conv2d_forward_m")
     if groups == 1:
         # G3: pins on first use (a no-op with the switch off). The auto-pinned
         # pair is exactly `_pinned` of both names; only when it holds no pair
@@ -700,11 +707,13 @@ def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonOb
             pb = _pinned(fields, entries, "bias_", xcnn_size(xcnn_shape(values[1])))
         if pw is not None and pb is not None:
             # the pinned weights are read where they live
-            _ = py_call_typed(conv, Python.list(xp.h, pw, pb, out.h), PythonObject(15), prm)
+            _ = xcnn_call(entries, XC_CONV2D_FORWARD_M, [xcnn_word(xp.h), xcnn_word(pw), xcnn_word(pb), xcnn_word(out.h)],
+                          _mw(15, prm))
         else:
             var w = values[0]
             var bias = values[1]
-            _ = py_call_typed(conv, Python.list(xp.h, xcnn_addr(w), xcnn_addr(bias), out.h), PythonObject(9), prm)
+            _ = xcnn_call(entries, XC_CONV2D_FORWARD_M, [xcnn_word(xp.h), xcnn_ptr(w), xcnn_ptr(bias), xcnn_word(out.h)],
+                          _mw(9, prm))
             _ = bias  # keep the Python object alive through the native call above
             _ = w  # keep the Python object alive through the native call above
     else:
@@ -712,17 +721,16 @@ def _conv_forward_t(layer: PythonObject, fields: PythonObject, entries: PythonOb
         var og = Int(py=fields["out_channels"]) // groups
         var xg = xcnn_dev_get(layer, entries, "xg", xcnn_size(ps) // groups, context)
         var yg = xcnn_dev_get(layer, entries, "yg", xcnn_size(oshape) // groups, context)
-        var copy = xcnn_entry(entries, "x_cnn_chan_copy_m")
         var inc = Int(py=fields["in_channels"])
         var outc = Int(py=fields["out_channels"])
         for g in range(groups):  # driver-loop: over convolution groups
             var wg = _host_rows(values[0], g * og, (g + 1) * og, context)
             var bg = _host_rows(values[1], g * og, (g + 1) * og, context)
-            _ = py_call_typed(copy, Python.list(xp.h, xg), PythonObject(3), _group_prm(ps, inc, groups, g, 0))
-            _ = py_call_typed(conv, Python.list(xg, xcnn_addr(wg), xcnn_addr(bg), yg), PythonObject(9), prm)
+            _ = xcnn_call(entries, XC_CHAN_COPY_M, [xcnn_word(xp.h), xcnn_word(xg)], _group_prm(ps, inc, groups, g, 0))
+            _ = xcnn_call(entries, XC_CONV2D_FORWARD_M, [xcnn_word(xg), xcnn_ptr(wg), xcnn_ptr(bg), xcnn_word(yg)], _mw(9, prm))
             _ = bg  # keep the Python object alive through the native call above
             _ = wg  # keep the Python object alive through the native call above
-            _ = py_call_typed(copy, Python.list(yg, out.h), PythonObject(3), _group_prm(oshape, outc, groups, g, 1))
+            _ = xcnn_call(entries, XC_CHAN_COPY_M, [xcnn_word(yg), xcnn_word(out.h)], _group_prm(oshape, outc, groups, g, 1))
     _set(fields, "_x", x)
     _set(fields, "_xp", xp)
     return out
@@ -760,8 +768,7 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
     var xp = a
     if _explicit(fields):
         xp = xcnn_host_f32(_padded(fields, xs), context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_forward"), xcnn_addr(a), xcnn_addr(xp),
-                          _pad_params(layer, fields, xs, -1))
+        _ = xcnn_call(entries, XC_PAD2D_FORWARD, [xcnn_ptr(a), xcnn_ptr(xp)], _pad_params(layer, fields, xs, -1))
         _ = xp  # keep the Python object alive through the native call above
         _ = a  # keep the Python object alive through the native call above
     var values = _weight_pair(fields, context)
@@ -772,7 +779,6 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
     var groups = Int(py=fields["groups"])
     var cg = Int(py=fields["in_channels"]) // groups
     var og = Int(py=fields["out_channels"]) // groups
-    var conv = xcnn_entry(entries, "x_cnn_conv2d_forward")
     for g in range(groups):  # driver-loop: over convolution groups
         var xg = xp
         if groups > 1:
@@ -780,7 +786,7 @@ def xcnn_conv2d_forward_fields(layer: PythonObject, fields: PythonObject, x: Pyt
         var wg = _host_rows(values[0], g * og, (g + 1) * og, context)
         var bg = _host_rows(values[1], g * og, (g + 1) * og, context)
         var yg = out if groups == 1 else xcnn_host_f32([xs[0], og, oshape[2], oshape[3]], context)
-        _ = py_call_typed(conv, xcnn_addr(xg), xcnn_addr(wg), xcnn_addr(bg), xcnn_addr(yg), prm)
+        _ = xcnn_call(entries, XC_CONV2D_FORWARD, [xcnn_ptr(xg), xcnn_ptr(wg), xcnn_ptr(bg), xcnn_ptr(yg)], prm)
         _ = yg  # keep the Python object alive through the native call above
         _ = bg  # keep the Python object alive through the native call above
         _ = wg  # keep the Python object alive through the native call above
@@ -828,8 +834,7 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
         var xs = xcnn_shape(x)
         if xcnn_on_dev(b, x, context) and xcnn_idn(b, XCNN_F_LAYER_IO) and xcnn_size(xs) > 0:
             var out = xcnn_new(b, xs, False, context)
-            _ = py_call_typed(xcnn_entry(b, "x_cnn_map2_m"), Python.list(x.h, x.h, out.h), PythonObject(7),
-                              Python.list(0, xcnn_size(xs)))
+            _ = xcnn_call(b, XC_MAP2_M, [xcnn_word(x.h), xcnn_word(x.h), xcnn_word(out.h)], [7, 0, xcnn_size(xs)])
             _set(fields, "_x", x)
             return out
     var a = xcnn_f32(x, "x", context)
@@ -837,8 +842,7 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
     var out = xcnn_host_f32(xs, context)
     if entries is None:
         entries = xcnn_entries(fields, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_relu_forward"), xcnn_addr(a), xcnn_addr(out),
-                      Python.list(xcnn_size(xs)))
+    _ = xcnn_call(entries, XC_RELU_FORWARD, [xcnn_ptr(a), xcnn_ptr(out)], [xcnn_size(xs)])
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _set(fields, "_x", a)
@@ -851,8 +855,7 @@ def _add(entries: PythonObject, left: PythonObject, right: PythonObject, context
     var c = xcnn_f32(right, "b", context)
     var s = xcnn_shape(a)
     var out = xcnn_host_f32(s, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_add"), xcnn_addr(a), xcnn_addr(c), xcnn_addr(out),
-                      Python.list(xcnn_size(s)))
+    _ = xcnn_call(entries, XC_ADD, [xcnn_ptr(a), xcnn_ptr(c), xcnn_ptr(out)], [xcnn_size(s)])
     _ = out  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -956,8 +959,8 @@ def _relu_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
         if not _same_shape(shape, xcnn_shape(gradient)):
             raise Error("ReLU gradient shape differs from its input")
         var dx = xcnn_out_new(entries, shape, context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(stored.h, gradient.h, dx.h),
-                          PythonObject(7), Python.list(1, xcnn_size(shape)))
+        _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(stored.h), xcnn_word(gradient.h), xcnn_word(dx.h)],
+                      [7, 1, xcnn_size(shape)])
         return dx
     var x = _snapshot(stored, "x", context)
     var g = _snapshot(gradient, "grad_out", context)
@@ -965,8 +968,7 @@ def _relu_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
     if not _same_shape(shape, xcnn_shape(g)):
         raise Error("ReLU gradient shape differs from its input")
     var dx = xcnn_host_f32(shape, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_relu_backward"), xcnn_addr(x), xcnn_addr(g), xcnn_addr(dx),
-                      Python.list(xcnn_size(shape)))
+    _ = xcnn_call(entries, XC_RELU_BACKWARD, [xcnn_ptr(x), xcnn_ptr(g), xcnn_ptr(dx)], [xcnn_size(shape)])
     _set(fields, "_x", x)
     _ = g
     return dx
@@ -981,13 +983,13 @@ def _block_conv_backward(block: PythonObject, conv: PythonObject, entries: Pytho
     var ws = xcnn_shape(w)
     var outc = Int(py=fields["out_channels"])
     var dxh = xcnn_dev_get(block, entries, name, xcnn_size(shape), context)
-    var entry = xcnn_entry(entries, "x_cnn_conv2d_backward_m")
     if xcnn_resident(entries, context):
         var pin = _res_w_values(conv, fields, entries, values, context)[0]
         var gwh = xcnn_dev_get(conv, entries, "gw", xcnn_size(ws), context)
         var gbh = xcnn_dev_get(conv, entries, "gb", outc, context)
-        _ = py_call_typed(entry, Python.list(xh, pin if pin is not None else xcnn_addr(w), gh, dxh, gwh, gbh),
-                          PythonObject(63 if pin is not None else 61), _conv_params(fields, shape))
+        _ = xcnn_call(entries, XC_CONV2D_BACKWARD_M, [xcnn_word(xh), xcnn_word(pin) if pin is not None else xcnn_ptr(w),
+                      xcnn_word(gh), xcnn_word(dxh), xcnn_word(gwh), xcnn_word(gbh)],
+                      _mw(63 if pin is not None else 61, _conv_params(fields, shape)))
         var dev = xcnn_dev(conv, entries, context)
         _set(fields, "_gw_dev", Python.tuple(dev, gwh))
         _set(fields, "_gw_1d", PythonObject(False))
@@ -997,8 +999,8 @@ def _block_conv_backward(block: PythonObject, conv: PythonObject, entries: Pytho
     else:
         var dw = xcnn_host_f32(ws, context)
         var db = xcnn_host_f32([outc], context)
-        _ = py_call_typed(entry, Python.list(xh, xcnn_addr(w), gh, dxh, xcnn_addr(dw), xcnn_addr(db)),
-                          PythonObject(13), _conv_params(fields, shape))
+        _ = xcnn_call(entries, XC_CONV2D_BACKWARD_M, [xcnn_word(xh), xcnn_ptr(w), xcnn_word(gh), xcnn_word(dxh),
+                      xcnn_ptr(dw), xcnn_ptr(db)], _mw(13, _conv_params(fields, shape)))
         _save_gradients(fields, dw, db, context)
     _ = w
     return dxh
@@ -1025,14 +1027,13 @@ def _block_backward_chain(block: PythonObject, fields: PythonObject, entries: Py
     var n1 = xcnn_size(s1)
     var gh = g.h if gt else xcnn_dev_upload(block, entries, "g", g, context)
     var gs = xcnn_dev_get(block, entries, "gs", n2, context)
-    var map2 = xcnn_entry(entries, "x_cnn_map2_m")
-    _ = py_call_typed(map2, Python.list(chain["s"], gh, gs), PythonObject(7), Python.list(1, n2))
+    _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(chain["s"]), xcnn_word(gh), xcnn_word(gs)], [7, 1, n2])
     var gb2 = xcnn_dev_get(block, entries, "gb2", n2, context)
     xcnn_bn_backward_dev(fields["bn2"], entries, chain["c2"], gs, gb2, True, context)
     var gr1 = _block_conv_backward(block, fields["conv2"], entries, chain["r1"], s1, gb2, "gr1", context)
     var gc1 = xcnn_dev_get(block, entries, "gc1", n1, context)
     var gb1 = xcnn_dev_get(block, entries, "gb1", n1, context)
-    _ = py_call_typed(map2, Python.list(chain["b1"], gr1, gb1), PythonObject(7), Python.list(1, n1))
+    _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(chain["b1"]), xcnn_word(gr1), xcnn_word(gb1)], [7, 1, n1])
     xcnn_bn_backward_dev(fields["bn1"], entries, chain["c1"], gb1, gc1, True, context)
     var gx1 = _block_conv_backward(block, fields["conv1"], entries, chain["xh"], shape, gc1, "gx1", context)
     var gi = gs
@@ -1042,8 +1043,8 @@ def _block_backward_chain(block: PythonObject, fields: PythonObject, entries: Py
         xcnn_bn_backward_dev(ds[1], entries, chain["d1"], gs, gd, True, context)
         gi = _block_conv_backward(block, ds[0], entries, chain["xh"], shape, gd, "gdx", context)
     var dx = xcnn_out_new(entries, shape, context) if gt else xcnn_host_f32(shape, context)
-    _ = py_call_typed(map2, Python.list(gx1, gi, dx.h if gt else xcnn_addr(dx)),
-                      PythonObject(7 if gt else 3), Python.list(2, xcnn_size(shape)))
+    _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(gx1), xcnn_word(gi), xcnn_word(dx.h) if gt else xcnn_ptr(dx)],
+                  [7 if gt else 3, 2, xcnn_size(shape)])
     _ = g
     return dx
 
@@ -1130,13 +1131,14 @@ def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, cf
     var yh = xcnn_dev_get(block, entries, name, xcnn_size(oshape), context)
     var values = _weight_pair(cf, context)
     var pins = _res_w_values(conv, cf, entries, values, context)   # G3: the auto-pinned weights (None with the switch off)
-    var entry = xcnn_entry(entries, "x_cnn_conv2d_forward_m")
     if pins[0] is not None and pins[1] is not None:
-        _ = py_call_typed(entry, Python.list(xh, pins[0], pins[1], yh), PythonObject(15), _conv_params(cf, xshape))
+        _ = xcnn_call(entries, XC_CONV2D_FORWARD_M, [xcnn_word(xh), xcnn_word(pins[0]), xcnn_word(pins[1]), xcnn_word(yh)],
+                      _mw(15, _conv_params(cf, xshape)))
     else:
         var w = values[0]
         var bias = values[1]
-        _ = py_call_typed(entry, Python.list(xh, xcnn_addr(w), xcnn_addr(bias), yh), PythonObject(9), _conv_params(cf, xshape))
+        _ = xcnn_call(entries, XC_CONV2D_FORWARD_M, [xcnn_word(xh), xcnn_ptr(w), xcnn_ptr(bias), xcnn_word(yh)],
+                      _mw(9, _conv_params(cf, xshape)))
         _ = bias  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
     return Python.tuple(yh, xcnn_tuple(oshape))
@@ -1184,13 +1186,12 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
         raise Error("mojolearn: input has " + String(xs[1]) + " channels, the layer " + String(inc))
     var xt = xcnn_is_t(x, context)
     var xh = x.h if xt else xcnn_dev_upload(block, entries, "x", x, context)
-    var map2 = xcnn_entry(entries, "x_cnn_map2_m")
     var c1 = _conv_dev(block, entries, conv1, convf[0], xh, xs, "c1", context)
     var s1 = _as_list(c1[1])
     var n1 = xcnn_size(s1)
     var r1 = xcnn_dev_get(block, entries, "r1", n1, context)
     var b1 = _bn_dev(block, entries, fields["bn1"], c1[0], s1, "b1", context)
-    _ = py_call_typed(map2, Python.list(b1, b1, r1), PythonObject(7), Python.list(0, n1))
+    _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(b1), xcnn_word(b1), xcnn_word(r1)], [7, 0, n1])
     var c2 = _conv_dev(block, entries, fields["conv2"], convf[1], r1, s1, "c2", context)
     var s2 = _as_list(c2[1])
     var n2 = xcnn_size(s2)
@@ -1208,14 +1209,14 @@ def _forward_chain(block: PythonObject, fields: PythonObject, entries: PythonObj
     elif xcnn_size(xs) != n2:
         raise Error("mojolearn: the identity's shape is not the block's output shape")
     var sh = xcnn_dev_get(block, entries, "s", n2, context)
-    _ = py_call_typed(map2, Python.list(b2, idh, sh), PythonObject(7), Python.list(2, n2))
+    _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(b2), xcnn_word(idh), xcnn_word(sh)], [7, 2, n2])
     var y: PythonObject
     if xt:
         y = xcnn_out_new(entries, s2, context)   # the ReLU stores every word
-        _ = py_call_typed(map2, Python.list(sh, sh, y.h), PythonObject(7), Python.list(0, n2))
+        _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(sh), xcnn_word(sh), xcnn_word(y.h)], [7, 0, n2])
     else:
         y = xcnn_host_f32(s2, context)
-        _ = py_call_typed(map2, Python.list(sh, sh, xcnn_addr(y)), PythonObject(3), Python.list(0, n2))
+        _ = xcnn_call(entries, XC_MAP2_M, [xcnn_word(sh), xcnn_word(sh), xcnn_ptr(y)], [3, 0, n2])
     var chain = Python.dict()
     py_setitem(chain, "x", xcnn_tuple(xs))
     py_setitem(chain, "xt", x if xt else PythonObject(None))
