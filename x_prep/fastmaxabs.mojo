@@ -96,9 +96,9 @@ def maxabs_fit_direct(x_addr: Int, n: Int, d: Int, out_addr: Int) raises:
     var ctx = x_prep_ctx()
     comptime if PREP3_MAXABS_POOL:
         # lane/apple-fast-w4-small: pooled buffers, the same launches
-        var px = pool_take["MojolearnXPrepMaxAbsXV1"](ctx, n * d)
-        var pp = pool_take["MojolearnXPrepMaxAbsPartV1"](ctx, nch * d)
-        var po = pool_take["MojolearnXPrepMaxAbsOutV1"](ctx, 2 * d)
+        var px = pool_take["MojolearnXPrepMaxAbsXV2"](ctx, n * d)
+        var pp = pool_take["MojolearnXPrepMaxAbsPartV2"](ctx, nch * d)
+        var po = pool_take["MojolearnXPrepMaxAbsOutV2"](ctx, 2 * d)
         ctx.enqueue_copy(dst_buf=px, src_ptr=FP(unsafe_from_address=x_addr))
         ctx.enqueue_function[maxabs_part_kernel](
             FP(unsafe_from_address=Int(px.unsafe_ptr())), FP(unsafe_from_address=Int(pp.unsafe_ptr())),
@@ -111,9 +111,9 @@ def maxabs_fit_direct(x_addr: Int, n: Int, d: Int, out_addr: Int) raises:
         )
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=po)
         ctx.synchronize()
-        pool_give["MojolearnXPrepMaxAbsXV1"](px^)
-        pool_give["MojolearnXPrepMaxAbsPartV1"](pp^)
-        pool_give["MojolearnXPrepMaxAbsOutV1"](po^)
+        pool_give["MojolearnXPrepMaxAbsXV2"](px^)
+        pool_give["MojolearnXPrepMaxAbsPartV2"](pp^)
+        pool_give["MojolearnXPrepMaxAbsOutV2"](po^)
         _ = ctx^
         return
     var dx = ctx.enqueue_create_buffer[DType.float32](n * d)

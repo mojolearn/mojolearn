@@ -1450,7 +1450,7 @@ def _connect_host_inference():
     from .tokenizer import _binding
     entries = {}
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
-                                                          "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
+                                                          "tsvd_transform", "tsvd_native_api_v1", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
                                                           "logistic_native_api_v1", "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "qn_proba", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
@@ -1463,6 +1463,11 @@ def _connect_host_inference():
             if entry is not None and not isinstance(entry, BuiltinFunctionType):
                 raise TypeError("explicit CPU prediction requires a native binding entry")
             entries[name] = entry
+    # Import connection only: the compiled TSVD owner uses this CPU image
+    # directly; fitting no longer calls the Python _HostBound._bind method.
+    from .decomposition import _TSVD_CONTEXT
+    if entries.get("tsvd_native_api_v1") is not None:
+        _TSVD_CONTEXT["tsvd_host_factory"] = entries["tsvd_native_api_v1"]
     # CPU training is public. Replace only this complete native fit after
     # mixin class setup; inherited/overridden operations keep their guards.
     HostKernelDensity.fit = _NATIVE_HOST_FITS["HostKernelDensity.fit"]

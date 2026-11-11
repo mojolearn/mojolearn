@@ -25,44 +25,19 @@ def connect(pca_class):
     if type(pca_class) is not type or type(descriptor) is not GetSetDescriptorType:
         raise TypeError("PCA owner requires a standard native instance dictionary")
     connected = {}
-    query_connections = []
-    fit_connections = []
     selected = _backend.default_mode()
-    required = ("estimators_vendor", "estimators_numeric_mode", "pca_transform", "inverse_transform")
-    # Additive exports: a build without one refuses the option that needs it
-    # by name (bindings/pca_exact.mojo), not at import.
-    optional = ("pca_fit_owned", "pca_fit_randomized", "pca_fit_full",
-                "pca_whiten_transform", "pca_whiten_inverse_transform")
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_estimators", mode)
-            entries = {}
-            for name in required + optional:  # glue: retain checked compiled estimator symbols
-                try:
-                    entry = getattr(binding, name)
-                except (AttributeError, ImportError):
-                    if name in required:
-                        raise
-                    continue
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"PCA owner requires compiled {name}")
-                entries[name] = entry
-            connected[mode] = entries
-            # glue: immutable identities for the query's six compiled entries;
-            # runtime table replacement is admitted before any reader runs.
-            query_connections.append((mode, tuple(
-                (entries[name], entries[name].__self__, entries[name].__name__) if name in entries else None
-                for name in required + ("pca_whiten_transform", "pca_whiten_inverse_transform"))))  # glue: import-time compiled entry identities
-            fit_connections.append((mode, tuple(
-                (entries[name], entries[name].__self__, entries[name].__name__) if name in entries else None
-                for name in required[:2] + optional)))  # glue: import-time compiled fit entry identities
+            factory = binding.pca_native_api_v1
+            if not isinstance(factory, BuiltinFunctionType):
+                raise TypeError("PCA owner requires compiled pca_native_api_v1")
+            connected[mode] = factory
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     # A densified SciPy sparse X is written as an Array (host_sparse_native).
     context["output_context"] = _numpy_free_context()
     context.update(pca_class=pca_class, pca_dictionary_descriptor=descriptor, pca_bindings=connected,
-                   pca_query_connections=tuple(query_connections),
-                   pca_fit_connections=tuple(fit_connections),
                    pca_parameters=("copy", "iterated_power", "n_components", "n_oversamples",
                                    "numeric_mode", "power_iteration_normalizer", "random_state",
                                    "svd_solver", "tol", "whiten"),
@@ -87,19 +62,14 @@ def connect(pca_class):
                                           pca_class.__module__)
                                    for name in ("fit", "fit_transform", "transform", "inverse_transform")})  # glue: fixed public scalar warning locations
     context["pca_fit_scalar_context"] = scalar_context
-    # glue (lane a6): PCA.transform of a cross-validation fold resident on
-    # the device, exported by the identical GPU base binding next to the
-    # fold store it reads (bindings/msel_device.mojo); a build without it
-    # (the CPU column) leaves None and the door gathers host rows.
-    # Lane a8d: the exact fit of a resident fold (`pca_fit_fold`), the same
-    # binding and the same rule.
+    # glue: resident folds retain the base image's descriptor, beside the
+    # device store it owns. A CPU install keeps the existing host gather.
     from ._buffer import _native
-    for name in ('pca_transform_fold', 'pca_fit_fold'):  # glue: fixed import-time entry connections
-        try:
-            fold = _native(name)
-        except (ImportError, AttributeError, TypeError, RuntimeError):
-            fold = None
-        context[name] = fold if isinstance(fold, BuiltinFunctionType) else None
+    try:
+        fold = _native("pca_fold_native_api_v1")
+    except (ImportError, AttributeError, TypeError, RuntimeError):
+        fold = None
+    context["pca_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
     entry = _binding()._module.pca_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("PCA owner requires a compiled pca_native_call")

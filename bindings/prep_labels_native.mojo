@@ -23,7 +23,7 @@ from bindings.classical_labels import (
     labels_address, labels_label_kind, labels_cast,
     labels_reduce_stat, _numeric_label_view, _flatten_labels, _sorted_classes)
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
-from bindings.scaler_native import _stage
+from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values

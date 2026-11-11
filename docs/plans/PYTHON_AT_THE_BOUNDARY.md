@@ -19,8 +19,9 @@ Mojo objects? We need to get rid of Python objects."
   pure Mojo and takes only Mojo values. PACK turns the Mojo result value into the Python object. Python object types
   appear in the unpack and pack files and nowhere else. Typed interfaces and executed-call tests establish the
   boundary; the retired source-count guard is not evidence that this target has been reached.
-- **Not touched.** Hand-tuned kernels, fused paths and every kernel's arithmetic (AGENTS.md "A measured winner is
-  never deleted on reasoning"). This design changes what calls the kernels, never the kernels. Bits do not move.
+- **Preserved.** Hand-tuned kernels, fused paths and kernel arithmetic (AGENTS.md "A measured winner is
+  never deleted on reasoning"). This migration changes the plumbing around them. Compilation is not evidence
+  of numerical identity or performance; those claims require their separate recorded executions.
 - **Order.** Reuse the pilot's native request and ownership patterns across independent families. Collect completed
   changes into an integration branch, compile one fixed snapshot, repair compilation failures, then merge the
   compiled work into main. Reuse unchanged compiled groups. Runtime correctness and performance evidence remain
@@ -128,9 +129,17 @@ Output: the Python return value, or the Python exception of the mapped type.
 
 ### 2.4 What a boundary file is
 
-`providers/python/**/*_pyapi.mojo` and the registration roots `bindings/_mojolearn*.mojo`. Nothing else. A boundary
-file contains UNPACK, PACK, the `OwnerToken` implementation and the module's method table. Today's
-`bindings/*_native.mojo` doors become RUN files and lose every Python import.
+The boundary is defined by its work: argument admission, buffer and provider lifetime pins, and public result
+publication. It may live in `bindings/*_boundary.mojo`, a public operation's UNPACK/PACK file, or
+`providers/python/*_pyapi.mojo`; registration roots connect these operations at import. A directory or a
+`_native` suffix does not make execution native. Do not move orchestration into a provider file to retain
+Python objects inside RUN.
+
+The implemented KMeans split illustrates the distinction: `bindings/kmeans_descriptor_boundary.mojo` admits and
+pins the provider and releases the GIL; `bindings/kmeans_owner_boundary.mojo` pins public storage and the compiled
+image. `core/kmeans_native_api.mojo` and `core/kmeans_owner_state.mojo` carry typed requests, results, function
+pointers and resident state without Python imports. Boundary pins are not model or optimizer algorithm state.
+Apply the same split to remaining doors; their current Python imports remain migration work.
 
 ### 2.5 Calling compiled entries in another extension module
 
@@ -172,8 +181,9 @@ attribute.
    belong in Mojo, with Python objects confined to UNPACK/PACK. Only `__sklearn_tags__` and its tag-only helpers
    may execute Python metadata code (the 2026-10-24 exception). Native product operations must never call them.
 2. **User-supplied Python objects.** A callable `init`, a custom scorer, a custom estimator inside a pipeline or a
-   search. UNPACK refuses them before any hook runs and names the native alternative. One exception exists in code
-   today, KMeans callable `init` (`kmeans_native.mojo:244-262`); lane P1 turns it into a refusal.
+   search. UNPACK refuses them before any hook runs and names the native alternative. The baseline identified
+   KMeans callable `init`; the implemented KMeans boundary now admits supported native options and arrays before
+   execution. Python callbacks are not an authorized fallback.
 3. **The array type the user holds.** `mojolearn.Array` (`python/mojolearn/_array.py:304`) is a Python class with a
    `_store` attribute that Mojo code reads (`classical_wrap_array(array._store)` broke KNeighborsRegressor today when
    the store type changed). Target: `Array` is a thin Python class over a native storage handle. It implements the

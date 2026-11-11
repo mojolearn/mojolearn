@@ -56,6 +56,19 @@ from x_decomp.descriptor_host import X_DECOMP_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 
+from core.shared_slot import SharedSlot
+from core.tsvd_native_decomp import TSVDDecompAPI
+from checks.numerics import NUMERIC_IDENTICAL
+
+comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompHostIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompHostFastV1"
+comptime TSVD_DECOMP_API = SharedSlot[TSVDDecompAPI[HostExec, NoRDev, False], _TSVD_DECOMP_API_NAME]
+
+
+def tsvd_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = TSVD_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def x_decomp_native_api_v1_binding() raises -> PythonObject:
     """The x_decomp kernel-call table of the host image (host-address
     operations only; x_decomp/descriptor_host.mojo)."""
@@ -71,6 +84,7 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp_host")
         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
+        m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
         m.def_function[x_decomp_host_numeric_mode_binding]("x_decomp_host_numeric_mode")
         m.def_function[x_decomp_host_vendor_binding]("x_decomp_host_vendor")
         m.def_function[x_decomp_host_column_binding]("x_decomp_host_column")

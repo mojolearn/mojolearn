@@ -35,6 +35,8 @@ from core.msel_device import (
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
+from core.pca_native_fold import PCA_FOLD_API
+from core.tsvd_native_fold import TSVD_FOLD_API
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_fit, logistic_fold_query
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_PROBA
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -301,6 +303,16 @@ def pca_transform_fold_binding(
         var ctx = msel_fold_entry_context()
         words = pca_transform_fold(ctx, base_id, base_rows, index_id, mp, cp, op, nr, nf, nc)
     return Python.list(Int(words[0]), Int(words[1]))
+
+
+def tsvd_fold_native_api_v1_binding() raises -> PythonObject:
+    var api = TSVD_FOLD_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def pca_fold_native_api_v1_binding() raises -> PythonObject:
+    var api = PCA_FOLD_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def logistic_fold_native_api_v1_binding() raises -> PythonObject:

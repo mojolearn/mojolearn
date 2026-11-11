@@ -13,6 +13,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
+from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_stats, scaler_fill, scaler_check_missing, scaler_counts
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.sequential_admission import _ordinary_torch, _one_of
@@ -63,15 +64,6 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
     _ = value^
     _ = prepared^
     return output
-
-
-def _stage(mut program: List[Int32], op: Int, total: Int, *params: Int):
-    program.append(Int32(op))
-    program.append(Int32(total))
-    for i in range(len(params)):  # small-loop(params: at most fourteen native stage arguments)
-        program.append(Int32(params[i]))
-    for i in range(14 - len(params)):  # small-loop(params: pad the fixed fourteen-word stage ABI)
-        program.append(0)
 
 
 def _copy_row(source: F32P, count: Int, context: PythonObject) raises -> PythonObject:

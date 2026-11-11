@@ -9,7 +9,11 @@
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
-from std.python.bindings import PythonModuleBuilder
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
+from providers.python.pca_query_cache_pyapi import PCAQueryCache
+from bindings.tsvd_owner_boundary import TSVDResidentOwner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -49,10 +53,36 @@ def runtime_decomp_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(RUNTIME_DECOMP_SABOTAGE)
 
 
+def register_pca_query_cache(mut module: PythonModuleBuilder) raises:
+    var existing: PythonObject
+    try:
+        existing = lookup_py_type_object[PCAQueryCache]()
+    except error:
+        if not py_type_absent(error, String(reflect[PCAQueryCache].name())):
+            raise error
+        _ = module.add_type[PCAQueryCache]("_PCAQueryCache")
+        return
+    py_type_attach(module.module, "_PCAQueryCache", existing)
+
+
+def register_tsvd_resident_owner(mut module: PythonModuleBuilder) raises:
+    var existing: PythonObject
+    try:
+        existing = lookup_py_type_object[TSVDResidentOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[TSVDResidentOwner].name())):
+            raise error
+        _ = module.add_type[TSVDResidentOwner]("_TSVDResidentOwner")
+        return
+    py_type_attach(module.module, "_TSVDResidentOwner", existing)
+
+
 def build__mojolearn_runtime_decomp_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_decomp_host")
+        register_pca_query_cache(module)
+        register_tsvd_resident_owner(module)
         module.def_py_c_function(pca_c, "pca_native_call")
         module.def_py_c_function(decomp_c, "decomp_native_call")
         module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
