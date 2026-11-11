@@ -139,3 +139,16 @@ struct GPCMemberTables(Movable):
     def prepare_scalars(mut self):
         for member in range(len(self.scalars)):  # driver-loop: one metadata entry per fitted OVR member
             self.scalars[member] = Int(self.scalar_storage.unsafe_ptr() + 3 * member)
+
+
+struct GPCQueryTables(Movable):
+    var targets: List[Int]
+    var pis: List[Int]
+    var wsrs: List[Int]
+    var factors: List[Int]
+
+    def __init__(out self, members: Int):
+        self.targets = List[Int](length=members, fill=0)
+        self.pis = List[Int](length=members, fill=0)
+        self.wsrs = List[Int](length=members, fill=0)
+        self.factors = List[Int](length=members, fill=0)
