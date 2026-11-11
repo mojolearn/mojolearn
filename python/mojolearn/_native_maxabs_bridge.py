@@ -19,7 +19,7 @@ def connect(scaler_class):
         try:
             module = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_maxabs_fit_direct",  # glue: fixed native exports connected during import
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_maxabs_fit_direct",  # glue: fixed native exports connected during import
                          "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
                          "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):
                 try:

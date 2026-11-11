@@ -28,7 +28,7 @@ def connect(scaler_class):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"StandardScaler requires compiled {name}")
                 entries[name] = entry
-            for name in ("x_prep_run", "x_prep_numeric_mode"):  # glue: cache the existing native weighted-statistics executor
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: cache the existing native weighted-statistics executor
                 entry = getattr(xprep, name)
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"StandardScaler requires compiled {name}")
@@ -73,7 +73,8 @@ def connect_host(cls, context, prep, xprep, training):
     entries = {"standard_transform": prep.standard_transform,
                "preprocessing_numeric_mode": prep.estimators_numeric_mode,
                "x_prep_run": xprep.x_prep_run,
-               "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
+               "x_prep_numeric_mode": xprep.x_prep_numeric_mode,
+               "x_prep_vendor": xprep.x_prep_vendor}
     if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
         raise TypeError("HostStandardScaler requires compiled CPU entries")
     entries["native_program_provider"] = xprep
