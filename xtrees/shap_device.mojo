@@ -313,8 +313,7 @@ def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, 
                 buf: F32P, phi: F32P):
     # P10: independent output planes, no skipped contributions or changed fold.
     var first = Int(block_idx.x) * TPB * AFT_SHAP_FOLD_ITEMS + Int(thread_idx.x)
-    @__parameter
-    for tile in range(AFT_SHAP_FOLD_ITEMS):
+    comptime for tile in range(AFT_SHAP_FOLD_ITEMS):
         var u = first + tile * TPB
         if u < Int(units):
             shap_fold_unit(u, Int(r0), Int(rows), Int(n_trees), Int(d), Int(k), Int(slots), slot, buf, phi)

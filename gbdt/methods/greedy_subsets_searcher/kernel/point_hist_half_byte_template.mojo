@@ -336,8 +336,7 @@ def add_half_byte_point(
             CDNA, not a guess.
     """
 
-    @__parameter
-    for i in range(8):
+    comptime for i in range(8):
         var slot = slice_base + add_point_slot(ci, tid, i)
         # IDENTITY_PATHS ROW 10: this family accumulates in FLOAT in both
         # modes (unlike hist_2's Int32), and a running cell can pass

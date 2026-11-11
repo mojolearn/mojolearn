@@ -216,8 +216,7 @@ def reorder_one_bit_kernel(
 
     var i = Int(block_idx.x) * REORDER_BLOCK + Int(thread_idx.x)
 
-    @__parameter
-    for k in range(REORDER_UNROLL):
+    comptime for k in range(REORDER_UNROLL):
         var idx = i + k * REORDER_BLOCK
         if idx < size:
             var ones_before = offsets.unsafe_load(idx)

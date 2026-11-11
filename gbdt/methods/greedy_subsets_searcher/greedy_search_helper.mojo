@@ -3314,8 +3314,7 @@ def launch_histograms_for_blocks[
         ]()
         var run_fixed_bridge = _flush_is_fixed_point
 
-        @__parameter
-        if (
+        comptime if (
             (hist2_smem_mode == HIST_SMEM_SHARED2_I32 or _one_byte_fixed)
             and not _flush_is_fixed_point
         ):
@@ -3332,8 +3331,7 @@ def launch_histograms_for_blocks[
                 # the bridge for it would read an accumulator nothing wrote
                 # and skip the memset the float atomics need. Before 1947
                 # that shape refused, so the distinction could not arise.
-                @__parameter
-                if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
+                comptime if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
                     run_fixed_bridge = True
                 else:
                     if stat_count == 2:
@@ -3597,8 +3595,7 @@ def launch_histograms_for_blocks[
                     )
                 else:
 
-                    @__parameter
-                    if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
+                    comptime if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
                         # lane trees-hist-ideas idea 4 (default off):
                         # SymmetricTree two-stat blocks may take FG cindex
                         # columns per block by `wide_columns_for`'s cost

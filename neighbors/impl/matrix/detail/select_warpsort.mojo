@@ -279,8 +279,7 @@ def is_ordered[ascending: Bool](left: UInt32, right: UInt32) -> Bool:
     docstring.
     """
 
-    @__parameter
-    if ascending:
+    comptime if ascending:
         return left < right
     else:
         return left > right
@@ -297,8 +296,7 @@ def dummy_key[ascending: Bool]() -> UInt32:
     (`util/cudart_utils.hpp:404-418`).
     """
 
-    @__parameter
-    if ascending:
+    comptime if ascending:
         return UInt32(0xFFFFFFFF)
     else:
         return UInt32(0)
@@ -363,16 +361,14 @@ def bitonic_merge[
     halves of opposite order.
     """
 
-    @__parameter
-    if SIZE > 1:
+    comptime if SIZE > 1:
         # Their in-register phase, `:185-201`. One level of compare-exchange
         # at stride `SIZE/2` over this block, then the two half-blocks. Inner
         # order kept descending from `offset + stride - 1` exactly as theirs,
         # though the pairs are disjoint and cannot see each other.
         comptime STRIDE = SIZE // 2
 
-        @__parameter
-        for t in range(STRIDE):
+        comptime for t in range(STRIDE):
             var key = keys[BASE + STRIDE - 1 - t]
             var other = keys[BASE + SIZE - 1 - t]
             var swaps: Bool
@@ -428,8 +424,7 @@ def bitonic_sort[
 ):
     """`bitonic<Size>::sort_impl`, `bitonic_sort.cuh:220-236`."""
 
-    @__parameter
-    if SIZE == 1:
+    comptime if SIZE == 1:
         # `:225-229`. Note `lane & width` is the ASCENDING flag and is
         # per-lane, while `width` -- which is both the loop variable and the
         # subwarp width handed to the merge -- is uniform, so the trip count
@@ -514,8 +509,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         makes a single `bitonic.merge` enough to restore the queue.
         """
 
-        @__parameter
-        for j in range(Self.arr_len):
+        comptime for j in range(Self.arr_len):
             var key = self.val_arr[j]
             var other = self.val_buf[j]
             if is_ordered[Self.ascending](other, key):
@@ -533,8 +527,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         # force the buffers spill into the local memory. Theirs, `:620-621`,
         # and it is doubly true here: a runtime `SIMD` element index is not
         # a register access at all.
-        @__parameter
-        for i in range(Self.arr_len):
+        comptime for i in range(Self.arr_len):
             if i == self.buf_len:
                 self.val_buf[i] = val
                 self.idx_buf[i] = idx
@@ -546,8 +539,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
             )
             self.merge_in()
 
-            @__parameter
-            for i in range(Self.arr_len):
+            comptime for i in range(Self.arr_len):
                 self.val_buf[i] = dummy_key[Self.ascending]()
             self.buf_len = 0
 
@@ -597,8 +589,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
                 Self.warp_width - 1
             )
 
-            @__parameter
-            for t in range(Self.arr_len):
+            comptime for t in range(Self.arr_len):
                 if idx < self.k:
                     var value = in_val.unsafe_load(idx)
                     if is_ordered[Self.ascending](
@@ -643,8 +634,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         """
         var idx = Int(lane_id()) & (Self.warp_width - 1)
 
-        @__parameter
-        for i in range(Self.arr_len):
+        comptime for i in range(Self.arr_len):
             if idx < self.k:
                 out_val.unsafe_store(idx, self.val_arr[i])
                 out_idx.unsafe_store(idx, self.idx_arr[i])
@@ -662,8 +652,7 @@ struct WarpSortImmediate[capacity: Int, ascending: Bool](Copyable, Movable):
         """
         var idx = Int(lane_id()) & (Self.warp_width - 1)
 
-        @__parameter
-        for i in range(Self.arr_len):
+        comptime for i in range(Self.arr_len):
             if idx < self.k:
                 out_val.unsafe_store(idx, twiddle_out(self.val_arr[i]))
                 out_idx.unsafe_store(idx, self.idx_arr[i])

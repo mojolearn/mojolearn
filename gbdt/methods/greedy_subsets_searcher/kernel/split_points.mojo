@@ -128,8 +128,7 @@ def split_and_make_sequence_kernel(
     var stride = SPLIT_UNROLL * SPLIT_BLOCK_SIZE * Int(grid_dim.x)
 
     while i < size:
-        @__parameter
-        for k in range(SPLIT_UNROLL):
+        comptime for k in range(SPLIT_UNROLL):
             var at = i + k * SPLIT_BLOCK_SIZE
             if at < size:
                 # `loadIndex[k] = loadIndices ? __ldg(loadIndices + i +

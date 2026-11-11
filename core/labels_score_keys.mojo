@@ -165,10 +165,9 @@ def _sort_distinct(keys: KeyPointer, mut rows: List[Int]):
         if lo >= hi:
             return
         var part = Span(unsafe_ptr=rp + lo, length=hi - lo)
-        @__parameter
-        def less(a: Int, b: Int) -> Bool:
+        def less(a: Int, b: Int) {imm keys} -> Bool:
             return _less(keys, a, b)
-        sort[cmp_fn=less](part)
+        sort(part, less)
     host_parallelize(initial, units)
     var scratch = List[Int](unsafe_uninit_length=n)
     var sp = WordPointer(unsafe_from_address=Int(scratch.unsafe_ptr()))

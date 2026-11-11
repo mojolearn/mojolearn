@@ -889,8 +889,7 @@ def rbc_eps_pass_fill(
     # entry points and both callers byte-for-byte unchanged;
     # `rbc_eps_pass_count` already performs exactly this read. Compiled out
     # entirely under FAST.
-    @__parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         var h_nnz = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.enqueue_copy(
             dst_ptr=h_nnz.unsafe_ptr(),
@@ -1511,8 +1510,7 @@ def rbc_eps_pass_max_k(
     # (`dbscan/impl/runner.mojo` returns False unconditionally), and
     # the check picks max_k from a prior count. The refusal exists so the hole
     # cannot open silently later.
-    @__parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         if actual_max > max_k:
             raise Error(
                 "rbc_eps_pass_max_k (IDENTICAL): the longest row is "

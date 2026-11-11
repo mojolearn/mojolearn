@@ -392,8 +392,7 @@ def target_score[objective: Int](
 ) -> Float32:
     """`TTarget::Score(target, prediction)`, per objective."""
 
-    @__parameter
-    if objective == OBJECTIVE_RMSE:
+    comptime if objective == OBJECTIVE_RMSE:
         # `TRmseTarget::Score` (`:180-182`)
         return (t - p) * (t - p)
     elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
@@ -470,8 +469,7 @@ def target_der[objective: Int](
     re-decided.
     """
 
-    @__parameter
-    if objective == OBJECTIVE_RMSE:
+    comptime if objective == OBJECTIVE_RMSE:
         # `:184-186`
         return t - p
     elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
@@ -534,8 +532,7 @@ def target_der2[objective: Int](
     Newton step on them divides by `lambda` alone.
     """
 
-    @__parameter
-    if objective == OBJECTIVE_RMSE:
+    comptime if objective == OBJECTIVE_RMSE:
         # `:188-190`
         return Float32(1.0)
     elif (
@@ -783,15 +780,13 @@ def pointwise_target_kernel[
     # target.Der2(relev, val)` landing in `weightsView`.
     var plane0 = weight
 
-    @__parameter
-    if second_der_as_weights:
+    comptime if second_der_as_weights:
         # DEVIATION 256 / row 10, same flush-at-derivation policy.
         plane0 = ftz(weight * target_der2[objective](relev, val, alpha))
 
     if in_range:
 
-        @__parameter
-        if estimation:
+        comptime if estimation:
             stats.unsafe_store(i, der)
             # DEVIATION 256 / row 10: the Newton Hessian plane, same
             # seam, same flush.
@@ -882,8 +877,7 @@ def deterministic_sum_lanes_kernel[
     var i = tid
     while i < count:
 
-        @__parameter
-        for lane in range(lanes):
+        comptime for lane in range(lanes):
             acc[lane] += partials.unsafe_load(i * lanes + lane)
         i += REDUCE_LANES_BLOCK
 
@@ -893,16 +887,14 @@ def deterministic_sum_lanes_kernel[
         address_space = AddressSpace.SHARED,
     ]()
 
-    @__parameter
-    for lane in range(lanes):
+    comptime for lane in range(lanes):
         red[lane * REDUCE_LANES_BLOCK + tid] = acc[lane]
     barrier()
     var step = REDUCE_LANES_BLOCK // 2
     while step > 0:
         if tid < step:
 
-            @__parameter
-            for lane in range(lanes):
+            comptime for lane in range(lanes):
                 red[lane * REDUCE_LANES_BLOCK + tid] = (
                     red[lane * REDUCE_LANES_BLOCK + tid]
                     + red[lane * REDUCE_LANES_BLOCK + tid + step]
@@ -911,8 +903,7 @@ def deterministic_sum_lanes_kernel[
         step //= 2
     if tid == 0:
 
-        @__parameter
-        for lane in range(lanes):
+        comptime for lane in range(lanes):
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
 
 
@@ -1026,8 +1017,7 @@ def cross_entropy_kernel[
     # `const float c = HAS_BORDER ? targetClass > border : targetClass;`
     var c: Float32
 
-    @__parameter
-    if has_border:
+    comptime if has_border:
         c = Float32(1.0) if target_class > border else Float32(0.0)
     else:
         c = target_class
@@ -1055,14 +1045,12 @@ def cross_entropy_kernel[
     # scale[j]` (`:373-375`) landing in `weightsView`.
     var plane0 = weight
 
-    @__parameter
-    if second_der_as_weights:
+    comptime if second_der_as_weights:
         plane0 = ftz(weight * scale)
 
     if in_range:
 
-        @__parameter
-        if estimation:
+        comptime if estimation:
             stats.unsafe_store(i, ftz(weight * direction))
             stats.unsafe_store(size + i, ftz(weight * scale))
         else:

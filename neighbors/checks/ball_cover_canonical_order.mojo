@@ -320,8 +320,7 @@ def rbc_canonicalize_row_order(
     is `comptime`, so FAST allocates nothing and launches nothing.
     """
 
-    @__parameter
-    if not PIN_CROSS_VENDOR:
+    comptime if not PIN_CROSS_VENDOR:
         return
     if n_queries <= 0 or nnz <= 0:
         return

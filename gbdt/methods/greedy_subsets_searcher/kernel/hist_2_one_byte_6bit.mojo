@@ -94,8 +94,7 @@ def hist2_add_points_6[
     var qstat1 = Array[Int32, n](fill=Int32(0))
     var qstat2 = Array[Int32, n](fill=Int32(0))
 
-    @__parameter
-    for k in range(n):
+    comptime for k in range(n):
         if flag == 1:
             stat1[k] = s2[k]
             stat2[k] = s1[k]
@@ -113,12 +112,10 @@ def hist2_add_points_6[
     var qval2 = Array[Int32, n](fill=Int32(0))
     var offset = Array[Int, n](fill=0)
 
-    @__parameter
-    for i in range(4):
+    comptime for i in range(4):
         var f = (2 * i + tid) & 6
 
-        @__parameter
-        for k in range(n):
+        comptime for k in range(n):
             var bin = Int((ci[k] >> UInt32(24 - (f << 2))) & UInt32(255))
             var keep = Float32(0.0)
             var qkeep = Int32(0)
@@ -142,16 +139,14 @@ def hist2_add_points_6[
 
         if write_first:
 
-            @__parameter
-            for k in range(n):
+            comptime for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
 
         turn_sync()
 
         if not write_first:
 
-            @__parameter
-            for k in range(n):
+            comptime for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
 
         # int shift = flag ? -1 : 1;
@@ -159,24 +154,21 @@ def hist2_add_points_6[
         if flag == 1:
             shift = -1
 
-        @__parameter
-        for k in range(n):
+        comptime for k in range(n):
             offset[k] += shift
 
         turn_sync()
 
         if write_first:
 
-            @__parameter
-            for k in range(n):
+            comptime for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
 
         turn_sync()
 
         if not write_first:
 
-            @__parameter
-            for k in range(n):
+            comptime for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
 
 
@@ -215,8 +207,7 @@ def hist2_reduce_tail_6[
             + is_second_stat
         )
 
-        @__parameter
-        for in_warp_hist in range(2):
+        comptime for in_warp_hist in range(2):
             sum0 += smem[src + (in_warp_hist << 4)]
             sum1 += smem[src + (in_warp_hist << 4) + 512]
 

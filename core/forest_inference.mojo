@@ -278,8 +278,7 @@ def forest_argmax_kernel(
 ):
     # P04: two row planes share a worker; every row still scans all classes.
     var first = Int(block_idx.x) * Int(block_dim.x) * AFT_ARGMAX_ROWS + Int(thread_idx.x)
-    @__parameter
-    for tile in range(AFT_ARGMAX_ROWS):
+    comptime for tile in range(AFT_ARGMAX_ROWS):
         var row = first + tile * Int(block_dim.x)
         if row < Int(rows_in):
             codes.unsafe_store(row, forest_argmax_row(scores, row, Int(outputs_in)))
@@ -390,8 +389,7 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
     var lane = tid%32
     var row = Int(block_idx.x)*traversal_rows+tid//32
     var totals = stack_allocation[OUTPUT_CAPACITY,Float32]()
-    @__parameter
-    for c in range(OUTPUT_CAPACITY):
+    comptime for c in range(OUTPUT_CAPACITY):
         totals[unsafe_offset=c] = Float32(0)
     var tiled = False
     comptime if FOREST_SHARED_ROWS:
@@ -411,8 +409,7 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
                 var tree = lane
                 while tree < trees:
                     var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
-                    @__parameter
-                    for c in range(OUTPUT_CAPACITY):
+                    comptime for c in range(OUTPUT_CAPACITY):
                         if c < outputs:
                             totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
                     tree += 32
@@ -420,27 +417,23 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
         var tree = lane
         while tree < trees:
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
-            @__parameter
-            for c in range(OUTPUT_CAPACITY):
+            comptime for c in range(OUTPUT_CAPACITY):
                 if c < outputs:
                     totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
             tree += 32
     var sums = stack_allocation[traversal_tpb*OUTPUT_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
-    @__parameter
-    for c in range(OUTPUT_CAPACITY):
+    comptime for c in range(OUTPUT_CAPACITY):
         sums[unsafe_offset=c*traversal_tpb+tid] = totals[unsafe_offset=c]
     barrier()
     var step = 16
     while step > 0:
         if lane < step:
-            @__parameter
-            for c in range(OUTPUT_CAPACITY):
+            comptime for c in range(OUTPUT_CAPACITY):
                 sums[unsafe_offset=c*traversal_tpb+tid] = forest_add(sums[unsafe_offset=c*traversal_tpb+tid],sums[unsafe_offset=c*traversal_tpb+tid+step])
         barrier()
         step //= 2
     if lane == 0 and row < rows:
-        @__parameter
-        for c in range(OUTPUT_CAPACITY):
+        comptime for c in range(OUTPUT_CAPACITY):
             if c < outputs:
                 output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*traversal_tpb+tid]),Float32(trees))))
 
@@ -515,29 +508,24 @@ def forest_vector_grove32_row_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKE
             var tree = lane
             while tree < trees:
                 var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
-                @__parameter
-                for c in range(OUTPUT_CAPACITY):
+                comptime for c in range(OUTPUT_CAPACITY):
                     if c < outputs:
                         totals[c] = forest_add(totals[c],leaves.unsafe_load(node*outputs+c))
                 tree += 32
-            @__parameter
-            for c in range(OUTPUT_CAPACITY):
+            comptime for c in range(OUTPUT_CAPACITY):
                 sums[unsafe_offset=c*32+lane] = totals[c]
         comptime if FOREST_ROW_THREADS_SABOTAGE:
             for lane in range(1, 32):
-                @__parameter
-                for c in range(OUTPUT_CAPACITY):
+                comptime for c in range(OUTPUT_CAPACITY):
                     sums[unsafe_offset=c*32] = forest_add(sums[unsafe_offset=c*32],sums[unsafe_offset=c*32+lane])
         else:
             var step = 16
             while step > 0:
                 for lane in range(step):
-                    @__parameter
-                    for c in range(OUTPUT_CAPACITY):
+                    comptime for c in range(OUTPUT_CAPACITY):
                         sums[unsafe_offset=c*32+lane] = forest_add(sums[unsafe_offset=c*32+lane],sums[unsafe_offset=c*32+lane+step])
                 step //= 2
-        @__parameter
-        for c in range(OUTPUT_CAPACITY):
+        comptime for c in range(OUTPUT_CAPACITY):
             if c < outputs:
                 output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*32]),Float32(trees))))
 

@@ -170,8 +170,7 @@ def binarize_float_feature_kernel(
         fill=Float32(0.0)
     )
 
-    @__parameter
-    for j in range(BINARIZE_DOCS_PER_THREAD):
+    comptime for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
             feature_values[j] = values.unsafe_load(idx)
@@ -179,14 +178,12 @@ def binarize_float_feature_kernel(
     for border in range(borders_count):
         var border_value = shared_borders[border]
 
-        @__parameter
-        for j in range(BINARIZE_DOCS_PER_THREAD):
+        comptime for j in range(BINARIZE_DOCS_PER_THREAD):
             # bit-pattern compare, not the float `>`: see `exact_f32_gt`
             if exact_f32_gt(feature_values[j], border_value):
                 index[j] += 1
 
-    @__parameter
-    for j in range(BINARIZE_DOCS_PER_THREAD):
+    comptime for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
             var bin = dst.unsafe_load(base + idx)
@@ -299,8 +296,7 @@ def pack_cindex_words_kernel(
         var vals = Array[Float32, PACK_DOCS](fill=Float32(0.0))
         var bins = Array[UInt32, PACK_DOCS](fill=0)
 
-        @__parameter
-        for j in range(PACK_DOCS):
+        comptime for j in range(PACK_DOCS):
             var idx = i + j * PACK_BLOCK
             if idx < n:
                 var v = x_cols.unsafe_load(col * n + idx)
@@ -310,19 +306,16 @@ def pack_cindex_words_kernel(
         for b in range(cnt):
             var bv = sh_vals[off + b]
 
-            @__parameter
-            for j in range(PACK_DOCS):
+            comptime for j in range(PACK_DOCS):
                 # bit-pattern compare, as `binarize_float_feature_kernel`
                 # (`exact_f32_gt`: Metal flushes subnormal compare operands)
                 if exact_f32_gt(vals[j], bv):
                     bins[j] += 1
 
-        @__parameter
-        for j in range(PACK_DOCS):
+        comptime for j in range(PACK_DOCS):
             word[j] |= (bins[j] & mask) << shift
 
-    @__parameter
-    for j in range(PACK_DOCS):
+    comptime for j in range(PACK_DOCS):
         var idx = i + j * PACK_BLOCK
         if idx < n:
             cindex.unsafe_store(w * n + idx, word[j])
@@ -360,8 +353,7 @@ def transpose_rows_to_columns_kernel(
     while rt < n_row_tiles:
         var r0 = rt * TR_TILE
 
-        @__parameter
-        for k in range(TR_TILE // TR_ROWS_PER_PASS):
+        comptime for k in range(TR_TILE // TR_ROWS_PER_PASS):
             var lr = ty + k * TR_ROWS_PER_PASS
             var r = r0 + lr
             var c = c0 + tx
@@ -369,8 +361,7 @@ def transpose_rows_to_columns_kernel(
                 tile[lr * (TR_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
         barrier()
 
-        @__parameter
-        for k in range(TR_TILE // TR_ROWS_PER_PASS):
+        comptime for k in range(TR_TILE // TR_ROWS_PER_PASS):
             var lc = ty + k * TR_ROWS_PER_PASS
             var c = c0 + lc
             var r = r0 + tx

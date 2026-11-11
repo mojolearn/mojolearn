@@ -614,8 +614,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # below), so apply it through the ORIGINAL kernel, then drain so
         # the `h_shift` rewrite below cannot race the in-flight DMA of
         # the deferred copy.
-        @__parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False
@@ -639,8 +638,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # kernel exactly as before.
         var defer_shift = False
 
-        @__parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             defer_shift = (
                 self.cursor_dim == 1 and self.single_bin_dim == 1
                 and not self.query.__bool__()
@@ -1417,8 +1415,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # the walker), so a deferred shift would never be applied. Flush
         # it through the original kernel so the cursor holds exactly what
         # the split schedule leaves.
-        @__parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False
