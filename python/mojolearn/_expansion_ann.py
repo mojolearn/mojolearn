@@ -16,7 +16,6 @@ first imported, after the package, so both may rely on every module existing:
 """
 from . import _native_archive_bridge, _native_family_bridge
 from ._native_robust_bridge import native_method as _native_ann_method
-from ._buffer import addr, addr_ro, empty
 from ._mode import NumericModeMixin
 
 # The compiled saved-model owner, connected once at import: `save` of
@@ -57,49 +56,11 @@ class _AnnResident:
 
     _KIND = None
 
-    def _resident_arrays(self):
-        """(addresses in the prepare order, params) of the fitted index."""
-        raise NotImplementedError
-
-    def _resident_handle(self, native):
-        try:
-            prepare = native.x_ann_index_prepare
-        except (ImportError, AttributeError):
-            return None
-        key = self._resident_key(native)
-        cached = self.__dict__.get("_resident")
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        # an array still held only on the device comes to numpy first, then
-        # the handle is replaced by a prepared one (lane fg-ivf A7)
-        self._materialize_device_arrays()
-        self._release_resident()
-        addrs, params = self._resident_arrays()
-        handle = int(prepare(self._KIND, addrs, params))
-        self._resident = (key, handle, native)
-        return handle
-
-    def _resident_key(self, native):
-        """The arrays a handle was made from, by identity, address and shape;
-        an array a resident fit left on the device (lane fg-ivf A7) is the
-        marker ("device",). Reads the dict, so no export happens."""
-        d = self.__dict__
-        arrays = tuple(d.get(a) for a, _dtype in self._SAVE_ARRAYS)  # glue: saved array attributes by name
-        return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
-                      for a, (name, _dtype) in zip(arrays, self._SAVE_ARRAYS)), id(native))  # glue: saved array attributes by name
-
-    def _materialize_device_arrays(self):
-        """Arrays held only on the device come to numpy (none by default)."""
-        return None
-
-    def _release_resident(self):
-        cached = self.__dict__.pop("_resident", None)
-        if cached is None:
-            return
-        try:
-            cached[2].x_ann_index_release(cached[1])
-        except Exception:  # noqa: BLE001
-            pass
+    # The resident handle (`_resident_handle`, `_resident_key`,
+    # `_resident_arrays`, `_materialize_device_arrays`, `_release_resident`)
+    # is native: bindings/neighbors_ann_native.mojo and
+    # bindings/neighbors_ann_query_native.mojo (lane pyout-small-families
+    # deleted the uncalled Python copies).
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected at the end of this module
@@ -286,36 +247,10 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def _p(self, name):
         return _ann_int(self._NAME, name, getattr(self, name))
 
-    def _resident_arrays(self):
-        n, dim, pq_dim = self.n_rows_, self.n_features_in_, self.pq_dim_
-        return ([addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-                 addr_ro(self.codebooks_.reshape((pq_dim * (1 << self.pq_bits_) * self.pq_len_,)), name="codebooks_"),
-                 addr_ro(self.codes_.reshape((n * pq_dim,)), name="codes_")],
-                [n, dim, self.n_lists_, pq_dim, self.pq_bits_])
-
     # `codes_` of a RESIDENT fit (lane fg-ivf A7) is made on first read by the
     # native attribute slot connected at import (bindings/neighbor_query_native.mojo
     # `neighbor_query_attribute_c`, `ann_pq_materialize`); there is no Python
     # `__getattr__`.
-
-    def _materialize_device_arrays(self):
-        """Write the resident fit's codes into a new numpy array
-        (`x_ann_index_export_codes`, one device copy in Mojo) and re-key the
-        held handle to it: the handle keeps serving searches, since the array
-        holds the words it holds."""
-        d = self.__dict__
-        if "_device_codes" not in d:
-            return
-        cached = d.get("_resident")
-        if cached is None:
-            raise RuntimeError("mojolearn IVFPQIndex: the resident index was released before its codes were read")
-        n, pq_dim = self.n_rows_, self.pq_dim_
-        codes = empty((n * pq_dim,), "<i4")
-        cached[2].x_ann_index_export_codes(cached[1], addr(codes, name="codes_"), n * pq_dim)
-        d["codes_"] = codes.reshape((n, pq_dim))
-        del d["_device_codes"]
-        d["_resident"] = (self._resident_key(cached[2]), cached[1], cached[2])
 
     def _is_built(self):
         d = self.__dict__
@@ -661,11 +596,6 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
             raise ValueError("mojolearn CagraIndex: random_state must be None or >= 0")
         return r % 2147483646 + 1
 
-    def _resident_arrays(self):
-        n, deg = self.n_rows_, self.graph_degree_
-        return ([addr_ro(self.dataset_, name="dataset_"), addr_ro(self.graph_.reshape((n * deg,)), name="graph_")],
-                [n, self.n_features_in_, deg])
-
     @_native_ann_method
     def fit(self, X, y=None):
         """Build the search graph from `X`.
@@ -824,14 +754,6 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def _p(self, name):
         return _ann_int("IVFSQIndex", name, getattr(self, name))
 
-    def _resident_arrays(self):
-        n, dim = self.n_rows_, self.n_features_in_
-        return ([addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-                 addr_ro(self.sq_vmin_, name="sq_vmin_"), addr_ro(self.sq_delta_, name="sq_delta_"),
-                 addr_ro(self.codes_.reshape((n * dim,)), name="codes_")],
-                [n, dim, self.n_lists_])
-
     @_native_ann_method
     def fit(self, X, y=None):
         """Build the index from `X`.
@@ -975,15 +897,6 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
 
     def _p(self, name):
         return _ann_int("IVFRaBitQIndex", name, getattr(self, name))
-
-    def _resident_arrays(self):
-        n, dim = self.n_rows_, self.n_features_in_
-        words = int(self.codes_.shape[1])
-        return ([addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-                 addr_ro(self.codes_.reshape((n * words,)), name="codes_"), addr_ro(self.norms_, name="norms_"),
-                 addr_ro(self.ip_factors_, name="ip_factors_")],
-                [n, dim, self.n_lists_, self.seed_])
 
     @_native_ann_method
     def fit(self, X, y=None):

@@ -7,6 +7,27 @@ from mojolearn._ivf_impl import _int_param
 from mojolearn._expansion_ann import _ann_int
 
 
+def _release_resident(self):
+    """The removed `_AnnResident._release_resident` (native twin:
+    bindings/neighbors_ann_native.mojo): drop the held handle, if any."""
+    cached = self.__dict__.pop("_resident", None)
+    if cached is None:
+        return
+    try:
+        cached[2].x_ann_index_release(cached[1])
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _resident_key(self, native):
+    """The removed `_AnnResident._resident_key` (native twin:
+    bindings/neighbors_ann_native.mojo `_ann_key_entry`)."""
+    d = self.__dict__
+    arrays = tuple(d.get(a) for a, _dtype in self._SAVE_ARRAYS)
+    return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
+                  for a, (name, _dtype) in zip(arrays, self._SAVE_ARRAYS)), id(native))
+
+
 def ivf_fit(self, X, y=None):
     self.__dict__.pop("_device_list_data", None)
     self._release_resident()
@@ -69,7 +90,7 @@ def ivf_fit(self, X, y=None):
 
 def pq_fit(self, X, y=None):
     self.__dict__.pop("_device_codes", None)
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
     n_lists, pq_dim, pq_bits = self._p("n_lists"), self._p("pq_dim"), self._p("pq_bits")
@@ -106,7 +127,7 @@ def pq_fit(self, X, y=None):
         self.n_features_in_, self.n_rows_, self.n_lists_ = dim, n, n_lists
         self.pq_dim_, self.pq_bits_, self.pq_len_ = pq_dim, pq_bits, pq_len
         self._device_codes = True
-        self._resident = (self._resident_key(native), handle, native)
+        self._resident = (_resident_key(self, native), handle, native)
         return self
     codes = empty((n * pq_dim,), "<i4")
     native.x_ann_ivf_pq_build(
@@ -128,7 +149,7 @@ def pq_fit(self, X, y=None):
 
 
 def sq_fit(self, X, y=None):
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
     n_lists = self._p("n_lists")
@@ -163,7 +184,7 @@ def sq_fit(self, X, y=None):
 
 
 def rabitq_fit(self, X, y=None):
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
     n_lists = self._p("n_lists")
@@ -196,7 +217,7 @@ def rabitq_fit(self, X, y=None):
 
 
 def cagra_fit(self, X, y=None):
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
     kdeg = min(self._p("intermediate_graph_degree"), n - 1)

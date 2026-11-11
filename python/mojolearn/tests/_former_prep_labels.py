@@ -14,7 +14,7 @@ from mojolearn.tests._array_reference import _native_reduce
 from mojolearn._buffer import as_f32_c, full
 from mojolearn import _labels
 from mojolearn._labels import flatten_labels, sorted_classes, label_kind
-from mojolearn._expansion_prep import (
+from mojolearn.tests._prep_prog_oracle import (
     _PrepBase, _Prog, _NONE, _CAT_R, _CAT_CH, _mode, _x2d, _codes, _fit_categories, _label_chunk,
     _LABEL_KIND, _LabelBuf, _label_buffer, _class_words, _prep_binding, _optional_prep_entry, _native_helper)
 

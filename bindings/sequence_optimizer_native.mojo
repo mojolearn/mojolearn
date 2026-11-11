@@ -556,8 +556,6 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         var entries = seq_binding(fields["numeric_mode"], context, py_get(fields, "_res_b") if py_get(fields, "_res_b") is not None else py_get(fields, "_dev_b"))
         if operation == "seq_binding":
             return seq_binding(fields["numeric_mode"], context, py_get(fields, "_dev_b"))["module"]
-        if operation == "seq_state_binding":
-            return entries["module"]
         var params = seq_list(fields["params"], context)
         var nh = len(params) if kind == 5 else 1
         var words = seq_addr(fields["_words"], 9, context, buffer_pins, True)
@@ -582,16 +580,11 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             return PythonObject(None)
         if operation == "seq_resident":
             return PythonObject(w[2] >= 0)
-        if operation == "seq_handle" or operation == "seq_handles":
+        if operation == "seq_handle":
             if w[2] < 0:
                 return PythonObject(None)
             var hp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=handles)
-            if operation == "seq_handle":
-                return PythonObject(Int(hp[0]))
-            var output = Python.list()
-            for i in range(nh):  # driver-loop: over returned resident handle words
-                _ = py_call(output.append, Int(hp[i]))
-            return output
+            return PythonObject(Int(hp[0]))
         if operation == "seq_state_set":
             opt_value(values[0], context)
             var proposed = py_call(b.dict, fields)
@@ -607,15 +600,8 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             if w[2] >= 0 and selected["module"] is not entries["module"]:
                 raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
             return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)
-        if operation == "seq_lr":
-            var schedule = py_get(fields, "lr_schedule")
-            if schedule is not None:
-                py_setitem(fields, "lr", schedule_operation("schedule_at", schedule, Python.tuple(Int(w[0]) + 1), context))
-            return fields["lr"]
-        if operation == "seq_state" or operation == "seq_slot" or operation == "seq_slots":
+        if operation == "seq_state" or operation == "seq_slot":
             var slots = seq_slots(fields, kind, context, buffer_pins, True)
-            if operation == "seq_slots":
-                return slots
             var slot_words = List[Int]()
             for i in range(len(slots)):  # driver-loop: over padded optimizer state slot addresses
                 slot_words.append(Int(py=slots[i]))
