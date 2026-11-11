@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "dependency": "7928f536d074c07f86596702bf8daf0770ce78af",
+  "status": "source reviewed only; uncompiled/unrun",
+  "fixtures": {
+    "cpu": 7,
+    "gpu": 8
+  },
+  "source_fixture": "python/mojolearn/tests/test_estimators_host_borrowed_buffers.py: original 2x3 input and 2x3 components",
+  "common_cases": [
+    {
+      "id": 0,
+      "case": "actual estimator mode/vendor/capability/Q-fix metadata"
+    },
+    {
+      "id": 1,
+      "case": "literal transform [[4,1],[1,0]], followed by component[0,0]=2 giving [[5,1],[0,0]]"
+    },
+    {
+      "id": 2,
+      "case": "literal inverse [[4,2,3],[1,0,1]] from [[4,1],[1,0]] and the same components"
+    },
+    {
+      "id": 3,
+      "case": "copied query uses rebound components without changing original native request"
+    },
+    {
+      "id": 4,
+      "case": "NaN input reports deferred finite status without mutating caller data"
+    },
+    {
+      "id": 5,
+      "case": "estimator provider refuses randomized decomposition-image route before touching fake addresses"
+    },
+    {
+      "id": 6,
+      "case": "CPU refuses resident lease operations; GPU opens real native lease, consumes transform/inverse then closes in finally"
+    }
+  ],
+  "gpu_extra": "negative resident lease is refused before buffer admission",
+  "oracle": "independently derived integer dot products, exact original values; no learned fit outputs or repeated output oracle",
+  "ownership": "sentinel output guards; source/components retained and checked after synchronous calls; resident lease released in finally",
+  "parallelism": "CPU independent fixtures and per-cell comparisons use host_parallelize; GPU graphs ordered over shared production context/store with existing device kernels parallel",
+  "python_split": {
+    "path": "python/mojolearn/tests/test_estimators_host_borrowed_buffers.py",
+    "moved": "first TSVD 2x3 pure numerical assertion",
+    "retained": "Python-loaded binding, borrowed NumPy output shape/dtype, caller-owned component mutation and PCA borrowed-buffer assertion",
+    "definitions_removed": 0
+  },
+  "remaining_coverage": "No TSVD numerical fit/TSQR/randomized/fold execution coverage in this query-only chunk; ABI fit route fields are covered by the contract suite. Pilot public native lease owner still in progress.",
+  "compile_flags": {
+    "all": "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "cpu_additional": "-D MOJOLEARN_COLUMN_CPU=1"
+  },
+  "kernel_changes": false,
+  "timing_or_identity_run": false
+}

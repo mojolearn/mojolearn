@@ -20,3 +20,25 @@ The concrete numerical migration candidate is the original 2x3 transform
 in test_estimators_host_borrowed_buffers.py; its in-place caller-storage
 mutation assertion remains a Python ownership seam.
 Evidence: ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/tsvd-python-review-index.json
+
+Query numerical migration: 7 CPU / 8 GPU cases (tsvd-native-execution.json)
+  Actual host/device providers execute the original literal 2x3 transform,
+  current component mutation, inverse, copied request/rebound buffer, finite
+  status, estimator/decomposition route refusal and resident capability.
+  GPU owns a real lease for transform plus inverse and closes in finally;
+  a separate negative lease test refuses before pointer access. Literal
+  expected integers are analytic dot products, not old fitted bits.
+  Source/fitted buffers remain named after pointer use; guard cells checked.
+  Independent CPU graphs/cell assertions parallel. GPU graphs ordered over
+  the shared production context/store, existing GPU kernels remain parallel.
+  Python loses its first pure TSVD numerical assertion; retains NumPy shape/
+  dtype, caller-owned component mutation and PCA borrowed-buffer seam.
+  No complete Python definition removed. No fit or numerical kernel changes.
+
+RUN OWED (run from repository root)
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_native_cpu.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_native_gpu.mojo
+  No lane compile/runtime/test/box or identity execution. Static source,
+  Python AST, TOML/JSON and whitespace checks only. Actual fit/randomized/
+  TSQR/fold numerical execution is not covered by this query-only chunk.
+  Public native lease owner remains pilot-owned and in progress.
