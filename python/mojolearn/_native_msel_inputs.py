@@ -8,10 +8,6 @@
 # door directly (lane calltable-msel).
 _HELPERS = ('bincount2_i32', 'bincount_i64', 'check_indices_i64', 'reduce_stat')
 
-#: The helper table's vendor words (core/msel_entry_table.mojo
-#: `msel_entry_vendor`), the mapping the binaries apply at publication.
-_MSEL_NATIVE_VENDORS = {'cpu': 0, 'metal': 1, 'cuda': 2, 'hip': 3}
-
 _SPLITTER_FIELDS = ('_default_test_size', '_folds', '_pairs', 'cv', 'cvargs', 'gap', 'max_train_size',
                     'n_groups', 'n_repeats', 'n_splits', 'p', 'random_state', 'shuffle', 'test_fold', 'test_size', 'train_size')
 
@@ -33,24 +29,17 @@ def connect(context, resident_context):
             entries[name] = entry
         except Exception as error:
             entries[name] = _refusal(error)
-    try:
-        # glue: once at import, the model-selection helper table key of the
-        # binary `_native` resolves; the doors call the table with it
-        mode = int(_native('mojolearn_numeric_mode')())  # import-time: the binary's compiled tier
-        vendor = _MSEL_NATIVE_VENDORS.get(str(_native('mojolearn_vendor')()), -1)  # import-time: its vendor
-        if mode not in (0, 1) or vendor < 0:
-            raise ImportError('mojolearn: the base binding publishes no model-selection helper table '
-                              f'(mode {mode!r}, vendor {vendor!r})')
-        entries['msel_native_key'] = (mode, vendor)
-    except Exception as error:
-        entries['msel_native_key'] = _refusal(error)
     # glue: once at import, the base helper table key the native doors read
-    # (lane calltable-base-helpers); a binary without one records the refusal
+    # (lane calltable-base-helpers); a binary without one records the refusal.
+    # The model-selection helper table is published by the same binary under
+    # the same (mode, vendor) key, so the msel doors read this one record
+    # (lane perf-audit-20261111 folded the second, identical computation).
     from ._buffer import base_native_key
     try:
         entries['base_native_key'] = base_native_key()
     except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
         entries['base_native_key'] = _refusal(error)
+    entries['msel_native_key'] = entries['base_native_key']
     context.update(label_context())
     from ._native_owner_lifetime import connect_owner_context
     connect_owner_context(context)

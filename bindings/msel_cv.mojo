@@ -14,14 +14,14 @@ from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_check_indices_i64
+from bindings.base_helpers_released import base_check_indices_i64
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.ffi import c_int, external_call
 from std.sys.compile import is_defined
 from bindings.cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
 from bindings.msel_helpers_key import msel_helpers_key
-from core.msel_helpers_calls import (
+from bindings.msel_helpers_released import (
     msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
     msel_store_free_bytes,
 )

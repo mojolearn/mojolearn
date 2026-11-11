@@ -21,7 +21,7 @@
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
 from bindings.labels_stat_boundary import labels_stat_pack
-from core.base_helpers_calls import base_reduce_stat, base_check_indices_i64, base_bincount_i64
+from bindings.base_helpers_released import base_reduce_stat, base_check_indices_i64, base_bincount_i64
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native import _resolved
 from bindings.native_instance_item import native_instance_item

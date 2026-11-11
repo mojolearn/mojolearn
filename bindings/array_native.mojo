@@ -18,7 +18,7 @@ from bindings.array_from_buffer_native import array_from_buffer
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
 from bindings.labels_stat_boundary import labels_stat_pack
-from core.base_helpers_calls import base_reduce_stat, base_equal_elements
+from bindings.base_helpers_released import base_reduce_stat, base_equal_elements
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module

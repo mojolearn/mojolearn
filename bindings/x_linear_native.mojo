@@ -38,7 +38,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_row_means_f64, base_reduce_stat_int
+from bindings.base_helpers_released import base_row_means_f64, base_reduce_stat_int
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy

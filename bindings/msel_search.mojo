@@ -39,7 +39,7 @@ from bindings.msel_common import (
 from bindings.msel_split import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_common import msel_signed32
 from bindings.msel_helpers_key import msel_helpers_key
-from core.msel_helpers_calls import msel_gather_i64
+from bindings.msel_helpers_released import msel_gather_i64
 # lane calltable-msel: the score-table passes both base bindings exported,
 # linked into this door instead of called through CPython.
 from core.array_helpers_impl import row_means_f64, row_stds_f64

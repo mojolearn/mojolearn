@@ -8,7 +8,7 @@
 # order are the ones the mixins called, so the score keeps its bits.
 from std.python import Python, PythonObject
 from bindings.base_helpers_key import base_helpers_key
-from core.base_helpers_calls import base_reduce_stat_int
+from bindings.base_helpers_released import base_reduce_stat_int
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.py_typed_call import py_call_typed
