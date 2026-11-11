@@ -24,7 +24,7 @@ Extending a table's layout requires a new V suffix, never a new loader.
 Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall, PRIMITIVE_ABI_NAME
 
 comptime SAMBA_TABLE_TRAINING = 0
@@ -157,3 +157,9 @@ def samba_table_entry[family: Int](key: SambaEntryKey) raises -> NativeDescripto
             comptime NAME = "MojolearnEntriesSambaTrainingFastHIPV1"
             return entry_table_read[NAME](key.mode, key.vendor, 0, schema, SAMBA_PRIMITIVE_OPERATIONS)
     raise Error("native samba entries: unsupported execution key")
+
+
+def samba_ref[family: Int](key: SambaEntryKey) raises -> EntryRef:
+    """The Samba primitive entry of `family`, resolved once (lane
+    entry-table-zero-alloc); the table refusals raise here."""
+    return EntryRef(samba_table_entry[family](key), entry_ref_word(key.mode, key.vendor, SAMBA_PRIMITIVE_OPERATIONS))

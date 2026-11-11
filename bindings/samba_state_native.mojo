@@ -16,9 +16,9 @@ from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv
 from std.python._cpython import GILReleased
-from core.native_descriptor_call import native_descriptor_call
+from core.entry_table import EntryRef, entry_ref_call
 from core.samba_entry_table import (
-    SambaEntryKey, samba_table_entry, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_OPTIMIZER_STEP,
+    SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_OPTIMIZER_STEP,
 )
 from core.device_plan import DevicePlan
 from training.optimizer_device_plan import optimizer_device_plan
@@ -47,15 +47,15 @@ def samba_entry_key(context: PythonObject, mode: PythonObject) raises -> SambaEn
     return SambaEntryKey(1 if String(selected) == "identical" else 0, word)
 
 
-def samba_primitive[family: Int](key: SambaEntryKey, op: Int, addresses: List[Int], ints: List[Int],
-                                 floats: List[Float64]) raises -> Int:
-    """One synchronous neural primitive call through the Samba table with the
-    GIL released, as the former Python entries ran it. The caller keeps every
-    addressed buffer alive past the call."""
-    var entry = samba_table_entry[family](key)
+def samba_primitive(entry: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
+                    floats: List[Float64]) raises -> Int:
+    """One synchronous neural primitive call through the Samba entry the
+    caller resolved once (`samba_ref`), with the GIL released, as the former
+    Python entries ran it. The caller keeps every addressed buffer alive past
+    the call."""
     var result = 0
     with GILReleased(Python()):
-        result = native_descriptor_call(entry, op, addresses, ints, floats)
+        result = entry_ref_call(entry, op, addresses, ints, floats)
     return result
 
 
@@ -537,7 +537,7 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
     var addresses: List[Int] = [Int(py=result["parameters"]._addr), Int(py=flat_gradient._addr),
         Int(py=result["exp_avg"]._addr), Int(py=result["exp_avg_sq"]._addr), Int(py=offsets._addr),
         Int(py=result["buf_initialized"]._addr), Int(py=info._addr)]
-    var written = samba_primitive[SAMBA_TABLE_TRAINING](samba_entry_key(context, state["numeric_mode"]),
+    var written = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, state["numeric_mode"])),
         SAMBA_PRIM_OPTIMIZER_STEP, addresses, ints, floats)
     _ = info  # keep the Python owner alive through the native call above
     _ = flat_gradient
