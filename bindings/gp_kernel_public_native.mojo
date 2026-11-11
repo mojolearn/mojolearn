@@ -11,7 +11,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_instance_item import native_instance_item
-from bindings.gp_mapping_boundary import gp_mapping_snapshot
+from bindings.gp_mapping_boundary import gp_mapping_snapshot, GPFieldUpdates
 from x_metrics.epilogue import portable_log_c
 
 
@@ -418,17 +418,16 @@ def _kernel_release(value: PythonObject, context: PythonObject, mut active: List
     _ = active.pop()
 
 
-def _kernel_publish(kernel: PythonObject, updates: PythonObject, context: PythonObject) raises:
+def _kernel_publish(kernel: PythonObject, updates: GPFieldUpdates, context: PythonObject) raises:
     _ = _kernel_class(kernel, context)
     var fields = _fields(kernel)
-    var names = gp_mapping_snapshot[False](updates)
     var active = List[PythonObject]()
-    for i in range(len(names.keys)):  # driver-loop: validate all replacement owners before mutating any field
-        var previous = _kernel_read(kernel, fields, names.keys[i], True)
-        if previous is not None and previous is not updates[names.keys[i]]:
+    for i in range(len(updates.keys)):  # driver-loop: validate all replacement owners before mutating any field
+        var previous = _kernel_read(kernel, fields, updates.keys[i], True)
+        if previous is not None and previous is not updates.values[i]:
             _kernel_release(previous, context, active)
-    for i in range(len(names.keys)):  # driver-loop: publish already-admitted state through the native dictionary
-        py_setitem(fields, names.keys[i], updates[names.keys[i]])
+    for i in range(len(updates.keys)):  # driver-loop: publish already-admitted state through the native dictionary
+        py_setitem(fields, updates.keys[i], updates.values[i])
 
 
 def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObject,
@@ -437,23 +436,23 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObjec
     var cls = _kernel_class(kernel, context)
     var layout = context["family_gp_kernel_nodes"][cls]
     var how = String(layout[0])
-    var updates = Python.dict()
+    var updates = GPFieldUpdates()
     if how == "leaf":
         var input = _kernel_input(args[0], context)
         if layout[3] is None:
             if len(input.shape) != 0 or len(input.values) != 1:
                 raise Error("TypeError: GP scalar kernel parameter must be a native scalar")
-            py_setitem(updates, layout[2], PythonObject(input.values[0]))
+            updates.put(layout[2], PythonObject(input.values[0]))
         else:
             if len(input.values) == 0:
                 raise Error("ValueError: GP kernel length_scale is an empty sequence")
-            py_setitem(updates, layout[3], _kernel_float_list(input.values))
+            updates.put(layout[3], _kernel_float_list(input.values))
             if layout[2] is not None:
                 var nu = _kernel_input(args[2], context)
                 if len(nu.shape) != 0 or len(nu.values) != 1:
                     raise Error("TypeError: Matern nu must be a native scalar")
-                py_setitem(updates, layout[2], PythonObject(nu.values[0]))
-        py_setitem(updates, context["family_gp_kernel_bounds"][cls], _kernel_bounds_input(args[1], len(input.values), context))
+                updates.put(layout[2], PythonObject(nu.values[0]))
+        updates.put(context["family_gp_kernel_bounds"][cls], _kernel_bounds_input(args[1], len(input.values), context))
     elif how == "pair":
         # Shared leaves retain one dictionary capture across both operands.
         var snapshot = GPKernelSnapshot()
@@ -464,10 +463,10 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObjec
         var sym = args[3]
         if py_type(op) is not py_type(PythonObject(0)) or (Int(py=op) != 4 and Int(py=op) != 5) or py_type(sym) is not py_type(PythonObject("")):
             raise Error("TypeError: native GP kernel composition requires sum/product metadata")
-        py_setitem(updates, "a", args[0])
-        py_setitem(updates, "b", args[1])
-        py_setitem(updates, "op", op)
-        py_setitem(updates, "sym", sym)
+        updates.put(PythonObject("a"), args[0])
+        updates.put(PythonObject("b"), args[1])
+        updates.put(PythonObject("op"), op)
+        updates.put(PythonObject("sym"), sym)
     elif how == "nodes":
         var nodes = args[0]
         _kernel_sequence(nodes)
@@ -484,7 +483,7 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObjec
                 raise Error("TypeError: saved GP kernel kinds and parameters must be scalars")
             var k = py_call(native_loaded_module("builtins").int, PythonObject(kind.values[0]))
             _ = py_call(saved.append, Python.tuple(k, PythonObject(parameter.values[0]), _kernel_float_list(scales.values)))
-        py_setitem(updates, layout[1], saved)
+        updates.put(layout[1], saved)
     else:
         raise Error("TypeError: this GP kernel constructor has no native public schema")
     _kernel_publish(kernel, updates, context)

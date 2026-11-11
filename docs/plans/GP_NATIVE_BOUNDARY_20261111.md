@@ -353,3 +353,11 @@ order. Snapshot mode captures only the requested keys or values, avoiding an
 unused reference vector. Constructor update dictionaries and saved public node
 storage are separate from this change; the latter remain observable boundary
 storage. This follow-up is source-reviewed only and follows the 13-role audit.
+
+Kernel constructor publication now uses `GPFieldUpdates`: a native hash index
+with owning key/value vectors. Repeated exact connected field names replace
+only the planned value and retain the original insertion position/name, as the
+former dictionary did. Publication reads the plan directly, removing the
+extra field-name snapshot. Every replaced owner is still admitted before the
+first mutation; the actual public numeric/list/kernel values remain PACK
+objects. No numerical algorithm, tensor copy or public kernel layout changed.
