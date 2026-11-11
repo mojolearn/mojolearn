@@ -53,10 +53,10 @@ def fh_groves_prepare(entry: EntryRef, addrs: List[Int], n_trees: Int, n_cols: I
 def fh_groves_predict(entry: EntryRef, handle: Int, x: Int, dst: Int, n_rows: Int, n_cols: Int,
                       num_outputs: Int, family: Int) raises -> Int:
     """The grove engine over `n_rows` ROW-major rows of x into dst. Returns rows."""
-    var addrs: List[Int] = [x, dst]
-    var ints: List[Int] = [handle, n_rows, n_cols, num_outputs, family]
-    var floats = List[Float64](length=len(ints), fill=0.0)
-    return fh_call(entry, FH_GROVES_PREDICT, addrs, ints, floats)
+    var addrs: Array[Int, 2] = [x, dst]
+    var ints: Array[Int, 5] = [handle, n_rows, n_cols, num_outputs, family]
+    var floats = Array[Float64, 5](fill=0.0)
+    return entry_ref_call(entry, FH_GROVES_PREDICT, addrs, ints, floats)
 
 
 def fh_gbdt_expand_ctr(entry: EntryRef, addrs: List[Int], params: List[Int]) raises -> Int:
@@ -78,7 +78,7 @@ def fh_gbdt_predict(entry: EntryRef, addrs: List[Int], params: List[Int], bias: 
 
 def fh_gbdt_sigmoid_pair(entry: EntryRef, raw: Int, dst: Int, n: Int) raises -> Int:
     """The two float64 Logloss probability columns of n raw approxes. Returns n."""
-    var addrs: List[Int] = [raw, dst]
-    var ints: List[Int] = [n]
-    var floats: List[Float64] = [0.0]
-    return fh_call(entry, FH_GBDT_SIGMOID_PAIR, addrs, ints, floats)
+    var addrs: Array[Int, 2] = [raw, dst]
+    var ints: Array[Int, 1] = [n]
+    var floats: Array[Float64, 1] = [0.0]
+    return entry_ref_call(entry, FH_GBDT_SIGMOID_PAIR, addrs, ints, floats)
