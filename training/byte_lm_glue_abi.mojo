@@ -24,7 +24,7 @@ Python session object of the stateless step (`byte_lm_session_create` and
 `byte_lm_native_session_handle_v1`) with a native call-scoped session.
 """
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_entry, BYTE_LM_TABLE_TRAINER
 
@@ -83,18 +83,36 @@ def byte_lm_trainer_entry(key: ByteLmEntryKey) raises -> NativeDescriptorCall:
     return byte_lm_table_entry[BYTE_LM_TABLE_TRAINER](key, 0, String(BYTE_LM_TRAINER_ABI), BYTE_LM_TRAINER_OPS)
 
 
-def byte_lm_trainer_call(key: ByteLmEntryKey, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
-    """Caller side: one trainer operation (the former provider execute)."""
-    return native_descriptor_call(byte_lm_trainer_entry(key), op, a, p, f)
+def byte_lm_trainer_ref(key: ByteLmEntryKey) raises -> EntryRef:
+    """Caller side: entry 0 resolved once (lane entry-table-zero-alloc); the
+    table refusals raise here."""
+    return EntryRef(byte_lm_trainer_entry(key), entry_ref_word(key.mode, key.vendor, BYTE_LM_TRAINER_OPS))
 
 
-def byte_lm_glue_call(key: ByteLmEntryKey, op: Int, a: List[Int], p: List[Int]) raises -> Int:
-    """Caller side: one glue operation of the image `key` names."""
-    var entry = byte_lm_table_entry[BYTE_LM_TABLE_TRAINER](key, 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT)
-    return native_descriptor_call(entry, op, a, p, List[Float64]())
+def byte_lm_glue_ref(key: ByteLmEntryKey) raises -> EntryRef:
+    """Caller side: entry 1, the glue dispatch of the image `key` names,
+    resolved once; the table refusals raise here."""
+    return EntryRef(byte_lm_table_entry[BYTE_LM_TABLE_TRAINER](key, 1, String(BYTE_LM_GLUE_ABI), BG_OP_COUNT),
+                    entry_ref_word(key.mode, key.vendor, BG_OP_COUNT))
 
 
-def byte_lm_glue_read_text(key: ByteLmEntryKey, op: Int, var p: List[Int]) raises -> Optional[String]:
+def byte_lm_trainer_call(trainer: EntryRef, op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+    """Caller side: one trainer operation (the former provider execute)
+    through the resolved entry: one indirect call."""
+    return entry_ref_call(trainer, op, a, p, f)
+
+
+def byte_lm_glue_call(glue: EntryRef, op: Int, a: List[Int], p: List[Int]) raises -> Int:
+    """Caller side: one glue operation through the resolved glue entry."""
+    var f: Array[Float64, 0] = []
+    var result = entry_ref_call(glue, op, Int(a.unsafe_ptr()), len(a), Int(p.unsafe_ptr()), len(p), 0, 0)
+    _ = a
+    _ = p
+    _ = f
+    return result
+
+
+def byte_lm_glue_read_text(glue: EntryRef, op: Int, var p: List[Int]) raises -> Optional[String]:
     """Caller side: a text answer, or None where the image has no such entry.
     `p` holds the operation's words after the capacity word."""
     var buffer = List[UInt8](length=BG_TEXT_CAPACITY + 1, fill=0)
@@ -102,7 +120,7 @@ def byte_lm_glue_read_text(key: ByteLmEntryKey, op: Int, var p: List[Int]) raise
     for i in range(len(p)):  # small-loop(at most twelve request words)
         words.append(p[i])
     var a: List[Int] = [Int(buffer.unsafe_ptr())]
-    var size = byte_lm_glue_call(key, op, a, words)
+    var size = byte_lm_glue_call(glue, op, a, words)
     if size == BG_ABSENT:
         return None
     if size < 0 or size > BG_TEXT_CAPACITY:
@@ -113,7 +131,7 @@ def byte_lm_glue_read_text(key: ByteLmEntryKey, op: Int, var p: List[Int]) raise
     return text^
 
 
-def byte_lm_glue_read_int(key: ByteLmEntryKey, op: Int, var p: List[Int]) raises -> Int:
+def byte_lm_glue_read_int(glue: EntryRef, op: Int, var p: List[Int]) raises -> Int:
     """Caller side: an integer answer (BG_ABSENT where the image has none);
     the text buffer is passed so a publisher reads one request shape."""
     var buffer = List[UInt8](length=BG_TEXT_CAPACITY + 1, fill=0)
@@ -121,19 +139,19 @@ def byte_lm_glue_read_int(key: ByteLmEntryKey, op: Int, var p: List[Int]) raises
     for i in range(len(p)):  # small-loop(at most twelve request words)
         words.append(p[i])
     var a: List[Int] = [Int(buffer.unsafe_ptr())]
-    var value = byte_lm_glue_call(key, op, a, words)
+    var value = byte_lm_glue_call(glue, op, a, words)
     _ = buffer^
     return value
 
 
-def byte_lm_session_new(key: ByteLmEntryKey) raises -> Int:
+def byte_lm_session_new(glue: EntryRef) raises -> Int:
     """Caller side: a call-scoped native session of the image `key` names."""
-    var session = byte_lm_glue_call(key, BG_SESSION_NEW, List[Int](), List[Int]())
+    var session = byte_lm_glue_call(glue, BG_SESSION_NEW, List[Int](), List[Int]())
     if session == 0:
         raise Error("byte LM glue: session creation returned a null handle")
     return session
 
 
-def byte_lm_session_free(key: ByteLmEntryKey, session: Int) raises:
+def byte_lm_session_free(glue: EntryRef, session: Int) raises:
     var a: List[Int] = [session]
-    _ = byte_lm_glue_call(key, BG_SESSION_FREE, a, List[Int]())
+    _ = byte_lm_glue_call(glue, BG_SESSION_FREE, a, List[Int]())
