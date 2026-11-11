@@ -3,7 +3,6 @@
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
 from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
-from ._buffer import all_finite, as_f32_c
 from ._mode import NumericModeMixin, available_if
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
@@ -26,26 +25,6 @@ _DBSCAN_UNSTORED = (
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-
-def _check_queries(X, n_features, where):
-    """The query checks `DBSCAN.predict` and
-    `AgglomerativeClustering.predict` share: float32 C order, the fitted
-    feature count, at least one row, and every value finite (a NaN query
-    has no distance order to take a nearest row from)."""
-    q, _ = as_f32_c(X, ndim=2, name="X")
-    if q.shape[1] != n_features:
-        raise ValueError(
-            f"mojolearn {where}: X has {q.shape[1]} features, the fit saw {n_features}"
-        )
-    if q.shape[0] < 1:
-        raise ValueError(f"mojolearn {where}: X has no rows; refused by name")
-    if not all_finite(q):
-        raise ValueError(
-            f"mojolearn {where}: X contains a NaN or an infinity; a non-finite "
-            "query has no distance order to take a nearest row from, so it is "
-            "refused by name"
-        )
-    return q
 
 EPS_NN_BRUTE_FORCE = 0
 EPS_NN_RBC = 1
