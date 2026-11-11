@@ -389,17 +389,29 @@ def _text_length(at: Int, kind: Int, width: Int) -> Int:
 
 def text_rows(layout: BufferLayout, kind: Int) raises -> TextRows:
     """Every element of a 'U' or 'S' buffer as one contiguous run of code
-    units (`TextRows`). Two native passes split across the host pool in
+    units (`TextRows`); see `text_rows_into`."""
+    var points = List[UInt32]()
+    var starts = List[Int]()
+    var lengths = List[Int]()
+    var n = text_rows_into(layout, kind, points, starts, lengths)
+    return TextRows(points^, starts^, lengths^, n)
+
+
+def text_rows_into(layout: BufferLayout, kind: Int, mut points: List[UInt32], mut starts: List[Int],
+                   mut lengths: List[Int]) raises -> Int:
+    """`text_rows` into the caller's three lists (replaced), returning the
+    element count. Two native passes split across the host pool in
     `BOUNDARY_COPY_CHUNK` runs (the lengths, then the copies), one prefix
     sum between them; no Python object per element."""
     if kind != BOUNDARY_KIND_UCS4 and kind != BOUNDARY_KIND_BYTES:
         raise Error("TypeError: a fixed-width text buffer is required")
     var width = layout.itemsize // 4 if kind == BOUNDARY_KIND_UCS4 else layout.itemsize
     var n = layout.count
-    var lengths = List[Int](length=n, fill=0)
-    var starts = List[Int](length=n, fill=0)
+    lengths = List[Int](length=n, fill=0)
+    starts = List[Int](length=n, fill=0)
     if n == 0:
-        return TextRows(List[UInt32](), starts^, lengths^, 0)
+        points = List[UInt32]()
+        return 0
     var units = (n + BOUNDARY_COPY_CHUNK - 1) // BOUNDARY_COPY_CHUNK
     var lp = UnsafePointer(to=layout)
     var lengths_address = Int(lengths.unsafe_ptr())
@@ -413,7 +425,7 @@ def text_rows(layout: BufferLayout, kind: Int) raises -> TextRows:
     for i in range(n):  # driver-loop: prefix sum of the element lengths (native, no Python)
         starts[i] = total
         total += lengths[i]
-    var points = List[UInt32](length=total, fill=0)
+    points = List[UInt32](length=total, fill=0)
     var points_address = Int(points.unsafe_ptr())
     var starts_address = Int(starts.unsafe_ptr())
     def fill_points(unit: Int) {imm lp, imm kind, imm n, imm lengths_address, imm starts_address, imm points_address}:
@@ -434,7 +446,4 @@ def text_rows(layout: BufferLayout, kind: Int) raises -> TextRows:
                     dst[first + k] = UInt32(narrow[k])
     host_parallelize(fill_points, units)
     _ = layout  # the layout's shape/stride lists are read by every task above
-    _ = lengths  # written and read by the tasks above through their addresses
-    _ = starts
-    _ = points
-    return TextRows(points^, starts^, lengths^, n)
+    return n
