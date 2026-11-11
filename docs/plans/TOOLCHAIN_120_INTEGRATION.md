@@ -36,8 +36,11 @@ passes, three expected failures and one failure; the repaired dependency case
 then passed its focused rerun. These are controller tests, not native runtime
 qualification.
 
-The consolidated Mojo 1.2 build, selected native fixture execution and separate
-image call-table proof remain pending in this source checkpoint. The existing
+The first consolidated Mojo 1.2 build completed with all 25 units failing on
+shared API compatibility diagnostics. The next source checkpoint repairs vendor
+queries, string construction, compile-time control syntax, sorting and two
+native sizing/ownership declarations. No unit has yet passed on 1.2. Selected
+native fixture execution and the separate image call-table proof remain pending. The existing
 development builder selects all 25 binding units with zero old-toolchain reuse.
 Linux/NVIDIA/AMD compilation and measurements remain separate, uncompleted work.
 No speed claim follows from removing Python or upgrading the compiler.
@@ -49,9 +52,10 @@ records its exact frozen source and merge outcome in
 
 ## Work still owed
 
-The Python boundary migration is incomplete: the audited source before the
-OneClassSVM addition contains 326 distinct migrated state roles, of which 278
-are on the earlier main. These are reviewed roles, not object allocation counts
+The Python boundary migration is incomplete: the audited source contains 332
+distinct migrated state roles, of which 278 are on the earlier main. OneClassSVM
+contributes six new aggregate roles; its seventh family role reuses already
+counted transport. These are reviewed roles, not object allocation counts
 or a percentage of the whole library. Required public Python exporter pins are
 not claimed as removed.
 
