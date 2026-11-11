@@ -796,6 +796,10 @@ def op_pcs_resident(
     one sketch per (row, degree), then per degree p >= 1 one thread per
     output cell folding the convolution in the same ascending order, the
     running product ping-ponging on the device."""
+    # An empty query has no output work. In particular, the row convolution
+    # cannot enqueue a zero-sized grid. Descriptor admission still runs first.
+    if n == 0:
+        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d_in, True)
     var d_hi = _buf_i(ctx, hidx, degree * nf, True)
