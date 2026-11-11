@@ -18,6 +18,12 @@ comptime _F64 = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I64 = Pointer[Int64, ImmUntrackedOrigin]
 
 
+def nc_scratch_address(values: List[Float32]) -> Int:
+    # Private Array scratch exposed address zero for an empty buffer. Keep
+    # that descriptor contract independent of Mojo's empty List pointer.
+    return Int(values.unsafe_ptr()) if len(values) else 0
+
+
 def nc_close(a: Float64, b: Float64) -> Bool:
     if a == b:
         return True
@@ -181,13 +187,13 @@ struct NcFitPlan(Movable):
         var f: InlineArray[Float64, 0] = []
         if self.euclidean:
             if self.split:
-                var a: InlineArray[Int, 3] = [x, labels, Int(self.centroids.unsafe_ptr())]
+                var a: InlineArray[Int, 3] = [x, labels, nc_scratch_address(self.centroids)]
                 var p: InlineArray[Int, 3] = [self.rows, self.features, self.classes]
                 _ = driver.run("group_mean", a, p, f)
         else:
             var offsets = nc_class_offsets(Int(self.wide_counts.unsafe_ptr()), self.classes)
             var steps = nc_power_steps(self.rows)
-            var a: InlineArray[Int, 4] = [x, labels, Int(offsets.unsafe_ptr()), Int(self.centroids.unsafe_ptr())]
+            var a: InlineArray[Int, 4] = [x, labels, Int(offsets.unsafe_ptr()), nc_scratch_address(self.centroids)]
             var p: InlineArray[Int, 5] = [self.rows, self.features, self.classes, steps[0], steps[1]]
             _ = driver.run("nc_median", a, p, f)
             _ = offsets^
@@ -195,10 +201,10 @@ struct NcFitPlan(Movable):
         var p: InlineArray[Int, 4] = [self.rows, self.features, self.classes, Int(status.unsafe_ptr())]
         if self.euclidean and not self.split:
             var a: InlineArray[Int, 6] = [x, labels, Int(self.counts.unsafe_ptr()),
-                Int(self.centroids.unsafe_ptr()), stats, Int(self.dataset_centroid.unsafe_ptr())]
+                nc_scratch_address(self.centroids), stats, nc_scratch_address(self.dataset_centroid)]
             _ = driver.run("nc_stats", a, p, f)
         else:
-            var a: InlineArray[Int, 4] = [x, labels, Int(self.centroids.unsafe_ptr()), stats]
+            var a: InlineArray[Int, 4] = [x, labels, nc_scratch_address(self.centroids), stats]
             _ = driver.run("nc_std", a, p, f)
         return Int(status[0])
 
@@ -222,8 +228,8 @@ struct NcFitPlan(Movable):
     def shrink(mut self, driver: NcDriver, x: Int, stats: Int, dst: Int, deviations: Int,
                median: Float64, threshold: Float64) raises:
         var fused = self.euclidean and not self.split
-        var a: InlineArray[Int, 6] = [Int(self.dataset_centroid.unsafe_ptr()) if fused else x,
-            Int(self.centroids.unsafe_ptr()), Int(self.counts.unsafe_ptr()), stats, dst, deviations]
+        var a: InlineArray[Int, 6] = [nc_scratch_address(self.dataset_centroid) if fused else x,
+            nc_scratch_address(self.centroids), Int(self.counts.unsafe_ptr()), stats, dst, deviations]
         var p: InlineArray[Int, 4] = [self.rows, self.features, self.classes, 1 if threshold != 0 else 0]
         var f: InlineArray[Float64, 2] = [median, threshold]
         _ = driver.run("nc_shrink_d" if fused else "nc_shrink", a, p, f)
@@ -261,10 +267,10 @@ struct NcQueryPlan(Copyable, Movable):
         var distances = List[Float32](length=self.rows * self.classes, fill=0)
         var selected = List[Float32](length=self.rows, fill=0)
         var f: InlineArray[Float64, 0] = []
-        var a: InlineArray[Int, 3] = [self.query, self.centroids, Int(distances.unsafe_ptr())]
+        var a: InlineArray[Int, 3] = [self.query, self.centroids, nc_scratch_address(distances)]
         var p: InlineArray[Int, 3] = [self.rows, self.classes, self.features]
         _ = driver.run("sqdist" if euclidean else "l1dist", a, p, f)
-        var aa: InlineArray[Int, 3] = [Int(distances.unsafe_ptr()), Int(selected.unsafe_ptr()), dst]
+        var aa: InlineArray[Int, 3] = [nc_scratch_address(distances), nc_scratch_address(selected), dst]
         var pp: InlineArray[Int, 4] = [self.rows, self.classes, 1, 0]
         _ = driver.run("knn_select", aa, pp, f)
         _ = selected^
@@ -272,9 +278,9 @@ struct NcQueryPlan(Copyable, Movable):
 
     def score_labels(self, driver: NcDriver, dst: Int) raises:
         var scores = List[Float32](length=self.rows * self.classes, fill=0)
-        self.decision(driver, Int(scores.unsafe_ptr()))
+        self.decision(driver, nc_scratch_address(scores))
         if self.rows:
-            var a: InlineArray[Int, 2] = [Int(scores.unsafe_ptr()), dst]
+            var a: InlineArray[Int, 2] = [nc_scratch_address(scores), dst]
             var p: InlineArray[Int, 2] = [self.rows, self.classes]
             var f: InlineArray[Float64, 0] = []
             _ = driver.run("row_argmax", a, p, f)
@@ -282,8 +288,8 @@ struct NcQueryPlan(Copyable, Movable):
 
     def probabilities(self, driver: NcDriver, dst: Int, mode: Int) raises:
         var scores = List[Float32](length=self.rows * self.classes, fill=0)
-        self.decision(driver, Int(scores.unsafe_ptr()))
-        var a: InlineArray[Int, 2] = [Int(scores.unsafe_ptr()), dst]
+        self.decision(driver, nc_scratch_address(scores))
+        var a: InlineArray[Int, 2] = [nc_scratch_address(scores), dst]
         var p: InlineArray[Int, 2] = [self.rows, self.classes]
         var f: InlineArray[Float64, 0] = []
         _ = driver.run("log_softmax" if mode == 1 else ("softmax64" if mode == 2 else "softmax"), a, p, f)

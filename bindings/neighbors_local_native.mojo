@@ -48,7 +48,7 @@ from bindings.classical_labels import (
 from bindings.labels_descriptor_boundary import labels_class_ratio_f64
 from bindings.nearest_centroid_provider import NcConnection
 from core.nearest_centroid_plan import (
-    NcFitPlan, NcQueryPlan, nc_uniform, nc_normalize_priors, nc_narrow_priors, nc_binary_decision,
+    NcFitPlan, NcQueryPlan, nc_uniform, nc_normalize_priors, nc_narrow_priors, nc_binary_decision, nc_scratch_address,
 )
 from core.admitted_weights import admitted_fill
 from bindings.admitted_input import admitted_array, admitted_vector, admitted_storage_native, admit_c_view, admitted_dtype
@@ -701,7 +701,7 @@ def _nc_decision_inputs(fields: PythonObject, source: PythonObject, context: Pyt
     var count = _size(given)
     var prior = List[Float32](length=count, fill=0)
     var source_address = Int(py=classical_address(given))
-    var prior_address = Int(prior.unsafe_ptr())
+    var prior_address = nc_scratch_address(prior)
     with GILReleased(Python()):
         nc_narrow_priors(source_address, prior_address, count)
     _ = given
@@ -768,12 +768,12 @@ def _nc_decision(model: PythonObject, args: PythonObject, context: PythonObject)
     if C == 2:
         var scores = List[Float32](length=n * C, fill=0)
         with GILReleased(Python()):
-            inputs.request.decision(connection.driver, Int(scores.unsafe_ptr()), Int(status.unsafe_ptr()))
+            inputs.request.decision(connection.driver, nc_scratch_address(scores), Int(status.unsafe_ptr()))
         admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
         output = admitted_storage_native([n], "<f4", context, as_array=True)
         var dst = Int(py=classical_address(output))
         with GILReleased(Python()):
-            nc_binary_decision(connection.driver, Int(scores.unsafe_ptr()), dst, n)
+            nc_binary_decision(connection.driver, nc_scratch_address(scores), dst, n)
         _ = scores^
     else:
         output = admitted_storage_native([n, C], "<f4", context, as_array=True)
