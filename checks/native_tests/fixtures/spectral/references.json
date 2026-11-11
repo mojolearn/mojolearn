@@ -1,0 +1,902 @@
+{
+  "status": "independent reference/input preparation only",
+  "workers": 10,
+  "independent_fixtures": 17,
+  "numpy": "2.5.2",
+  "python": "3.13.15 | packaged by conda-forge | (main, Aug 10 2026, 13:01:04) [Clang 19.1.7 ]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "sources": {
+    "python/mojolearn/tests/test_native_dense_coo.py": {
+      "sha256": "4c0da1bc543dcb41d5acaddee7710d43eb7cbdb068582c204d56af2849d59e77",
+      "functions": {
+        "_dense_oracle": {
+          "line": 21,
+          "ast_sha256": "f0d019b34d79a53642a909731c133ebdac5dd4834f587c657fc058980dcdfb95"
+        },
+        "_knn_oracle": {
+          "line": 34,
+          "ast_sha256": "1e0c0bf77f939bc773c82d242d5d8b69f37abb428bbd8917c2584be7da78db7d"
+        },
+        "_matrix": {
+          "line": 62,
+          "ast_sha256": "29ed53ce8a5d86f8640309ec42f320cad0dc1412e497ada74e82e083f4d30e92"
+        },
+        "test_dense_coo_matches_the_python_scan": {
+          "line": 70,
+          "ast_sha256": "f34213c2165d6685347eb0c6b4140adc217a89802952076504f3828a22d8b317"
+        },
+        "test_dense_knn_affinity_matches_the_python_loops": {
+          "line": 80,
+          "ast_sha256": "a0895dbcfab62fb133c07b1f3821c6b60a9d13db594ce7708c7bda4fdf4847bd"
+        },
+        "test_refusals": {
+          "line": 94,
+          "ast_sha256": "c6787b89ffc9ad3cf65a2d1f228b96d301068c10fc6b7be92d7155d2a84f7ec8"
+        }
+      }
+    },
+    "python/mojolearn/tests/test_spectral_embedding.py": {
+      "sha256": "0a0b0b4f2b8029d69343ed041602c47b1aca458ea3948c886034902c93119c71",
+      "functions": {
+        "_blobs": {
+          "line": 14,
+          "ast_sha256": "662b4ee4c62bf3610f1391712dd81f0d0a6eb1cdea9d56c3c2aa87275e631632"
+        },
+        "_affinity": {
+          "line": 21,
+          "ast_sha256": "31a9cc238106781b1ea84e991d960298174f66201c27b40d102c1c7518a05fcf"
+        },
+        "_bytes": {
+          "line": 26,
+          "ast_sha256": "9c0edf2e709df638b56fdd3d6a2433b1895530f0f37588271b2a34558fe8c8bc"
+        },
+        "test_unsupported_options_are_refused_by_name": {
+          "line": 44,
+          "ast_sha256": "efcc38edee15c5a74cfa32ebe5f7b728f0f51b81c92e52b2af1871a5c1d2c0fd"
+        },
+        "test_public_names": {
+          "line": 50,
+          "ast_sha256": "e7ea24b571c18fefaf9d9d7cbdcdced45ae56ebba8e86f0b88c17406569d3421"
+        },
+        "test_fit_transform_shape_and_repeatability": {
+          "line": 56,
+          "ast_sha256": "58793d1dcc32a0d967441197fa9ecf04690da2c6614187d726645cc5c9e93bdd"
+        },
+        "test_too_many_components_is_refused": {
+          "line": 68,
+          "ast_sha256": "1c24ea14a6cd1385933ac332415fde942dfcf3557e3d9c145ee7100145b1d466"
+        },
+        "test_embedding_is_the_clustering_embedding_without_its_trivial_column": {
+          "line": 73,
+          "ast_sha256": "cd384b6ce7e3cdeb140b19974cf2c66c083d0f40c103057d0014c875e56c94f8"
+        },
+        "test_precomputed_drops_the_diagonal": {
+          "line": 83,
+          "ast_sha256": "200f7e1710377043d901836ea033abe2faab678f039ec1c18ea28bafcc5a278e"
+        },
+        "test_unnormalized_laplacian_is_a_different_embedding": {
+          "line": 94,
+          "ast_sha256": "2c5cc21d1f88dcf1a0cba425dea7fbc982f1d6546d4ff3eab44ccce31f6a4276"
+        },
+        "test_eigen_tol_float_is_the_lanczos_tolerance": {
+          "line": 103,
+          "ast_sha256": "d4c8b652c6b22b61ac0f5dd50c4aa5433cee6bc83520cacfb6e5fc8ce29f71ce"
+        }
+      }
+    },
+    "python/mojolearn/tests/test_spectral_predict.py": {
+      "sha256": "6fea5b8c28f4cd224ba42f57d6e49b1e11426639d438079c5d3e8a4efa0c995e",
+      "functions": {
+        "_identical": {
+          "line": 35,
+          "ast_sha256": "34166a4eaa27594323c46562a484e5c09b8ae51a23494c89f1cf17b7f21d5ecf"
+        },
+        "_blobs": {
+          "line": 41,
+          "ast_sha256": "64c2a6fd8a387f9997479d99744161b9205f07cbe63f7bbb48e09ea4909b7000"
+        },
+        "_affinity": {
+          "line": 50,
+          "ast_sha256": "0a2338397f25c94a26ec5d5107f83e08e452b62af4bd11106ae74fa190a10f79"
+        },
+        "arm_nearest_neighbors": {
+          "line": 59,
+          "ast_sha256": "36461bfa089c7a33efed92d3e7b69cc984111e7b5616553df95d031607399582"
+        },
+        "arm_precomputed": {
+          "line": 143,
+          "ast_sha256": "1955bf8ace195c8edc4c86a55cfa4cb712d8346a19a0e1a7f547186dab91e7a4"
+        },
+        "arm_host": {
+          "line": 176,
+          "ast_sha256": "2d43b669328f3d6411331edf639f7f835c5203d7bef94fb0f9ed672c3e2112df"
+        },
+        "main": {
+          "line": 197,
+          "ast_sha256": "732b5ddba452e1319eb7f8b875a5b8f6900e8dad460d2fc4cb6d7e61f2f891c9"
+        }
+      }
+    },
+    "python/mojolearn/tests/test_cluster_resident_native.py": {
+      "sha256": "2dd934214c1ccf1aaa222c4257fde6956f5ec25eaa8e44e91565398a16374726",
+      "functions": {
+        "_gpu_binding": {
+          "line": 22,
+          "ast_sha256": "cd9b82f3d70dca25d0b5348b33b965054a998be535390f381598a2a1a4ef7dba"
+        },
+        "_blobs": {
+          "line": 30,
+          "ast_sha256": "ce6797a7f8597c86236d64bfd11b5951de6d57e087a213905f0c47dc3fb02dde"
+        },
+        "_bytes": {
+          "line": 36,
+          "ast_sha256": "7a506363d99db661fdc8c184ee13acf4660bf76f0851d2b0bdd116db6e05a66e"
+        },
+        "x_cluster": {
+          "line": 41,
+          "ast_sha256": "8be385175f056cf73129998c456de9062fb98c4898306eedcb80c3c3018a27d5"
+        },
+        "test_x_cluster_centers_resident": {
+          "line": 53,
+          "ast_sha256": "8b3ee16b99ccf9f6080c11681c847916be13ddcafef4af8c202a58f9d6c279ff"
+        },
+        "metrics": {
+          "line": 96,
+          "ast_sha256": "edd388cefca2588a598cd7c43ae39dde3d784adc0ecdd59b45bc3fbdf2f066ed"
+        },
+        "test_spectral_predict_resident": {
+          "line": 104,
+          "ast_sha256": "29e08d146288325d8fcf661ef6028c6d9bed3762610e009284b3fc253d447d05"
+        },
+        "test_sequence_resident_doors": {
+          "line": 123,
+          "ast_sha256": "88795d1f45990107e6fc1a5b4c4651140168c16fd1b6aa77a75a48e96918dbbe"
+        }
+      }
+    },
+    "python/mojolearn/tests/test_x_cluster_twice.py": {
+      "sha256": "929a820fb4b8b38d6e09178e51208ef82fc93ac8e43b443f5c18a8e49fcc3b68",
+      "functions": {
+        "_run": {
+          "line": 70,
+          "ast_sha256": "9925b31e043b0b9447f2bab7137721dd83bb140f9680a2a55e083dbea4dc6ab8"
+        },
+        "_binding_present": {
+          "line": 78,
+          "ast_sha256": "8f9e85ba509961ebe107bfab2283ff328b686e6b5aa6263f74bd460ca0dae0e4"
+        },
+        "test_every_x_cluster_entry_twice_in_one_process": {
+          "line": 88,
+          "ast_sha256": "1376c0a4136d23605a01e3e99d0b3dfb5f7d5c2c8aaa3909afe9a948c6c2f65b"
+        }
+      }
+    },
+    "python/mojolearn/tests/test_cpu_training_e2.py": {
+      "sha256": "b5cfc750dbe8a8ec4c263b73cd81108d00a2e3e43a1ca2b3ef828c88fb605f78",
+      "functions": {
+        "_read": {
+          "line": 52,
+          "ast_sha256": "fb323f0b117ccc5cc3502f0dcc3fcb34f255f8ae8b4c63980849fd9ee3abb80b"
+        },
+        "_run_with_threads": {
+          "line": 56,
+          "ast_sha256": "e1c4e33ea5d2c4262acfdb310bf8a3936c83ebaa9a37272d754d46dd441ce595"
+        },
+        "test_manifest_covers_kmeans": {
+          "line": 98,
+          "ast_sha256": "359960f06b411c05b4a316dae7725401e091a1896854bc0efc2612c480659e71"
+        },
+        "test_accuracy_host_uses_pointer_parallel_count": {
+          "line": 110,
+          "ast_sha256": "1aaf3f58ce0f1fdaa93a15c4bee8efa8dd7384baf68d3e9cb003373c38b726dd"
+        },
+        "test_confusion_host_uses_pointer_parallel_counts": {
+          "line": 117,
+          "ast_sha256": "c0754896e5288944bb9f45b51308a2291e299802cad373d7e125a7460c096d18"
+        },
+        "test_binding_registers_kmeans_fit": {
+          "line": 125,
+          "ast_sha256": "50775c0aea59bfa36d51d95ec578ea5f5bad66a73d6c95888a43df2031b85b3d"
+        },
+        "test_oracle_imports_no_gpu_and_reads_the_matrix": {
+          "line": 136,
+          "ast_sha256": "b29a48ee7769b5abfa57251e3b1e3fd4c1eaf6c4a6de51f3828ad4c9611dfc4d"
+        },
+        "test_sabotage_define_moves_the_accumulation": {
+          "line": 147,
+          "ast_sha256": "0b3614ee7c694cfd60f63a0fd1ebd51e3cfd0ed6978a012a2c184653ad1c2bce"
+        },
+        "test_oracle_spells_the_device_seed_reassembly": {
+          "line": 157,
+          "ast_sha256": "8c8a58c1d6e2369717a06f2798ff99be6e53237dda3397b4471b0a1ba4e6ceda"
+        },
+        "test_manifest_covers_metrics": {
+          "line": 166,
+          "ast_sha256": "d02f7da37c954e91335bd0d0a79c573af8450cbaadee2838485623e9dccf62c9"
+        },
+        "test_metrics_binding_registers_the_lane_entries": {
+          "line": 183,
+          "ast_sha256": "63832f54030fdfb76e13e24054278948f861c6ed4cc05ff6a18c35b395da4f1f"
+        },
+        "test_metrics_oracle_imports_no_gpu_and_carries_the_sabotage_arm": {
+          "line": 196,
+          "ast_sha256": "9ed69ae7f480d47e5401de3d2dfdcccb23e7bcb669ddef7b18b78b4783081b3d"
+        },
+        "test_manifest_covers_spectral_and_the_oracle_moved": {
+          "line": 209,
+          "ast_sha256": "792013a13b4a4e89c93ee331d677f1797c3dc8cde7835471e8cdb2ec83001461"
+        },
+        "test_spectral_runs_on_the_host_when_built": {
+          "line": 229,
+          "ast_sha256": "ce6720414aa37cd7d433a0d712114b327ec69b75b975c5c7ac5bec632123af97"
+        },
+        "test_manifest_covers_the_scalers": {
+          "line": 247,
+          "ast_sha256": "d80663ac29b6d077912444c85314aeb83c77c5cde5fb6c5eb91a64edc9099871"
+        },
+        "test_scalers_run_on_the_host_when_built": {
+          "line": 274,
+          "ast_sha256": "faa9ee560cec49b2f37b71c5d94787fa59be9963483d2715a65d2ea1cd32289b"
+        },
+        "test_manifest_covers_logistic": {
+          "line": 301,
+          "ast_sha256": "eb2547a27bfa3dbd4f8c206b2d8856eda5ed6d5ae4d37110af59d28eb6f3fff4"
+        },
+        "test_logistic_runs_on_the_host_when_built": {
+          "line": 330,
+          "ast_sha256": "0baf1e8fc0a8228b3ba62e706fab28875060f4abe5e5010218fd4ddec2e3518a"
+        },
+        "test_metrics_run_on_the_host_when_built": {
+          "line": 354,
+          "ast_sha256": "2c45d8b2d0c1f0b6cc64c6b679820c6e77497bfb4491775c68ea1db84607e20c"
+        },
+        "test_kmeans_fit_runs_on_the_host_when_built": {
+          "line": 384,
+          "ast_sha256": "15e9b2d84d1c4dcb0d6ea8fd54dd7c9833c37ad10950aaa3cb8fada720548875"
+        }
+      }
+    }
+  },
+  "fixtures": [
+    {
+      "name": "coo-0",
+      "rows": 17,
+      "nonzero": 196,
+      "artifacts": [
+        {
+          "file": "coo-0-input.f32",
+          "shape": [
+            17,
+            17
+          ],
+          "dtype": "<f4",
+          "bytes": 1156,
+          "sha256": "1c105d1bbc68ba19b2ab5c5ae1820bef7d0f811881fefe8fe5ea1b46f6b7653b",
+          "role": "original input"
+        },
+        {
+          "file": "coo-0-rows.i32",
+          "shape": [
+            196
+          ],
+          "dtype": "<i4",
+          "bytes": 784,
+          "sha256": "fb6f6652d1ed3b5e8d22f1957c08a7d5070f90b60a20e3e380117c539a2e597f",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-0-cols.i32",
+          "shape": [
+            196
+          ],
+          "dtype": "<i4",
+          "bytes": 784,
+          "sha256": "9c71e016684ea022b5797af1618dd6312dbe85ab8b94908dc5191932b0329e71",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-0-values.f32",
+          "shape": [
+            196
+          ],
+          "dtype": "<f4",
+          "bytes": 784,
+          "sha256": "5f853f499db97a94368553084379b3c8b521fc1d307533b68fd294f283eef0de",
+          "role": "independent oracle"
+        }
+      ]
+    },
+    {
+      "name": "coo-1",
+      "rows": 18,
+      "nonzero": 232,
+      "artifacts": [
+        {
+          "file": "coo-1-input.f32",
+          "shape": [
+            18,
+            18
+          ],
+          "dtype": "<f4",
+          "bytes": 1296,
+          "sha256": "9ba41bcad48141eb88b3bcfb89cffe7bb5a2864c9d0382a9003a7abc4efd74dd",
+          "role": "original input"
+        },
+        {
+          "file": "coo-1-rows.i32",
+          "shape": [
+            232
+          ],
+          "dtype": "<i4",
+          "bytes": 928,
+          "sha256": "081d1ba4eb94e9108319641cb495152f567119a07e11647616a3af3b6c59f070",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-1-cols.i32",
+          "shape": [
+            232
+          ],
+          "dtype": "<i4",
+          "bytes": 928,
+          "sha256": "8266091a8dd1292959d60995a1c04be6d3f1166e38769e17524164f099bfc397",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-1-values.f32",
+          "shape": [
+            232
+          ],
+          "dtype": "<f4",
+          "bytes": 928,
+          "sha256": "df46d486fb64780a04480c4220cb8d814ff561a71476020076c90f314f74a44b",
+          "role": "independent oracle"
+        }
+      ]
+    },
+    {
+      "name": "coo-2",
+      "rows": 19,
+      "nonzero": 244,
+      "artifacts": [
+        {
+          "file": "coo-2-input.f32",
+          "shape": [
+            19,
+            19
+          ],
+          "dtype": "<f4",
+          "bytes": 1444,
+          "sha256": "911c9eb8c8f459a07013a0cc7700d70a6559a6ce54f285f5dd1df4f2a696c3f3",
+          "role": "original input"
+        },
+        {
+          "file": "coo-2-rows.i32",
+          "shape": [
+            244
+          ],
+          "dtype": "<i4",
+          "bytes": 976,
+          "sha256": "765cf5ffc804c4c95b2dbaf4976b2b49308809dd6109a1b4a19bde73236ce3f7",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-2-cols.i32",
+          "shape": [
+            244
+          ],
+          "dtype": "<i4",
+          "bytes": 976,
+          "sha256": "fe6bf60171751eba0ec676e0e9f8a85f5799e5f5dd5e4b033045c7fd40863a2e",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-2-values.f32",
+          "shape": [
+            244
+          ],
+          "dtype": "<f4",
+          "bytes": 976,
+          "sha256": "e35a3e8b950deab9f61aee83dae98811a0754775cc5ac04cfaa206e6c966c8d9",
+          "role": "independent oracle"
+        }
+      ]
+    },
+    {
+      "name": "coo-3",
+      "rows": 20,
+      "nonzero": 283,
+      "artifacts": [
+        {
+          "file": "coo-3-input.f32",
+          "shape": [
+            20,
+            20
+          ],
+          "dtype": "<f4",
+          "bytes": 1600,
+          "sha256": "1ccbb30a3e8060da4333786bc3aa6e166b3ba01e3923b659fbaefe825b74ede0",
+          "role": "original input"
+        },
+        {
+          "file": "coo-3-rows.i32",
+          "shape": [
+            283
+          ],
+          "dtype": "<i4",
+          "bytes": 1132,
+          "sha256": "c9ea46577041772440c73b10e3401b61680e4f5bc4b018f1d39037f44d4cc46a",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-3-cols.i32",
+          "shape": [
+            283
+          ],
+          "dtype": "<i4",
+          "bytes": 1132,
+          "sha256": "65cdfb567be8aeb524853a70dee4da054ee33537f97b8dcba3d903721bf30b5d",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-3-values.f32",
+          "shape": [
+            283
+          ],
+          "dtype": "<f4",
+          "bytes": 1132,
+          "sha256": "907f2241d6a00129a7c61cb49d5290ffcd33f54016c5550e2d699bfafa4dd1c1",
+          "role": "independent oracle"
+        }
+      ]
+    },
+    {
+      "name": "coo-4",
+      "rows": 21,
+      "nonzero": 315,
+      "artifacts": [
+        {
+          "file": "coo-4-input.f32",
+          "shape": [
+            21,
+            21
+          ],
+          "dtype": "<f4",
+          "bytes": 1764,
+          "sha256": "da271f3bd9c4da4052d55fce55783878a95a05cde507a56c76645ced604f7349",
+          "role": "original input"
+        },
+        {
+          "file": "coo-4-rows.i32",
+          "shape": [
+            315
+          ],
+          "dtype": "<i4",
+          "bytes": 1260,
+          "sha256": "3158e070425ff3b3a77e3540527264a239c411e0c2b4f0a42fcdf4a218e66ba0",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-4-cols.i32",
+          "shape": [
+            315
+          ],
+          "dtype": "<i4",
+          "bytes": 1260,
+          "sha256": "6c5998f572be74f7f617d9f42d3d6d97ebf81a3cc51d7d033c7b3172979c9d5f",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-4-values.f32",
+          "shape": [
+            315
+          ],
+          "dtype": "<f4",
+          "bytes": 1260,
+          "sha256": "5d7682d1e096f8bce3ee8481cefb4ad7182a4cd7b10a14c8a1cdec536b97d278",
+          "role": "independent oracle"
+        }
+      ]
+    },
+    {
+      "name": "coo-5",
+      "rows": 22,
+      "nonzero": 340,
+      "artifacts": [
+        {
+          "file": "coo-5-input.f32",
+          "shape": [
+            22,
+            22
+          ],
+          "dtype": "<f4",
+          "bytes": 1936,
+          "sha256": "08210808a61460f6664ea91d54376c8fa0f3ddf095e0e0e0c03168c88750e9e8",
+          "role": "original input"
+        },
+        {
+          "file": "coo-5-rows.i32",
+          "shape": [
+            340
+          ],
+          "dtype": "<i4",
+          "bytes": 1360,
+          "sha256": "62c452010acab148dec6973cba64721124461c6aca21905ee18134c0e6be8d01",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-5-cols.i32",
+          "shape": [
+            340
+          ],
+          "dtype": "<i4",
+          "bytes": 1360,
+          "sha256": "02cb50ddbb6de2038d5c4c1063fc36da5fad3942913cb2282f20e31182a47496",
+          "role": "independent oracle"
+        },
+        {
+          "file": "coo-5-values.f32",
+          "shape": [
+            340
+          ],
+          "dtype": "<f4",
+          "bytes": 1360,
+          "sha256": "c6ea324ca5f223bf35f3b6db62dd202c601430158e3f01a841e2e0938e29f2f8",
+          "role": "independent oracle"
+        }
+      ]
+    },
+    {
+      "name": "knn-0",
+      "rows": 23,
+      "neighbors": 3,
+      "artifacts": [
+        {
+          "file": "knn-0-input.f32",
+          "shape": [
+            23,
+            23
+          ],
+          "dtype": "<f4",
+          "bytes": 2116,
+          "sha256": "b9c17f57987530935d744e88266004b2d1a1a6e1788fda915184668af8f25845",
+          "role": "original input"
+        },
+        {
+          "file": "knn-0-affinity.f32",
+          "shape": [
+            23,
+            23
+          ],
+          "dtype": "<f4",
+          "bytes": 2116,
+          "sha256": "61fb6d6a457fdedc2f2d79e982702f26f295e6f45dcfcfa4c0ef5d5cc42a52a2",
+          "role": "independent sorted-candidate oracle"
+        }
+      ]
+    },
+    {
+      "name": "knn-1",
+      "rows": 24,
+      "neighbors": 4,
+      "artifacts": [
+        {
+          "file": "knn-1-input.f32",
+          "shape": [
+            24,
+            24
+          ],
+          "dtype": "<f4",
+          "bytes": 2304,
+          "sha256": "5b284da68f73482aa257f97b17a633c73145a7b412de24dadd45c37931417a7d",
+          "role": "original input"
+        },
+        {
+          "file": "knn-1-affinity.f32",
+          "shape": [
+            24,
+            24
+          ],
+          "dtype": "<f4",
+          "bytes": 2304,
+          "sha256": "17e3cb68a81b509f35263a34817d9d65aa286dd624fb2732bc8aaa0963547734",
+          "role": "independent sorted-candidate oracle"
+        }
+      ]
+    },
+    {
+      "name": "knn-2",
+      "rows": 25,
+      "neighbors": 5,
+      "artifacts": [
+        {
+          "file": "knn-2-input.f32",
+          "shape": [
+            25,
+            25
+          ],
+          "dtype": "<f4",
+          "bytes": 2500,
+          "sha256": "e0d74ad046200a06ad52c220c64f386dd805713a71727cbbd9060628d0663a3e",
+          "role": "original input"
+        },
+        {
+          "file": "knn-2-affinity.f32",
+          "shape": [
+            25,
+            25
+          ],
+          "dtype": "<f4",
+          "bytes": 2500,
+          "sha256": "7dab919e377f7d6225602adb4736d9df91dcd0f42e233bddc2ec136dcf1b4548",
+          "role": "independent sorted-candidate oracle"
+        }
+      ]
+    },
+    {
+      "name": "knn-3",
+      "rows": 26,
+      "neighbors": 6,
+      "artifacts": [
+        {
+          "file": "knn-3-input.f32",
+          "shape": [
+            26,
+            26
+          ],
+          "dtype": "<f4",
+          "bytes": 2704,
+          "sha256": "5343f3ee46e6c4e510efce11ffde4ee4890a04298862d6a209b52c8de4d1e076",
+          "role": "original input"
+        },
+        {
+          "file": "knn-3-affinity.f32",
+          "shape": [
+            26,
+            26
+          ],
+          "dtype": "<f4",
+          "bytes": 2704,
+          "sha256": "fa9cea0b7a312a62eb250f3f1fadd637141985b2e50c7d601595385ac91e15b4",
+          "role": "independent sorted-candidate oracle"
+        }
+      ]
+    },
+    {
+      "name": "knn-4",
+      "rows": 27,
+      "neighbors": 7,
+      "artifacts": [
+        {
+          "file": "knn-4-input.f32",
+          "shape": [
+            27,
+            27
+          ],
+          "dtype": "<f4",
+          "bytes": 2916,
+          "sha256": "966abde89dd7bd4c3cf0c133f969d0d5fdd9d699adcc14609c3b8246cbd124fc",
+          "role": "original input"
+        },
+        {
+          "file": "knn-4-affinity.f32",
+          "shape": [
+            27,
+            27
+          ],
+          "dtype": "<f4",
+          "bytes": 2916,
+          "sha256": "51cb9b1908835a4d83a49012797dece8074f57b9e710d8aa77b22778f8da1407",
+          "role": "independent sorted-candidate oracle"
+        }
+      ]
+    },
+    {
+      "name": "knn-5",
+      "rows": 28,
+      "neighbors": 8,
+      "artifacts": [
+        {
+          "file": "knn-5-input.f32",
+          "shape": [
+            28,
+            28
+          ],
+          "dtype": "<f4",
+          "bytes": 3136,
+          "sha256": "641e928984d866a8d25118b369f8e81e462d4f90fb8c4b8a4f53f02df39e9ccd",
+          "role": "original input"
+        },
+        {
+          "file": "knn-5-affinity.f32",
+          "shape": [
+            28,
+            28
+          ],
+          "dtype": "<f4",
+          "bytes": 3136,
+          "sha256": "c0b7d0274621e31cac04279f1da957ebcbff663d98ec63d35776bdcb1252ca77",
+          "role": "independent sorted-candidate oracle"
+        }
+      ]
+    },
+    {
+      "name": "embedding",
+      "artifacts": [
+        {
+          "file": "embedding150-input.f32",
+          "shape": [
+            150,
+            2
+          ],
+          "dtype": "<f4",
+          "bytes": 1200,
+          "sha256": "5428ca6c0adb04c3013bdd0747413323142b21106313f58ea0c2b551a3708fbc",
+          "role": "original input"
+        },
+        {
+          "file": "embedding150-affinity.f32",
+          "shape": [
+            150,
+            150
+          ],
+          "dtype": "<f4",
+          "bytes": 90000,
+          "sha256": "92141dbfa1ea301f2975d16d8f73f15e7a503881d9ecd524201fec39f8e5df10",
+          "role": "original precomputed input"
+        },
+        {
+          "file": "embedding150-hollow.f32",
+          "shape": [
+            150,
+            150
+          ],
+          "dtype": "<f4",
+          "bytes": 90000,
+          "sha256": "56dcdaaa4a52474e18df2e782ac065e49cd9a433f187ba6160bcd2f406a7bc87",
+          "role": "original hollow precomputed input"
+        },
+        {
+          "file": "embedding80-affinity.f32",
+          "shape": [
+            80,
+            80
+          ],
+          "dtype": "<f4",
+          "bytes": 25600,
+          "sha256": "371d384e46d3305a9eb6bef6cc697271c1406651cc664ab95f2603cf79a5f5f4",
+          "role": "original tolerance input"
+        }
+      ],
+      "status": "input preparation only; fitted numerical oracles pending typed API"
+    },
+    {
+      "name": "predict",
+      "artifacts": [
+        {
+          "file": "predict120-input.f32",
+          "shape": [
+            120,
+            2
+          ],
+          "dtype": "<f4",
+          "bytes": 960,
+          "sha256": "0e69105011930d5a443aa3c6869e80a565908f5bbdc5ea176b041eaabb117478",
+          "role": "original input"
+        },
+        {
+          "file": "predict240-duplicated.f32",
+          "shape": [
+            240,
+            2
+          ],
+          "dtype": "<f4",
+          "bytes": 1920,
+          "sha256": "2c702a98e848c8ab858584c83894fe6600015646ee9a613e79c5f4daa436f088",
+          "role": "original duplicate input"
+        },
+        {
+          "file": "predict120-far.f32",
+          "shape": [
+            2,
+            2
+          ],
+          "dtype": "<f4",
+          "bytes": 16,
+          "sha256": "fd224b4ed9182c8d651a4a86f30ebf3b28fbee5784331a52a5366547963281f1",
+          "role": "original nearest-neighbor query"
+        },
+        {
+          "file": "predict120-affinity.f32",
+          "shape": [
+            120,
+            120
+          ],
+          "dtype": "<f4",
+          "bytes": 57600,
+          "sha256": "1f9fb8c38dd460fd1c895a35388964c29b8602aecb6046455df44ce24c5966d2",
+          "role": "original precomputed input"
+        },
+        {
+          "file": "predict120-query-affinity.f32",
+          "shape": [
+            2,
+            120
+          ],
+          "dtype": "<f4",
+          "bytes": 960,
+          "sha256": "2805e906d34af7d0d572f7600c545d74c6343c27ee99b043d20733df3994e100",
+          "role": "original zero-degree and central queries"
+        }
+      ],
+      "status": "input preparation only; fitted numerical oracles pending typed API"
+    },
+    {
+      "name": "resident",
+      "artifacts": [
+        {
+          "file": "resident180-input.f32",
+          "shape": [
+            180,
+            3
+          ],
+          "dtype": "<f4",
+          "bytes": 2160,
+          "sha256": "17c7a73da00e697bf67573532275d926028ed7d9a2b3d04cb221c697bbb397dc",
+          "role": "original input"
+        },
+        {
+          "file": "resident180-query.f32",
+          "shape": [
+            36,
+            3
+          ],
+          "dtype": "<f4",
+          "bytes": 432,
+          "sha256": "6f1bb69954597dbe22f1144e5b0d6e5098f249beddf8362b742e7ce74bfa73f5",
+          "role": "original resident query"
+        }
+      ],
+      "status": "input preparation only; fitted numerical oracles pending typed API"
+    },
+    {
+      "name": "assignment",
+      "artifacts": [
+        {
+          "file": "assignment180-input.f32",
+          "shape": [
+            180,
+            3
+          ],
+          "dtype": "<f4",
+          "bytes": 2160,
+          "sha256": "3a7998bce85738790c530971d515251c1cbc85410c7d28c8f5c1ab169ac75868",
+          "role": "original input"
+        }
+      ],
+      "status": "input preparation only; fitted numerical oracles pending typed API"
+    },
+    {
+      "name": "host",
+      "artifacts": [
+        {
+          "file": "host120-input.f32",
+          "shape": [
+            120,
+            3
+          ],
+          "dtype": "<f4",
+          "bytes": 1440,
+          "sha256": "04b44b7034fbd7c911958d68165b1101abbaeecba9d5796d10570ad1fd27a697",
+          "role": "original separated-class input"
+        }
+      ],
+      "status": "input preparation only; fitted numerical oracles pending typed API"
+    }
+  ],
+  "limits": [
+    "No Mojolearn imports or native execution.",
+    "No fitted-output or old-release hash is an oracle.",
+    "Original full Spectral input bytes retained; fit/eigen/query expectations await typed API."
+  ]
+}
