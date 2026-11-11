@@ -25,7 +25,7 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from layout import TileTensor
+from layout import Coord, TileTensor, coord_to_index_list
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from std.utils.index import IndexList
@@ -329,7 +329,11 @@ def fast_gemm_nt_sub_lower(
     @always_inline
     def epi[
         dtype: DType, width: SIMDLength, *, alignment: Int = 1
-    ](idx: IndexList[2], val: SIMD[dtype, width]) capturing -> None:
+    ](coord: Coord, val: SIMD[dtype, width]) capturing -> None:
+        # Mojo 1.2.0: matmul hands the epilogue a rank-2 `Coord` (row, column)
+        # instead of an `IndexList[2]`; convert it back, the arithmetic is unchanged.
+        comptime assert coord.rank == 2, "the matmul epilogue contract is rank 2"
+        var idx = rebind[IndexList[2]](coord_to_index_list(coord))
         var i = off + idx[0]
         comptime for w in range(Int(width)):
             var j = off + idx[1] + w
