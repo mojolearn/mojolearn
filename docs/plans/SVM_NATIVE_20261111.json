@@ -1,0 +1,446 @@
+{
+  "baseline": "78a6a382354bcf3e463b74ebce58f1f77f1c051f",
+  "status": "before inventory; no role migrated yet",
+  "selected_scope": "LinearSVC fit/decision/predict transport and private state; shared LinearSVR query behavior preserved",
+  "roles": [
+    {
+      "family": "LinearSVC",
+      "role": "regularization strength pair",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 75,
+        "text": "def _linear_strengths(fields: PythonObject) raises -> PythonObject:"
+      },
+      "after_plan": "typed pair; shared LinearSVR wrapper remains until converted",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "combined sample/class row-weight scratch",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 103,
+        "text": "def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: PythonObject,"
+      },
+      "after_plan": "native weight owner with existing label-weight plans and kernels",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "row-major fitted OVR coefficient scratch",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 284,
+        "text": "var w_all = family_array(Python.tuple(PythonObject(n_fits), PythonObject(n_coefs)), \"<f4\", context)"
+      },
+      "after_plan": "native Float32 owner; same public coefficient PACK copies",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "OVR per-fit info scratch",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 292,
+        "text": "var info = family_array(Python.tuple(PythonObject(n_fits), PythonObject(3)), \"<f4\", context)"
+      },
+      "after_plan": "native Float32 metadata owner",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "OVR option list",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 293,
+        "text": "var params = Python.list(PythonObject(rows), PythonObject(cols), PythonObject(first), PythonObject(n_fits),"
+      },
+      "after_plan": "typed request to same existing GPU OVR door",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "CPU per-class binary target scratch",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 327,
+        "text": "var y_enc = family_array(Python.tuple(PythonObject(rows)), \"<f4\", context)"
+      },
+      "after_plan": "native owner, independent conversion partitions",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "CPU per-class QN result envelope",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 334,
+        "text": "var result = _qn_fit_one_target(fields, binding, x, y_enc, 2, loss, strengths[0], strengths[1], tol,"
+      },
+      "after_plan": "typed result; preserve shared LinearSVR caller behavior",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "objective and retcode accumulation",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 286,
+        "text": "var objectives = Python.list()"
+      },
+      "after_plan": "typed metadata until scalar/list public PACK",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "decision option list and compiled-Python dispatch",
+      "before": {
+        "file": "bindings/svm_mixture_native.mojo",
+        "line": 36,
+        "text": "var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(intercept))"
+      },
+      "after_plan": "existing typed QnQueryRequest/driver; shared LinearSVR consumer preserved",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "fused prediction option list",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 414,
+        "text": "var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(fi))"
+      },
+      "after_plan": "typed query config",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "prediction class-code scratch",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 412,
+        "text": "var codes = family_array(Python.tuple(PythonObject(n)), \"<i8\", context)"
+      },
+      "after_plan": "native Int64 owner through label PACK",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "fallback private decision score scratch",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 450,
+        "text": "var scores = _qn_scores(model, binding, source, 1 if k == 2 else k, context)"
+      },
+      "after_plan": "native owner feeding unchanged threshold/argmax routes",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "LinearSVC",
+      "role": "cached compiled flag scalar",
+      "before": {
+        "file": "bindings/svc_linear_native.mojo",
+        "line": 386,
+        "text": "comptime _SVC_LINEAR_FLAGS_SLOT = \"p3_svc_linear_flags_v1\""
+      },
+      "after_plan": "native capability metadata; preserve flag-selected fused route",
+      "status": "pending",
+      "scope": "selected"
+    },
+    {
+      "family": "SVC",
+      "role": "binary solver worst-case output scratch and result envelope",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 538,
+        "text": "var dual = family_array(Python.tuple(PythonObject(n_rows)), \"<f4\", context)"
+      },
+      "after_plan": "typed solver result/storage; public truncated support fields remain",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "pair selection scratch and tuple",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 520,
+        "text": "return Python.tuple(idx, lab, cout, PythonObject(m))"
+      },
+      "after_plan": "typed selection result and owners",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "GPU glue request lists",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 444,
+        "text": "Python.list(PythonObject(_GLUE_C_ROWS), PythonObject(n_rows), PythonObject(n_classes),"
+      },
+      "after_plan": "typed glue requests to same kernels",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "probability fold scratch",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 825,
+        "text": "var dec_perm = family_array(Python.tuple(PythonObject(max(n, 1))), \"<f4\", context)"
+      },
+      "after_plan": "typed fold buffers/state",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "probability calibration result pairs",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 801,
+        "text": "var ab = Python.list()"
+      },
+      "after_plan": "typed calibration values; public probA/probB remain",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "multiclass fit pointer and dimension lists",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 960,
+        "text": "var meta = Python.list(PythonObject(k), PythonObject(n_rows), PythonObject(k * (k - 1) // 2))"
+      },
+      "after_plan": "typed pair dimensions/spans; exposed pair owners reviewed before removal",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "query pair-decision scratch",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1330,
+        "text": "var dec = family_array(Python.tuple(PythonObject(len(pairs)), PythonObject(n_rows)), \"<f4\", context)"
+      },
+      "after_plan": "native query scratch",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVC",
+      "role": "epilogue pair-code scratch",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1364,
+        "text": "var out = family_array(Python.tuple(PythonObject(max(1, 2 * len(pairs)))), \"<i4\", context)"
+      },
+      "after_plan": "typed pair code owner",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVR",
+      "role": "fit request options",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1559,
+        "text": "var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(_kernel_code(fields, context)),"
+      },
+      "after_plan": "typed SVR request, same provider",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVR",
+      "role": "fit pointer transport",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1583,
+        "text": "var n_support = svc_int(svr_execute(binding, native, True, Python.list(PythonObject(x_meta.source.addr), classical_address(targets),"
+      },
+      "after_plan": "typed native addresses",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVR",
+      "role": "fit dual/support/vector/info scratch",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1554,
+        "text": "var info = family_array(Python.tuple(PythonObject(6)), \"<f8\", context)"
+      },
+      "after_plan": "native scratch owners; same public prefix copies",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "SVR",
+      "role": "query options",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1668,
+        "text": "var params = Python.list(PythonObject(n_rows), PythonObject(n_features), PythonObject(n_support),"
+      },
+      "after_plan": "typed SVR query config",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "numeric operation pointer/int/float lists",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 38,
+        "text": "def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,"
+      },
+      "after_plan": "typed existing x_neighbors/x_decomp requests",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "sample-weight positive compaction scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 176,
+        "text": "var prow = family_array(Python.tuple(PythonObject(n)), \"<i4\", context)"
+      },
+      "after_plan": "native compaction owner",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "kernel matrix private scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 77,
+        "text": "def _kernel(binding: PythonObject, a: PythonObject, b: PythonObject, code: Int, gamma: Float64, coef0: Float64,"
+      },
+      "after_plan": "native matrix owner; same kernel",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "solver alpha and result scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 220,
+        "text": "var alpha = family_array(Python.tuple(PythonObject(m)), \"<f4\", context)"
+      },
+      "after_plan": "native solver state",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "solver request addresses",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 230,
+        "text": "var addresses = Python.list(_a(xw), _a(cv), _a(alpha), _a(info), _a(iters))"
+      },
+      "after_plan": "typed same solver request",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "private query score storage",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 354,
+        "text": "var s = family_array(Python.tuple(PythonObject(nq)), \"<f4\", context)"
+      },
+      "after_plan": "native score owner until requested public PACK",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "private sign-label code scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 342,
+        "text": "var lab = family_array(Python.tuple(PythonObject(nq)), \"<i4\", context)"
+      },
+      "after_plan": "native code owner; same fused/default routes",
+      "status": "pending",
+      "scope": "remaining"
+    }
+  ],
+  "role_counts": {
+    "LinearSVC": 13,
+    "SVC": 8,
+    "SVR": 4,
+    "OneClassSVM": 7
+  },
+  "count_policy": "distinct local schemas/owners, not Python imports, struct declarations, parametrizations or inferred runtime object instances; remaining inventory is bounded to confirmed private locals and is not a complete callback audit",
+  "routes": {
+    "LinearSVC": [
+      "python/mojolearn/svm.py:185/207/228/245 -> family lifecycle -> svc_linear_operation / svm_mixture_operation",
+      "_linear_svc_fit -> existing device qn_fit_ovr_host or CPU QnHostKernels.fit per class",
+      "_linear_svc_predict -> existing fused binary/multiclass QN query routes or unchanged decision + threshold/argmax",
+      "existing QnNativeDriver and QnDeviceKernels/QnHostKernels reused"
+    ],
+    "SVC": [
+      "python/mojolearn/_svm_impl.py:554/586/613/640/664/682 -> svc_kernel_operation",
+      "_svc_fit/_run/_pair_decisions/_epilogue -> existing SVC descriptor/resident/fold/OVO paths"
+    ],
+    "SVR": [
+      "python/mojolearn/_svm_impl.py:1065 and query methods -> svc_kernel_operation",
+      "_svr_fit/_svr_predict -> svr_execute -> dedicated svm/native_svr_dispatch and host_svr_native"
+    ],
+    "OneClassSVM": [
+      "python/mojolearn/_expansion_neighbors.py OneClassSVM -> svc_ocsvm_operation",
+      "_ocsvm_fit/_ocsvm_run -> existing x_neighbors OC-SVM and x_decomp operation routes"
+    ]
+  },
+  "retained_public_boundaries": [
+    "LinearSVC _w, coef_, intercept_, classes_, n_iter_, objective_, retcode_ and scalar fitted attributes; preserve mutation and serialization",
+    "SVC/SVR support_, support_vectors_, dual_coef_, intercept_, probability/fitted attributes and any existing observable backing owners",
+    "OneClassSVM public support/dual/offset/iteration outputs"
+  ],
+  "reserved_shared_edits": [
+    "new linear_svc_native_api_v1 estimator factory registrations",
+    "svm_mixture_native._qn_scores only; GP untouched"
+  ],
+  "excluded_ownership": [
+    "core/linear_score_run.mojo",
+    "labels_score_boundary",
+    "mcls_common GP score extensions",
+    "GP gp_svm_records/state sections"
+  ],
+  "parallel_fixture_plan": [
+    "parallel independent CPU options/lifetime/refusal cases",
+    "parallel native CPU binary/multiclass/weights/intercept solver cases with independent references",
+    "ordered numerical GPU cases while shared-context concurrency remains parked"
+  ],
+  "affected_build_roots": [
+    "runtime_family_host",
+    "estimators",
+    "estimators_host"
+  ],
+  "compiled": false,
+  "executed": false,
+  "removed": "nothing yet; inventory precedes implementation"
+}
