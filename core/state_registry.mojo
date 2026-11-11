@@ -113,7 +113,7 @@ struct StateRegistry[T: Movable & Deinitable, name: StaticString]:
                     or slot[].generations[handle.index] != handle.generation
                     or handle.index not in slot[].values):
                 raise Error("native state registry: state is not fitted or was released")
-            retired = slot[].values.pop(handle.index)
+            retired = slot[].values[handle.index].copy()
             slot[].values[handle.index] = fresh.copy()
         finally:
             shared_slot_unlock(lock)

@@ -15,19 +15,19 @@ def _reduce_not_fitted(error):
 
 
 def _native_table_cells(module, prefix):
-    # glue: read immutable execution identity and retain the selected image
-    # once at import. Product operations use native SharedSlot entry tables.
-    from types import BuiltinFunctionType
-    mode_entry = getattr(module, prefix + "_numeric_mode")
-    vendor_entry = getattr(module, prefix + "_vendor")
-    if type(mode_entry) is not BuiltinFunctionType or type(vendor_entry) is not BuiltinFunctionType:
-        raise TypeError("native entry table metadata requires compiled entries")
-    mode = mode_entry()
-    vendor = vendor_entry()
-    vendors = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
-    if type(mode) is not int or mode not in (0, 1) or type(vendor) is not str or vendor not in vendors:
-        raise TypeError("native entry table metadata has an unsupported execution key")
-    return {"_native_entry_key": (mode, vendors[vendor]), "_native_entry_images": (module,)}
+    # glue: create an immutable compiled connection owner once at import.
+    # The compiled connector admits exact images/metadata and the published
+    # endpoint; product operations never invoke the capsule factory.
+    from .tokenizer import _binding
+    families = {"estimators": (0, "linear_fit_native_api_v1"),
+                "x_linear": (1, "ridge_fit_native_api_v1"),
+                "x_decomp": (2, "x_decomp_native_api_v1"),
+                "x_metrics": (3, "metrics_program_native_api_v1")}
+    family, factory = families[prefix]
+    owner = _binding()._module.linear_entry_connection_v1(
+        family, getattr(module, prefix + "_numeric_mode"),
+        getattr(module, prefix + "_vendor"), getattr(module, factory))
+    return {"_native_entry_connection": owner}
 
 
 def _decomp_cells(decomp):
@@ -72,9 +72,7 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         cpu["decomp"] = type(error).__name__ + ": " + str(error)
     weighted = _native_table_cells(linear, "x_linear")
-    if weighted["_native_entry_key"] != cpu["_native_entry_key"]:
-        raise RuntimeError("explicit host Ridge native entry key differs")
-    cpu["_native_entry_images"] += weighted["_native_entry_images"]
+    cpu["_native_weighted_connection"] = weighted["_native_entry_connection"]
     connected = {mode: dict(cpu) for mode in context["classical_bindings"]}  # glue: one CPU entry family per connected mode
     context.update(classical_bindings=connected, classical_explicit_cpu=True,
                    classical_metric_vendor=context["vendor"], vendor="cpu")
@@ -244,9 +242,7 @@ def connect(ridge_class, linear_class=None):
                     raise TypeError(f"classical owner requires compiled {name}")
                 entries[name] = entry
             weighted = _native_table_cells(linear, "x_linear")
-            if weighted["_native_entry_key"] != entries["_native_entry_key"]:
-                raise RuntimeError("classical Ridge native entry key differs")
-            entries["_native_entry_images"] += weighted["_native_entry_images"]
+            entries["_native_weighted_connection"] = weighted["_native_entry_connection"]
             if linear_class is not None:
                 try:
                     entries["decomp"] = _decomp_cells(_backend.binding("_mojolearn_x_decomp", mode))

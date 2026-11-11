@@ -8,8 +8,12 @@ mismatches, incompatible schemas/counts and conflicting publications refuse.
 Publication is release/acquire synchronized and immutable. Existing capsule
 and boxed exports remain for unconverted clients.
 
-The public boundary captures the import-time key and an immutable tuple of
-image pins before releasing the GIL. No native request/table/registry contains
+The public boundary captures an opaque canonical connection owner before
+releasing the GIL. Import-time creation admits compiled metadata/factory entries
+from the same exact module and compares their endpoint with the published table.
+The owner stores an immutable native key and retains that exact module; mutable
+Python tuples cannot substitute its key or pins. Entry-admission caches include
+the owner identity, so replacement rechecks the selected mode/vendor. No native request/table/registry contains
 Python fields. Import-time wiring remains Python; it does not run inside an
 estimator operation. No numerical kernels or route-selection code is changed.
 Weighted/one-feature Ridge, Gram, resident Ridge/OLS, TSQR and metric ranges

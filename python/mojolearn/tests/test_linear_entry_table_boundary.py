@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Canonical connection and public buffer seams for the native linear table.
+
+These are boundary controls, not proof that sys.setprofile observes native
+C-API calls. Numerical/native handle contracts have separate Mojo fixtures.
+"""
+import numpy as np
+import pytest
+
+from mojolearn import LinearRegression, Ridge
+from mojolearn._native_classical_bridge import connect
+
+
+def setup_case(cls):
+    entry, context = connect(Ridge, LinearRegression)
+    x = np.array([[0, 1], [1, 0], [1, 2], [2, -1], [3, 2]], dtype="f4")
+    y = np.array([1, 2, 4, 3, 8], dtype="f4")
+    model = cls()
+    entry(model, "fit", (x, y, None), context)
+    mode = context["backend_fields"]["_DEFAULT_MODE"]
+    return entry, context, context["classical_bindings"][mode], model, x, y
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+@pytest.mark.parametrize("fake", [(1,), (1, 0), 1, None])
+def test_connection_refuses_editable_key_or_pin_substitutes(cls, fake, monkeypatch):
+    entry, context, entries, model, x, _ = setup_case(cls)
+    # Prime the admitted-entry cache, then mutate the same live dictionary.
+    entry(model, "predict", (x,), context)
+    monkeypatch.setitem(entries, "_native_entry_connection", fake)
+    with pytest.raises(TypeError, match="canonical connection owner"):
+        entry(model, "predict", (x,), context)
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_connection_refuses_callback_object_without_hooks(cls, monkeypatch):
+    entry, context, entries, model, x, _ = setup_case(cls)
+    calls = []
+
+    class Hook:
+        def __getattribute__(self, name):
+            calls.append(name)
+            raise AssertionError("connection callback executed")
+
+        def __iter__(self):
+            calls.append("iter")
+            raise AssertionError("connection callback executed")
+
+    monkeypatch.setitem(entries, "_native_entry_connection", Hook())
+    with pytest.raises(TypeError, match="canonical connection owner"):
+        entry(model, "predict", (x,), context)
+    assert calls == []
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_connection_refuses_other_native_family_after_cached_success(cls, monkeypatch):
+    entry, context, entries, model, x, _ = setup_case(cls)
+    entry(model, "predict", (x,), context)
+    monkeypatch.setitem(entries, "_native_entry_connection", entries["_native_weighted_connection"])
+    with pytest.raises(TypeError, match="connection family differs"):
+        entry(model, "predict", (x,), context)
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_connection_replacement_rechecks_selected_numeric_mode(cls, monkeypatch):
+    entry, context, entries, model, x, _ = setup_case(cls)
+    mode = context["backend_fields"]["_DEFAULT_MODE"]
+    other = context["classical_bindings"]["fast" if mode == "identical" else "identical"]
+    if isinstance(other, str):
+        pytest.skip("The other numerical tier is not installed on this target")
+    entry(model, "predict", (x,), context)
+    monkeypatch.setitem(entries, "_native_entry_connection", other["_native_entry_connection"])
+    with pytest.raises(RuntimeError, match="mode differs"):
+        entry(model, "predict", (x,), context)
+
+
+def test_weighted_connection_refuses_estimator_owner(monkeypatch):
+    entry, context, entries, _, x, y = setup_case(Ridge)
+    monkeypatch.setitem(entries, "_native_weighted_connection", entries["_native_entry_connection"])
+    with pytest.raises(TypeError, match="connection family differs"):
+        entry(Ridge(), "fit", (x, y, np.ones(len(x), dtype="f4")), context)
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_imported_connection_ignores_legacy_capsule_factories(cls, monkeypatch):
+    from mojolearn import _backend
+
+    entry, context, entries, _, x, y = setup_case(cls)
+    mode = context["backend_fields"]["_DEFAULT_MODE"]
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append("legacy factory")
+        raise AssertionError("operation reconnected a legacy capsule factory")
+
+    for image, factory in [("_mojolearn_estimators", "linear_fit_native_api_v1"),
+                           ("_mojolearn_estimators", "linear_predict_native_api_v1"),
+                           ("_mojolearn_x_linear", "ridge_fit_native_api_v1"),
+                           ("_mojolearn_x_decomp", "x_decomp_native_api_v1"),
+                           ("_mojolearn_x_metrics", "metrics_program_native_api_v1")]:
+        # Test setup only: retain and mutate the actual compiled function owner,
+        # including when the package exposes a host-binding import proxy.
+        function = getattr(_backend.binding(image, mode), factory)
+        monkeypatch.setattr(function.__self__, factory, forbidden)
+    model = cls()
+    entry(model, "fit", (x, y, None), context)
+    prediction = entry(model, "predict_public", (x,), context)
+    score = entry(model, "score", (x, y), context)
+    assert prediction.shape == (len(x),)
+    assert prediction.dtype == np.dtype("f8")
+    assert isinstance(score, float)
+    assert calls == []
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_handle_refresh_preserves_public_coefficient_replacement(cls):
+    entry, context, _, model, x, _ = setup_case(cls)
+    model.coef_ = np.array([2, -3], dtype="f4")
+    model.intercept_ = 0.5
+    expected = (x @ model.coef_ + np.float32(0.5)).astype("f8")
+    actual = entry(model, "predict_public", (x,), context)
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+    model.coef_[0] = 4
+    expected = (x @ model.coef_ + np.float32(0.5)).astype("f8")
+    actual = entry(model, "predict_public", (x,), context)
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)

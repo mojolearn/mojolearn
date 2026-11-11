@@ -45,7 +45,10 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
     var connection = linear_entry_connection(entries)
     var key = connection.key.copy()
     var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
-    var weighted_entry = linear_table_entry[LINEAR_TABLE_X_LINEAR](key, 0, String(RIDGE_FIT_ABI), 1)
+    var weighted_connection = linear_entry_connection(entries, LINEAR_TABLE_X_LINEAR, True)
+    if weighted_connection.key.mode != key.mode or weighted_connection.key.vendor != key.vendor:
+        raise Error("native Ridge weighted execution key differs")
+    var weighted_entry = linear_table_entry[LINEAR_TABLE_X_LINEAR](weighted_connection.key, 0, String(RIDGE_FIT_ABI), 1)
     var result = LinearFitResult()
     try:
         with GILReleased(Python()):
@@ -59,6 +62,7 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
         _ = mean
         _ = entries
         _ = connection
+        _ = weighted_connection
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", result.intercept)
     py_setitem(fields, "_x_mean", mean)
