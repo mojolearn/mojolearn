@@ -4,11 +4,16 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
-from bindings.py_typed_call import py_call_typed
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.native_loaded_module import native_loaded_module
-from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
+from bindings.pca_exact import pca_too_small, pca_refusal
+from bindings.pca_descriptor_boundary import (
+    pca_capabilities, pca_mode, pca_fold_connection, pca_whiten_capability, pca_run_fit,
+)
+from core.pca_native_api import (
+    PCAFitRequest, PCAFitResult, PCAFoldStore, PCA_CAP_EXACT, PCA_CAP_FULL, PCA_CAP_RANDOMIZED,
+)
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.decomp_inputs import decomp_admit
 from bindings.admitted_input import admitted_finite_refuse
@@ -48,14 +53,16 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
                     + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
     var operation = String("fit_transform") if project else String("fit")
     var fields = pca_fit_fields(state, operation, context)
-    var entries = pca_fit_entries(fields, context)
+    var connection = pca_fit_entries(fields, context)
+    var capabilities = pca_capabilities(connection)
     if pca_fit_host_only(model):
         raise Error("ImportError: mojolearn: no CPU implementation of the PCA fit on the host class; "
                     + "the host PCA transforms a saved model only")
-    var solver = pca_fit_preflight(fields, operation, context)
-    var whiten = Bool(py=fields["whiten"])
+    var preflight = pca_fit_preflight(fields, operation, context)
+    var solver = preflight[0]
+    var whiten = preflight[1]
     if whiten:
-        pca_whiten_entries(entries)
+        pca_whiten_capability(connection)
     # Freeze mutable scalar storage before Torch/native input preparation
     # can release the GIL. Conversion/errors stay at their prior stages.
     var settings = List[PCAFitScalar]()
@@ -78,11 +85,10 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # `pca_fit_fold` (no host gather, no upload of X; finite and range
     # words from the gather); otherwise a fold's rows are gathered on the
     # host by the admission.
-    var fold_entry = py_get(context, "pca_fit_fold")
-    var mode = py_get(fields, "numeric_mode")
-    var identical = (mode is not None and py_type(mode) is py_type(PythonObject(""))
-                     and String(py_call(py_call(mode.strip).lower)) == "identical")
-    var fold_ok = fold_entry is not None and identical and not project and solver != "randomized"
+    var fold_connection = -1
+    if pca_mode(connection) == 1 and not project and solver != "randomized":
+        fold_connection = pca_fold_connection(context)
+    var fold_ok = fold_connection >= 0
     var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)
     var on_device = x.store.active()
     var rows = x.rows
@@ -96,12 +102,12 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var copied = not direct or not x.borrowed
     var randomized = solver == "randomized"
     var dense = solver == "full" and cols >= 2
-    if dense and py_get(entries, "pca_fit_full") is None:
+    if dense and (capabilities & PCA_CAP_FULL) == 0:
         raise Error("NotImplementedError: mojolearn PCA: svd_solver='full' needs the dense arm and this build of "
                     + "_mojolearn_estimators does not export it; rebuild it with bindings/build_estimators.sh")
     if rows < 2 or (randomized and cols < 2):
         raise Error(pca_too_small(rows, cols))
-    if dense and rows < cols and Int(py=entries["_pca_numeric_mode"]) != 1:
+    if dense and rows < cols and pca_mode(connection) != 1:
         raise Error("NotImplementedError: mojolearn PCA: svd_solver='full' needs at least as many samples as "
                     + "features and got " + String(rows) + " x " + String(cols) + ". The dense route is an R-SVD, "
                     + "which needs a tall matrix; svd_solver='covariance_eigh' handles this shape "
@@ -133,15 +139,13 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var oversamples = 0
     var iterations = 0
     var auto = False
-    var seed = PythonObject(0)
+    var seed = 0
     if randomized:
         var normalizer = fields["power_iteration_normalizer"]
         if py_type(normalizer) is not b.str or (String(normalizer) != "auto" and String(normalizer) != "QR" and String(normalizer) != "LU" and String(normalizer) != "none"):
             raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-        seed = fields["random_state"]
-        if seed is None:
-            seed = PythonObject(0)
-        elif py_type(seed) is not b.int:
+        var seed_value = fields["random_state"]
+        if seed_value is not None and py_type(seed_value) is not b.int:
             raise Error("TypeError: random_state must be None or an int (the counter-based RNG takes an integer seed)")
         var extra = settings[extra_setting].convert(operation, context, True)
         oversamples = Int(py=extra)
@@ -152,12 +156,13 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         if not auto:
             power = settings[power_setting].convert(operation, context, True)
             iterations = Int(py=power)
-        if py_get(entries, "pca_fit_randomized") is None:
+        if (capabilities & PCA_CAP_RANDOMIZED) == 0:
             raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not export "
                         + "pca_fit_randomized; rebuild it with bindings/build_estimators.sh")
         # Exact immutable native integer, frozen before any input/reader work.
-        seed = py_call(b.int.__dict__["__and__"], seed, PythonObject(0xFFFFFFFF))
-    elif py_get(entries, "pca_fit_owned") is None:
+        if seed_value is not None:
+            seed = Int(py=py_call(b.int.__dict__["__and__"], seed_value, PythonObject(0xFFFFFFFF)))
+    elif (capabilities & PCA_CAP_EXACT) == 0:
         raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not export "
                     + "pca_fit_owned; rebuild it with bindings/build_estimators.sh")
     var components = PCAFitOutput(count, cols, context)
@@ -172,69 +177,41 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     if project:
         projection = sequential_array(Python.tuple(rows, count), context["float32"], context)
         projection_address = Int(py=sequential_address(projection))
-    var noise = PythonObject(None)
-    var keep = count
+    var fold = PCAFoldStore()
+    if on_device:
+        fold = PCAFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
+    var request = PCAFitRequest(x.address, components.address, mean.address, variance.address,
+        ratio.address, singular.address, projection_address, rows, cols, count, dense, keep_mode,
+        whiten, randomized, oversamples, iterations, auto, seed, not x.finite, fraction, fold)
+    var fitted: PCAFitResult
     if randomized:
-        var rparams = Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed)
-        if not x.finite:
-            _ = py_call(rparams.append, PythonObject(1))
-        var got = PythonObject(None)
         try:
-            got = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
-                mean.address, variance.address, ratio.address, singular.address, projection_address,
-                rparams)
+            fitted = pca_run_fit(connection, request)
         except error:
             raise pca_refusal(error^)
-        if not x.finite:
-            admitted_finite_refuse(Int(py=got[1]), "PCA")
-            noise = got[0]
-        else:
-            noise = got
-    elif on_device:
-        var fold = py_call_typed(fold_entry, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
-            Python.list(components.address, mean.address, variance.address, ratio.address, singular.address),
-            Python.list(rows, cols, count, Int(dense), keep_mode, fraction))
-        door_rows_refuse(Int(py=fold[2]), Int(py=fold[3]), "PCA", x.store.base_rows)
-        keep = Int(py=fold[0])
-        noise = fold[1]
-        if keep != count:
-            components = components.prefix(keep, cols, context)
-            variance = variance.prefix(keep, 0, context)
-            ratio = ratio.prefix(keep, 0, context)
-            singular = singular.prefix(keep, 0, context)
     else:
-        var fit_params = Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction)
-        if not x.finite:
-            _ = py_call(fit_params.append, PythonObject(1))
-        var fitted = py_call_typed(entries["pca_fit_owned"], x.address, components.address,
-            mean.address, variance.address, ratio.address, singular.address, projection_address,
-            fit_params)
-        if not x.finite:
-            admitted_finite_refuse(Int(py=fitted[2]), "PCA")
-        keep = Int(py=fitted[0])
-        noise = fitted[1]
-        if keep != count:
-            components = components.prefix(keep, cols, context)
-            variance = variance.prefix(keep, 0, context)
-            ratio = ratio.prefix(keep, 0, context)
-            singular = singular.prefix(keep, 0, context)
-            if project:
-                # MLE returns zero below two eigenvalues. Keep the public
-                # projection a matrix even when its component axis is empty.
-                var cropped = sequential_array(Python.tuple(rows, keep), context["float32"], context)
-                var cropped_address = Int(py=sequential_address(cropped))
-                if keep > 0:
-                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
-                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=projection_address),
-                           count=rows * keep * 4)
-                # Keep the full projection alive through the solver call and
-                # the copy above. Its last read was the address taken before
-                # the solver; reassigning below is no read, so Mojo's ASAP
-                # destruction freed it before the solver wrote into it (the
-                # fit_transform rows of n_components=0.8/'mle' came back with
-                # the allocator's free-list words in their first 16 bytes).
-                _ = projection
-                projection = cropped
+        fitted = pca_run_fit(fold_connection if on_device else connection, request)
+    if on_device:
+        door_rows_refuse(fitted.finite, fitted.in_range, "PCA", x.store.base_rows)
+    elif not x.finite:
+        admitted_finite_refuse(fitted.finite, "PCA")
+    var keep = fitted.keep
+    if keep != count:
+        components = components.prefix(keep, cols, context)
+        variance = variance.prefix(keep, 0, context)
+        ratio = ratio.prefix(keep, 0, context)
+        singular = singular.prefix(keep, 0, context)
+        if project:
+            # Preserve the exact solver's packed-prefix copy, including a
+            # matrix result when MLE selects an empty component axis.
+            var cropped = sequential_array(Python.tuple(rows, keep), context["float32"], context)
+            var cropped_address = Int(py=sequential_address(cropped))
+            if keep > 0:
+                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=cropped_address),
+                       src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=projection_address),
+                       count=rows * keep * 4)
+            _ = projection  # retain the original allocation through RUN and the prefix copy
+            projection = cropped
     # Publish only after the solver and all finished-output allocations pass.
     # Writes target the admitted original dict; no live settings are reread.
     py_setitem(state, "input_copied_", copied)
@@ -243,7 +220,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     py_setitem(state, "explained_variance_", variance.keep)
     py_setitem(state, "explained_variance_ratio_", ratio.keep)
     py_setitem(state, "singular_values_", singular.keep)
-    py_setitem(state, "noise_variance_", py_call(b.float, noise))
+    py_setitem(state, "noise_variance_", PythonObject(fitted.noise))
     py_setitem(state, "n_components_", keep)
     py_setitem(state, "n_features_in_", cols)
     py_setitem(state, "n_samples_", rows)
