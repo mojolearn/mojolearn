@@ -17,6 +17,7 @@ callee reports one. `entry_table_read` keeps its name and its error texts and
 now returns `entry_table_resolve(...).call`.
 """
 from std.atomic import Atomic, Ordering
+from std.sys import is_defined
 from std.sys.info import size_of
 from core.native_call_output import NativeCallOutput
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -139,11 +140,20 @@ def entry_ref_call(entry: EntryRef, operation: Int, addresses: Int, address_coun
     passed by reference to the out-of-line span call, so their address is
     real storage for the whole foreign call. The error list stays empty (no
     allocation) unless the callee reports a refusal."""
-    var output = NativeCallOutput()
-    var result = native_descriptor_call_spans(entry.call, operation, addresses, address_count,
-        ints, int_count, floats, float_count, output)
-    _ = output
-    return result
+    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
+        # Opt-in former form (see core/native_descriptor_call.mojo).
+        var held = List[NativeCallOutput]()
+        held.append(NativeCallOutput())
+        var held_result = native_descriptor_call_spans(entry.call, operation, addresses, address_count,
+            ints, int_count, floats, float_count, held[0])
+        _ = held
+        return held_result
+    else:
+        var output = NativeCallOutput()
+        var result = native_descriptor_call_spans(entry.call, operation, addresses, address_count,
+            ints, int_count, floats, float_count, output)
+        _ = output
+        return result
 
 
 def entry_ref_call(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
