@@ -38,5 +38,30 @@
   "python_tests_removed": 0,
   "numerical_oracles_changed": 0,
   "identity_run": false,
-  "performance_claim": false
+  "performance_claim": false,
+  "production_composition": {
+    "review": "NET-P01",
+    "suite": "checks.native_tests.linear_entry_production_suite",
+    "entry": "checks/native_tests/linear_entry_production.mojo",
+    "standalone_required": true,
+    "CPU_cases": 2,
+    "precondition_controls": 1,
+    "parallel": "After the ordered missing-table check and actual host publication, narrow/wide graphs run independently through host_parallelize. Kernel parallelism is unchanged.",
+    "graph": "Production LINEAR_STATES insert/acquire/replace/release -> linear_lease_predict -> production estimator table -> real linear_predict_host_v1",
+    "publication": "Exact host production table schema/endpoint order/publisher API identity; fit endpoint retained alongside predict",
+    "oracles": {
+      "original": [
+        3.25,
+        1.25
+      ],
+      "replacement": [
+        20.25,
+        2.25
+      ]
+    },
+    "lifetime": "Explicit coefficient/source/destination native Lists remain named through acquired old/new leases and registry release. A handle alone does not own borrowed buffers.",
+    "refusals": "Missing production table before publication leaves output untouched; stale handle refuses after release.",
+    "compile": "Root standard optimized CPU-column identical flags; fresh standalone process, not a shared process with earlier production table publication.",
+    "executed": false
+  }
 }
