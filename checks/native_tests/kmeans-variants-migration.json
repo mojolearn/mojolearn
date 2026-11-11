@@ -1,0 +1,39 @@
+{
+  "schema": "mojolearn.kmeans-variants-native-tests.v1",
+  "dependency": "49c35f2a97",
+  "status": "authored; uncompiled and unrun",
+  "contracts": {
+    "root": "checks/native_tests/kmeans_variants_contract.mojo",
+    "fixtures": 17,
+    "coverage": [
+      "legacy request layout",
+      "native result slot ownership and move/reuse",
+      "RNG halves above signed Int32 range",
+      "resident routing",
+      "malformed metadata/numerical/null-result refusal"
+    ]
+  },
+  "numerical": {
+    "root": "checks/native_tests/kmeans_variants_native_cpu.mojo",
+    "fixtures": 10,
+    "provider": "x_cluster.variants_host.kmeans_variants_host_v1",
+    "coverage": [
+      "weighted/unweighted MiniBatch fit fixed point",
+      "weighted/unweighted partial means/counts/inertia",
+      "second partial consumes prior counts and RNG",
+      "Bisect kmeans++ and random initialization",
+      "actual native Int32 tree prediction",
+      "nearest tie and squared distances",
+      "score objective",
+      "Euclidean transform"
+    ]
+  },
+  "parallel": "host_parallelize over independent fixture units; sequential partial updates within one unit consume prior state",
+  "unchanged_python_tests": "all existing Python tests retained; no deletion before replacement passes",
+  "limits": [
+    "No execution or performance claim.",
+    "Actual GPU provider cases remain pending root scheduling.",
+    "Witness cases prove wire/layout only, numerical cases call actual CPU provider.",
+    "Bisect root center is the existing zero placeholder, not the dataset mean."
+  ]
+}
