@@ -8,14 +8,17 @@ route (CPU builds, the CPU inference model) runs the installed CPU kernels
 layer by layer. Public classes and buffer exporters remain CPython-owned
 interface records.
 """
-from providers.python.samba_resident_pyapi import samba_resident_provider
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, generation_weight_address, py_ints
-from bindings.samba_state_native import samba_fields, samba_entries
+from bindings.samba_state_native import samba_fields, samba_entries, samba_entry_key, samba_primitive
+from core.samba_entry_table import (
+    SambaEntryKey, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST, SAMBA_PRIM_EMBEDDING_FORWARD,
+    SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD, SAMBA_PRIM_CE_LOSS,
+)
 from bindings.samba_training_native import samba_ids
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
@@ -403,6 +406,16 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     return (ids, sizes^)
 
 
+def _samba_host_primitive(cpu_inference: Bool, key: SambaEntryKey, op: Int, addresses: List[Int], ints: List[Int],
+                          floats: List[Float64]) raises:
+    """The host route's primitive: the CPU inference model's neural_host
+    image or the stack's connected training image, through the Samba table."""
+    if cpu_inference:
+        _ = samba_primitive[SAMBA_TABLE_NEURAL_HOST](key, op, addresses, ints, floats)
+    else:
+        _ = samba_primitive[SAMBA_TABLE_TRAINING](key, op, addresses, ints, floats)
+
+
 def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject, lengths: PythonObject,
                   step: Bool, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
@@ -421,10 +434,15 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var entries = PythonObject(None)
-    if Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False))):
+    var cpu_inference = Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False)))
+    # UNPACK: the Samba table key of the primitives this model runs on (the
+    # identical `_mojolearn_neural_host` image for the CPU inference model).
+    var key = SambaEntryKey(1, 0)
+    if cpu_inference:
         entries = _model_bindings(PythonObject("cpu"), "mamba3", context["neural"], PythonObject("identical"))["primitives"]
     else:
         entries = samba_entries(context, fields["numeric_mode"])
+        key = samba_entry_key(context, fields["numeric_mode"])
     var d = Int(py=config["d_model"])
     var v = Int(py=config["vocab"])
     var admitted = _samba_inference_ids(inputs, v, step, lengths, context)
@@ -439,9 +457,6 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         # The host route (CPU builds and the CPU inference model): the
         # installed CPU kernels layer by layer. Device builds never come
         # here (samba_program_arm).
-        var native = py_get(fields, "_native_primitives")
-        if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):
-            native = PythonObject(None)
         var blocks = fields["_blocks"]
         var states = PythonObject(None)
         if state is not None:
@@ -451,10 +466,8 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             states = slots["layers"]
         var arrays = fields["arrays"]
         var hidden = generation_array([b, l, d])
-        if native is not None:
-            _ = neural_descriptor_execute(native, 0, [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [b * l, v, d], [])
-        else:
-            _ = py_call(_native_function(entries, "embedding_forward"), Python.list(hidden._addr, arrays["embed.weight"]._addr, ids._addr), py_ints([b * l, v, d]))
+        _samba_host_primitive(cpu_inference, key, SAMBA_PRIM_EMBEDDING_FORWARD,
+            [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [b * l, v, d], [])
         _ = hidden  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
         for i in range(len(config["layers"])):  # driver-loop: over native model layer execution owners
@@ -470,18 +483,13 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         output = generation_array([b, l, v])
         var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
         var normalized = generation_array([b, l, d])
-        var params = py_ints([b * l, d])
-        _ = py_call(params.append, config["norm_eps"])
-        if native is not None:
-            _ = neural_descriptor_execute(native, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=arrays["norm_f.weight"]._addr)], [b * l, d], [Float64(py=config["norm_eps"])])
-        else:
-            _ = py_call(_native_function(entries, "rms_norm_forward"), Python.list(normalized._addr, hidden._addr, arrays["norm_f.weight"]._addr), params)
+        _samba_host_primitive(cpu_inference, key, SAMBA_PRIM_RMS_NORM_FORWARD,
+            [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=arrays["norm_f.weight"]._addr)], [b * l, d],
+            [Float64(py=config["norm_eps"])])
         _ = normalized  # keep the Python object alive through the native call above
         _ = hidden  # keep the Python object alive through the native call above
-        if native is not None:
-            _ = neural_descriptor_execute(native, 4, [Int(py=output._addr), Int(py=normalized._addr), Int(py=head._addr)], [b * l, v, d], [])
-        else:
-            _ = py_call(_native_function(entries, "linear_forward"), Python.list(output._addr, normalized._addr, head._addr), py_ints([b * l, v, d]))
+        _samba_host_primitive(cpu_inference, key, SAMBA_PRIM_LINEAR_FORWARD,
+            [Int(py=output._addr), Int(py=normalized._addr), Int(py=head._addr)], [b * l, v, d], [])
         _ = normalized  # keep the Python object alive through the native call above
         _ = head  # keep the Python object alive through the native call above
         _ = output  # keep the Python object alive through the native call above
@@ -517,18 +525,14 @@ def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject,
     var rows = Int(py=logits.shape[0]) * Int(py=logits.shape[1])
     if Int(py=y.size) != rows:
         raise Error("SambaStack.loss: targets must contain one class index per logit row")
-    var entries = samba_entries(context, fields["numeric_mode"])
+    _ = samba_entries(context, fields["numeric_mode"])  # mode/vendor admission of the connected binding
     var loss = generation_array([1])
     var row_loss = generation_array([rows])
     var unused_gradient = generation_array([1])
-    var params = py_ints([rows, v, -100, 2, 0, 0])
-    _ = py_call(params.append, 0.0)
-    var primitive = samba_resident_provider(fields, entries)
-    if primitive is not None:
-        _ = neural_descriptor_execute(primitive, 8, [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=unused_gradient._addr),
-            Int(py=logits._addr), Int(py=y._addr)], [rows, v, -100, 2, 0, 0], [0.0])
-    else:
-        _ = py_call(_native_function(entries, "ce_loss"), loss._addr, row_loss._addr, unused_gradient._addr, logits._addr, y._addr, params)
+    # ce_loss words: [n_rows, vocab, ignore_index, reduction (2 mean), num_items, want_grad], [label_smoothing].
+    _ = samba_primitive[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"]), SAMBA_PRIM_CE_LOSS,
+        [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=unused_gradient._addr), Int(py=logits._addr), Int(py=y._addr)],
+        [rows, v, -100, 2, 0, 0], [0.0])
     _ = unused_gradient  # keep the Python object alive through the native call above
     _ = row_loss  # keep the Python object alive through the native call above
     _ = loss  # keep the Python object alive through the native call above
