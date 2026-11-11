@@ -4,7 +4,7 @@ expansion's estimators (bindings/decomp_native.mojo)."""
 
 #: The compiled decomp drivers the owners call (a build without one refuses
 #: that operation by name).
-ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
+ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project",
                "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig",
                "x_decomp_rp_fit", "x_decomp_rp_project",
                # the pool entries a resident fitted matrix is held through
@@ -32,6 +32,7 @@ def connect(classes, neighbors=False, metadata=None):
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
     decomp = {}
+    nmf = {}
     near = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
@@ -46,8 +47,12 @@ def connect(classes, neighbors=False, metadata=None):
                 if isinstance(entry, BuiltinFunctionType):
                     entries[name] = entry
             decomp[mode] = entries
+            # NMF runs through one typed descriptor, with no per-function map.
+            factory = getattr(binding, "nmf_native_api_v1", None)
+            nmf[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             decomp[mode] = type(error).__name__ + ": " + str(error)
+            nmf[mode] = decomp[mode]
         if neighbors:
             try:
                 binding = _backend.binding("_mojolearn_x_neighbors", mode)
@@ -64,7 +69,7 @@ def connect(classes, neighbors=False, metadata=None):
                 near[mode] = type(error).__name__ + ": " + str(error)
     # Fitted arrays and results are mojolearn Arrays, as `_M.out` made them.
     context["output_context"] = _numpy_free_context()
-    context.update(decomp_classes=dict(classes), decomp_entries=decomp, decomp_neighbors=near)
+    context.update(decomp_classes=dict(classes), decomp_entries=decomp, decomp_neighbors=near, nmf_bindings=nmf)
     context.update(metadata or {})
     entry = _binding()._module.decomp_native_call
     if not isinstance(entry, BuiltinFunctionType):
