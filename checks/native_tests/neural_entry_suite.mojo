@@ -20,9 +20,10 @@ Run in a fresh process (the first check needs an unpublished table).
 """
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.entry_table import entry_ref_same
 from core.host_parallel import host_parallelize
 from core.neural_entry_table import (
-    NeuralEntryKey, neural_entry_call, NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_BLOCK_TRAIN,
+    NeuralEntryKey, neural_entry_call, neural_ref, NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_BLOCK_TRAIN,
     NEURAL_TABLE_MAMBA_TRAIN, NEURAL_TABLE_MLP_PROGRAM, NEURAL_BLOCK_FORWARD_FRESH,
     NEURAL_BLOCK_SESSION_FORWARD_FRESH, NEURAL_BLOCK_BACKWARD, NEURAL_MAMBA1_BACKWARD,
     NEURAL_MAMBA2_BACKWARD, NEURAL_MAMBA3_BACKWARD, NEURAL_MLP_PROGRAM_OPERATIONS,
@@ -56,7 +57,7 @@ def _refuses(problem: Error, text: String) raises:
 def _expect_refusal[family: Int](operation: Int, addresses: List[Int], ints: List[Int],
     floats: List[Float64], text: String) raises:
     try:
-        _ = neural_entry_call[family](_key(), operation, addresses, ints, floats)
+        _ = neural_entry_call(neural_ref[family](_key()), operation, addresses, ints, floats)
     except problem:
         _refuses(problem, text)
         return
@@ -66,29 +67,45 @@ def _expect_refusal[family: Int](operation: Int, addresses: List[Int], ints: Lis
 def precondition_unpublished() raises:
     var none = List[Int]()
     try:
-        _ = neural_entry_call[NEURAL_TABLE_BLOCK_TRAIN](_key(), NEURAL_BLOCK_BACKWARD, none, none, List[Float64]())
+        _ = neural_entry_call(neural_ref[NEURAL_TABLE_BLOCK_TRAIN](_key()), NEURAL_BLOCK_BACKWARD, none, none, List[Float64]())
     except problem:
         _refuses(problem, "provider is not published")
         return
     raise Error("an unpublished neural table did not refuse")
 
 
+def ref_resolution() raises:
+    """Lane entry-table-zero-alloc: each family resolves once into a ref that
+    a connection owner reuses (the same pointer and layout word every time),
+    and a mismatched key refuses at resolution, never at a call."""
+    require(entry_ref_same(neural_ref[NEURAL_TABLE_BLOCK_TRAIN](_key()), neural_ref[NEURAL_TABLE_BLOCK_TRAIN](_key())),
+            "neural block train: a second resolution returned another entry")
+    require(entry_ref_same(neural_ref[NEURAL_TABLE_MAMBA_TRAIN](_key()), neural_ref[NEURAL_TABLE_MAMBA_TRAIN](_key())),
+            "neural mamba train: a second resolution returned another entry")
+    try:
+        _ = neural_ref[NEURAL_TABLE_BLOCK_TRAIN](NeuralEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0))
+        raise Error("neural: a mismatched key did not refuse at resolution")
+    except problem:
+        require("did not refuse" not in String(problem), String(problem))
+
+
 def preconditions_published() raises:
+    ref_resolution()
     var none = List[Int]()
     try:
-        _ = neural_entry_call[NEURAL_TABLE_MAMBA_TRAIN](NeuralEntryKey(Int(GLOBAL_NUMERIC_MODE), 2),
+        _ = neural_entry_call(neural_ref[NEURAL_TABLE_MAMBA_TRAIN](NeuralEntryKey(Int(GLOBAL_NUMERIC_MODE), 2)),
             NEURAL_MAMBA1_BACKWARD, none, none, List[Float64]())
         raise Error("an unpublished vendor key did not refuse")
     except problem:
         _refuses(problem, "provider is not published")
     try:
-        _ = neural_entry_call[NEURAL_TABLE_BLOCK_FORWARD](NeuralEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0),
+        _ = neural_entry_call(neural_ref[NEURAL_TABLE_BLOCK_FORWARD](NeuralEntryKey(1 - Int(GLOBAL_NUMERIC_MODE), 0)),
             NEURAL_BLOCK_FORWARD_FRESH, none, none, List[Float64]())
         raise Error("a mismatched tier key did not refuse")
     except problem:
         require("did not refuse" not in String(problem), String(problem))
     try:
-        _ = neural_entry_call[NEURAL_TABLE_MLP_PROGRAM](NeuralEntryKey(Int(GLOBAL_NUMERIC_MODE), 4),
+        _ = neural_entry_call(neural_ref[NEURAL_TABLE_MLP_PROGRAM](NeuralEntryKey(Int(GLOBAL_NUMERIC_MODE), 4)),
             SMALL_MLP_PROGRAM_CLOSE, none, none, List[Float64]())
         raise Error("an invalid vendor key did not refuse")
     except problem:
