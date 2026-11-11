@@ -37,9 +37,23 @@ from core.decomp_native_impl import (
     decomp_f32_to_u8, decomp_i32_to_u8, decomp_u8_to_f32, decomp_f32_to_i32, decomp_count_u8,
 )
 
+from x_decomp.descriptor_schema import XD_MCD, XD_CONSISTENCY_FACTOR, XD_CHI2_QUANTILE
+
 comptime MCD_F32_EPS = 1.1920928955078125e-07
 comptime MCD_LOG_2PI = 1.8378770664093453
 comptime MCD_TINY = 1.1754943508222875e-38
+
+
+def _mcd_scalar(kit: DecompKit, op: Int, floats: List[Float64]) raises -> Float64:
+    # One float64 result of the x_decomp table (XD_CONSISTENCY_FACTOR or
+    # XD_CHI2_QUANTILE; were the Python entries x_decomp_consistency_factor
+    # and x_decomp_chi2_quantile), written to a host word.
+    var word = List[Float64](length=1, fill=0.0)
+    var addresses: List[Int] = [Int(word.unsafe_ptr())]
+    _ = kit.xd(op, addresses, List[Int](), floats, True)
+    var value = word[0]
+    _ = word^
+    return value
 
 
 def _name(model: PythonObject) raises -> String:
@@ -254,26 +268,24 @@ def mcd_fit(model: PythonObject, args: PythonObject, mut kit: DecompKit, context
     else:
         # fast_mcd in ONE binding call; only the O(1) plan integers here, with
         # the float expressions they always used.
-        var plan = Python.list(0, 0, 0, 0, 0, 0, 0)
+        var params: List[Int] = [n, p, h, decomp_seed_word(seed), 0, 0, 0, 0, 0, 0, 0]
         if n > 500:
             var n_sub = n // 300
             var n_ss = n // n_sub
             var n_m = min(1500, n)
             var share = Float64(h) / Float64(n)
-            plan = Python.list(n_sub, n_ss, Int(ceil(Float64(n_ss) * share)), max(10, 500 // n_sub), n_m,
-                               Int(ceil(Float64(n_m) * share)), 10 if n > 1500 else 1)
+            params = [n, p, h, decomp_seed_word(seed), n_sub, n_ss, Int(ceil(Float64(n_ss) * share)),
+                      max(10, 500 // n_sub), n_m, Int(ceil(Float64(n_m) * share)), 10 if n > 1500 else 1]
         loc = kit.zeros(1, p)
         cov = kit.zeros(p, p)
         dist = kit.zeros(n, 1)
         var store = py_call(context["output_context"]["array_type"], PythonObject("i"),
                             py_call(context["output_context"]["native_bytes_type"], 4 * n))
-        var params = Python.list(n, p, h, decomp_seed_word(seed))
-        _ = py_call(params.extend, plan)
-        var ax = kit.address(x)
-        _ = x  # keep the Python object alive through the native call above
-        _ = py_call(kit.entries["x_decomp_mcd"], ax, kit.address(loc), kit.address(cov), py_call(store.buffer_info)[0],
-                    kit.address(dist), params)
-        _ = x  # keep the Python object alive through the native call above
+        # XD_MCD (was the Python entry x_decomp_mcd)
+        var addresses: List[Int] = [kit.at(x), kit.at(loc), kit.at(cov), Int(py=py_call(store.buffer_info)[0]),
+                                    kit.at(dist)]
+        _ = kit.xd(XD_MCD, addresses, params, List[Float64](), True)
+        _ = store  # keep the Python object alive through the native call above
         kit.wrote_host(loc)
         kit.wrote_host(cov)
         kit.wrote_host(dist)
@@ -295,16 +307,14 @@ def mcd_fit(model: PythonObject, args: PythonObject, mut kit: DecompKit, context
     py_setitem(fields, "raw_support_", support)
     # correct_covariance: consistency at the normal model (dist_ is rescaled)
     var n_support = _support_count(support, n)
-    var corr = decomp_float(py_call(kit.entries["x_decomp_consistency_factor"], PythonObject(Float64(p)), PythonObject(Float64(n_support)),
-                                     PythonObject(Float64(n))))
+    var corr = _mcd_scalar(kit, XD_CONSISTENCY_FACTOR, [Float64(p), Float64(n_support), Float64(n)])
     dist = kit.ew(XD_SCALE, dist, scalar=1.0 / corr)
     # reweight_covariance: the mask dist < thr (`le` against the float32 just below thr)
-    var thr = decomp_float(py_call(kit.entries["x_decomp_chi2_quantile"], PythonObject(Float64(p)), PythonObject(Float64(0.025))))
+    var thr = _mcd_scalar(kit, XD_CHI2_QUANTILE, [Float64(p), 0.025])
     var below = kit.const(_f32_below(thr))
     var mask = kit.ew(XD_LE, dist, below)
     var moments = _masked_cov(kit, x, mask, assume_centered)
-    var factor = decomp_float(py_call(kit.entries["x_decomp_consistency_factor"], PythonObject(Float64(p)), PythonObject(Float64(0.975)),
-                                       PythonObject(Float64(1.0))))
+    var factor = _mcd_scalar(kit, XD_CONSISTENCY_FACTOR, [Float64(p), 0.975, 1.0])
     var covr = kit.ew(XD_SCALE, moments[1], scalar=factor)
     var reweighted = _mask_store(kit, mask, n, context)
     var precision = _pinvh(kit, covr)
