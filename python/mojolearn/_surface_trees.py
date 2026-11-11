@@ -100,9 +100,8 @@ FAMILIES = (
             "x_trees_count_rows", "x_trees_count_equal", "x_trees_oob_r2", "x_trees_class_counts",
             "x_trees_remap_cols", "x_trees_positive_codes", "x_trees_spread_leaves", "x_trees_leaf_numbering",
             "x_trees_iota_i32", "x_trees_fill_class_major_f64", "x_trees_code_counts", "x_trees_class_rows",
-            # fam2-forests: IDN_DART_DEVICE host twin, native tree shape, SHAP device-model entries
-            "x_trees_dart_open", "x_trees_dart_step", "x_trees_dart_add", "x_trees_dart_close",
-            "x_trees_dart_predict",
+            # fam2-forests: native tree shape, SHAP device-model entries (the x_trees_dart_* round and
+            # predict entries left with lane calltable-gbdt-forest-dart: native DART table only)
             "x_trees_tree_shape",
             # perf lanes: the fused OneVsRest and calibrated-probability epilogues
             "x_trees_ovr_assemble", "x_trees_calibrated_proba",
