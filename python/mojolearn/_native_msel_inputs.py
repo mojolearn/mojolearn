@@ -41,6 +41,13 @@ def connect(context, resident_context):
         entries['x_metrics_first_rows'] = entry  # glue: retain fixed native entry identity for product calls
     except Exception as error:
         entries['x_metrics_first_rows'] = _refusal(error)  # glue: retain import failure metadata without running the operation
+    # glue: once at import, the base helper table key the native doors read
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        entries['base_native_key'] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        entries['base_native_key'] = _refusal(error)
     context.update(label_context())
     from ._native_owner_lifetime import connect_owner_context
     connect_owner_context(context)

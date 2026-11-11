@@ -20,6 +20,8 @@ from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.msel_common import msel_signed32
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import base_reduce_stat_int, base_bincount_i64, base_bincount2_i32
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_storage_allocate
@@ -415,11 +417,12 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
     if have:
         var dtype = String(py=arr.dtype)
         if (dtype == "<f4" or dtype == "<f8") and Int(py=flat.size) > 0:
-            var integral = family_call(msel_entry("reduce_stat", context), PythonObject(msel_addr(flat)),
-                                       context["family_msel_native_code"][PythonObject(dtype)], flat.size,
-                                       context["family_msel_reduce_integral"])
+            var integral = base_reduce_stat_int(
+                base_helpers_key(context["family_msel_entries"]), msel_addr(flat),
+                Int(py=context["family_msel_native_code"][PythonObject(dtype)]), Int(py=flat.size),
+                Int(py=context["family_msel_reduce_integral"]))
             _ = flat  # keep the Python object alive through the native call above
-            if not msel_truth(integral):
+            if integral == 0:
                 return PythonObject(None)
             _ = flat  # keep the Python object alive through the native calls above
     return msel_encode(flat if have else y, context)
@@ -715,8 +718,8 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
     _ = folds  # keep the Python object alive through the native call above
     _ = cnt  # keep the Python object alive through the native call above
     var sizes = msel_new(k, "<i8", context)
-    _ = family_call(msel_entry("bincount_i64", context), PythonObject(msel_addr(folds)), PythonObject(2), PythonObject(n),
-                    PythonObject(k), PythonObject(msel_addr(sizes)), PythonObject(0))
+    _ = base_bincount_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(folds), 2, n, k,
+                          msel_addr(sizes), False)
     _ = folds  # keep the Python object alive through the native call above
     _ = sizes  # keep the Python object alive through the native call above
     if msel_entry_ready("select_folds_i64", context):
@@ -803,8 +806,8 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
     var to_fold = msel_new(m, "<i4", context)
     var sizes = msel_new(k, "<i8", context)
     var dist = msel_new(m * n_classes, "<i8", context)
-    _ = family_call(msel_entry("bincount2_i32", context), PythonObject(msel_addr(yenc)), PythonObject(msel_addr(gc.codes)),
-                    py_call(msel_b().list, Python.tuple(n, n_classes, m)), PythonObject(msel_addr(dist)))
+    _ = base_bincount2_i32(base_helpers_key(context["family_msel_entries"]), msel_addr(yenc), msel_addr(gc.codes),
+                           n, n_classes, m, msel_addr(dist))
     _ = yenc  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
     var bad = msel_int(family_call(msel_entry("strat_group_plan_i32", context),  # cpu-route: sequential greedy fold plan over groups, not rows
@@ -1398,12 +1401,14 @@ def msel_native_discrete(y: PythonObject, context: PythonObject) raises -> Pytho
     if not py_contains(context["family_msel_native_encode"], dtype):
         return PythonObject(None)
     var d = String(py=dtype)
-    var integral = msel_entry("reduce_stat", context)
+    var bkey = base_helpers_key(context["family_msel_entries"])
     if d != "<f4" and d != "<f8":
         return PythonObject(True)
     var c = msel_materialize(arr, "y", context)
-    var _keep_ret_c_r972 = PythonObject(msel_truth(family_call(integral, PythonObject(msel_addr(c)), context["family_msel_native_code"][dtype],
-                                               arr.size, context["family_msel_reduce_integral"])))
+    var _keep_ret_c_r972 = PythonObject(base_reduce_stat_int(bkey, msel_addr(c),
+                                                             Int(py=context["family_msel_native_code"][dtype]),
+                                                             Int(py=arr.size),
+                                                             Int(py=context["family_msel_reduce_integral"])) != 0)
     _ = c  # keep the Python object alive through the native call above
     var _keep_ret_c = _keep_ret_c_r972^
     _ = c  # keep the Python object alive through the native call above
