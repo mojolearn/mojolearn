@@ -12,7 +12,7 @@ from bindings.native_class_admission import class_record, class_admit, class_wat
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.optimizer_public_words import stash_python_error
 from bindings.metrics_native_support import metric_warn
-from bindings.scaler_native import _stage
+from core.preprocessing_program import prep_program_stage as _stage
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_run
 from bindings.parallel_public_result import parallel_public_result
 from bindings.prep_entry_cache import prep_mode_checked

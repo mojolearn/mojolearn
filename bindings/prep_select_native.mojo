@@ -31,7 +31,8 @@ from bindings.classical_arrays import classical_is_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import classical_encode_labels
 from bindings.admitted_input import admit_f32, admitted_vector
-from bindings.scaler_native import _stage, _ptr
+from bindings.scaler_native import _ptr
+from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_stateless_native import _select_transform, _select_gather, _support_columns, _words

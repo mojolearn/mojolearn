@@ -29,7 +29,8 @@ from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input, scaler_snapshot_write_back
-from bindings.scaler_native import scaler_fit, _input, _ptr, _stage, _copy_row, _bool
+from bindings.scaler_native import scaler_fit, _input, _ptr, _copy_row, _bool
+from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import scaler_fill, scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices, scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
