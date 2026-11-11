@@ -1,0 +1,155 @@
+{
+  "family": "GaussianProcessRegressor/GaussianProcessClassifier",
+  "status": "source inventory; typed API pending; no compile/test execution",
+  "initial_scan": {
+    "files": 23,
+    "matching_functions_including_helpers": 40,
+    "candidate_count": "Not inferred from name matches; mixed functions split below"
+  },
+  "reviewed_workloads": [
+    {
+      "source": "test_gp_surface.py::main POSTERIOR/FAILED-FIT",
+      "workload": "16x2 splitmix-shaped hashed X salt0x67700001 and y salt0x67700002",
+      "settings": "Constant1 * ARD RBF[.25,.25] + White0; alpha2^-20; no normalization/optimizer. Failure variant duplicates row1=row0, RBF1/alpha0.",
+      "numerical_candidates": [
+        "factorization status",
+        "training mean recovery max absolute error <2^-14",
+        "nonnegative standard deviation",
+        "native clamp flags/count consistency",
+        "finite symmetric covariance",
+        "finite fit-time LML",
+        "duplicate singular fit status"
+      ],
+      "retain_python": [
+        "binding/mode provenance",
+        "public L/dual/clamped/covariance Array shapes and packing",
+        "failed-fit query/LML refusal and all option/protocol refusals"
+      ],
+      "do_not_recreate": "same-bits mean/cov and row-alone identity controller"
+    },
+    {
+      "source": "test_gp_return_cov.py::test_cov_is_symmetric_and_its_diagonal_is_the_variance",
+      "workload": "seed2 normal60x3; q=first20 +Float32(.25); y=sin(x0)+.1*noise plus5 when normalized",
+      "settings": "Constant1*RBF1+White.1; normalize False/True; alpha default2^-20",
+      "numerical_candidates": [
+        "exact covariance symmetry",
+        "sqrt(clipped covariance diagonal) versus native std rtol1e-3/atol1e-4"
+      ],
+      "retain_python": [
+        "both return flags refusal",
+        "20x20 Float32 public packing",
+        "independent sklearn covariance oracle qfirst15+.5 atol2e-3"
+      ],
+      "do_not_recreate": "repeated covariance/mean bits controller"
+    },
+    {
+      "source": "test_gp_normalize_y.py",
+      "workload": "seed4 normal96x3; y=50+12*sin(x0)+3*x1; qnext24x3; constant target7 variant",
+      "settings": "Constant1*RBF1+White.1; normalize True, alpha2^-20",
+      "numerical_candidates": [
+        "native train mean within1e-3 of Float64",
+        "constant target mean7/std1 and finite prediction"
+      ],
+      "retain_python": [
+        "sklearn normalized mean rtol2e-4/atol2e-3 and std rtol2e-3/atol2e-3",
+        "bool admission",
+        "save/load length-scale counts for RBF/Matern/ARD and GPC"
+      ],
+      "do_not_recreate": "second-fit byte comparison"
+    },
+    {
+      "source": "test_gp_sample_y.py::arm_shape/arm_moments",
+      "workload": "seed4 n96,d3,q24 sample5/key1 and default sample1; seed6 n96,d3,q6, draws4000/key3",
+      "settings": "y=50+12*sin(x0)+3*x1; Constant1*RBF1+White.1; unnormalized; alpha2^-20",
+      "numerical_candidates": [
+        "all native samples finite",
+        "empirical mean within6SE+1e-4",
+        "empirical standard deviation relative error<.08"
+      ],
+      "retain_python": [
+        "public two-dimensional sample Array shape",
+        "sample count/seed/feature/prefit refusals",
+        "sklearn joint-covariance oracle seed7/q5/draws6000/key9, normalizeFalse/True, .08 correlation units and6SE+1e-3"
+      ],
+      "do_not_recreate": "repeated samples/key/width bits campaign; seed words can have separate typed wire contracts"
+    },
+    {
+      "source": "test_gp_optimizer.py::arm_gradient",
+      "workload": "seed4 n40,d3; y=sin(1.5*x0)+.5*x1+.1*noise",
+      "settings": [
+        "Constant1.5*RBF[.8,1.2,2]+White.2",
+        "Constant1*Matern1.1 nu.5+White.1",
+        "Constant.7*Matern[1,.6,1.4] nu1.5+White.1",
+        "Matern.9 nu2.5+Constant.3+White.2"
+      ],
+      "numerical_candidates": [
+        "central differences h1e-2, max abs(g-fd)/(abs(fd)+1)<5e-3"
+      ],
+      "retain_python": [
+        "independent sklearn LML/gradient oracle gerr<1e-3 and LMLerror<1e-3*(abs(ref)+1)",
+        "public kernel theta/bounds/leaf order and constructor semantics"
+      ]
+    },
+    {
+      "source": "test_gp_optimizer.py::arm_optimize/arm_restarts",
+      "workload": "seed5 n48,d3 initial RBF kernel; seed6 n48,d3 Matern2.5 ARD restart kernel",
+      "settings": "optimizer fmin_l_bfgs_b unchanged; original no-restart then2 restarts/key7; alpha2^-20",
+      "numerical_candidates": [
+        "positive steps",
+        "likelihood improves from original start",
+        "best saved run wins, earliest tie",
+        "free params retain admitted Float32 representation",
+        "no free parameters produces no optimizer runs"
+      ],
+      "retain_python": [
+        "kernel_ object identity/copy ownership",
+        "optimizer None retains original kernel object",
+        "callable optimizer/RNG/refusal boundaries",
+        "sklearn optimized LML references n64 seeds11/12/13 and original relative bound1e-3*(abs(ref)+1)"
+      ],
+      "do_not_recreate": "second-fit/repeated-run bits campaign"
+    },
+    {
+      "source": "test_gpc_surface.py::test_binary_and_multiclass_fit_predict",
+      "workload": "48x3 from Python random.Random0.gauss; original rank labels2/3 computed from original Float64 lists; qfirst10",
+      "settings": "binary default kernel; multiclass Constant2*Matern1 nu1.5; max_iter_predict default100",
+      "numerical_candidates": [
+        "binary probabilities within[0,1] and sum within1e-12",
+        "iterations1..100",
+        "latent mean sign predicts binary class",
+        "positive latent variance",
+        "three-class probabilities sum within1e-12"
+      ],
+      "retain_python": [
+        "public Float64 probability dtype/shape, L_ shape, estimators_/n_iter_ publication",
+        "class labels/degenerate classes/refusals",
+        "multiclass latent refusal",
+        "save/load and host interoperability"
+      ],
+      "do_not_recreate": "repeat/batch bytes campaign"
+    },
+    {
+      "source": "test_parallel_public_drivers.py::_gaussian_process/_gaussian_process_classifier and test_classical_partition_native.py::test_native_gpc",
+      "workload": "GPR64x4 train/32query from seed0 normal96x4; targets x0-.5*x2; partition GPC9x3 seed75/classes2 or3/max_iter3; public GPC64 training split",
+      "settings": "original RBF composite/defaults and declared partition widths/devices",
+      "numerical_candidates": [
+        "single native fit/query workloads if needed for missing route coverage"
+      ],
+      "retain_python": [
+        "multi-device/native partition controller and interop comparisons; never relabel as physical-GPU concurrency proof"
+      ]
+    }
+  ],
+  "source_only_checks": "test_cpu_training_gp.py includes old wrapper exports/error-string/import-list/fold-spelling assertions. Review separately when typed API freezes; do not preserve removed wrappers solely to satisfy source text. No replacement source guard is proposed.",
+  "existing_native_checks": "gaussian_process/checks and host/*_oracle contain numerical/seam/identity infrastructure. Preserve algorithms and do not rerun or reconstruct older bits campaigns.",
+  "native_interfaces_seen": [
+    "gaussian_process.gp_binding_entries._gpr_fit_run/_gpr_predict_run/_gpr_predict_cov_run/_gpr_sample_y_run/_gpr_optimize_run/_gpr_lml_grad_run",
+    "gaussian_process.gp_binding_entries._gpc_fit_run/_gpc_predict_run",
+    "gaussian_process.gp_resident_state typed lease/store",
+    "Existing GPKernelSpec constructor/evaluation and tuned resident/OVR routes; wait for pilot fixed typed descriptors"
+  ],
+  "ownership": "Pilot owns product and new Python boundary tests; this lane owns new gp_contract/state/native files and migration manifests. No DBSCAN blocked or completed Agglomerative source changes.",
+  "planned_independent_references": "Original Float32 input bytes; NumPy Float64 kernel equations, covariance/linear solves/LML and analytic log-hyperparameter gradients. Original bounds remain unchanged. Classifier invariants retain declared tolerances. Existing external sklearn checks stay Python.",
+  "python_removed": 0,
+  "reference_preparation": "Not started for GP; no product import or execution."
+}
