@@ -712,7 +712,7 @@ struct _NativeTextCodes(Copyable, Movable, _TextCodeStorage):
 @fieldwise_init
 struct _TextLabels[S: _TextCodeStorage](Copyable, Movable):
     var classes: PythonObject
-    var codes: S
+    var codes: Self.S
     var count: Int
 
 
