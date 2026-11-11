@@ -20,6 +20,11 @@ at module init, once per (tier, vendor) key:
   CAUSAL_TABLE_BLOCK       `transformer/native_block_dispatch.mojo::
                            transformer_block_v1` (GPU `_mojolearn_transformer`)
                            and the neural host family 2, TRANSFORMER_BLOCK_ABI_NAME.
+                           Not published here: the same images publish the
+                           same entry in the neural table's
+                           NEURAL_TABLE_BLOCK_FORWARD family
+                           (core/neural_entry_table.mojo), and this family
+                           reads that one slot (precompile-fixes, 2026-11-11).
   CAUSAL_TABLE_MAMBA       `mamba/native_state_dispatch.mojo::mamba_state_v1`
                            (GPU `_mojolearn_mamba`) and the neural host
                            family 1, MAMBA_STATE_ABI_NAME.
@@ -35,6 +40,7 @@ Publication and lookup are small metadata operations with no independent
 numerical work to split.
 """
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
+from core.neural_entry_table import NeuralEntryKey, neural_table_entry, NEURAL_TABLE_BLOCK_FORWARD
 from core.native_descriptor_abi import (
     NativeDescriptorCall, PRIMITIVE_ABI_NAME, TRANSFORMER_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME,
 )
@@ -129,6 +135,8 @@ def causal_table_publish[family: Int](key: CausalEntryKey, publisher: Int, entry
     """Publish this image's one descriptor entry of `family` under `key`
     (the provider's module init). A repeated init publishes the same pointer."""
     comptime assert family >= CAUSAL_TABLE_LINALG and family <= CAUSAL_TABLE_MAMBA, "unknown CausalLM table family"
+    # The block family is the neural table's NEURAL_TABLE_BLOCK_FORWARD slot.
+    comptime assert family != CAUSAL_TABLE_BLOCK, "the CausalLM block family is published in the neural table"
     _causal_entry_key_check(key)
     comptime if family == CAUSAL_TABLE_LINALG:
         if key.vendor == 0 and key.mode == 1:
@@ -209,47 +217,6 @@ def causal_table_publish[family: Int](key: CausalEntryKey, publisher: Int, entry
             return
         if key.vendor == 3 and key.mode == 0:
             comptime NAME = "MojolearnEntriesCausalPrimitivesFastHIPV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-    comptime if family == CAUSAL_TABLE_BLOCK:
-        if key.vendor == 0 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalCPUV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 0 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastCPUV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 1 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalMetalV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 1 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastMetalV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 2 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalCUDAV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 2 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastCUDAV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 3 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalHIPV1"
-            entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
-                [_causal_operations[family]()], [entry])
-            return
-        if key.vendor == 3 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastHIPV1"
             entry_table_publish[NAME](key.mode, key.vendor, publisher, [_causal_schema[family]()],
                 [_causal_operations[family]()], [entry])
             return
@@ -353,30 +320,10 @@ def causal_table_entry[family: Int](key: CausalEntryKey) raises -> NativeDescrip
             comptime NAME = "MojolearnEntriesCausalPrimitivesFastHIPV1"
             return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
     comptime if family == CAUSAL_TABLE_BLOCK:
-        if key.vendor == 0 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalCPUV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 0 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastCPUV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 1 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalMetalV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 1 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastMetalV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 2 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalCUDAV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 2 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastCUDAV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 3 and key.mode == 1:
-            comptime NAME = "MojolearnEntriesCausalBlockIdenticalHIPV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
-        if key.vendor == 3 and key.mode == 0:
-            comptime NAME = "MojolearnEntriesCausalBlockFastHIPV1"
-            return entry_table_read[NAME](key.mode, key.vendor, 0, _causal_schema[family](), _causal_operations[family]())
+        # One publication per image: the Transformer block entry lives in
+        # the neural table's block-forward family (same images, same keys,
+        # same schema and operation count), read here.
+        return neural_table_entry[NEURAL_TABLE_BLOCK_FORWARD](NeuralEntryKey(key.mode, key.vendor))
     comptime if family == CAUSAL_TABLE_MAMBA:
         if key.vendor == 0 and key.mode == 1:
             comptime NAME = "MojolearnEntriesCausalMambaStateIdenticalCPUV1"
