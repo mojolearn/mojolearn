@@ -10,62 +10,17 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
-from bindings.p3_array_arena_records import P3_FROM_BUFFER_LAYOUT, p3_layout_admitted, p3_layout_admit
-
-
-def _namespace(cls: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
-    var names = py_call(b.list, fields.keys())
-    for i in range(len(names)):  # driver-loop: native class metadata keys before lookup
-        if py_type(names[i]) is not b.str:
-            raise Error("TypeError: Array storage classes require native string keys")
-    return fields
+from bindings.native_array_storage_admission import (
+    array_storage_namespace as _namespace, array_storage_class, array_storage_admit,
+)
 
 
 def _is_array_class(cls: PythonObject, context: PythonObject) raises -> Bool:
-    var b = native_loaded_module("builtins")
-    if py_type(cls) is not b.type:
-        return False
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(ancestry)):  # driver-loop: native Array class ancestry
-        if ancestry[i] is context["array_class"]:
-            return True
-    return False
+    return array_storage_class(cls, context["array_class"])
 
 
 def _slots(cls: PythonObject, context: PythonObject) raises -> PythonObject:
-    var slots = context["from_buffer_slots"]
-    # p3-array-arena: the class admission below is kept per class state (type
-    # watcher; a modification of the class or any ancestor, the base Array
-    # class included, re-runs it), not repeated on every from_buffer call.
-    if p3_layout_admitted(P3_FROM_BUFFER_LAYOUT, cls, slots):
-        return slots
-    if not _is_array_class(cls, context):
-        raise Error("TypeError: Array.from_buffer builds a mojolearn Array class")
-    var b = native_loaded_module("builtins")
-    var names = py_call(b.list, slots.keys())
-    var base = context["array_class"]
-    var base_fields = _namespace(base)
-    for i in range(len(names)):  # small-loop(retained Array member descriptors)
-        if py_get(base_fields, names[i]) is not slots[names[i]]:
-            raise Error("TypeError: Array native storage descriptors changed")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(ancestry)):  # driver-loop: admit passive subclass storage and lifetime
-        var fields = _namespace(ancestry[i])
-        if py_contains(fields, "__getattr__") or py_contains(fields, "__del__"):
-            raise Error("TypeError: Array.from_buffer does not invoke Python metadata or lifetime hooks")
-        for name in ["__getattribute__", "__setattr__", "__new__"]:  # small-loop(native storage access protocols)
-            var member = py_get(fields, PythonObject(name))
-            if member is not None and member is not b.object.__dict__[name]:
-                raise Error("TypeError: Array.from_buffer requires native allocation and storage access")
-        if ancestry[i] is base:
-            continue
-        for j in range(len(names)):  # small-loop(refuse subclass field overrides before slot access)
-            if py_contains(fields, names[j]):
-                raise Error("TypeError: Array.from_buffer requires its inherited native storage slots")
-    p3_layout_admit(P3_FROM_BUFFER_LAYOUT, cls, slots)
-    return slots
+    return array_storage_admit(cls, context["array_class"], context["from_buffer_slots"])
 
 
 def _tuple(values: List[Int]) raises -> PythonObject:
