@@ -776,8 +776,8 @@ def _code_buffer(y: PythonObject, context: PythonObject, mut codes: List[Int]) r
     var kind = String(py=y.dtype.kind)
     if kind != "i" and kind != "u" and kind != "b":
         return False
-    if String(py=y.dtype.byteorder) == ">":
-        return False  # big-endian words: the list path reads them
+    if String(py=y.dtype.byteorder) == ">" or Int(py=y.ndim) == 0:
+        return False  # big-endian words or a 0-d array: the list path reads (or refuses) them
     classical_admit_value(y, context)
     var view = admitted_buffer_view(y)
     if view.kind == BOUNDARY_KIND_UINT and view.itemsize == 8:
@@ -1041,7 +1041,7 @@ def _le_inverse(model: PythonObject, y: PythonObject, context: PythonObject) rai
     if not _code_buffer(y, context, codes):
         codes = _int64_codes(_flatten_labels(y, context))
     var k = len(classes)
-    for i in range(len(codes)):  # list-input: one int() per entry of the caller's Python code list (an integer code array takes _code_buffer)
+    for i in range(len(codes)):  # driver-loop: native range check of the code words (no CPython call)
         if codes[i] < 0 or codes[i] >= k:
             raise Error(UNSEEN)
     return _class_list(classes, codes, context)
