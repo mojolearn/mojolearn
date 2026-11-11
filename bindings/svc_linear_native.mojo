@@ -28,7 +28,7 @@ from bindings.label_weights_boundary import label_weights_run
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY, LABEL_WEIGHTS_ROWS
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from bindings.classical_labels import labels_type_name, classical_encode_labels
-from bindings.linear_svc_boundary import LinearSvcWeights, LinearSvcConnection, linear_svc_connection, linear_svc_run_fit, linear_svc_run_query, LinearSvrFitResult, linear_svr_run_fit
+from bindings.linear_svc_boundary import LinearSvcWeights, LinearSvcConnection, linear_svc_connection, linear_svc_run_fit, linear_svc_run_query, LinearSvrFitResult, linear_svr_run_fit, LinearSvcPrediction
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcFitPlan, LinearSvcWeightsState, linear_svc_pack
 from core.qn_single_fit import QnSingleFitPlan
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_MULTICLASS_AVAILABLE
@@ -37,8 +37,10 @@ from bindings.labels_descriptor_boundary import labels_threshold, labels_argmax_
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy,
     svc_mode, svc_binding, svc_shape_of, svc_labels_1d, svc_sorted_classes,
-    svc_decode, svc_r2_sums, svc_accuracy,
+    svc_decode, svc_r2_sums,
 )
+
+from bindings.svc_score_boundary import svc_decode_score, svc_accuracy_native
 
 comptime _PY2MOJO_ROWS = 2
 
@@ -353,8 +355,8 @@ def _linear_svc_codes(model: PythonObject, fields: PythonObject, connection: Lin
     return codes^
 
 
-def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
+def _linear_svc_prediction(model: PythonObject, binding: PythonObject, source: PythonObject,
+                        context: PythonObject) raises -> LinearSvcPrediction:
     var fields = py_fields(model)
     var fitted = svc_has(fields, "classes_")
     if fitted:
@@ -363,10 +365,10 @@ def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: Pyth
         var connection = linear_svc_connection(binding)
         if k == 2 and (connection.driver.flags() & _PY2MOJO_ROWS) != 0:
             var codes = _linear_svc_codes(model, fields, connection, source, QN_NATIVE_BINARY, 2, context)
-            return svc_decode(model, classes, codes, context)
+            return LinearSvcPrediction(classes, codes^)
         if k > 2 and connection.driver.metadata(QN_NATIVE_MULTICLASS_AVAILABLE) != 0:
             var codes = _linear_svc_codes(model, fields, connection, source, QN_NATIVE_MULTICLASS, k, context)
-            return svc_decode(model, classes, codes, context)
+            return LinearSvcPrediction(classes, codes^)
     if not svc_has(fields, "_w"):
         raise Error("mojolearn LinearSVC: call fit first")
     var classes = svc_field(fields, "classes_")
@@ -385,15 +387,13 @@ def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: Pyth
     elif scores.rows > 0:
         labels_argmax_rows(context, False, Int(scores.values.unsafe_ptr()), scores.rows, k, Int(codes.unsafe_ptr()))
     _ = scores
-    return svc_decode(model, classes, codes, context)
+    return LinearSvcPrediction(classes, codes^)
 
 
-def _pred_count(pred: PythonObject) raises -> Int:
-    """`len(pred)` of an Array (its first axis) or a list."""
-    var b = svc_builtins()
-    if py_type(pred) is b.list:
-        return len(pred)
-    return Int(py=pred.shape[0])
+def _linear_svc_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    var result = _linear_svc_prediction(model, binding, source, context)
+    return svc_decode(model, result.classes, result.codes, context)
 
 
 def svc_linear_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -412,6 +412,7 @@ def svc_linear_operation(model: PythonObject, operation: String, args: PythonObj
     if operation == "family_svc_linear_svc_predict":
         return _linear_svc_predict(model, args[0], args[1], context)
     if operation == "family_svc_linear_svc_score":
-        var pred = _linear_svc_predict(model, args[0], args[1], context)
-        return PythonObject(svc_accuracy(args[2], pred, _pred_count(pred), context))
+        var result = _linear_svc_prediction(model, args[0], args[1], context)
+        var prediction = svc_decode_score(model, result.classes, result.codes, context)
+        return PythonObject(svc_accuracy_native(args[2], prediction, context))
     raise Error("RuntimeError: unknown linear SVM operation " + operation)

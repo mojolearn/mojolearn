@@ -69,3 +69,9 @@ def linear_svr_run_fit(connection: LinearSvcConnection, request: QnFitRequest,
     finally:
         _ = connection
         _ = plan
+
+
+@fieldwise_init
+struct LinearSvcPrediction(Movable):
+    var classes: PythonObject
+    var codes: List[Int64]
