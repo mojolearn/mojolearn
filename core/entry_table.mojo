@@ -90,3 +90,17 @@ def entry_table_read[name: StaticString](mode: Int, vendor: Int,
     if slot[].schemas[index] != schema or slot[].operations[index] != operations:
         raise Error("native entry table: ABI schema differs: " + String(name))
     return slot[].entries[index]
+
+
+def entry_table_same_call(left: NativeDescriptorCall, right: NativeDescriptorCall) -> Bool:
+    # Native thin C function pointers have no owned captures. This comparison
+    # is import-time admission metadata, never a numerical/prediction loop.
+    var lp = Pointer(to=left).bitcast[UInt8]()
+    var rp = Pointer(to=right).bitcast[UInt8]()
+    var same = True
+    for byte in range(size_of[NativeDescriptorCall]()):
+        if lp[byte] != rp[byte]:
+            same = False
+    _ = left
+    _ = right
+    return same

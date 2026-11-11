@@ -47,7 +47,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
         if py_type(decomp) is not native_loaded_module("builtins").dict:
             raise Error("ImportError: native LinearRegression TSQR entries unavailable: " + String(decomp))
         decomp_pins = decomp
-        var decomp_connection = linear_entry_connection(decomp)
+        var decomp_connection = linear_entry_connection(decomp, LINEAR_TABLE_DECOMP)
         var decomp_key = decomp_connection.key.copy()
         decomp_pins = decomp_connection.images
         if decomp_key.mode != key.mode or decomp_key.vendor != key.vendor:

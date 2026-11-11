@@ -33,6 +33,7 @@ from bindings.admitted_call import AdmittedCall
 from core.linear_fit_types import LF_MODE, LF_VENDOR
 from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
 from providers.python.linear_execution_boundary import linear_execution_word
+from providers.python.linear_entry_boundary import linear_entry_identity
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -60,10 +61,11 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     # context; a reconnection installs new entry dictionaries (or a new
     # vendor object), so the identities differ and the check runs again.
     var vendor = context["vendor"]
+    var connection_identity = linear_entry_identity(entries)
     var verdicts = py_get(context, "classical_entries_admitted")
     if verdicts is not None:
         var seen = py_get(verdicts, mode)
-        if seen is not None and seen[0] is entries and seen[1] is vendor:
+        if seen is not None and len(seen) == 3 and seen[0] is entries and seen[1] is vendor and seen[2] is connection_identity:
             call.remember_binding("classical", mode_name, True, entries)
             return entries
     if linear_execution_word(entries, LF_VENDOR) != linear_vendor_code(String(vendor)):
@@ -73,7 +75,7 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     if verdicts is None:
         verdicts = Python.dict()
         py_setitem(context, "classical_entries_admitted", verdicts)
-    py_setitem(verdicts, mode, Python.tuple(entries, vendor))
+    py_setitem(verdicts, mode, Python.tuple(entries, vendor, connection_identity))
     call.remember_binding("classical", mode_name, True, entries)
     return entries
 

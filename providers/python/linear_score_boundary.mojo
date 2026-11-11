@@ -63,7 +63,7 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     var metric_pins = context["classical_metrics"][metric_mode]
     if py_type(metric_pins) is native_loaded_module("builtins").str:
         raise Error("ImportError: " + String(metric_pins))
-    var metric_connection = linear_entry_connection(metric_pins)
+    var metric_connection = linear_entry_connection(metric_pins, LINEAR_TABLE_METRICS)
     var metric_key = metric_connection.key.copy()
     var metrics = linear_table_entry[LINEAR_TABLE_METRICS](metric_key, 0, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))

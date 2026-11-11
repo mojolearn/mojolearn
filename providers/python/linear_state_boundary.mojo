@@ -7,6 +7,10 @@ Public fitted buffers remain writable; each operation reconciles their
 admitted descriptors before taking its immutable native snapshot.
 """
 from std.python import PythonObject
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
+from bindings.native_owner_registry import borrowed_native_owner, register_native_owner
 from bindings.classical_arrays import classical_address
 from bindings.native_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from core.linear_model_state import LinearModelState
@@ -95,3 +99,34 @@ def linear_state_refresh(model: PythonObject, var owner: PythonObject,
     native[].coefficients = coefficients
     _ = prior
     return owner
+
+
+def linear_state_owner_pins(value: Int, index: Int) abi("C") -> Int:
+    if not value or index < -1 or index > 1:
+        return -1
+    try:
+        var owner = borrowed_native_owner(value)
+        var native = owner.downcast_value_ptr[LinearStateOwner]()
+        var result = 2
+        if index == 0:
+            result = Int(native[].coefficients._obj_ptr)
+        elif index == 1:
+            result = Int(native[].means._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1
+
+
+def register_linear_state_owner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[LinearStateOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[LinearStateOwner].name())):
+            raise error
+        _ = module.add_type[LinearStateOwner]("_LinearStateOwner")
+        register_native_owner(lookup_py_type_object[LinearStateOwner](), module.module, linear_state_owner_pins)
+        return
+    py_type_attach(module.module, "_LinearStateOwner", existing)
+    register_native_owner(existing, module.module, linear_state_owner_pins)
