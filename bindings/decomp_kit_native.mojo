@@ -264,7 +264,7 @@ struct DecompMatrix(Copyable, Movable):
 
 
 # Removed (lane calltable-prep-decomp, 2026-11-11): DecompKit's
-# per-kit entry handle cache (`_DK_*` slots, `_entry`) and its kernel-call
+# per-kit entry handle cache (the `_DK_DEV_MOVE` .. `_DK_HOT_COUNT` slots, `_entry`) and its kernel-call
 # provider (`xd`, bindings/kit_call.mojo) went with the Python entry calls they
 # served: every operation now calls the image's published x_decomp dispatch
 # (core/decomp_entry_table.mojo) with plain words.
@@ -1578,6 +1578,29 @@ def decomp_resident_drop(owner: PythonObject) raises:
     prepared_drop(mods, _DK_RESIDENT_SLOT, owner)
 
 
+def _decomp_key(entries: PythonObject) raises -> LinearEntryKey:
+    """The table key of a connected x_decomp entries dict (the bridge's
+    `x_decomp_native_key`), read at the boundary."""
+    var key = py_get(entries, "x_decomp_native_key")
+    if key is None:
+        raise Error("ImportError: mojolearn: the x_decomp binding publishes no native entry table")
+    return LinearEntryKey(Int(py=key[0]), Int(py=key[1]))
+
+
+def _decomp_dev(key: LinearEntryKey, op: Int, addresses: List[Int], ints: List[Int], release: Bool) raises -> Int:
+    """One pool operation (XD_DEV_ALLOC / _FREE / _UPLOAD) of the image `key`
+    names, outside a kit; `release` as the door the call replaces."""
+    var entry = decomp_table_entry(key)
+    var result = 0
+    if release:
+        var py = Python()
+        with GILReleased(py):
+            result = native_descriptor_call(entry, op, addresses, ints, List[Float64]())
+    else:
+        result = native_descriptor_call(entry, op, addresses, ints, List[Float64]())
+    return result
+
+
 def decomp_resident_binding(entries: PythonObject) raises -> Bool:
     """A GPU x_decomp binding's entries dict: the pool entries a resident
     operand is held through (`DecompKit.resident` reads the same marker)."""
@@ -1610,19 +1633,21 @@ def decomp_resident_operand(owner: PythonObject, entries: PythonObject, source: 
     var n = rows * cols
     if owner is None or n < 1 or not decomp_resident_binding(entries):
         return PythonObject(None)
+    # alloc / free name the minting binding in the record (identity only).
     var alloc = entries["x_decomp_dev_alloc"]
-    var upload = entries["x_decomp_dev_upload"]
     var free = entries["x_decomp_dev_free"]
     var held = decomp_resident_find(owner, alloc, free, source, name, True)
     if held is not None and Int(py=held[3]) == rows and Int(py=held[4]) == cols:
         return held
     if not decomp_resident_freeze(source):
         return PythonObject(None)
-    var handle = Int(py=py_call(alloc, n))
+    var key = _decomp_key(entries)
+    var handle = _decomp_dev(key, XD_DEV_ALLOC, List[Int](), [n], False)
     try:
-        _ = py_call(upload, handle, classical_address(source), n)
+        var address: List[Int] = [Int(py=classical_address(source))]
+        _ = _decomp_dev(key, XD_DEV_UPLOAD, address, [handle, n], True)
     except error:
-        _ = py_call(free, handle)
+        _ = _decomp_dev(key, XD_DEV_FREE, List[Int](), [handle], False)
         raise error^
     _ = source  # keep the Python object alive through the native call above
     return decomp_resident_hold(owner, alloc, free, source, name, rows, cols, handle, True)
@@ -1638,14 +1663,15 @@ def decomp_resident_adopt(owner: PythonObject, entries: PythonObject, source: Py
     if handle < 0:
         return PythonObject(None)
     var free = entries["x_decomp_dev_free"]
+    var key = _decomp_key(entries)
     var frozen = False
     try:
         frozen = owner is not None and decomp_resident_freeze(source)
     except error:
-        _ = py_call(free, handle)
+        _ = _decomp_dev(key, XD_DEV_FREE, List[Int](), [handle], False)
         raise error^
     if not frozen:
-        _ = py_call(free, handle)
+        _ = _decomp_dev(key, XD_DEV_FREE, List[Int](), [handle], False)
         return PythonObject(None)
     return decomp_resident_hold(owner, entries["x_decomp_dev_alloc"], free, source, name, rows, cols, handle, True,
                                 True)
