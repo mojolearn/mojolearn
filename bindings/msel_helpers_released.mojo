@@ -8,7 +8,7 @@ work. Every argument is a plain word: nothing here reads a Python object
 while the GIL is released. The caller holds the GIL on entry."""
 from std.python import Python
 from std.python._cpython import GILReleased
-from core.msel_entry_table import MselEntryKey
+from core.entry_table import EntryRef
 from core.msel_helpers_calls import (
     msel_arange_i64 as _msel_arange_i64,
     msel_count_mask_u8 as _msel_count_mask_u8,
@@ -34,152 +34,152 @@ from core.msel_helpers_calls import (
 )
 
 
-def msel_arange_i64(key: MselEntryKey, dst: Int, start: Int, n: Int) raises -> Int:
+def msel_arange_i64(entry: EntryRef, dst: Int, start: Int, n: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_arange_i64(key, dst, start, n)
+        result = _msel_arange_i64(entry, dst, start, n)
     return result
 
 
-def msel_count_mask_u8(key: MselEntryKey, mask: Int, n: Int) raises -> Int:
+def msel_count_mask_u8(entry: EntryRef, mask: Int, n: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_count_mask_u8(key, mask, n)
+        result = _msel_count_mask_u8(entry, mask, n)
     return result
 
 
-def msel_select_mask_u8_i64(key: MselEntryKey, mask: Int, n: Int, test: Int, train: Int) raises -> Int:
+def msel_select_mask_u8_i64(entry: EntryRef, mask: Int, n: Int, test: Int, train: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_select_mask_u8_i64(key, mask, n, test, train)
+        result = _msel_select_mask_u8_i64(entry, mask, n, test, train)
     return result
 
 
-def msel_mask_from_indices_u8(key: MselEntryKey, idx: Int, k: Int, n: Int, mask: Int) raises -> Int:
+def msel_mask_from_indices_u8(entry: EntryRef, idx: Int, k: Int, n: Int, mask: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_mask_from_indices_u8(key, idx, k, n, mask)
+        result = _msel_mask_from_indices_u8(entry, idx, k, n, mask)
     return result
 
 
-def msel_leave_range_i64(key: MselEntryKey, n: Int, lo: Int, hi: Int, train: Int, test: Int) raises -> Int:
+def msel_leave_range_i64(entry: EntryRef, n: Int, lo: Int, hi: Int, train: Int, test: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_leave_range_i64(key, n, lo, hi, train, test)
+        result = _msel_leave_range_i64(entry, n, lo, hi, train, test)
     return result
 
 
-def msel_indices_overlap_i64(key: MselEntryKey, a: Int, na: Int, b: Int, nb: Int, bound: Int) raises -> Int:
+def msel_indices_overlap_i64(entry: EntryRef, a: Int, na: Int, b: Int, nb: Int, bound: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_indices_overlap_i64(key, a, na, b, nb, bound)
+        result = _msel_indices_overlap_i64(entry, a, na, b, nb, bound)
     return result
 
 
-def msel_fold_ids(key: MselEntryKey, codes: Int, n: Int, n_classes: Int, n_splits: Int, counts: Int, folds: Int,
+def msel_fold_ids(entry: EntryRef, codes: Int, n: Int, n_classes: Int, n_splits: Int, counts: Int, folds: Int,
                   fold_counts: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_fold_ids(key, codes, n, n_classes, n_splits, counts, folds, fold_counts)
+        result = _msel_fold_ids(entry, codes, n, n_classes, n_splits, counts, folds, fold_counts)
     return result
 
 
-def msel_select_fold_i64(key: MselEntryKey, folds: Int, n: Int, fold: Int, test: Int, train: Int) raises -> Int:
+def msel_select_fold_i64(entry: EntryRef, folds: Int, n: Int, fold: Int, test: Int, train: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_select_fold_i64(key, folds, n, fold, test, train)
+        result = _msel_select_fold_i64(entry, folds, n, fold, test, train)
     return result
 
 
-def msel_select_folds_i64(key: MselEntryKey, folds: Int, n: Int, k: Int, sizes: Int, tests: Int, trains: Int) raises -> Int:
+def msel_select_folds_i64(entry: EntryRef, folds: Int, n: Int, k: Int, sizes: Int, tests: Int, trains: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_select_folds_i64(key, folds, n, k, sizes, tests, trains)
+        result = _msel_select_folds_i64(entry, folds, n, k, sizes, tests, trains)
     return result
 
 
-def msel_gather_i32(key: MselEntryKey, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
+def msel_gather_i32(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_gather_i32(key, table, n_table, codes, n, dst)
+        result = _msel_gather_i32(entry, table, n_table, codes, n, dst)
     return result
 
 
-def msel_gather_i64(key: MselEntryKey, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
+def msel_gather_i64(entry: EntryRef, table: Int, n_table: Int, codes: Int, n: Int, dst: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_gather_i64(key, table, n_table, codes, n, dst)
+        result = _msel_gather_i64(entry, table, n_table, codes, n, dst)
     return result
 
 
-def msel_first_seen_i32(key: MselEntryKey, codes: Int, n: Int, k: Int, enc: Int, counts: Int) raises -> Int:
+def msel_first_seen_i32(entry: EntryRef, codes: Int, n: Int, k: Int, enc: Int, counts: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_first_seen_i32(key, codes, n, k, enc, counts)
+        result = _msel_first_seen_i32(entry, codes, n, k, enc, counts)
     return result
 
 
-def msel_strat_fold_assign_i32(key: MselEntryKey, enc: Int, n: Int, k: Int, n_folds: Int, alloc: Int, perms: Int,
+def msel_strat_fold_assign_i32(entry: EntryRef, enc: Int, n: Int, k: Int, n_folds: Int, alloc: Int, perms: Int,
                                counts: Int, dst: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_strat_fold_assign_i32(key, enc, n, k, n_folds, alloc, perms, counts, dst)
+        result = _msel_strat_fold_assign_i32(entry, enc, n, k, n_folds, alloc, perms, counts, dst)
     return result
 
 
-def msel_store_alloc(key: MselEntryKey, nbytes: Int) raises -> Int:
+def msel_store_alloc(entry: EntryRef, nbytes: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_store_alloc(key, nbytes)
+        result = _msel_store_alloc(entry, nbytes)
     return result
 
 
-def msel_store_read(key: MselEntryKey, id: Int, dst: Int, nbytes: Int) raises -> Int:
+def msel_store_read(entry: EntryRef, id: Int, dst: Int, nbytes: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_store_read(key, id, dst, nbytes)
+        result = _msel_store_read(entry, id, dst, nbytes)
     return result
 
 
-def msel_store_free(key: MselEntryKey, id: Int) raises -> Int:
+def msel_store_free(entry: EntryRef, id: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_store_free(key, id)
+        result = _msel_store_free(entry, id)
     return result
 
 
-def msel_scatter_rows(key: MselEntryKey, dst_id: Int, n_dst: Int, dst_code: Int, src: Int, src_code: Int,
+def msel_scatter_rows(entry: EntryRef, dst_id: Int, n_dst: Int, dst_code: Int, src: Int, src_code: Int,
                       n_src: Int, width: Int, idx_id: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_scatter_rows(key, dst_id, n_dst, dst_code, src, src_code, n_src, width, idx_id)
+        result = _msel_scatter_rows(entry, dst_id, n_dst, dst_code, src, src_code, n_src, width, idx_id)
     return result
 
 
-def msel_proba_column(key: MselEntryKey, src: Int, code: Int, n: Int, k: Int, col: Int, dst: Int) raises -> Int:
+def msel_proba_column(entry: EntryRef, src: Int, code: Int, n: Int, k: Int, col: Int, dst: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_proba_column(key, src, code, n, k, col, dst)
+        result = _msel_proba_column(entry, src, code, n, k, col, dst)
     return result
 
 
-def msel_split_table_i32(key: MselEntryKey, perm: Int, m: Int, n_test: Int, n_train: Int, counts: Int, table: Int,
+def msel_split_table_i32(entry: EntryRef, perm: Int, m: Int, n_test: Int, n_train: Int, counts: Int, table: Int,
                          sums: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_split_table_i32(key, perm, m, n_test, n_train, counts, table, sums)
+        result = _msel_split_table_i32(entry, perm, m, n_test, n_train, counts, table, sums)
     return result
 
 
-def msel_group_fold_perm_i32(key: MselEntryKey, counts: Int, m: Int, n_folds: Int, perm: Int, dst: Int, sizes: Int) raises -> Int:
+def msel_group_fold_perm_i32(entry: EntryRef, counts: Int, m: Int, n_folds: Int, perm: Int, dst: Int, sizes: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_group_fold_perm_i32(key, counts, m, n_folds, perm, dst, sizes)
+        result = _msel_group_fold_perm_i32(entry, counts, m, n_folds, perm, dst, sizes)
     return result
 
 
-def msel_store_free_bytes(key: MselEntryKey) raises -> Int:
+def msel_store_free_bytes(entry: EntryRef) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _msel_store_free_bytes(key)
+        result = _msel_store_free_bytes(entry)
     return result
