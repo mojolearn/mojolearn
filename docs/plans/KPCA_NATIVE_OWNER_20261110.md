@@ -43,3 +43,11 @@ Dense centering has a separately identified inherited driver error; the frozen
 a separate numerical repair. The completed migration will include that repair
 using existing reduction kernels. Native correctness fixtures remain owned by
 the test lane; no lane compilation or execution has occurred.
+
+`KPCAFitPrepareRequest(source,columns,total,rows,features,options^)` and
+`KPCADenseFit(near_driver,decomp_entry,request)` now own the complete dense
+preparation, including the corrected shared global-mean helper. `address()`
+returns the centered matrix while the native owner lives. `columns` has rows
+words and `total` has one word. The native test lane uses this exact production
+preparation for independent centering/eigen/query oracles. The boundary switch
+and retained public mutation/refusal fixtures remain pending.

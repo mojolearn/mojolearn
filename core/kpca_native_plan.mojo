@@ -193,3 +193,38 @@ def kpca_fit_global_mean(driver: KPCANeighborDriver, decomp: NativeDescriptorCal
     _ = native_descriptor_call_fixed(decomp, XD_COLSUM, a, p, f)
     driver.divide(summed.address(), total, 1, Float64(rows))
     _ = summed
+
+
+@fieldwise_init
+struct KPCAFitPrepareRequest(Copyable, Movable):
+    var source: Int
+    var columns: Int
+    var total: Int
+    var rows: Int
+    var features: Int
+    var options: KPCAKernelOptions
+
+
+struct KPCADenseFit(Movable):
+    var centered: KPCAScratch
+
+    def __init__(out self, driver: KPCANeighborDriver, decomp: NativeDescriptorCall,
+                 r: KPCAFitPrepareRequest) raises:
+        var kernel: Optional[KPCAScratch] = None
+        var address = r.source
+        if r.options.kind != KPCA_PRECOMPUTED:
+            kernel = Optional[KPCAScratch](KPCAScratch(r.rows, r.rows))
+            address = kernel.value().address()
+            driver.kernel(r.source, r.source, address, r.rows, r.rows, r.features, r.options)
+        var sums = KPCAScratch(r.rows, 1)
+        driver.colsum(address, sums.address(), r.rows, r.rows)
+        driver.divide(sums.address(), r.columns, r.rows, Float64(r.rows))
+        kpca_fit_global_mean(driver, decomp, r.columns, r.total, r.rows)
+        var centered = KPCAScratch(r.rows, r.rows)
+        driver.center(address, r.columns, r.columns, r.total, centered.address(), r.rows, r.rows)
+        _ = kernel
+        _ = sums
+        self.centered = centered^
+
+    def address(self) -> Int:
+        return self.centered.address()
