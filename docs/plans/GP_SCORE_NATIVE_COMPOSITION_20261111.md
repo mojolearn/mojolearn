@@ -98,3 +98,10 @@ The source owner is explicitly retained after the conversion on both success
 and refusal. This does not change the host integer encoder or introduce the
 different device-label encoder used elsewhere. No `classical_labels` algorithm
 was modified. Native key and COUNT composition remains unfinished at this point.
+
+The score input helper also accepts retained scalar pins directly. The existing
+`gp_label_input` exact-type/overflow walk is shared by its Python sequence and
+native pin-list callers. The signed metrics encoder moved unchanged into
+`core.labels_score_encode`; the existing metrics caller imports its old local
+name as an alias. Both paths retain the same `host_unique_inverse_cast` call.
+These are source-only additive dependencies; no lane compilation or execution.
