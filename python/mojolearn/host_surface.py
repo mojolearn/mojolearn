@@ -2677,6 +2677,8 @@ FAMILIES = (
             "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
             "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
             "gmm_score_bic_aic", "gmm_sample",
+            # the typed transport the mixture door calls (lane thin-unpack-mixture-cluster)
+            "mixture_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

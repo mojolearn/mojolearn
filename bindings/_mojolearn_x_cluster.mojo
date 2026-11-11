@@ -16,6 +16,7 @@ from hierarchy.cluster_descriptor_device import HIERARCHY_CLUSTER_DEVICE_API
 from x_cluster.variants_device import KMEANS_VARIANTS_DEVICE_API
 from x_cluster.centroid_fit_device import CENTROID_FIT_DEVICE_API
 from x_cluster.optics_fit_device import OPTICS_FIT_DEVICE_API
+from x_cluster.bgmm_native_device import BGMM_NATIVE_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr
@@ -45,6 +46,13 @@ def spectral_assign_native_api_v1_binding() raises -> PythonObject:
 
 def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
     var api = HIERARCHY_CLUSTER_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def bgmm_native_api_v1_binding() raises -> PythonObject:
+    # The typed BGMM / GaussianMixture option-parity transport
+    # (core/bgmm_native_api.mojo); bindings/mixture_native.mojo reads it.
+    var api = BGMM_NATIVE_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -169,6 +177,7 @@ def build__mojolearn_x_cluster() -> PythonObject:
         m.def_function[kmeans_variants_native_api_v1_binding]("kmeans_variants_native_api_v1")
         m.def_function[cluster_centroid_fit_native_api_v1_binding]("cluster_centroid_fit_native_api_v1")
         m.def_function[optics_fit_native_api_v1_binding]("optics_fit_native_api_v1")
+        m.def_function[bgmm_native_api_v1_binding]("bgmm_native_api_v1")
         m.def_function[spectral_assign_native_api_v1_binding]("spectral_assign_native_api_v1")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")

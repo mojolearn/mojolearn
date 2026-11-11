@@ -52,6 +52,16 @@ CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
 # per used class, so its count must not grow with rows); SVC/SVR with
 # kernel='precomputed' (predict reads support_, which grows with rows).
 ESTIMATOR_CLASS = {"LinearSVC_str": "LinearSVC", "SVC_precomputed": "SVC", "SVR_precomputed": "SVR"}
+         # Mixture and clustering doors (lane thin-unpack-mixture-cluster).
+         "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans", "BisectingKMeans",
+         "SpectralClustering", "HDBSCAN", "OPTICS")
+
+# Cases whose fit takes X alone.
+UNSUPERVISED = ("PCA", "KMeans", "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans",
+                "BisectingKMeans", "SpectralClustering", "HDBSCAN", "OPTICS")
+# Cases without predict: the query is fit_predict on the 7-row query slice
+# (a fixed shape, so only the fit's count scales with --rows).
+FIT_PREDICT_QUERY = ("SpectralClustering", "HDBSCAN", "OPTICS")
 
 # Classifier cases: integer 0/1 targets.
 CLASSIFIERS = ("LogisticRegression", "RandomForestClassifier", "GaussianProcessClassifier", "SVC_precomputed")
@@ -165,6 +175,15 @@ def model_parameters(name):
         "LinearSVC_str": {"max_iter": 50},
         "SVC_precomputed": {"kernel": "precomputed"},
         "SVR_precomputed": {"kernel": "precomputed"},
+        # Fixed iteration counts (tol=0 where the estimator has one), so the
+        # fit does the same number of steps at both shapes.
+        "GaussianMixture": {"n_components": 2, "max_iter": 5, "tol": 0.0, "random_state": 0},
+        "BayesianGaussianMixture": {"n_components": 2, "max_iter": 5, "tol": 0.0, "random_state": 0},
+        "MiniBatchKMeans": {"n_clusters": 3, "max_iter": 5, "random_state": 0},
+        "BisectingKMeans": {"n_clusters": 3, "max_iter": 5, "random_state": 0},
+        "SpectralClustering": {"n_clusters": 2, "affinity": "rbf", "random_state": 0},
+        "HDBSCAN": {"min_cluster_size": 5},
+        "OPTICS": {"min_samples": 5},
     }
     return dict(numeric_mode="identical", **parameters[name])
 
@@ -243,6 +262,8 @@ def run_case(case):
         if name == "LinearSVC_str":
             # The full-size score: its CPython count must not grow with rows.
             operations.append(("score", model.score, (x, y)))
+        operations = [("fit", model.fit, (x,) if name in UNSUPERVISED else (x, y)),
+                      (query, getattr(model, query), (x[:min(7, rows)],))]
         for operation, function, arguments in operations:
             # These two dependent operations cannot run concurrently: query
             # consumes the fitted state produced by this exact fit.
@@ -354,6 +375,8 @@ def perf_counts(path):
 
 
 def query_operation(name):
+    if name in FIT_PREDICT_QUERY:
+        return "fit_predict"
     return "transform" if name == "PCA" else "predict"
 
 
