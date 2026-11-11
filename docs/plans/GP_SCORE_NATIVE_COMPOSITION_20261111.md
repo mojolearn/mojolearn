@@ -130,3 +130,41 @@ The new Python file contains only public class rebinding, unseen-label and
 error-order seams. Existing tests are retained. Native score fixtures are owned
 by the test lane and are pending; no compilation, runtime, timing or identity
 execution occurred in this producer lane.
+
+Frozen source handoff: `4256e469ae255410c9d6b09a885f14c687b95f8e`.
+The independently collectable score producers are `76bba34249`, `6f5afa90c8`,
+`b8acfbcfdb`, `b9b0edfe7f`, `4d8e2c64b3`, `6ed4b3b075`, and `4256e469ae`.
+The intervening `0ef98ae676` is only the GP public-class parameter compile
+repair, already collected separately by the orchestrator; do not replay it as
+part of this tranche.
+
+The bounded source audit is
+`~/mojolearn-evidence/python-mojo-migration-20261110/python-object-typed-gp-score-composition.json`.
+It records 15 distinct removed private roles: seven GPR rows plus eight GPC
+rows, with all 30 before/after source anchors present. Integer input snapshots
+and arena storage are shared roles and are not counted again for GPC. Actual
+class scalar identities and image/source lifetime pins are excluded. Five
+native roots reach 36 local sources with zero Python imports. The audited
+Gaussian-process/metrics numerical sources and shared label encoder, gather,
+COUNT and R² program bodies are unchanged. This is a source report, not a
+runtime or performance result.
+
+The supported build closure walker identifies these affected binding roots:
+
+- `_mojolearn_runtime_byte_trainer_host`
+- `_mojolearn_runtime_classical_host`
+- `_mojolearn_runtime_decomp_host`
+- `_mojolearn_runtime_family_host`
+- `_mojolearn_runtime_linear_host`
+- `_mojolearn_runtime_manifold_host`
+- `_mojolearn_runtime_model_selection_host`
+- `_mojolearn_runtime_parallel_host`
+- `_mojolearn_runtime_prep_host`
+- `_mojolearn_runtime_trees_host`
+- `_mojolearn_runtime_xseq_host`
+
+The import-time `_native_arena_prog.py` change captures the already exported
+metrics program factory. No provider ABI or tombstoned store/free export is
+added. Native score fixtures belong to the test lane; the 5 new Python boundary
+definitions expand to 11 cases and remain unrun. All existing numerical tests
+remain in place. No A/B switch, measurement, identity run or box job was added.
