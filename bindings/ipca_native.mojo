@@ -17,7 +17,7 @@ from bindings.decomp_scalar_admission import decomp_scalar_admit
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
-from bindings.public_lifecycle_owner import lifecycle_end
+from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
 from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
 from bindings.ipca_descriptor_boundary import ipca_connection, ipca_resident, ipca_run_fit, ipca_run_partial, ipca_run_query, ipca_run_free
@@ -70,12 +70,14 @@ def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
+    lifecycle_admit_fields(fields)
     if not py_contains(fields, name):
         raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '" + name + "'")
     return fields[name]
 
 
 def _set_mode(fields: PythonObject, context: PythonObject) raises:
+    lifecycle_admit_fields(fields)
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -87,6 +89,7 @@ def _f32(rows: Int, cols: Int, context: PythonObject, vector: Bool = False) rais
 
 
 def _requested(fields: PythonObject, context: PythonObject) raises -> Int:
+    lifecycle_admit_fields(fields)
     var value = fields["n_components"]
     return -1 if value is None else _int(value, context)
 
@@ -137,6 +140,13 @@ def _state_name(index: Int) -> String:
     return "explained_variance_"
 
 
+def _state_field(fields: PythonObject, index: Int) raises -> PythonObject:
+    # Resident preparation and stale-owner release may relinquish the GIL.
+    # Re-admit live dictionary keys before the next public-field probe.
+    lifecycle_admit_fields(fields)
+    return fields[PythonObject(_state_name(index))]
+
+
 def _free_kept(connection: Int, mut result: IPCAFitResult) raises:
     if not result.kept:
         return
@@ -155,11 +165,12 @@ def _adopt_state(model: PythonObject, fields: PythonObject, connection: Int,
     for k in range(5):  # driver-loop: five returned resident buffers
         var rows = result.count if k == 0 else 1
         var cols = features if (k == 0 or k == 2 or k == 3) else result.count
-        var handle = result.state.values[k]
-        result.state.values[k] = -1
         try:
+            var source = _state_field(fields, k)
+            var handle = result.state.values[k]
+            result.state.values[k] = -1
             # The callee takes this handle even if packing the owner fails.
-            ipca_owner_adopt(model, connection, fields[PythonObject(_state_name(k))], k, rows, cols, handle)
+            ipca_owner_adopt(model, connection, source, k, rows, cols, handle)
         except error:
             _free_kept(connection, result)
             raise error^
@@ -170,6 +181,7 @@ def _finish_fit(model: PythonObject, fields: PythonObject, connection: Int,
                 room: IPCAOutputRoom, mut result: IPCAFitResult, seen: Int,
                 features: Int, context: PythonObject) raises:
     try:
+        lifecycle_admit_fields(fields)
         py_setitem(fields, "n_samples_seen_", PythonObject(seen))
         py_setitem(fields, "n_components_", PythonObject(result.count))
         py_setitem(fields, "n_features_in_", PythonObject(features))
@@ -189,6 +201,7 @@ def ipca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     if py_contains(fields, "n_samples_seen_"):
         _ = py_call(fields.pop, "n_samples_seen_")
     var x = decomp_admit(source, "IncrementalPCA", context)
+    lifecycle_admit_fields(fields)
     var batch = fields["batch_size"]
     var batch_size = 5 * x.cols if batch is None else _int(batch, context)
     py_setitem(fields, "batch_size_", PythonObject(batch_size))
@@ -211,6 +224,7 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
     if not py_contains(fields, "numeric_mode_"):
         _set_mode(fields, context)
     var x = decomp_admit(source, "IncrementalPCA", context)
+    lifecycle_admit_fields(fields)
     var seen_value = py_get(fields, "n_samples_seen_")
     var seen = 0 if seen_value is None else _int(seen_value, context)
     var connection = ipca_connection(model, fields, context)
@@ -234,7 +248,7 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
         state.append(admit_f32(_attr(model, fields, "var_"), 1, "var_", context))
         for k in range(4):  # driver-loop: four admitted prior-state buffers
             addresses[k] = state[k].address
-            if resident and state[k].array is fields[PythonObject(_state_name(k))]:
+            if resident and state[k].array is _state_field(fields, k):
                 var owner = ipca_owner_cached(model, connection, state[k].array, k, False)
                 if owner is not None:
                     ids.values[k] = ipca_owner_handle(owner)
@@ -261,6 +275,7 @@ def _check(model: PythonObject, fields: PythonObject) raises:
 
 def _project(model: PythonObject, fields: PythonObject, x: AdmittedX, inverse: Bool,
              context: PythonObject) raises -> PythonObject:
+    lifecycle_admit_fields(fields)
     var connection = ipca_connection(model, fields, context)
     var components = admit_f32(fields["components_"], 2, "components_", context)
     var count = components.rows
@@ -281,17 +296,17 @@ def _project(model: PythonObject, fields: PythonObject, x: AdmittedX, inverse: B
     if resident:
         # Only these three stored arrays are read by a query; borrowed and
         # converted storage keeps the original per-call upload path.
-        if components.array is fields["components_"]:
+        if components.array is _state_field(fields, 0):
             var owner = ipca_owner_operand(model, connection, components.array, 0, count, features, components.address)
             if owner is not None:
                 ids.values[0] = ipca_owner_handle(owner)
                 held.append(owner)
-        if mean.array is fields["mean_"]:
+        if mean.array is _state_field(fields, 2):
             var owner = ipca_owner_operand(model, connection, mean.array, 2, 1, features, mean.address)
             if owner is not None:
                 ids.values[2] = ipca_owner_handle(owner)
                 held.append(owner)
-        if whiten and variance.array is fields["explained_variance_"]:
+        if whiten and variance.array is _state_field(fields, 4):
             var owner = ipca_owner_operand(model, connection, variance.array, 4, 1, count, variance.address)
             if owner is not None:
                 ids.values[4] = ipca_owner_handle(owner)

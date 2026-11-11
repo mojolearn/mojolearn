@@ -77,3 +77,12 @@ Root must compile the affected GPU `_mojolearn_x_decomp`, host
 merged initialization ordering. No compile, installed runtime, measurement or
 cross-vendor identity result is claimed here. A/B define: none. Numerical source is unchanged;
 output identity remains untested. No box job was queued by this lane.
+
+## Namespace admission follow-up
+
+The shared lifecycle key-admission repair is reused after GIL-releasing input,
+fit and resident preparation steps, before later public-field probes or writes.
+Unchanged exact-key dictionaries use the existing native mutation stamp.
+Adoption now reads/admit-checks the source before transferring its result handle,
+so a refused or missing field cannot strand that handle. Numerical bodies and
+copy/transfer routes are unchanged. Runtime checks remain owed to root.
