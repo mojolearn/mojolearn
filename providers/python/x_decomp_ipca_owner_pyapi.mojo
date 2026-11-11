@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The doors of IncrementalPCA's drivers (x_decomp/ipca_owner.mojo): each
 unpacks one list of addresses and integers, releases the GIL and calls one
-typed driver; no data work happens here. The native IncrementalPCA owner
-(bindings/ipca_native.mojo) is their only caller."""
+typed driver; no data work happens here. These legacy direct-call exports
+remain available; the public IncrementalPCA owner uses its native descriptor."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
