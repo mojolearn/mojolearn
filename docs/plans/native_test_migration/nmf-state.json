@@ -1,0 +1,16 @@
+{
+  "suite": "nmf_state",
+  "fixtures": 20,
+  "dependency": "bb172e710e",
+  "execution": "uncompiled and unrun; root bundle owed",
+  "parallel": "host_parallelize over all independent fixtures; initialized storage writes parallel",
+  "coverage": [
+    "typed beta/solver options and copy independence",
+    "rank-two shapes including both zero dimensions",
+    "empty and fully initialized Float32 scratch",
+    "negative dimensions and count/byte overflow before allocation",
+    "move-only allocation lifetime and independent shape lists"
+  ],
+  "python_removed": [],
+  "notes": "New typed state has no previous direct Python equivalent; public ownership and admission tests remain."
+}

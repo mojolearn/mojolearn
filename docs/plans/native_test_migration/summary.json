@@ -735,6 +735,17 @@
       "decision": "split-migrated",
       "source_review_only": true,
       "runtime_status": "7 CPU / 8 GPU typed TSVD query fixtures; uncompiled/unrun; see tsvd-native-execution.json."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsvd_native_boundary.py",
+      "removed": "One pure finite-score assertion inside descriptor/callback test; same6x3 numerical/finite behavior covered directly by native Gram/fused/randomized fit/query cases",
+      "retained": "All18 current Python definitions including scalar refusal additions, returned-array shapes, descriptor callback audit, fit/fit_transform comparison, weakref ownership, rebinding and serialization seams",
+      "authorization": "Pilot delegated this single line; finite lane coordinated appended scalar additions.",
+      "definitions_removed": 0,
+      "python_definitions_retained": 18,
+      "decision": "split-migrated",
+      "source_review_only": true,
+      "runtime_status": "10 CPU / 13 GPU actual TSVD fit/TSQR/fold fixtures uncompiled/unrun; tsvd-fit-execution.json."
     }
   ],
   "reviewed_files": 51,

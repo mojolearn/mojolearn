@@ -49,3 +49,49 @@ Lease-state follow-up: dependency 14ad3ca7ab, 12 parallel native fixtures.
   independence. Python registration/destructor/pin seams remain pilot-owned.
   RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_lease_state.mojo
   Source/TOML/JSON/whitespace review only; no compilation or execution.
+
+Actual fit follow-up: 10 CPU / 13 GPU cases (tsvd-fit-execution.json)
+  Original 512x5 seed7 and pilot 6x3 literal inputs. Native estimator Gram,
+  fused fit, explained-only planted components; randomized with original
+  count2/oversamples10/iterations5/seed7; GPU TSQR plus explained tail and
+  exact CPU TSQR refusal. Three GPU resident-fold fit cases preserve base
+  context, distinguish finite/range flags and retain uploaded source/index
+  ownership. NaN/infinity/count refusal cases have live owned buffers.
+  Independent NumPy Float64 SVD/subspace/population-variance/ratio references
+  (14 recorded files) never import or execute Mojolearn. No native output
+  seeds an oracle. Original query equation tolerance2e-4/2e-4 retained.
+  New independent fit bounds documented separately; no old bound weakened.
+  Explicit finally pins retain all raw-address owners on normal/refusal/error
+  paths. Shared PCA test helpers supply only buffer comparisons/guards; no
+  PCA kernel or fit output is executed for these TSVD references.
+  CPU graphs/data decode/oracle cells parallel; GPU graphs ordered over
+  shared contexts/stores, existing numerical kernels remain parallel.
+
+Python split
+  Removed only the pure finite-score assertion from the descriptor boundary
+  test, with the original6x3 numerical/finite checks covered natively.
+  All public callback/array/weakref/rebinding/serialization/scalar-admission
+  seams remain, including finite lane's five appended definitions. No full
+  Python definition removed. Pilot/finite ownership coordination recorded.
+
+RUN OWED (repository root)
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_fit_cpu.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_fit_gpu.mojo
+  These new fit suites have not compiled or run. No lane compiler, tests,
+  timing, identity or box action. Static AST/TOML/JSON, recorded-data hashes,
+  whitespace and source/API/lifetime review only. No kernels/defaults/A-B
+  definitions changed. Existing green fixtures are not queued again.
+
+Scalar diagnostic follow-up26dd5ed3b4 adopted after the fit chunk. All18
+Python boundary definitions remain; only the previously recorded numerical
+finite-score assertion moved. The appended native parse/refusal seams are
+unchanged by this test lane.
+
+Root accepted execution update (wave8r4, frozen7199c5d596)
+  CPU aggregate163 passed, including authored TSVD contracts/leases/query/fit
+  fixtures. New GPU TSVD fit13 passed; earlier numerical GPU26 retained gives
+  39 numerical GPU fixtures accepted. Full structured record:
+  ~/mojolearn-evidence/python-mojo-migration-20261110/native-wave8-accepted-results.json
+  GPU concurrency and neighbor-state11 remain failed under a MAX-only Metal
+  reproduction, with no unchanged rerun queued. This is bounded native
+  correctness, not installed-wheel, performance or cross-vendor identity.

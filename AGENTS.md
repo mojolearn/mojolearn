@@ -449,6 +449,8 @@ them for you.
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
 - `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
   Put `comptime assert` inside a function body, never at module scope.
+- Generic struct parameters used by static methods or initializers must be qualified as
+  `Self.E`, `Self.D`, `Self.RES` (and so on), including arguments to generic callees.
 - A Python-registered native owner with non-`Writable` state implements both `write_to` and
   `write_repr_to`. Otherwise the binding derives repr through the state fields and fails compilation.
 - Construct a native list with a typed literal (`var values: List[Float32] = [1.0, 2.0]`),
