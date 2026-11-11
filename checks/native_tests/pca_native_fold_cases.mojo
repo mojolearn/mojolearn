@@ -43,8 +43,10 @@ def fold_fixture(unit: Int) raises:
         else:
             require((answer.finite != 0) == (unit == 1) and (answer.in_range != 0) == (unit == 2),
                     "PCA resident fit finite/range status distinction")
-            write_guarded(state.components, List[Float32](1, 0, 0, 0, 1, 0, 0, 0, 1))
-            write_guarded(state.mean, List[Float32](0, 0, 0))
+            var component_values: List[Float32] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+            write_guarded(state.components, component_values)
+            var mean_values: List[Float32] = [0, 0, 0]
+            write_guarded(state.mean, mean_values)
         var status = driver.query(state.query_request(0, Int(state.projected.unsafe_ptr()) + 4,
             8, 3, 3, 8, False, fold))
         require((status.finite != 0) == (unit == 1) and (status.in_range != 0) == (unit == 2),
