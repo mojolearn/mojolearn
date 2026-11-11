@@ -3,8 +3,6 @@
 # and publish public fitted state. Initialization and training stay in the
 # existing x_decomp/nmf_owner kernels; no Python call envelopes reach RUN.
 from std.python import Python, PythonObject
-from std.python._cpython import ExternalFunction, PyObjectPtr
-from core.shared_slot import SharedSlot
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
 from bindings.native_buffer_address import native_buffer_address
@@ -13,6 +11,7 @@ from bindings.admitted_input import admit_f32, AdmittedX, admitted_finite_refuse
 from bindings.decomp_inputs import decomp_admit
 from bindings.decomp_owner_common import decomp_attr, decomp_check, decomp_gemm_check, decomp_set_mode
 from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
+from bindings.decomp_scalar_compare import decomp_equal_admitted as _equal, decomp_name_admitted as _name
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.nmf_descriptor_boundary import nmf_connection, nmf_run_fit, nmf_run_inverse
@@ -29,21 +28,6 @@ from x_decomp.nmf_owner import (
 )
 
 
-comptime _NMFCompare = ExternalFunction[
-    "PyObject_RichCompareBool", def(PyObjectPtr, PyObjectPtr, Int32) thin abi("C") -> Int32]
-
-
-struct NMFScalarAPI(Defaultable, Movable):
-    var compare: _NMFCompare.type
-
-    def __init__(out self):
-        ref cpy = Python().cpython()
-        self.compare = _NMFCompare.load(cpy.lib.borrow())
-
-
-comptime NMF_SCALAR_API = SharedSlot[NMFScalarAPI, "MojolearnNMFScalarAPIV1"]
-
-
 @fieldwise_init
 struct NMFPackedFit(Movable):
     # Only public output storage pins remain Python objects. The execution
@@ -52,26 +36,6 @@ struct NMFPackedFit(Movable):
     var h: PythonObject
     var count: Int
     var result: NMFFitResult
-
-
-def _equal(value: PythonObject, other: PythonObject) raises -> Bool:
-    # Both operands are exact admitted scalar storage, so their C comparison
-    # slots cannot dispatch to user protocols. Never call operator.eq.
-    var result = NMF_SCALAR_API.get_or_create_ptr()[].compare(value._obj_ptr, other._obj_ptr, Int32(2))
-    _ = value
-    _ = other
-    if result < 0:
-        ref cpy = Python().cpython()
-        raise cpy.unsafe_get_error()
-    return result != 0
-
-
-def _name(value: PythonObject, name: String) raises -> Bool:
-    # Caller admits the scalar first. The common exact-string path compares
-    # native strings; native NumPy scalar/0-D comparisons keep their C slots.
-    if py_type(value) is py_type(PythonObject("")):
-        return String(value) == name
-    return _equal(value, PythonObject(name))
 
 
 def _int(value: PythonObject, context: PythonObject) raises -> Int:
