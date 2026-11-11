@@ -5,7 +5,7 @@ The boundary controls admission/publication stages. No kernel, solver, stopping
 rule or reduction is implemented here; fixed native requests preserve the
 existing compaction, Gram, resident, fused and unfused routes.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.native_array_layout import NativeArrayLayout
 from core.neighbors_native_driver import XnDriver
 from core.admitted_weights import admitted_fill
@@ -121,9 +121,9 @@ struct OcWeights(Movable):
             raise Error("Invalid input - all samples have zero or negative weights.")
         # Preserve the two former private prefix copies, in their order.
         self.rows = List[Int32](length=kept, fill=0)
-        memcpy(dest=self.rows.unsafe_ptr(), src=rows.unsafe_ptr(), count=kept)
+        unsafe_memcpy(dest=self.rows.unsafe_ptr(), src=rows.unsafe_ptr(), count=kept)
         self.values = List[Float32](length=kept, fill=0)
-        memcpy(dest=self.values.unsafe_ptr(), src=values.unsafe_ptr(), count=kept)
+        unsafe_memcpy(dest=self.values.unsafe_ptr(), src=values.unsafe_ptr(), count=kept)
         self.count = kept
         self.selected = True
         _ = rows

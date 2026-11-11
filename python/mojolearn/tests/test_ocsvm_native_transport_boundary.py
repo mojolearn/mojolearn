@@ -159,3 +159,101 @@ def test_ocsvm_refusals_keep_gamma_and_fitted_publication_stages():
         iterations.fit(_train())
     assert iterations._gamma == 0.5
     assert "support_" not in vars(iterations)
+
+
+def test_ocsvm_rebound_ndarray_type_is_refused_before_dtype_hook(monkeypatch):
+    from mojolearn import _expansion_neighbors
+
+    calls = []
+
+    class PretendArray:
+        @property
+        def dtype(self):
+            calls.append("dtype")
+            raise AssertionError("Python dtype property invoked")
+
+    model = _model()
+    vars(model)["kernel"] = PretendArray()
+    monkeypatch.setitem(_expansion_neighbors._NATIVE_CONTEXT, "ndarray", PretendArray)
+    with pytest.raises(TypeError, match="native|scalar|protocol|owner"):
+        model.fit(_train())
+    assert calls == []
+    assert "_gamma" not in vars(model)
+
+
+@pytest.mark.parametrize("rank", [0, 1, 2])
+def test_ocsvm_precomputed_array_rank_preserves_native_route(rank):
+    kernel = np.array("precomputed").reshape((1,) * rank)
+    calls = []
+
+    def formatter(value):
+        calls.append(value)
+        raise AssertionError("NumPy formatter invoked")
+
+    model = _model(kernel=kernel)
+    gram = np.eye(2, dtype=np.float32)
+    query = np.array([[0.2, 0.2], [1.2, 0], [1, 1]], dtype=np.float32)
+    with np.printoptions(formatter={"all": formatter}):
+        if rank == 0:
+            model.fit(gram)
+            np.testing.assert_allclose(model.score_samples(query), [0.2, 0.6, 1], rtol=0, atol=2e-4)
+        else:
+            with pytest.raises(TypeError, match="unhashable"):
+                model.fit(gram)
+            assert model._gamma == 2.0  # non-precomputed gamma publication precedes key refusal
+            fitted = _model(gamma=0.5).fit(_train())
+            vars(fitted)["kernel"] = kernel
+            with pytest.raises(TypeError, match="unhashable"):
+                fitted.score_samples(query)
+    assert calls == []
+
+
+@pytest.mark.parametrize("field,operation,gamma_published", [
+    ("nu", "fit", False),
+    ("degree", "fit", False),
+    ("coef0", "fit", False),
+    ("max_iter", "fit", True),
+    ("tol", "fit", True),
+    ("_gamma", "score_samples", True),
+    ("offset_", "decision_function", True),
+    ("offset_", "predict", True),
+])
+def test_ocsvm_scalar_conversions_refuse_python_hooks_at_existing_stage(
+    monkeypatch, field, operation, gamma_published
+):
+    calls = []
+
+    def hook(*args):
+        calls.append(args)
+        raise AssertionError("Python scalar conversion invoked")
+
+    model = _model(gamma="auto")
+    if operation != "fit":
+        model.fit(_train())
+    # Exact Path is admitted by the shared family boundary; its Python
+    # conversion hooks are not valid scalar execution inside OneClassSVM.
+    vars(model)[field] = pathlib.PosixPath("not-a-number")
+    monkeypatch.setattr(pathlib.PosixPath, "__float__", hook, raising=False)
+    monkeypatch.setattr(pathlib.PosixPath, "__int__", hook, raising=False)
+    with pytest.raises(TypeError, match="native|scalar|protocol|owner"):
+        getattr(model, operation)(_train() if operation == "fit" else _query())
+    assert calls == []
+    assert ("_gamma" in vars(model)) is gamma_published
+    if operation == "fit":
+        assert "support_" not in vars(model)
+
+
+@pytest.mark.parametrize("storage", ["scalar", "array", "object_array"])
+def test_ocsvm_native_numeric_options_keep_existing_conversion(storage):
+    def scalar(value):
+        if storage == "scalar":
+            return np.int64(value) if isinstance(value, int) else np.float64(value)
+        return np.array(value, dtype=object if storage == "object_array" else None)
+
+    model = OneClassSVM(nu=scalar(0.5), degree=scalar(3), coef0=scalar(0.0),
+                       max_iter=scalar(1000), tol=scalar(1e-6), gamma=scalar(0.5),
+                       numeric_mode="identical").fit(_train())
+    vars(model)["_gamma"] = scalar(0.5)
+    vars(model)["offset_"] = scalar((1 + np.exp(-2)) / 2)
+    np.testing.assert_allclose(model.score_samples(_query()), _scores(0.5), rtol=0, atol=2e-4)
+    np.testing.assert_array_equal(model.predict(_query()), [-1, 1, 1, -1])

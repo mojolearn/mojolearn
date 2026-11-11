@@ -205,8 +205,8 @@
     "gpu_cases_default": 22,
     "gpu_cases_flag_off": 12,
     "gpu_skip_if_flag_off": 10,
-    "boundary_definitions": 9,
-    "boundary_cases": 14,
+    "boundary_definitions": 13,
+    "boundary_cases": 29,
     "status": "authored/uncompiled/unrun; original Python retained",
     "oracles": "closed-form two-point dual/rho; independent parallel Float64 kernels/KKT on original150x6/40x6 inputs"
   },
@@ -217,5 +217,13 @@
     "_mojolearn_native_classical_family_host",
     "_mojolearn_runtime_family_host"
   ],
-  "upgrade": "new core files use Mojo1.2 Array; root owns remaining consolidated SDK migration; no workaround or compatibility alias"
+  "upgrade": "new core files use Mojo1.2 Array; new copy calls use unsafe_memcpy; root owns remaining consolidated SDK migration; no workaround or compatibility alias",
+  "scalar_review_repair": {
+    "reviewed_source": "6a96587b8ebb33dd243ce5b543d85a8d80c4025e",
+    "canonical_ndarray": "context and modules keys admitted before native_numpy_type; reject advertised type mismatch before dtype access",
+    "precomputed": "zero-dimensional native arrays preserve scalar text route; nonzero rank retains later unhashable-key refusal without invoking formatter",
+    "conversions": "same-site exact scalar admission before nu/degree/coef0/max_iter/tol/_gamma/offset_ float/int conversion",
+    "new_roles": 0,
+    "status": "source only; boundary seams authored/unrun"
+  }
 }

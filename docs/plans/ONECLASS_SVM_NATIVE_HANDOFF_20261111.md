@@ -5,8 +5,8 @@ run by this lane. Root collects this with the Mojo 1.2 / MAX 26.7 migration into
 the one combined pre-integration branch. No new family work follows this freeze.
 
 Producers: `2e9df61c52` before-role inventory, `f4e90945ee` additive plans/API,
-`6a96587b8ebb33dd243ce5b543d85a8d80c4025e` public source switch, and this fixture
-commit. The preceding SVR chain and its canonical shared dependencies are listed
+`6a96587b8ebb33dd243ce5b543d85a8d80c4025e` public source switch, `ef64113d6b0a6e7ff90781988b4de017c4a56b8d` fixtures, and the subsequent
+isolated scalar review repair. The preceding SVR chain and its canonical shared dependencies are listed
 in `SVR_NATIVE_HANDOFF_20261111.md`. Dependency adoptions are not new producers.
 
 Seven inventoried family roles now use native storage: numerical request lists,
@@ -33,6 +33,16 @@ and callable transport are gone. Native class identities are cached at the
 boundary, and scalar object-array owner chains are admitted under the GIL before
 comparison. Array diagnostics use a fixed container description instead of
 calling NumPy's Python formatter. Namespace checks precede mode-table lookup.
+
+Independent review of `6a965` found two concrete boundary regressions: mutable
+context ndarray identity before dtype access, and ndarray equality selecting the
+precomputed route for rank-one strings. The isolated correction uses the existing
+native NumPy type admission before field access and unwraps only zero-dimensional
+native arrays for route selection. It also admits each numeric option at its
+existing conversion site, closing inherited conversion callbacks without moving
+publication stages. New traps cover metadata rebinding, formatter-free rank
+selection, each conversion stage and valid native scalar storage. New copy calls
+use the supported Mojo 1.2 `unsafe_memcpy` spelling; arguments are unchanged.
 
 Retained and owed: the existing OneClass coefficient weak-cache tuple/layout
 record in `gp_svm_records.mojo`, shared lifecycle/public storage admission,
@@ -61,7 +71,7 @@ The original 150x6 training and 40x6 held-out inputs from
 only was executed: system Python lacked NumPy; the existing Pixi Python prepared
 the exact bytes. Both logs are retained. No estimator, oracle or test executed.
 
-Fourteen Python boundary cases (nine definitions) cover scalar conversions,
+Twenty-nine Python boundary cases (thirteen definitions) cover scalar conversions,
 public storage/pickle lifetime, original weighted row indices, coefficient
 replacement, native support-index conversion, factory refusals, callback traps,
 formatter refusal and early/late publication stages. All existing Python
@@ -83,7 +93,7 @@ commit/push logs remain there. Independent source review is separate from
 compilation and execution.
 
 RUN OWED: combined SDK-1.2 product compilation, 12 CPU / 22 default GPU native
-cases (or the stated switch-off coverage), and 14 retained boundary cases.
+cases (or the stated switch-off coverage), and 29 retained boundary cases.
 Other SVM work still owed after the combined freeze: SVC's eight inventoried
 roles, SVR/LinearSVR score composition, shared weighted/precomputed temporary
 storage, and the explicitly retained OneClass weak-cache record. No box job was
