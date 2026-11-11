@@ -3,7 +3,7 @@
 """The ann lane's typed address contract, shared by `x_ann/resident.mojo` and,
 through `providers/python/x_ann_abi_pyapi.mojo`, by `bindings/_mojolearn_x_ann.mojo` and
 `bindings/_mojolearn_x_ann_host.mojo`: plain copies, no arithmetic. No
-Python here; the PythonObject unpacking is `providers/python/x_ann_abi_pyapi.mojo`."""
+Python here; the Python object unpacking is `providers/python/x_ann_abi_pyapi.mojo`."""
 
 from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr, i32_ptr

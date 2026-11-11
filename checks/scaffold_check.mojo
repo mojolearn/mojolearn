@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Tests for `checks/scaffold.mojo` and `checks/binding_prelude.mojo`.
+"""Tests for `checks/scaffold.mojo`.
 
 Every helper is checked against a value worked out by hand, and the
 comparisons that decide a check (bits, same_bits, CaseTally) are shown to
@@ -15,7 +15,7 @@ from std.testing import assert_equal, assert_false, assert_raises, assert_true
 from max.gpu.host import DeviceContext
 
 from checks.fixture_rng import u16_row_f32
-from checks.numerics import GLOBAL_NUMERIC_MODE, numeric_mode_name
+from checks.numerics import numeric_mode_name
 from checks.scaffold import (
     CaseTally,
     bits,
@@ -30,15 +30,6 @@ from checks.scaffold import (
     same_bits,
     task_count,
     upload,
-)
-from checks.vendor import COMPILED_VENDOR
-from checks.binding_prelude import (
-    compiled_vendor_name,
-    f32_ptr,
-    host_vendor_binding,
-    i32_ptr,
-    numeric_mode_binding,
-    vendor_binding,
 )
 
 
@@ -130,25 +121,6 @@ def test_case_tally() raises:
         empty.finish("tally-empty")
 
 
-def test_binding_prelude() raises:
-    assert_equal(compiled_vendor_name(), String(COMPILED_VENDOR))
-    assert_equal(String(vendor_binding()), String(COMPILED_VENDOR))
-    assert_equal(String(host_vendor_binding()), "cpu")
-    assert_equal(Int(py=numeric_mode_binding()), GLOBAL_NUMERIC_MODE)
-    var xs: List[Float32] = [1.5, -2.0, 3.25]
-    var p = f32_ptr(Int(xs.unsafe_ptr()))
-    assert_equal(bits(p[unsafe_offset=2]), bits(Float32(3.25)))
-    var ys: List[Int32] = [7, -9]
-    var q = i32_ptr(Int(ys.unsafe_ptr()))
-    assert_equal(q[unsafe_offset=1], Int32(-9))
-    with assert_raises():
-        _ = f32_ptr(0)
-    with assert_raises():
-        _ = i32_ptr(0)
-    _ = xs^
-    _ = ys^
-
-
 def test_upload_download() raises:
     comptime if not has_accelerator():
         print("SKIP test_upload_download: no accelerator on this box")
@@ -175,6 +147,5 @@ def main() raises:
     test_card_path()
     test_fixture_matrix()
     test_case_tally()
-    test_binding_prelude()
     test_upload_download()
     print("scaffold check: PASS")

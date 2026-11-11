@@ -3,7 +3,7 @@
 """Typed side of the transformer host binding (`bindings/_mojolearn_transformer_host.mojo`).
 
 Everything here takes typed values (Ints, addresses, lists, handles) and
-imports no Python. The binding unpacks its PythonObject arguments, calls
+imports no Python. The binding unpacks its Python object arguments, calls
 one entry below, and packs the result. Moved word for word from the
 binding (thin-shell lane, 2026-10-21): same operations, same order.
 """

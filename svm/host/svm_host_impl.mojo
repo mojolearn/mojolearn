@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Typed host entries of `bindings/_mojolearn_svm_host.mojo`: the SVC and SVR
 fits and predictions over the SMO oracle and the isolation forest run, with
-no Python import. The binding unpacks its PythonObject arguments, calls one
+no Python import. The binding unpacks its Python object arguments, calls one
 function here and converts the result back (lane thin-core, 2026-10-21: the
 bodies moved word for word, no bit change)."""
 from std.math import isnan

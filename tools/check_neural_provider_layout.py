@@ -9,17 +9,14 @@ from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE_TREES = ('autograd', 'sequence', 'training', 'transformer', 'mamba', 'core')
-TEST_FIXTURES = frozenset({
-    'training/checks/cross_vendor_resume.mojo',
-    'training/checks/peer_copy_check.mojo',
-    'training/checks/train_gradient_capture.mojo',
-})
+# The three training checks that once imported Python (cross_vendor_resume,
+# peer_copy_check, train_gradient_capture) are native now, so the testing
+# exclusion list they needed is gone.
 
 
 def native_roots(root=ROOT):
     return tuple(path.relative_to(root).with_suffix('').as_posix().replace('/', '.')
-                 for tree in NATIVE_TREES for path in sorted((root / tree).rglob('*.mojo'))
-                 if path.relative_to(root).as_posix() not in TEST_FIXTURES)
+                 for tree in NATIVE_TREES for path in sorted((root / tree).rglob('*.mojo')))
 
 
 def check(root=ROOT, *, require_native_only=False):
@@ -36,7 +33,7 @@ def main():
     for chain, reason in problems:
         print(f'FAIL {reason}: {" -> ".join(chain)}')
     print(f'neural native layout: {len(roots)} roots, {len(seen)} closure modules, '
-          f'{len(problems)} violations; {len(TEST_FIXTURES)} explicit testing exclusions')
+          f'{len(problems)} violations')
     return int(bool(problems))
 
 

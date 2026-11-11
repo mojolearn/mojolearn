@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Typed bodies of the core host binding (`bindings/_mojolearn_core_host.mojo`).
 
-The binding keeps the Python door: it unpacks PythonObject arguments, calls
+The binding keeps the Python door: it unpacks Python object arguments, calls
 one function here under `GILReleased` and converts the typed result back.
 Every statement that reads, compares, copies or folds data lives here with
 no Python import, word for word as it was in the binding (lane thin-core,

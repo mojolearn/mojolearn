@@ -8,6 +8,11 @@
 # file (see tools/hooks/pre-commit for the record). Reading the blob sizes
 # takes seconds; the upload took hours.
 #
+# Python-free directories (2026-11-11): tools/python_free_dirs.sh, from the
+# pushed tree, refuses a push in which a Mojo file outside bindings/,
+# providers/, experiments/, bench/ and tests/ imports Python (an import grep,
+# not a count gate).
+#
 # Owner 2026-11-10: the source-graph runtime fence is retired. It classified
 # admitted host input preparation as GPU computation. Runtime restrictions
 # remain; source reachability/counts cannot certify them.
@@ -94,6 +99,18 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
         status=$?
         rm -f "$connections"
         [ $status -eq 0 ] || { echo "pre-push: REFUSED by native package connection declarations" >&2; exit 4; }
+    fi
+
+    # Python-free kernel directories (2026-11-11): no Mojo file outside
+    # bindings/, providers/, experiments/, bench/ and tests/ imports Python.
+    # An import grep over the pushed tree, run with the pushed tree's script.
+    if git cat-file -e "$local_sha:tools/python_free_dirs.sh" 2>/dev/null; then
+        pyfree=$(mktemp "${TMPDIR:-/tmp}/python-free-dirs.XXXXXX") || exit 4
+        git show "$local_sha:tools/python_free_dirs.sh" >"$pyfree" || { rm -f "$pyfree"; exit 4; }
+        bash "$pyfree" "$local_sha" >/dev/null
+        status=$?
+        rm -f "$pyfree"
+        [ $status -eq 0 ] || { echo "pre-push: REFUSED by tools/python_free_dirs.sh: a kernel directory imports Python" >&2; exit 4; }
     fi
 
 done

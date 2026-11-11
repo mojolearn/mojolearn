@@ -25,11 +25,11 @@ the repro is PEERSOLVE and not a bare copy.
 MOJOLEARN_PEERCOPY_SKIP_BARE=1 skips part 1, MOJOLEARN_PEERCOPY_SKIP_SOLVE=1
 the single PEERSOLVE pass, MOJOLEARN_PEERCOPY_TRIALS sets the PEERRACE trials
 (and half as many PEERSOLVE-REPEAT rounds), and
-MOJOLEARN_PEERCOPY_ENABLE_PEER=1 calls max.driver.enable_all_peer_access()
-first (run the binary under `pixi run` so the Python import resolves).
+MOJOLEARN_PEERCOPY_ENABLE_PEER=1 calls the native `comm.sync.enable_p2p()`
+first (peer access between every GPU pair, before any context is created).
 """
 from std.os import getenv, setenv
-from std.python import Python
+from comm.sync import enable_p2p
 from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.gpu import block_dim, block_idx, thread_idx
@@ -646,14 +646,11 @@ def main() raises:
     if String(getenv("RUNPOD_POD_ID")) == "":
         raise Error("RunPod required; no local execution")
     if String(getenv("MOJOLEARN_PEERCOPY_ENABLE_PEER", "0")) == "1":
-        # MAX's Python driver exposes peer access; the Mojo DeviceContext calls
-        # these drivers use do not. Enabled before any context is created.
-        try:
-            var driver = Python.import_module("max.driver")
-            _ = driver.enable_all_peer_access()
-            print("PEERACCESS enable_all_peer_access returned")
-        except e:
-            print("PEERACCESS enable_all_peer_access raised:", e)
+        # Native peer access (MAX `comm.sync.enable_p2p`, the same driver call
+        # `max.driver.enable_all_peer_access` makes); enabled before any
+        # context is created. It reports False instead of raising when the
+        # hardware has no P2P.
+        print("PEERACCESS enable_p2p returned", enable_p2p())
     var failures = 0
     if String(getenv("MOJOLEARN_PEERCOPY_SKIP_BARE", "0")) != "1":
         var sizes: List[Int] = [4096, 65536, 262144, 262145, 263169, 524288, 1048576, 4194304]

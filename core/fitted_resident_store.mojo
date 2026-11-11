@@ -13,7 +13,7 @@ computes on data.
 
 THE KEY. A model's resident copies belong to a LEASE: an integer the
 family binding mints (`fitted_lease_open`) and hands back inside a native
-lease object (`PythonObject(alloc=...)`, the family's own small struct whose
+lease object (a Python object built with `alloc=...`, the family's own small struct whose
 `__deinit__` calls `fitted_lease_close`). The public door keeps that object
 in the model's prepared-owner record (bindings/native_prepared_owner.mojo,
 outside the model's `__dict__`), together with the model's generation word
