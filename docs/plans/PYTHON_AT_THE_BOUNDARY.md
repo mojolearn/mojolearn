@@ -5,6 +5,8 @@ Design baseline from lane `b1-python-boundary-design`, 2026-11-09, read against
 The Mojo types are design sketches; implementation handoffs and build records carry the current signatures,
 completed migrations and their evidence. This document does not establish compilation or runtime success.
 
+Current integration status, remaining Python work and compile estimates: [migration handoff](PYTHON_MIGRATION_HANDOFF_20261111.json).
+
 Andrew, 2026-11-09: "Why do we need to touch Python at all, why can't it be purely at the boundary, why can't we use
 Mojo objects? We need to get rid of Python objects."
 

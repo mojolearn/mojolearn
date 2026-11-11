@@ -1,0 +1,224 @@
+{
+  "project": "Mojolearn",
+  "updated_at": "2026-11-11T17:38:47.753356+00:00",
+  "scope": "Engineering handoff for the Python-at-the-boundary migration; source progress is not runtime/performance acceptance.",
+  "main": {
+    "source": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+    "compiled_units": 25,
+    "pushed": true,
+    "migrated_roles": 278,
+    "compile_evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/compiled-main-merge-accepted.json",
+    "footprint": {
+      "bindings": {
+        "files": 726,
+        "python_support_import_files": 717
+      },
+      "providers": {
+        "files": 186,
+        "python_support_import_files": 182
+      },
+      "core": {
+        "files": 379,
+        "python_support_import_files": 0
+      },
+      "python_tests": {
+        "files": 654,
+        "definitions": 4364
+      }
+    }
+  },
+  "assembled_batch": {
+    "code_source": "502000ce42bb992d3d81c07f66797b3a9cc8d3e0",
+    "root": "/Users/andrewhendel/mojolearn-wt/integ-python-repair-20261110",
+    "branch": "integ/python-boundary-repair-20261110",
+    "roles": {
+      "gp_score": 15,
+      "gp_tuple_staging": 1,
+      "linear_svc_fit_query": 13
+    },
+    "total_roles": 29,
+    "audited_total_including_main": 307,
+    "compiled": false,
+    "native_execution": false,
+    "new_native_cases": {
+      "cpu": 49,
+      "apple_gpu": 39
+    },
+    "footprint": {
+      "bindings": {
+        "files": 730,
+        "python_support_import_files": 721
+      },
+      "providers": {
+        "files": 186,
+        "python_support_import_files": 182
+      },
+      "core": {
+        "files": 385,
+        "python_support_import_files": 0
+      },
+      "python_tests": {
+        "files": 656,
+        "definitions": 4377
+      }
+    },
+    "notes": "All completed producer work in this migration campaign is collected. This is not all remaining migration or repository integration work."
+  },
+  "compile_estimate": {
+    "physical_units_to_build": 12,
+    "physical_units_to_reuse": 13,
+    "recorded_unit_seconds": 1363.5864,
+    "clean_compile_and_integration_minutes": [
+      25,
+      40
+    ],
+    "allowance_with_repair_rounds_minutes": [
+      60,
+      120
+    ],
+    "qualification": "Estimate from recorded durations on this Mac; compiler failures and cache behavior can change it.",
+    "plan_evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/next-cohort-build-plan.json"
+  },
+  "remaining": {
+    "python_removed_everywhere": false,
+    "estimator_inventory": {
+      "total": 170,
+      "reviewed_scoped": 26,
+      "unreviewed": 144,
+      "classes_with_audited_migration_roles": 23,
+      "qualification": "Reviewed means bounded scope reviewed, not every operation fully migrated; 31 other classes and121 function/dynamic exports lie outside denominator."
+    },
+    "gp": [
+      "Mixed numeric label ordering",
+      "General label flattening",
+      "Inherited/public argument capture and rebinding",
+      "Kernel-constructor tuple",
+      "Shared score truth admission metadata",
+      "GPC archive kernel-unpack lists and mode-validation dictionary"
+    ],
+    "svm": {
+      "inventoried_unmigrated_role_groups": {
+        "SVC": 8,
+        "SVR": 4,
+        "OneClassSVM": 7
+      },
+      "additional": [
+        "LinearSVC score still materializes the public prediction result",
+        "LinearSVR legacy fit helper remains live",
+        "Shared parameter/lifecycle admission and class-cache boundary need full transitive review"
+      ]
+    },
+    "spectral": [
+      "Shared sparse/admission/metadata paths not exhaustively migrated",
+      "Three additive config/storage APIs lack direct native test coverage"
+    ],
+    "broader_families": [
+      "Trees and preprocessing",
+      "Meta-estimators, model selection and orchestration",
+      "Training, sequence and neural families",
+      "Archive, host, array, parameter and remaining public-function surfaces"
+    ],
+    "inventory_warning": "These are known gaps and audit scope, not an exhaustive remaining Python-object count. No defensible overall completion percentage yet.",
+    "necessary_python_boundary": [
+      "Public Python API objects and required buffer/image lifetime pins",
+      "UNPACK/PACK interoperability and public/archive compatibility values",
+      "Python boundary/refusal tests and independent test controllers/oracles"
+    ],
+    "target": "Python objects confined to admitted UNPACK/PACK boundaries; typed Mojo values across RUN. Zero core imports alone does not prove this contract."
+  },
+  "validation": {
+    "accepted_native_cases": {
+      "cpu": 1192,
+      "apple_gpu": 318
+    },
+    "pending_hdbscan_retry": {
+      "cpu": 23,
+      "apple_gpu": 8,
+      "previous_attempt": "Compile failed; no execution. Product compile now passed; test retry remains unrun."
+    },
+    "blocked": [
+      "DBSCAN28 native state cases: minimized compiler origin/capture issue",
+      "OPTICS9CPU/9GPU cases: minimized nested-pointer capture issue",
+      "Shared Apple Metal DeviceContext concurrent submission failure"
+    ],
+    "separate_pending": [
+      "Installed Python-boundary tests",
+      "NVIDIA/AMD compilation/runtime",
+      "Performance measurements",
+      "Final release identity only after all code/measurements settle"
+    ],
+    "source_guard": "Deleted; do not restore it or replace it with a new source guard.",
+    "kernel_policy": "Preserve tuned/fused kernels, solver routes and copies. No Python fallback, serialization or generic replacement to bypass toolchain limitations."
+  },
+  "other_integration_work": {
+    "older_branches": [
+      {
+        "branch": "lane/apple-emb9",
+        "head": "b9c8519e16347762d0b7f9d2ba36e86c0560522d",
+        "commits_not_ancestors_of_main": 3,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "integ/select2-20261105",
+        "head": "23a69302e94e17b08c22d42cbfdd0342346e4a72",
+        "commits_not_ancestors_of_main": 2,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "integ/tooling-20261105b",
+        "head": "f4d37b4c5b9b24af6e667b9b2285404f4471339d",
+        "commits_not_ancestors_of_main": 9,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "lane/lane-select-glue-attribution",
+        "head": "3eebfe3e4ee73faa417aaa4dc853075e91bb338e",
+        "commits_not_ancestors_of_main": 3,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "lane/ne-bisect-hang",
+        "head": "a002c5dfbe238574054ea134d7aaa73d3251b5bd",
+        "commits_not_ancestors_of_main": 24,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "lane/ne-fix-hang3",
+        "head": "23d145442e31e89796125dc07f5b1eefc1ce4759",
+        "commits_not_ancestors_of_main": 5,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "lane/ne-fix-hang4",
+        "head": "fd39b43fc03c291a885ebb0b530d5f5bef3e5afd",
+        "commits_not_ancestors_of_main": 1,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      },
+      {
+        "branch": "lane/nvidia-one-wheel",
+        "head": "bd21a17d0a373fbeb490d0d22b3f190654086269",
+        "commits_not_ancestors_of_main": 1,
+        "status": "Retained, not reviewed for unique content or merge readiness; cherry-picked equivalents may exist."
+      }
+    ],
+    "dirty_checkouts": "Original shared checkout and admit-tree were retained with edits; not part of this migration merge, do not overwrite.",
+    "qualification": "Older branch ancestry is not proof of unique remaining changes; review patch equivalence, ownership and compile evidence before merge."
+  },
+  "next_actions": [
+    "Build this assembled29-role batch once with standard optimized identical/host release layout; reuse matching units.",
+    "Repair failures without changing algorithms; merge and normally push the exact successfully compiled source, preserving intervening remote work.",
+    "Run the new native fixtures separately; retain Python coverage until equivalent native acceptance.",
+    "Finish known GP/SVM gaps and expand the transitive boundary inventory across remaining families.",
+    "Review older retained branches separately; do not infer they are obsolete from their age."
+  ],
+  "build_root": "/Users/andrewhendel/mojolearn-wt/integ-w3",
+  "build_command": "MOJOLEARN_ORCHESTRATOR=1 bash tools/compile_slot.sh pixi run python3 tools/development_build.py build --sets identical,host --layout release --evidence <unique-evidence-directory>",
+  "merge_gate": "Affected compilation plus existing normal push checks; no added packed-wheel smoke gate. Compilation is not runtime or identity proof.",
+  "release": "No release, tag, PyPI publication or identity campaign authorized by this handoff.",
+  "cleanup": {
+    "worktrees_removed": 60,
+    "remaining": 31,
+    "local_files_archived_bytes": 1373907695,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/worktree-prune-summary.json"
+  }
+}
