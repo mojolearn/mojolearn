@@ -125,3 +125,28 @@ Affected roots additionally include every current `cluster_resident_table`
 consumer through the existing runtime family build closure. Native ownership,
 public mutation/cache/lifetime tests and all target compiles remain root-owned.
 Affinity preparation and alternative label assignment remain staged next.
+
+## Alternative assignment descriptor
+
+`core/spectral_assignment_api.mojo` defines a separate one-operation ABI
+`mojolearn.spectral.assign.v1`; the nine-operation fit/query ABI is unchanged.
+`SpectralAssignmentRequest(source, count, rows, components, method, seed,
+restarts, iterations)` is primitive native state. `SpectralAssignmentOutput`
+keeps one heap-owned result (`labels: List[Int32]`, `iterations: Int`). Its
+host/device adapters call the same `cluster_*_execute(ENTRY_SPECTRAL_ASSIGN)`
+with the existing 30/20 settings and `[0.0]` native floating envelope. There
+is no duplicate discretization/QR implementation or algorithm switch.
+
+The public fit path removes its Python option lists and nested ClusterOut
+serialization/readback. The provider transfers the label list with pop, and
+PACK copies it once into the same owning array exporter before wrapping it.
+Iteration publication still precedes label packing. Import-time Spectral
+capture replaces its unused x_cluster_call entry with the new compiled factory;
+other families and direct compatibility callers retain the raw export.
+
+Tests may instantiate `SpectralAssignmentDriver(spectral_assign_native_v1[
+SpectralAssignmentHost/Device])` and inspect output.storage[0].labels and
+iterations. Preserve original assignment workloads/options; no tests executed
+by this lane. Additional roots: `_mojolearn_x_cluster` and host, plus the
+family runtime closure. Source audit: `E/spectral-native-owner/assignment-source-audit.json`.
+RBF/COO/kNN preparation remains the next staged execution transport.

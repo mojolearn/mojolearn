@@ -25,7 +25,9 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array,
     family_field, family_is_str, family_min,
 )
-from bindings.cluster_native import _reference_queries, _xc_array
+from bindings.cluster_native import _reference_queries
+from core.spectral_assignment_api import SpectralAssignmentRequest
+from bindings.spectral_assignment_boundary import spectral_assignment_run, spectral_assignment_pack
 from bindings.cluster_resident_table import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
 from bindings.spectral_resident_boundary import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
@@ -55,8 +57,6 @@ comptime _DENSE_NEGATIVE = -3
 #: x_decomp/cells.mojo op codes (`_expansion_decomp._OP`).
 comptime _OP_EXP = 9
 comptime _OP_SCALE = 14
-#: `x_cluster/entries.mojo::ENTRY_SPECTRAL_ASSIGN`.
-comptime _E_SPECTRAL_ASSIGN = 12
 
 
 def _builtins() raises -> PythonObject:
@@ -748,19 +748,17 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     _ = py_call(fields.pop, PythonObject("n_iter_assign_"), PythonObject(None))
     var assign = family_field(fields, "assign_labels")
     if String(py=assign) != "kmeans":
-        # scikit-learn's discretize / cluster_qr on the fit's embedding, the
-        # x_cluster binding's host code (ENTRY_SPECTRAL_ASSIGN).
-        var ip = Python.list(PythonObject(n), PythonObject(k), context["family_cfb_assign_codes"][assign],
-                             PythonObject(_int(family_field(fields, "_seed"))), PythonObject(30), PythonObject(20))
-        var result = family_call(family_entry(args[3], "x_cluster_call", context), PythonObject(_E_SPECTRAL_ASSIGN),
-                                 classical_address(embedding), PythonObject(Int(py=embedding.size)), PythonObject(0),
-                                 PythonObject(0), ip, Python.list(PythonObject(0.0)))
-        _ = embedding  # keep the Python object alive through the native call above
+        # Preserve ENTRY_SPECTRAL_ASSIGN and its 30/20 restart/iteration
+        # settings. Only its options and result envelope become native.
+        var request = SpectralAssignmentRequest(Int(py=classical_address(embedding)),
+            Int(py=embedding.size), n, k, Int(py=context["family_cfb_assign_codes"][assign]),
+            _int(family_field(fields, "_seed")), 30, 20)
+        var result = spectral_assignment_run(args[3], request, context)
+        _ = embedding
         if String(py=assign) == "discretize":
-            py_setitem(fields, "n_iter_assign_", PythonObject(_int(result[2][0])))
-            _ = embedding  # keep the Python object alive through the native call above
-        labels = _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
-        _ = embedding  # keep the Python object alive through the native call above
+            py_setitem(fields, "n_iter_assign_", PythonObject(result.storage[0].iterations))
+        labels = spectral_assignment_pack(result, n, context)
+        _ = embedding
     # A fit releases the last fit's resident prediction state at once (N326).
     cres_forget(model, CRES_SPECTRAL)
     py_setitem(fields, "labels_", labels)
