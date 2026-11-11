@@ -12,6 +12,12 @@ from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR
 from core.linear_fit_types import RIDGE_FIT_ABI
 from x_linear.ridge_descriptor_device import ridge_fit_device_v1
 from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
+from core.linear_entry_table_ext import xl_ops_publish
+from x_linear.ops_entry_device import (
+    x_linear_ops_device_v1, XLINEAR_OPS_DEVICE_API, xl_fit_device_run, xl_fit_fold_device_run,
+    xl_decision_device_run, xl_decision_codes_device_run, xl_decision_rows_device_run, xl_huber_out_device_run,
+    xl_class_prep_device_run, xl_spearman_device_run, xl_best_alpha_run,
+)
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
@@ -21,37 +27,20 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
-from x_linear.spearman_device import spearman_sign_device
 from x_linear.device import linear_ctx as _p2m_ctx
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
-from x_linear.ops import FP, IP
-from x_linear.ridgecv import ridge_best_alpha
-from x_linear.device import fit_device, ridge_resident, decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device, SGD_IDN_DEV_FINITE
-from x_linear.dispatch import isotonic_abi_check, ALGO_SGD, ALGO_RIDGE
-from core.device_zero import enqueue_fill
-from core.msel_device_x import msel_fold_entry_context, msel_device_x_f32
 from checks.numerics import NUMERIC_IDENTICAL
-from x_linear.finite_device import XLIN_IDN_DEV_FINITE
-from x_linear.class_prep_device import class_prep_device
-from x_linear.x_linear_input_impl import x_linear_finite_device as _finite
-
-
-def _fp(addr: Int) raises -> FP:
-    if addr == 0:
-        raise Error("x_linear: null float32 buffer address")
-    return FP(unsafe_from_address=addr)
 
 
 def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     """Lane py-runtime round 2: RidgeCV's best alpha index over the n mean
-    CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN."""
-    var na = Int(py=n)
-    if na <= 0:
-        return PythonObject(-1)
-    return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
+    CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN.
+    The native owner calls XL_OP_BEST_ALPHA; this export remains for the
+    Python surface (_surface_linear.py)."""
+    return PythonObject(xl_best_alpha_run(Int(py=scores_addr), Int(py=n)))
 
 
 def ridge_fit_native_api_v1_binding() raises -> PythonObject:
@@ -59,8 +48,31 @@ def ridge_fit_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def _int32_words(values: PythonObject, count: Int) raises -> List[Int32]:
+    var words = List[Int32](capacity=count)
+    for i in range(count):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
+        words.append(Int32(Int(py=values[i])))
+    return words^
+
+
+def _float32_words(values: PythonObject, count: Int) raises -> List[Float32]:
+    var words = List[Float32](capacity=count)
+    for i in range(count):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
+        words.append(Float32(Float64(py=values[i])))
+    return words^
+
+
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
                 ip: PythonObject, fp: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    # The Python door of XL_OP_FIT (x_linear/ops_entry_device.mojo), kept for
+    # the Python surface (_surface_linear.py, _expansion_linear.py); the
+    # native owner bindings/x_linear_native.mojo calls the table.
+    var ipl = _int32_words(ip, Int(py=dims[7]))
+    var fpl = _float32_words(fp, Int(py=dims[8]))
+    var a = Int(py=algo)
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    var oa = Int(py=out_addr)
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var n_x = Int(py=dims[2])
@@ -68,116 +80,61 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var n_out = Int(py=dims[4])
     var n_fw = Int(py=dims[5])
     var n_iw = Int(py=dims[6])
-    var n_ip = Int(py=dims[7])
-    var n_fp = Int(py=dims[8])
-    if n <= 0 or d < 0 or n_out <= 0:
-        raise Error("x_linear: positive dimensions required")
-    isotonic_abi_check(Int(py=algo), n, n_y, n_out, n_fw, n_iw, n_ip)
-    var ipl = List[Int32](capacity=n_ip)
-    for i in range(n_ip):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
-        ipl.append(Int32(Int(py=ip[i])))
-    var fpl = List[Float32](capacity=n_fp)
-    for i in range(n_fp):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
-        fpl.append(Float32(Float64(py=fp[i])))
-    var a = Int(py=algo)
-    var x = _fp(Int(py=x_addr))
-    var y = _fp(Int(py=y_addr))
-    var out = _fp(Int(py=out_addr))
-    # lane/idn-sgd-multiblock: the SGD grids test the uploaded words on the
-    # device (x_linear/device.mojo SGD_IDN_DEV_FINITE; the same error)
-    # lane/fam-linear: every other route does the same on the X it uploads
-    # (x_linear/finite_device.mojo XLIN_IDN_DEV_FINITE; the same error)
-    # The fallback finite scans (builds without the device-side checks) are
-    # native device work over host pointers: they run with the GIL released,
-    # before the fit, with the same refusals.
-    var host_scan = not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD))
     with GILReleased(Python()):
-        if host_scan:
-            _finite(x, n_x, "X")
-            _finite(y, n_y, "y")
-        fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
+        n_out = xl_fit_device_run(a, xa, ya, n, d, n_x, n_y, n_out, n_fw, n_iw, ipl, fpl, oa)
+    _ = ipl^
+    _ = fpl^
     return PythonObject(n_out)
 
 
 def fit_fold_binding(algo: PythonObject, ids: PythonObject, y_addr: PythonObject, dims: PythonObject,
                      ip: PythonObject, fp: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """`x_linear_fit` over a model-selection fold resident on the device
-    (lane a8c-device-x-linear-prep-rfe; IDENTICAL GPU builds): `ids` is
-    [base store id, base rows, index store id] in model selection's store
-    (bindings/device_rows_door.mojo door_rows_store); the fold's n x d rows
-    are gathered on the device straight into the fit's X buffer, the finite
-    and range tests in the same pass (core/msel_device_x.mojo), and the fit
-    runs on `msel_fold_entry_context()` (the one fold-entry context rule): no host gather
-    and no upload of X. `dims`, `ip`, `fp` and the result are
-    `x_linear_fit`'s. Ridge (algo 8: Ridge with weights, RidgeClassifier)
-    only; any other algo is refused by name (its door gathers host rows).
-    Returns [n_out, finite word, range word]: a nonzero word means the
-    result is not to be read and the door refuses."""
-    var a = Int(py=algo)
-    if a != ALGO_RIDGE:
-        raise Error("x_linear_fit_fold: only the Ridge fit (algo 8) reads a device fold; algo " + String(a))
+    (XL_OP_FIT_FOLD, x_linear/ops_entry_device.mojo). `ids` is [base store
+    id, base rows, index store id]. Returns [n_out, finite word, range word]."""
     if len(ids) != 3:
         raise Error("x_linear_fit_fold: ids must hold 3 values")
+    var ipl = _int32_words(ip, Int(py=dims[7]))
+    var fpl = _float32_words(fp, Int(py=dims[8]))
+    var a = Int(py=algo)
     var base_id = Int(py=ids[0])
     var base_rows = Int(py=ids[1])
     var index_id = Int(py=ids[2])
+    var ya = Int(py=y_addr)
+    var oa = Int(py=out_addr)
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
+    var n_x = Int(py=dims[2])
     var n_y = Int(py=dims[3])
     var n_out = Int(py=dims[4])
-    var n_ip = Int(py=dims[7])
-    var n_fp = Int(py=dims[8])
-    if n <= 0 or d <= 0 or n_out <= 0:
-        raise Error("x_linear: positive dimensions required")
-    if Int(py=dims[2]) != n * d:
-        raise Error("x_linear_fit_fold: dims[2] must be n * d (the fold's X words)")
-    var ipl = List[Int32](capacity=n_ip)
-    for i in range(n_ip):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
-        ipl.append(Int32(Int(py=ip[i])))
-    var fpl = List[Float32](capacity=n_fp)
-    for i in range(n_fp):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
-        fpl.append(Float32(Float64(py=fp[i])))
-    var y = _fp(Int(py=y_addr))
-    var out = _fp(Int(py=out_addr))
-    var finite = Int32(0)
-    var in_range = Int32(0)
+    var finite = 0
+    var in_range = 0
     with GILReleased(Python()):
-        var ctx = msel_fold_entry_context()
-        var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
-        var dst = ctx.enqueue_create_buffer[DType.int32](2)
-        enqueue_fill[DType.int32](ctx, dst, Int32(0))
-        msel_device_x_f32(ctx, base_id, base_rows, d, index_id, n, dx, dst.unsafe_ptr(), 0)
-        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
-        ctx.enqueue_copy(dst_buf=words, src_buf=dst)
-        # the gather tested X (n_x_test 0); y is tested by the fit as before.
-        # ridge_resident synchronizes once at its end, which delivers words.
-        ridge_resident(ctx.copy(), dx, 0, y, n_y, n, d, ipl, fpl, n_out, out)
-        finite = words.unsafe_ptr().unsafe_load(0)
-        in_range = words.unsafe_ptr().unsafe_load(1)
-        _ = words^
-        _ = dst^
-        _ = dx^
-    return Python.list(n_out, Int(finite), Int(in_range))
+        var words = xl_fit_fold_device_run(a, base_id, base_rows, index_id, ya, n, d, n_x, n_y, n_out, ipl, fpl, oa)
+        finite = words[0]
+        in_range = words[1]
+    _ = ipl^
+    _ = fpl^
+    return Python.list(n_out, finite, in_range)
 
 
 def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
                      out_addr: PythonObject) raises -> PythonObject:
+    # dims[4] (optional): the host address of the deferred finite status
+    # word of X (lane a1b; core/admitted_finite_status.mojo), 0 or absent
+    # when the door tested X.
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var k = Int(py=dims[2])
     var link = Int(py=dims[3])
-    if n < 0 or d < 0 or k <= 0:
-        raise Error("x_linear: positive dimensions required")
-    # dims[4] (optional): the host address of the deferred finite status
-    # word of X (lane a1b; core/admitted_finite_status.mojo), 0 or absent
-    # when the door tested X.
     var status = Int(py=dims[4]) if len(dims) > 4 else 0
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
-    var out = _fp(Int(py=out_addr))
+    var xa = Int(py=x_addr)
+    var wa = Int(py=wb_addr)
+    var oa = Int(py=out_addr)
+    var cells = 0
     with GILReleased(Python()):
-        decision_device(x, wb, n, d, k, link, out, status)
-    return PythonObject(n * k)
+        cells = xl_decision_device_run(xa, wa, n, d, k, link, oa, status)
+    return PythonObject(cells)
 
 
 def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
@@ -192,16 +149,15 @@ def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Py
     var strict = Int(py=dims[4])
     var below = Int(py=dims[5])
     var above = Int(py=dims[6])
-    if n < 0 or d < 0 or k <= 0:
-        raise Error("x_linear: positive dimensions required")
     # dims[7] (optional): the deferred finite status word's host address.
     var status = Int(py=dims[7]) if len(dims) > 7 else 0
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
-    var out = IP(unsafe_from_address=Int(py=out_addr))
+    var xa = Int(py=x_addr)
+    var wa = Int(py=wb_addr)
+    var oa = Int(py=out_addr)
+    var rows = 0
     with GILReleased(Python()):
-        decision_codes_device(x, wb, n, d, k, link, strict, below, above, out, status)
-    return PythonObject(n)
+        rows = xl_decision_codes_device_run(xa, wa, n, d, k, link, strict, below, above, oa, status)
+    return PythonObject(rows)
 
 
 # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
@@ -222,14 +178,13 @@ def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Pyt
     var link = Int(py=dims[3])
     var mode = Int(py=dims[4])
     var status = Int(py=dims[5]) if len(dims) > 5 else 0
-    if n < 0 or d < 0 or k <= 0:
-        raise Error("x_linear: positive dimensions required")
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
-    var out = _fp(Int(py=out_addr))
+    var xa = Int(py=x_addr)
+    var wa = Int(py=wb_addr)
+    var oa = Int(py=out_addr)
+    var rows = 0
     with GILReleased(Python()):
-        decision_rows_device(x, wb, n, d, k, link, mode, out, status)
-    return PythonObject(n)
+        rows = xl_decision_rows_device_run(xa, wa, n, d, k, link, mode, oa, status)
+    return PythonObject(rows)
 
 
 def decision_huber_out_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
@@ -243,19 +198,15 @@ def decision_huber_out_binding(x_addr: PythonObject, wb_addr: PythonObject, dims
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var link = Int(py=dims[2])
-    if n < 0 or d < 0:
-        raise Error("x_linear: positive dimensions required")
-    var y = _fp(Int(py=dims[3]))
+    var ya = Int(py=dims[3])
     var thr = Float64(py=dims[4])
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
+    var xa = Int(py=x_addr)
+    var wa = Int(py=wb_addr)
     var oa = Int(py=out_addr)
-    if oa == 0:
-        raise Error("x_linear: null flag buffer address")
-    var flags = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=oa)
+    var rows = 0
     with GILReleased(Python()):
-        decision_huber_out_device(x, wb, n, d, link, y, thr, flags)
-    return PythonObject(n)
+        rows = xl_huber_out_device_run(xa, wa, n, d, link, ya, thr, oa)
+    return PythonObject(rows)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -284,11 +235,9 @@ def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: Pyt
     var n = Int(py=n_obj)
     var xa = Int(py=x_addr)
     var ya = Int(py=y_addr)
-    if n <= 0 or xa == 0 or ya == 0:
-        raise Error("x_linear spearman: n > 0 and two buffers required")
     var sign = 0
     with GILReleased(Python()):
-        sign = spearman_sign_device(_p2m_ctx(), FP(unsafe_from_address=xa), FP(unsafe_from_address=ya), n)
+        sign = xl_spearman_device_run(xa, ya, n)
     return PythonObject(sign)
 
 
@@ -308,16 +257,9 @@ def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr:
     var sa = Int(py=sw_addr)
     var wa = Int(py=cw_addr)
     var oa = Int(py=out_addr)
-    if n <= 0 or k < 1 or ca == 0 or wa == 0:
-        raise Error("x_linear class prep: n > 0, k > 0, codes and class weights required")
-    if weighted and sa == 0:
-        raise Error("x_linear class prep: weighted counts need sample weights")
     var largest = 0
     with GILReleased(Python()):
-        largest = class_prep_device(
-            _p2m_ctx(), IP(unsafe_from_address=ca), FP(unsafe_from_address=sa if sa != 0 else wa), sa != 0,
-            FP(unsafe_from_address=wa), n, k, balanced, weighted, FP(unsafe_from_address=oa if oa != 0 else wa),
-            oa != 0)
+        largest = xl_class_prep_device_run(ca, sa, wa, oa, n, k, balanced, weighted)
     return PythonObject(largest)
 
 
@@ -332,6 +274,10 @@ def _publish_linear_entry_table() raises:
     var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1))
     linear_table_publish[LINEAR_TABLE_X_LINEAR](key,
         Int(api[].entries.unsafe_ptr()), [String(RIDGE_FIT_ABI)], [1], [ridge_fit_device_v1])
+    # The x_linear operations table (core/linear_entry_table_ext.mojo): the
+    # native owner of the linear expansion estimators calls these entries.
+    var ops = XLINEAR_OPS_DEVICE_API.get_or_create_ptr()
+    xl_ops_publish(key, Int(ops[].entries.unsafe_ptr()), x_linear_ops_device_v1)
 
 def build__mojolearn_x_linear() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"

@@ -3,17 +3,10 @@
 estimators and the coordinate-descent pair (bindings/x_linear_native.mojo)
 and its fixed ABI. Nothing here runs when a public method is called."""
 
-#: The x_linear binding's entries the owner calls.
-_X_LINEAR_ENTRIES = ("x_linear_fit", "x_linear_decision", "x_linear_decision_codes", "x_linear_class_prep",
-                     "py2mojo_rows", "x_linear_spearman_sign", "x_linear_best_alpha")
 #: The base binding's fold, index and score helpers the cv fits call
 #: (`_buffer._native`, always the identical binary).
 _BASE_HELPERS = ("fold_ids", "select_fold_i64", "assign_fold_i64", "check_indices_i64", "count_fold_hits_i64",
                  "mark_split_roles_f32", "row_means_f64", "gather_rows_bytes", "reduce_stat")
-_X_LINEAR_OPTIONAL = ("x_linear_numeric_mode", "x_linear_vendor", "x_linear_decision_rows",
-                      "x_linear_decision_huber_out",
-                      # lane a8c: the Ridge fit over a device-resident CV fold (IDENTICAL GPU builds only)
-                      "x_linear_fit_fold")
 
 
 def _refusal(error):
@@ -22,17 +15,12 @@ def _refusal(error):
 
 
 def _linear_entries(module):
-    # glue: retain checked compiled entries of one x_linear binding at connection
-    from types import BuiltinFunctionType
-    entries = {}
-    for name in _X_LINEAR_ENTRIES + _X_LINEAR_OPTIONAL:  # glue: fixed native exports
-        entry = getattr(module, name, None)
-        if entry is None and name in _X_LINEAR_OPTIONAL:
-            continue
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"the x_linear owner requires compiled {name}")
-        entries[name] = entry
-    return entries
+    # glue: the canonical native connection of one x_linear binding, admitted
+    # once at import against the table it publishes. The owner calls that
+    # binding's x_linear operations table (core/linear_entry_table_ext.mojo)
+    # through this connection's key; no compiled Python entry is retained.
+    from ._native_classical_bridge import _native_table_cells
+    return _native_table_cells(module, "x_linear")
 
 
 def connect(tables, solver=None):
