@@ -1,0 +1,24 @@
+Mojolearn KernelPCA native tests (2026-11-10)
+
+First chunk: 20 typed eigen wire/owning-image metadata cases.
+Dependency c613f33133. All eight Boolean combinations, distinct six addresses,
+dimensions and Float64 gamma; copies; malformed spans; exact native errors;
+host neighbor metadata refuses an eigensolver operation it does not own.
+No numerical solver in the mock, no fake address dereference. Error/result
+storage remains heap-owned through descriptor calls, including refusals.
+All independent cases use host_parallelize.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kpca_contract.mojo
+Entry kpca_contract_suite.run_checks(). Uncompiled/unrun; JSON/TOML/source/
+whitespace checks only. No lane build/test/box/timing/development bits run.
+Nothing removed: new internal wire coverage. Product/defaults unchanged.
+
+Upcoming execution dependency: query/owner API 2c3a36c216. Pilot owns dense
+centering reproducer 6a4856f068 and product correction. Root will execute it.
+Native numerical fixtures retain both K=[[1,2],[2,4]] global mean2.25 and
+sign-changing X=[2,-1], K=[[4,-2],[-2,1]], global mean0.25. The latter's
+true centered eigenvalues4.5/0 expose the old spurious constant eigenmode.
+Original Python KPCA data: train80x6 seed0/query20x6 seed3, first5rows times6,
+rank3, rbf/linear/poly/cosine; eig rtol1e-3 and score/query2e-3/2e-3.
+Keep independent sklearn/public array lifetime/refusal seams. No algorithm
+fork, no old path comparison or identity campaign. GPU graphs ordered over
+shared contexts; kernels parallel and concurrency failures remain separate.
