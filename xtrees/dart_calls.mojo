@@ -7,11 +7,10 @@ the call returns. Positions follow `xtrees/dart_abi.mojo`.
 Lane entry-table-zero-alloc (2026-11-11): the caller resolves the table once
 (`xd_ref`, where a missing or mismatched publication refuses with the table's
 error) and passes the `EntryRef` to every call; a call is one indirect call.
-The per-round calls (`xd_step`, `xd_add`) build their request words on the
-stack, so a round allocates nothing. The refusal text of an operation is its
+Every call builds its request words in inline `Array` envelopes on its
+frame, so a round allocates nothing. The refusal text of an operation is its
 former Python entry's.
 """
-from std.memory import stack_allocation
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 from core.trees_entry_table import TreesEntryKey
 from core.trees_entry_table_dart import trees_dart_table_entry
@@ -47,56 +46,24 @@ def xd_open(dart: EntryRef, x: Int, y: Int, inits: Int, n: Int, d: Int, k: Int, 
 def xd_step(dart: EntryRef, handle: Int, coef: Int, thr: Int, flags: Int, bad: Int, t: Int, drop_seed: Int,
             iteration: Int, skip_thr: Int) raises -> Int:
     """The round's step with no host targets (they stay in the session).
-    Request words on the stack: no allocation per round."""
-    var a = stack_allocation[4, Int]()
-    a[0] = coef
-    a[1] = thr
-    a[2] = flags
-    a[3] = bad
-    var p = stack_allocation[5, Int]()
-    p[0] = handle
-    p[1] = t
-    p[2] = drop_seed
-    p[3] = iteration
-    p[4] = skip_thr
-    var f = stack_allocation[5, Float64]()
-    for i in range(5):  # small-loop(the call's five integer parameters)
-        f[i] = Float64(p[i])
-    return entry_ref_call(dart, XD_STEP, Int(a), 4, Int(p), 5, Int(f), 5)
+    Request words inline on the frame: no allocation per round."""
+    var addrs: Array[Int, 4] = [coef, thr, flags, bad]
+    var ints: Array[Int, 5] = [handle, t, drop_seed, iteration, skip_thr]
+    var floats: Array[Float64, 5] = [Float64(handle), Float64(t), Float64(drop_seed), Float64(iteration),
+                                     Float64(skip_thr)]
+    return entry_ref_call(dart, XD_STEP, addrs, ints, floats)
 
 
 def xd_add(dart: EntryRef, handle: Int, colid: Int, quesval: Int, left: Int, values: Int, rows: Int, tree: Int,
            cls: Int, lo: Int, n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64,
            mds: Float64, m: Int) raises -> Int:
-    """One member's add. Request words on the stack: no allocation per member."""
-    var a = stack_allocation[5, Int]()
-    a[0] = colid
-    a[1] = quesval
-    a[2] = left
-    a[3] = values
-    a[4] = rows
-    var p = stack_allocation[11, Int]()
-    p[0] = handle
-    p[1] = tree
-    p[2] = cls
-    p[3] = lo
-    p[4] = n_nodes
-    for i in range(5, 10):  # small-loop(five reserved zero words)
-        p[i] = 0
-    p[10] = m
-    var f = stack_allocation[11, Float64]()
-    f[0] = Float64(handle)
-    f[1] = Float64(tree)
-    f[2] = Float64(cls)
-    f[3] = Float64(lo)
-    f[4] = Float64(n_nodes)
-    f[5] = shrink
-    f[6] = factor
-    f[7] = lam
-    f[8] = l1
-    f[9] = mds
-    f[10] = Float64(m)
-    return entry_ref_call(dart, XD_ADD, Int(a), 5, Int(p), 11, Int(f), 11)
+    """One member's add. Request words inline on the frame: no allocation per
+    member."""
+    var addrs: Array[Int, 5] = [colid, quesval, left, values, rows]
+    var ints: Array[Int, 11] = [handle, tree, cls, lo, n_nodes, 0, 0, 0, 0, 0, m]
+    var floats: Array[Float64, 11] = [Float64(handle), Float64(tree), Float64(cls), Float64(lo), Float64(n_nodes),
+                                      shrink, factor, lam, l1, mds, Float64(m)]
+    return entry_ref_call(dart, XD_ADD, addrs, ints, floats)
 
 
 def xd_close(dart: EntryRef, handle: Int, bad: Int) raises -> Int:
