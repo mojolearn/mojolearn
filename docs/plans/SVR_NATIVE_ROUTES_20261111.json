@@ -1,0 +1,71 @@
+{
+  "base": "3db92c31f3",
+  "status": "inventory before implementation; no compilation/execution",
+  "family": "SVR",
+  "roles": [
+    {
+      "name": "fit option list",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1559,
+        "text": "var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(_kernel_code(fields, context)),"
+      },
+      "after_plan": "typed scalar fit request preserving 9/10/12 candidate and 16 device-X forms"
+    },
+    {
+      "name": "fit pointer list",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1583,
+        "text": "var n_support = svc_int(svr_execute(binding, native, True, Python.list(PythonObject(x_meta.source.addr), classical_address(targets),"
+      },
+      "after_plan": "typed addresses and native result integer"
+    },
+    {
+      "name": "worst-case dual/support/vector/info scratch",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1551,
+        "text": "var dual = family_array(Python.tuple(PythonObject(n_rows)), \"<f4\", context)"
+      },
+      "after_plan": "native Float32/Int32/Float64 owners; same public prefix copies/order"
+    },
+    {
+      "name": "query option/status transport",
+      "before": {
+        "file": "bindings/svc_kernel_native.mojo",
+        "line": 1668,
+        "text": "var params = Python.list(PythonObject(n_rows), PythonObject(n_features), PythonObject(n_support),"
+      },
+      "after_plan": "typed direct/resident/fold request and native finite/range status"
+    }
+  ],
+  "preserved_routes": {
+    "fit_default_device": "_svm_fit_entry detects existing native resident export; non-precomputed device-X/fold/scale-gamma form \u2192 svr_fit_host_borrowed; same status6 words",
+    "fit_default_host": "svm.host.svm_host_impl.svr_fit_host",
+    "fit_candidate": "MOJOLEARN_CLASSICAL_NATIVE_DISPATCH switch stays unchanged; original svm/native_svr_dispatch or host native descriptor route, host X admission",
+    "predict_resident": "svm.svm_resident_state.svr_predict_resident_host; same lease/fold/status, private tuple envelopes only migrated",
+    "predict_fallback": "original host-list or CPU direct output route; precomputed support-column gather kept",
+    "weights_gamma": "existing _c_rows/_resolve_gamma and scale_gamma kernels unchanged"
+  },
+  "query_shared_reuse": "Any prepared record/mirror tuple migration is reuse of existing GP lease state schema and will not count as a new aggregate role; actual lifetime pins remain boundary-owned.",
+  "pending_extra": "SVR.score and internal precomputed support-column gather not automatically claimed complete by these four roles.",
+  "public_storage": [
+    "support_",
+    "support_vectors_",
+    "dual_coef_",
+    "intercept_",
+    "n_features_in_",
+    "n_support_",
+    "n_iter_",
+    "_gamma"
+  ],
+  "original_python_coverage": [
+    "test_host_svr_native.py",
+    "test_svr_surface.py",
+    "test_host_model_svm.py"
+  ],
+  "native_fixture_plan": "actual same-provider deterministic linear/RBF/poly/sigmoid/precomputed fits and direct/resident query cases with independent references; CPU units parallel, GPU numerical units ordered under existing upstream concurrency park",
+  "jobs": "none; root only",
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/svr"
+}
