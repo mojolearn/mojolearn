@@ -1,5 +1,31 @@
 Mojolearn IncrementalPCA native tests (2026-11-10)
 
+Current execution status and narrow owner-authorized exception (2026-11-10):
+  Root compiled and passed the 60 pure state/wire fixtures; do not rerun them
+  unchanged. Original actual CPU15/GPU17 fixture builds exited 139 before
+  numerical runtime. The immutable nested List pointer-capture compiler bug
+  is reproduced in standalone probe13; flat control14 and no-closure control15
+  compiled. Original sources, failures and these three probes remain intact.
+  Thin actual host fit/partial and public boundary compilation are distinct
+  accepted evidence; neither executes the full numerical fixture suite.
+
+  The owner explicitly approved replacing only IPCATestRoom's nested
+  List[List[Float32]] with six named List[Float32] fields. This narrow test-only
+  exception does not authorize other workarounds or alter the Wait for Mojo
+  rule generally. Direct named buffers retain lengths 11/5/5/5/5/5, every
+  canary, assertion, tolerance, owner pin, cleanup and the CPU15/GPU17 case
+  set. All input/reference bytes and original minimal compiler repro/controls
+  are unchanged. No product, kernel, algorithm, unsafe cast or Python fallback
+  was introduced. The compiler bug remains open; upstream draft is unsent.
+  Removed only nested test-container indexing and its fixed six-field loops;
+  all six guard and refused-output comparisons remain explicit.
+
+  Mechanical source transformation and 29 unchanged hashes are recorded in
+  E/pca-native-tests/ipca-flat-room-static.json. Original fixture source is
+  E/pca-native-tests/ipca-before-authorized-flat-room.mojo. Refactored actual
+  CPU15/GPU17 remain uncompiled/unrun; root owns execution and raw evidence.
+  The commands below remain owed only for these actual numerical wrappers.
+
 Dependencies e97482b20b additive API and 769351665c typed state/public owner.
 Do not cherry-pick their adoption ancestry. No product files changed here.
 
@@ -15,9 +41,9 @@ All independent cases/word checks run via host_parallelize. Fixed six-field
 metadata comparisons are serial. Address lists and room owners remain named
 after raw pointer use. No borrowed-pointer early destruction in error paths.
 
-RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_state.mojo
-Uncompiled/unrun. Source/JSON/TOML/whitespace review only; no lane builds/tests,
-boxes, timing or identity. Wire and actual numerical fixtures follow.
+ROOT PASSED: ipca_state.mojo (26 fixtures), alongside wire34.
+Lane performed source/JSON/TOML/whitespace review only; no lane builds/tests,
+boxes, timing or identity. Actual numerical fixture status is recorded above.
 Nothing removed yet: new internal typed state has no former direct Python
 state assertions; public array mutation/refusal/interoperability seams stay.
 No algorithm/kernel/default changes and no A/B define.
@@ -32,9 +58,9 @@ Second chunk: 34 typed request/wire fixtures, dependency e97482b20b.
   No numerical solver in the test oracle. Backing and output Lists pinned
   through refusal/error paths. No fake handle touches a real resident pool.
   All independent cases parallel. State26 + wire34 =60 pure CPU fixtures.
-RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_contract.mojo
-  Entry ipca_contract_suite.run_checks(). Uncompiled/unrun; JSON/TOML/source/
-  whitespace checks only. Nothing removed: these are new internal wire tests.
+ROOT PASSED: ipca_contract.mojo (34 fixtures), alongside state26.
+  Entry ipca_contract_suite.run_checks(). Lane JSON/TOML/source/whitespace
+  checks only. Nothing removed: these are new internal wire tests.
 
 Third chunk: 15 actual CPU +17 ordered GPU graphs, dependencies unchanged.
   Original 6x3 data, count2, fit batch3; whitening both ways, full rank and
