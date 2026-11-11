@@ -11,6 +11,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor, causal_table_publish, CAUSAL_TABLE_MAMBA
 from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API
+from core.causal_lm_entry_table_sessions import causal_sessions_publish, CAUSAL_SESSIONS_MAMBA
+from mamba.causal_session_entry import NATIVE_CAUSAL_SESSIONS_MAMBA_API
 
 
 def publish_causal_mamba_device() raises:
@@ -20,3 +22,7 @@ def publish_causal_mamba_device() raises:
     var key = CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor)
     var api = NATIVE_MAMBA_STATE_API.get_or_create_ptr()
     causal_table_publish[CAUSAL_TABLE_MAMBA](key, Int(api), api[].entries[0])
+    # The decode program behind a native handle
+    # (core/causal_lm_entry_table_sessions.mojo, lane causal-lm-sessions-native).
+    var sessions = NATIVE_CAUSAL_SESSIONS_MAMBA_API.get_or_create_ptr()
+    causal_sessions_publish[CAUSAL_SESSIONS_MAMBA](key, Int(sessions), sessions[].entries[0])

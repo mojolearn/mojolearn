@@ -11,6 +11,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor, causal_table_publish, CAUSAL_TABLE_BLOCK
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
+from core.causal_lm_entry_table_sessions import causal_sessions_publish, CAUSAL_SESSIONS_TRANSFORMER
+from transformer.causal_session_entry import NATIVE_CAUSAL_SESSIONS_API
 
 
 def publish_causal_transformer_device() raises:
@@ -20,3 +22,7 @@ def publish_causal_transformer_device() raises:
     var key = CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor)
     var api = NATIVE_TRANSFORMER_BLOCK_API.get_or_create_ptr()
     causal_table_publish[CAUSAL_TABLE_BLOCK](key, Int(api), api[].entries[0])
+    # The resident sessions and the decode program behind native handles
+    # (core/causal_lm_entry_table_sessions.mojo, lane causal-lm-sessions-native).
+    var sessions = NATIVE_CAUSAL_SESSIONS_API.get_or_create_ptr()
+    causal_sessions_publish[CAUSAL_SESSIONS_TRANSFORMER](key, Int(sessions), sessions[].entries[0])
