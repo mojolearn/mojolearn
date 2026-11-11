@@ -116,9 +116,8 @@
     ]
   },
   "remaining": [
-    "Native production normalization via final scaler dependency; normalized Python assertions stay",
+    "Normalization, GPLeaseState and GPCQueryScratch fixtures authored in gp-native-final.json; all remain uncompiled/unrun",
     "Public fixed-kernel/no-free-parameter optimizer bypass and kernel object publication remain Python until native plan coverage is available",
-    "Final native public-boundary query/lease owner-state coverage when pilot freezes those types",
     "Native source tests compile/run by root, followed by reviewed Python numerical-only cleanup"
   ],
   "python_removed": 0,
@@ -136,5 +135,6 @@
     "net_lines_removed": 42,
     "condition": "Apply only after root accepts the relevant actual native CPU/GPU replacements. Recheck the original file hashes and patch against the integration base.",
     "preserved": "External sklearn oracles; normalize_y=True covariance numerics and all normalization tests pending native preparation; public Array shapes/dtypes/state/refusals/seed behavior/save-load/partition; existing repeatability controllers. Unchanged top-level AST outside named reviewed functions."
-  }
+  },
+  "final_coverage_companion": "gp-native-final.json"
 }
