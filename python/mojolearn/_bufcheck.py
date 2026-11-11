@@ -174,13 +174,6 @@ def flat_view(obj, code):
     return mv.cast("B").cast(code)
 
 
-def ctypes_view(obj, ctype, count, *, name):
-    """A ctypes array over `obj`'s memory, for the rare exporter whose
-    memoryview cannot be cast (a non-native format string). Slicing with
-    a step yields a list; slice assignment accepts one."""
-    return (ctype * int(count)).from_address(addr_ro(obj, name=name))
-
-
 def strided_rows(src, offset, count, n_rows, row_len, dst):
     """Un-interleave a TIME-MAJOR float32 block into `dst`, a C-contiguous
     `(n_rows, row_len)` float32 buffer: element `[s + i * n_rows]` of
