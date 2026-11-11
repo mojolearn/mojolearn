@@ -118,8 +118,8 @@ def _sequence_scalar_capture(mut plan: SequenceInputPlan, raw: PyObjectPtr, dept
         plan.scalar(depth, unsigned, "u", 8)
 
 
-def _sequence_capture(mut mods: NativeModules, source: PythonObject, context: PythonObject,
-    float_target: Bool) raises -> SequenceBoundaryCapture:
+def _sequence_capture_impl[row_items: Bool](mut mods: NativeModules, source: PythonObject, context: PythonObject,
+    float_target: Bool, items: List[PythonObject]) raises -> SequenceBoundaryCapture:
     # Scalar/container unpack must hold GIL. Exact type checks precede reads;
     # no subclass indexing, scalar conversion hook or recursive dispatch runs.
     # Stack depth is at most eight, and scalar storage uses compact native
@@ -141,6 +141,16 @@ def _sequence_capture(mut mods: NativeModules, source: PythonObject, context: Py
     var stack = List[SequenceBoundaryFrame]()
     var current = source
     var depth = 0
+    var root_index = 0
+    comptime if row_items:
+        # This is the former [list(input)] shape, captured from native boundary
+        # pins without constructing either Python list. Container admission is
+        # ordered under the GIL; sequence_write still owns parallel conversion.
+        capture.plan.container(0, 1)
+        capture.plan.container(1, len(items))
+        current = items[0]
+        root_index = 1
+        depth = 2
     while True:  # cpu-route: exact external containers are decoded iteratively under the GIL
         var cls = py_type(current)
         var word = Int(cls._obj_ptr)
@@ -185,9 +195,35 @@ def _sequence_capture(mut mods: NativeModules, source: PythonObject, context: Py
             found = True
             break
         if not found:
+            comptime if row_items:
+                if root_index < len(items):
+                    current = items[root_index]
+                    root_index += 1
+                    depth = 2
+                    continue
             break
     _ = source
+    _ = items
     return capture^
+
+
+
+def _sequence_capture(mut mods: NativeModules, source: PythonObject, context: PythonObject,
+    float_target: Bool) raises -> SequenceBoundaryCapture:
+    var items = List[PythonObject]()
+    return _sequence_capture_impl[False](mods, source, context, float_target, items)
+
+
+def sequential_capture_row_items(items: List[PythonObject], context: PythonObject,
+    float32_target: Bool = False) raises -> SequenceBoundaryCapture:
+    """Capture one numeric row from ordered, admitted boundary item pins.
+
+    No Python container is allocated. Exact scalar/array admission and native
+    dtype/shape inference are the existing traversal; callers retain `items`
+    through capture and retain the returned buffer pins through sequence_write.
+    """
+    var mods = NativeModules()
+    return _sequence_capture_impl[True](mods, PythonObject(None), context, float32_target, items)
 
 
 def sequential_sequence_native(mut mods: NativeModules, value: PythonObject, context: PythonObject,
