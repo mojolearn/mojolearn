@@ -42,7 +42,8 @@ from bindings.gbdt_fit_boundary import gbdt_fit_params_py, gbdt_fit_strs_py
 from std.memory import unsafe_memcpy
 from core.trees_entry_table import TreesEntryKey
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
-from gbdt.fit_calls import xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
+from core.entry_table import EntryRef, entry_ref_vendor
+from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
 from bindings.trees_boost_constructor_native import tree_constructor_storage
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
@@ -830,15 +831,16 @@ def _f64_curve(values: List[Float64], context: PythonObject) raises -> PythonObj
     return out
 
 
-def _gk(table: PythonObject) raises -> TreesEntryKey:
-    """The gbdt table key of the image this tier connected (the bridge
+def _gk(table: PythonObject) raises -> EntryRef:
+    """The gbdt entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the image this tier connected (the bridge
     records it at import as `gbdt_native_key`): the fit, its probes and the
     model dimension run through that image's published native entry
     (gbdt/fit_calls.mojo), not through its Python entries."""
     var key = py_get(table, PythonObject("gbdt_native_key"))
     if key is None:
         raise Error("ImportError: mojolearn: the gbdt binding publishes no native entry table")
-    return TreesEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return xg_ref(TreesEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 # -------------------------------------------------------------------- fit
@@ -1069,7 +1071,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "test_loss_curve_", _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
     py_setitem(fields, "n_features_in_", PythonObject(n_features))
     var dim = PythonObject(None)
-    if gkey.vendor == 0 and gbdt_has_ctr(text):
+    if entry_ref_vendor(gkey) == 0 and gbdt_has_ctr(text):
         # the host image (vendor word 0 is "cpu", core/gbdt_entry_table.mojo)
         dim = py_call_typed(b.int, host_archive_gbdt_state(text, context)["dim"])
     else:

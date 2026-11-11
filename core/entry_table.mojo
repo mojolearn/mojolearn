@@ -98,6 +98,18 @@ def entry_ref_word(mode: Int, vendor: Int, operations: Int) -> Int:
     return ((ENTRY_TABLE_LAYOUT & 0xFFFF) << 48) | ((operations & 0xFFFFFFFF) << 16) | ((mode & 0xFF) << 8) | (vendor & 0xFF)
 
 
+@always_inline
+def entry_ref_vendor(entry: EntryRef) -> Int:
+    """The vendor word the ref was resolved for (0 CPU, 1 Metal, 2 CUDA, 3 HIP)."""
+    return entry.word & 0xFF
+
+
+@always_inline
+def entry_ref_mode(entry: EntryRef) -> Int:
+    """The tier word the ref was resolved for (1 identical, 0 fast)."""
+    return (entry.word >> 8) & 0xFF
+
+
 @fieldwise_init
 struct EntryRef(ImplicitlyCopyable, Movable):
     """A table entry resolved once: the thin C pointer and its layout word.
