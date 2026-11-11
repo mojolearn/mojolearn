@@ -1242,7 +1242,19 @@ _native_archive_bridge.register(
 # tables: the base binding's host-helper resolver (`_buffer._native`, the
 # entries `gather_i64`, `threshold_labels_i64`, ... the Python called) and
 # the connected public class-label type the native fit publishes `classes_` as.
-_native_family_bridge.tables(family_svc_native=_native, family_svc_kernels=dict(_SVC_KERNELS),
+def _svc_base_helpers():
+    # glue: once at import, the base helper table key the native SVM owner
+    # reads (lane calltable-base-helpers); a binary without one records the
+    # refusal, raised by the first call that needs it
+    from ._buffer import base_native_key
+    try:
+        return {"base_native_key": base_native_key()}
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        return {"base_native_key": type(error).__name__ + ": " + str(error)}
+
+
+_native_family_bridge.tables(family_svc_native=_native, family_svc_base_helpers=_svc_base_helpers(),
+                             family_svc_kernels=dict(_SVC_KERNELS),
                              classifier_labels_class=ClassLabels,
                              classifier_labels_namespace=dict(vars(ClassLabels)),
                              classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),

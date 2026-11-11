@@ -14,6 +14,8 @@ is kept as it was.
 from std.memory import unsafe_memcpy
 from std.ffi import c_int
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from core.base_helpers_calls import base_reduce_stat
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
@@ -337,9 +339,9 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
         var positive = Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4], PythonObject(size)))
         _ = y  # keep the Python object alive through the native call above
         if positive:
-            var low = py_call_typed(xseq_base(context, "reduce_stat"), series[4], PythonObject(0), PythonObject(size), PythonObject(0))
+            var low = base_reduce_stat(base_helpers_key(context["xseq_base"]), Int(py=series[4]), 0, size, 0)
             _ = y  # keep the Python object alive through the native call above
-            positive = Bool(py=low > PythonObject(0))
+            positive = low.f > 0.0
             _ = y  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native calls above
         if not positive:

@@ -72,6 +72,13 @@ def connect():
         if not isinstance(symbol, BuiltinFunctionType):
             raise TypeError(f"the sequence estimators require a compiled {name}")
         base[name] = symbol
+    # glue: once at import, the base helper table key the native doors read
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        base["base_native_key"] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        base["base_native_key"] = type(error).__name__ + ": " + str(error)
     metrics = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
