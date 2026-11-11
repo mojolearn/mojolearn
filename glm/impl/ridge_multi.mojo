@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultiOutputRegressor(Ridge): every target in ONE ridge program (lane
 apple-fast-meta, -D MOJOLEARN_MULTIOUT_RIDGE). FAST + Apple ONLY: the
-estimators binding registers `ridge_fit_multi` and `ridge_predict_multi`
-under MULTIOUT_RIDGE and nothing else references this file.
+estimators binding publishes its runs (core/linear_multi_device.mojo) in the
+ridge multi table (core/linear_entry_table_multi.mojo) under MULTIOUT_RIDGE.
 
 The reference route (python/mojolearn/_expansion_trees.py
 MultiOutputRegressor) clones Ridge per target: X goes up per target, its

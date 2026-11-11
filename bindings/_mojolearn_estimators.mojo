@@ -107,10 +107,8 @@ from glm.impl.center_device import col_sums_pair_device, scale_rows_device
 from glm.impl.ols_prep_device import ols_prep_device
 from glm.impl.lm_finish import lm_intercept
 from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
-from glm.impl.ridge_multi import MULTIOUT_RIDGE
 from core.linear_multi_device import (
-    lm_col_sums_run, lm_means_finish_run, lm_center_run, ridge_fit_multi_run, ridge_predict_multi_run,
-    publish_ridge_multi,
+    lm_col_sums_run, lm_means_finish_run, lm_center_run, publish_ridge_multi,
 )
 from core.estimators_impl import (
     pca_whiten_overlap_check,
@@ -1137,65 +1135,9 @@ def ridge_fit_resident_binding(
     return PythonObject(0)
 
 
-def ridge_fit_multi_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    ymean_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
-    of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
-    n_features, ymean the n_targets column means. params: n_rows,
-    n_features, n_targets, alpha, center_y (1 subtracts the column means),
-    and optionally xmean_addr, icpt_addr: then icpt[j] = ymean[j] - xmean .
-    coef[j, :] (binary64 products and sum, ascending features; lane
-    pyglue-numeric: a Python fsum per target)."""
-    if len(params) != 5 and len(params) != 7:
-        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y"
-                    " (, xmean_addr, icpt_addr)")
-    var xp = Int(py=x_addr)
-    var yp = Int(py=y_addr)
-    var wp = Int(py=coef_addr)
-    var mp = Int(py=ymean_addr)
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nt = Int(py=params[2])
-    var alpha = Float32(Float64(py=params[3]))
-    var center = Int(py=params[4]) != 0
-    # The intercept addresses are read with the GIL held, before the one
-    # GIL-released device section that runs the fit and then the intercepts
-    # (ne2-g-linear, N408: `ridge_multi_icpt_kernel` in the same session).
-    var want_icpt = len(params) == 7 and nt > 0 and nf > 0
-    var xm = Int(py=params[5]) if want_icpt else 0
-    var ic = Int(py=params[6]) if want_icpt else 0
-    with GILReleased(Python()):
-        ridge_fit_multi_run(xp, yp, wp, mp, nr, nf, nt, alpha, center, want_icpt, xm, ic)
-    return PythonObject(0)
-
-
-def ridge_predict_multi_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    icpt_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): out (n_rows x
-    n_targets, row-major) = X coef^T + icpt. params: n_rows, n_features,
-    n_targets."""
-    if len(params) != 3:
-        raise Error("ridge_predict_multi: params must contain n_rows, n_features, n_targets")
-    var xp = Int(py=x_addr)
-    var cp = Int(py=coef_addr)
-    var ip = Int(py=icpt_addr)
-    var op = Int(py=out_addr)
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nt = Int(py=params[2])
-    with GILReleased(Python()):
-        ridge_predict_multi_run(xp, cp, ip, op, nr, nf, nt)
-    return PythonObject(0)
+# TOMBSTONE: ridge_fit_multi / ridge_predict_multi Python exports (no live caller: MultiOutputRegressor's
+# one-program ridge reaches core/linear_multi_device.mojo through the ridge multi table) deleted
+# 2026-11-11 by lane calltable-base-helpers; code recoverable at 17b0a91b04.
 
 
 def qn_fit_binding(
@@ -1745,9 +1687,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[ridge_resident_default_binding]("ridge_resident_default")
         m.def_function[linear_gram_fit_binding]("linear_gram_fit")
         m.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
-        comptime if MULTIOUT_RIDGE:
-            m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
-            m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
+        # TOMBSTONE: ridge_fit_multi / ridge_predict_multi registrations deleted 2026-11-11 by lane
+        # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
         m.def_function[qn_fit_binding]("qn_fit")
         comptime if QN_OVR_ONE_UPLOAD:
             m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
