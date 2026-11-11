@@ -219,3 +219,44 @@ admission tuple. These are not claimed removed by the compiled RUN migration.
 Public classes, fitted model fields, estimator objects, exporter-backed result
 Arrays and interpreter transport pins remain intentionally observable boundary
 storage. All current chunks still await root compilation/runtime evidence.
+
+### Frozen tranche accounting (source through `de371e5d37`)
+
+The bounded before/after audit records **51 distinct migrated private roles**:
+19 state, 18 scratch, 12 boundary-container and 2 shared dispatch-envelope
+roles. This is not a runtime allocation count, a struct count, or a family
+completion percentage. Repeated calls and alternative prediction-code routes
+are counted once. Mandatory public/provider/transport pins are excluded;
+boundary-container rows count only the replaced container schema. Every row
+has existing before/after source anchors, with no missing anchors.
+
+Baseline: `eb2682df505911ce01dd154d07a0d9be110ea61f` (before the GP migration).
+Producer freeze: `de371e5d37`; root compilation snapshot:
+`d6090df58b3293250c9c377b1a057f9bb9f7ba39`. The audit's explicit native RUN
+roots close over 207 local sources with zero Python imports. The entire
+`gaussian_process/`, `preprocessing/` and `x_prep/` numerical source trees
+are unchanged against that baseline. Neither fact is runtime, speed or
+cross-vendor identity evidence.
+
+Four reviewed boundary mechanism groups remain: exact-list numeric staging,
+general primitive-label class/index metadata, shared archive-compatible
+postfix capture, and broader GP fitted-state admission metadata. Each has a
+current source anchor in the JSON audit; this is not an exhaustive remaining
+role denominator. They continue in the next source tranche while root builds
+the immutable snapshot. No migration-complete claim is made for GP.
+
+Complete evidence, including all role rows and remaining anchors:
+`~/mojolearn-evidence/python-mojo-migration-20261110/python-object-typed-gp-family.json`.
+The native source inventory is `gp-native-owner/final-source-closure.json`;
+complete conservative build roots are `gp-native-owner/affected-build-roots.json`
+in that same evidence directory. The reverse import audit identifies 19
+binding roots: GP device/full-host/inference-host; preprocessing device/host;
+x_prep device/host; core host; and runtime byte-trainer, classical, decomp,
+family, linear, manifold, model-selection, parallel, prep, trees and xseq host
+roots. The root build planner owns merged-group selection and reuse.
+
+Live boxed compatibility consumers remain recorded: portable host math
+`gp_theta_params`, historical GP predict benchmark `gpr_predict`, and resident
+lifetime/upload controller `gp_resident_stats`. Those exports are retained;
+retired source-name probes are not treated as reasons to preserve dispatch.
+No lane compilation, test, timing, identity run or box job was launched.
