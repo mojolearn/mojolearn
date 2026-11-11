@@ -330,8 +330,15 @@ Automatic gamma remains `1.0 / Float64(features)` and neighbors remain
 UNPACK/PACK, with publication suppressed only for the standalone operation
 that never exposes a model.
 
-Affected dispatcher roots: `_mojolearn_classical_host` and its host splits,
-plus `_mojolearn_dispatcher` where present. No factory or provider ABI changes.
+Affected owning dispatcher root: `_mojolearn_runtime_family_host`. The local
+reverse-import closure is saved in `E/spectral-native-owner/embedding-config-build-roots.txt`.
+No factory or provider ABI changes.
 Standalone generated affinity arrays and shared admission/sparse metadata
 remain explicitly pending. No compile, test, timing or identity execution was
 run in this lane. Root owns the combined build and native configuration cases.
+
+The frozen producer is `6a090a14b0`. Its separate before/after audit is
+`E/python-object-typed-spectral-standalone-state.json`: one additional role,
+23 disjoint Spectral roles total, zero missing anchors, and zero changed
+numerical files in the compared closure. The earlier18- and4-role audits
+remain immutable. These counts are not an exhaustive allocation inventory.
