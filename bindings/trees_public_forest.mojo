@@ -59,8 +59,9 @@ from core.forest_fit_request import (
     XF_CAP_DEVICE_SCAN, XF_CAP_ORDERED_RESIDENT, XF_CAP_FUSED_LABELS, XF_CAP_RESIDENT_LABELS, XF_CAP_STRICT,
     XF_RESIDENT_RELEASE, XF_STRICT_RELEASE,
 )
+from core.entry_table import EntryRef
 from core.forest_calls import (
-    ForestExport, xf_entry, xf_caps, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
+    ForestExport, xf_ref, xf_caps, xf_dt_default_bins, xf_fit, xf_fit_dart, xf_export_sizes, xf_export_into,
     xf_export_verify, xf_export_release, xf_predict, xf_resident_prepare, xf_resident_predict, xf_resident_labels,
     xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
 )
@@ -496,8 +497,9 @@ def forest_effective_mode(fields: PythonObject, context: PythonObject) raises ->
 # ------------------------------------------------------------ fit export
 
 
-def forest_key(native: PythonObject) raises -> ForestEntryKey:
-    """The forest table key of the image a tier connected (the bridge
+def forest_key(native: PythonObject) raises -> EntryRef:
+    """The forest entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the image a tier connected (the bridge
     records it at import as `rf_native_key` / `trees_native_key`): every
     fit, export and predict of the door runs through that image's published
     native entry (core/forest_calls.mojo), not through its Python entries."""
@@ -508,7 +510,7 @@ def forest_key(native: PythonObject) raises -> ForestEntryKey:
         key = py_get(native, PythonObject("trees_native_key"))
     if key is None:
         raise Error("ImportError: mojolearn: the forest binding publishes no native entry table")
-    return ForestEntryKey(family, TreesEntryKey(Int(py=key[0]), Int(py=key[1])))
+    return xf_ref(ForestEntryKey(family, TreesEntryKey(Int(py=key[0]), Int(py=key[1]))))
 
 
 def _check_count(value: PythonObject, message: String) raises -> Int:
@@ -540,7 +542,7 @@ def forest_export(native: PythonObject, descriptor: PythonObject, selection: Str
     return forest_export_handle(key, Int(py=handle), selection, context)
 
 
-def forest_export_handle(key: ForestEntryKey, handle: Int, selection: String,
+def forest_export_handle(key: EntryRef, handle: Int, selection: String,
                          context: PythonObject) raises -> PythonObject:
     """One owned native fit copied into the five model Arrays, its handle
     always released. Returns `(offsets, colid, quesval, left_child, leaves,
@@ -1253,10 +1255,10 @@ struct ForestHandle(Movable):
     takes no weak reference, or a snapshot over the table's byte cap)."""
     var handle: Int
     var kept: Bool
-    var key: ForestEntryKey
+    var key: EntryRef
     var release_op: Int
 
-    def __init__(out self, handle: Int, kept: Bool, key: ForestEntryKey, release_op: Int):
+    def __init__(out self, handle: Int, kept: Bool, key: EntryRef, release_op: Int):
         self.handle = handle
         self.kept = kept
         self.key = key.copy()
@@ -1370,7 +1372,7 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
     var kept = False
     try:
         if trees_resident_watch(model, model_key):
-            kept = trees_resident_put_native(model_key, generation, TREES_RESIDENT_FOREST, native, xf_entry(key),
+            kept = trees_resident_put_native(model_key, generation, TREES_RESIDENT_FOREST, native, key.call,
                                              XF_RESIDENT_RELEASE, handle, words^, mirrors^, bytes)
         if kept:
             trees_resident_pin(handle)
@@ -1418,7 +1420,7 @@ def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput,
         try:
             if trees_resident_watch(model, model_key):
                 kept = trees_resident_put_native(model_key, generation, TREES_RESIDENT_FOREST_STRICT, native,
-                                                 xf_entry(key), XF_STRICT_RELEASE, handle, words^, mirrors^, bytes)
+                                                 key.call, XF_STRICT_RELEASE, handle, words^, mirrors^, bytes)
         except error:
             xf_snapshot_release(key, XF_STRICT_RELEASE, handle)
             raise error^
@@ -1444,13 +1446,13 @@ struct ForestInput(Copyable, Movable):
     var x: AdmittedX
     var mode: String
     var native: PythonObject
-    var key: ForestEntryKey
+    var key: EntryRef
     var caps: Int
     var engine: String
     var ordered_export: Bool
     var outputs: Int
 
-    def __init__(out self, var x: AdmittedX, mode: String, native: PythonObject, key: ForestEntryKey, caps: Int,
+    def __init__(out self, var x: AdmittedX, mode: String, native: PythonObject, key: EntryRef, caps: Int,
                  engine: String, outputs: Int):
         self.x = x^
         self.mode = mode
