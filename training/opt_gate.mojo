@@ -44,7 +44,7 @@ bits by construction (its docstring). Any clip sabotage build still takes
 the original inside the batched entry.
 -D MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF (or MOJOLEARN_IDN_ALL_OFF).
 """
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys.compile import is_defined

@@ -13,7 +13,7 @@ from gemm.f16_widen import f16_bits_to_f32
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_instance_item import native_instance_item
 from bindings.native_array_storage import native_array_empty, native_array_zeros
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.native_buffer_address import native_buffer_address
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.neural_block_admission import neural_array_slots, neural_array_snapshot
@@ -206,7 +206,7 @@ def _checkpoint_store_pinned(pin: AdmittedBorrowedBuffer, code: String) raises -
     if nbytes > 0:
         var destination = native_buffer_address(store)
         if layout.contiguous():
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
                    src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=layout.address), count=nbytes)
         else:
             layout.copy_to(destination)

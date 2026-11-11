@@ -75,7 +75,7 @@ fast-math substitution is diagnosed from WHICH inputs break (reciprocals
 break denormals first).
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma, sqrt
 
 from std.sys import argv

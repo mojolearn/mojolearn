@@ -148,7 +148,7 @@ kernel.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill

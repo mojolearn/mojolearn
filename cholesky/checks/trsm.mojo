@@ -65,8 +65,8 @@ correctly-rounded quotient. `CHOL_SAB_TRSM_RECIPROCAL` is that arm.
 with its own banner saying it is unreachable from any identity path here.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -533,8 +533,8 @@ def trsm_lower_multi_rhs4_kernel(
         var kc = min(32, n - k0)
         var base = tid
         while base < n:
-            var tv = InlineArray[SIMD[DType.float32, RB], G](fill=SIMD[DType.float32, RB](0.0))
-            var live = InlineArray[Bool, G](fill=False)
+            var tv = Array[SIMD[DType.float32, RB], G](fill=SIMD[DType.float32, RB](0.0))
+            var live = Array[Bool, G](fill=False)
             comptime for g in range(G):
                 var i = base + g * NT
                 if i < n and i >= k0 + 32:

@@ -30,7 +30,7 @@ only, in the order `coo_sort` leaves (row, then column; a dense matrix has
 no repeated key): the same COO, so the same Laplacian bits as the host scan
 route on every vendor. The host column (the metrics host binding's oracle)
 keeps the COO route."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

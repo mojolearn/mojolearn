@@ -24,12 +24,12 @@ def main() raises:
     var second: List[Float32] = [-9999.0, 0.0, 0.0, -9999.0]
     var total: List[Float32] = [-9999.0, 0.0, 0.0, -9999.0]
     var centered: List[Float32] = [-9999.0, 0.0, 0.0, 0.0, 0.0, -9999.0]
-    var empty: InlineArray[Float64, 0] = []
-    var divisor: InlineArray[Float64, 1] = [2.0]
-    var shape: InlineArray[Int, 2] = [2, 2]
-    var row_shape: InlineArray[Int, 2] = [1, 2]
-    var count: InlineArray[Int, 1] = [2]
-    var a: InlineArray[Int, 2] = [Int(matrix.unsafe_ptr()), Int(sums.unsafe_ptr() + 1)]
+    var empty: Array[Float64, 0] = []
+    var divisor: Array[Float64, 1] = [2.0]
+    var shape: Array[Int, 2] = [2, 2]
+    var row_shape: Array[Int, 2] = [1, 2]
+    var count: Array[Int, 1] = [2]
+    var a: Array[Int, 2] = [Int(matrix.unsafe_ptr()), Int(sums.unsafe_ptr() + 1)]
     _ = driver.run("colsum", a, shape, empty)
     a = [Int(sums.unsafe_ptr() + 1), Int(columns.unsafe_ptr() + 1)]
     _ = driver.run("scale_div", a, count, divisor)
@@ -37,7 +37,7 @@ def main() raises:
     _ = driver.run("colsum", a, row_shape, empty)
     a = [Int(second.unsafe_ptr() + 1), Int(total.unsafe_ptr() + 1)]
     _ = driver.run("scale_div", a, count, divisor)
-    var center_addresses: InlineArray[Int, 5] = [Int(matrix.unsafe_ptr()), Int(columns.unsafe_ptr() + 1),
+    var center_addresses: Array[Int, 5] = [Int(matrix.unsafe_ptr()), Int(columns.unsafe_ptr() + 1),
         Int(columns.unsafe_ptr() + 1), Int(total.unsafe_ptr() + 1), Int(centered.unsafe_ptr() + 1)]
     _ = driver.run("kpca_center", center_addresses, shape, empty)
     require(sums[0] == -9999.0 and sums[3] == -9999.0, "first colsum canary overwritten")

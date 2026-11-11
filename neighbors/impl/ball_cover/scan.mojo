@@ -29,7 +29,7 @@ scanning past `SCAN_TPB * chunk` elements and produced a truncated CSR, which
 that file records as a bug found by audit rather than by a test.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

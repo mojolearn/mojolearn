@@ -478,7 +478,7 @@ def chol_solve_group(l: FP, loff: Int, m: Int, b: FP, first: Int, count: Int):
     """C14: up to four column-major RHS share factor loads, same scalar chains.
     NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     """
-    var values = InlineArray[Float32, 4](fill=Float32(0))
+    var values = Array[Float32, 4](fill=Float32(0))
     for i in range(m):
         for t in range(count):
             values[t] = ld(b, (first + t) * m + i)

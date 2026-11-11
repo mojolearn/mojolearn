@@ -9,7 +9,7 @@ Neural model dispatch reaches these opt-in arms. Uncompiled and unverified.
 """
 from gemm.experiments.neural_profile_device import neural_profile_device
 from std.sys.compile import is_defined
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -16,8 +16,8 @@ saw a candidate. Distances are the direct sum of squared differences
 host after the order is fixed, as in the pinned path).
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
-from std.gpu.primitives.warp import shuffle_xor, shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
+from max.gpu.primitives.warp import shuffle_xor, shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -93,8 +93,8 @@ def fast_ivf_scan_kernel[KM: Int, DM: Int = FIVF_DIM_TILE](
     barrier()
     if not active:
         return
-    var td = InlineArray[Float32, KM](fill=Float32.MAX)
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32.MAX)
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     var n_probes = Int(n_probes_in)
     for p in range(n_probes):
         var l = Int(probe_idx[q * n_probes + p])

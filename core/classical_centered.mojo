@@ -14,7 +14,7 @@ def centered_gram_v1_cell(
     rows: Int, cols: Int, i: Int, j: Int,
 ) -> Float32:
     var leaf = contract_leaf_size(rows)
-    var stack = InlineArray[Float32, 32](fill=Float32(0))
+    var stack = Array[Float32, 32](fill=Float32(0))
     var depth = 0
     var leaves = 0
     for start in range(0, rows, leaf):
@@ -51,7 +51,7 @@ def centered_cross_v1_cell(
     rows, the same chain and the same binary-counter fold (the host column
     of core/blocked_moments.mojo::bm_centered_cross_panels)."""
     var leaf = contract_leaf_size(rows)
-    var stack = InlineArray[Float32, 32](fill=Float32(0))
+    var stack = Array[Float32, 32](fill=Float32(0))
     var depth = 0
     var leaves = 0
     var ym = ftz(y_mean)
@@ -92,7 +92,7 @@ def bm_column_mean_cell(x: MutPointer[Float32, MutAnyOrigin], rows: Int, cols: I
         return Float32(0)
     var leaf = bm_mean_leaf_rows(rows)
     var chains = bm_sub_chains(cols) if cols <= BM_TPB else 1
-    var stack = InlineArray[Float32, 32](fill=Float32(0))
+    var stack = Array[Float32, 32](fill=Float32(0))
     var depth = 0
     var leaves = 0
     for start in range(0, rows, leaf):

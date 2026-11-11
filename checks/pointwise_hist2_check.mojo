@@ -52,7 +52,7 @@ passed every gate in that file, at every block size, in both
 its broken and its fixed form, and failed here on the first run.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -80,7 +80,7 @@ from std.sys.defines import get_defined_int
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from cluster.checks.reduce_by_key import (
     blocked_acc_table_cells,

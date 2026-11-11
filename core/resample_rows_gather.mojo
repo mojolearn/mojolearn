@@ -6,7 +6,7 @@ run of bytes (strided trailing axes or PEP 3118 suboffsets) and holds no
 object references. The bytes as they are, item by item in C order of the
 trailing axes; the rows split across the host's cores (every output row is
 a function of its own source row, so the split moves no bit). No Python."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -45,7 +45,7 @@ def resample_gather_rows(layout: BorrowedBufferLayout, rows: MutPointer[Int32, M
                     address += coordinates[axis] * strides_ptr[axis]
                     if sub_ptr[axis] >= 0:
                         address = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=address)[0] + sub_ptr[axis]
-                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at),
+                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at),
                     src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=address), count=itemsize)
                 for reverse in range(rank - 1):
                     var axis = rank - reverse - 1

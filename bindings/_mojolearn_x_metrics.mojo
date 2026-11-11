@@ -4,6 +4,9 @@
 model_selection helpers the expansion added). One entry runs a program of
 units on the device (x_metrics/common.mojo); the host binding runs the same
 units on the CPU."""
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_METRICS
+from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
+from x_metrics.descriptor_device import metrics_program_device_v1
 from core.experiment_guards_base import BASE_GUARDS_OK
 from x_metrics.descriptor_device import METRICS_PROGRAM_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -112,6 +115,15 @@ def vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = METRICS_PROGRAM_DEVICE_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1))
+    linear_table_publish[LINEAR_TABLE_METRICS](key,
+        Int(api[].entries.unsafe_ptr()), [String(METRICS_PROGRAM_ABI)], [MP_OPERATION_COUNT], [metrics_program_device_v1])
+
 def build__mojolearn_x_metrics() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
@@ -127,6 +139,8 @@ def build__mojolearn_x_metrics() -> PythonObject:
         m.def_function[vendor_binding]("x_metrics_vendor")
         # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_metrics: ", e))

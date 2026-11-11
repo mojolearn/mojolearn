@@ -50,7 +50,7 @@ is one exact multiply followed by one rounding multiply, and there is no
 add to contract it into.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_pow, identical_sqrt
 

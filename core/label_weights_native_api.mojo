@@ -72,7 +72,7 @@ struct LabelWeightsDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def run(self, operation: Int, request: LabelWeightsRequest) raises -> Int:
-        var addresses: InlineArray[Int, 3] = [request.first, request.second, request.dst]
-        var ints: InlineArray[Int, 2] = [request.rows, request.classes]
-        var floats: InlineArray[Float64, 0] = []
+        var addresses: Array[Int, 3] = [request.first, request.second, request.dst]
+        var ints: Array[Int, 2] = [request.rows, request.classes]
+        var floats: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, addresses, ints, floats)

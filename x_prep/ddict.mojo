@@ -24,7 +24,7 @@ A run opens at sorted position i when i == 0 or key(i) != key(i-1) (`key`
 equality, as unique_cols_unit). The radix keys are a bijection of the words,
 so key equality there is word equality, and canon words make it `key` equality.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz

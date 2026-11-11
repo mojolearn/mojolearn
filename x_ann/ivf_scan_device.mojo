@@ -23,7 +23,7 @@ The old kernels ran ~1000 threads (one per query) that recomputed every
 coarse distance for every probe; this runs one thread per candidate.
 Queries go in chunks so the candidate buffer stays under CAND_BUDGET floats."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -114,7 +114,7 @@ def coarse_tiled_kernel(c_: Int32, q0_: Int32, queries: F32P, dim_: Int32, cente
     var cs = stack_allocation[CT_L * CT_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var ta = tid // 16
     var tb = tid - ta * 16
-    var acc = InlineArray[Float32, CT_R * CT_R](fill=Float32(0.0))
+    var acc = Array[Float32, CT_R * CT_R](fill=Float32(0.0))
     var f0 = 0
     while f0 < dim:
         var fc = min(CT_FC, dim - f0)
@@ -132,8 +132,8 @@ def coarse_tiled_kernel(c_: Int32, q0_: Int32, queries: F32P, dim_: Int32, cente
             q += CT_TPB
         barrier()
         for f in range(fc):
-            var qv = InlineArray[Float32, CT_R](fill=Float32(0.0))
-            var cv = InlineArray[Float32, CT_R](fill=Float32(0.0))
+            var qv = Array[Float32, CT_R](fill=Float32(0.0))
+            var cv = Array[Float32, CT_R](fill=Float32(0.0))
             comptime for i in range(CT_R):
                 qv[i] = qs[(ta + 16 * i) * CT_XS + f]
                 cv[i] = cs[(tb + 16 * i) * CT_XS + f]
@@ -675,8 +675,8 @@ def select_group_kernel(
     var sd = stack_allocation[SEL_T * SEL_KM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var si = stack_allocation[SEL_T * SEL_KM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sn = stack_allocation[SEL_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var ld = InlineArray[Float32, SEL_KM](fill=pq_inf())
-    var li = InlineArray[Int32, SEL_KM](fill=Int32(-1))
+    var ld = Array[Float32, SEL_KM](fill=pq_inf())
+    var li = Array[Int32, SEL_KM](fill=Int32(-1))
     var n_cand = 0
     var has_nan = False
     for p in range(np):
@@ -902,8 +902,8 @@ def pq_scan_fused_kernel(
     var qr = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var si = stack_allocation[SEL_T * SEL_KM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sn = stack_allocation[SEL_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var ld = InlineArray[Float32, SEL_KM](fill=pq_inf())
-    var li = InlineArray[Int32, SEL_KM](fill=Int32(-1))
+    var ld = Array[Float32, SEL_KM](fill=pq_inf())
+    var li = Array[Int32, SEL_KM](fill=Int32(-1))
     var n_cand = 0
     var has_nan = False
     var jt = LUT_MAX // nc
@@ -922,7 +922,7 @@ def pq_scan_fused_kernel(
         var stop = Int(offsets.unsafe_load(l + 1))
         var w0 = start
         while w0 < stop:
-            var accs = InlineArray[Float32, PQ_FUSED_R](fill=Float32(0.0))
+            var accs = Array[Float32, PQ_FUSED_R](fill=Float32(0.0))
             var j0 = 0
             while j0 < pd:
                 var jn = pd - j0

@@ -97,7 +97,7 @@ from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 # comptime no-op under FAST.
 # =======================================================================
 from checks.numerics import ftz
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 #: `const ui32 blockSize = 1024` (`exact_estimation.cu:107`): the LOGICAL
 #: lane count of the need-weights sum -- the row stride and the width of the

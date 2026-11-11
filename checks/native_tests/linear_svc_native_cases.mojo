@@ -71,9 +71,9 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
         pack_fixture(unit)
         return
     if unit == 7:
-        var a: InlineArray[Int, 4] = [0, 0, 0, 0]
-        var p: InlineArray[Int, 10] = [4, 2, 1, 1, 10, 10, 5, 1, 1, 4]
-        var f: InlineArray[Float64, 4] = [0, 1, 0.0001, 0.00001]
+        var a: Array[Int, 4] = [0, 0, 0, 0]
+        var p: Array[Int, 10] = [4, 2, 1, 1, 10, 10, 5, 1, 1, 4]
+        var f: Array[Float64, 4] = [0, 1, 0.0001, 0.00001]
         var refused = False
         try:
             _ = native_descriptor_call_fixed(driver.entry, LINEAR_SVC_OVR, a, p, f)

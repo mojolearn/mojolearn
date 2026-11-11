@@ -8,7 +8,7 @@ one positive word per row, avoiding one lookup/division per dense output cell.
 Lane idn-int-prep (2026-10-04): IDENTICAL takes the same bundle on every vendor
 and in the host column (IDN_LABEL below); FAST off Apple is unchanged.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL

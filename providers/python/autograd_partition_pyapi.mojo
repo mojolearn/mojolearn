@@ -2,7 +2,7 @@
 # Python door for model/tensor/pipeline partitioned captured graphs
 # (partition_entries.mojo): argument unpacking and results only.
 from bindings.native_json import native_path
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem
 from sequence.exec_trait import Exec
@@ -91,7 +91,7 @@ def partition_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
 
 def graph_array_output(a: GraphBytes) raises -> PythonObject:
     var out = output_array(a.shape)
-    memcpy(dest=FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0])),
+    unsafe_memcpy(dest=FP(unsafe_from_address=Int(py=out.__array_interface__["data"][0])),
            src=a.words.unsafe_ptr(), count=a.shape.count())
     return out
 

@@ -174,8 +174,8 @@ from gbdt.methods.leaves_estimation.device_walker import (
     enqueue_zero_average,
     weight_keep_mask_strided_kernel,
 )
-from std.memory import bitcast, memcpy
-from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, unsafe_memcpy
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_neg, sf64_to_f32
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
@@ -772,7 +772,7 @@ def _test_loss_flush(
     )
     ctx.enqueue_copy(dst_ptr=h_losses.unsafe_ptr(), src_buf=d_losses)
     ctx.synchronize()
-    memcpy(
+    unsafe_memcpy(
         dest=(test_losses.unsafe_ptr() + base).bitcast[UInt64](),
         src=h_losses.unsafe_ptr(),
         count=pending,
@@ -1020,7 +1020,7 @@ def fit_two_level_feature_freq_tree(
     var weak = TObliviousTreeModel(structure^)
     weak.dim = 1
     weak.leaf_values = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(
+    unsafe_memcpy(
         dest=weak.leaf_values.unsafe_ptr(), src=h_leaves.unsafe_ptr(),
         count=n_leaves,
     )
@@ -1367,7 +1367,7 @@ def finish_deferred_estimation(
     leaf_values.clear()
     if tail.n_values > 0:
         leaf_values.resize(unsafe_uninit_length=tail.n_values)
-        memcpy(
+        unsafe_memcpy(
             dest=leaf_values.unsafe_ptr(),
             src=est_ws[0].h_est.unsafe_ptr(),
             count=tail.n_values,
@@ -1986,7 +1986,7 @@ def _estimate_and_apply(
         leaf_values.clear()
         if n_leaves > 0:
             leaf_values.resize(unsafe_uninit_length=n_leaves)
-            memcpy(
+            unsafe_memcpy(
                 dest=leaf_values.unsafe_ptr(),
                 src=h_est.unsafe_ptr(),
                 count=n_leaves,
@@ -2125,7 +2125,7 @@ def _estimate_and_apply(
         leaf_values.clear()
         if n_leaves * approx_dim > 0:
             leaf_values.resize(unsafe_uninit_length=n_leaves * approx_dim)
-            memcpy(
+            unsafe_memcpy(
                 dest=leaf_values.unsafe_ptr(),
                 src=h_est.unsafe_ptr(),
                 count=n_leaves * approx_dim,
@@ -2188,7 +2188,7 @@ def _estimate_and_apply(
         leaf_values.clear()
         if mw_len > 0:
             leaf_values.resize(unsafe_uninit_length=mw_len)
-            memcpy(
+            unsafe_memcpy(
                 dest=leaf_values.unsafe_ptr(),
                 src=h_est.unsafe_ptr(),
                 count=mw_len,
@@ -2792,7 +2792,7 @@ def walk_leaf_values(
     download (the boosting loop keeps its ensemble on the host; lane
     cpu4-gbdt's device-resident model item is not done)."""
     var out = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(
+    unsafe_memcpy(
         dest=out.unsafe_ptr(),
         src=est_ws[0].h_est.unsafe_ptr(),
         count=n_leaves,
@@ -4987,7 +4987,7 @@ def fit_with_test(
             # streamed than theirs.
             var compute_mags = False
 
-            @parameter
+            @__parameter
             if _needs_magnitudes:
                 compute_mags = True
             launch_bootstrap(
@@ -5083,7 +5083,7 @@ def fit_with_test(
         loop_times.stop_host("iter_gradients_enqueue", t_grad)
         var mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-        @parameter
+        @__parameter
         if _needs_magnitudes:
             mags_opt = Optional(mags.copy())
 
@@ -5147,11 +5147,11 @@ def fit_with_test(
             # DEVIATION 95), so this per-tree drain is not taken.
             var ns_mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-            @parameter
+            @__parameter
             if _needs_magnitudes and IDN_NS_SCALE_DEVICE:
                 ns_mags_opt = Optional(mags.copy())
 
-            @parameter
+            @__parameter
             if _needs_magnitudes and not IDN_NS_SCALE_DEVICE:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
@@ -5569,7 +5569,7 @@ def fit_with_test(
                     noise_sm if noise_sm > 0 else 1,
                 )
             var scale = Float32(1.0)
-            @parameter
+            @__parameter
             if _needs_magnitudes:
                 var sym_scale_ready = False
                 comptime if SYM_BUF_ARENA:
@@ -5606,7 +5606,7 @@ def fit_with_test(
             # lane/sym-quality: the gradient plane onto the tree's grid, as
             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
             # only where the scale above is a real one
-            @parameter
+            @__parameter
             if _needs_magnitudes:
                 var g_plane = planes[1].copy()
                 enqueue_snap_plane(ctx, g_plane, n_rows, scale)

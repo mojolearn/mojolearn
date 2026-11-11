@@ -81,7 +81,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_TN
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
 #: (`-D MOJOLEARN_IDN_GPC_OVR_OFF` restores the per-class binding calls).
@@ -151,9 +151,9 @@ def gpc_targets_kernel(codes: _GI, y: _GP, seen: _GI, k: Int32, n: Int32):
         var hit = codes.unsafe_load(i) == k
         y.unsafe_store(i, Float32(1.0) if hit else Float32(0.0))
         if hit:
-            _ = Atomic[DType.int32].min(seen + 1, Int32(i))
+            _ = Atomic[Int32].min(seen + 1, Int32(i))
         else:
-            _ = Atomic[DType.int32].min(seen, Int32(i))
+            _ = Atomic[Int32].min(seen, Int32(i))
 
 
 def gpc_one_class_kernel(seen: _GI, g: Int32, n: Int32, bad: _GI):

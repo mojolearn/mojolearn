@@ -7,7 +7,7 @@ float parameters as `List[Float64]` (the door's `py_ints` / `py_f64s`), and
 returns the count the door hands back. `fptr`, `ival` and `fval` here read
 those lists with the door's null and range checks. No Python here."""
 from std.math import sqrt
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from sequence.perf3_seq_resident_words import seq_resident_words
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
@@ -632,9 +632,9 @@ def _var_fit_queued[E: Exec](
         var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
         ex.download_async(tp, Bm, span)
         ex.sync()
-        memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
-        memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
-        memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
+        unsafe_memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
+        unsafe_memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
+        unsafe_memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
         var code = Int(tp.unsafe_load(m * K + R * K + K * K))
         _ = tmp^
         return code

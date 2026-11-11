@@ -86,7 +86,7 @@ the root's two cluster children, written by one thread in `eom_init_kernel`.
 
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hdbscan.checks.hdbscan_sabotage import (

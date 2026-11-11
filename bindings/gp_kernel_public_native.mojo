@@ -12,6 +12,7 @@ from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_instance_item import native_instance_item
 from bindings.gp_mapping_boundary import gp_mapping_snapshot, GPFieldUpdates
+from bindings.gp_argument_pins import GPArgumentPins
 from x_metrics.epilogue import portable_log_c
 
 
@@ -171,14 +172,19 @@ def _kernel_log(value: Float64) raises -> Float64:
 def gp_kernel_operation(kernel: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     if operation == "family_gp_kernel_initialize":
-        return _kernel_construct(kernel, operation, args, context)
+        var inputs = GPArgumentPins(args)
+        return _kernel_construct(kernel, operation, inputs, context)
     if operation == "family_gp_kernel_add" or operation == "family_gp_kernel_mul":
         # The constructor below admits both operands with one owner snapshot.
         var combined = context["family_gp_classes"]["combined"]
         _kernel_allocation_class(combined)
         var out = native_storage_allocate(combined)
         var op = 4 if operation == "family_gp_kernel_add" else 5
-        _ = _kernel_construct(out, "family_gp_kernel_initialize", Python.tuple(kernel, args[0], op, "+" if op == 4 else "*"), context)
+        # These four pins become the public composition fields; no private
+        # Python tuple bridges the two compiled functions.
+        var fields: List[PythonObject] = [kernel, args[0], PythonObject(op), PythonObject("+" if op == 4 else "*")]
+        var inputs = GPArgumentPins(fields^)
+        _ = _kernel_construct(out, "family_gp_kernel_initialize", inputs, context)
         return out
     var snapshot = gp_kernel_snapshot(kernel, context)
     if operation == "family_gp_kernel_repr":
@@ -430,7 +436,7 @@ def _kernel_publish(kernel: PythonObject, updates: GPFieldUpdates, context: Pyth
         py_setitem(fields, updates.keys[i], updates.values[i])
 
 
-def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObject,
+def _kernel_construct(kernel: PythonObject, operation: String, args: GPArgumentPins,
                       context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var cls = _kernel_class(kernel, context)

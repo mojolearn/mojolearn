@@ -64,7 +64,7 @@ THE POLICY CHOICES
 from max.gpu.host import DeviceContext
 from core.device_plan import DevicePlan, plan_for_single
 from ensemble.instruments import StageTimes as HostStageTimes
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.math import isfinite
 from core.device_scan import device_first_nonfinite
 
@@ -146,10 +146,10 @@ def gbdt_fit_two_level_feature_freq(
         raise Error("two-level FeatureFreq weights must be empty or per-row")
     var raw = List[Float32]()
     raw.resize(n_rows * n_features, Float32(0.0))
-    memcpy(dest=raw.unsafe_ptr(), src=x, count=n_rows * n_features)
+    unsafe_memcpy(dest=raw.unsafe_ptr(), src=x, count=n_rows * n_features)
     var target = List[Float32]()
     target.resize(n_rows, Float32(0.0))
-    memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
+    unsafe_memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
     # lane/cpu3-gbdt-b: the finiteness walk on the device, one word back
     var d_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.enqueue_copy(dst_buf=d_target, src_ptr=y)
@@ -159,7 +159,7 @@ def gbdt_fit_two_level_feature_freq(
     var weights = List[Float32]()
     if n_weights != 0:
         weights.resize(n_rows, Float32(0.0))
-        memcpy(dest=weights.unsafe_ptr(), src=sample_weight, count=n_rows)
+        unsafe_memcpy(dest=weights.unsafe_ptr(), src=sample_weight, count=n_rows)
     var source_ids = List[Int]()
     var seen_source = List[Bool]()
     seen_source.resize(n_features, False)
@@ -227,7 +227,7 @@ def gbdt_fit_two_level_feature_freq(
             _ = d_col^
             folds.append(len(feature_borders))
             one_hot.append(False)
-        memcpy(
+        unsafe_memcpy(
             dest=flat_bins.unsafe_ptr() + f * n_rows,
             src=col.unsafe_ptr(),
             count=n_rows,
@@ -549,7 +549,7 @@ def gbdt_fit(
         )
     var ys = List[Float32]()
     ys.resize(n_rows * target_dim, Float32(0.0))
-    memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows * target_dim)
+    unsafe_memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows * target_dim)
 
     var cats = List[Bool]()
     var one_hot = List[Bool]()
@@ -565,16 +565,16 @@ def gbdt_fit(
     var ws = List[Float32]()
     if n_weights != 0:
         ws.resize(n_rows, Float32(0.0))
-        memcpy(dest=ws.unsafe_ptr(), src=weights, count=n_rows)
+        unsafe_memcpy(dest=ws.unsafe_ptr(), src=weights, count=n_rows)
 
     var eval_xs = List[Float32]()
     var eval_ys = List[Float32]()
     if n_eval_rows != 0:
         var n_ex = n_eval_rows * n_features
         eval_xs.resize(n_ex, Float32(0.0))
-        memcpy(dest=eval_xs.unsafe_ptr(), src=eval_x, count=n_ex)
+        unsafe_memcpy(dest=eval_xs.unsafe_ptr(), src=eval_x, count=n_ex)
         eval_ys.resize(n_eval_rows, Float32(0.0))
-        memcpy(dest=eval_ys.unsafe_ptr(), src=eval_y, count=n_eval_rows)
+        unsafe_memcpy(dest=eval_ys.unsafe_ptr(), src=eval_y, count=n_eval_rows)
 
     # `TOverfittingDetectorOptions::Load` (`:24-40`), which is where the
     # detector TYPE comes from when the caller named only a wait or only a
@@ -764,7 +764,7 @@ def gbdt_predict_multi(
     var n_x = n_rows * n_features
     var xs = List[Float32]()
     xs.resize(n_x, Float32(0.0))
-    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    unsafe_memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
     # lane/cpu3-gbdt-b: the reshape and the link on the device, written
     # straight into the caller's buffer (`predict_multi_linked_into`); the
@@ -815,7 +815,7 @@ def gbdt_predict(
     var n_x = n_rows * n_features
     var xs = List[Float32]()
     xs.resize(n_x, Float32(0.0))
-    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    unsafe_memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
     var p = predict_floats(ctx, tm, xs, n_rows)
     for i in range(n_rows):

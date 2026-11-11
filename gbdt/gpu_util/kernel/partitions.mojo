@@ -40,7 +40,7 @@ Grid-stride, blockSize 256, no shared memory, no warp intrinsics, no
 vendor row.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 comptime PARTITIONS_BLOCK_SIZE = 256
 

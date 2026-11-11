@@ -6,7 +6,7 @@
 and the k class words narrowed back to the caller's items, by the same
 element functions as the device kernels, so both columns give the same
 bytes."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_raw_bits, cast_w64_bits, narrow_w64
 from core.label_encode import host_unique_inverse
@@ -22,7 +22,7 @@ def host_unique_inverse_cast(src: CastIn, label_kind: Int, classes_addr: Int, co
     # the bytes in whole words (the tail zero-padded), so a word read never
     # passes the caller's buffer
     var raw = List[Float32](length=src.words(), fill=Float32(0))
-    memcpy(dest=_BP(unsafe_from_address=Int(raw.unsafe_ptr())), src=_BP(unsafe_from_address=src.start()), count=src.nbytes())
+    unsafe_memcpy(dest=_BP(unsafe_from_address=Int(raw.unsafe_ptr())), src=_BP(unsafe_from_address=src.start()), count=src.nbytes())
     var rp = FP(unsafe_from_address=Int(raw.unsafe_ptr()))
     var w64 = List[UInt64](length=n, fill=UInt64(0))
     for i in range(n):  # host twin: one label per row, as _widen_kernel

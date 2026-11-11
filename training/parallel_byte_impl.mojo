@@ -4,7 +4,7 @@
 admitted input array, and the value checks on admitted state. No Python here;
 the boundary resolves addresses and calls these."""
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 def _parallel_span(dims: List[Int]) raises -> Int:
@@ -36,7 +36,7 @@ def parallel_copy_words(src_addr: Int, dst_addr: Int, dims: List[Int], n: Int, f
                 remaining //= dims[axis]
             dst[i] = src[source]
     else:
-        memcpy(dest=dst, src=src, count=n)
+        unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def parallel_require_finite_f32(addr: Int, n: Int) raises:

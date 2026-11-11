@@ -5,7 +5,7 @@ float16 widening launch and the result copies of qr_r and svdvals, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change)."""
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from gemm.f16_widen import f16_bits_to_f32
 from decomposition.linalg_public_device import (
     device_qr_r,

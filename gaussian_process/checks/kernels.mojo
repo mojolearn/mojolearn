@@ -96,7 +96,7 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 
 from core.device_plan import device_plan_device, device_plan_setting
 from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

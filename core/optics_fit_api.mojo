@@ -64,15 +64,15 @@ struct OpticsFitDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def mode(self) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, OPTICS_FIT_MODE, a, p, f)
 
     def fit(self, r: OpticsFitRequest, mut result: OpticsFitResultSlot) raises:
-        var a: InlineArray[Int, 2] = [r.source.address, result.address()]
-        var p: InlineArray[Int, 8] = [r.source.count, r.rows, r.features,
+        var a: Array[Int, 2] = [r.source.address, result.address()]
+        var p: Array[Int, 8] = [r.source.count, r.rows, r.features,
             r.min_samples, r.min_cluster_size, r.method, Int(r.predecessor_correction), r.metric.code]
-        var f: InlineArray[Float64, 4] = [r.max_eps, r.xi, r.eps, r.metric.power]
+        var f: Array[Float64, 4] = [r.max_eps, r.xi, r.eps, r.metric.power]
         _ = native_descriptor_call_fixed(self.entry, OPTICS_FIT_RUN, a, p, f)
         _ = result

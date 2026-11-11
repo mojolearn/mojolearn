@@ -25,8 +25,8 @@ from core.classical_distance import direct_distance_step
 from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -84,9 +84,9 @@ def identical_ivf_scan_kernel[KM: Int](
     if not active:
         return
     var qn = ftz(q_norm[q])
-    var tk = InlineArray[UInt32, KM](fill=UInt32.MAX)
-    var td = InlineArray[Float32, KM](fill=Float32(0))
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var tk = Array[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32(0))
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     var n_probes = Int(n_probes_in)
     for p in range(n_probes):
         var l = Int(probe_idx[q * n_probes + p])
@@ -216,9 +216,9 @@ def identical_ivf_scan_staged_kernel[KM: Int](
     var qn = Float32(0.0)
     if active:
         qn = ftz(q_norm[q])
-    var tk = InlineArray[UInt32, KM](fill=UInt32.MAX)
-    var td = InlineArray[Float32, KM](fill=Float32(0))
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var tk = Array[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32(0))
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     # the warp's cursor over (probe, position)
     var p = 0
     var s = 0
@@ -394,9 +394,9 @@ def identical_ivf_scan_grouped_kernel[KM: Int](
         qn = ftz(q_norm[q])
     var s = Int(list_offsets[l])
     var e = Int(list_offsets[l + 1])
-    var tk = InlineArray[UInt32, KM](fill=UInt32.MAX)
-    var td = InlineArray[Float32, KM](fill=Float32(0))
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var tk = Array[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32(0))
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     var n_chunks = (dim + IIVF_CH - 1) // IIVF_CH
     var base = s
     while base < e:
@@ -489,9 +489,9 @@ def identical_ivf_merge_kernel[KM: Int](
         return
     var n_probes = Int(n_probes_in)
     var k = Int(k_in)
-    var tk = InlineArray[UInt32, KM](fill=UInt32.MAX)
-    var td = InlineArray[Float32, KM](fill=Float32(0))
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var tk = Array[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32(0))
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     for p in range(n_probes):
         var base = (q * n_probes + p) * KM
         for r in range(KM):

@@ -42,7 +42,7 @@ arm A FAST main, arm B the define; forecast_rmse must not go up (quality
 must not go down).
 """
 from std.math import inf, sqrt, floor
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -147,7 +147,7 @@ def root_check_kernel(
         var deg = p if poly == 0 else q
         if reject or deg <= 0 or deg > ROOT_MAX_DEG:
             continue
-        var a = InlineArray[Float32, ROOT_MAX_DEG + 1](fill=0.0)
+        var a = Array[Float32, ROOT_MAX_DEG + 1](fill=0.0)
         a[0] = 1.0
         for i in range(deg):
             if poly == 0:
@@ -161,7 +161,7 @@ def root_check_kernel(
             scale *= ROOT_MIN_MODULUS
             a[i] = a[i] * scale
         var m = deg
-        var tmp = InlineArray[Float32, ROOT_MAX_DEG + 1](fill=0.0)
+        var tmp = Array[Float32, ROOT_MAX_DEG + 1](fill=0.0)
         while m >= 1 and not reject:
             var k = a[m]
             if not (abs(k) < Float32(1.0)):

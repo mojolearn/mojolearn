@@ -38,11 +38,11 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_TN as _SVGP_OP_TN
 from x_linear.ff import ff_of, ff_add, ff_sub, ff_mul, ff_div, ff_sqrt, ff_ld, ff_st
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.atomic import Atomic
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -426,7 +426,7 @@ def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
                 # a racing read only costs a spare round: the flag is set
                 # whenever this edge could still lower an entry
                 if lab.unsafe_load(Int(hi)) > lo:
-                    Atomic[DType.int32].min(lab + Int(hi), lo)
+                    Atomic[Int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, Int32(1))
 
 
@@ -495,7 +495,7 @@ def cc_hook_round_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP
                 var lo = a if a < b else b
                 var hi = b if a < b else a
                 if lab.unsafe_load(Int(hi)) > lo:
-                    _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                    _ = Atomic[Int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, rid)
 
 
@@ -580,11 +580,11 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
     var o_c = o_l + max(n, 1)
     var hb = take_host_i32(ctx, o_c + 1)
     var hp = hb.unsafe_ptr()
-    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
+    unsafe_memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
     if nnz > 0:
-        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
+        unsafe_memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
     if n > 0:
-        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
+        unsafe_memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
     var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
     var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
@@ -640,7 +640,7 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
         ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_out)
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
+        unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
     var ip = IP(unsafe_from_address=info)
     ip.unsafe_store(0, Int32(rounds))
     ip.unsafe_store(1, hp[o_c] + Int32(1))
@@ -674,7 +674,7 @@ def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
                     var lo = x if x < y else y
                     var hi = y if x < y else x
                     if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        _ = Atomic[Int32].min(lab + Int(hi), lo)
                         changed.unsafe_store(0, Int32(1))
 
 
@@ -717,7 +717,7 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
         ctx.synchronize()
-        memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
     IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
     _ = hb^
     _ = d_a^
@@ -1014,11 +1014,11 @@ def knn_sq_tiled2_kernel(
     var j0 = 0
     while j0 < m:
         var rows = min(KNN2_TY, m - j0)
-        var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        var acc = Array[Float32, KNN2_R * KNN2_R](fill=Float32(0))
         # XN_KNN_PRUNE: this thread's four rows' k-th distances for this y
         # tile (written before the barrier that ended the last tile), and
         # whether all 16 of its pairs are out
-        var wv = InlineArray[Float32, KNN2_R](fill=inf)
+        var wv = Array[Float32, KNN2_R](fill=inf)
         var dead = False
         comptime if XN_KNN_PRUNE:
             comptime for i in range(KNN2_R):
@@ -1036,8 +1036,8 @@ def knn_sq_tiled2_kernel(
             barrier()
             if not dead:
                 for f in range(fc):
-                    var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                    var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    var xv = Array[Float32, KNN2_R](fill=Float32(0))
+                    var yv = Array[Float32, KNN2_R](fill=Float32(0))
                     comptime for i in range(KNN2_R):
                         xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
                         yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
@@ -1460,7 +1460,7 @@ def knn_impute_split_kernel(
         var bd = best_d + t * k
         var bi = best_i + t * k
         var total = 0
-        var head = InlineArray[Int, IMPS_SPLIT](fill=0)
+        var head = Array[Int, IMPS_SPLIT](fill=0)
         for u in range(IMPS_SPLIT):
             total += Int(pn[tid + u])
         for s in range(k):
@@ -1543,7 +1543,7 @@ def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int6
     var u = q + 1
     while u < nc and Int(cells.unsafe_load(u)) // d == r:
         u += 1
-    var slot = Int(Atomic[DType.int32].fetch_add(counter, Int32(1)))
+    var slot = Int(Atomic[Int32].fetch_add(counter, Int32(1)))
     rq.unsafe_store(slot, Int32(q))
     rc.unsafe_store(slot, Int32(u - q))
 
@@ -1609,8 +1609,8 @@ def knn_impute_rows_kernel(
     var j0 = 0
     while j0 < m:
         var rows = min(IMR_JT, m - j0)
-        var acc = InlineArray[Float32, IMR_R * IMR_R](fill=Float32(0))
-        var pres = InlineArray[Int, IMR_R * IMR_R](fill=0)
+        var acc = Array[Float32, IMR_R * IMR_R](fill=Float32(0))
+        var pres = Array[Int, IMR_R * IMR_R](fill=0)
         var f0 = 0
         while f0 < d:
             var fc = min(IMR_FC, d - f0)
@@ -1628,8 +1628,8 @@ def knn_impute_rows_kernel(
                 q += IMR_TPB
             barrier()
             for f in range(fc):
-                var xv = InlineArray[Float32, IMR_R](fill=Float32(0))
-                var yv = InlineArray[Float32, IMR_R](fill=Float32(0))
+                var xv = Array[Float32, IMR_R](fill=Float32(0))
+                var yv = Array[Float32, IMR_R](fill=Float32(0))
                 comptime for i in range(IMR_R):
                     xv[i] = xs[(ta + 16 * i) * IMR_XS + f]
                     yv[i] = fs[(tb + 16 * i) * IMR_XS + f]
@@ -2079,7 +2079,7 @@ def _c54_svgp_predict_kernel(q: FP,z: FP,dst: FP,rows: Int32,m: Int32,d: Int32,g
     var first = (tile%per_row)*4
     if row >= Int(rows):
         return
-    var sums = InlineArray[Float32,4](fill=Float32(0))
+    var sums = Array[Float32,4](fill=Float32(0))
     for feature in range(Int(d)):
         var qv=q.unsafe_load(row*Int(d)+feature)
         comptime for lane in range(4):

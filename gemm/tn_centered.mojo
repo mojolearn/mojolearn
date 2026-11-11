@@ -36,7 +36,7 @@ in shared memory (2 x TNC_KS x TNC_BM floats, 16 KB), a block per (tile,
 leaf) as the split plans launch.
 """
 from core.device_plan import DevicePlan, device_plan_current
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext

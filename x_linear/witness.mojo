@@ -17,7 +17,7 @@ fit raises. Off Apple the words are never written and `ok` is True without
 a wait. `MOJOLEARN_METAL_WITNESS_LOG=1` prints each rerun to stdout; any
 other non-empty value is a file path each rerun appends one line to (a
 harness that swallows the worker's output reads the file)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.atomic import Atomic
 from std.os import getenv
 from std.sys.compile import is_defined

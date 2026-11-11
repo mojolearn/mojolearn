@@ -17,7 +17,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_identity_key import NativeIdentityKey
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_fields, prepared_key_same
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check

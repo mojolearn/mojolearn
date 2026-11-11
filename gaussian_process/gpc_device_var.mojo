@@ -4,7 +4,7 @@
 (lane neighbors-apple3, 2026-09-28): gaussian_process/host/gpc_steps.mojo's
 `gpc_scale_rows` and `gpc_latent_var` as kernels. Its own module, imported
 only where a build selects it (`-D MOJOLEARN_GPC_DEVICE_VAR`)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

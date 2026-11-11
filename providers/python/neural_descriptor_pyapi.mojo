@@ -3,7 +3,7 @@
 # unwrapping of arbitrary Python functions, extension layouts or signatures.
 from std.ffi import c_int
 from std.collections import Dict
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_owner_registry import borrowed_native_owner
@@ -634,7 +634,7 @@ def neural_descriptor_reserved_execute(
         scratch[].words.resize(len(ints) + 1, 0)
         scratch[].words[0] = handle
         if len(ints) > 0:
-            memcpy(dest=scratch[].words.unsafe_ptr() + 1, src=ints.unsafe_ptr(), count=len(ints))
+            unsafe_memcpy(dest=scratch[].words.unsafe_ptr() + 1, src=ints.unsafe_ptr(), count=len(ints))
         var words = Int(scratch[].words.unsafe_ptr())
         owner[].calls[reserve] += 1
         _ = native_descriptor_call_spans(owner[].entry, reserve, 0, 0, words, 1, 0, 0, scratch[].output)

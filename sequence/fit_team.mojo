@@ -233,7 +233,7 @@ def garch_nll_team(team: SeqTeam, par: FP, r: FP, n: Int, p: Int, o: Int, q: Int
                 acc = add(acc, add(add(LOG_2PI, ftz(identical_log(v))), ftz(identical_div(mul(x, x), v))))
             st(slots, s, acc)
         team.sync()
-        var sl = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+        var sl = Array[Float32, FOLD_L](fill=Float32(0.0))
         comptime for j in range(FOLD_L):
             sl[j] = ld(slots, j)
         ll = tree32(sl)

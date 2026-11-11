@@ -7,8 +7,8 @@ from core.native_descriptor_call import native_descriptor_call_spans
 
 def native_descriptor_call_fixed[NA: Int, NP: Int, NF: Int](
     entry: NativeDescriptorCall, operation: Int,
-    addresses: InlineArray[Int, NA], ints: InlineArray[Int, NP],
-    floats: InlineArray[Float64, NF],
+    addresses: Array[Int, NA], ints: Array[Int, NP],
+    floats: Array[Float64, NF],
 ) raises -> Int:
     # Request envelopes are borrowed inline storage, never retained by the
     # synchronous entry. Empty spans have no address. Keep the proven heap

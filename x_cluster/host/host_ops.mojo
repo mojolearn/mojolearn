@@ -17,7 +17,7 @@ index range into contiguous tasks (`cluster/host/host_cells.mojo`: the
 caller's floating-point environment, DEVIATION 5900). An index's arithmetic is the serial walk's, in
 the same order, so the bits are the same at every thread count; it is not a
 numeric row."""
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
@@ -193,14 +193,14 @@ struct HostOps(ClusterOps):
         if n > len(self.f[slot]):
             raise Error("x_cluster host: get of " + String(n) + " values from a slot of " + String(len(self.f[slot])))
         var out = List[Float32](length=n, fill=Float32(0))
-        memcpy(dest=out.unsafe_ptr(), src=self.f[slot].unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=self.f[slot].unsafe_ptr(), count=n)
         return out^
 
     def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
         if n > len(self.i[slot]):
             raise Error("x_cluster host: get_i of " + String(n) + " values from a slot of " + String(len(self.i[slot])))
         var out = List[Int32](length=n, fill=Int32(0))
-        memcpy(dest=out.unsafe_ptr(), src=self.i[slot].unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=self.i[slot].unsafe_ptr(), count=n)
         return out^
 
     def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
@@ -218,7 +218,7 @@ struct HostOps(ClusterOps):
     def set(mut self, slot: Int, v: List[Float32]) raises:
         if len(v) > len(self.f[slot]):
             raise Error("x_cluster host: set of " + String(len(v)) + " values into a slot of " + String(len(self.f[slot])))
-        memcpy(dest=self._fp(slot), src=v.unsafe_ptr(), count=len(v))
+        unsafe_memcpy(dest=self._fp(slot), src=v.unsafe_ptr(), count=len(v))
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         var pa = self._fp(a)
@@ -461,7 +461,7 @@ struct HostOps(ClusterOps):
         # centered matrix lives in a slot under IDN_BISECT_DEVICE_CENTER)
         var g = List[Float32](length=len(rows) * d, fill=Float32(0))
         if len(rows) * d > 0:
-            memcpy(dest=g.unsafe_ptr(), src=self.f[sub].unsafe_ptr(), count=len(rows) * d)
+            unsafe_memcpy(dest=g.unsafe_ptr(), src=self.f[sub].unsafe_ptr(), count=len(rows) * d)
         return self.kmeans(g, len(rows), d, k, max_iter, tol, seed, n_init, init, centers, labels)
 
     def shrink(mut self, slot: Int) raises:
@@ -766,7 +766,7 @@ struct HostOps(ClusterOps):
     def set_i(mut self, slot: Int, v: List[Int32]) raises:
         if len(v) > len(self.i[slot]):
             raise Error("x_cluster host: set_i of " + String(len(v)) + " values into a slot of " + String(len(self.i[slot])))
-        memcpy(dest=self._ip(slot), src=v.unsafe_ptr(), count=len(v))
+        unsafe_memcpy(dest=self._ip(slot), src=v.unsafe_ptr(), count=len(v))
 
     def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
         var pb = self._fp(b)

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Physical residency is separate from this immutable logical graph. Tensor
 # splitting partitions independent output columns, never the contraction K.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from autograd.program import OpsProgram
 from autograd.rankn import ShapeN
 
@@ -93,7 +93,7 @@ def column_bytes(a: GraphBytes, lo: Int, width: Int) raises -> GraphBytes:
     # Byte packing, no host arithmetic on tensor values. The full unpartitioned
     # parameter is never uploaded to a model-stage executor.
     for row in range(a.shape.rows()):  # driver-loop: packed parameter row copies
-        memcpy(dest=data.unsafe_ptr() + row * width,
+        unsafe_memcpy(dest=data.unsafe_ptr() + row * width,
                src=a.words.unsafe_ptr() + row * a.shape.cols() + lo, count=width)
     return GraphBytes(ShapeN.matrix(a.shape.rows(), width), data^, a.integer)
 

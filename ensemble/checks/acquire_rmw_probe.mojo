@@ -53,7 +53,7 @@ the cell is not contending and NOTHING above it means anything.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 

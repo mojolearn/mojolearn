@@ -8,7 +8,7 @@
 # the bits do not move. The bindings are acquired the way the Python acquired
 # them: the linalg binding through `_load()`'s cache, the x_decomp binding of
 # the default mode, each only on the route that used it.
-from std.memory import memcpy, memset_zero
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
@@ -60,12 +60,12 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
     var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
     if r * c:
-        memcpy(dest=dst, src=kit.ptr(h), count=r * c)
+        unsafe_memcpy(dest=dst, src=kit.ptr(h), count=r * c)
         _ = out  # keep the Python object alive through the native call above
     for i in range(1, r):  # cpu-route: one zero fill per row of a host factor (the Python _triu's slice store)
         var w = min(i, c)
         if w:
-            memset_zero(dst + i * c, w)
+            unsafe_memset_zero(dst + i * c, w)
             _ = out  # keep the Python object alive through the native call above
     return out
 

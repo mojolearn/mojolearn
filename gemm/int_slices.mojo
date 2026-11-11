@@ -55,7 +55,7 @@ product in the UNIT and FLAT epilogues (never in the host oracle): the gate
 must print DIFFER under it on shapes whose low halves are nonzero.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

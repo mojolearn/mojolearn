@@ -11,7 +11,7 @@ fixed tree combines the shares (a pairwise sum, never less accurate than the
 row-order one). The quality rule is checked by bench/x_prep_quality.py
 (paired against scikit-learn, 5 seeds x 2 datasets).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

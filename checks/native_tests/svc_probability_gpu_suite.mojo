@@ -6,7 +6,7 @@ Thin test kernels call the actual sigmoid/coupling routines, with no duplicated
 algorithm. A coupling row is an inherently dependent three-class solve; the
 original fixture has one row. Each sigmoid point is an independent GPU thread.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from svm.estimator import _family_ctx
 from svm.impl.svc_epilogue import device_splitmix_perm, device_platt_train

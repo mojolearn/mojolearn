@@ -15,7 +15,7 @@ from core.hostptr import read_i32
 from x_cnn.ops import IP
 from x_cnn.device import cnn_ctx
 from core.device_zero import enqueue_fill
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 
 # The host entries' label and CSR refusals, as one bulk upload, one check

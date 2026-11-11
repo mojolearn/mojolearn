@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Device launchers for the pure neural_profile contract; no host binding imports this module."""
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.contract import CONTRACT_K_LEAF_MIN
 from gemm.experiments.neural_profile import (

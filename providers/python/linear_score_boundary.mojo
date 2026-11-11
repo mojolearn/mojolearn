@@ -15,6 +15,9 @@ from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, n
 from x_decomp.descriptor_schema import xd_vendor_code
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
+from providers.python.linear_entry_boundary import linear_entry_connection
+from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_METRICS, linear_table_entry
+
 
 def _linear_metrics_provider(context: PythonObject) raises -> PythonObject:
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -53,16 +56,29 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
     linear_r2_check_target(rows, target_rows)
     var target_address = Int(py=classical_address(target))
     var x_address = admitted_x.address
-    var prediction_provider = neural_descriptor_connect_factory_once(
-        entries["linear_predict_native_api_v1"], String(LINEAR_PREDICT_ABI), 1)
-    var metrics_provider = _linear_metrics_provider(context)
-    var predict = prediction_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
-    var metrics = metrics_provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
+    var connection = linear_entry_connection(entries)
+    var key = connection.key.copy()
+    var predict = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 1, String(LINEAR_PREDICT_ABI), 1)
+    var metric_mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var metric_pins = context["classical_metrics"][metric_mode]
+    if py_type(metric_pins) is native_loaded_module("builtins").str:
+        raise Error("ImportError: " + String(metric_pins))
+    var metric_connection = linear_entry_connection(metric_pins, LINEAR_TABLE_METRICS)
+    var metric_key = metric_connection.key.copy()
     var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
     var mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
+    # A canonical metrics owner can still belong to another selected route.
+    # Explicit CPU estimators may intentionally use the context's GPU metrics,
+    # so compare against metric selection, not the estimator connection key.
+    if metric_key.vendor != vendor:
+        raise Error("RuntimeError: native linear score metrics vendor differs from selected execution")
+    if metric_key.mode != mode:
+        raise Error("RuntimeError: native linear score metrics mode differs from selected execution")
+    var metrics = linear_table_entry[LINEAR_TABLE_METRICS](metric_key, 0, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var result = Float64(0.0)
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = linear_score_run(predict, metrics, state, x_address, rows, cols,
                 target_address, target_rows, vendor, mode, est)
     finally:
@@ -70,8 +86,10 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
         _ = admitted_x
         _ = coef
         _ = target
-        _ = prediction_provider
-        _ = metrics_provider
+        _ = entries
+        _ = connection
+        _ = metric_pins
+        _ = metric_connection
     return PythonObject(result)
 
 
@@ -88,8 +106,9 @@ def classical_r2_score(prediction: PythonObject, target_source: PythonObject,
     var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
     var mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
     var result = Float64(0.0)
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = linear_r2_run(entry, prediction_address, rows, target_address, target_rows, vendor, mode)
     finally:
         _ = prediction

@@ -57,7 +57,7 @@ from kernel_methods.checks.random_features import (
 )
 from kernel_methods.estimator import _family_ctx
 from core.staged_download import download_f32_into, DOWNLOAD_CHUNK_FLOATS, _stage_take, _stage_give, _stage_enqueue
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.shared_slot import SharedSlot
 
 
@@ -326,7 +326,7 @@ def rbf_sampler_fit_transform_resident(
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
                         _ = tsub^
-                memcpy(dest=zp + k * chunk, src=stages[k % 2].unsafe_ptr(), count=min(chunk, nz - k * chunk))
+                unsafe_memcpy(dest=zp + k * chunk, src=stages[k % 2].unsafe_ptr(), count=min(chunk, nz - k * chunk))
             _stage_give[_RBF_STAGE_POOL](stages.pop())
             _stage_give[_RBF_STAGE_POOL](stages.pop())
     if not piped:

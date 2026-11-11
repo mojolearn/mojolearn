@@ -10,7 +10,7 @@
 # into the score with the same binary64 operations in the same order. The
 # micro-average precision no longer runs the one-vs-rest curve program
 # whose results it never read. Same kernels: the bits do not move.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
@@ -152,7 +152,7 @@ def _auc_values(v: PythonObject, name: String, context: PythonObject) raises -> 
             var n = mx_len(store)
             var out = family_array(Python.tuple(PythonObject(n)), "<f8", context)
             if n > 0:
-                memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
+                unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
                        src=FAMILY_F64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])), count=n)
                 _ = out  # keep the Python object alive through the native call above
             return out
@@ -189,7 +189,7 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var flags = arena.i32(OUT + 2)
     if (flags & _AX_NEG) and (flags & _AX_POS):
         var store = py_call(context["array_type"], PythonObject("d"), py_call(context["native_bytes_type"], 8 * n))
-        memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
+        unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
                src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(xa))), count=n)
         _ = xa  # keep the Python object alive through the native call above
         raise Error("x is neither increasing nor decreasing : " + family_str(py_call(store.tolist)) + ".")
@@ -199,7 +199,7 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
 def _f64_words(values: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_f64_array_words`: the float64 values as an Int32 word array."""
     var words = family_array(Python.tuple(PythonObject(2 * n)), "<i4", context)
-    memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
+    unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
            src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values))), count=n)
     _ = words  # keep the Python object alive through the native call above
     return words
@@ -406,7 +406,7 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
         _ = words  # keep the Python object alive through the native call above
     if average is None:
         var result = family_array(Python.tuple(PythonObject(k)), "<f8", context)
-        memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))), src=dst, count=k)
+        unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))), src=dst, count=k)
         _ = result  # keep the Python object alive through the native call above
         _ = words  # keep the Python object alive through the native call above
         return result

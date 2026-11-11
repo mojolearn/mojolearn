@@ -16,7 +16,7 @@ the same names.
 """
 from core.hotpath_impl import _cast_from, HP_I32
 from bindings.native_buffer_owner import native_buffer_view
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.mode_metadata_native import _fields, _class_fields
@@ -658,7 +658,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
 def _cnn_float_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var shape = xcnn_shape(value)
     var out = xcnn_host_f32(shape, context)
-    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
+    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(value))), count=xcnn_size(shape))
     _ = value
     return out

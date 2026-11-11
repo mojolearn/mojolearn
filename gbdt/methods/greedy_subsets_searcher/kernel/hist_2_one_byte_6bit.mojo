@@ -58,11 +58,11 @@ def hist2_slice_offset_6(tid: Int) -> Int:
 def hist2_add_points_6[
     n: Int, dt: DType
 ](
-    ci: InlineArray[UInt32, n],
-    s1: InlineArray[Float32, n],
-    s2: InlineArray[Float32, n],
-    q1: InlineArray[Int32, n],
-    q2: InlineArray[Int32, n],
+    ci: Array[UInt32, n],
+    s1: Array[Float32, n],
+    s2: Array[Float32, n],
+    q1: Array[Int32, n],
+    q2: Array[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
@@ -89,12 +89,12 @@ def hist2_add_points_6[
     """
     var flag = tid & 1
 
-    var stat1 = InlineArray[Float32, n](fill=Float32(0.0))
-    var stat2 = InlineArray[Float32, n](fill=Float32(0.0))
-    var qstat1 = InlineArray[Int32, n](fill=Int32(0))
-    var qstat2 = InlineArray[Int32, n](fill=Int32(0))
+    var stat1 = Array[Float32, n](fill=Float32(0.0))
+    var stat2 = Array[Float32, n](fill=Float32(0.0))
+    var qstat1 = Array[Int32, n](fill=Int32(0))
+    var qstat2 = Array[Int32, n](fill=Int32(0))
 
-    @parameter
+    @__parameter
     for k in range(n):
         if flag == 1:
             stat1[k] = s2[k]
@@ -107,17 +107,17 @@ def hist2_add_points_6[
             qstat1[k] = q1[k]
             qstat2[k] = q2[k]
 
-    var val1 = InlineArray[Float32, n](fill=Float32(0.0))
-    var val2 = InlineArray[Float32, n](fill=Float32(0.0))
-    var qval1 = InlineArray[Int32, n](fill=Int32(0))
-    var qval2 = InlineArray[Int32, n](fill=Int32(0))
-    var offset = InlineArray[Int, n](fill=0)
+    var val1 = Array[Float32, n](fill=Float32(0.0))
+    var val2 = Array[Float32, n](fill=Float32(0.0))
+    var qval1 = Array[Int32, n](fill=Int32(0))
+    var qval2 = Array[Int32, n](fill=Int32(0))
+    var offset = Array[Int, n](fill=0)
 
-    @parameter
+    @__parameter
     for i in range(4):
         var f = (2 * i + tid) & 6
 
-        @parameter
+        @__parameter
         for k in range(n):
             var bin = Int((ci[k] >> UInt32(24 - (f << 2))) & UInt32(255))
             var keep = Float32(0.0)
@@ -142,7 +142,7 @@ def hist2_add_points_6[
 
         if write_first:
 
-            @parameter
+            @__parameter
             for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
 
@@ -150,7 +150,7 @@ def hist2_add_points_6[
 
         if not write_first:
 
-            @parameter
+            @__parameter
             for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val1[k], qval1[k])
 
@@ -159,7 +159,7 @@ def hist2_add_points_6[
         if flag == 1:
             shift = -1
 
-        @parameter
+        @__parameter
         for k in range(n):
             offset[k] += shift
 
@@ -167,7 +167,7 @@ def hist2_add_points_6[
 
         if write_first:
 
-            @parameter
+            @__parameter
             for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
 
@@ -175,7 +175,7 @@ def hist2_add_points_6[
 
         if not write_first:
 
-            @parameter
+            @__parameter
             for k in range(n):
                 hist2_smem_add[dt](smem, offset[k], val2[k], qval2[k])
 
@@ -215,7 +215,7 @@ def hist2_reduce_tail_6[
             + is_second_stat
         )
 
-        @parameter
+        @__parameter
         for in_warp_hist in range(2):
             sum0 += smem[src + (in_warp_hist << 4)]
             sum1 += smem[src + (in_warp_hist << 4) + 512]

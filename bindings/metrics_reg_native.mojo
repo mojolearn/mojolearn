@@ -14,7 +14,7 @@
 # Python `_run` made). The result words are read back from the arena as the
 # Python `words(out, 2, "d")` read them. Same program, same kernels: the
 # bits do not move.
-from std.memory import memcpy, bitcast
+from std.memory import unsafe_memcpy, bitcast
 from bindings.admitted_family import admit_family, admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -230,7 +230,7 @@ struct _Reg(Movable):
             mode = _RE_CUSTOM
             # `_words64`: the binary64 weights as their Int32 word pairs, low first.
             var words = family_array(Python.tuple(2 * d), "<i4", context)
-            memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
+            unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
                    src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(self.custom))), count=d)
             _ = words  # keep the Python object alive through the native call above
             w = self.prog.put_i32(words)

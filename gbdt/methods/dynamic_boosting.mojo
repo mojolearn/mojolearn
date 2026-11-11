@@ -15,7 +15,7 @@ There is no host gradient/leaf reduction or alternate CPU training path.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.atomic import Atomic
 from core.pinned_reduce import pinned_block_max
 from std.math import isfinite

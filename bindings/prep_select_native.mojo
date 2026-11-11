@@ -16,7 +16,7 @@
 # support mask and the ranking are in-out inputs, as `_Prog.put(inout=True)`
 # made them. The mutual-information programs and the selector transform run
 # on the encode owner's transport (bindings/prep_encode_native.mojo `EncProg`).
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
@@ -589,7 +589,7 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
         if t.rows != n:
             raise Error("mojolearn: X and y have different numbers of rows")
         target = admitted_vector(n, "<f4", context)
-        memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.address), count=n)
+        unsafe_memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.address), count=n)
         _ = target  # keep the Python object alive through the native call above
         _ = t^
     var dc = len(cont)

@@ -5,7 +5,7 @@ Host storage has native owners and reference-counted views. Device storage
 uses the existing pool and an allocation ledger, including on exceptions.
 The numeric operations and selected kernels are unchanged.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
@@ -345,7 +345,7 @@ struct LinearKit(Movable):
         var result = self.host(out)
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source)
         var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=result)
-        memcpy(dest=dst, src=src, count=rows * cols)
+        unsafe_memcpy(dest=dst, src=src, count=rows * cols)
         return out
 
     def svd(mut self, a: Int) raises -> Tuple[Int, Int, Int]:

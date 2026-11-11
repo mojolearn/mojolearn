@@ -56,7 +56,7 @@ returns a HOST Float32; with the regularizer the host adds `loss + reg`
 the convergence test branch on, and every operand of it is pinned above.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
@@ -698,29 +698,29 @@ def _qnf_partial_body[DMAX: Int, K: Int](
         comptime if K > 1:
             bias_p = xp.unsafe_load(d)
             bias_d = drt.unsafe_load(d)
-    var wr = InlineArray[Float32, DMAX](fill=Float32(0.0))
-    var pr = InlineArray[Float32, DMAX](fill=Float32(0.0))
-    var dr = InlineArray[Float32, DMAX](fill=Float32(0.0))
-    var acc = InlineArray[Float32, DMAX](fill=Float32(0.0))
+    var wr = Array[Float32, DMAX](fill=Float32(0.0))
+    var pr = Array[Float32, DMAX](fill=Float32(0.0))
+    var dr = Array[Float32, DMAX](fill=Float32(0.0))
+    var acc = Array[Float32, DMAX](fill=Float32(0.0))
     comptime for j in range(DMAX):
         if j < d:
             wr[j] = w.unsafe_load(j)
             comptime if K > 1:
                 pr[j] = xp.unsafe_load(j)
                 dr[j] = drt.unsafe_load(j)
-    var steps = InlineArray[Float32, K](fill=Float32(0.0))
+    var steps = Array[Float32, K](fill=Float32(0.0))
     comptime if K > 1:
         var st = step0
         comptime for c in range(K):
             steps[c] = st
             st = st * ls_dec
-    var acc_c = InlineArray[Float32, K](fill=Float32(0.0))
+    var acc_c = Array[Float32, K](fill=Float32(0.0))
     var acc_dz = Float32(0.0)
     var acc_lt = Float32(0.0)
     var r = blk * (QNF_TPB * QNF_RPT) + tid
     for _ in range(QNF_RPT):
         if r < n:
-            var xr = InlineArray[Float32, DMAX](fill=Float32(0.0))
+            var xr = Array[Float32, DMAX](fill=Float32(0.0))
             var zi = bias
             comptime for j in range(DMAX):
                 if j < d:

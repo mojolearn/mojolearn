@@ -5,7 +5,7 @@ from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns

@@ -28,7 +28,7 @@ solver's and are not implemented (`solver/NOT_IMPLEMENTED.tsv`).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.column_stats import TRANSPOSE_TILE, transpose_kernel
 from core.gemm import gemv_n

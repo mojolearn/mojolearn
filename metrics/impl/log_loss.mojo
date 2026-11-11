@@ -8,7 +8,7 @@ The chunk partials fold on the device as the fixed slab tree of
 `metrics/checks/pinned_sum.mojo` (`fold_partials_levels`); the last level and
 the optional mean are one launch.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_div, identical_log
 from metrics.checks.pinned_sum import (

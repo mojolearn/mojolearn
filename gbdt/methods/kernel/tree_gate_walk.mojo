@@ -32,7 +32,7 @@ Word 0 is a failure word in the sense of `core/step_gate.mojo`
 (`step_fail_joins_loop` reads word 0 of its buffer), so a device loop stops
 on a refused tree without a host read.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gbdt.methods.kernel.pointwise_split_resolve import PW_SENTINEL_ID

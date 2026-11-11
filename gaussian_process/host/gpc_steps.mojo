@@ -79,7 +79,7 @@ the reference divides zero by zero.
 """
 
 from std.math import fma, sqrt
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 from core.host_parallel import host_parallelize
 
@@ -406,7 +406,7 @@ def gpc_ovr_combine_rows(col_addrs: List[Int], out_addr: Int, codes_addr: Int, n
         )
     var staged = List[UInt64](unsafe_uninit_length=n * k)
     for c in range(k):
-        memcpy(
+        unsafe_memcpy(
             dest=staged.unsafe_ptr() + c * n,
             src=MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=col_addrs[c]),
             count=n,

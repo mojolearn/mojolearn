@@ -2,7 +2,7 @@
 """Local IDENTICAL GEMM card for large transformer-training consumers."""
 from std.memory import bitcast
 from std.time import perf_counter_ns
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.atomic import Atomic
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -2,7 +2,7 @@
 # Once-admitted PEP3118 storage layout. Metadata is native and reusable;
 # transfers occur at the caller's original execution position so aliases see
 # intervening writes. Byte copies never convert/reassociate numeric values.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 struct BorrowedBufferLayout(Copyable, Movable):
@@ -64,12 +64,12 @@ struct BorrowedBufferLayout(Copyable, Movable):
         if self.count == 0:
             return
         if self.contiguous():
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.address), count=self.count * self.itemsize)
             return
         var coordinates = List[Int](length=len(self.shape), fill=0)
         for i in range(self.count):  # cpu-route: byte-preserving preparation of a borrowed host buffer
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination + i * self.itemsize),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination + i * self.itemsize),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.item_address(coordinates)), count=self.itemsize)
             self.advance(coordinates)
 
@@ -81,11 +81,11 @@ struct BorrowedBufferLayout(Copyable, Movable):
         if self.count == 0:
             return
         if self.contiguous():
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=self.address),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=self.address),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=source), count=self.count * self.itemsize)
             return
         var coordinates = List[Int](length=len(self.shape), fill=0)
         for i in range(self.count):  # cpu-route: byte-preserving publication into the admitted host buffer
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=self.item_address(coordinates)),
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=self.item_address(coordinates)),
                 src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=source + i * self.itemsize), count=self.itemsize)
             self.advance(coordinates)

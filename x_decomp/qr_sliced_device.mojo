@@ -23,7 +23,7 @@ are independent), and on the Apple column the host waits whenever the
 enqueued work since the last wait passes QS_LAUNCH_CELLS: macOS cuts a long
 command buffer silently.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN

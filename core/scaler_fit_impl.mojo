@@ -7,7 +7,7 @@ These routines preserve the former buffer casts and public validation semantics.
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def scaler_finite(value: Float32) -> Bool:

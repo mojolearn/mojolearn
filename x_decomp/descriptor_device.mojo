@@ -49,7 +49,7 @@ def xd_iso_gather_min(d: Int, im: Int, sq: Int, q: Int, dc: Int, nn: Int, one: I
         _ = dev_move_run(d, im, rows, XD_MV_TAKE_ROWS, count, dc, 0, 0, nn, a, dn, count, imn)
         # mk_dev_gather(SQ, TAKE_COLS, [a]): the index word uploaded as an
         # exact float32, then the q x 1 column moved out.
-        var word = InlineArray[Float32, 1](fill=Float32(Float64(a)))
+        var word = Array[Float32, 1](fill=Float32(Float64(a)))
         var di = pool_alloc(1)
         _ = dev_upload_run(di, F32Ptr(unsafe_from_address=Int(word.unsafe_ptr())), 1)
         _ = word[0]  # keep the index word alive through the synchronous upload

@@ -18,12 +18,12 @@ def require(ok: Bool, message: String) raises:
 
 
 def code_at(index: Int, fixture_id: Int, classes: Int) -> Int32:
-    var literal: InlineArray[Int32, 8] = [0, 2, 1, 2, 0, 2, 0, 1]
+    var literal: Array[Int32, 8] = [0, 2, 1, 2, 0, 2, 0, 1]
     return literal[index] if fixture_id == 1 else Int32(index % classes)
 
 
 def class_word(index: Int, raw: Bool) -> UInt32:
-    var words: InlineArray[UInt32, 5] = [0x80000000, 0x00000000, 0x7FC00042, 0x7F800123, 0x3F800000]
+    var words: Array[UInt32, 5] = [0x80000000, 0x00000000, 0x7FC00042, 0x7F800123, 0x3F800000]
     return words[index] if raw else bitcast[DType.uint32](Float32(index + 1) * Float32(0.125))
 
 
@@ -67,7 +67,7 @@ def pipeline(driver: LabelWeightsDriver, fixture_id: Int) raises:
     def check(index: Int) {imm cp, imm vp, imm sw, imm np, imm rp, imm pp, imm fp,
             imm fixture_id, imm classes, imm rows, imm raw}:
         if index < classes:
-            var literal_counts: InlineArray[Int32, 3] = [3, 2, 3]
+            var literal_counts: Array[Int32, 3] = [3, 2, 3]
             var expected = literal_counts[index] if fixture_id == 1 else Int32(rows // classes + Int(index < rows % classes))
             if np[index] != expected or vp[index] != class_word(index, raw):
                 fp.unsafe_store(index, 1)

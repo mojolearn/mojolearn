@@ -4,7 +4,7 @@
 cgr4-device-optim-bgmm): one thread per cell for every step, one block per
 component for the Cholesky. GPU binding only (the host column walks the same
 cells in `bgmm_host_step`)."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.host import DeviceContext

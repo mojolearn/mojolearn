@@ -55,7 +55,7 @@ element, which is only meaningful if both sides run the same expression.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 
 def scalable_uniform(seed_lo: Int32, seed_hi: Int32, i: Int) -> Float32:

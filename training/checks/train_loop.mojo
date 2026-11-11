@@ -113,8 +113,8 @@ WHAT THIS FILE IS LEAST CONFIDENT COMPILES
      returned.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from max.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, unsafe_memcpy
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
 from std.os import getenv

@@ -11,7 +11,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
@@ -247,7 +247,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             lu_array = kit.publish(factor[0])
             piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
             if n:
-                memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=piv_array._addr)),
+                unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=piv_array._addr)),
                        src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(factor[1].buffer_info)[0])),
                        count=n)
             if factor[2] == 0 and (qf & 4) != 0:
@@ -270,7 +270,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             raise Error("b has " + String(kit.nrows(bm)) + " rows, the factorization has " + String(n))
         var store = py_call(context["output_context"]["array_type"], PythonObject("i"), py_call(context["output_context"]["native_bytes_type"], 4 * max(n, 1)))
         if n:
-            memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
+            unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
                    src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(piv))), count=n)
             _ = piv  # keep the Python object alive through the native call above
         var x = kit.lu_solve(l, store, bm)
@@ -491,7 +491,7 @@ def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonOb
         var lu_array = kit.publish(factor[0])
         var piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
         if n:
-            memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=piv_array._addr)),
+            unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=piv_array._addr)),
                    src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(factor[1].buffer_info)[0])),
                    count=n)
             _ = piv_array  # keep the Python object alive through the native call above

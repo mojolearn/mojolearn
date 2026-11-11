@@ -17,7 +17,7 @@ The same compiled entries with the same argument words, so no bit moves.
 A host inference class (`HostExponentialSmoothing`) reads its loaded
 forecast host binding from the module table.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_array_storage import native_array_zeros
@@ -159,7 +159,7 @@ def _block(source: PythonObject, offset: Int, count: Int, code: String, typestr:
     Array of `shape` (the Python body's slice, and its reshape)."""
     var out = tsa_array(code, typestr, shape, count, 4, context)
     if count > 0:
-        memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(out))),
                src=_F32P(unsafe_from_address=Int(py=classical_address(source)) + 4 * offset), count=count)
         _ = out  # keep the Python object alive through the native call above
     return out

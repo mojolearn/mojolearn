@@ -19,7 +19,7 @@ default off) stays removed. The bias launches are `_mlp_kernel`'s body
 (autograd/small_mlp_cells.mojo small_mlp_cell, restored by lane r1), so the
 words are 0.8.66's.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from autograd.small_mlp_cells import small_mlp_cell, small_mlp_cell_count
 from training.neural_session_shape import nn_mlp_session_shape

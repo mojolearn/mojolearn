@@ -49,7 +49,7 @@ Layout of `structure`: `gbdt/methods/kernel/tree_gate_walk.mojo`
 (`tree_structure_words(max_depth)` Int32 words; word 0 status, word 1 kept
 depth, then 3 words per split).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
 

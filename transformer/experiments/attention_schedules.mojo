@@ -12,7 +12,7 @@ from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div,

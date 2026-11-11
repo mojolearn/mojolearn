@@ -5,12 +5,12 @@ cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.sys.compile import is_defined
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.vendor import COMPILED_VENDOR
@@ -993,7 +993,7 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
     if tid < width:
         acts[tid] = act.unsafe_load(kk0 + tid)
     barrier()
-    var acc = InlineArray[Float32, LU_RB * LU_RB](fill=Float32(0))
+    var acc = Array[Float32, LU_RB * LU_RB](fill=Float32(0))
     comptime for r in range(LU_RB):
         comptime for c in range(LU_RB):
             var i = i0 + ty + LU_TILE * r
@@ -1002,8 +1002,8 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
                 acc[r * LU_RB + c] = ftz(a.unsafe_load(i * nn + j))
     for kp in range(width):
         if acts[kp] != Float32(0):
-            var lv = InlineArray[Float32, LU_RB](fill=Float32(0))
-            var uv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            var lv = Array[Float32, LU_RB](fill=Float32(0))
+            var uv = Array[Float32, LU_RB](fill=Float32(0))
             comptime for r in range(LU_RB):
                 lv[r] = ls[kp * LU_RB_TILE + ty + LU_TILE * r]
             comptime for c in range(LU_RB):
@@ -1701,7 +1701,7 @@ def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
 def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
     """`memcpy(dst, src, n)`: the one read of pinned memory (one thread;
     cpu-gpu-cleanup c-decomp removed the host-task split)."""
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:

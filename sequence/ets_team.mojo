@@ -563,7 +563,7 @@ def ets_team_replay(t: Int, a: Args):
     var lo = x + 8
     var hi = lo + 8
     var nm_scr = hi + 8
-    var buf = InlineArray[Float32, ETS_REPLAY_W](fill=Float32(0.0))
+    var buf = Array[Float32, ETS_REPLAY_W](fill=Float32(0.0))
     var maps = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
     var L = (n + ETS_TEAM_CHUNKS - 1) // ETS_TEAM_CHUNKS
     var fa = (a.i5 & 1) != 0

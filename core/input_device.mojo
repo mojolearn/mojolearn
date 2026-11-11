@@ -33,7 +33,7 @@ below 2^31 (`IND_MAX_N`).
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -342,7 +342,7 @@ def _lengths_kernel(lens: _I64, n_: Int32, hi: Int64, status: _I32):
         return
     var v = lens.unsafe_load(i)
     if v < Int64(1) or v > hi:
-        _ = Atomic[DType.int32].min(status, Int32(i))
+        _ = Atomic[Int32].min(status, Int32(i))
 
 
 def device_check_lengths(ctx: DeviceContext, addr: Int, n: Int, hi: Int) raises -> Int:

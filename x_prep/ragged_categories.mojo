@@ -6,7 +6,7 @@ and lookup execute the existing pinned category primitives. Canonical NaN,
 signed-zero and FTZ policy are unchanged. Compile/device qualification is
 pending; no estimator default changes. Caller owns all bounded storage.
 """
-from std.gpu import block_idx,thread_idx
+from max.gpu import block_idx,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from x_prep.prims import unique_cols_unit,lookup_unit
 from experiments.performance_ideas.I19.ragged_float import enqueue_ragged_float_sort

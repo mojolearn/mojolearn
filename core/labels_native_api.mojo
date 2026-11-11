@@ -182,30 +182,30 @@ struct LabelsNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def threshold(self, r: LabelsThresholdRequest) raises -> Int:
-        var a: InlineArray[Int, 2] = [r.source, r.dst]
-        var p: InlineArray[Int, 5] = [r.code, r.count, Int(r.strict), Int(r.below), Int(r.above)]
-        var f: InlineArray[Float64, 1] = [r.threshold]
+        var a: Array[Int, 2] = [r.source, r.dst]
+        var p: Array[Int, 5] = [r.code, r.count, Int(r.strict), Int(r.below), Int(r.above)]
+        var f: Array[Float64, 1] = [r.threshold]
         return native_descriptor_call_fixed(self.entry, LABELS_OP_THRESHOLD_I64, a, p, f)
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def prepare(self, r: LabelsPrepareRequest) raises -> Int:
-        var a: InlineArray[Int, 4] = [r.labels, r.classes, r.codes, r.weights]
-        var p: InlineArray[Int, 4] = [r.label_code, r.count, r.weight_code, r.weight_flags]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 4] = [r.labels, r.classes, r.codes, r.weights]
+        var p: Array[Int, 4] = [r.label_code, r.count, r.weight_code, r.weight_flags]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, LABELS_OP_PREPARE_TARGETS, a, p, f)
 
     def reduce(self, r: LabelsReduceRequest) raises -> HpStat:
         # The v1 wire writes three int64 words. Keep their established heap
         # owner; writable integer-address outputs must survive the foreign ABI.
         var words = List[Int64](length=3, fill=0)
-        var a: InlineArray[Int, 2] = [r.source, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 3] = [r.code, r.count, r.operation]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.source, Int(words.unsafe_ptr())]
+        var p: Array[Int, 3] = [r.code, r.count, r.operation]
+        var f: Array[Float64, 0] = []
         try:
             var kind = native_descriptor_call_fixed(self.entry, LABELS_OP_REDUCE_STAT, a, p, f)
             return labels_stat_load(kind, Int(words.unsafe_ptr()))
@@ -213,19 +213,19 @@ struct LabelsNativeDriver(Copyable, Movable):
             _ = words
 
     def argmax(self, wide: Bool, r: LabelsArgmaxRequest) raises:
-        var a: InlineArray[Int, 2] = [r.scores, r.dst]
-        var p: InlineArray[Int, 2] = [r.rows, r.cols]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.scores, r.dst]
+        var p: Array[Int, 2] = [r.rows, r.cols]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, LABELS_OP_ARGMAX_F64 if wide else LABELS_OP_ARGMAX_F32, a, p, f)
 
     def gather(self, kind: Int, r: LabelsGatherRequest) raises:
-        var a: InlineArray[Int, 3] = [r.table, r.codes, r.dst]
-        var p: InlineArray[Int, 2] = [r.classes, r.count]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.table, r.codes, r.dst]
+        var p: Array[Int, 2] = [r.classes, r.count]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, LABELS_OP_GATHER_I32 + kind, a, p, f)
 
     def ratio(self, r: LabelsRatioRequest) raises -> Int:
-        var a: InlineArray[Int, 2] = [r.counts, r.dst]
-        var p: InlineArray[Int, 3] = [r.classes, r.count, r.mode]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [r.counts, r.dst]
+        var p: Array[Int, 3] = [r.classes, r.count, r.mode]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, LABELS_OP_CLASS_RATIO_F64, a, p, f)

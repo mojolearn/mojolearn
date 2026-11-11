@@ -18,7 +18,7 @@ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 # The sampling body (lane thin-trees-metrics, 2026-10-21) is the kernel
 # module's; the output copies below are one memcpy each.
 from mixture.host.gmm_host_entries import gmm_sample_into
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from mixture.host.gmm_host_oracle import (
     gmmh_predict,
     gmmh_predict_proba,
@@ -98,7 +98,7 @@ def gmm_score_samples_binding(
         var s = gmmh_score_samples(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
-        memcpy(dest=op, src=s.unsafe_ptr(), count=max(0, m.n))
+        unsafe_memcpy(dest=op, src=s.unsafe_ptr(), count=max(0, m.n))
         _ = s^
     _ = m^
     return PythonObject(0)
@@ -115,7 +115,7 @@ def gmm_predict_proba_binding(
         var r = gmmh_predict_proba(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
-        memcpy(dest=op, src=r.unsafe_ptr(), count=max(0, m.n * m.k))
+        unsafe_memcpy(dest=op, src=r.unsafe_ptr(), count=max(0, m.n * m.k))
         _ = r^
     _ = m^
     return PythonObject(0)
@@ -132,7 +132,7 @@ def gmm_predict_binding(
         var labels = gmmh_predict(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
-        memcpy(dest=op, src=labels.unsafe_ptr(), count=max(0, m.n))
+        unsafe_memcpy(dest=op, src=labels.unsafe_ptr(), count=max(0, m.n))
         _ = labels^
     _ = m^
     return PythonObject(0)

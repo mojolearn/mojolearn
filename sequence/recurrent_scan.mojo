@@ -26,7 +26,7 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
 The host executor runs the scan ops as the per-step launches they replace
 (row by row, step by step): the same cells in the same order.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 

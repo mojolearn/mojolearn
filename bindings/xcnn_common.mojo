@@ -11,7 +11,7 @@ layer methods are one call each into `xcnn_native_call`, which runs the same
 compiled entries with the same argument words and residency bits as the
 Python bodies it replaces.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -417,7 +417,7 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
         var out = xcnn_host_f32(shape, context)
         var size = xcnn_size(shape)
         if size:
-            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(out)),
+            unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(out)),
                    src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(source)), count=size)
         return out
     var out = xcnn_host_f32(shape, context)
@@ -504,7 +504,7 @@ def xcnn_writable_copy(value: PythonObject, context: PythonObject) raises -> Pyt
     var out = xcnn_host_f32(shape, context)
     var count = xcnn_size(shape)
     if count:
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(value))), count=count)
     _ = value
     return out
@@ -684,7 +684,7 @@ def xcnn_slice_f32(source: PythonObject, offset: Int, count: Int, context: Pytho
     """`a[offset:offset + count].copy()` of a C-ordered float32 array."""
     var out = xcnn_host_f32([count], context)
     if count:
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(source))) + offset,
                count=count)
         _ = out  # keep the Python object alive through the native call above
@@ -699,7 +699,7 @@ def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: I
     if Int(py=a.size) != count:
         raise Error("ValueError: could not broadcast " + name + " into shape (" + String(count) + ",)")
     if count:
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(dest))) + offset,
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(dest))) + offset,
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(a))),
                count=count)
         _ = a  # keep the Python object alive through the native call above

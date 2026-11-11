@@ -5,7 +5,7 @@ Each compare/exchange pass has disjoint pairs. Stream-ordered launches are
 its global barriers. Padding and power-of-two slack sort to the sentinel tail.
 """
 from std.sys.compile import is_defined
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

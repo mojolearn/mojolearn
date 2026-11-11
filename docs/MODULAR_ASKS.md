@@ -3,6 +3,61 @@
 Features we wait for instead of working around (CLAUDE.md, "Wait for Mojo and Modular"). One section per ask:
 what we need, where it would be used, what we do meanwhile.
 
+## Mojo 1.2.0 / MAX 26.7.0 recheck (2026-11-11)
+
+The owner approved upgrading from Mojo 1.0.0 / MAX 26.5.0. The local recheck
+used Mojo 1.2.0 (`2016d0cd`) / MAX 26.7.0. Complete sources, compiler output,
+controls and runtime failures are retained in
+`~/mojolearn-evidence/modular-check-20261111/`; `SUMMARY.md` and `results.tsv`
+distinguish the minimal probes from full product and fixture qualification.
+The upgrade integration and compilation remain owned by the orchestrator.
+
+- **IPCA nested immutable List capture: fixed upstream.** The original
+  `13_immutable_nested_capture` and flat/no-closure controls compile with exit
+  zero. The prior compiler crash (139) remains preserved. The temporary,
+  owner-authorized six-field test-room layout is removed: the original nested
+  storage is restored with all CPU15/GPU17 cases and oracles intact. Full
+  restored-fixture compilation and execution remain pending; a minimal
+  compile is not a numerical runtime result. No issue was filed.
+- **DBSCAN mutable field capture: fixed upstream.**
+  `01_mutable_field_capture` and both controls now compile with exit zero.
+  The existing scoped mutable borrow in `dbscan_state_suite.mojo` retains
+  all 33 parallel writes, the owner move and allocation-identity assertions.
+  The formerly blocked 28 fixtures still await full compilation/execution.
+  No issue was filed; old diagnostics and reproduction sources remain.
+- **DeadArgumentElimination `surveyUse`: fixed upstream.**
+  `dbscan/checks/compiler_repro_dead_arg_elim.mojo` compiles on the new
+  toolchain; the old abort (134) remains preserved. Existing
+  [Modular issue #7164](https://github.com/modular/modular/issues/7164) was
+  closed as completed on 2026-10-14. This does not establish DBSCAN runtime
+  correctness by itself.
+- **OPTICS capture: our ownership error, not an open compiler bug.**
+  Mojo 1.2 diagnoses competing captured container/interior origins. The
+  fixture now captures one outer result-storage pointer and derives its
+  nested read-only field pointers within the callback. It retains the owner,
+  parallel row checks, nine CPU/GPU cases and every numerical assertion;
+  no copy, cast or serial replacement is introduced. Compilation/execution
+  of the correction remain pending. The original diagnostic/control remain.
+- **Runtime PythonObject defaults: still open, filed as
+  [Modular issue #7543](https://github.com/modular/modular/issues/7543).**
+  `PythonObject(None)` used as a runtime argument default is evaluated at
+  compile time and fails on both versions; explicitly passing it compiles.
+  The 18-line reproduction, control and filed ask are retained under `src/`
+  and `issues/default_arg.md`. Keep explicit runtime arguments; no Python
+  fallback or compiler patch is authorized.
+- **Concurrent shared DeviceContext submission on Metal: still open, filed
+  as [Modular issue #7544](https://github.com/modular/modular/issues/7544).**
+  The retained recheck failed in two of three runs on each version. Selecting
+  streams still failed in four of six runs; the Apple context reported one
+  stream. Sources and complete failures are in `src/`, `out/` and
+  `issues/metal.md`. Ordered GPU numerical suites make no shared-context
+  concurrency claim. No fallback, unsupported runtime patch or unchanged
+  rerun is introduced by this fixture update.
+
+The mutual-recursion/default deadlock and missing-kernelId cases were not
+reproduced with a new minimal case. The older AMD/NVIDIA/Linux asks below
+were not rechecked on those platforms and retain their existing status.
+
 ## Masked (subset) warp reduction and native grouping on AMD (2026-10-07, lane trees-hist-ideas)
 
 **Need.** Warp-aggregated histogram atomics in their general form: lanes that hit the same histogram cell

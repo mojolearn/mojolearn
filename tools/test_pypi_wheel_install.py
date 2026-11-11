@@ -109,6 +109,31 @@ def test_loaded_from_the_verified_files_passes(tmp_path):
     assert P.refusal(m, _loaded(m)) is None
 
 
+@pytest.mark.parametrize("filename,hash_value,refusal", [
+    ("mojolearn-0.8.67.dev0%2Bdeadbeef-py3-none-any.whl", "a" * 64, None),
+    ("mojolearn-0.8.67.dev0+deadbeef-py3-none-any.whl", "a" * 64, None),
+    ("mojolearn-0.8.67.dev0%2Bdeadbeef-py3-none-any.whl", "b" * 64, "installed bytes hash"),
+    ("mojolearn-0.8.67.dev0%2Bother-py3-none-any.whl", "a" * 64, "verified file"),
+    ("mojolearn-0.8.67.dev0%252Bdeadbeef-py3-none-any.whl", "a" * 64, "verified file"),
+])
+def test_measurement_local_version_direct_url(filename, hash_value, refusal):
+    manifest = {"version": "0.8.67.dev0+deadbeef", "files": [{
+        "distribution": "mojolearn",
+        "file": "mojolearn-0.8.67.dev0+deadbeef-py3-none-any.whl",
+        "sha256": "a" * 64,
+    }]}
+    loaded = _loaded(manifest)
+    loaded["mojolearn"]["direct_url"] = {
+        "url": "file:///cache/measurement%20builds/" + filename,
+        "archive_info": {"hashes": {"sha256": hash_value}},
+    }
+    answer = P.installed_refusal(manifest, loaded)
+    if refusal is None:
+        assert answer is None
+    else:
+        assert refusal in answer
+
+
 @pytest.mark.parametrize("over,needle", [
     ({IMPORT: {"module_file": "/repo/python/mojolearn/__init__.py"}}, "site-packages"),
     ({"mojolearn-core": {"version": "0.8.43"}}, "0.8.43"),

@@ -40,7 +40,7 @@ FOLD_BLOCK and any d whose partial table fits device memory (the
 weighted Ridge's). The one-thread Cholesky was latency bound at d^3 / 6
 dependent float-float operations; the team cuts that to d^2 steps.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from x_linear.ops import FP, IP, ld, st, ldi, sti, i2f
 from x_linear.ff import (
     ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_mul_f, ff_div, ff_sqrt, ff_f32, ff_ld, ff_st,

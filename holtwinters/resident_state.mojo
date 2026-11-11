@@ -24,7 +24,7 @@ trace on the forecast runs `holtwinters_forecast_ptr` itself over a host copy
 of the same words: the bits are the per-call path's.
 """
 from std.atomic import Atomic, Ordering
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
@@ -290,7 +290,7 @@ def holtwinters_query_resident(handle: Int, out_ptr: _F32P, seasonal: String, st
             var fc = List[Float32](length=h * bs, fill=Float32(0))
             var fc_ptr = rebind[_F32P](fc.unsafe_ptr())
             _ = holtwinters_forecast_ptr(host_ptr, fc_ptr, n, bs, f, seasonal, h)
-            memcpy(dest=dst, src=fc_ptr + skip, count=h * bs - skip)
+            unsafe_memcpy(dest=dst, src=fc_ptr + skip, count=h * bs - skip)
             _ = host^
             _ = fc^
         else:

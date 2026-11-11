@@ -28,7 +28,7 @@ IDENTICAL only; FAST keeps the host walk. `-D MOJOLEARN_IDN_IVF_DEVICE_FINITE_OF
 of any output moves either way (a scan only refuses).
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

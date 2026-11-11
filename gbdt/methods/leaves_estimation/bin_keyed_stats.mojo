@@ -47,7 +47,7 @@ columns outside SymmetricTree (`bindings/_mojolearn_gbdt_host.mojo`, the
 route runs only with more than one permutation, i.e. with CTR columns.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

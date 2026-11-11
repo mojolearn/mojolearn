@@ -47,7 +47,7 @@ run's stages are freed eagerly when the call ends (kept only for a recorded
 OPS_ATTN_STEP's backward, as above), and `OpsSession`'s parked count stays 0
 on a host session.
 """
-from std.memory import bitcast, memcpy, memset_zero
+from std.memory import bitcast, unsafe_memcpy, unsafe_memset_zero
 from sequence.ops import FP
 from core.host_lanes import host_f32_uninit
 from autograd.block_step_ops import (
@@ -124,7 +124,7 @@ def _host_take(p: FP, at: Int, n: Int) raises -> List[Float32]:
     """The n floats at p + at, as an owned list (the oracles take lists)."""
     var out = host_f32_uninit(n)
     if n > 0:
-        memcpy(dest=FP(unsafe_from_address=Int(out.unsafe_ptr())), src=p + at, count=n)
+        unsafe_memcpy(dest=FP(unsafe_from_address=Int(out.unsafe_ptr())), src=p + at, count=n)
     return out^
 
 
@@ -134,7 +134,7 @@ def _host_put(p: FP, at: Int, values: List[Float32], n: Int, what: String) raise
         raise Error("ops: host step op: " + what + " holds " + String(len(values)) + " values, the layout "
                     + String(n))
     if n > 0:
-        memcpy(dest=p + at, src=FP(unsafe_from_address=Int(values.unsafe_ptr())), count=n)
+        unsafe_memcpy(dest=p + at, src=FP(unsafe_from_address=Int(values.unsafe_ptr())), count=n)
 
 
 def _host_words(p: FP, k: Int) -> List[Int]:
@@ -630,7 +630,7 @@ def host_mamba_step_train_run(
     var l = _tokens(code, counts[0], b, dm)
     try:
         if counts[2] > 0:
-            memset_zero(bufs[2], counts[2])
+            unsafe_memset_zero(bufs[2], counts[2])
         if code == OPS_M2_STEP:
             var zero: List[Int] = [0]
             _host_set_words(bufs[3], zero)

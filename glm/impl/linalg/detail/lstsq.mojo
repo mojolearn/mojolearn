@@ -127,7 +127,7 @@ from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from std.atomic import Atomic
-from std.gpu import block_idx as _ols_bidx, block_dim as _ols_bdim, thread_idx as _ols_tidx
+from max.gpu import block_idx as _ols_bidx, block_dim as _ols_bdim, thread_idx as _ols_tidx
 
 from cluster.checks.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn, gemv_n, pinned_gemm_nt_kernel
@@ -263,7 +263,7 @@ def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, dst: MutP
     if i < Int(n):
         var mag = abs(v.unsafe_load(i))
         if mag == mag and mag > Float32(0.0):
-            _ = Atomic[DType.int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
+            _ = Atomic[Int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
 
 
 def ols_device_abs_max(ctx: DeviceContext, mut v: DeviceBuffer[DType.float32], n: Int, tpb: Int) raises -> Float32:

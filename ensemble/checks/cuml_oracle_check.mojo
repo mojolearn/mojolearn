@@ -56,7 +56,7 @@ WHERE EXACT EQUALITY IS AND IS NOT CLAIMED:
 from std.math import abs as fabs
 from std.sys.info import size_of
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     BinScales,

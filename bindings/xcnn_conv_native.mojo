@@ -7,7 +7,7 @@ compiled convolution/padding entries. BasicBlock forward composes these
 owners; its remaining public operations have a separate migration batch.
 """
 from std.math import sqrt
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value, neural_string_keys
@@ -124,7 +124,7 @@ def _channels(source: PythonObject, start: Int, count: Int, context: PythonObjec
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out)))
     var spatial = shape[2] * shape[3]
     for n in range(shape[0]):  # driver-loop: one native contiguous copy per image
-        memcpy(dest=dst + n * count * spatial, src=src + (n * shape[1] + start) * spatial, count=count * spatial)
+        unsafe_memcpy(dest=dst + n * count * spatial, src=src + (n * shape[1] + start) * spatial, count=count * spatial)
     _ = source
     _ = out
     return out
@@ -136,14 +136,14 @@ def _put_channels(dest: PythonObject, start: Int, count: Int, source: PythonObje
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(dest)))
     var spatial = shape[2] * shape[3]
     for n in range(shape[0]):  # driver-loop: one native contiguous copy per image
-        memcpy(dest=dst + (n * shape[1] + start) * spatial, src=src + n * count * spatial, count=count * spatial)
+        unsafe_memcpy(dest=dst + (n * shape[1] + start) * spatial, src=src + n * count * spatial, count=count * spatial)
     _ = source
     _ = dest
 
 
 def _copy_words(dest: PythonObject, offset: Int, source: PythonObject, count: Int) raises:
     if count:
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(dest))) + offset,
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(dest))) + offset,
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(source))), count=count)
     _ = source
     _ = dest

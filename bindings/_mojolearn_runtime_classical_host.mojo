@@ -31,6 +31,8 @@ from bindings.classical_attributes import classical_attribute_c, classical_attri
 from bindings.host_archive_lifetime import host_archive_finalize_c
 from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
 from bindings.admitted_input import register_admitted_buffer_pin
+from providers.python.linear_entry_boundary import register_linear_entry_owner, linear_entry_connect
+from providers.python.linear_state_boundary import register_linear_state_owner
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -134,6 +136,9 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         register_compiled_binding_snapshot(module)
         register_scaler_snapshot(module)
         register_admitted_buffer_pin(module)
+        register_linear_entry_owner(module)
+        register_linear_state_owner(module)
+        module.def_function[linear_entry_connect]("linear_entry_connection_v1")
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")
         module.def_function[runtime_classical_host_column_binding]("runtime_classical_host_column")

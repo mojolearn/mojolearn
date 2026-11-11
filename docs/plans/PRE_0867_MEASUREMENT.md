@@ -72,7 +72,8 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    running anything.
 2. **Job tree.** The tree the job runs `tools/` from must contain this lane's commits (the integration branch
    after merge). It is a different commit from the measurement build's source commit.
-3. **Datasets** on each box: `sh tools/dataset_store.sh stage "<ssh flags+target>" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz`.
+3. **Datasets** on each box: `sh tools/dataset_store.sh stage "<ssh flags+target>" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz gbm-bench/istella/istella_rank.npz`
+   (the rank rows need `istella_rank`; without it both installs refuse).
 4. **B wheel sets** for the define A/Bs. Stage each with the A set: `--b-arm em-check-1=<B work dir>/<commit12>/linux/final@<SHA40>`
    (likewise `em-check-8`, `sgd-check-1`). The stage step reads each B set's own version from its `candidate.json`.
    `svd-one-block` is `-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK` (label `svd1`): B routes PCA / TSVD / randomized-svd through `svd_op_tall`. Rows without a staged set report

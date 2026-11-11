@@ -44,7 +44,7 @@ flushed by the previous step). Same words, same order, same flushes as the
 NVIDIA gate, so its PASS on H100 and L40S is this probe's `shipped == swrtf`
 line on the NVIDIA column.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined

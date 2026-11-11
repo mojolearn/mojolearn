@@ -207,7 +207,7 @@ nothing but `niter` and the criterion.
 ============================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from holtwinters.impl.internal.hw_eval import (

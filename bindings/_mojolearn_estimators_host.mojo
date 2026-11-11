@@ -50,6 +50,11 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
+from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
+from core.linear_boundary_types import LINEAR_PREDICT_ABI
+from glm.host.linear_fit_native import linear_fit_host_v1
+from glm.host.linear_predict_native import linear_predict_host_v1
 from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
@@ -1573,6 +1578,15 @@ def rbf_sampler_transform_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = LINEAR_FIT_HOST_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
+    linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
+        Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_host_v1, linear_predict_host_v1])
+
 def build__mojolearn_estimators_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1640,6 +1654,8 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
         module.def_function[nystroem_transform_binding]("nystroem_transform")
         module.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
-        return module.finalize()
+        var published_module = module.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

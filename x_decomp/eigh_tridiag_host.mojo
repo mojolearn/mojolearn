@@ -73,7 +73,7 @@ def _td_grid(count: Int) -> Int:
 
 
 @always_inline
-def _td_tree(mut red: InlineArray[Float32, TD_TPB]) -> Float32:
+def _td_tree(mut red: Array[Float32, TD_TPB]) -> Float32:
     """The kernels' shared-memory fold: w = TD_TPB / 2 .. 1, slot t < w
     takes tf_add(red[t], red[t + w]); slot 0 is the block's value."""
     var w = TD_TPB // 2
@@ -88,7 +88,7 @@ def _td_tree(mut red: InlineArray[Float32, TD_TPB]) -> Float32:
 def _td_fold_parts(part: F32Ptr, np_: Int) -> Float32:
     """`td_gemv_kernel` / `td_w_kernel`'s fold of the np_ block partials:
     thread t sums part[t], part[t + TD_TPB], ... from +0.0, then the tree."""
-    var red = InlineArray[Float32, TD_TPB](fill=Float32(0.0))
+    var red = Array[Float32, TD_TPB](fill=Float32(0.0))
     for t in range(TD_TPB):
         var s = Float32(0.0)
         var q = t
@@ -138,7 +138,7 @@ def _td_tridiag(
 
             # td_col_kernel: xcol, the block partials of ||x[1:]||^2, d_j
             def col_block(b: Int) {imm a, imm vp, imm wp, imm xcol, imm part, imm n, imm j, imm jj}:
-                var red = InlineArray[Float32, TD_TPB](fill=Float32(0.0))
+                var red = Array[Float32, TD_TPB](fill=Float32(0.0))
                 for tid in range(TD_TPB):
                     var i = j + 1 + b * TD_TPB + tid
                     var s = Float32(0.0)
@@ -161,7 +161,7 @@ def _td_tridiag(
             var scale = hh[2]
 
             def y_row(b: Int) {imm a, imm xcol, imm y, imm n, imm j, imm scale}:
-                var red = InlineArray[Float32, TD_TPB](fill=Float32(0.0))
+                var red = Array[Float32, TD_TPB](fill=Float32(0.0))
                 var row = (j + 1 + b) * n
                 for tid in range(TD_TPB):
                     var s = Float32(0.0)
@@ -175,7 +175,7 @@ def _td_tridiag(
             host_cells(y_row, m, 2 * m)
 
             def tv_dot(q: Int) {imm vp, imm wp, imm xcol, imm tv, imm n, imm j, imm jj, imm scale}:
-                var red = InlineArray[Float32, TD_TPB](fill=Float32(0.0))
+                var red = Array[Float32, TD_TPB](fill=Float32(0.0))
                 for tid in range(TD_TPB):
                     var s = Float32(0.0)
                     var i = j + 1 + tid
@@ -202,7 +202,7 @@ def _td_tridiag(
 
             # td_p_kernel: pb = tau (y - V (W^T v) - W (V^T v)), block partials of pb . v
             def p_block(b: Int) {imm vp, imm wp, imm vv, imm y, imm tv, imm tau, imm pb, imm part2, imm n, imm j, imm jj}:
-                var red = InlineArray[Float32, TD_TPB](fill=Float32(0.0))
+                var red = Array[Float32, TD_TPB](fill=Float32(0.0))
                 for tid in range(TD_TPB):
                     var i = j + 1 + b * TD_TPB + tid
                     var s = Float32(0.0)
@@ -377,7 +377,7 @@ def host_eigh_td(mut m: List[Float32], n: Int, w: F32Ptr, v: F32Ptr) raises -> B
         var cnt = min(TD_NB, n - 1 - k)
         var qa = b // TD_NB
         var qb = b - qa * TD_NB
-        var red = InlineArray[Float32, TD_TPB](fill=Float32(0.0))
+        var red = Array[Float32, TD_TPB](fill=Float32(0.0))
         for tid in range(TD_TPB):
             var s = Float32(0.0)
             if qa < cnt and qb < cnt:

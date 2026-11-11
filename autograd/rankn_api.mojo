@@ -106,7 +106,7 @@ def rn_shape(dims: List[Int], what: String) raises -> ShapeN:
     """The ShapeN of `dims` (0 .. RN_MAX_RANK positive dims, row-major)."""
     if len(dims) > RN_MAX_RANK:
         raise Error(what + ": tensors have at most " + String(RN_MAX_RANK) + " dimensions")
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     for k in range(len(dims)):  # small-loop(dims: the tensor dims, at most 8): shape metadata, no data
         if dims[k] < 1:
             raise Error(what + ": every dimension must be positive")
@@ -130,7 +130,7 @@ def rn_with_batch(batch: Int, sample: ShapeN, what: String) raises -> ShapeN:
     var rank = max(sample.ndim, 0) + 1
     if rank > RN_MAX_RANK:
         raise Error(what + ": tensors have at most " + String(RN_MAX_RANK) + " dimensions")
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     if batch < 1:
         raise Error(what + ": every dimension must be positive")
     d[0] = batch

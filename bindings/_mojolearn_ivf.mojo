@@ -23,7 +23,7 @@ from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.sys.compile import is_defined
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -369,11 +369,11 @@ def ivf_flat_build_resident_binding(addrs: PythonObject, params: PythonObject) r
         raise Error("ivf_flat_build_resident: the built centres disagree with n_lists and dim")
     if len(index.list_offsets) != n_lists + 1 or len(index.list_indices) != n:
         raise Error("ivf_flat_build_resident: the built lists disagree with n and n_lists")
-    memcpy(dest=_f32_ptr(Int(py=addrs[1])), src=index.centers.unsafe_ptr(), count=n_lists * dim)
-    memcpy(dest=_f32_ptr(Int(py=addrs[2])), src=index.center_norms.unsafe_ptr(), count=n_lists)
-    memcpy(dest=_i32_ptr(Int(py=addrs[3])), src=index.list_offsets.unsafe_ptr(), count=n_lists + 1)
+    unsafe_memcpy(dest=_f32_ptr(Int(py=addrs[1])), src=index.centers.unsafe_ptr(), count=n_lists * dim)
+    unsafe_memcpy(dest=_f32_ptr(Int(py=addrs[2])), src=index.center_norms.unsafe_ptr(), count=n_lists)
+    unsafe_memcpy(dest=_i32_ptr(Int(py=addrs[3])), src=index.list_offsets.unsafe_ptr(), count=n_lists + 1)
     if n > 0:
-        memcpy(dest=_i32_ptr(Int(py=addrs[4])).bitcast[UInt32](), src=index.list_indices.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=_i32_ptr(Int(py=addrs[4])).bitcast[UInt32](), src=index.list_indices.unsafe_ptr(), count=n)
     var handle = ivf_resident_register_built(ctx, index^, dev^)
     bst.host("register")
     _ = ctx^
@@ -455,7 +455,7 @@ def ivf_flat_extend_binding(
     var new_labels = List[UInt32](length=max(n_new, 0), fill=UInt32(0))
     var first_new = len(out.labels) - n_new
     if n_new > 0:
-        memcpy(dest=new_labels.unsafe_ptr(), src=out.labels.unsafe_ptr() + first_new, count=n_new)
+        unsafe_memcpy(dest=new_labels.unsafe_ptr(), src=out.labels.unsafe_ptr() + first_new, count=n_new)
     ivf_write_extended_arrays(
         addrs, out.n_rows, out.dim, out.n_lists, out.list_offsets,
         out.list_indices, out.list_data, new_labels, n_new,

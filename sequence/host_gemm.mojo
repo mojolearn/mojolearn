@@ -86,11 +86,11 @@ def _block[R: Int](a: Args, bp: FP, ldb: Int, m0: Int, n0: Int):
     stride."""
     comptime W = HG_W
     var K = a.i2
-    var acc = InlineArray[SIMD[DType.float32, W], R](fill=SIMD[DType.float32, W](0.0))
+    var acc = Array[SIMD[DType.float32, W], R](fill=SIMD[DType.float32, W](0.0))
     if a.i7 != 0:
         comptime for r in range(R):
             acc[r] = _ftz_v[W](a.p2.load[width=W]((m0 + r) * a.i8 + n0))
-    var abase = InlineArray[Int, R](fill=0)
+    var abase = Array[Int, R](fill=0)
     comptime for r in range(R):
         abase[r] = (m0 + r) * a.i3
 

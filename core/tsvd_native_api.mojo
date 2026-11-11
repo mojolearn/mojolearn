@@ -147,31 +147,31 @@ struct TSVDNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: TSVDFitRequest) raises -> TSVDFitResult:
         var words = List[Int](length=2, fill=0)
-        var a: InlineArray[Int, 6] = [r.source, r.components, r.singular, r.variance, r.ratio, Int(words.unsafe_ptr())]
-        var p: InlineArray[Int, 12] = [r.rows, r.features, r.count, r.oversamples, r.iterations,
+        var a: Array[Int, 6] = [r.source, r.components, r.singular, r.variance, r.ratio, Int(words.unsafe_ptr())]
+        var p: Array[Int, 12] = [r.rows, r.features, r.count, r.oversamples, r.iterations,
             Int(r.auto_iterations), r.seed, Int(r.test_finite), r.route, r.fold.base, r.fold.rows, r.fold.indices]
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, TSVD_FIT, a, p, f)
         return TSVDFitResult(words[0], words[1])
 
     def query(self, r: TSVDQueryRequest) raises -> Int:
-        var a: InlineArray[Int, 3] = [r.source, r.components, r.dst]
-        var p: InlineArray[Int, 7] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.test_finite), Int(r.resident), r.lease]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.source, r.components, r.dst]
+        var p: Array[Int, 7] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.test_finite), Int(r.resident), r.lease]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, TSVD_QUERY, a, p, f)
 
     def open(self) raises -> Int:
         return self.metadata(TSVD_OPEN)
 
     def close(self, lease: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [lease]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [lease]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, TSVD_CLOSE, a, p, f)

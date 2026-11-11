@@ -25,7 +25,7 @@ def _ready(result: Int, context: Int) raises:
         "descriptor error must start empty")
 
 
-def _int_slots[N: Int](address: Int, expected: InlineArray[Int, N]) raises:
+def _int_slots[N: Int](address: Int, expected: Array[Int, N]) raises:
     var actual = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=address)
     comptime for i in range(N):
         _require(actual[i] == expected[i], "integer/address wire slot " + String(i))
@@ -46,27 +46,27 @@ def _dense_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         var token = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)[0]
         if operation == 0:
             _require(na == 6 and np == 9 and nf == 5 and ff > 0, "dense fit counts")
-            var a: InlineArray[Int, 6] = [token, token + 1, token + 2, token + 3, token + 4, token + 5]
-            var p: InlineArray[Int, 9] = [17, 19, 3, 29, 31, 7, 1, 0, 5]
+            var a: Array[Int, 6] = [token, token + 1, token + 2, token + 3, token + 4, token + 5]
+            var p: Array[Int, 9] = [17, 19, 3, 29, 31, 7, 1, 0, 5]
             _int_slots(aa, a)
             _int_slots(pp, p)
             _float_slots(ff)
         elif 1 <= operation <= 4:
             _require(na == 4 and np == 5 and nf == 0 and ff == 0, "dense query counts/empty floats")
-            var a: InlineArray[Int, 4] = [token, token + 2, token + 3, token + 5]
-            var p: InlineArray[Int, 5] = [17, 19, 3, 1, 1]
+            var a: Array[Int, 4] = [token, token + 2, token + 3, token + 5]
+            var p: Array[Int, 5] = [17, 19, 3, 1, 1]
             _int_slots(aa, a)
             _int_slots(pp, p)
         elif operation == 5 or operation == 6:
             _require(na == 2 and np == 2 and nf == 0 and ff == 0, "dense link counts/empty floats")
-            var a: InlineArray[Int, 2] = [token, token + 3]
-            var p: InlineArray[Int, 2] = [17, 3]
+            var a: Array[Int, 2] = [token, token + 3]
+            var p: Array[Int, 2] = [17, 3]
             _int_slots(aa, a)
             _int_slots(pp, p)
         else:
             _require(operation == 7 and na == 2 and np == 1 and nf == 0 and ff == 0, "dense log contract")
-            var a: InlineArray[Int, 2] = [token, token + 3]
-            var p: InlineArray[Int, 1] = [51]
+            var a: Array[Int, 2] = [token, token + 3]
+            var p: Array[Int, 1] = [51]
             _int_slots(aa, a)
             _int_slots(pp, p)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = token + 97
@@ -85,16 +85,16 @@ def _fold_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         if operation == 0:
             token -= 1
             _require(na == 5 and np == 12 and nf == 5 and ff > 0, "fold fit counts")
-            var a: InlineArray[Int, 5] = [token + 1, token + 2, token + 3, token + 4, token + 6]
-            var p: InlineArray[Int, 12] = [53, 59, 61, 17, 19, 3, 29, 31, 7, 1, 0, 5]
+            var a: Array[Int, 5] = [token + 1, token + 2, token + 3, token + 4, token + 6]
+            var p: Array[Int, 12] = [53, 59, 61, 17, 19, 3, 29, 31, 7, 1, 0, 5]
             _int_slots(aa, a)
             _int_slots(pp, p)
             _float_slots(ff)
         else:
             token -= 2
             _require(1 <= operation <= 4 and na == 3 and np == 8 and nf == 0 and ff == 0, "fold query contract")
-            var a: InlineArray[Int, 3] = [token + 2, token + 3, token + 6]
-            var p: InlineArray[Int, 8] = [53, 59, 61, 17, 19, 3, 1, 1]
+            var a: Array[Int, 3] = [token + 2, token + 3, token + 6]
+            var p: Array[Int, 8] = [53, 59, 61, 17, 19, 3, 1, 1]
             _int_slots(aa, a)
             _int_slots(pp, p)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = token + 97
@@ -147,8 +147,8 @@ def _fixed_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
         if operation == 2:
             return 0  # A successful entry may intentionally leave the result zero.
         if operation == 3 or operation == 4:
-            var empty_i: InlineArray[Int, 0] = []
-            var empty_f: InlineArray[Float64, 0] = []
+            var empty_i: Array[Int, 0] = []
+            var empty_f: Array[Float64, 0] = []
             if operation == 3:
                 _require(native_descriptor_call_fixed(_empty_entry, 0, empty_i, empty_i, empty_f) == 73,
                     "nested descriptor result")
@@ -197,9 +197,9 @@ def logistic_fold_fixture(operation: Int) raises:
 
 
 def logistic_fixed_fixture(unit: Int) raises:
-    var a: InlineArray[Int, 1] = [37]
-    var p: InlineArray[Int, 1] = [41]
-    var f: InlineArray[Float64, 1] = [43.0]
+    var a: Array[Int, 1] = [37]
+    var p: Array[Int, 1] = [41]
+    var f: Array[Float64, 1] = [43.0]
     if unit == 1 or unit == 5:
         var message = String()
         try:
@@ -223,9 +223,9 @@ def logistic_fixed_fixture(unit: Int) raises:
 def logistic_concurrent_fixture(unit: Int) raises:
     var token = 1001 + unit * 11
     logistic_driver_fixture(0, token)
-    var a: InlineArray[Int, 1] = [token]
-    var p: InlineArray[Int, 1] = [token + 1]
-    var f: InlineArray[Float64, 1] = [Float64(token + 2)]
+    var a: Array[Int, 1] = [token]
+    var p: Array[Int, 1] = [token + 1]
+    var f: Array[Float64, 1] = [Float64(token + 2)]
     _require(native_descriptor_call_fixed(_fixed_entry, 3, a, p, f) == 3 * token + 3,
         "concurrent/nested callers must retain private request and output storage")
     _require(a[0] == token and p[0] == token + 1 and f[0] == Float64(token + 2), "concurrent request owners")

@@ -3,7 +3,7 @@
 """The kernels of x_decomp/lle_local.mojo's cells (cgr-decomp, 2026-10-03):
 one thread per output, or per sample for the k-sized serial steps. The
 driver is `DevExec.lle_local` (x_decomp/device.mojo)."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from x_decomp.cells import F32Ptr
 from x_decomp.lle_local import (

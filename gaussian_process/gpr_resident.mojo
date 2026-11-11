@@ -33,7 +33,7 @@ glue calls `gpr_fit` / `gpr_predict`.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -114,7 +114,7 @@ def gp_clamp_count_kernel(clamped: _GI, cnt: _GI, n: Int32):
     var t = Int(block_idx.x) * GP_YDOT_TPB + Int(thread_idx.x)
     if t < Int(n):
         if clamped.unsafe_load(t) != Int32(0):
-            _ = Atomic[DType.int32].fetch_add(cnt, Int32(1))
+            _ = Atomic[Int32].fetch_add(cnt, Int32(1))
 
 
 def gpr_fit_ptr_device(

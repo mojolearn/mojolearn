@@ -201,7 +201,7 @@ zero-distance duplicate and the fused path does not. This kernel copies both
 clauses. See the lane file; `core/` is another lane's.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from neighbors.impl.topk.logical_warp32 import queue_any, LOGICAL32_ON64
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -441,7 +441,7 @@ def fused_l2_knn_kernel[
                 for kk in range(FKNN_KBLK):
                     var regy = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
-                    @parameter
+                    @__parameter
                     for j in range(FKNN_ACC_COLS_PER_TH):
                         regy[j] = sy[
                             (tc + j * FKNN_ACC_TH_COLS) * FKNN_SMEM_STRIDE + kk
@@ -490,7 +490,7 @@ def fused_l2_knn_kernel[
             # as `OutT* regyn` (`:346`).
             var regyn = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
-            @parameter
+            @__parameter
             for j in range(FKNN_ACC_COLS_PER_TH):
                 var cj = n0 + tc + j * FKNN_ACC_TH_COLS
                 if cj < n:
@@ -500,7 +500,7 @@ def fused_l2_knn_kernel[
             # by hand because `acc0`/`acc1` are separate SIMD values. The
             # `if (gmemRowId < m)` guard is `:459` and is warp-uniform.
             if have0:
-                @parameter
+                @__parameter
                 for j in range(FKNN_ACC_COLS_PER_TH):
                     # `Pair otherKV = {keyMax, identity};` `:463`, overwritten
                     # only when `colId < ldd`. The out-of-range lane still calls
@@ -514,7 +514,7 @@ def fused_l2_knn_kernel[
                         val = UInt32(col)
                     heap0.add(key, val)
             if have1:
-                @parameter
+                @__parameter
                 for j in range(FKNN_ACC_COLS_PER_TH):
                     var col1 = n0 + tc + j * FKNN_ACC_TH_COLS
                     var key1 = FKNN_IDENTITY

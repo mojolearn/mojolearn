@@ -12,7 +12,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -155,7 +155,7 @@ def afn_step_status_kernel(
     var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     if gid == 0 and _afn_nonfinite(loss.unsafe_load(0)):
-        _ = Atomic[DType.int32].min(status + AFN_ST_LOSS, Int32(0))
+        _ = Atomic[Int32].min(status + AFN_ST_LOSS, Int32(0))
     var bg = NONFINITE_NONE
     var bp = NONFINITE_NONE
     var bm = NONFINITE_NONE
@@ -176,15 +176,15 @@ def afn_step_status_kernel(
             bn = Int32(i)
         i += stride
     if bg != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_GRAD, bg)
+        _ = Atomic[Int32].min(status + AFN_ST_GRAD, bg)
     if bp != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_PARAM, bp)
+        _ = Atomic[Int32].min(status + AFN_ST_PARAM, bp)
     if bm != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_M, bm)
+        _ = Atomic[Int32].min(status + AFN_ST_M, bm)
     if bv != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_V, bv)
+        _ = Atomic[Int32].min(status + AFN_ST_V, bv)
     if bn != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_VNEG, bn)
+        _ = Atomic[Int32].min(status + AFN_ST_VNEG, bn)
 
 
 def afn_ce_fused_kernel(

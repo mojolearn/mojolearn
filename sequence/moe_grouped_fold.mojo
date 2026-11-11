@@ -49,7 +49,7 @@ comptime MOE_FOLD_SLOTS = 16
 
 
 @always_inline
-def _fold_push16(mut stack: InlineArray[Float32, MOE_FOLD_SLOTS], mut occ: Int, value: Float32):
+def _fold_push16(mut stack: Array[Float32, MOE_FOLD_SLOTS], mut occ: Int, value: Float32):
     """`gemm_identical._fold_push`: slot d holds a full block of 2^d leaves;
     an occupied level merges `ftz(ftz(stack[d]) + ftz(val))` (the earlier
     leaves on the left) and carries upward; an unpaired leaf waits."""
@@ -67,7 +67,7 @@ def _fold_push16(mut stack: InlineArray[Float32, MOE_FOLD_SLOTS], mut occ: Int, 
 
 
 @always_inline
-def _fold_drain16(stack: InlineArray[Float32, MOE_FOLD_SLOTS], occ: Int) -> Float32:
+def _fold_drain16(stack: Array[Float32, MOE_FOLD_SLOTS], occ: Int) -> Float32:
     """`gemm_identical._fold_drain`: the leftover slots, lowest level first;
     one slot performs no addition."""
     var have = False
@@ -89,7 +89,7 @@ def moe_contract_cell(a: FP, b: FP, k: Int) -> Float32:
     the contract's leaves and tree, the stored word `ftz(root)`."""
     var leaf = contract_leaf_size(k)
     var p_count = leaf_count(k, leaf)
-    var stack = InlineArray[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
+    var stack = Array[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
     var occ = 0
     for t in range(p_count):
         var pb = t * leaf

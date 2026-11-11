@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One-block integer scans the x_linear grid drivers share (moved out of
 x_linear/device.mojo by cgr-linear so x_linear/logcv_grid.mojo reaches them)."""
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -15,7 +15,7 @@ this adds an index transpose, scratch and a separate preparation cost.
 
 Caller owns nonoverlapping Q,Y,YT,norms,Z and retains them through sync.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, identical_sqrt
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel

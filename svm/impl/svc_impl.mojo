@@ -30,7 +30,7 @@ layout, not an arithmetic, and.
 
 from std.builtin.sort import sort
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

@@ -169,17 +169,17 @@ struct KDENativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def prepare(self, r: KDEPrepareRequest) raises -> Int:
         var kb = r.kernel.as_bytes()
         var mb = r.metric.as_bytes()
-        var a: InlineArray[Int, 4] = [r.train, r.weights, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr())]
-        var p: InlineArray[Int, 6] = [r.rows, r.features, Int(r.has_weights), Int(r.finite_tested), len(kb), len(mb)]
-        var f: InlineArray[Float64, 1] = [r.bandwidth]
+        var a: Array[Int, 4] = [r.train, r.weights, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr())]
+        var p: Array[Int, 6] = [r.rows, r.features, Int(r.has_weights), Int(r.finite_tested), len(kb), len(mb)]
+        var f: Array[Float64, 1] = [r.bandwidth]
         try:
             return native_descriptor_call_fixed(self.entry, KDE_PREPARE, a, p, f)
         finally:
@@ -188,18 +188,18 @@ struct KDENativeDriver(Copyable, Movable):
             _ = r
 
     def release(self, handle: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [handle]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, KDE_RELEASE, a, p, f)
 
     def query(self, r: KDEQueryRequest) raises -> Float64:
         var kb = r.kernel.as_bytes()
         var mb = r.metric.as_bytes()
         var total = List[Float64](length=1, fill=0.0)
-        var a: InlineArray[Int, 7] = [r.train, r.query, r.weights, r.dst, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr()), Int(total.unsafe_ptr())]
-        var p: InlineArray[Int, 7] = [r.train_rows, r.query_rows, r.features, Int(r.has_weights), Int(r.want_total), len(kb), len(mb)]
-        var f: InlineArray[Float64, 1] = [r.bandwidth]
+        var a: Array[Int, 7] = [r.train, r.query, r.weights, r.dst, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr()), Int(total.unsafe_ptr())]
+        var p: Array[Int, 7] = [r.train_rows, r.query_rows, r.features, Int(r.has_weights), Int(r.want_total), len(kb), len(mb)]
+        var f: Array[Float64, 1] = [r.bandwidth]
         try:
             _ = native_descriptor_call_fixed(self.entry, KDE_QUERY, a, p, f)
             return total[0]
@@ -213,9 +213,9 @@ struct KDENativeDriver(Copyable, Movable):
         var kb = r.kernel.as_bytes()
         var mb = r.metric.as_bytes()
         var total = List[Float64](length=1, fill=0.0)
-        var a: InlineArray[Int, 6] = [r.query, r.dst, r.status, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr()), Int(total.unsafe_ptr())]
-        var p: InlineArray[Int, 6] = [r.handle, r.rows, r.features, Int(r.want_total), len(kb), len(mb)]
-        var f: InlineArray[Float64, 1] = [r.bandwidth]
+        var a: Array[Int, 6] = [r.query, r.dst, r.status, Int(kb.unsafe_ptr()), Int(mb.unsafe_ptr()), Int(total.unsafe_ptr())]
+        var p: Array[Int, 6] = [r.handle, r.rows, r.features, Int(r.want_total), len(kb), len(mb)]
+        var f: Array[Float64, 1] = [r.bandwidth]
         try:
             _ = native_descriptor_call_fixed(self.entry, KDE_RESIDENT_QUERY, a, p, f)
             return total[0]

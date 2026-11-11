@@ -23,7 +23,7 @@ Codes are Int32 (Metal has no 64-bit atomics and none are needed; a
 buffer here is far below 2^30 elements, and a longer one is refused by
 name rather than silently truncated).
 """
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

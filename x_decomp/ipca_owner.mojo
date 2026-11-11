@@ -33,7 +33,7 @@ arrays were downloaded from, every step reads them where it read the
 upload, and the routes do not depend on where an operand came from, so the
 bits are the same. The host words are still published every step."""
 from std.math import sqrt
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from x_decomp.api import eigh_run
 from x_decomp.cells import F32Ptr
@@ -149,7 +149,7 @@ def _stack_rows[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, b
         var part = parts[p]
         var count = kit.r(part) * kit.c(part)
         if count:
-            memcpy(dest=dst.unsafe_offset(offset), src=kit.ptr(part), count=count)
+            unsafe_memcpy(dest=dst.unsafe_offset(offset), src=kit.ptr(part), count=count)
         offset += count
     return out
 
@@ -410,12 +410,12 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
         state.clear()
     else:
         ipca_free_state[D](state)
-    memcpy(dest=components_out, src=_words(comps[cur]), count=count * d)
-    memcpy(dest=singular_out, src=_words(sing[cur]), count=count)
-    memcpy(dest=mean_out, src=_words(mean[cur]), count=d)
-    memcpy(dest=var_out, src=_words(var_[cur]), count=d)
-    memcpy(dest=variance_out, src=_words(ev[cur]), count=count)
-    memcpy(dest=ratio_out, src=_words(evr[cur]), count=count)
+    unsafe_memcpy(dest=components_out, src=_words(comps[cur]), count=count * d)
+    unsafe_memcpy(dest=singular_out, src=_words(sing[cur]), count=count)
+    unsafe_memcpy(dest=mean_out, src=_words(mean[cur]), count=d)
+    unsafe_memcpy(dest=var_out, src=_words(var_[cur]), count=d)
+    unsafe_memcpy(dest=variance_out, src=_words(ev[cur]), count=count)
+    unsafe_memcpy(dest=ratio_out, src=_words(evr[cur]), count=count)
     # the state words stay alive past the copies that read their addresses
     _ = comps^
     _ = sing^

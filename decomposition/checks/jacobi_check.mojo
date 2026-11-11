@@ -42,7 +42,7 @@ in `_TOL_*` below and printed with every result, so a reader never has to
 guess what "passes" meant.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import sqrt
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -6,7 +6,7 @@ Host scheduling in mcd_fast calls the existing Apple GEMM launcher with
 main's per-candidate shapes. These kernels gather/center and reduce exactly
 as DKit does; they do not replace the matrix multiplication's arithmetic.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from x_decomp.cells import F32Ptr, I32Ptr, sub, mul, add
 
 

@@ -15,7 +15,7 @@ from core.fast_radix_sort import frs_exclusive_scan, frs_scan_blocks
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
@@ -150,8 +150,8 @@ from x_cluster.device_post import (
 )
 from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_SQDIFF, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
 from x_cluster.bgmm_kernels import bgmm_launch
-from std.gpu import WARP_SIZE
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu import WARP_SIZE
+from max.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word, mb_wdraw_cell
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from core.shared_slot import SharedSlot
@@ -3682,10 +3682,10 @@ def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int3
 def _xc_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):
     comptime assert XC_ASSIGN_ROWS == 2 or XC_ASSIGN_ROWS == 4, "MOJOLEARN_XCLUSTER_ROW_ASSIGN takes 2 or 4"
     var first=_tid()*XC_ASSIGN_ROWS
-    var best=InlineArray[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
-    var ids=InlineArray[Int32,XC_ASSIGN_ROWS](fill=Int32(0))
+    var best=Array[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
+    var ids=Array[Int32,XC_ASSIGN_ROWS](fill=Int32(0))
     for center in range(Int(k)):
-        var acc=InlineArray[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
+        var acc=Array[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
         for f in range(Int(d)):
             var cv=ftz(c[center*Int(d)+f])
             comptime for r in range(XC_ASSIGN_ROWS):

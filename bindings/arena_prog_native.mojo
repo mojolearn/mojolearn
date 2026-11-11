@@ -14,7 +14,7 @@
 # `_expansion_prep._Prog.run` and `_expansion_metrics._execute` step for
 # step: the same entries are called with the same words, so no bit moves.
 from bindings.native_array_storage import native_array_zeros
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.metrics_plan_admission import MetricArenaOwner
 from std.os import getenv
@@ -380,7 +380,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
                     src = Int(py=_entry_call(entries["x_prep_dev_put"], Python.tuple(classical_address(value), size)))
                     owned.append(src)
             if src < 0:
-                memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
+                unsafe_memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
                        src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size)
             _add_input(ins, off, off + size, src)
             if not is_inout:
@@ -651,7 +651,7 @@ def _metrics_execute[native_plan: Bool](
                         cache_state = _cache_state(cache, entries, context, "x_metrics")
                     src = _cached_slot_in(cache_state, value, entries, "x_metrics")
             if src < 0:
-                memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
+                unsafe_memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
                        src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size_k)
             _add_input(ins, off, off + size_k, src)
         var pa = Int(stages.unsafe_ptr())

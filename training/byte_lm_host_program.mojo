@@ -12,7 +12,7 @@ the committed flat lists (param, m, v, grad in `ByteConfig.offsets` order);
 of the session, one block copy per tensor piece, no arithmetic. A host
 module: no GPU binding imports it.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from sequence.ops import FP
 from sequence.exec import HostExec
 from autograd.ops_api import OpsSession, ops_session, OPS_HOST
@@ -55,9 +55,9 @@ def _move_host(mut s: OpsSession[HostExec], e: ByteHostProgram, flat: Int, part:
         var f = FP(unsafe_from_address=flat) + o[j]
         if n > 0:
             if into_program:
-                memcpy(dest=p, src=f, count=n)
+                unsafe_memcpy(dest=p, src=f, count=n)
             else:
-                memcpy(dest=f, src=p, count=n)
+                unsafe_memcpy(dest=f, src=p, count=n)
 
 
 def byte_host_program_load(mut e: ByteHostProgram, param: Int, m: Int, v: Int, completed: Int) raises:

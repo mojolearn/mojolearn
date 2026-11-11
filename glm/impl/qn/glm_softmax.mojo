@@ -82,7 +82,7 @@ kernel it stands beside, and the `C = 1` path keeps calling those
 launches are untouched.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 
 from core.column_stats import STATS_TPB

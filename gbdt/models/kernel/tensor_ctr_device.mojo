@@ -30,7 +30,7 @@ unchanged.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 
 from gbdt.models.tensor_ctr_apply import TENSOR_SPLIT_TAKE_BIN

@@ -165,7 +165,7 @@ def _gemm_micro(
     at: F32Ptr, bt: F32Ptr, kc: Int, np: Int, dst: F32Ptr, i: Int, j: Int, rows: Int, cols: Int, n: Int,
     first: Bool,
 ):
-    var acc = InlineArray[V, MR * NV](fill=V(0))
+    var acc = Array[V, MR * NV](fill=V(0))
     var full = rows == MR and cols == NR
     if not first:
         if full:
@@ -178,7 +178,7 @@ def _gemm_micro(
                     acc[r * NV + q // W][q % W] = dst.unsafe_load((i + r) * n + j + q)
     for p in range(kc):
         var brow = bt.unsafe_offset(p * np)
-        var y = InlineArray[V, NV](fill=V(0))
+        var y = Array[V, NV](fill=V(0))
         comptime for v in range(NV):
             y[v] = brow.unsafe_load[width=W](v * W)
         comptime for r in range(MR):
@@ -220,11 +220,11 @@ def rowdot_task(t: Int, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int):
     var i = i0
     while i < i1:
         var rows = min(RI, i1 - i)
-        var tot = InlineArray[Float32, RI](fill=Float32(0))
+        var tot = Array[Float32, RI](fill=Float32(0))
         for blk in range(nb):
             var p0 = blk * FOLD_BLOCK
             var p1 = min(k, p0 + FOLD_BLOCK)
-            var acc = InlineArray[Float32, RI](fill=Float32(0))
+            var acc = Array[Float32, RI](fill=Float32(0))
             if rows == RI:
                 for p in range(p0, p1):
                     var y = _ftz1(b.unsafe_load(p))
@@ -276,10 +276,10 @@ def sqdist_task(t: Int, a: F32Ptr, bt: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d:
     var j0 = 0
     while j0 < nb:
         var cols = min(NR, nb - j0)
-        var acc = InlineArray[V, MR * NV](fill=V(0))
+        var acc = Array[V, MR * NV](fill=V(0))
         for p in range(d):
             var brow = bt.unsafe_offset(p * nbp + j0)
-            var y = InlineArray[V, NV](fill=V(0))
+            var y = Array[V, NV](fill=V(0))
             comptime for v in range(NV):
                 y[v] = brow.unsafe_load[width=W](v * W)
             comptime for r in range(MR):

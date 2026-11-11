@@ -67,7 +67,7 @@ def resource_scope(records: List[Int], unit: Int) raises:
 def ownership(unit: Int) raises:
     var stats = List[Int](length=8,fill=0)
     var records = List[Int](length=15,fill=0)
-    var tags: InlineArray[Int,5] = [4,1,3,0,2]
+    var tags: Array[Int,5] = [4,1,3,0,2]
     try:
         for index in range(5):  # Fixed five resource records, independent of tensor values.
             records[index*3] = Int(stats.unsafe_ptr())

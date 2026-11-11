@@ -48,7 +48,7 @@ order. So the CPU column's `CausalLM.generate` is the same `Program.decode`
 as the GPUs'. Not differentiable.
 """
 from std.memory import bitcast, stack_allocation
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from sequence.ops import FP

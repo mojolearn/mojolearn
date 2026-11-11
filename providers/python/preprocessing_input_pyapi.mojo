@@ -16,7 +16,7 @@ from bindings.sequential_admission import _ordinary_torch, sequential_admit_valu
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once, array_slot_once
 from core.scaler_fit_impl import scaler_cast
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 struct ScalerInputSnapshot(Movable, Writable):

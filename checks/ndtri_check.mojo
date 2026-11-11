@@ -41,7 +41,7 @@ ndtr, x:   0 uniform [-6, 6]   1 [-1, 1]   2 the tails [-14, -5] and [5, 14]
      it where the accuracy bound might not).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erfc, exp, log, sqrt
 from std.memory import bitcast
 from std.os import getenv

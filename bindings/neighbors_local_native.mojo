@@ -19,7 +19,7 @@
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -209,7 +209,7 @@ def _f32_scalar(value: PythonObject) raises -> Float64:
 def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`X.copy()` of a C-order float32 array: a new Array of its shape."""
     var out = _out(py_call(_b().tuple, x.shape), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=_size(x))
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above

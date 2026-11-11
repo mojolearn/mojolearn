@@ -10,7 +10,7 @@
 # the caller's objects. The score tables use the base binding's
 # `row_means_f64` / `row_stds_f64` and the permutations the same counter
 # draws, so every result is unchanged.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.admitted_convert import admitted_convert_vector
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
@@ -676,18 +676,18 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
         _ = py_call(sizes.append, PythonObject(Int(offsets[g + 1]) - Int(offsets[g])))
     var rows_sorted = msel_new(n, "<i8", context)
     var inverse = msel_new(n, "<i8", context)
-    memcpy(dest=msel_p64(rows_sorted), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_ord), count=n)
+    unsafe_memcpy(dest=msel_p64(rows_sorted), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_ord), count=n)
     _ = rows_sorted  # keep the Python object alive through the native call above
-    memcpy(dest=msel_p64(inverse), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_inv), count=n)
+    unsafe_memcpy(dest=msel_p64(inverse), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_inv), count=n)
     _ = inverse  # keep the Python object alive through the native call above
     var ord32 = msel_new(n, "<i4", context)
     var inv32 = msel_new(n, "<i4", context)
     var off32 = msel_new(m + 1, "<i4", context)
-    memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(ord32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * w_ord32), count=n)
+    unsafe_memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(ord32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * w_ord32), count=n)
     _ = ord32  # keep the Python object alive through the native copy above
-    memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(inv32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * w_inv32), count=n)
+    unsafe_memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(inv32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * w_inv32), count=n)
     _ = inv32  # keep the Python object alive through the native copy above
-    memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(off32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=m + 1)
+    unsafe_memcpy(dest=FAMILY_I32P(unsafe_from_address=msel_addr(off32)), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=m + 1)
     _ = off32  # keep the Python object alive through the native copy above
     # Both raw source addresses still point into this arena after the final
     # offset read. Allocating the result Arrays must not release its storage.
@@ -740,7 +740,7 @@ def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int
     var arena = _reg_run(prog, PythonObject(None), context)
     var idx = msel_new(n, "<i8", context)
     if n > 0:
-        memcpy(dest=msel_p64(idx), src=FAMILY_I64P(unsafe_from_address=_arena_base(arena) + 4 * out), count=n)
+        unsafe_memcpy(dest=msel_p64(idx), src=FAMILY_I64P(unsafe_from_address=_arena_base(arena) + 4 * out), count=n)
     _ = idx  # keep the Python object alive through the native copy above
     # The copied address points into this arena: keep it through the copy.
     _ = arena^

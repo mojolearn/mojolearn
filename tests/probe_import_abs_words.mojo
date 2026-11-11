@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Testing-only probe of the production abs helper, including its FTZ boundary.
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import bitcast
 from autograd.import_ops import _abs
 from checks.numerics import ftz

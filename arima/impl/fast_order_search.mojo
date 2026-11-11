@@ -46,7 +46,7 @@ vendor, and the host column takes the same formula
 (`bindings/hotpath_helpers.mojo::ic_running_min_f32_host_binding`).
 """
 from std.math import inf, isfinite
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer

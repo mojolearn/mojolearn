@@ -401,7 +401,7 @@ def is_int_buf(kind):
 
 def device():
     s = [HDR, GEN, '"""The neighbors lane\'s GPU drivers (see x_neighbors/gen.py)."""\n',
-         "from std.gpu import block_idx, block_dim, thread_idx\n",
+         "from max.gpu import block_idx, block_dim, thread_idx\n",
          "from core.device_plan import DevicePlan\n",
          "from core.neural_context import process_ctx\n",
          "from max.gpu.host import DeviceBuffer, DeviceContext\n",

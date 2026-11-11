@@ -41,7 +41,7 @@ k-NN). A k-NN entry that leaves its result on the device removes both.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 from neighbors.estimator import knn_search_resident

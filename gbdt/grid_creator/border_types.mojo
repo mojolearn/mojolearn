@@ -37,7 +37,7 @@ sampled path; the searches themselves are the old host arithmetic
 (`portable_log64` is `sf64_log` statement for statement, and IEEE
 add/mul/div are what soft binary64 returns).
 """
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import ftz, pinned_mul_f32, portable_divf
 from checks.soft_f64 import (

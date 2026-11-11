@@ -632,7 +632,7 @@ def _dot_coop(a: FP, b: FP, n: Int) -> Float32:
     fma chain from 0 (coordinates lane, lane + 32, ...), then `_wsum`'s
     butterfly, whose value in every lane is the pairwise tree over the
     lanes taken in bit-reversed order (float addition commutes)."""
-    var stack = InlineArray[Float32, 5](fill=Float32(0.0))
+    var stack = Array[Float32, 5](fill=Float32(0.0))
     var out = Float32(0.0)
     for c in range(COOP_PW):
         var s = Float32(0.0)
@@ -681,8 +681,8 @@ def _coop_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
     for j in range(P):
         st(g, j, Float32(0.0))
     var sse = Float32(0.0)
-    var acc = InlineArray[Float32, COOP_JB](fill=Float32(0.0))
-    var stack = InlineArray[Float32, 5 * COOP_JB](fill=Float32(0.0))
+    var acc = Array[Float32, COOP_JB](fill=Float32(0.0))
+    var stack = Array[Float32, 5 * COOP_JB](fill=Float32(0.0))
     var j0 = 0
     while j0 < P + 1:
         var jn = P + 1 - j0
@@ -748,7 +748,7 @@ def _coop_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
                             sse = add(sse, v)
         j0 += jn
     # the priors: each lane folds its own coordinates' terms, then the butterfly
-    var fstack = InlineArray[Float32, 5](fill=Float32(0.0))
+    var fstack = Array[Float32, 5](fill=Float32(0.0))
     var f = Float32(0.0)
     for c in range(COOP_PW):
         var fc = Float32(0.0)

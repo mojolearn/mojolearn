@@ -59,7 +59,7 @@ itself before any device number was consulted. With the fix it is below
 reported objective is sklearn's `LinearSVC` objective divided by `C n`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_mul_add
 

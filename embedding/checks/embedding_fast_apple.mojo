@@ -23,7 +23,7 @@ thread (`emb_gather4_kernel`), a quarter of the threads for the same
 coalesced words.
 """
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext

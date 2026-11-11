@@ -7,7 +7,7 @@ compute `cagra_prune` / `cagra_reverse_merge` (the host column's functions)
 integer for integer (gap-fails2, 2026-10-02: the opt-in host prune and its
 64-entry bound are gone)."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
@@ -309,7 +309,7 @@ def prune_kernel[KMAX: Int](n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned
     # representatives: sorted position p holds rank r; r represents its id
     # when eligible and least (cnt, rank) among its id's eligible entries
     comptime PER = KMAX // PRUNE_TPB if KMAX >= PRUNE_TPB else 1
-    var sel = InlineArray[UInt64, PER](fill=U64_MAX)
+    var sel = Array[UInt64, PER](fill=U64_MAX)
     for j in range(PER):
         var pos = t + j * PRUNE_TPB
         if pos < k:

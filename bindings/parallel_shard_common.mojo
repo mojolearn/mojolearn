@@ -24,7 +24,7 @@ PLACED at the true offset. Inert at one device.
 No floating-point value is computed here: copies only.
 """
 from std.ffi import external_call
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
@@ -489,7 +489,7 @@ def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) ra
     var out = shard_array(dtype, py_call(b.tuple, shape), (hi - lo) * inner, context)
     var bytes = (hi - lo) * inner * item[1]
     if bytes > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
                + lo * inner * item[1],
                count=bytes)
@@ -506,7 +506,7 @@ def shard_row_vector(source: PythonObject, row: Int, context: PythonObject) rais
     var item = shard_item(dtype)
     var out = shard_array(dtype, Python.tuple(width), width, context)
     if width > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
                + row * width * item[1],
                count=width * item[1])
@@ -550,7 +550,7 @@ def shard_join_rows(arrays: PythonObject, total: Int, context: PythonObject) rai
         if cursor + rows > total:
             raise Error("ValueError: shard workers returned too many rows")
         if bytes > 0:
-            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
                    + cursor * inner * item[1],
                    src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
                    count=bytes)

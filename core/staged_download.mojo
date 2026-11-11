@@ -13,7 +13,7 @@ every name, so `from training.checks.train_loop import download_f32_into`
 still resolves. The stage pool keeps its `_Global` slot name, so the
 process still holds ONE pool per numeric tier. Copies only: no bit moves.
 """
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -249,7 +249,7 @@ def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Floa
     copy-out over host tasks is gone (no CPU threads in GPU code, the
     no_host_routes hook). The pipeline still overlaps this copy with the
     copy engine filling the other stage. Copies only: no bit moves."""
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
     if scan:
         return _first_nonfinite(dst, n)
     return -1

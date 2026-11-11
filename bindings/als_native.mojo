@@ -10,7 +10,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -114,7 +114,7 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             var recorded = max(min(count, slots), 0)
             var values = List[Float64](length=recorded, fill=0.0)
             if recorded > 0:
-                memcpy(dest=values.unsafe_ptr(),
+                unsafe_memcpy(dest=values.unsafe_ptr(),
                        src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(losses_store))),
                        count=recorded)
             _ = losses_store  # keep the Python object alive through the copy above
@@ -168,10 +168,10 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
     var labels = _typed(c, "<i4", "i", 4, context)
     var scores = _typed(c, "<f4", "f", 4, context)
     if c:
-        memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)),
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)),
                src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=order_address), count=c)
         _ = labels  # keep the Python object alive through the native call above
-        memcpy(dest=DecompF32(unsafe_from_address=Int(py=scores._addr)),
+        unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=scores._addr)),
                src=DecompF32(unsafe_from_address=Int(py=kit.address(values))), count=c)
         _ = scores  # keep the Python object alive through the native call above
         _ = values  # keep the Python object alive through the native call above

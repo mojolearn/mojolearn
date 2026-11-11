@@ -6,7 +6,7 @@
 # Numerical exports still use the existing packed CPython extension ABI; a
 # descriptor-only ANN provider remains explicit migration work. No arithmetic
 # or vendor identity lane is introduced by these boundary repairs.
-from std.memory import memcpy, MutPointer
+from std.memory import unsafe_memcpy, MutPointer
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
 from bindings.admitted_finite_wording import admitted_finite_wording
@@ -631,7 +631,7 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         dataset = x_snapshot.keep
     else:
         var flat = _ann_empty(n * d, "<f4", context)
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flat))),
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flat))),
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_snapshot.source.addr), count=n * d)
         _ = x_snapshot  # the source storage stays alive through the copy above
         dataset = _ann_view(flat, Python.tuple(n, d), context)

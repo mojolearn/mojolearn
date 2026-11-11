@@ -40,8 +40,8 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

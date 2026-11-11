@@ -20,7 +20,7 @@ it to H[l], H[l + 32], ... `cells.lasso_row`'s sequence otherwise
 same stop rule), so the iterates are its words. k <= LG_MAXK, else the old
 kernel.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

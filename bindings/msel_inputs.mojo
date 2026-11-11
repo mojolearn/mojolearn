@@ -3,7 +3,7 @@
 # Never ask caller objects for shape, len, __array__, or DLPack protocols.
 from bindings.native_array_storage import native_array_from_bytes, native_array_from_values
 from bindings.native_loaded_module import native_loaded_module
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.msel_column_rows import msel_block_columns_to_rows
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get

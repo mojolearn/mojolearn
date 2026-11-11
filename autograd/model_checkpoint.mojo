@@ -42,7 +42,7 @@ and read here, host side (a checkpoint is a host file). No arithmetic on the
 values: they move by memcpy and by their bits. The Python doors (argument
 unpacking and results) are in model_checkpoint_pyapi.mojo.
 """
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.model import (
@@ -113,13 +113,13 @@ def _check_layout(ck: Checkpoint, offsets: List[Int], names: List[String], path:
 def _floats_of(p: FP, n: Int) -> List[Float32]:
     var out = List[Float32](length=n, fill=Float32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=p, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=p, count=n)
     return out^
 
 
 def _put_floats(dst: FP, src: List[Float32]):
     if len(src) > 0:
-        memcpy(dest=dst, src=src.unsafe_ptr(), count=len(src))
+        unsafe_memcpy(dest=dst, src=src.unsafe_ptr(), count=len(src))
 
 
 # ---------------------------------------------------------------- Sequential save
@@ -300,7 +300,7 @@ def model_save_checkpoint(
         var sa = addrs[3]
         if sa == 0:
             raise Error("model_save_checkpoint: null training-state buffer")
-        memcpy(dest=state.unsafe_ptr(), src=IP64(unsafe_from_address=sa), count=FIT_STATE_WORDS)
+        unsafe_memcpy(dest=state.unsafe_ptr(), src=IP64(unsafe_from_address=sa), count=FIT_STATE_WORDS)
     var opt = ip[3]
     var flags = ip[4]
     ck.t = Int(state[FS_STEP])
@@ -421,10 +421,10 @@ def model_load_checkpoint(file: String, addrs: List[Int]) raises -> Int:
     if addrs[2] != 0:
         _put_floats(fptr_word(addrs[2], "v"), ck.v_state)
     if addrs[3] != 0:
-        memcpy(dest=IP64(unsafe_from_address=addrs[3]), src=r.state.unsafe_ptr(), count=FIT_STATE_WORDS)
+        unsafe_memcpy(dest=IP64(unsafe_from_address=addrs[3]), src=r.state.unsafe_ptr(), count=FIT_STATE_WORDS)
     if addrs[4] != 0 and r.n_run > 0:
         var curve = fptr_word(addrs[4], "loss_curve")
-        memcpy(dest=curve, src=ck.ext_floats.unsafe_ptr() + r.curve_at, count=r.n_run)
+        unsafe_memcpy(dest=curve, src=ck.ext_floats.unsafe_ptr() + r.curve_at, count=r.n_run)
     if addrs[5] != 0 and r.k > 0:
         var bp = BP(unsafe_from_address=addrs[5])
         for j in range(r.k):  # driver-loop: over classes

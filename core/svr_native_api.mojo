@@ -152,35 +152,35 @@ struct SvrNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def fit(self, r: SvrFitRequest) raises -> Int:
-        var a: InlineArray[Int, 7] = [r.x, r.target, r.dual, r.support, r.vectors, r.info, r.bounds]
-        var p: InlineArray[Int, 12] = [r.rows, r.features, r.kernel, r.max_iter,
+        var a: Array[Int, 7] = [r.x, r.target, r.dual, r.support, r.vectors, r.info, r.bounds]
+        var p: Array[Int, 12] = [r.rows, r.features, r.kernel, r.max_iter,
             r.nochange_steps, r.degree, r.base_id, r.base_rows, r.index_id,
             Int(r.device_form), Int(r.scale_gamma), Int(r.candidate)]
-        var f: InlineArray[Float64, 5] = [r.gamma, r.c, r.epsilon, r.tolerance, r.coef0]
+        var f: Array[Float64, 5] = [r.gamma, r.c, r.epsilon, r.tolerance, r.coef0]
         return native_descriptor_call_fixed(self.entry, SVR_NATIVE_FIT, a, p, f)
 
     def query(self, r: SvrQueryRequest, resident: Bool) raises -> Int:
-        var a: InlineArray[Int, 5] = [r.x, r.dual, r.vectors, r.dst, r.status]
-        var p: InlineArray[Int, 10] = [r.rows, r.features, r.supports, r.kernel,
+        var a: Array[Int, 5] = [r.x, r.dual, r.vectors, r.dst, r.status]
+        var p: Array[Int, 10] = [r.rows, r.features, r.supports, r.kernel,
             r.degree, r.lease, r.slot, r.base_id, r.base_rows, r.index_id]
-        var f: InlineArray[Float64, 4] = [r.bias, r.gamma, r.cache_mib, r.coef0]
+        var f: Array[Float64, 4] = [r.bias, r.gamma, r.cache_mib, r.coef0]
         return native_descriptor_call_fixed(self.entry,
             SVR_NATIVE_RESIDENT if resident else SVR_NATIVE_PREDICT, a, p, f)
 
     def lease_open(self) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, SVR_NATIVE_LEASE_OPEN, a, p, f)
 
     def lease_close(self, handle: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [handle]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, SVR_NATIVE_LEASE_CLOSE, a, p, f)
 
     def device(self) raises -> Bool:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, SVR_NATIVE_DEVICE, a, p, f) != 0

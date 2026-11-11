@@ -16,7 +16,7 @@ upload. Here the weights are uploaded once and checked where they live:
 The two flags are order-free (every writer stores the same word). Two Int32
 and one 8-byte word are read back, never the weights.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.abs_sum_blocked import device_abs_sum_blocked

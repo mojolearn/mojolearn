@@ -7,7 +7,7 @@ sabotage switches) and the chunked LM head's GEMM backward
 (chunked_lm_head_v2_gemm_backward_into and its two chunk kernels, moved
 unchanged out of training/chunked_lm_head_v2.mojo)."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from max.gpu.host import DeviceBuffer, DeviceContext
 from training.neural_identical_experiments import IDN_CE_GRAD_FUSED

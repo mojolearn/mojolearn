@@ -30,7 +30,7 @@
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hotpath_impl import HpStat
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -1178,7 +1178,7 @@ def _clf_predict_proba(model: PythonObject, binding: PythonObject, x_source: Pyt
     for i in range(len(n_classes)):  # driver-loop: over probability block slices per output
         var count = Int(py=n_classes[i])
         var block = family_array(Python.tuple(nq, count), "<f4", context)
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(block))),
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(block))),
                src=FAMILY_F32P(unsafe_from_address=src + 4 * off), count=nq * count)
         _ = block  # keep the Python object alive through the native call above
         _ = proba  # keep the Python object alive through the native call above

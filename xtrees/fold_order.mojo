@@ -26,7 +26,7 @@ column at once: only same bits across hardware matter.
 
 This module imports nothing from xtrees/ops.mojo, so ops.mojo and the device
 files may both import it."""
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.soft_f64 import sf64_add

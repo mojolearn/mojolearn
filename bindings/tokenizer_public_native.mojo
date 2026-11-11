@@ -7,7 +7,7 @@ from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
 from std.ffi import c_int
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.cpython_table import cpython_table
@@ -298,7 +298,7 @@ def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool 
             raise failure^
         var text_start = len(arena)
         arena.resize(text_start + text_size, 0)
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(arena.unsafe_ptr()) + text_start),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(arena.unsafe_ptr()) + text_start),
             src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=text_address), count=text_size)
         _ = value
         return text_size

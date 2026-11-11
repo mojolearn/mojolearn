@@ -15,7 +15,7 @@ unbounded grid (Apple aborts long command buffers). The chunking moves no
 bit: every unit's chain is independent of it (xtrees/shap.mojo)."""
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -313,7 +313,7 @@ def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, 
                 buf: F32P, phi: F32P):
     # P10: independent output planes, no skipped contributions or changed fold.
     var first = Int(block_idx.x) * TPB * AFT_SHAP_FOLD_ITEMS + Int(thread_idx.x)
-    @parameter
+    @__parameter
     for tile in range(AFT_SHAP_FOLD_ITEMS):
         var u = first + tile * TPB
         if u < Int(units):

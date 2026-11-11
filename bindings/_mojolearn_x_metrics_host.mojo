@@ -3,6 +3,9 @@
 """CPU binding for `_mojolearn_x_metrics`. HOST ONLY: the same units as the
 device, run in a loop on the caller's arena (x_metrics/host/program.mojo), with
 the GPU binding's export names and address contract."""
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_METRICS
+from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
+from x_metrics.descriptor_host import metrics_program_host_v1
 from core.experiment_guards_base import BASE_GUARDS_OK
 from x_metrics.descriptor_host import METRICS_PROGRAM_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -101,6 +104,15 @@ def x_metrics_vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = METRICS_PROGRAM_HOST_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
+    linear_table_publish[LINEAR_TABLE_METRICS](key,
+        Int(api[].entries.unsafe_ptr()), [String(METRICS_PROGRAM_ABI)], [MP_OPERATION_COUNT], [metrics_program_host_v1])
+
 def build__mojolearn_x_metrics_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
@@ -117,6 +129,8 @@ def build__mojolearn_x_metrics_host() -> PythonObject:
         m.def_function[x_metrics_vendor_binding]("x_metrics_vendor")
         # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_metrics_host: ", e))

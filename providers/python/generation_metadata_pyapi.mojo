@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_array_snapshot, generation_buffer_view
 from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -612,7 +612,7 @@ struct GenerationEngineAdmission(Movable):
             if self.native.layers[i].kind == 2 and self.native.layers[i].completed:
                 var heads = self.snapshot.layers[i].words.heads
                 var report = generation_array([self.native.batch, heads, 64, 128])
-                memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=report._addr)),
+                unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=report._addr)),
                     src=self.native.layers[i].report.unsafe_ptr(), count=self.native.layers[i].report_size)
                 py_setitem(self.snapshot.layers[i].block, "h_last_", report)
             if self.native.layers[i].visited and self.native.layers[i].profile_admitted and self.snapshot.layers[i].profile is not None:

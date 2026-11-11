@@ -32,7 +32,7 @@ The test is on BITS (`|bits| >= 0x7F800000`), never a float compare
 constant 1 into its own input's word: no atomics, no order, no 64-bit word
 (Apple has no 64-bit atomic). Numerics: none; no output bit changes.
 """
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 

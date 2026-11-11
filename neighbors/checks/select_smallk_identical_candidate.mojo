@@ -59,11 +59,11 @@ chain): `warpbound_guard`, `warpbound_guard1` (refresh every batch) and
 `_smallk_warpbound_refresh_due`.
 """
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from neighbors.checks.lane_minimum import shuffle_min_u64
-from std.gpu.primitives.warp import shuffle_xor, vote
+from max.gpu.primitives.warp import shuffle_xor, vote
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

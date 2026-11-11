@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed requests around the existing SVR device-X, short and resident routes."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from core.device_query_x import QueryFold
@@ -44,7 +44,7 @@ struct SvrDeviceKernels(SvrNativeKernels):
         if r.candidate and fitted.finite_word != 0:
             raise Error("Input X contains NaN or infinity (SVR).")
         copy_f32(fitted.dual_coefs.unsafe_ptr(), dp, fitted.n_support)
-        memcpy(dest=sip, src=fitted.support_idx.unsafe_ptr(), count=fitted.n_support)
+        unsafe_memcpy(dest=sip, src=fitted.support_idx.unsafe_ptr(), count=fitted.n_support)
         copy_f32(fitted.support_matrix.unsafe_ptr(), smp, fitted.n_support * r.features)
         ip[0] = Float64(fitted.b)
         ip[1] = Float64(fitted.n_support)

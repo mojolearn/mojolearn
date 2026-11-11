@@ -15,7 +15,7 @@ into the second half at `i + n_rows`, which shares the kernel row). FAST
 arithmetic: the natural j order, a plain fused multiply-add.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -67,7 +67,7 @@ def fused_update_f_kernel[KPAD: Int, RBF: Bool](
     var tda = stack_allocation[
         ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var xr = InlineArray[Float32, KPAD](fill=0.0)
+    var xr = Array[Float32, KPAD](fill=0.0)
     var ni = Float32(0.0)
     if active:
         comptime for c in range(KPAD):

@@ -6,7 +6,7 @@
     "e97482b20b",
     "769351665c"
   ],
-  "execution": "Root compiled and ran all actual CPU15/GPU17 fixtures successfully at 0f8a2bfdef on the local CPU and Apple Metal GPU. Both compile and run exit codes are zero. Pure60 had already passed and were not rerun. Original actual builds exited 139; those failures and the standalone compiler reproducer remain preserved.",
+  "execution": "Original nested fixture layout restored for Mojo1.2/MAX26.7; full CPU15/GPU17 suite compilation/execution pending. Previous Mojo1.0 flat-layout acceptance is retained under historical_execution_mojo_1_0.",
   "coverage": {
     "0": "actual provider mode/vendor/fit-partial-query-resident capabilities",
     "1-2": "original 6x3, count2, fit batch3; whiten false/true; state, query and inverse",
@@ -80,7 +80,7 @@
     "compiler": "Mojo1.0.0(ed45d567)",
     "max": "26.5.0",
     "original_fixtures_changed": true,
-    "workaround": "Narrow owner-authorized test-layout exception only: IPCATestRoom uses six named flat Mojo List fields. No product, algorithm, compiler, toolchain or Python fallback changes.",
+    "workaround": "Removed after owner-approved toolchain upgrade; original nested room restored without algorithm/assertion changes.",
     "accepted_distinct_evidence": "Pure60 previously passed. The approved test-layout refactor now compiles and passes CPU15/GPU17; see runtime_evidence. Thin host fit/partial and public boundary compilation remain distinct evidence. Compiler reproducer remains failing and unchanged.",
     "authorization": {
       "date": "2026-11-10",
@@ -89,9 +89,11 @@
       "broader_workaround_permission": false
     },
     "minimal_reproducer_and_controls_unchanged": true,
-    "upstream_status": "Confirmed original standalone compiler crash remains open; draft not submitted. This layout change is not a compiler fix.",
+    "upstream_status": "Resolved upstream in standalone reproduction on Mojo 1.2.0 (2016d0cd)/MAX26.7.0; original nested fixture layout restored. Full restored fixtures await root compile/execution.",
     "original_fixture_archive": "E/pca-native-tests/ipca-before-authorized-flat-room.mojo",
-    "refactor_evidence": "E/pca-native-tests/ipca-flat-room-static.json"
+    "refactor_evidence": "E/pca-native-tests/ipca-flat-room-static.json",
+    "historical_mojo_1_0_upstream_status": "Confirmed original standalone compiler crash remains open; draft not submitted. This layout change is not a compiler fix.",
+    "historical_test_layout_exception": "Narrow owner-authorized test-layout exception only: IPCATestRoom uses six named flat Mojo List fields. No product, algorithm, compiler, toolchain or Python fallback changes."
   },
   "removed": "Only the test room nested container and its fixed six-field indexing loops; all six buffers, canaries and checks retained under named fields. No Python tests or product code removed.",
   "runtime_evidence": "E/ipca-native-execution-accepted-results.json",
@@ -102,5 +104,16 @@
     "NVIDIA and AMD not executed",
     "No performance timing or cross-device identity claim",
     "No shared-context concurrent submission clearance"
-  ]
+  ],
+  "toolchain_upgrade": {
+    "date": "2026-11-11",
+    "source": "/Users/andrewhendel/mojolearn-evidence/modular-check-20261111/SUMMARY.md",
+    "minimal_reproduction": "13_immutable_nested_capture compile exit0 on Mojo1.2; old139 and controls retained",
+    "removed": "Six named-buffer test-only exception; restored original IPCATestRoom nested List source bytes",
+    "cpu_cases": 15,
+    "gpu_cases": 17,
+    "input_reference_assertion_changes": false,
+    "restored_suite_execution": "pending; previous flat-layout CPU15/GPU17 acceptance is historical evidence only"
+  },
+  "historical_execution_mojo_1_0": "Root compiled and ran all actual CPU15/GPU17 fixtures successfully at 0f8a2bfdef on the local CPU and Apple Metal GPU. Both compile and run exit codes are zero. Pure60 had already passed and were not rerun. Original actual builds exited 139; those failures and the standalone compiler reproducer remain preserved."
 }

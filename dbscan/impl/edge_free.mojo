@@ -85,7 +85,7 @@ O(E). A fit whose ranges fit one CSR each keeps the CSR route unchanged.
 
 from std.atomic import Atomic, Ordering
 from std.bit import count_trailing_zeros
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext

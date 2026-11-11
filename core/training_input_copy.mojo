@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native byte-preserving admission copy; no arithmetic conversion is performed.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.host_helpers_impl import all_finite_f32
 
 
@@ -18,7 +18,7 @@ def training_copy_words32(source: Int, target: Int, shape: List[Int], strides: L
     if contiguous:
         # Ordinary buffers may start at an unaligned byte offset. Copy bytes
         # without inventing an alignment guarantee for the admitted source.
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target),
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=target),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source), count=count * 4)
     else:
         for i in range(count):  # cpu-route: byte-preserving strided input admission

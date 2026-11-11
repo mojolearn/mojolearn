@@ -13,7 +13,7 @@
 # `log_loss_options`), rebuilt here with the same arena layout, the same
 # stage records in the same order and the same declared outputs, run by the
 # shared runner. Same kernels, same programs: the bits do not move.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricArenaOwner
@@ -514,7 +514,7 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = output  # keep the Python object alive through the native calls above
     if average is None:
         var values = family_array(Python.tuple(width), "<f4", context)
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(values))),
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(values))),
                src=words + metric * width, count=width)
         _ = values  # keep the Python object alive through the native call above
         _ = output  # keep the Python object alive through the native call above

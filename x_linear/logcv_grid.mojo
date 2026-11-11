@@ -27,7 +27,7 @@ the same statements on the same rows in the same order: the same words.
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight, lcv_caller_folds, LCV_ROLES_AFTER
 from x_linear.cv_roles import cv_train, cv_test
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, ldi, i2f, fa, fd
 from std.memory import stack_allocation

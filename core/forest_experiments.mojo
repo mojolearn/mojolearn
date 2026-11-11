@@ -45,7 +45,7 @@ def chunk_add(a: Float32, b: Float32) -> Float32:
     return ftz(ftz(a) + ftz(b))
 
 @always_inline
-def forest_chunk_sum(mut values: InlineArray[Float32, FOREST_CHUNK]) -> Float32:
+def forest_chunk_sum(mut values: Array[Float32, FOREST_CHUNK]) -> Float32:
     var stride = 1
     while stride < FOREST_CHUNK:
         var i = 0

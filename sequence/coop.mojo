@@ -13,8 +13,8 @@ stores. Launched by `DeviceExec` (`coop_kernel`, one simdgroup per cell)
 for the ops below on an Apple GPU, and (nr-small D1/D11, IDENTICAL,
 `MOJOLEARN_IDN_SEQ_COOP_NVAMD`) on NVIDIA and AMD; the host runs the
 one-thread op, the same chain."""
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import shuffle_idx
 from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 
 from sequence.coop_lane import COOP_CELL_W, coop_src
@@ -38,7 +38,7 @@ from sequence.vecar import pow2_scale
 from sequence.layernorm import div as ln_div
 from sequence.layernorm import LN_ROW_WARP, LN_RW_LANES, ln_bwd_g
 from sequence.layernorm import ln_bwd_x_rw_one_pass, ln_fwd_rw_one_pass, ln_one_pass_on
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
 from checks.numerics import ftz, identical_rsqrt
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
 from sequence.ops import OP_AF_RMEAN, OP_AF_ROW

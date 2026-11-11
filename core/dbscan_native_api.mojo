@@ -226,51 +226,51 @@ struct DBSCANNativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: DBSCANFitRequest) raises -> Int:
-        var a: InlineArray[Int, 4] = [r.x, r.labels, r.weights, r.core]
-        var p: InlineArray[Int, 7] = [r.rows, r.features, r.min_samples, r.budget_mb, r.max_iter, r.method, r.metric]
-        var f: InlineArray[Float64, 1] = [r.eps]
+        var a: Array[Int, 4] = [r.x, r.labels, r.weights, r.core]
+        var p: Array[Int, 7] = [r.rows, r.features, r.min_samples, r.budget_mb, r.max_iter, r.method, r.metric]
+        var f: Array[Float64, 1] = [r.eps]
         return native_descriptor_call_fixed(self.entry, DBSCAN_FIT, a, p, f)
 
     def core_count(self, r: DBSCANCoreRequest) raises -> Int:
-        var a: InlineArray[Int, 3] = [r.x, r.labels, r.core]
-        var p: InlineArray[Int, 2] = [r.rows, r.features]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.x, r.labels, r.core]
+        var p: Array[Int, 2] = [r.rows, r.features]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, DBSCAN_CORE_COUNT, a, p, f)
 
     def core_gather(self, r: DBSCANGatherRequest) raises -> Int:
-        var a: InlineArray[Int, 6] = [r.x, r.labels, r.core, r.indices, r.components, r.core_labels]
-        var p: InlineArray[Int, 3] = [r.rows, r.features, r.count]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 6] = [r.x, r.labels, r.core, r.indices, r.components, r.core_labels]
+        var p: Array[Int, 3] = [r.rows, r.features, r.count]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, DBSCAN_CORE_GATHER, a, p, f)
 
     def prepare(self, r: DBSCANReferenceRequest) raises -> Int:
-        var a: InlineArray[Int, 3] = [r.refs, r.keys, r.labels]
-        var p: InlineArray[Int, 3] = [r.rows, r.features, r.metric]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 3] = [r.refs, r.keys, r.labels]
+        var p: Array[Int, 3] = [r.rows, r.features, r.metric]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, DBSCAN_PREPARE, a, p, f)
 
     def release(self, handle: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [handle]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, DBSCAN_RELEASE, a, p, f)
 
     def query(self, r: DBSCANQueryRequest) raises -> Int:
-        var a: InlineArray[Int, 6] = [r.refs, r.keys, r.labels, r.query, r.dst, r.chosen]
-        var p: InlineArray[Int, 5] = [r.rows, r.queries, r.features, r.metric, Int(r.has_threshold)]
-        var f: InlineArray[Float64, 1] = [r.eps]
+        var a: Array[Int, 6] = [r.refs, r.keys, r.labels, r.query, r.dst, r.chosen]
+        var p: Array[Int, 5] = [r.rows, r.queries, r.features, r.metric, Int(r.has_threshold)]
+        var f: Array[Float64, 1] = [r.eps]
         return native_descriptor_call_fixed(self.entry, DBSCAN_QUERY, a, p, f)
 
     def resident(self, r: DBSCANResidentQuery) raises -> Int:
-        var a: InlineArray[Int, 2] = [r.query, r.dst]
-        var p: InlineArray[Int, 5] = [r.handle, r.queries, r.features, r.metric, Int(r.has_threshold)]
-        var f: InlineArray[Float64, 1] = [r.eps]
+        var a: Array[Int, 2] = [r.query, r.dst]
+        var p: Array[Int, 5] = [r.handle, r.queries, r.features, r.metric, Int(r.has_threshold)]
+        var f: Array[Float64, 1] = [r.eps]
         return native_descriptor_call_fixed(self.entry, DBSCAN_RESIDENT_QUERY, a, p, f)
 
 

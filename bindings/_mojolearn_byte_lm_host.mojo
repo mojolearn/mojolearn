@@ -10,7 +10,7 @@ The loss comes back as its IEEE-754 bit pattern, an int, so the gate compares
 bytes and nothing on the Python side rounds it.
 """
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module

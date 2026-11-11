@@ -20,7 +20,7 @@ from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
 from core.weight_epoch import weight_epoch_bump
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.shared_slot import SharedSlot
 
 
@@ -330,7 +330,7 @@ def generation_copy(value: PythonObject) raises -> PythonObject:
     var out = generation_array(dims, code)
     var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
     var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=captured._addr))
-    memcpy(dest=dst, src=src, count=Int(py=captured.nbytes))
+    unsafe_memcpy(dest=dst, src=src, count=Int(py=captured.nbytes))
     _ = captured
     return out
 

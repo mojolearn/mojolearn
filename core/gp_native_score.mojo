@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native GP score storage and the existing R² program's distinct GP policy."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.hostptr import f32_ptr
 from core.admitted_convert import admitted_convert
 from core.cast_in import CAST_KIND_FLOAT
@@ -41,7 +41,7 @@ struct GPRScoreProgram(Movable):
         if count == 0:
             return
         if slot < 0:
-            memcpy(dest=self.arena.unsafe_ptr() + offset, src=f32_ptr(source), count=count)
+            unsafe_memcpy(dest=self.arena.unsafe_ptr() + offset, src=f32_ptr(source), count=count)
         # Same adjacent host-range coalescing as the arena boundary runner.
         var length = len(self.inputs)
         if slot < 0 and length >= 3 and self.inputs[length - 1] < 0 and Int(self.inputs[length - 2]) == offset:

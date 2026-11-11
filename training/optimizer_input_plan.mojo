@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native optimizer buffer-layout and gradient-shape plans."""
 from bindings.tensor_view import TensorView, base_format, shape_text
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from core.classical_pandas_impl import pd_raw_at
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -141,7 +141,7 @@ def optimizer_contiguous_address(view: TensorView, mut keep: List[List[Float32]]
             if step == 4:
                 # Copy contiguous inner spans directly, including unaligned
                 # exports. General signed strides retain exact raw-word loads.
-                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination + cursor * 4),
+                unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination + cursor * 4),
                     src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source + offset), count=run * 4)
             else:
                 for i in range(run):  # parallel-work: this worker's strided inner span

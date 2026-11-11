@@ -146,7 +146,7 @@ GENERATOR AND ITS TRANSFORM:
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -559,7 +559,7 @@ def km_basis_candidates_kernel(
         return
     var k = draw_permutation_key(key_join(lo_bits, hi_bits), 0, j)
     if k <= key_join(thr_lo, thr_hi):
-        var slot = Int(Atomic[DType.int32].fetch_add(count, Int32(1)))
+        var slot = Int(Atomic[Int32].fetch_add(count, Int32(1)))
         ckey.unsafe_store(slot, k)
         cidx.unsafe_store(slot, Int32(j))
 

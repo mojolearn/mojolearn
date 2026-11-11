@@ -1,0 +1,39 @@
+{
+  "source_branch": "merge/small-tooling-20261111",
+  "original_head": "4652687399",
+  "reviewed_changes": [
+    "percent-decoded wheel provenance filenames retain exact filename and hash validation",
+    "istella_rank staging command documentation, not a completed dataset upload",
+    "lane-selector definition/import attribution"
+  ],
+  "initial_tests": {
+    "source": "b471d4778d21ebbdd606fb1dcc891dcf4b38507f",
+    "passed": 169,
+    "failed": 7,
+    "xfailed": 3,
+    "evidence": "~/mojolearn-evidence/python-mojo-migration-20261110/small-tooling-tests-r2.xml"
+  },
+  "source_repairs": [
+    "Computed/import-aliased module names cannot prove pandas absence",
+    "Formal/local bindings cannot impersonate trusted gate helpers",
+    "Only helpers reachable from a gated body can inherit exclusion",
+    "Comparison operators are not local rebinding assignments"
+  ],
+  "test_reviews": {
+    "registry_helper": "New top-level _backend side effect is attributed to every package importer; named helper still follows callers",
+    "neighbors": "497 selected includes490 explicitly unresolved native dispatcher paths; only7 are proved direct callers. Preserve uncertainty instead of dropping paths to meet old bound.",
+    "method": "494 selected includes486 unresolved dispatch lanes and8 opaque contributions. Synthetic changed/other caller control retains strict narrowing requirement when proved.",
+    "unknown_exports": "Use explicit caller/noncaller/unknown/opaque fixture rather than assuming current chi2 graph has two removable lanes.",
+    "subpackage": "Package __init__ eagerly imports models; models.__init__ imports safetensors. KMeans/GBDT dependencies are real.",
+    "global_shared_file_ceiling": "Removed historical global source-file count ceiling; retained required native-owner edges and reviewed named membership. Historical text remains in Git.",
+    "sequence_export_roundtrip": "Public _x_sequence_model and compiled Sequential owner no longer import neural_inference.py; removed this old membership record only."
+  },
+  "preserved": [
+    "All numerical/kernel implementations",
+    "Conservative unresolved dependency selection",
+    "Normal push hooks",
+    "Retired runtime source-count guards remain absent"
+  ],
+  "validation": "70 narrow-selector/wheel/profiler controls passed atfa1609eaad; final full tooling run pending",
+  "diagnostics": "~/mojolearn-evidence/python-mojo-migration-20261110/tooling-diagnostics/"
+}

@@ -42,7 +42,7 @@ test row; a training row its training row; any other row is skipped by
 both. C13_LOGCV_WEIGHTS (an opt-in define) sums the other folds' weights,
 which holds for a partition only."""
 from x_linear.vfold import vwsq
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix, fold_parts, fold_blocks, FOLD_BLOCK
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
 

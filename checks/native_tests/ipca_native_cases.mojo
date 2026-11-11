@@ -49,37 +49,26 @@ def reference_values(name: String, count: Int) raises -> List[Float64]:
 
 
 struct IPCATestRoom(Movable):
-    var components: List[Float32]
-    var singular: List[Float32]
-    var mean: List[Float32]
-    var population_variance: List[Float32]
-    var explained_variance: List[Float32]
-    var explained_ratio: List[Float32]
+    var values: List[List[Float32]]
 
     def __init__(out self):
-        self.components = List[Float32](length=11, fill=PCA_TEST_GUARD)
-        self.singular = List[Float32](length=5, fill=PCA_TEST_GUARD)
-        self.mean = List[Float32](length=5, fill=PCA_TEST_GUARD)
-        self.population_variance = List[Float32](length=5, fill=PCA_TEST_GUARD)
-        self.explained_variance = List[Float32](length=5, fill=PCA_TEST_GUARD)
-        self.explained_ratio = List[Float32](length=5, fill=PCA_TEST_GUARD)
+        self.values = List[List[Float32]]()
+        self.values.append(List[Float32](length=11, fill=PCA_TEST_GUARD))
+        for _ in range(5):  # Six fixed output descriptor fields.
+            self.values.append(List[Float32](length=5, fill=PCA_TEST_GUARD))
 
     def outputs(self) -> IPCAOutputs:
-        return IPCAOutputs(Int(self.components.unsafe_ptr()) + 4, Int(self.singular.unsafe_ptr()) + 4,
-            Int(self.mean.unsafe_ptr()) + 4, Int(self.population_variance.unsafe_ptr()) + 4,
-            Int(self.explained_variance.unsafe_ptr()) + 4, Int(self.explained_ratio.unsafe_ptr()) + 4)
+        return IPCAOutputs(Int(self.values[0].unsafe_ptr()) + 4, Int(self.values[1].unsafe_ptr()) + 4,
+            Int(self.values[2].unsafe_ptr()) + 4, Int(self.values[3].unsafe_ptr()) + 4,
+            Int(self.values[4].unsafe_ptr()) + 4, Int(self.values[5].unsafe_ptr()) + 4)
 
     def previous(self) -> IPCAPrevious:
         var output = self.outputs()
         return IPCAPrevious(output.components, output.singular, output.mean, output.population_variance)
 
     def check_guards(self) raises:
-        guards(self.components, "IPCA output field 0")
-        guards(self.singular, "IPCA output field 1")
-        guards(self.mean, "IPCA output field 2")
-        guards(self.population_variance, "IPCA output field 3")
-        guards(self.explained_variance, "IPCA output field 4")
-        guards(self.explained_ratio, "IPCA output field 5")
+        for part in range(6):
+            guards(self.values[part], "IPCA output field " + String(part))
 
 
 def release(driver: IPCANativeDriver, mut result: IPCAFitResult) raises:
@@ -106,17 +95,17 @@ def state_oracle(room: IPCATestRoom, result: IPCAFitResult, name: String, count:
     var ratio = reference_values(name + "-ratio", 3)
     var noise = reference_values(name + "-noise", 1)
     var vectors = reference_values(name + "-vectors", 9)
-    close_values(room.mean, mean, 3, 1e-4, 1e-5, "IPCA independent full-history mean")
-    close_values(room.population_variance, population, 3, 1e-4, 1e-5, "IPCA independent full-history population variance")
-    close_values(room.singular, singular, count, 1e-3, 1e-4, "IPCA independent incremental singular values")
-    close_values(room.explained_variance, explained, count, 1e-3, 1e-4, "IPCA independent explained variance")
-    close_values(room.explained_ratio, ratio, count, 1e-3, 1e-5, "IPCA independent explained ratio")
+    close_values(room.values[2], mean, 3, 1e-4, 1e-5, "IPCA independent full-history mean")
+    close_values(room.values[3], population, 3, 1e-4, 1e-5, "IPCA independent full-history population variance")
+    close_values(room.values[1], singular, count, 1e-3, 1e-4, "IPCA independent incremental singular values")
+    close_values(room.values[4], explained, count, 1e-3, 1e-4, "IPCA independent explained variance")
+    close_values(room.values[5], ratio, count, 1e-3, 1e-5, "IPCA independent explained ratio")
     var expected_noise = noise[0] if count < 3 else Float64(0)
     require(isfinite(result.noise) and abs(result.noise - expected_noise) <= Float64(1e-4) + Float64(1e-3) * abs(expected_noise),
             "IPCA independent trailing covariance noise")
     var failures = List[Int](length=count * 9, fill=0)
     var fp = failures.unsafe_ptr()
-    var cp = room.components.unsafe_ptr() + 1
+    var cp = room.values[0].unsafe_ptr() + 1
     var vp = vectors.unsafe_ptr()
     def cell(index: Int) {imm fp, imm cp, imm vp}:
         var component = index // 9
@@ -143,9 +132,9 @@ def query_oracle(driver: IPCANativeDriver, source: List[Float32], room: IPCATest
     var expected = List[Float64](unsafe_uninit_length=6 * count)
     var reconstructed = List[Float64](unsafe_uninit_length=18)
     var xp = source.unsafe_ptr()
-    var cp = room.components.unsafe_ptr() + 1
-    var mp = room.mean.unsafe_ptr() + 1
-    var vp = room.explained_variance.unsafe_ptr() + 1
+    var cp = room.values[0].unsafe_ptr() + 1
+    var mp = room.values[2].unsafe_ptr() + 1
+    var vp = room.values[4].unsafe_ptr() + 1
     var ep = expected.unsafe_ptr()
     def forward(index: Int) {imm xp, imm cp, imm mp, imm vp, imm ep, imm count, imm whiten}:
         var row = index // count
@@ -296,12 +285,8 @@ def refusal_case(driver: IPCANativeDriver, unit: Int) raises:
         require(refused, "IPCA actual provider preserves native refusal")
         unchanged(source, original, "IPCA refused source")
         unchanged(dst, dst_before, "IPCA refused query destination")
-        unchanged(output.components, untouched.components, "IPCA refused output field 0")
-        unchanged(output.singular, untouched.singular, "IPCA refused output field 1")
-        unchanged(output.mean, untouched.mean, "IPCA refused output field 2")
-        unchanged(output.population_variance, untouched.population_variance, "IPCA refused output field 3")
-        unchanged(output.explained_variance, untouched.explained_variance, "IPCA refused output field 4")
-        unchanged(output.explained_ratio, untouched.explained_ratio, "IPCA refused output field 5")
+        for part in range(6):
+            unchanged(output.values[part], untouched.values[part], "IPCA refused output field " + String(part))
     finally:
         _ = source^
         _ = previous^
@@ -315,9 +300,9 @@ def prepare_case(driver: IPCANativeDriver, host: Bool) raises:
     var components: List[Float32] = [1, 0, 0, 0, 1, 0]
     var mean: List[Float32] = [1, 2, 3]
     var variance: List[Float32] = [4, 9]
-    write_guarded(room.components, components)
-    write_guarded(room.mean, mean)
-    write_guarded(room.explained_variance, variance)
+    write_guarded(room.values[0], components)
+    write_guarded(room.values[2], mean)
+    write_guarded(room.values[4], variance)
     var handle = -1
     try:
         if host:

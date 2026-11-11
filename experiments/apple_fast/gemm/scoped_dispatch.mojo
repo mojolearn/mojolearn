@@ -16,7 +16,7 @@ Fragment math copied from compiled catalog fa39073607e3b19c4fbfe063a5545a63318f1
 """
 from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
 from max.gpu.host import DeviceContext
-from std.gpu import block_idx, lane_id, warp_id
+from max.gpu import block_idx, lane_id, warp_id
 from std.atomic import Atomic
 from std.ffi import _Global
 
@@ -76,11 +76,11 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False, LOWER: 
     comptime if SPLIT:
         first = Int(block_idx.y) * per
         last = min(k, first + per)
-    var acc = InlineArray[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
+    var acc = Array[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
     for kb in range(first, last, 16):
         for ks in range(0, 16, 8):
-            var af = InlineArray[SIMD[DType.float32, 2], RM](fill=SIMD[DType.float32, 2](0))
-            var bf = InlineArray[SIMD[DType.float32, 2], RN](fill=SIMD[DType.float32, 2](0))
+            var af = Array[SIMD[DType.float32, 2], RM](fill=SIMD[DType.float32, 2](0))
+            var bf = Array[SIMD[DType.float32, 2], RN](fill=SIMD[DType.float32, 2](0))
             comptime for mi in range(RM):
                 var row = bm + sr + mi * 8 + fr
                 var fragment = SIMD[DType.float32, 2](0)

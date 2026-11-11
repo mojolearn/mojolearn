@@ -11,7 +11,7 @@ functions shared with the host entries, so the words are the host's.
   * `dev_order_small_py`: the stable ascending order of a short device
     vector, one thread per element counting the elements before it (an
     exact rank; every rank is distinct) and writing its index there."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.cells import F32Ptr

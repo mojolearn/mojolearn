@@ -13,7 +13,7 @@ reads X."""
 # Default since the M3 A/B (b272364e4, n=2, identical output hashes): ET
 # taxi 2,867 -> 2,829 ms, istella 4,143 -> 4,059 ms; RF neutral.
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

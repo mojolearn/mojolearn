@@ -25,7 +25,7 @@ The caller allocates the five outputs (and the projection) at the fitted
 component count; the kept components are their prefix (C order), so the
 Python layer only trims.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 

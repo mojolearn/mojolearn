@@ -43,7 +43,7 @@ def rn_shape_of_dims(dims: List[Int]) raises -> ShapeN:
     """The ShapeN with these dims, row-major (unused slots 1)."""
     if len(dims) > RN_MAX_RANK:
         raise Error("tensors have at most " + String(RN_MAX_RANK) + " dimensions")
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     for k in range(len(dims)):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         if dims[k] < 1:
             raise Error("tensor dimensions must be positive")
@@ -51,9 +51,9 @@ def rn_shape_of_dims(dims: List[Int]) raises -> ShapeN:
     return ShapeN(len(dims), d)
 
 
-def _dense_strides(s: ShapeN) -> InlineArray[Int, RN_MAX_RANK]:
+def _dense_strides(s: ShapeN) -> Array[Int, RN_MAX_RANK]:
     """Row-major strides of s (0 on an unused axis)."""
-    var r = InlineArray[Int, RN_MAX_RANK](fill=0)
+    var r = Array[Int, RN_MAX_RANK](fill=0)
     for k in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         r[k] = s.stride(k)
     return r^
@@ -61,7 +61,7 @@ def _dense_strides(s: ShapeN) -> InlineArray[Int, RN_MAX_RANK]:
 
 def _put_record(
     mut words: List[Int], src_base: Int, dst_base: Int, shape: ShapeN,
-    src: InlineArray[Int, RN_MAX_RANK], dst: InlineArray[Int, RN_MAX_RANK],
+    src: Array[Int, RN_MAX_RANK], dst: Array[Int, RN_MAX_RANK],
 ) raises:
     """Append one slab-copy record (autograd/rankn_layout_ops.mojo RNL_REC_*)."""
     var at = len(words)

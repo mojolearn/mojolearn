@@ -14,7 +14,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
 from bindings.gp_native_boundary import GPConnection
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
 from bindings.archive_schema_native import _schema_kernel_layouts
@@ -124,13 +124,13 @@ def gp_kernel_arrays_transport(kernel: PythonObject, context: PythonObject) rais
     var parameters = family_array(Python.tuple(view.nodes), "<f4", context)
     var lengths = family_array(Python.tuple(view.nodes), "<i4", context)
     var scales = family_array(Python.tuple(max(1, view.scale_count)), "<f4", context)
-    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(kinds))),
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(kinds))),
            src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=view.kinds), count=view.nodes)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parameters))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parameters))),
            src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=view.parameters), count=view.nodes)
-    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(lengths))),
+    unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(lengths))),
            src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=view.lengths), count=view.nodes)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(scales))),
+    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(scales))),
            src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=view.scales), count=max(1, view.scale_count))
     _ = packed
     return Python.tuple(kinds, parameters, lengths, scales, PythonObject(view.scale_count))
@@ -280,7 +280,7 @@ def gp_fit_owned(source: PythonObject, caller: PythonObject, context: PythonObje
     if source is caller:
         var b = native_loaded_module("builtins")
         var result = family_array(py_call(b.tuple, source.shape), "<f4", context)
-        memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
                src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), count=Int(py=source.size))
         _ = result  # keep the Python object alive through the native call above
         return result

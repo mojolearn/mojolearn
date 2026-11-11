@@ -16,7 +16,7 @@ from core.gp_native_api import (
 from core.pca_native_api import pca_vendor_code
 from gaussian_process.unnorm import gpc_binary_out, gpc_ovr_targets
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.gp_native_storage import gp_native_ints, gp_native_f64
 from gaussian_process.host.gp_host_entries import _rebuild_kernel_spec, _gpr_predict_run, _gpc_predict_run
@@ -233,7 +233,7 @@ struct GPHostKernels(GPNativeKernels):
             y = gpc_ovr_targets(read_i32(r.targets, max(0, n_train)), n_train, r.column)
             if r.target_output != 0:
                 var yo = f32_ptr(r.target_output)
-                memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
+                unsafe_memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
                 _ = len(y)
         else:
             y = read_f32(r.targets, max(0, n_train))
@@ -271,5 +271,5 @@ struct GPHostKernels(GPNativeKernels):
         var values = gp_native_f64(r.source, r.count)
         var result = gp_theta_params_list(values)
         if r.count > 0:
-            memcpy(dest=f64_ptr(r.dst), src=result.unsafe_ptr(), count=r.count)
+            unsafe_memcpy(dest=f64_ptr(r.dst), src=result.unsafe_ptr(), count=r.count)
         return r.count

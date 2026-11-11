@@ -33,11 +33,11 @@ the narrow launch). Every case runs under TWO grids: the shipped shape
 that forces the border past the first stride for the wide leaves.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from std.gpu.intrinsics import ldg
+from max.gpu.intrinsics import ldg
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     update_partitions_after_split_kernel,
     update_partitions_and_plan_kernel,

@@ -251,7 +251,7 @@ def rf_host_predict(
                 # over one row is `predict_one` at that row's offset.
                 comptime if T34_CHUNK_FOLD:
                     var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
-                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+                    var values = Array[Float32, FOREST_CHUNK](fill=Float32(0))
                     var first = 0
                     while first < n_trees:
                         for j in range(FOREST_CHUNK*num_outputs):
@@ -366,7 +366,7 @@ def et_host_predict(
                 # `predict_one`'s `+=`, every tree in order (DEVIATION 147).
                 comptime if T34_CHUNK_FOLD:
                     var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
-                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+                    var values = Array[Float32, FOREST_CHUNK](fill=Float32(0))
                     var first = 0
                     while first < n_trees:
                         for j in range(FOREST_CHUNK*num_outputs):

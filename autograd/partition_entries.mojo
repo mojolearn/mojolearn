@@ -2,7 +2,7 @@
 # Native lifetime table and typed entries for model/tensor/pipeline
 # partitioned captured graphs. The Python door (partition_pyapi.mojo)
 # converts arrays and options and builds results.
-from std.memory import alloc, memcpy
+from std.memory import alloc, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, _OpsStore
@@ -25,7 +25,7 @@ comptime _PARTITIONS = SharedSlot[_OpsStore, _PARTITION_NAME]
 
 def register_partition[E: Exec & Movable & Deinitable, KIND: Int](var d: PartitionedProgram[E]) raises -> Int:
     var p = alloc[PartitionedProgram[E]](1)
-    p.init_pointee_move(d^)
+    p.unsafe_write(d^)
     var s = _PARTITIONS.get_or_create_ptr()
     var id = s[].next_id
     s[].next_id += 1
@@ -114,7 +114,7 @@ def partition_open_native[E: Exec & Movable & Deinitable, KIND: Int](
             if d.plan.column_width[j] > 0:
                 state = column_bytes(state, d.plan.column_first[j], d.plan.column_width[j])
             var dst = FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) if which == 0 else FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr()))
-            memcpy(dest=dst + ck.offsets[j], src=state.words.unsafe_ptr(), count=state.shape.count())
+            unsafe_memcpy(dest=dst + ck.offsets[j], src=state.words.unsafe_ptr(), count=state.shape.count())
         ck.ext_floats[scalar + 3 * j] = st.pw1
         ck.ext_floats[scalar + 3 * j + 1] = st.pw2
         ck.ext_floats[scalar + 3 * j + 2] = st.mu_prod
@@ -197,7 +197,7 @@ def partition_state_native[E: Exec & Movable & Deinitable, KIND: Int](id: Int) r
                 ptr = FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr()))
             elif which == 2:
                 ptr = FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr()))
-            memcpy(dest=a.data.unsafe_ptr(), src=ptr + ck.offsets[j], count=sh.count())
+            unsafe_memcpy(dest=a.data.unsafe_ptr(), src=ptr + ck.offsets[j], count=sh.count())
             arrays.append(a^)
         out.arrays.append(arrays^)
     out.epoch = d[].epoch
@@ -273,8 +273,8 @@ def partition_close_native[E: Exec & Movable & Deinitable, KIND: Int](id: Int) r
     try:
         p[].close()
     except err:
-        p.destroy_pointee()
+        p.unsafe_deinit_pointee()
         p.free()
         raise err
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()

@@ -26,7 +26,7 @@ not lose an increment, this check has not reached the window and its repaired-ar
 a NULL, not a clearance. Report it as a null.
 """
 from std.atomic import Atomic, Ordering
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from core.device_mutex import claim_device_mutex
 

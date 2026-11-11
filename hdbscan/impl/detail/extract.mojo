@@ -48,7 +48,7 @@ it is part of the answer and not a formatting choice.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE

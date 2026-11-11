@@ -100,7 +100,7 @@ def strided_ftz_sum[
     var acc = acc_in
     var i = start
     while i + (U - 1) * stride < n:
-        var t = InlineArray[Float32, U](fill=Float32(0.0))
+        var t = Array[Float32, U](fill=Float32(0.0))
         comptime for u in range(U):
             t[u] = v.unsafe_load((i + u * stride) * row + off)
         comptime for u in range(U):
@@ -131,8 +131,8 @@ def strided_mul_add[
     var acc = Float32(0.0)
     var r = start
     while r + (U - 1) * stride < n:
-        var a = InlineArray[Float32, U](fill=Float32(0.0))
-        var b = InlineArray[Float32, U](fill=Float32(0.0))
+        var a = Array[Float32, U](fill=Float32(0.0))
+        var b = Array[Float32, U](fill=Float32(0.0))
         comptime for u in range(U):
             a[u] = x.unsafe_load((r + u * stride) * x_row + x_off)
             b[u] = y.unsafe_load((r + u * stride) * y_row + y_off)

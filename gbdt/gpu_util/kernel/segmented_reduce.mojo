@@ -32,7 +32,7 @@ tolerance.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
 from max.gpu.memory import AddressSpace
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 
 comptime SEG_REDUCE_BLOCK = 256

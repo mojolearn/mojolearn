@@ -60,7 +60,7 @@ arithmetic re-canonicalizes any NaN input to 0x7fffffff, so the payload
 the same check plants `q[7] = -1` and reads `0x7fc00000` in both modes.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 

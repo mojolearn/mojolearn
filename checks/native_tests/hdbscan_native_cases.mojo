@@ -38,9 +38,9 @@ def check_flags(flags: List[Int], where: String) raises:
 
 def fixture(fit_driver: HdbscanFitDriver, query_driver: HdbscanQueryDriver, unit: Int) raises:
     if unit == 6:
-        var a: InlineArray[Int, 1] = [0]
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 1] = [0]
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         var caught = False
         try:
             _ = native_descriptor_call_fixed(query_driver.entry, HDBSCAN_QUERY_APPROXIMATE, a, p, f)

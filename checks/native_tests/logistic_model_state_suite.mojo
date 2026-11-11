@@ -18,7 +18,7 @@ def require(ok: Bool, message: String) raises:
 def coefficient_word(index: Int) -> UInt32:
     # Deliberately include signed zeros and distinct quiet/signaling NaN
     # payloads: PACK must copy words without converting or canonicalizing.
-    var special: InlineArray[UInt32, 4] = [0x00000000, 0x80000000, 0x7FC00042, 0x7F800123]
+    var special: Array[UInt32, 4] = [0x00000000, 0x80000000, 0x7FC00042, 0x7F800123]
     if index % 17 < 4:
         return special[index % 17]
     return UInt32(0x3F000000) + UInt32((index * 97) % 0x007FFFFF)

@@ -3,6 +3,9 @@
 """CPU binding for `_mojolearn_x_linear` (lane/algos-linear, 2026-09-27).
 HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
+from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_X_LINEAR
+from core.linear_fit_types import RIDGE_FIT_ABI
+from x_linear.ridge_descriptor_host import ridge_fit_host_v1
 from x_linear.ridge_descriptor_host import RIDGE_FIT_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.host_finite_scan import host_all_finite_f32
@@ -223,6 +226,15 @@ def x_linear_vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_linear_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+def _publish_linear_entry_table() raises:
+    # Native publication only; the existing capsule ABI remains for clients
+    # not yet converted. The original descriptor owner has image lifetime.
+    var api = RIDGE_FIT_HOST_API.get_or_create_ptr()
+    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
+    linear_table_publish[LINEAR_TABLE_X_LINEAR](key,
+        Int(api[].entries.unsafe_ptr()), [String(RIDGE_FIT_ABI)], [1], [ridge_fit_host_v1])
+
 def build__mojolearn_x_linear_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -246,6 +258,8 @@ def build__mojolearn_x_linear_host() -> PythonObject:
         m.def_function[x_linear_vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_host_binding]("py2mojo_rows")
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_linear_host: ", e))

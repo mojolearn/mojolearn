@@ -14,7 +14,7 @@ spec.loader.exec_module(smoke)
 
 ADAPTERS = dict(directory="/x/_adapters", vendor="hip", arch="gfx942",
                 torch=dict(series="2.13", backend="rocm", index_url="https://download.pytorch.org/whl/rocm7.2"),
-                max=dict(version="26.5.0"), requirements=dict(torch="torch>=2.13,<2.14", max="max==26.5.0"),
+                max=dict(version="26.7.0"), requirements=dict(torch="torch>=2.13,<2.14", max="max==26.7.0"),
                 paths=dict(native="/x/libmojolearn_adapter.so", torch="/x/mojolearn_torch.so", max="/x/mojolearn_ops.mojoc"))
 
 
@@ -51,7 +51,7 @@ def test_require_turns_an_absent_framework_into_a_failure(tmp_path):
 
 
 #: the [torch]/[max] extras as an installed wheel's metadata lists them (setuptools orders the specifiers)
-EXTRAS = dict(torch=["torch<2.14,>=2.13", "onnx>=1.18", "onnxscript>=0.5"], max=["max==26.5.0"],
+EXTRAS = dict(torch=["torch<2.14,>=2.13", "onnx>=1.18", "onnxscript>=0.5"], max=["max==26.7.0"],
               numpy=["numpy>=1.26.4"])
 
 
@@ -60,7 +60,7 @@ def test_install_uses_the_index_the_registration_was_built_against():
     assert cmds["install-torch"][-4:] == ["--index-url", "https://download.pytorch.org/whl/rocm7.2",
                                           "--extra-index-url", "https://pypi.org/simple"]
     assert "torch<2.14,>=2.13" in cmds["install-torch"]
-    assert cmds["install-max"][-1] == "max==26.5.0"
+    assert cmds["install-max"][-1] == "max==26.7.0"
     pypi = dict(ADAPTERS, torch=dict(ADAPTERS["torch"], index_url="https://pypi.org/simple"))
     assert "--index-url" not in smoke.install_commands("py", pypi, ["torch"], EXTRAS)["install-torch"]
 
@@ -98,13 +98,13 @@ def test_the_probe_reads_the_installed_extras(tmp_path):
     (pkg / "METADATA").write_text("Metadata-Version: 2.4\nName: mojolearn-core\nVersion: 9.9.9\n"
                                   "Provides-Extra: torch\nRequires-Dist: torch>=2.13,<2.14; extra == \"torch\"\n"
                                   "Requires-Dist: onnx>=1.18; extra == \"torch\"\n"
-                                  "Provides-Extra: max\nRequires-Dist: max==26.5.0; extra == \"max\"\n"
+                                  "Provides-Extra: max\nRequires-Dist: max==26.7.0; extra == \"max\"\n"
                                   "Requires-Dist: mojolearn-nvidia==9.9.9\n\n")
     env = dict(os.environ, PYTHONPATH=str(tmp_path / "site"))
     facts = json.loads(subprocess.run([sys.executable, "-c", smoke.PROBE], env=env, capture_output=True,
                                       text=True, check=True).stdout.splitlines()[-1])
     assert facts["extras_distribution"] == "mojolearn-core", facts
-    assert facts["extras"]["max"] == ["max==26.5.0"]
+    assert facts["extras"]["max"] == ["max==26.7.0"]
     assert facts["extras"]["torch"][1] == "onnx>=1.18"
     assert smoke._requirement_key(facts["extras"]["torch"][0]) == smoke._requirement_key("torch>=2.13,<2.14")
 

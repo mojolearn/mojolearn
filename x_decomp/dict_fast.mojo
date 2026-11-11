@@ -28,7 +28,7 @@ the two launches by `x_decomp/dictl_resample.mojo` (gated on the device: no
 read of A); positive_dict keeps the kit loop. FAST: the product's fold order and the norm's differ from
 the elementwise chain's (quality, not bits).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace

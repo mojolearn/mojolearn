@@ -8,7 +8,7 @@ from bindings.p3_labels_metrics_native import p3_text_classes
 from core.labels_score_keys import score_key_codes
 
 
-def gp_integer_classes[S: _TextCodeStorage](labels: PythonObject,
+def gp_integer_classes[S: _TextCodeStorage](labels: List[PythonObject],
                                            context: PythonObject) raises -> _TextLabels[S]:
     # The caller has completed the original label admission and admits only
     # exact builtin int/bool here. Their arbitrary-precision mathematical order
@@ -23,8 +23,9 @@ def gp_integer_classes[S: _TextCodeStorage](labels: PythonObject,
         raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
     var codes = S(len(labels), context)
     var destination = codes.address()
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             score_key_codes(index, captured.keys, destination)
     finally:
         _ = captured
