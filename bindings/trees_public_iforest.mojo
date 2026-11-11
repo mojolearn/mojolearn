@@ -302,7 +302,7 @@ def _device_scan(fields: PythonObject, context: PythonObject) raises -> Bool:
     (`iforest_device_scan` or `iforest_device_finite_scan`)."""
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
     var names = Python.tuple("iforest_device_scan", "iforest_device_finite_scan")
-    for i in range(2):  # small-loop(names): the two device scan probes
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(names): the two device scan probes
         var probe = trees_entry(svm, String(names[i]))
         if probe is not None and Int(py=py_call_typed(probe)) == 1:
             return True
@@ -372,7 +372,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
         x = admitted_words(native_buffer_view(owned), dst, x.rows, x.cols)
     var had = Python.dict()
     var kept = Python.tuple("_x", "n_features_in_")
-    for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(kept): the two fitted field names restored on a refusal
         if py_contains(fields, kept[i]):
             py_setitem(had, kept[i], fields[kept[i]])
     _release(model, fields)
@@ -390,7 +390,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     except error:
         var message = String(error)
         if device_scan and ("Input X contains" in message or "does not accept non-finite" in message):
-            for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
+            for i in range(2):  # driver-loop: over fixed call structure, small-loop(kept): the two fitted field names restored on a refusal
                 _ = py_call(fields.pop, kept[i], PythonObject(None))
             _ = py_call(fields.update, had)
             raise Error(_NONFINITE)

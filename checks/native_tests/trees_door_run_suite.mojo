@@ -25,9 +25,8 @@ from xtrees.trees_boost_run import (
     boost_count_fraction_ok, boost_count_check, boost_weight_flags_check, boost_dart_cap_check,
 )
 from xtrees.trees_meta_run import CalibratedProgram, meta_binary_column_check
-from xtrees.trees_score_run import (
-    SCORE_STAGE_WORDS, score_shape_text, score_accuracy_check, score_accuracy_plan, score_accuracy_answer,
-)
+from xtrees.trees_score_run import score_shape_text
+from core.labels_score_keys import ScoreLabelKey, ScoreKeyIndex, score_key_codes, SCORE_INT
 
 comptime TREES_DOOR_RUN_CASES = 8
 
@@ -199,25 +198,25 @@ def case_score() raises:
     var two: List[Int] = [3, 4]
     require(score_shape_text(empty) == "()" and score_shape_text(one) == "(3,)" and score_shape_text(two) == "(3, 4)",
             "shape text")
-    try:
-        score_accuracy_check("accuracy_score", 3, 4, "integer", "integer")
-        raise Error("no refusal")
-    except problem:
-        refuses(problem, "y_true and y_pred lengths differ")
-    # Unweighted: pair key, group sort, group sum, off diff, COUNT epilogue.
-    var plan = score_accuracy_plan(10, 3, False)
-    require(plan.program.stage_count() == 5, "unweighted stages")
-    require(len(plan.program.input_offsets) == 2 and plan.program.input_offsets[1] == 10, "input offsets")
-    require(len(plan.program.stages) == 5 * SCORE_STAGE_WORDS, "stage words")
-    # Weighted over 600 rows: three wsum blocks, two fold levels.
-    var weighted = score_accuracy_plan(600, 2, True)
-    require(weighted.program.stage_count() == 5 and len(weighted.program.input_offsets) == 3, "weighted stages")
-    var arena = List[Int32](length=2 * (plan.out + 11), fill=0)
-    var base = Int(arena.unsafe_ptr())
-    var at = base + 4 * (plan.out + 8)
-    MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at)[0] = 0.75
-    require(score_accuracy_answer(base, plan.out, False) == 0.75, "answer read")
-    _ = arena  # keep the arena alive through the reads above
+    # The COUNT program words moved to the shared labels_accuracy
+    # (lane loops-trees-ab); its plan is covered by the labels suites.
+    # `trees_class_codes` RUN (lane loops-trees-ab): the distinct labels in
+    # sorted order and each row's position among them, natively; the door
+    # then maps the few distinct labels through the class dict and gathers.
+    var labels: List[Int] = [5, 3, 5, 7, 3]
+    var keys = List[ScoreLabelKey]()
+    for i in range(len(labels)):  # driver-loop: over the five literal fixture labels
+        keys.append(ScoreLabelKey(SCORE_INT, Int64(labels[i]), 0, 0, False))
+    var index = ScoreKeyIndex(Int(keys.unsafe_ptr()), len(keys))
+    require(len(index.sorted_rows) == 3, "three distinct labels")
+    require(index.sorted_rows[0] == 1 and index.sorted_rows[1] == 0 and index.sorted_rows[2] == 3,
+            "distinct labels in sorted order, first row of each")
+    var codes = List[Int32](length=len(keys), fill=-9)
+    score_key_codes(index, keys, Int(codes.unsafe_ptr()), True)
+    require(codes[0] == 1 and codes[1] == 0 and codes[2] == 1 and codes[3] == 2 and codes[4] == 0,
+            "row positions among the sorted distinct labels")
+    _ = index^
+    _ = keys^
 
 
 def case(unit: Int) raises:

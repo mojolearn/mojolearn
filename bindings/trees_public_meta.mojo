@@ -49,9 +49,8 @@ from bindings.trees_public_boost import (
     _mode, _xt, _xr, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
-from bindings.trees_public_score import (
-    trees_accuracy, trees_r2, _classification_encoded as score_classification_encoded, _codes as score_codes_into,
-)
+from bindings.trees_public_score import trees_r2, trees_class_codes
+from bindings.classical_labels import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.prep_native_estimator import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split,
@@ -599,7 +598,7 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
     var seen_addr = trees_address(seen)
     var bkey = base_helpers_key(context["trees_helpers"])
-    for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair
+    for pair in pairs:  # driver-loop: over the cv folds (one (train, test) index-array pair each, read natively per fold)
         var both = py_call(b.tuple, pair)
         if len(both) != 2:
             raise Error("each cv split must be a (train, test) pair")
@@ -1543,7 +1542,7 @@ def _multioutput_rows_score(model: PythonObject, eq: PythonObject, n: Int, m: In
     _ = miss  # keep the Python object alive through the native call above
     var zero = admitted_vector(n, "<i4", context)
     var mode = py_get(py_fields(model), "numeric_mode")
-    return PythonObject(trees_accuracy(zero, miss, sample_weight, mode, context))
+    return PythonObject(labels_accuracy(zero, miss, sample_weight, mode, context))
 
 
 def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y: PythonObject,
@@ -1575,7 +1574,7 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
         var listed = classifier_label_list(classes[j], context)
         if py_type(listed) is not b.list and py_type(listed) is not b.tuple:
             listed = _label_list(listed, context)
-        var truth = score_codes_into(score_classification_encoded(column, "y", context), listed, context)
+        var truth = trees_class_codes(score_classification_encoded(column, "y", context), listed, context)
         var pred = codes[j]
         _ = base_equal_elements(bkey, trees_address(truth), trees_address(pred), 2, n, base + j * n)
         _ = eq  # keep the flag store alive through the native call above
@@ -2248,7 +2247,7 @@ def _fit_params_weight(fit_params: PythonObject) raises -> PythonObject:
     """`fit(X, y, **fit_params)`: only `sample_weight` is a fit parameter."""
     var b = trees_builtins()
     var keys = py_call(b.list, fit_params)
-    for i in range(len(keys)):  # small-loop(keyword arguments): the caller's fit parameters
+    for i in range(len(keys)):  # driver-loop: over fixed call structure, small-loop(keyword arguments): the caller's fit parameters
         if String(keys[i]) != "sample_weight":
             raise Error("TypeError: fit() got an unexpected keyword argument '" + String(keys[i]) + "'")
     return py_get(fit_params, PythonObject("sample_weight"))
@@ -2312,7 +2311,7 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
                 or operation == "trees_meta_transform" or operation == "trees_meta_score"):
             var prepared = _staged_input(model, kind, args[0], context)
             var call = Python.list(prepared[0])
-            for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+            for i in range(1, len(args)):  # driver-loop: over fixed call structure, small-loop(args): the call's remaining positional arguments
                 _ = py_call(call.append, args[i])
             try:
                 result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)

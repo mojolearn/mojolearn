@@ -273,7 +273,7 @@ def _decode_slot(owner: PythonObject, classes: PythonObject) raises -> Int:
     """The cache slot recorded for `owner` whose listed classes are still
     the same objects, or -1."""
     var g = _DECODE.get_or_create_ptr()
-    for s in range(len(g[].owners)):  # small-loop(_DECODE_SLOTS): at most eight recorded classes_
+    for s in range(len(g[].owners)):  # driver-loop: over fixed call structure, small-loop(_DECODE_SLOTS): at most eight recorded classes_
         if not (g[].owners[s] is owner):
             continue
         var held = g[].items[s]
@@ -290,7 +290,7 @@ def _decode_record(owner: PythonObject, classes: PythonObject, kind: Int, table:
     """Record `kind` (0 int, 1 float, 2 object) and the gather table."""
     var g = _DECODE.get_or_create_ptr()
     var copy = py_call(trees_builtins().list, classes)
-    for s in range(len(g[].owners)):  # small-loop(_DECODE_SLOTS): replace this owner's stale entry
+    for s in range(len(g[].owners)):  # driver-loop: over fixed call structure, small-loop(_DECODE_SLOTS): replace this owner's stale entry
         if g[].owners[s] is owner:
             g[].items[s] = copy
             g[].kinds[s] = kind

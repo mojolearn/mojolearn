@@ -33,6 +33,7 @@ THE ABI (`GBDT_ENTRY_ABI`, one `abi("C")` entry per gbdt image, published in
 The caller owns every buffer until the synchronous call returns.
 """
 from std.memory import alloc, unsafe_memcpy
+from std.sys.compile import is_defined
 
 comptime GBDT_ENTRY_ABI = "mojolearn.trees.gbdt.v1"
 
@@ -166,15 +167,37 @@ def gbdt_outcome_free(handle: Int) raises:
     o.free()
 
 
+# A/B define (lane loops-trees-ab, 2026-11-11; perf audit 20261111 section 7):
+# `-D MOJOLEARN_GBDT_FIT_TEXT_COPY_OFF` builds the String in ONE copy from a
+# byte view of the source span, instead of a byte List copy and then the
+# String copy of that List. It halves the model-text copies of every GBDT
+# fit on both sides of the table: the caller's outcome text
+# (gbdt/fit_calls.mojo `xg_fit`, after the one crossing copy out of the
+# image) and the image's `model_dim` read (gbdt/gbdt_entry.mojo
+# XG_MODEL_DIM); request option strings take the same path. Same bytes, no
+# bit change. It is a define, not a deletion, because the pointer-span
+# constructor has not compiled on this toolchain yet (lanes do not compile);
+# the integrator compiles it, the GBDT-fit-with-a-large-model A/B decides it,
+# and a winner becomes the default (verdict pending:
+# docs/apple-fast/EXPERIMENTS.md row MOJOLEARN_GBDT_FIT_TEXT_COPY_OFF).
+comptime _GBDT_FIT_TEXT_COPY_OFF = is_defined["MOJOLEARN_GBDT_FIT_TEXT_COPY_OFF"]()
+
+
 def gbdt_string_at(address: Int, nbytes: Int) raises -> String:
     """A String of nbytes UTF-8 bytes at address (a request string or the
     model text)."""
     if nbytes < 0 or (nbytes > 0 and address == 0):
         raise Error("gbdt: null or invalid string span")
-    var bytes = List[UInt8](length=nbytes, fill=0)
-    if nbytes > 0:
-        unsafe_memcpy(dest=bytes.unsafe_ptr(), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address),
-                      count=nbytes)
-    var text = String(StringSlice(unsafe_from_utf8=Span(bytes)))
-    _ = bytes
-    return text^
+    comptime if _GBDT_FIT_TEXT_COPY_OFF:
+        if nbytes == 0:
+            return String()
+        var view = Span(unsafe_ptr=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), length=nbytes)
+        return String(StringSlice(unsafe_from_utf8=view))
+    else:
+        var bytes = List[UInt8](length=nbytes, fill=0)
+        if nbytes > 0:
+            unsafe_memcpy(dest=bytes.unsafe_ptr(), src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address),
+                          count=nbytes)
+        var text = String(StringSlice(unsafe_from_utf8=Span(bytes)))
+        _ = bytes
+        return text^

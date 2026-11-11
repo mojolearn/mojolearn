@@ -59,7 +59,12 @@ CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
          # (one buffer read: the count must not grow with rows) and of a
          # Python list (public type sequence of int: one C-API read per id,
          # expected to grow; recorded for the API decision).
-         "BpeTokenizer_decode_array", "BpeTokenizer_decode_list")
+         "BpeTokenizer_decode_array", "BpeTokenizer_decode_list",
+         # Trees doors (lane loops-trees-ab): PairLogit fit with ndarray
+         # pairs and pairs_weight (one buffer view each), the GBDT adapter's
+         # classifier score and MultiOutputClassifier's str-label score (one
+         # dict lookup per distinct label, per-row codes native).
+         "GradientBoosting_pairs", "GradientBoostingClassifier_score", "MultiOutputClassifier_str")
 
 # Neural cases (lane loops-neural): one `forward` operation, no fit/query.
 NEURAL_CASES = ("Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
@@ -72,7 +77,14 @@ TOKENIZER_CASES = {"BpeTokenizer_decode_array": ("decode_bytes",),
 # LinearSVC with string labels and a full-size score (the score UNPACK is
 # per used class, so its count must not grow with rows); SVC/SVR with
 # kernel='precomputed' (predict reads support_, which grows with rows).
-ESTIMATOR_CLASS = {"LinearSVC_str": "LinearSVC", "SVC_precomputed": "SVC", "SVR_precomputed": "SVR"}
+ESTIMATOR_CLASS = {"LinearSVC_str": "LinearSVC", "SVC_precomputed": "SVC", "SVR_precomputed": "SVR",
+                   "GradientBoosting_pairs": "GradientBoosting",
+                   "GradientBoostingClassifier_score": "GradientBoostingClassifier",
+                   "MultiOutputClassifier_str": "MultiOutputClassifier"}
+
+# Cases whose last counted operation is a full-size score (its CPython count
+# must not grow with rows).
+SCORED = ("LinearSVC_str", "GradientBoostingClassifier_score", "MultiOutputClassifier_str")
 
 # Cases whose fit takes X alone.
 UNSUPERVISED = ("PCA", "KMeans", "GaussianMixture", "BayesianGaussianMixture", "MiniBatchKMeans",
@@ -82,7 +94,8 @@ UNSUPERVISED = ("PCA", "KMeans", "GaussianMixture", "BayesianGaussianMixture", "
 FIT_PREDICT_QUERY = ("SpectralClustering", "HDBSCAN", "OPTICS")
 
 # Classifier cases: integer 0/1 targets.
-CLASSIFIERS = ("LogisticRegression", "RandomForestClassifier", "GaussianProcessClassifier", "SVC_precomputed")
+CLASSIFIERS = ("LogisticRegression", "RandomForestClassifier", "GaussianProcessClassifier", "SVC_precomputed",
+               "GradientBoostingClassifier_score")
 
 # uprobe group of the CPython call count (`--cpython-count perf`).
 PERF_GROUP = "mojolearn_cpy"
@@ -223,7 +236,15 @@ def model_parameters(name):
         "SpectralClustering": {"n_clusters": 2, "affinity": "rbf", "random_state": 0},
         "HDBSCAN": {"min_cluster_size": 5},
         "OPTICS": {"min_samples": 5},
+        "GradientBoosting_pairs": {"loss": "PairLogit", "n_estimators": 3, "max_depth": 2, "random_state": 0},
+        "GradientBoostingClassifier_score": {"n_estimators": 3, "max_depth": 2, "random_state": 0},
     }
+    if name == "MultiOutputClassifier_str":
+        import mojolearn as ml
+        # The member is built here (an estimator object is not JSON); the
+        # record keeps its parameters.
+        return {"estimator": ml.RandomForestClassifier(n_estimators=3, max_depth=3, random_state=0,
+                                                       numeric_mode="identical")}
     return dict(numeric_mode="identical", **parameters[name])
 
 
@@ -293,8 +314,10 @@ def run_case(case):
         elif name in NEURAL_CASES:
             operations = _neural_operations(name, rows, np, ml, result)
         else:
-            result["parameters"] = model_parameters(name)
-            model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**result["parameters"])
+            parameters = model_parameters(name)
+            result["parameters"] = {key: (value if isinstance(value, (int, float, str, type(None))) else repr(value))
+                                    for key, value in parameters.items()}
+            model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**parameters)
             query = query_operation(name)
             fit_x, query_x = x, x[:min(7, rows)]
             if name.endswith("_precomputed"):
@@ -302,9 +325,26 @@ def run_case(case):
                 fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
             if name == "LinearSVC_str":
                 y = np.where(y > 0, "pos", "neg").astype(object)
-            operations = [("fit", model.fit, (x,) if name in UNSUPERVISED else (fit_x, y)),
+            if name == "MultiOutputClassifier_str":
+                # Two str-label outputs: the score encodes each column against
+                # that output's classes (bindings/trees_public_meta.mojo).
+                y = np.stack([np.where(y > 0, "pos", "neg"), np.where(x[:, 2] > 0, "up", "down")], axis=1).astype(object)
+            fit_kwargs = {}
+            if name == "GradientBoosting_pairs":
+                # Groups of four consecutive rows; two pairs per group, as int64
+                # and float32 ndarrays (the one-buffer-view route).
+                group_id = np.repeat(np.arange(rows // 4 + 1), 4)[:rows]
+                starts = np.arange(0, rows - rows % 4, 4)
+                pairs = np.concatenate([np.stack([starts, starts + 1], axis=1),
+                                        np.stack([starts + 2, starts + 3], axis=1)]).astype(np.int64)
+                fit_kwargs = {"group_id": group_id, "pairs": pairs,
+                              "pairs_weight": np.ones(len(pairs), dtype=np.float32)}
+            # Lane loops-trees-ab: one list (a second assignment used to replace
+            # this one, dropping the precomputed Gram inputs and the score).
+            fit_call = model.fit if not fit_kwargs else (lambda *a: model.fit(*a, **fit_kwargs))
+            operations = [("fit", fit_call, (x,) if name in UNSUPERVISED else (fit_x, y)),
                           (query, getattr(model, query), (query_x,))]
-            if name == "LinearSVC_str":
+            if name in SCORED:
                 # The full-size score: its CPython count must not grow with rows.
                 operations.append(("score", model.score, (x, y)))
         for operation, function, arguments in operations:
@@ -341,7 +381,7 @@ def run_case(case):
                         raise AssertionError("score returned a nonfinite value")
                 elif operation != "fit":
                     output = np.asarray(value)
-                    if output.shape[0] != min(7, rows) or not np.isfinite(output).all():
+                    if output.shape[0] != min(7, rows) or (output.dtype.kind in "fc" and not np.isfinite(output).all()):
                         raise AssertionError("query returned invalid shape or nonfinite output")
                     record["output_shape"] = list(output.shape)
                 record["status"] = "observed"
@@ -449,7 +489,7 @@ def case_operations(name):
         return ("forward",)
     if name in TOKENIZER_CASES:
         return TOKENIZER_CASES[name]
-    return ("fit", query_operation(name)) + (("score",) if name == "LinearSVC_str" else ())
+    return ("fit", query_operation(name)) + (("score",) if name in SCORED else ())
 
 
 def merge_counted(case, counted):
