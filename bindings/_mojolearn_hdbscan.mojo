@@ -29,6 +29,8 @@ from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hdbscan.native_fit_device import HDBSCAN_FIT_DEVICE_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 from hdbscan.impl.hdbscan_door_impl import HDB_DEVCTX_SLOT, hdbscan_fit_door_run, prediction_data_door_run
@@ -69,6 +71,11 @@ def hdbscan_vendor_binding() raises -> PythonObject:
 
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+
+
+def hdbscan_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = HDBSCAN_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def hdbscan_fit_binding(
@@ -545,6 +552,7 @@ def build__mojolearn_hdbscan() -> PythonObject:
         m.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         m.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         m.def_function[hdbscan_fit_binding]("hdbscan_fit")
+        m.def_function[hdbscan_fit_native_api_v1_binding]("hdbscan_fit_native_api_v1")
         m.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
         m.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
         m.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")

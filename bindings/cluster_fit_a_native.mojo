@@ -26,19 +26,24 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
+    FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
     family_type_name, family_call, family_array, family_nonfinite, family_shape_repr,
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native import cluster_operation, _xc_array
 from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import (
-    MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VARIANTS_CAP_DEVSCAN,
+    MiniBatchFitRequest, MiniBatchPartialRequest, BisectFitRequest, VariantsResultSlot, VariantsSpan, VARIANTS_CAP_DEVSCAN,
 )
 from core.kmeans_variants_plan import MiniBatchStreamState
 from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest, CentroidFitResultSlot
 from core.affinity_preference_plan import AffinityPreferencePlan
 from core.optics_fit_api import OpticsMetric, OpticsFitRequest, OpticsFitResultSlot
+from core.hdbscan_fit_api import (
+    HdbscanFitOptions, HdbscanFitRequest, HdbscanFitPlan,
+    HdbscanPredictionRequest, HdbscanPredictionPlan,
+)
+from bindings.hdbscan_fit_boundary import hdbscan_fit_connection, hdbscan_pack_head, hdbscan_buffer_span
 from bindings.optics_fit_boundary import optics_fit_connection, OpticsPackedResult
 from bindings.cluster_centroid_fit_boundary import centroid_fit_connection, CentroidPackedResult
 from bindings.affinity_preference_boundary import affinity_preference_prepare
@@ -672,21 +677,6 @@ def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObje
 
 # ---------------------------------------------------------------- HDBSCAN
 
-def _i32_at(array: PythonObject, index: Int) raises -> Int:
-    return Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(array)))[index])
-
-
-def _head(array: PythonObject, count: Int, typestr: String, context: PythonObject) raises -> PythonObject:
-    """The first `count` elements of a 1-D 4-byte Array as a new Array
-    (`array[:count]`, same values)."""
-    var out = family_array(Python.tuple(count), typestr, context)
-    if count:
-        memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))),
-               src=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(array))), count=count)
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
 def _hdbscan_int_param(model: PythonObject, name: String) raises -> PythonObject:
     var value = _attr(model, name)
     if not family_is_int(value):
@@ -778,144 +768,87 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     var want_pd = Bool(py=want_pd_field)
     var labels = family_array(Python.tuple(n), "<i4", context)
     var core = family_array(Python.tuple(n), "<f4", context)
-    var info = family_array(Python.tuple(5 if want_pd else 4), "<i4", context)
-    # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
-    # x, labels_out, core_dists_out, info_out
-    var addrs = Python.list(classical_address(x), classical_address(labels), classical_address(core),
-                            classical_address(info))
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
+    var plan = HdbscanFitPlan(want_pd)
+    # Preserve the original initial address admission before probabilities
+    # allocation. Private info/tree addresses now come from Mojo owners.
+    var source_address = Int(py=classical_address(x))
+    var label_address = Int(py=classical_address(labels))
+    var core_address = Int(py=classical_address(core))
     var probs = family_array(Python.tuple(n), "<f4", context)
-    var t_par = PythonObject(None)
-    var t_ch = PythonObject(None)
-    var t_lam = PythonObject(None)
-    var t_sz = PythonObject(None)
-    var t_inv = PythonObject(None)
     if want_pd:
-        # tree_parents_out, tree_children_out, tree_lambdas_out,
-        # tree_sizes_out (2 * n each), inverse_label_map_out (n)
-        t_par = family_array(Python.tuple(2 * n), "<i4", context)
-        t_ch = family_array(Python.tuple(2 * n), "<i4", context)
-        t_lam = family_array(Python.tuple(2 * n), "<f4", context)
-        t_sz = family_array(Python.tuple(2 * n), "<i4", context)
-        t_inv = family_array(Python.tuple(n), "<i4", context)
-        _ = py_call(addrs.append, classical_address(t_par))
-        _ = t_par  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = core  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = py_call(addrs.append, classical_address(t_ch))
-        _ = t_ch  # keep the Python object alive through the native call above
-        _ = t_par  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = core  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = py_call(addrs.append, classical_address(t_lam))
-        _ = t_lam  # keep the Python object alive through the native call above
-        _ = t_ch  # keep the Python object alive through the native call above
-        _ = t_par  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = core  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = py_call(addrs.append, classical_address(t_sz))
-        _ = t_sz  # keep the Python object alive through the native call above
-        _ = t_lam  # keep the Python object alive through the native call above
-        _ = t_ch  # keep the Python object alive through the native call above
-        _ = t_par  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = core  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        _ = py_call(addrs.append, classical_address(t_inv))
-        _ = t_inv  # keep the Python object alive through the native call above
-        _ = t_sz  # keep the Python object alive through the native call above
-        _ = t_lam  # keep the Python object alive through the native call above
-        _ = t_ch  # keep the Python object alive through the native call above
-        _ = t_par  # keep the Python object alive through the native call above
-        _ = info  # keep the Python object alive through the native call above
-        _ = core  # keep the Python object alive through the native call above
-        _ = labels  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    # probabilities_out, always LAST (DEVIATION 5116)
-    _ = py_call(addrs.append, classical_address(probs))
-    _ = t_inv  # keep the Python object alive through the native call above
-    _ = t_sz  # keep the Python object alive through the native call above
-    _ = t_lam  # keep the Python object alive through the native call above
-    _ = t_ch  # keep the Python object alive through the native call above
-    _ = t_par  # keep the Python object alive through the native call above
-    _ = probs  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
+        plan.storage[0].prepare_tree(n)
+    var probability_address = Int(py=classical_address(probs))
     _hdbscan_mode(model, binding, context)
-    # n, d, min_samples, min_cluster_size, max_cluster_size, alpha,
-    # allow_single_cluster, cluster_selection_method, cluster_selection_epsilon, metric
-    var params = Python.list(PythonObject(n), PythonObject(d), min_samples, _int(min_cluster_size),
-                             _int(max_cluster_size), _float(alpha_field),
-                             _flag(_truthy(_attr(model, "allow_single_cluster"))), method, _float(cse_field), metric)
-    var n_clusters = family_call(neural_descriptor_entry(binding, "hdbscan_fit"), addrs, params)
-    _ = t_inv  # keep the Python object alive through the native call above
-    _ = t_sz  # keep the Python object alive through the native call above
-    _ = t_lam  # keep the Python object alive through the native call above
-    _ = t_ch  # keep the Python object alive through the native call above
-    _ = t_par  # keep the Python object alive through the native call above
-    _ = probs  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
+    # Stage every original scalar conversion before machine-word narrowing,
+    # preserving large-int versus later invalid-parameter refusal order.
+    var staged_min_cluster = _int(min_cluster_size)
+    var staged_max_cluster = _int(max_cluster_size)
+    var staged_alpha = _float(alpha_field)
+    var allow_single = _truthy(_attr(model, "allow_single_cluster"))
+    var staged_epsilon = _float(cse_field)
+    var connection = hdbscan_fit_connection(binding)
+    var options = HdbscanFitOptions(n, d, Int(py=min_samples), Int(py=staged_min_cluster),
+        Int(py=staged_max_cluster), allow_single, Int(py=method), Int(py=metric), want_pd,
+        Float64(py=staged_alpha), Float64(py=staged_epsilon))
+    var request = HdbscanFitRequest(VariantsSpan(source_address, n * d),
+        VariantsSpan(label_address, n), VariantsSpan(core_address, n),
+        VariantsSpan(probability_address, n), options)
+    if connection.host:
+        plan.capture_host_source(request)
+    var n_clusters = 0
+    try:
+        with GILReleased(Python()):
+            n_clusters = connection.driver.fit(request, plan)
+    finally:
+        _ = connection.provider
+        _ = x
+        _ = labels
+        _ = core
+        _ = probs
+        _ = plan
+    plan.storage[0].host_source = List[Float32]()
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "labels_", labels)
     _set(model, "core_distances_", core)
     _set(model, "probabilities_", probs)
-    _set(model, "n_clusters_", _int(n_clusters))
-    _set(model, "n_outliers_", PythonObject(_i32_at(info, 1)))
-    _set(model, "n_boruvka_rounds_", PythonObject(_i32_at(info, 2)))
-    _set(model, "n_condensed_clusters_", PythonObject(_i32_at(info, 3)))
+    _set(model, "n_clusters_", PythonObject(n_clusters))
+    _set(model, "n_outliers_", PythonObject(Int(plan.storage[0].info[1])))
+    _set(model, "n_boruvka_rounds_", PythonObject(Int(plan.storage[0].info[2])))
+    _set(model, "n_condensed_clusters_", PythonObject(Int(plan.storage[0].info[3])))
     _set(model, "_prediction_data", PythonObject(None))
     _set(model, "_raw_data", PythonObject(None))
     if want_pd:
-        _set(model, "_prediction_data",
-             _hdbscan_prediction_data(model, binding, n, _i32_at(info, 4), t_par, t_ch, t_lam, t_sz, t_inv, context))
-        # cuML keeps the training matrix as `_raw_data` (hdbscan.pyx:1323);
-        # a borrowed input is copied so a caller's later write cannot move it.
+        _set(model, "_prediction_data", _hdbscan_prediction_data(model, binding, n,
+            Int(plan.storage[0].info[4]), plan, context))
+        # Keep the original borrowed-input copy and publication stage.
         var raw = x
         if not copied:
             raw = family_array(Python.tuple(n, d), "<f4", context)
             memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(raw))),
-                   src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=n * d)
-            _ = raw  # keep the Python object alive through the native call above
-            _ = x  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native calls above
+                src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=n * d)
+            _ = raw
+            _ = x
         _set(model, "_raw_data", raw)
-    _ = x^
-    _ = info^
+    _ = x
+    _ = plan
 
 
 def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int, n_edges: Int,
-                             t_par: PythonObject, t_ch: PythonObject, t_lam: PythonObject, t_sz: PythonObject,
-                             t_inv: PythonObject, context: PythonObject) raises -> PythonObject:
-    """cuML `generate_prediction_data` (`hdbscan.pyx:394-427`,
-    `prediction_data.cu:92-239`) through the binding's host function."""
+    fit_plan: HdbscanFitPlan, context: PythonObject) raises -> PythonObject:
+    """Same prediction-data algorithm and observable mapping; native scratch."""
     var n_cond = Int(py=_attr(model, "n_condensed_clusters_"))
     var n_sel = Int(py=_attr(model, "n_clusters_"))
     var pd = Python.dict()
     py_setitem(pd, PythonObject("n_edges"), PythonObject(n_edges))
     py_setitem(pd, PythonObject("n_condensed"), PythonObject(n_cond))
-    var parents = _head(t_par, n_edges, "<i4", context)
-    var children = _head(t_ch, n_edges, "<i4", context)
-    var lambdas = _head(t_lam, n_edges, "<f4", context)
-    var sizes = _head(t_sz, n_edges, "<i4", context)
-    var inverse = _head(t_inv, max(n_sel, 1), "<i4", context)
+    var parents = hdbscan_pack_head(Int(fit_plan.storage[0].tree_parents.unsafe_ptr()), n_edges, "<i4", context)
+    var children = hdbscan_pack_head(Int(fit_plan.storage[0].tree_children.unsafe_ptr()), n_edges, "<i4", context)
+    var lambdas = hdbscan_pack_head(Int(fit_plan.storage[0].tree_lambdas.unsafe_ptr()), n_edges, "<f4", context)
+    var sizes = hdbscan_pack_head(Int(fit_plan.storage[0].tree_sizes.unsafe_ptr()), n_edges, "<i4", context)
+    var inverse = hdbscan_pack_head(Int(fit_plan.storage[0].inverse.unsafe_ptr()), max(n_sel, 1), "<i4", context)
     var deaths = family_array(Python.tuple(n_cond), "<f4", context)
     var selected = family_array(Python.tuple(max(n_sel, 1)), "<i4", context)
-    var exemplar_idx = family_array(Python.tuple(n), "<i4", context)
+    var plan = HdbscanPredictionPlan(n)
     var offsets = family_array(Python.tuple(n_sel + 1), "<i4", context)
     var index_into = family_array(Python.tuple(n_edges + 1), "<i4", context)
     py_setitem(pd, PythonObject("parents"), parents)
@@ -925,48 +858,42 @@ def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int,
     py_setitem(pd, PythonObject("inverse_label_map"), inverse)
     py_setitem(pd, PythonObject("deaths"), deaths)
     py_setitem(pd, PythonObject("selected_clusters"), selected)
-    py_setitem(pd, PythonObject("exemplar_idx"), exemplar_idx)
+    # The mapping is still private until return. Preserve its original key
+    # insertion order without constructing the replaced full-capacity Array.
+    py_setitem(pd, PythonObject("exemplar_idx"), PythonObject(None))
     py_setitem(pd, PythonObject("exemplar_label_offsets"), offsets)
     py_setitem(pd, PythonObject("index_into_children"), index_into)
     var labels = _attr(model, "labels_")
-    # labels, parents, children, lambdas, sizes, inverse_label_map,
-    # deaths_out, selected_clusters_out, exemplar_idx_out,
-    # exemplar_label_offsets_out, index_into_children_out;
-    # n_leaves, n_edges, n_clusters, n_selected
-    var n_ex = family_call(
-        neural_descriptor_entry(binding, "hdbscan_generate_prediction_data"),
-        Python.list(classical_address(labels), classical_address(parents), classical_address(children),
-                    classical_address(lambdas), classical_address(sizes), classical_address(inverse),
-                    classical_address(deaths), classical_address(selected), classical_address(exemplar_idx),
-                    classical_address(offsets), classical_address(index_into)),
-        Python.list(PythonObject(n), PythonObject(n_edges), PythonObject(n_cond), PythonObject(n_sel)),
-    )
-    _ = labels  # keep the Python object alive through the native call above
-    _ = children  # keep the Python object alive through the native call above
-    _ = parents  # keep the Python object alive through the native call above
-    _ = inverse  # keep the Python object alive through the native call above
-    _ = sizes  # keep the Python object alive through the native call above
-    _ = lambdas  # keep the Python object alive through the native call above
-    _ = exemplar_idx  # keep the Python object alive through the native call above
-    _ = selected  # keep the Python object alive through the native call above
-    _ = deaths  # keep the Python object alive through the native call above
-    _ = index_into  # keep the Python object alive through the native call above
-    _ = offsets  # keep the Python object alive through the native call above
-    var n_exemplars = Int(py=_int(n_ex))
-    _ = labels  # keep the Python object alive through the native call above
-    _ = index_into  # keep the Python object alive through the native call above
-    _ = offsets  # keep the Python object alive through the native call above
-    _ = exemplar_idx  # keep the Python object alive through the native call above
-    _ = selected  # keep the Python object alive through the native call above
-    _ = deaths  # keep the Python object alive through the native call above
-    _ = inverse  # keep the Python object alive through the native call above
-    _ = sizes  # keep the Python object alive through the native call above
-    _ = lambdas  # keep the Python object alive through the native call above
-    _ = children  # keep the Python object alive through the native call above
-    _ = parents  # keep the Python object alive through the native call above
+    var connection = hdbscan_fit_connection(binding)
+    var request = HdbscanPredictionRequest(hdbscan_buffer_span(labels, n), hdbscan_buffer_span(parents, n_edges),
+        hdbscan_buffer_span(children, n_edges), hdbscan_buffer_span(lambdas, n_edges), hdbscan_buffer_span(sizes, n_edges), hdbscan_buffer_span(inverse, n_sel),
+        hdbscan_buffer_span(deaths, n_cond), hdbscan_buffer_span(selected, n_sel), hdbscan_buffer_span(offsets, n_sel + 1), hdbscan_buffer_span(index_into, n_edges + 1),
+        n, n_edges, n_cond, n_sel)
+    plan.storage[0].capture(request)
+    var n_exemplars = 0
+    try:
+        with GILReleased(Python()):
+            n_exemplars = connection.driver.prediction(request, plan)
+    finally:
+        _ = connection.provider
+        _ = labels
+        _ = parents
+        _ = children
+        _ = lambdas
+        _ = sizes
+        _ = inverse
+        _ = deaths
+        _ = selected
+        _ = offsets
+        _ = index_into
+        _ = plan
+        _ = fit_plan
+    plan.storage[0].release_inputs()
     py_setitem(pd, PythonObject("n_exemplars"), PythonObject(n_exemplars))
-    py_setitem(pd, PythonObject("exemplar_idx"), _head(exemplar_idx, max(n_exemplars, 1), "<i4", context))
-    _ = labels^
+    py_setitem(pd, PythonObject("exemplar_idx"),
+        hdbscan_pack_head(Int(plan.storage[0].exemplars.unsafe_ptr()), max(n_exemplars, 1), "<i4", context))
+    _ = plan
+    _ = labels
     return pd
 
 
