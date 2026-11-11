@@ -20,7 +20,7 @@ struct HdbscanFitDeviceBackend(HdbscanFitBackend):
 
     @staticmethod
     def fit(request: HdbscanFitRequest, mut state: HdbscanFitState) raises -> Int:
-        var o = request.options
+        var o = request.options.copy()
         var lp = i32_ptr(request.labels.address)
         var cp = f32_ptr(request.core_distances.address)
         var ip = i32_ptr(Int(state.info.unsafe_ptr()))

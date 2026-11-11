@@ -349,7 +349,7 @@ def _record(model: PythonObject, slot: String, key: PythonObject, binding: Pytho
     var dims = HdbscanQueryDimensions(rows, columns, edges, condensed, exemplars, selected, neighbors)
     var record = HdbscanQueryRecord(binding, connection.provider, connection.driver.copy(), connection.host,
         dims.copy(), raw, core, labels, parents, lambdas, deaths, clusters, children, indices, offsets)
-    cluster_record_put(slot, model, key, PythonObject(record^))
+    cluster_record_put(slot, model, key, PythonObject(alloc=record^))
 
 
 def hdbscan_public_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
