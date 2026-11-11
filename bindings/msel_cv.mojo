@@ -21,7 +21,7 @@ from std.sys.compile import is_defined
 from bindings.cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
 from bindings.msel_helpers_key import msel_helpers_key
-from core.msel_helpers_calls import (
+from bindings.msel_helpers_released import (
     msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
     msel_store_free_bytes,
 )

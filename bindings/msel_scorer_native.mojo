@@ -11,7 +11,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.family_common import family_call, family_array
 from bindings.classical_arrays import classical_address
 from bindings.msel_helpers_key import msel_helpers_key
-from core.msel_helpers_calls import msel_proba_column
+from bindings.msel_helpers_released import msel_proba_column
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.metrics_native_support import metric_is_real, metric_float
 from bindings.msel_inputs import msel_input, msel_admit

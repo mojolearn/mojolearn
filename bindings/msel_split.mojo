@@ -20,7 +20,7 @@ from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.msel_common import msel_signed32
 from bindings.msel_helpers_key import msel_helpers_key
-from core.msel_helpers_calls import (
+from bindings.msel_helpers_released import (
     msel_fold_ids, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_group_fold_perm_i32, msel_leave_range_i64,
     msel_select_fold_i64, msel_gather_i32, msel_split_table_i32,
 )
