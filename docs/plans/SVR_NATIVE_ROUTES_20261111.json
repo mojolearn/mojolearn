@@ -110,8 +110,8 @@
   },
   "source_review": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/svr/query-source-conservation.json",
   "new_fixture_coverage": {
-    "cpu_cases": 11,
-    "ordered_gpu_cases": 20,
+    "cpu_cases": 12,
+    "ordered_gpu_cases": 21,
     "boundary_cases": 9,
     "status": "authored, uncompiled/unrun",
     "native_suites": [
