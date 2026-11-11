@@ -16,6 +16,7 @@ from core.logistic_native_api import (
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
+from glm.linear_svc_native_device import LINEAR_SVC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
 from core.dbscan_native_api import DBSCANFitRequest
@@ -968,6 +969,11 @@ def linear_fit_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def linear_svc_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_SVC_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def logistic_native_api_v1_binding() raises -> PythonObject:
     var api = LOGISTIC_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1720,6 +1726,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
         m.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         m.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
+        m.def_function[linear_svc_native_api_v1_binding]("linear_svc_native_api_v1")
         m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")

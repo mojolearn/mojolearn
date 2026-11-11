@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Exact compiled provider admission and lifetime pins for typed LinearSVC."""
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from core.linear_svc_native_api import (
+    LINEAR_SVC_NATIVE_ABI, LINEAR_SVC_NATIVE_COUNT, LinearSvcDriver,
+    LinearSvcFitRequest, LinearSvcFitPlan,
+)
+from core.logistic_native_api import QnQueryRequest
+from providers.python.neural_descriptor_pyapi import (
+    NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
+)
+
+
+@fieldwise_init
+struct LinearSvcConnection(Movable):
+    var provider: PythonObject
+    var driver: LinearSvcDriver
+
+
+def linear_svc_connection(binding: PythonObject) raises -> LinearSvcConnection:
+    var factory = neural_descriptor_entry(binding, "linear_svc_native_api_v1")
+    var provider = neural_descriptor_connect_factory_once(factory,
+        String(LINEAR_SVC_NATIVE_ABI), LINEAR_SVC_NATIVE_COUNT)
+    return LinearSvcConnection(provider,
+        LinearSvcDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+
+
+def linear_svc_run_fit(connection: LinearSvcConnection, request: LinearSvcFitRequest,
+    mut plan: LinearSvcFitPlan) raises:
+    try:
+        with GILReleased(Python()):
+            connection.driver.fit(request, plan)
+    finally:
+        _ = connection
+        _ = plan
+
+
+def linear_svc_run_query(connection: LinearSvcConnection, operation: Int,
+    request: QnQueryRequest) raises:
+    try:
+        with GILReleased(Python()):
+            connection.driver.qn().query(operation, request)
+    finally:
+        _ = connection
