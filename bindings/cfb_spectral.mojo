@@ -51,6 +51,7 @@ from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.native_array_view import native_array_ndarray_view
@@ -881,7 +882,8 @@ def _se_validate(fields: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "_gamma", PythonObject(None) if gamma is None else _float(gamma))
 
 
-def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject) raises:
+def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject,
+            admit_source: Bool = False) raises:
     """SpectralEmbedding fit over admitted source and provider pins."""
     var b = _builtins()
     var fields = py_fields(model)
@@ -902,6 +904,11 @@ def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     if graph_affinity:
         connection = SpectralConnection(metrics, context)
         use_dense = (connection.value().capabilities & SPECTRAL_CAP_DENSE) != 0
+    if admit_source:
+        # The standalone function does not pass through spectral_input. Admit
+        # its supported native input before any shape/property operation,
+        # after the same option/route checks. Exact sparse inputs stay allowed.
+        classical_admit_value(source, context)
     var dense = PythonObject(None)
     var from_matrix = False
     if affinity == "precomputed_nearest_neighbors":
@@ -1021,8 +1028,9 @@ def _spectral_embedding(args: PythonObject, routes: SpectralRoutePins, context: 
     for i in range(2):  # small-loop(flags: norm_laplacian, drop_first): 2
         var value = args[6 + i]
         if py_type(value) is not b.bool:
+            var type_name = py_call(b.type.__dict__["__name__"].__get__, py_type(value))
             raise Error("TypeError: mojolearn spectral_embedding: " + names[i] + " must be a bool, got "
-                        + String(py_type(value).__name__))
+                        + String(type_name))
     # The model the function's Python built: the constructor's fields, in
     # its order, then the two switches.
     var model = py_call(b.object.__new__, args[0])
@@ -1038,7 +1046,10 @@ def _spectral_embedding(args: PythonObject, routes: SpectralRoutePins, context: 
     py_setitem(fields, "verbose", PythonObject(False))
     py_setitem(fields, "_drop_first", args[7])
     py_setitem(fields, "_norm_laplacian", args[6])
-    _se_fit(model, routes, args[1], context)
+    # Match the estimator door's exact scalar/class admission before the
+    # validator compares or converts any rebound/public parameter.
+    _ = spectral_admit(model, False, False, context)
+    _se_fit(model, routes, args[1], context, True)
     return fields["embedding_"]
 
 
