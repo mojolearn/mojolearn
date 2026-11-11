@@ -27,7 +27,8 @@ from bindings.cpython_table import cpython_table
 from bindings.prep_native_estimator import prep_native_split, prep_entry_call
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
-from bindings.scaler_native import _stage, _ptr, _input
+from bindings.scaler_native import _ptr, _input
+from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3

@@ -1,0 +1,51 @@
+Mojolearn focused native device concurrency fixtures (2026-11-10)
+
+Dependency SHAs and exact coverage: native-device-concurrency.json.
+Five primary GPU phases; source reviewed only, no compile or execution.
+  1. First decomposition context publication and actual small ew operations.
+  2. First neighbor context publication and actual small unary operations.
+  3. Concurrent owner/position-distinct downloads just above the unchanged
+     Apple staging threshold; guards and caller input lifetime retained.
+  4. Two resident-pool waves: fresh append and same-class pop/reuse, distinct
+     live IDs/pointers, growth during other owners' upload/ew/read/download,
+     concurrent metadata reads and joined live-count restoration.
+  5. Three isolated generic device-pool waves: exact-sized held owners,
+     unique pointers, actual fill/download, take/give and quiescent byte/list
+     accounting. Fixture slot ends V2; DEVICE_POOL_LAYOUT is used everywhere.
+
+Parallel plan / run constraints
+  One independent owner per allocated CPU core through host_parallelize.
+  MOJOLEARN_NATIVE_TEST_WORKERS is the actual affinity/cgroup allocation on
+  rented hosts; local default is all logical cores. No arbitrary lower cap.
+  At least two workers and overlapping operation regions are required;
+  observed counts print in each phase. These are call overlap counts, not
+  busy-core measurements. Root reports resources and CPU utilization.
+  At peak, about 2 MiB host and 2 MiB device per worker plus the existing
+  Apple 64 MiB pinned stage. No timing or identity workload is introduced.
+
+RUN OWED
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/native_device_concurrency.mojo
+  Run the standalone executable in a FRESH PROCESS, with no preceding device
+  suite or concurrent sibling suite. If compiled into a combined harness,
+  run this suite first. Later execution cannot claim first-publication
+  coverage. No lane compiler/test/box execution occurred.
+  Apple executes the shared pinned stage; other GPU columns report the raw
+  copy route and do not claim Apple-stage coverage. No multi-chunk 64 MiB
+  boundary or 2 GiB eviction stress is included in this bounded fixture.
+  No prior green numerical suites need repeating for these new fixtures.
+
+Ownership and oracle
+  Native Lists retain source/destination storage after all synchronous calls.
+  Resident IDs remain live through use; concurrent use after freeing an ID
+  is outside the handle contract and is not tested. Generic pool owners are
+  retained independently through joined operations; only the test's private
+  slot is read after joins. Expected values are small exact integer patterns
+  identifying owner and cell. No old output bits or hashes supply an oracle.
+
+No product/kernel changes in this fixture commit. No source guard, Python
+fallback, experimental switch or A/B define. Nothing removed: these new
+correctness checks cover newly repaired synchronization and preserve all
+existing numerical workloads. Static TOML/JSON/whitespace and source review
+only. Frozen resident dependency 15ed627362 is adopted; all dependency
+SHAs are recorded in the manifest. Local adoption commits are history only,
+not root cherry-picks.

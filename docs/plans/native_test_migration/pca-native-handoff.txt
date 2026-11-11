@@ -1,0 +1,61 @@
+Mojolearn PCA native test lane (2026-11-10)
+
+Dependencies
+  Frozen integration e53128fe7f; product API e8958ae5e2. Local adoption
+  7cd18e8103 is dependency history, not a root cherry-pick. Product/boundary
+  files remain pilot-owned. Query cache state dependency b2b211b86c is adopted separately.
+
+Contract chunk 811bdb304c: 32 pure native wire/state contracts
+  pca_contract{,_suite}.mojo; breakdown in pca-native-contract.json.
+  Every request slot, Boolean combinations, optional projection/fold fields,
+  signed-zero noise/status words, metadata, malformed envelopes, missing
+  spans, whitening dimension/pointer refusals and independent request copies.
+  Test wire oracle implements no PCA algorithm. All cases run in parallel.
+
+Execution chunk: 10 CPU and 13 GPU fixtures
+  pca_native_{cpu,gpu}{,_suite}.mojo, shared pca_native_cases.mojo and
+  pca_native_fold_cases.mojo. Exact breakdown in pca-native-execution.json.
+  Actual host/estimator/fold providers execute original exact 21x4,
+  variance-fraction 21x4, full 8x3, wide 4x7 and randomized rank-20x5 cases.
+  Full/rank reconstruction keeps original 2e-4/1e-3 bounds; NumPy-only saved
+  Float64 spectra and subspaces are independent oracles. No PCA algorithm
+  or fitting implementation copied into test code. Literal planted queries
+  test current state pointers and copied records; guards and unchanged source
+  and fitted state cover storage ownership. Resident cases preserve original
+  source/index storage after upload and distinguish finite/range failures.
+  CPU graphs and oracle cells parallel; GPU graphs ordered over shared
+  contexts/store, existing GPU algorithms parallel. Existing whitening
+  3 CPU / 3 GPU numerical fixtures are not duplicated.
+
+Genuine Python split / deletions
+  Numerical inverse reconstruction moved from two existing definitions,
+  preserving original inputs, settings and bounds. Python owner/audit/array
+  seams and independent NumPy comparisons remain. The two definitions retain
+  boundary purpose; no entire definition removed. Removed their second fits,
+  repeated state/output bit comparisons. No identity counterpart recreated.
+  Other Python tests, including existing unrun identity-only cases, unchanged.
+  No product/kernel/default/tuning/A/B changes. No source guard or fallback.
+
+Root queue / RUN OWED (run from repository root)
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_contract.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/pca_native_cpu.mojo
+  mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_native_gpu.mojo
+  Importable run_checks() suites and pixi tasks included. Bundle with product
+  and linalg once; root already applies identical and CPU column flags.
+  No lane compilation, runtime tests, boxes, timing or identity execution.
+
+Static evidence only: Python AST, TOML/JSON parse, whitespace and source
+review. NumPy-only data generation preserved the original sources and has
+no product runtime claim. Nineteen fixture files have recorded provenance.
+Linalg task flags/assertions and reference writer parallelism were corrected
+in this follow-up; all five linalg fixture data files remain unchanged.
+Complete evidence: ~/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/
+
+Query cache state follow-up: 24 native fixtures (pca-query-state.json)
+  Dependency b2b211b86c, product files unchanged. pca_query_state_suite covers
+  native settings, all copied fields, invalid/valid key pairs, absent slots,
+  ordering/duplicate keys, full-width identity words and native copy lifetime.
+  Every independent case uses host_parallelize. Python reference pins and
+  public admission/cache seams remain in the pilot-owned boundary tests.
+  RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_query_state.mojo
+  No compile or runtime execution; static source/TOML/JSON/whitespace only.

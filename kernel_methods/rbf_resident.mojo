@@ -287,10 +287,10 @@ def rbf_sampler_fit_transform_resident(
         # SCAN_BLOCKS partials plus one slot for their device-folded minimum
         st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS + 1)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var dw = pool_take["MojolearnKmRbfResWV1"](ctx, d * q)
-    var db = pool_take["MojolearnKmRbfResBV1"](ctx, q)
-    var dx = pool_take["MojolearnKmRbfResXV1"](ctx, nx)
-    var dz = pool_take["MojolearnKmRbfResZV1"](ctx, nz)
+    var dw = pool_take["MojolearnKmRbfResWV2"](ctx, d * q)
+    var db = pool_take["MojolearnKmRbfResBV2"](ctx, q)
+    var dx = pool_take["MojolearnKmRbfResXV2"](ctx, nx)
+    var dz = pool_take["MojolearnKmRbfResZV2"](ctx, nz)
     km_random_weights(ctx, dw, seed, d, q, sigma, KM_RF_TPB, KMSAB_NONE)
     km_random_offsets(ctx, db, seed, q, KM_RF_TPB)
     var blocks = _scan_blocks(nx)
@@ -336,10 +336,10 @@ def rbf_sampler_fit_transform_resident(
     var is_nan = False
     if bad >= 0:
         is_nan = device_classify_nonfinite(ctx, dx, bad)
-    pool_give["MojolearnKmRbfResWV1"](dw^)
-    pool_give["MojolearnKmRbfResBV1"](db^)
-    pool_give["MojolearnKmRbfResXV1"](dx^)
-    pool_give["MojolearnKmRbfResZV1"](dz^)
+    pool_give["MojolearnKmRbfResWV2"](dw^)
+    pool_give["MojolearnKmRbfResBV2"](db^)
+    pool_give["MojolearnKmRbfResXV2"](dx^)
+    pool_give["MojolearnKmRbfResZV2"](dz^)
     if bad >= 0:
         if is_nan:
             raise Error("rbf_sampler transform X: NaN at flat index " + String(bad) + "; refused by name (DEVIATION 1686)")

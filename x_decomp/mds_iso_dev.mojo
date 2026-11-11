@@ -24,15 +24,13 @@ from std.memory import bitcast
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, _down, xd_ctx
 from x_decomp.mds_iso import ISO_CHUNK, iso_chunk, iso_group_sum, iso_mean, iso_merge
-from x_decomp.resident import X_DECOMP_POOL, _ptr
+from x_decomp.resident import pool_buffer, _ptr
 from x_decomp.select_ops import order_less
 
 
 def _iptr(id: Int, n: Int) raises -> I32Ptr:
     """Pooled matrix id as int32 words (made on the host, never in a kernel)."""
-    _ = _ptr(id, n)
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    return I32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+    return _ptr(id, n).bitcast[Int32]()
 
 
 def mds_keys_kernel(dis: F32Ptr, keys: F32Ptr, idx: I32Ptr, n: Int32, total: Int32):
@@ -187,12 +185,13 @@ def scatter_disp_kernel(gv: F32Ptr, gid: I32Ptr, idx: I32Ptr, dst: F32Ptr, m: In
 
 def _read_i32(id: Int) raises -> Int:
     """Word 0 of pooled matrix id as an int32, after every launch before it."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var buffer = pool_buffer(id, 1)
     var h = List[Float32](length=1, fill=Float32(0))
     var ctx = xd_ctx()
-    _down(ctx, p[].bufs[id], F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())), 1)
+    _down(ctx, buffer, F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())), 1)
     ctx.synchronize()
     var v = Int(bitcast[DType.int32](h[0]))
+    _ = buffer^
     return v
 
 

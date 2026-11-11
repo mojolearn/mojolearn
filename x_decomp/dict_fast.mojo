@@ -37,7 +37,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul_add, identical_sqrt
 from x_decomp.cells import F32Ptr
 from x_decomp.device import xd_ctx
-from x_decomp.resident import _ptr, pool_alloc, pool_free, X_DECOMP_POOL
+from x_decomp.resident import _ptr, pool_alloc, pool_free, pool_buffer
 from x_decomp.dictl_resample import enqueue_dict_resample
 
 comptime DECOMP_FAST_DICT_DEV = (
@@ -106,15 +106,15 @@ def dict_update_dev(
         var cells = nc * m
         if cells <= 0:
             return 0
-        _ = _ptr(isrc, cells)
-        var pd = _ptr(idst, cells)
+        var source = pool_buffer(isrc, cells)
+        var target = pool_buffer(idst, cells)
+        var pd = F32Ptr(unsafe_from_address=Int(target.unsafe_ptr()))
         var pa = _ptr(ia, nc * nc)
         var pb = _ptr(ib, m * nc)
         var ctx = xd_ctx()
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
         ctx.enqueue_copy(
-            dst_buf=pool[].bufs[idst].create_sub_buffer[DType.float32](0, cells),
-            src_buf=pool[].bufs[isrc].create_sub_buffer[DType.float32](0, cells),
+            dst_buf=target.create_sub_buffer[DType.float32](0, cells),
+            src_buf=source.create_sub_buffer[DType.float32](0, cells),
         )
         var nblk = (m + DD_TPB - 1) // DD_TPB
         var sid = pool_alloc(nblk)
@@ -131,5 +131,7 @@ def dict_update_dev(
             )
         # the stream orders a later reuse of the scratch behind these launches
         pool_free(sid)
+        _ = source^
+        _ = target^
         return cells
     raise Error("x_decomp: dev_dict_update needs a FAST build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF")

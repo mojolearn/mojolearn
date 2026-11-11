@@ -74,7 +74,7 @@ from x_decomp.device import (
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
 from decomposition.linalg_types import _validate_shape
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -105,6 +105,8 @@ struct _Pool(Defaultable, Movable):
     var released: List[Int]
     var free_floats: Int
     var free_count: Int
+    var metadata_lock: List[Int64]
+    var trimming: Bool
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
@@ -116,9 +118,11 @@ struct _Pool(Defaultable, Movable):
         self.released = List[Int]()
         self.free_floats = 0
         self.free_count = 0
+        self.metadata_lock = List[Int64](length=1, fill=0)
+        self.trimming = False
 
 
-comptime X_DECOMP_POOL = SharedSlot[_Pool, "MojolearnXDecompPoolV1"]
+comptime X_DECOMP_POOL = SharedSlot[_Pool, "MojolearnXDecompPoolV2", 2]
 
 
 def pool_alloc(n: Int) raises -> Int:
@@ -127,49 +131,106 @@ def pool_alloc(n: Int) raises -> Int:
     if c >= POOL_CLASSES:
         raise Error("x_decomp: a device matrix past the pool's largest size class")
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if len(p[].free_by_class[c]) > 0:
-        var id = p[].free_by_class[c].pop()
-        p[].live[id] = True
-        p[].free_floats -= 1 << c
-        p[].free_count -= 1
-        return id
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if len(p[].free_by_class[c]) > 0:
+            var id = p[].free_by_class[c].pop()
+            p[].live[id] = True
+            p[].free_floats -= 1 << c
+            p[].free_count -= 1
+            return id
+    finally:
+        shared_slot_unlock(lock)
+    # Device allocation does not hold the metadata lock. Other fits can
+    # continue using and returning their live buffers while it completes.
     var ctx = xd_ctx()
     var buf = ctx.enqueue_create_buffer[DType.float32](1 << c)
-    if len(p[].released) > 0:
-        var id = p[].released.pop()
-        p[].bufs[id] = buf^
-        p[].cls[id] = c
-        p[].live[id] = True
-        return id
-    p[].bufs.append(buf^)
-    p[].cls.append(c)
-    p[].live.append(True)
-    return len(p[].cls) - 1
+    var displaced = buf
+    var result = -1
+    shared_slot_lock(lock)
+    try:
+        if len(p[].released) > 0:
+            var id = p[].released.pop()
+            displaced = p[].bufs[id]
+            p[].bufs[id] = buf^
+            p[].cls[id] = c
+            p[].live[id] = True
+            result = id
+        else:
+            p[].bufs.append(buf^)
+            p[].cls.append(c)
+            p[].live.append(True)
+            result = len(p[].cls) - 1
+    finally:
+        shared_slot_unlock(lock)
+    _ = displaced^  # the last reference to a replaced tiny buffer dies outside the lock
+    return result
+
+
+def _pool_trim() raises:
+    """Detach idle buffers under the lock; drain and destroy them outside it."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    while True:  # driver-loop: idle batches returned while this trim drains
+        var complete = False
+        var repeat = False
+        try:
+            var ctx = xd_ctx()
+            ctx.synchronize()
+            var tiny = ctx.enqueue_create_buffer[DType.float32](1)
+            var retired = List[DeviceBuffer[DType.float32]]()
+            shared_slot_lock(lock)
+            try:
+                for k in range(POOL_CLASSES):  # driver-loop: existing pool size classes
+                    while len(p[].free_by_class[k]) > 0:
+                        var f = p[].free_by_class[k].pop()
+                        # Retain the allocation before replacing its metadata
+                        # slot; no device-buffer destruction runs under the lock.
+                        retired.append(p[].bufs[f])
+                        p[].bufs[f] = tiny
+                        p[].cls[f] = -1
+                        p[].released.append(f)
+                p[].free_floats = 0
+                p[].free_count = 0
+            finally:
+                shared_slot_unlock(lock)
+            ctx.synchronize()
+            _ = retired^
+            _ = tiny^
+            complete = True
+        finally:
+            shared_slot_lock(lock)
+            # A concurrent return may cross the cap during the drain. This
+            # trimmer owns that follow-up batch; no overflow is left waiting
+            # for an unrelated later call. On an error allow a later retry.
+            repeat = complete and (p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT)
+            p[].trimming = repeat
+            shared_slot_unlock(lock)
+        if not repeat:
+            return
 
 
 def pool_free(id: Int) raises:
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
-        raise Error("x_decomp: freeing a device matrix that is not live")
-    var c = p[].cls[id]
-    p[].live[id] = False
-    p[].free_by_class[c].append(id)
-    p[].free_floats += 1 << c
-    p[].free_count += 1
-    if p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT:
-        # release every free buffer: its id holds a copy of one tiny buffer
-        var ctx = xd_ctx()
-        ctx.synchronize()
-        var tiny = ctx.enqueue_create_buffer[DType.float32](1)
-        for k in range(POOL_CLASSES):
-            while len(p[].free_by_class[k]) > 0:
-                var f = p[].free_by_class[k].pop()
-                p[].bufs[f] = tiny
-                p[].cls[f] = -1
-                p[].released.append(f)
-        p[].free_floats = 0
-        p[].free_count = 0
-        ctx.synchronize()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var trim = False
+    shared_slot_lock(lock)
+    try:
+        if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
+            raise Error("x_decomp: freeing a device matrix that is not live")
+        var c = p[].cls[id]
+        p[].live[id] = False
+        p[].free_by_class[c].append(id)
+        p[].free_floats += 1 << c
+        p[].free_count += 1
+        if (p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT) and not p[].trimming:
+            p[].trimming = True
+            trim = True
+    finally:
+        shared_slot_unlock(lock)
+    if trim:
+        _pool_trim()
 
 
 def pool_live_count() raises -> Int:
@@ -177,31 +238,63 @@ def pool_live_count() raises -> Int:
     the resident fitted state the decomposition owners hold (lane
     ne1-a-decomp-resident)."""
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var live = 0
-    for i in range(len(p[].live)):  # driver-loop: over the pool's ids (test readout)
-        if p[].live[i]:
-            live += 1
-    return live
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        var live = 0
+        for i in range(len(p[].live)):  # driver-loop: over the pool's ids (test readout)
+            if p[].live[i]:
+                live += 1
+        return live
+    finally:
+        shared_slot_unlock(lock)
+
+
+def pool_buffer(id: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """An owned buffer reference, independent of pool List reallocations.
+
+    The caller owns its live ID until its last enqueue. Copies pin storage;
+    they do not grant use of an ID after pool_free or prevent its reuse.
+    """
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
+            raise Error("x_decomp: a device matrix id that is not live")
+        if (1 << p[].cls[id]) < n:
+            raise Error("x_decomp: a device matrix smaller than the call reads")
+        return p[].bufs[id]
+    finally:
+        shared_slot_unlock(lock)
 
 
 def _ptr(id: Int, n: Int) raises -> F32Ptr:
+    # A live ID retains its allocation in the pool until its owner frees it.
+    # List movement never moves device storage, and trimming visits only idle
+    # IDs. Validate/read under the lock; kernels execute after it is released.
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
-        raise Error("x_decomp: a device matrix id that is not live")
-    if (1 << p[].cls[id]) < n:
-        raise Error("x_decomp: a device matrix smaller than the call reads")
-    return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
+            raise Error("x_decomp: a device matrix id that is not live")
+        if (1 << p[].cls[id]) < n:
+            raise Error("x_decomp: a device matrix smaller than the call reads")
+        return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+    finally:
+        shared_slot_unlock(lock)
 
 
 # ---- Typed entries behind the GPU binding's doors (the shell is x_decomp/resident_py*.mojo)
 def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     """Host floats into the device matrix; waits (the host store may change
     after this returns)."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    _ = _ptr(i, cnt)
+    var buffer = pool_buffer(i, cnt)
     var ctx = xd_ctx()
-    _up_into(ctx, p[].bufs[i], src, cnt)
+    _up_into(ctx, buffer, src, cnt)
     ctx.synchronize()
+    _ = buffer^
     return cnt
 
 
@@ -215,10 +308,10 @@ def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     a8c's duplicate named entry x_decomp_dev_upload_finite was folded into
     it at integration, integ/pre-0867-w5). Callers: the manifold kit's
     resident upload and DecompKit.input_tested (PLS with a deferred X)."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    var dp = _ptr(i, cnt)
+    var buffer = pool_buffer(i, cnt)
+    var dp = F32Ptr(unsafe_from_address=Int(buffer.unsafe_ptr()))
     var ctx = xd_ctx()
-    _up_into(ctx, p[].bufs[i], src, cnt)
+    _up_into(ctx, buffer, src, cnt)
     var status = ctx.enqueue_create_buffer[DType.int32](1)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
     if cnt > 0:
@@ -229,16 +322,17 @@ def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     var flagged = Int(word.unsafe_ptr()[0])
     _ = word^
     _ = status^
+    _ = buffer^
     return flagged
 
 
 def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:
     """The device matrix into host floats, after every launch before it."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    _ = _ptr(i, cnt)
+    var buffer = pool_buffer(i, cnt)
     var ctx = xd_ctx()
-    _down(ctx, p[].bufs[i], dst, cnt)
+    _down(ctx, buffer, dst, cnt)
     ctx.synchronize()
+    _ = buffer^
     return cnt
 
 
@@ -282,14 +376,15 @@ def dev_project_run(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) r
         raise Error("x_decomp: projection exceeds the Int32 index bound")
     comptime if not PROJECT_TILED:
         return -1
-    var pf = _ptr(flag, 1)
+    var flags = pool_buffer(flag, 1)
+    var pf = F32Ptr(unsafe_from_address=Int(flags.unsafe_ptr()))
     var pa = _ptr(a, m * k)
     var pb = _ptr(b, k * n)
     var pc = _ptr(c, m * n)
     var ctx = xd_ctx()
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
-    enqueue_fill(ctx, pool[].bufs[flag], Float32(0))
+    enqueue_fill(ctx, flags, Float32(0))
     launch_project(ctx, pa, pb, pc, pf, m, k, n)
+    _ = flags^
     return m * n
 
 
@@ -358,14 +453,15 @@ def dev_orth_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
     """dst = the orthonormalized columns of a (DevExec.orth's passes on the
     device copy; a is unchanged)."""
     var cells = m * l
-    _ = _ptr(ia, cells)
-    _ = _ptr(io, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(io, cells)
     var ctx = xd_ctx()
     if cells > 0:
-        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
-        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        var sub = target.create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=source.create_sub_buffer[DType.float32](0, cells))
         orth_on_device(ctx, sub, m, l)
+    _ = source^
+    _ = target^
     return cells
 
 
@@ -373,20 +469,21 @@ def dev_orth_diag_run(ia: Int, io: Int, pd: F32Ptr, m: Int, l: Int) raises -> In
     """`dev_orth_run`, and the host floats at `pd` (l) = the product of the
     two passes' R diagonals (`orth_on_device_diag`, lane neural-pass17)."""
     var cells = m * l
-    _ = _ptr(ia, cells)
-    _ = _ptr(io, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(io, cells)
     var ctx = xd_ctx()
     var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
     enqueue_fill(ctx, dd, Float32(1.0))
     if cells > 0:
-        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
-        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        var sub = target.create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=source.create_sub_buffer[DType.float32](0, cells))
         orth_on_device_diag(ctx, sub, m, l, dd, True)
     if l > 0:
         ctx.enqueue_copy(dst_ptr=pd, src_buf=dd.create_sub_buffer[DType.float32](0, l))
     ctx.synchronize()
     _ = dd^
+    _ = source^
+    _ = target^
     return cells
 
 
@@ -478,14 +575,14 @@ def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
     var cells = m * n
     if cells > 2147483647:
         raise Error("x_decomp: svd exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
     _ = da^
     ctx.synchronize()
+    _ = source^
     return n
 
 
@@ -517,14 +614,14 @@ def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: lu exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pl = _ptr(il, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(il, cells)
+    var pl = F32Ptr(unsafe_from_address=Int(target.unsafe_ptr()))
     var ctx = xd_ctx()
     if ia != il:
         ctx.enqueue_copy(
-            dst_buf=pool[].bufs[il].create_sub_buffer[DType.float32](0, cells),
-            src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells),
+            dst_buf=target.create_sub_buffer[DType.float32](0, cells),
+            src_buf=source.create_sub_buffer[DType.float32](0, cells),
         )
     var dp = ctx.enqueue_create_buffer[DType.int32](n)
     var di = ctx.enqueue_create_buffer[DType.float32](1)
@@ -538,6 +635,8 @@ def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
     _ = di^
     _ = ds^
     _ = dact^
+    _ = source^
+    _ = target^
     return n
 
 
@@ -591,21 +690,22 @@ def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> I
     var cells = m * n
     if cells > 2147483647:
         raise Error("x_decomp: qr_r exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
     var ctx = xd_ctx()
     comptime if IDN_QR_R_INPLACE:
         if consume:
-            var dv = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
+            var dv = source.create_sub_buffer[DType.float32](0, cells)
             DevExec._qr_r_on(ctx, dv, m, n, pr)
             _ = dv^
             ctx.synchronize()
+            _ = source^
             return 1
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     DevExec._qr_r_on(ctx, da, m, n, pr)
     _ = da^
     ctx.synchronize()
+    _ = source^
     return 0
 
 
@@ -641,7 +741,8 @@ def dev_code_rows_run(
     var cells = n * k
     var pg = _ptr(ig, k * k)
     var pq = _ptr(iq, cells)
-    var pw = _ptr(iw, cells)
+    var weights = pool_buffer(iw, cells)
+    var pw = F32Ptr(unsafe_from_address=Int(weights.unsafe_ptr()))
     var alpha = Float32(alpha_in)
     var tol = Float32(tol_in)
     var per = cells
@@ -649,7 +750,6 @@ def dev_code_rows_run(
         per = n * (k * k + LARS_ROW_EXTRA * k)
     elif kind == 2:
         per = n * (k * k + 3 * k)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     # the scratch at its exact size (DevExec's; a pooled buffer rounds n (k^2 +
     # 7 k) floats up to a power of two)
@@ -662,7 +762,7 @@ def dev_code_rows_run(
         )
     else:
         # the host-address entries start from a zeroed w
-        var wsub = pool[].bufs[iw].create_sub_buffer[DType.float32](0, cells)
+        var wsub = weights.create_sub_buffer[DType.float32](0, cells)
         enqueue_fill(ctx, wsub, Float32(0.0))
         if kind == 1:
             ctx.enqueue_function[lars_rows_kernel](
@@ -675,6 +775,7 @@ def dev_code_rows_run(
             )
     # the scratch dies here: wait for the launch that uses it
     ctx.synchronize()
+    _ = weights^
     _ = dn^
     _ = ds^
     return n
@@ -705,13 +806,13 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: eigh exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
     _ = da^
+    _ = source^
     return n
 
 
@@ -746,13 +847,12 @@ def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: eigh exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
+    var source = pool_buffer(ia, cells)
     var pw = _ptr(iw, n)
     var pv = _ptr(iv, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     var dw = ctx.enqueue_create_buffer[DType.float32](n)
     var dv = ctx.enqueue_create_buffer[DType.float32](cells)
     var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
@@ -767,6 +867,7 @@ def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
     _ = dw^
     _ = dv^
     _ = status^
+    _ = source^
     DevExec.eigh_status_check(hs, n)
 
 
@@ -785,19 +886,18 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: eigh exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    _ = _ptr(iw, n)
-    _ = _ptr(iv, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var weights = pool_buffer(iw, n)
+    var vectors = pool_buffer(iv, cells)
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     if uplo != 0:
         ctx.enqueue_function[sym_from_triangle_kernel](
             da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=(cells + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
         )
-    var dw = pool[].bufs[iw].create_sub_buffer[DType.float32](0, n)
-    var dv = pool[].bufs[iv].create_sub_buffer[DType.float32](0, cells)
+    var dw = weights.create_sub_buffer[DType.float32](0, n)
+    var dv = vectors.create_sub_buffer[DType.float32](0, cells)
     var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
     var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
@@ -806,6 +906,9 @@ def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
     _ = dw^
     _ = dv^
     _ = status^
+    _ = source^
+    _ = weights^
+    _ = vectors^
     DevExec.eigh_status_check(hs, n)
     return n
 
@@ -1001,7 +1104,7 @@ def grp_fit_fused_run(
         st[].part = ctx.enqueue_create_buffer[DType.int32](513)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
     var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-    var buf = pool_take["MojolearnXDecompCls2ScanV1"](ctx, max(cnt, 1))
+    var buf = pool_take["MojolearnXDecompCls2ScanV2"](ctx, max(cnt, 1))
     if cnt > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
         ctx.enqueue_function[nonfinite_partial_kernel](
@@ -1034,14 +1137,16 @@ def grp_fit_fused_run(
     ctx.synchronize()
     if cnt > 0:
         best = st[].host.value().unsafe_ptr()[0]
-    pool_give["MojolearnXDecompCls2ScanV1"](buf^)
+    pool_give["MojolearnXDecompCls2ScanV2"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 
 def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     """The first `count` floats of pooled matrix id as a sub-buffer."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
+    var buffer = pool_buffer(id, count)
+    var view = buffer.create_sub_buffer[DType.float32](0, count)
+    _ = buffer^
+    return view^
 
 
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.

@@ -19,7 +19,8 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
-from bindings.scaler_native import _input, _ptr, _stage, _copy_row
+from bindings.scaler_native import _input, _ptr, _copy_row
+from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _write_back, _public_result, _nan_fill
 from core.scaler_fit_impl import scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices
 from bindings.minmax_metadata import _flag, minmax_range_pair

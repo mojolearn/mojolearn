@@ -87,7 +87,7 @@ from x_decomp.jacobi_par import pj_identity_kernel
 from x_decomp.mcd import IDN_MCD_CHOL
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
-from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
+from x_decomp.resident import pool_buffer, _pool_buf_view, _ptr, pool_alloc, pool_free
 from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_COLS, MOVE_TRANSPOSE
 from x_decomp.cells import LARS_ROW_EXTRA
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dict_update_dev
@@ -413,27 +413,27 @@ struct DKit(Movable):
         self.svd_pending = False
         # the unused broadcast operand: Kit's `one`, a 0
         var z = List[Float32](length=1, fill=Float32(0))
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
         self.ctx.enqueue_copy(
-            dst_buf=pool[].bufs[self.one.id].create_sub_buffer[DType.float32](0, 1),
+            dst_buf=_pool_buf_view(self.one.id, 1),
             src_ptr=F32Ptr(unsafe_from_address=Int(z.unsafe_ptr())),
         )
         self.hold_f.append(z^)
-        var nv = pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1)
+        var nv = _pool_buf_view(self.nan_word.id, 1)
         enqueue_fill(self.ctx, nv, Float32(0))
         _ = nv^
-        var ev = pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1)
+        var ev = _pool_buf_view(self.eig_word.id, 1)
         enqueue_fill(self.ctx, ev, Float32(0))
         _ = ev^
-        var sv = pool[].bufs[self.svd_word.id].create_sub_buffer[DType.float32](0, 1)
+        var sv = _pool_buf_view(self.svd_word.id, 1)
         enqueue_fill(self.ctx, sv, Float32(0))
         _ = sv^
 
     # ---- movement
     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
-        _ = D.p()
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
-        return pool[].bufs[D.id].create_sub_buffer[DType.float32](D.off, max(D.n(), 1))
+        var buffer = pool_buffer(D.id, D.off + max(D.n(), 1))
+        var view = buffer.create_sub_buffer[DType.float32](D.off, max(D.n(), 1))
+        _ = buffer^
+        return view^
 
     def upload_into(mut self, D: DMat, var src: List[Float32]) raises:
         if D.n() > 0:
@@ -452,9 +452,9 @@ struct DKit(Movable):
             raise Error("x_decomp: a row view is not downloaded")
         var out = Mat(D.r, D.c)
         if D.n() > 0:
-            var pool = X_DECOMP_POOL.get_or_create_ptr()
-            _ = D.p()
-            _down(self.ctx, pool[].bufs[D.id], out.p(), D.n())
+            var buffer = pool_buffer(D.id, D.n())
+            _down(self.ctx, buffer, out.p(), D.n())
+            _ = buffer^
         return out^
 
     def sync(mut self) raises:
@@ -462,22 +462,19 @@ struct DKit(Movable):
         var echeck = self.eig_pending
         var scheck = self.svd_pending
         if check:
-            var pool = X_DECOMP_POOL.get_or_create_ptr()
             self.ctx.enqueue_copy(
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
-                src_buf=pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1),
+                src_buf=_pool_buf_view(self.nan_word.id, 1),
             )
         if echeck:
-            var pool = X_DECOMP_POOL.get_or_create_ptr()
             self.ctx.enqueue_copy(
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.eig_host.unsafe_ptr())),
-                src_buf=pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1),
+                src_buf=_pool_buf_view(self.eig_word.id, 1),
             )
         if scheck:
-            var pool = X_DECOMP_POOL.get_or_create_ptr()
             self.ctx.enqueue_copy(
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.svd_host_word.unsafe_ptr())),
-                src_buf=pool[].bufs[self.svd_word.id].create_sub_buffer[DType.float32](0, 1),
+                src_buf=_pool_buf_view(self.svd_word.id, 1),
             )
         self.ctx.synchronize()
         self.hold_f.clear()
@@ -541,8 +538,7 @@ struct DKit(Movable):
 
     def _bad_flag(mut self) raises -> DMat:
         var bad = DMat(1, 1)
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
-        var bv = pool[].bufs[bad.id].create_sub_buffer[DType.float32](0, 1)
+        var bv = _pool_buf_view(bad.id, 1)
         enqueue_fill(self.ctx, bv, Float32(0))
         _ = bv^
         return bad^
@@ -550,10 +546,9 @@ struct DKit(Movable):
     def _refuse_nan(mut self, bad: DMat) raises:
         """One word home: `_key`'s NaN refusal, as the host sort raised it."""
         var h = List[Int32](length=1, fill=Int32(0))
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
         self.ctx.enqueue_copy(
             dst_ptr=F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())),
-            src_buf=pool[].bufs[bad.id].create_sub_buffer[DType.float32](0, 1),
+            src_buf=_pool_buf_view(bad.id, 1),
         )
         self.sync()
         if h[0] != Int32(0):
@@ -1232,8 +1227,7 @@ struct DKit(Movable):
         var th = self.get(t)
         # the sign rule on the device (lane cpu3-core): two words come home
         var sg = DMat(1, 2)
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
-        var sgv = pool[].bufs[sg.id].create_sub_buffer[DType.float32](0, 2)
+        var sgv = _pool_buf_view(sg.id, 2)
         enqueue_fill(self.ctx, sgv, Float32(0))
         if n > 0:
             self.ctx.enqueue_function[logdet_sign_kernel](
@@ -1243,7 +1237,7 @@ struct DKit(Movable):
         var sh = List[Int32](length=2, fill=Int32(0))
         self.ctx.enqueue_copy(
             dst_ptr=F32Ptr(unsafe_from_address=Int(sh.unsafe_ptr())),
-            src_buf=pool[].bufs[sg.id].create_sub_buffer[DType.float32](0, 2),
+            src_buf=_pool_buf_view(sg.id, 2),
         )
         self.sync()
         pool_free(pid)
@@ -1667,11 +1661,10 @@ def fast_mcd_dev(
     var h = p[2]
     var run = DMcd(p[3])
     var Xd = run.k.upload(X)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
     var sup = DMat(n, 1)
     var dist = DMat(n, 1)
-    var supv = pool[].bufs[sup.id].create_sub_buffer[DType.float32](0, max(n, 1))
-    var distv = pool[].bufs[dist.id].create_sub_buffer[DType.float32](0, max(n, 1))
+    var supv = _pool_buf_view(sup.id, max(n, 1))
+    var distv = _pool_buf_view(dist.id, max(n, 1))
     enqueue_fill(run.k.ctx, supv, Float32(0))
     enqueue_fill(run.k.ctx, distv, Float32(0))
     _ = supv^

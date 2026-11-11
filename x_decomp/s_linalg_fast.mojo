@@ -26,7 +26,7 @@ from x_decomp.device import (
     orth_guard_kernel, trsm_kernel, xd_ctx,
 )
 from x_decomp.qfix import LU_QFIX, QF_LAUNCH_CELLS, QF_RT, QF_TPB, lu_resid_ff_kernel
-from x_decomp.resident import X_DECOMP_POOL, _ptr
+from x_decomp.resident import pool_buffer, _ptr
 
 # TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (KEPT FAST + Apple default, superseded) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. It moved randomized_svd's
@@ -160,32 +160,36 @@ def dev_lu_factor_run(
     the factor (see the door). ppv holds int32 words, moved as 4-byte floats."""
     if n <= 0 or n * n > 2147483647:
         raise Error("x_decomp: dev_lu_factor needs 0 < n and n * n inside Int32")
-    _ = _ptr(ida, n * n)
-    var dl = _ptr(idl, n * n)
-    var dp = I32Ptr(unsafe_from_address=Int(_ptr(idp, n)))
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ida, n * n)
+    var factor = pool_buffer(idl, n * n)
+    var pivots = pool_buffer(idp, n)
+    var dl = F32Ptr(unsafe_from_address=Int(factor.unsafe_ptr()))
+    var dp = I32Ptr(unsafe_from_address=Int(pivots.unsafe_ptr()))
     var rc = 0
     var ctx = xd_ctx()
-    _up_into(ctx, pool[].bufs[ida], src, n * n)
-    if device_first_nonfinite(ctx, pool[].bufs[ida], n * n) >= 0:
+    _up_into(ctx, source, src, n * n)
+    if device_first_nonfinite(ctx, source, n * n) >= 0:
         rc = -1
     else:
         ctx.enqueue_copy(
-            dst_buf=pool[].bufs[idl].create_sub_buffer[DType.float32](0, n * n),
-            src_buf=pool[].bufs[ida].create_sub_buffer[DType.float32](0, n * n),
+            dst_buf=factor.create_sub_buffer[DType.float32](0, n * n),
+            src_buf=source.create_sub_buffer[DType.float32](0, n * n),
         )
         var di = ctx.enqueue_create_buffer[DType.float32](1)
         var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
         var dact = ctx.enqueue_create_buffer[DType.float32](n)
         launch_lu(ctx, dl, dp, _p(di), _p(ds), _p(dact), n)
-        _down(ctx, pool[].bufs[idl], plu, n * n)
-        _down(ctx, pool[].bufs[idp], ppv, n)
+        _down(ctx, factor, plu, n * n)
+        _down(ctx, pivots, ppv, n)
         _down(ctx, di, pinf, 1)
         ctx.synchronize()
         _ = di^
         _ = ds^
         _ = dact^
     ctx.synchronize()
+    _ = source^
+    _ = factor^
+    _ = pivots^
     return rc
 
 
@@ -247,7 +251,7 @@ def orth_ws_on_device(
 ) raises:
     """dst = the orthonormalized columns of a (both m x l, a unchanged):
     `orth_on_device`'s two passes with pooled work buffers, enqueued."""
-    comptime NAME = "MojolearnXDecompOrthWSV1"
+    comptime NAME = "MojolearnXDecompOrthWSV2"
     var cells = m * l
     var ns = qr_slice_count(m, l)
     var dw = pool_take[NAME](ctx, cells)
@@ -283,14 +287,15 @@ def dev_orth_ws_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
     """`dev_orth_ws_py`'s typed body: pool matrix io = the orthonormalized
     columns of pool matrix ia (`orth_ws_on_device`)."""
     var cells = m * l
-    _ = _ptr(ia, cells)
-    _ = _ptr(io, cells)
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(io, cells)
     if ia == io:
         raise Error("x_decomp: dev_orth_ws needs distinct input and output matrices")
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
     if cells > 0:
-        var src = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
-        var out = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
+        var src = source.create_sub_buffer[DType.float32](0, cells)
+        var out = target.create_sub_buffer[DType.float32](0, cells)
         var ctx = xd_ctx()
         orth_ws_on_device(ctx, src, out, m, l)
+    _ = source^
+    _ = target^
     return cells
