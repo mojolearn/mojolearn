@@ -21,3 +21,17 @@ boxes, timing or identity. Wire and actual numerical fixtures follow.
 Nothing removed yet: new internal typed state has no former direct Python
 state assertions; public array mutation/refusal/interoperability seams stay.
 No algorithm/kernel/default changes and no A/B define.
+
+Second chunk: 34 typed request/wire fixtures, dependency e97482b20b.
+  Metadata; fit keep flags; partial resident/keep combinations; all eight
+  query inverse/whiten/resident combinations; six output addresses, previous
+  arrays, dimensions, five state IDs; seven integer result words plus signed
+  zero Float64 noise; valid-zero and positive prepare/free handles; nested
+  copies; unknown/metadata/operation envelope refusals; every missing fit/
+  partial result span; heap-owned missing global result error.
+  No numerical solver in the test oracle. Backing and output Lists pinned
+  through refusal/error paths. No fake handle touches a real resident pool.
+  All independent cases parallel. State26 + wire34 =60 pure CPU fixtures.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_contract.mojo
+  Entry ipca_contract_suite.run_checks(). Uncompiled/unrun; JSON/TOML/source/
+  whitespace checks only. Nothing removed: these are new internal wire tests.
