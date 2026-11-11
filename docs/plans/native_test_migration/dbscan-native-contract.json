@@ -1,0 +1,38 @@
+{
+  "family": "DBSCAN",
+  "execution": "authored; uncompiled and unrun",
+  "dependencies": [
+    "a446091b7a",
+    "db68d9d7db",
+    "5205c33160"
+  ],
+  "suites": {
+    "dbscan_contract": {
+      "fixtures": 45,
+      "coverage": {
+        "0-12": "ten fixed operation slots; every request field and Boolean; optional weight pointer; prescribed mock results above 2^53; native request copy; provider error propagation",
+        "13-16": "heap-owned missing result and three missing argument spans, error precedence before unknown operation",
+        "17-20": "unknown operation and metadata rejects each argument-span class",
+        "21-41": "all seven nonmetadata operations reject each malformed address/integer/scalar count before dereferencing tensor data",
+        "42-44": "zero handle prepare/release and signed-zero Float64 radius"
+      }
+    },
+    "dbscan_options": {
+      "fixtures": 41,
+      "coverage": {
+        "0-11": "original exact metric aliases/method names and unsupported spellings",
+        "12-35": "all 24 cells of prescribed method [-1,0,1,2] by metric [-1,0,1,2,3,4] table; RBC/precomputed admitted",
+        "36-40": "parallel empty-core int32 noise-label fill for 0/1/17/1025 rows with guards, plus null address for zero extent"
+      }
+    }
+  },
+  "parallel": "independent fixtures and fill oracle words use host_parallelize",
+  "lifetime": "foreign output/error fields are heap-owned; fake tensor addresses never reach actual kernels; native buffers remain named through pointer use",
+  "numerical_claim": false,
+  "python_removed": 0,
+  "product_changes": false,
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+  ],
+  "remaining": "Actual numerical and resident ownership coverage still being authored. Original Python coverage retained until root passes native replacements; RBC/precomputed force-to-brute remains a public boundary seam."
+}
