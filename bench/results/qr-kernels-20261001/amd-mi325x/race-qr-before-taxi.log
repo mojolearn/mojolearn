@@ -1,6 +1,0 @@
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/qr", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
-ALGOS-ROUND lane=qr dataset=taxi arm=ours round=0 ms=4218.567 infer_ms=None digest=e54f8db0f5ca6525
-ALGOS-ROUND lane=qr dataset=taxi arm=ours round=1 ms=4060.234 infer_ms=None digest=e54f8db0f5ca6525
-ALGOS-ROUND lane=qr dataset=taxi arm=ours round=2 ms=4073.015 infer_ms=None digest=e54f8db0f5ca6525
-ALGOS-ROUND lane=qr dataset=taxi arm=ours round=3 ms=4062.697 infer_ms=None digest=e54f8db0f5ca6525
-ALGOS lane=qr dataset=taxi arm=ours status=ok median_ms=4062.6968599972315 quality={"relative_gram_difference": 0.001995900098513438}
