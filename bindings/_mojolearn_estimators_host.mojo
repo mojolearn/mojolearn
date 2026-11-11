@@ -60,6 +60,7 @@ from core.logistic_native_api import (
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
 from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
+from glm.host.linear_svc_native_host import LINEAR_SVC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
 from core.dbscan_native_api import DBSCANFitRequest
@@ -975,6 +976,11 @@ def linear_fit_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def linear_svc_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_SVC_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def logistic_native_api_v1_binding() raises -> PythonObject:
     var api = LOGISTIC_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1614,6 +1620,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
         module.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         module.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
+        module.def_function[linear_svc_native_api_v1_binding]("linear_svc_native_api_v1")
         module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[qn_proba_binding]("qn_proba")
