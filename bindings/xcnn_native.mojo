@@ -40,11 +40,12 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
         if operation == "dev_finalize":
             var fields = xcnn_dev_fields(owner, context)
             var entries = xcnn_module_entries(fields["b"], context)
+            var xc = xcnn_ref(entries)
             var table = fields["h"]
             var names = py_call(xcnn_builtins().list, table.keys())
             py_setitem(fields, "h", Python.dict())
             for i in range(len(names)):  # driver-loop: release the owner's native allocation handles
-                _ = xcnn_call(entries, XC_RES_FREE, [xcnn_word(table[names[i]][0])], List[Int]())
+                _ = xcnn_call(xc, XC_RES_FREE, [xcnn_word(table[names[i]][0])], List[Int]())
     except:
         pass  # partially initialized owner or interpreter shutdown
     return PythonObject(None)

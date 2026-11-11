@@ -211,7 +211,8 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
         _ = xcnn_dev_upload(layer, entries, "running", r, context)
         _set(fields, "_run_dev", dev)
     var rh = xcnn_dev_handle(dev, "running")
-    _ = xcnn_call(entries, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)],
+    var xc = xcnn_ref(entries)
+    _ = xcnn_call(xc, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)],
                   [15 if dev_y else 13, n, c, hw, 1 if batch_stats else 0])
     if _truth(fields["training"]):
         _set(fields, "_run_stale", PythonObject(True))
@@ -233,7 +234,8 @@ def xcnn_bn_forward_dev(layer: PythonObject, fields: PythonObject, entries: Pyth
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    _ = xcnn_call(entries, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)],
+    var xc = xcnn_ref(entries)
+    _ = xcnn_call(xc, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)],
                   [3 if dev_y else 1, n, c, hw, 1 if batch_stats else 0])
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
@@ -306,7 +308,8 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    _ = xcnn_call(b, XC_BATCHNORM_FORWARD, [xcnn_ptr(x3), xcnn_ptr(y), xcnn_ptr(running), xcnn_ptr(aux)],
+    var xcb = xcnn_ref(b)
+    _ = xcnn_call(xcb, XC_BATCHNORM_FORWARD, [xcnn_ptr(x3), xcnn_ptr(y), xcnn_ptr(running), xcnn_ptr(aux)],
                   [n, c, hw, 1 if batch_stats else 0])
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
@@ -371,11 +374,12 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
         var b = xcnn_builtins()
         if py_type(ad) is not b.tuple or len(ad) != 2 or py_type(ad[1]) is not b.int:
             raise Error("TypeError: batch normalization aux state requires native owner/handle metadata")
+    var xc = xcnn_ref(entries)
     if (dev_x and ad is not None and _fields(ad[0])["b"] is entries["module"]
             and _truth(fields["track_running_stats"]) and xcnn_resident(entries, context)):
         _set(fields, "_g_dev", PythonObject(None))
         var flags = 9 | (2 if dev_g else 0) | (4 if dev_dx else 0)
-        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_word(ad[1])],
+        _ = xcnn_call(xc, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_word(ad[1])],
                       [flags, shape[0], c, shape[2], stats])
         _set(fields, "_g_dev", ad)
         return
@@ -385,10 +389,10 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
     var aux = xcnn_slice_f32(original, 0, 2 + 7 * c, context)
     if dev_x or dev_g or dev_dx:
         var flags = (1 if dev_x else 0) | (2 if dev_g else 0) | (4 if dev_dx else 0)
-        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
+        _ = xcnn_call(xc, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
                       [flags, shape[0], c, shape[2], stats])
     else:
-        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
+        _ = xcnn_call(xc, XC_BATCHNORM_BACKWARD, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
                       [shape[0], c, shape[2], stats])
     _ = aux  # keep the Python object alive through the native call above
     _backward_grads(fields, aux, c, context)

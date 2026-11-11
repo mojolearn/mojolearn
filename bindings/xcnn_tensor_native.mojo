@@ -71,6 +71,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
         _xcnn_set_raw(owner, "_host", args[3], context)
         _xcnn_set_raw(owner, "_base", args[4], context)
         return PythonObject(None)
+    var xc = xcnn_ref(entries)
     if operation == "tensor_finalize":
         # Partially initialized objects and interpreter shutdown are legal.
         # Suppression lives in native code, with handles cleared before free.
@@ -84,7 +85,7 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
                     return PythonObject(None)
                 var entries = xcnn_module_entries(_xcnn_slot_raw(owner, "b", context), context)
                 _xcnn_set_raw(owner, "h", PythonObject(None), context)
-                _ = xcnn_call(entries, XC_RES_FREE, [Int(py=handle)], List[Int]())
+                _ = xcnn_call(xc, XC_RES_FREE, [Int(py=handle)], List[Int]())
         except:
             pass
         return PythonObject(None)
