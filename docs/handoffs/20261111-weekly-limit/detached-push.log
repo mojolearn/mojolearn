@@ -1,0 +1,6 @@
+error: dst ref refs/heads/checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96 receives from more than one src
+error: dst ref refs/heads/checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96 receives from more than one src
+error: dst ref refs/heads/checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96 receives from more than one src
+error: dst ref refs/heads/checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96 receives from more than one src
+error: dst ref refs/heads/checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96 receives from more than one src
+error: failed to push some refs to 'https://github.com/mojolearn/mojolearn.git'

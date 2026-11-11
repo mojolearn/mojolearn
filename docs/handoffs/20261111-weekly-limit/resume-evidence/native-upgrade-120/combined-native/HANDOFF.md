@@ -1,0 +1,15 @@
+# Combined native upgrade execution proposal
+
+Source inputs: consolidated `28f38904d51ad574fa5104aca93ac807ef662b79` plus frozen OneClass fixture producer `ef64113d6b0a6e7ff90781988b4de017c4a56b8d`. All25suite signatures and declared counts are confirmed; root records the final integrated product freeze after the separate OneClass boundary followup. No build or execution was launched. Existing source signatures and case constants were read from immutable git bytes; snapshots/hashes are retained under `sources/` and in `plan.json`.
+
+Combined CPU: **179 cases /14 suite groups**. Combined GPU: **127 cases /11 ordered groups** with existing OneClass resident support enabled; **117** if disabled. Breakdown: prior72/47 +LinearSVR6/6 +LinearSVCscore5/5 +SVR12/21 +entry contracts20/0 +IPCA15/17 +DBSCANstate28/0 +OPTICS9/9 +OneClass12/22. The prior72/47 component is included once, not added to these totals again.
+
+`combined_cpu.mojo` preserves each suite's case scheduling and uses the host pool for independent groups. `combined_gpu.mojo` calls suites in order; each GPU suite orders its numerical graphs and retains kernel parallelism. Shared DeviceContext concurrency remains unqualified under Modular7544; no concurrent GPU stress is included or marked fixed.
+
+Both columns use the existing standard optimized compiler/controller and `MOJOLEARN_NUMERIC_IDENTICAL=1`; CPU additionally sets `MOJOLEARN_COLUMN_CPU=1`. The default127 GPU count requires `MOJOLEARN_IDN_ALL_OFF` and `MOJOLEARN_IDN_OCSVM_RES_OFF` absent. The GPU wrapper reads actual OCSVM_IDN_RES and reports the reduced total when disabled. Root records the final source/lock/compiler/flags/target before execution and preserves every failed/partial log.
+
+Excluded from combined processes: NET-P01 (`linear_entry_production.mojo`) requires a fresh process and adds **two CPU numerical/lifetime graphs plus one ordered missing-table precondition**; the separate provider/consumer image proof likewise uses its own controller and another process for deliberate layout abort. Do not convert its protocol steps into invented fixture counts.
+
+This does not count requalification as new migration progress: IPCA15/17 previously passed on1.0 with the temporary flat layout, and now requires qualification for the upgraded toolchain/original nested layout. DBSCAN28 and OPTICS9/9 remain pending full execution despite resolved minimal compiler probes or source corrections. Unchanged unrelated previously accepted suites, including IPCApure60 and DBSCANactual17CPU/20GPU, are not included.
+
+The OneClass owner confirmed its immutable fixture source and12CPU/22GPUdefault counts. The suite uses native resident flags bit2; the provider exposes exactly OCSVM_IDN_RES there, so the wrapper count follows the actual suite selection. A separate boundary-only correction is still being finalized; it does not change native fixtures/counts. Update final integrated product provenance before compiling. Current wrappers, counts and signatures are source-only proposals, not accepted results. No Python coverage is removed by this plan.

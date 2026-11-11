@@ -1,0 +1,1041 @@
+{
+  "status": "complete source-only case/wrapper proposal; all25suite signatures confirmed; final product freeze remains root-owned",
+  "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+  "source_is_final_freeze": false,
+  "pending_collection": [
+    "Root records final consolidated product SHA after OneClass boundary-only followup; fixture source signatures/counts are complete."
+  ],
+  "prior_plan": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-combined-score-svm-hdbscan-r1-source/plan.json",
+  "prior_plan_sha256": "139d0e81fd089ad8204a0c6d2d927caa1eebee0b5030f764029bcf78dfdfc01c",
+  "counts": {
+    "combined_cpu": 179,
+    "combined_gpu_default": 127,
+    "combined_gpu_resident_off": 117,
+    "separate_NET_P01_cpu": 2,
+    "separate_NET_P01_precondition": 1,
+    "cross_image_proof": "separate lifecycle protocol, no invented fixture count",
+    "optional_total_CPU_graphs_including_NET_P01": 181
+  },
+  "group_count": {
+    "cpu": 14,
+    "gpu": 11
+  },
+  "groups": [
+    {
+      "target": "cpu",
+      "index": 0,
+      "suite": "checks.native_tests.gpr_score_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 17,
+      "family": "GP score",
+      "path": "checks/native_tests/gpr_score_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "e808773e2386d6f81ada7f8f387461d18917fe0bae66afb50aa65f240e407b92",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 15,
+      "scheduling_anchors": [
+        {
+          "line": 28,
+          "source": "host_parallelize(run, GPR_SCORE_CPU_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/gpr_score_contract_suite.mojo",
+          "sha256": "e59adca7e1c4a456667f5d033ccfe063ad1e0ced277a576adf892689c9def451",
+          "constants": [
+            {
+              "line": 8,
+              "source": "comptime GPR_SCORE_CONTRACT_CASES = 7"
+            }
+          ]
+        },
+        {
+          "path": "checks/native_tests/gpr_score_cases.mojo",
+          "sha256": "0e53152534f37a6a527792208375fcf8b32ba646e5c6c76f14e80ff1b4d5464d",
+          "constants": [
+            {
+              "line": 15,
+              "source": "comptime GPR_SCORE_NATIVE_CASES = 10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 1,
+      "suite": "checks.native_tests.gpc_score_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 15,
+      "family": "GP score",
+      "path": "checks/native_tests/gpc_score_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "5fe27527e44f736c9f2896cfc77a8be05d411f78fac0aa0faf0cf2473286244f",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 14,
+      "scheduling_anchors": [
+        {
+          "line": 27,
+          "source": "host_parallelize(run, GPC_SCORE_CPU_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/gpc_score_cases.mojo",
+          "sha256": "779afcbc1f3235b9936e98b0b773a0e63169edc44d9f106c8400a1e34c286050",
+          "constants": [
+            {
+              "line": 19,
+              "source": "comptime GPC_SCORE_NATIVE_CASES = 14"
+            }
+          ]
+        }
+      ],
+      "count_derivation": "1 empty CPU seam +14 numerical fixtures"
+    },
+    {
+      "target": "cpu",
+      "index": 2,
+      "suite": "checks.native_tests.linear_svc_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 10,
+      "family": "LinearSVC fit",
+      "path": "checks/native_tests/linear_svc_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "bba9c0a76a728d08347c0df661ddc6c5edea2d6739db11a6f7c59603cbceceff",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 17,
+          "source": "host_parallelize(run, LINEAR_SVC_CPU_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/linear_svc_native_cases.mojo",
+          "sha256": "1e104fd4fa0832b0ed393aeacade0e7d6dc2f5e8426ffba5408ecf3337a7d237",
+          "constants": [
+            {
+              "line": 21,
+              "source": "comptime LINEAR_SVC_PROVIDER_CASES = 8"
+            },
+            {
+              "line": 22,
+              "source": "comptime LINEAR_SVC_CPU_CASES = 10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 3,
+      "suite": "checks.native_tests.labels_threshold_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 7,
+      "family": "LinearSVC label threshold",
+      "path": "checks/native_tests/labels_threshold_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "d9bc9a94282c193b1c01663d86847d593f7c8b759bb35260d439027d8d0c9175",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 17,
+          "source": "host_parallelize(run, LABELS_THRESHOLD_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/labels_threshold_cases.mojo",
+          "sha256": "598256361e6a55429de16dff350332287aa25432fa9cd38e5cac233b2d48144e",
+          "constants": [
+            {
+              "line": 6,
+              "source": "comptime LABELS_THRESHOLD_CASES = 7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 4,
+      "suite": "checks.native_tests.hdbscan_plan_suite",
+      "entry": "run_checks() raises",
+      "cases": 15,
+      "family": "HDBSCAN contracts",
+      "path": "checks/native_tests/hdbscan_plan_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "02e54aad2e450cd95dafcc1eb17a38c3c25c55d4c992bfa829bfd97c1a2af540",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 172,
+      "scheduling_anchors": [
+        {
+          "line": 181,
+          "source": "host_parallelize(run, HDBSCAN_PLAN_CASES)"
+        }
+      ],
+      "inline_case_constants": [
+        {
+          "line": 19,
+          "source": "comptime HDBSCAN_PLAN_CASES = 15"
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 5,
+      "suite": "checks.native_tests.hdbscan_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 8,
+      "family": "HDBSCAN actual",
+      "path": "checks/native_tests/hdbscan_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "945e3692fbf21d50919988507e23688f62ce1ff9c8958b4d9d75d6c20aea4a5c",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 10,
+      "scheduling_anchors": [
+        {
+          "line": 19,
+          "source": "host_parallelize(run, HDBSCAN_NATIVE_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/hdbscan_native_cases.mojo",
+          "sha256": "e23e2fa25438f47251eb786598f73f18ba22549d36ebe19a40c38dcf5c4a3c97",
+          "constants": [
+            {
+              "line": 24,
+              "source": "comptime HDBSCAN_NATIVE_CASES = 8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 6,
+      "suite": "checks.native_tests.linear_svr_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 6,
+      "family": "LinearSVR",
+      "path": "checks/native_tests/linear_svr_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "6317ddc8c27f7df96c862d099250f2278fa93f8373f3a8bb3a62561f5e29817b",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 17,
+          "source": "host_parallelize(run, LINEAR_SVR_NATIVE_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/linear_svr_native_cases.mojo",
+          "sha256": "63a17e984e8b2a38baa0126fcf3e1acdeeae616a39edb579bc21c0d64edca78b",
+          "constants": [
+            {
+              "line": 14,
+              "source": "comptime LINEAR_SVR_NATIVE_CASES = 6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 7,
+      "suite": "checks.native_tests.svc_accuracy_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 5,
+      "family": "LinearSVC score",
+      "path": "checks/native_tests/svc_accuracy_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "1189a47024a5f5ca509bc9ce2f66d7bc38b1be545648cc9b128f94af3d6b8967",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 9,
+      "scheduling_anchors": [
+        {
+          "line": 18,
+          "source": "host_parallelize(run, SVC_ACCURACY_NATIVE_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/svc_accuracy_native_cases.mojo",
+          "sha256": "5461a4a0debba63fa97e2739b3e91f54eaf9a43946ff5da553d5b6a74f367525",
+          "constants": [
+            {
+              "line": 15,
+              "source": "comptime SVC_ACCURACY_NATIVE_CASES = 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 8,
+      "suite": "checks.native_tests.svr_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 12,
+      "family": "SVR",
+      "path": "checks/native_tests/svr_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "64a07526c757d724a1bad8f8d95d565033e0e085a38efa4b85cd90cf9cc89a73",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 17,
+          "source": "host_parallelize(run, SVR_NATIVE_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/svr_native_cases.mojo",
+          "sha256": "4f93125818599c0948f505350159137a59e78e14c8f5d0ed34b77334c38d7d18",
+          "constants": [
+            {
+              "line": 14,
+              "source": "comptime SVR_NATIVE_CASES = 12"
+            },
+            {
+              "line": 15,
+              "source": "comptime SVR_RESIDENT_CASES = 9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 9,
+      "suite": "checks.native_tests.entry_table_contract_suite",
+      "entry": "run_checks() raises",
+      "cases": 20,
+      "family": "native entry table/registry contracts",
+      "path": "checks/native_tests/entry_table_contract_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "81b9234a8e5a418fec2ae378f426fa1301f33361ea0f18191f25893b9810ae22",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 258,
+      "scheduling_anchors": [
+        {
+          "line": 64,
+          "source": "host_parallelize(task, 16)"
+        },
+        {
+          "line": 120,
+          "source": "host_parallelize(task, 16)"
+        },
+        {
+          "line": 267,
+          "source": "host_parallelize(task, ENTRY_TABLE_CONTRACT_CASES)"
+        }
+      ],
+      "inline_case_constants": [
+        {
+          "line": 12,
+          "source": "comptime ENTRY_TABLE_CONTRACT_CASES = 20"
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 10,
+      "suite": "checks.native_tests.ipca_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 15,
+      "family": "IPCA actual",
+      "path": "checks/native_tests/ipca_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "3a001c6c1ae17325884fdbac1c439c26e83fed2db89e13f46a45efd1e8a8fd9b",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 13,
+      "scheduling_anchors": [
+        {
+          "line": 23,
+          "source": "host_parallelize(task, IPCA_NATIVE_FIXTURES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/ipca_native_cases.mojo",
+          "sha256": "ecb86f7d0b866e9796db73ece0d74e6c23e37fb5ee466173d0a68a1a7ca11e44",
+          "constants": [
+            {
+              "line": 14,
+              "source": "comptime IPCA_NATIVE_FIXTURES = 15"
+            },
+            {
+              "line": 15,
+              "source": "comptime IPCA_RESIDENT_FIXTURES = 2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 11,
+      "suite": "checks.native_tests.dbscan_state_suite",
+      "entry": "run_checks() raises",
+      "cases": 28,
+      "family": "DBSCAN state",
+      "path": "checks/native_tests/dbscan_state_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "75bb7a375fa0012008288cfd4a58f873404d8b2fe64d3fb315f5da4215c72270",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 153,
+      "scheduling_anchors": [
+        {
+          "line": 54,
+          "source": "host_parallelize(cell, len(value))"
+        },
+        {
+          "line": 66,
+          "source": "host_parallelize(cell, 33)"
+        },
+        {
+          "line": 162,
+          "source": "host_parallelize(task, DBSCAN_STATE_FIXTURES)"
+        }
+      ],
+      "inline_case_constants": [
+        {
+          "line": 14,
+          "source": "comptime DBSCAN_STATE_FIXTURES = 28"
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 12,
+      "suite": "checks.native_tests.optics_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 9,
+      "family": "OPTICS actual",
+      "path": "checks/native_tests/optics_native_cpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "fbc2c5174e88c48333a89d6dc3a77b41e88243c6ca49c9fa139b1b7217a22052",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 103,
+      "scheduling_anchors": [
+        {
+          "line": 47,
+          "source": "host_parallelize(fill, rows)"
+        },
+        {
+          "line": 84,
+          "source": "host_parallelize(check, rows)"
+        },
+        {
+          "line": 112,
+          "source": "host_parallelize(run, OPTICS_NATIVE_CASES)"
+        }
+      ],
+      "inline_case_constants": [
+        {
+          "line": 15,
+          "source": "comptime OPTICS_NATIVE_CASES = 9"
+        }
+      ]
+    },
+    {
+      "target": "cpu",
+      "index": 13,
+      "suite": "checks.native_tests.ocsvm_native_cpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 12,
+      "family": "OneClass actual",
+      "path": "checks/native_tests/ocsvm_native_cpu_suite.mojo",
+      "source": "ef64113d6b0a6e7ff90781988b4de017c4a56b8d",
+      "signature_confirmed": true,
+      "source_sha256": "80a3f6f96dcb0e94564786422809d9768d629e8db5c4c2ba4289490fc13cba92",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 10,
+      "scheduling_anchors": [
+        {
+          "line": 19,
+          "source": "host_parallelize(run, OCSVM_NATIVE_CASES)"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/ocsvm_native_cases.mojo",
+          "source": "ef64113d6b0a6e7ff90781988b4de017c4a56b8d",
+          "sha256": "d98e27bfb1a004d8eaef5ad3760575fb2032fe074467783dc882d41a596d537e",
+          "constants": [
+            {
+              "line": 20,
+              "source": "comptime OCSVM_NATIVE_CASES = 12"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 0,
+      "suite": "checks.native_tests.gpr_score_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 10,
+      "family": "GP score",
+      "path": "checks/native_tests/gpr_score_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "2ef71434977a835901e06d8d09392507c595ac4a80c2655c47a5537d5f0b59a6",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 15,
+      "scheduling_anchors": [
+        {
+          "line": 17,
+          "source": "for unit in range(GPR_SCORE_NATIVE_CASES):  # ordered graphs on the one shared physical GPU"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/gpr_score_cases.mojo",
+          "sha256": "0e53152534f37a6a527792208375fcf8b32ba646e5c6c76f14e80ff1b4d5464d",
+          "constants": [
+            {
+              "line": 15,
+              "source": "comptime GPR_SCORE_NATIVE_CASES = 10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 1,
+      "suite": "checks.native_tests.gpc_score_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 14,
+      "family": "GP score",
+      "path": "checks/native_tests/gpc_score_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "1d4ae0decc904fd4cf37eaf1182d7f93662e7063ba1624e8eefd947c7848db6f",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 15,
+      "scheduling_anchors": [
+        {
+          "line": 17,
+          "source": "for unit in range(GPC_SCORE_NATIVE_CASES):  # ordered graphs on the one shared physical GPU"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/gpc_score_cases.mojo",
+          "sha256": "779afcbc1f3235b9936e98b0b773a0e63169edc44d9f106c8400a1e34c286050",
+          "constants": [
+            {
+              "line": 19,
+              "source": "comptime GPC_SCORE_NATIVE_CASES = 14"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 2,
+      "suite": "checks.native_tests.linear_svc_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 8,
+      "family": "LinearSVC fit",
+      "path": "checks/native_tests/linear_svc_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "75bb7ce02548a5a1ef500bb6e4da7c256d69a961e934337062a06307cfe3baad",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 10,
+          "source": "for unit in range(LINEAR_SVC_PROVIDER_CASES):  # ordered shared-context numerical fixtures"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/linear_svc_native_cases.mojo",
+          "sha256": "1e104fd4fa0832b0ed393aeacade0e7d6dc2f5e8426ffba5408ecf3337a7d237",
+          "constants": [
+            {
+              "line": 21,
+              "source": "comptime LINEAR_SVC_PROVIDER_CASES = 8"
+            },
+            {
+              "line": 22,
+              "source": "comptime LINEAR_SVC_CPU_CASES = 10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 3,
+      "suite": "checks.native_tests.labels_threshold_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 7,
+      "family": "LinearSVC label threshold",
+      "path": "checks/native_tests/labels_threshold_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "86e35a2b704ef25bd3ced4429190ccc4d445d458cf3634bf3b0d42e166510d10",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 10,
+          "source": "for unit in range(LABELS_THRESHOLD_CASES):  # ordered shared-context numerical fixtures"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/labels_threshold_cases.mojo",
+          "sha256": "598256361e6a55429de16dff350332287aa25432fa9cd38e5cac233b2d48144e",
+          "constants": [
+            {
+              "line": 6,
+              "source": "comptime LABELS_THRESHOLD_CASES = 7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 4,
+      "suite": "checks.native_tests.hdbscan_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 8,
+      "family": "HDBSCAN actual",
+      "path": "checks/native_tests/hdbscan_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "766e2f801c2ba783100cae43cf81577a011259729e77c080f84b30d5faa8fc96",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 10,
+      "scheduling_anchors": [
+        {
+          "line": 12,
+          "source": "for unit in range(HDBSCAN_NATIVE_CASES):  # ordered shared-context numerical cases, not concurrency qualification"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/hdbscan_native_cases.mojo",
+          "sha256": "e23e2fa25438f47251eb786598f73f18ba22549d36ebe19a40c38dcf5c4a3c97",
+          "constants": [
+            {
+              "line": 24,
+              "source": "comptime HDBSCAN_NATIVE_CASES = 8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 5,
+      "suite": "checks.native_tests.linear_svr_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 6,
+      "family": "LinearSVR",
+      "path": "checks/native_tests/linear_svr_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "69670402cb9e2eb1d108287f81ef8e48115461e949e4165a78034705ffe491e1",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 7,
+      "scheduling_anchors": [
+        {
+          "line": 9,
+          "source": "for unit in range(LINEAR_SVR_NATIVE_CASES):  # ordered shared-context numerical fixtures"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/linear_svr_native_cases.mojo",
+          "sha256": "63a17e984e8b2a38baa0126fcf3e1acdeeae616a39edb579bc21c0d64edca78b",
+          "constants": [
+            {
+              "line": 14,
+              "source": "comptime LINEAR_SVR_NATIVE_CASES = 6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 6,
+      "suite": "checks.native_tests.svc_accuracy_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 5,
+      "family": "LinearSVC score",
+      "path": "checks/native_tests/svc_accuracy_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "10220b22b91ad78931fbe60e0d889678a41224f833d3dee720d6c0e2922afa4e",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 10,
+          "source": "for unit in range(SVC_ACCURACY_NATIVE_CASES):  # ordered shared-context numerical fixtures"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/svc_accuracy_native_cases.mojo",
+          "sha256": "5461a4a0debba63fa97e2739b3e91f54eaf9a43946ff5da553d5b6a74f367525",
+          "constants": [
+            {
+              "line": 15,
+              "source": "comptime SVC_ACCURACY_NATIVE_CASES = 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gpu",
+      "index": 7,
+      "suite": "checks.native_tests.svr_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 21,
+      "family": "SVR direct/resident",
+      "path": "checks/native_tests/svr_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "a55c9f3e59ff360352efdeab1a515f4970724aacbecc1a2d1a557deb0fe056b2",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 10,
+          "source": "for unit in range(SVR_NATIVE_CASES + SVR_RESIDENT_CASES):  # ordered shared-context numerical fixtures"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/svr_native_cases.mojo",
+          "sha256": "4f93125818599c0948f505350159137a59e78e14c8f5d0ed34b77334c38d7d18",
+          "constants": [
+            {
+              "line": 14,
+              "source": "comptime SVR_NATIVE_CASES = 12"
+            },
+            {
+              "line": 15,
+              "source": "comptime SVR_RESIDENT_CASES = 9"
+            }
+          ]
+        }
+      ],
+      "count_derivation": "12 direct +9 resident fixtures"
+    },
+    {
+      "target": "gpu",
+      "index": 8,
+      "suite": "checks.native_tests.ipca_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 17,
+      "family": "IPCA actual/resident",
+      "path": "checks/native_tests/ipca_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "8259ccaa09e42e4bbd0b2b8e9f19cf8f5a3993e92870a9f1c6fee7e7030f36cb",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 17,
+      "scheduling_anchors": [
+        {
+          "line": 20,
+          "source": "for unit in range(IPCA_NATIVE_FIXTURES + IPCA_RESIDENT_FIXTURES):"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/ipca_native_cases.mojo",
+          "sha256": "ecb86f7d0b866e9796db73ece0d74e6c23e37fb5ee466173d0a68a1a7ca11e44",
+          "constants": [
+            {
+              "line": 14,
+              "source": "comptime IPCA_NATIVE_FIXTURES = 15"
+            },
+            {
+              "line": 15,
+              "source": "comptime IPCA_RESIDENT_FIXTURES = 2"
+            }
+          ]
+        }
+      ],
+      "count_derivation": "15 actual +2 resident fixtures"
+    },
+    {
+      "target": "gpu",
+      "index": 9,
+      "suite": "checks.native_tests.optics_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 9,
+      "family": "OPTICS actual",
+      "path": "checks/native_tests/optics_native_gpu_suite.mojo",
+      "source": "28f38904d51ad574fa5104aca93ac807ef662b79",
+      "signature_confirmed": true,
+      "source_sha256": "a814aa86842182da4fbaf7e4a837ba6dc4404f12d7e6ef58bb3e5c9259eadc46",
+      "status": "frozen fixture source confirmed; not executed",
+      "signature_line": 8,
+      "scheduling_anchors": [
+        {
+          "line": 10,
+          "source": "for unit in range(OPTICS_NATIVE_CASES):  # shared context numerical coverage; no concurrency qualification"
+        }
+      ],
+      "inline_case_constants": []
+    },
+    {
+      "target": "gpu",
+      "index": 10,
+      "suite": "checks.native_tests.ocsvm_native_gpu_suite",
+      "entry": "run_checks() raises",
+      "cases": 22,
+      "family": "OneClass base/resident",
+      "path": "checks/native_tests/ocsvm_native_gpu_suite.mojo",
+      "source": "ef64113d6b0a6e7ff90781988b4de017c4a56b8d",
+      "signature_confirmed": true,
+      "source_sha256": "3b89d7c3abd4322e611bb3e923567e413f793506ce59ce109ffcee45bc8afe27",
+      "status": "frozen fixture source confirmed; not executed",
+      "conditional_cases": {
+        "base": 12,
+        "resident": 10,
+        "condition": "OCSVM_IDN_RES",
+        "disabled_total": 12
+      },
+      "signature_line": 10,
+      "scheduling_anchors": [
+        {
+          "line": 15,
+          "source": "for index in range(count):  # ordered shared-context numerical fixtures"
+        }
+      ],
+      "case_constant_sources": [
+        {
+          "path": "checks/native_tests/ocsvm_native_cases.mojo",
+          "source": "ef64113d6b0a6e7ff90781988b4de017c4a56b8d",
+          "sha256": "d98e27bfb1a004d8eaef5ad3760575fb2032fe074467783dc882d41a596d537e",
+          "constants": [
+            {
+              "line": 20,
+              "source": "comptime OCSVM_NATIVE_CASES = 12"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "breakdown": [
+    {
+      "family": "previous GP score/LinearSVC/HDBSCAN plan",
+      "cpu": 72,
+      "gpu": 47
+    },
+    {
+      "family": "LinearSVR",
+      "cpu": 6,
+      "gpu": 6
+    },
+    {
+      "family": "LinearSVC score",
+      "cpu": 5,
+      "gpu": 5
+    },
+    {
+      "family": "SVR",
+      "cpu": 12,
+      "gpu": 21
+    },
+    {
+      "family": "entry contracts",
+      "cpu": 20,
+      "gpu": 0
+    },
+    {
+      "family": "IPCA actual",
+      "cpu": 15,
+      "gpu": 17
+    },
+    {
+      "family": "DBSCAN state",
+      "cpu": 28,
+      "gpu": 0
+    },
+    {
+      "family": "OPTICS actual",
+      "cpu": 9,
+      "gpu": 9
+    },
+    {
+      "family": "OneClass actual",
+      "cpu": 12,
+      "gpu": 22,
+      "resident_off_gpu": 12
+    }
+  ],
+  "defines": {
+    "both": [
+      "MOJOLEARN_NUMERIC_IDENTICAL=1"
+    ],
+    "cpu_extra": [
+      "MOJOLEARN_COLUMN_CPU=1"
+    ],
+    "GPU_column": "existing GPU column/target selection; do not define CPU column",
+    "OneClass_default_resident_conditions": [
+      "MOJOLEARN_IDN_ALL_OFF absent",
+      "MOJOLEARN_IDN_OCSVM_RES_OFF absent"
+    ],
+    "flags_not_added": [
+      "no -O0/debug shortcut",
+      "no new runtime fallback",
+      "no new worker/thread caps",
+      "no performance/identity run flags"
+    ],
+    "toolchain": "root pins Mojo1.2.0/MAX26.7.0; exact lock/compiler bytes recorded by root execution controller"
+  },
+  "synchronization": {
+    "cpu": "14 independent suite groups dispatch to the full host pool; each existing suite owns parallel case scheduling and native kernels. No global thread cap.",
+    "gpu": "11 suites invoked in order; each suite has ordered GPU graphs. Existing kernel parallelism/synchronizations remain. One physical GPU job at a time.",
+    "NET_P01": "fresh standalone process; missing production table then publication, followed by two independent narrow/wide host graphs",
+    "cross_image": "separate provider/consumer shared libraries in fresh controller process; dedicated second process for deliberate layout abort",
+    "concurrency_limitation": "Metal issue7544 remains unqualified; concurrency stress suites intentionally excluded, not relabeled fixed"
+  },
+  "standalone": {
+    "NET_P01": {
+      "review": "NET-P01",
+      "suite": "checks.native_tests.linear_entry_production_suite",
+      "entry": "checks/native_tests/linear_entry_production.mojo",
+      "standalone_required": true,
+      "CPU_cases": 2,
+      "precondition_controls": 1,
+      "parallel": "After the ordered missing-table check and actual host publication, narrow/wide graphs run independently through host_parallelize. Kernel parallelism is unchanged.",
+      "graph": "Production LINEAR_STATES insert/acquire/replace/release -> linear_lease_predict -> production estimator table -> real linear_predict_host_v1",
+      "publication": "Exact host production table schema/endpoint order/publisher API identity; fit endpoint retained alongside predict",
+      "oracles": {
+        "original": [
+          3.25,
+          1.25
+        ],
+        "replacement": [
+          20.25,
+          2.25
+        ]
+      },
+      "lifetime": "Explicit coefficient/source/destination native Lists remain named through acquired old/new leases and registry release. A handle alone does not own borrowed buffers.",
+      "refusals": "Missing production table before publication leaves output untouched; stale handle refuses after release.",
+      "compile": "Root standard optimized CPU-column identical flags; fresh standalone process, not a shared process with earlier production table publication.",
+      "executed": false
+    },
+    "cross_image": {
+      "provider": "checks/native_tests/entry_table_image_provider.mojo",
+      "consumer": "checks/native_tests/entry_table_image_consumer.mojo",
+      "compile": "Root builds each separately with standard optimized --emit shared-lib, CPU column and identical flags. Do not combine the modules into one image.",
+      "controller": "Root-owned; use exact C Int=int64 and UInt64=uint64 signatures and retain both loaded images.",
+      "steps": [
+        "Load both images; provider state(37, &generation) returns index >= 0.",
+        "Before publication consumer query(index, generation, 3) returns -700 (missing table).",
+        "provider publish() returns 0; repeat publish() returns 0.",
+        "consumer query(index, generation, 3) returns 3703 via provider-only compiled body.",
+        "consumer hold(index, generation) returns 0; provider release(index, generation) returns 0.",
+        "consumer query(index, generation, 3) returns -700 (stale handle); held(4) returns 3704 (native owning lease).",
+        "provider state(91, &new_generation) reuses isolated index with a changed generation; new query(..., 5) returns 9105 while held(6) remains 3706.",
+        "schema_refusal() returns 1; release new handle, drop held lease; held(0) returns -700.",
+        "Separate fresh process: publish then layout_abort(); require nonzero process exit and SharedSlot mixed-binary diagnostic, not a returned success. Preserve full stderr."
+      ],
+      "concurrency": "Dependent lifecycle sequence is ordered; independent controls may run in separate processes. This proves no GPU shared-context concurrency.",
+      "runtime_result": null
+    }
+  },
+  "excluded_from_combined": [
+    "linear_entry_production / NET-P01",
+    "entry_table_image_provider and entry_table_image_consumer proof",
+    "native_device_concurrency_suite and other parked Metal concurrent-submission stress",
+    "previously accepted unrelated suites including IPCA pure60 and DBSCAN actualCPU17/GPU20"
+  ],
+  "progress_accounting": {
+    "all_counts_unique_within_this_plan": true,
+    "previous_72_47_are_components_not_added_again": true,
+    "IPCA": "The32 actual cases previously accepted on1.0 are requalification for changed toolchain/restored test layout, not new migrated-case progress.",
+    "DBSCAN_state": "28 formerly compiler-blocked cases; minimal probe compile does not qualify them.",
+    "OPTICS": "9/9 formerly blocked; correction authored, actual execution pending.",
+    "source_or_compile_is_runtime_pass": false
+  },
+  "preserved_failure_evidence": [
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave19-cpu-result.json",
+      "sha256": "31e9cb90c365468013c6ac0d15d74a2afb89abefd2fcfe3c1a55830a633fc92f",
+      "source_commit": "5f7d3aaf722ce04a8f24c12f0b8650fe72728775",
+      "compile_exit": 1,
+      "run_exit": null,
+      "state": "failed",
+      "build_log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave19-cpu-build.log",
+      "run_log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave19-cpu-run.log"
+    },
+    {
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave19-gpu-result.json",
+      "sha256": "e680b5dc132f9937f6d0da4d38e742624c87873aca6fc1a92034edbbb0526c17",
+      "source_commit": "5f7d3aaf722ce04a8f24c12f0b8650fe72728775",
+      "compile_exit": 1,
+      "run_exit": null,
+      "state": "failed",
+      "build_log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave19-gpu-build.log",
+      "run_log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave19-gpu-run.log"
+    },
+    "E/pca-native-tests/ipca-minimize/",
+    "E/pca-native-tests/dbscan-minimize/",
+    "E/optics-hdbscan-native/compiler-minimize/",
+    "/Users/andrewhendel/mojolearn-evidence/modular-check-20261111/out/"
+  ],
+  "root_freeze_rule": "Before launching, record final consolidated SHA and verify suite+case source hashes/OneClass signature. Preserve this proposal and all old receipts. Compile via existing semaphore/controller, standard optimized flags. Report per-suite exit/count/skip; aggregate PASS only after all requested suites pass.",
+  "wrappers": {
+    "combined_cpu.mojo": "ea72db9d18b2b8c442bd26bcacd26648c422386be8e352566d4d8034f4240e6b",
+    "combined_gpu.mojo": "8dd406e1d758c11bde32c8d62b6df80fbf07e23cdeebe1e44a84897915c15a25"
+  },
+  "compiled": false,
+  "executed": false,
+  "source_inputs": {
+    "consolidated_fixture_base": "28f38904d51ad574fa5104aca93ac807ef662b79",
+    "OneClass_fixture_producer": "ef64113d6b0a6e7ff90781988b4de017c4a56b8d",
+    "OneClass_additive_API": "f4e90945ee1ee63cf6a932ffe65d8bf5ca27216f",
+    "OneClass_public_initial": "6a96587b8ebb33dd243ce5b543d85a8d80c4025e",
+    "OneClass_boundary_only_followup": "Owner is preparing isolated scalar-admission/route correction; native fixtures/counts frozen and unchanged."
+  },
+  "fixture_signature_count": 25,
+  "fixture_signatures_pending": 0,
+  "execution_paths": {
+    "compile_include_root": "Final frozen repository checkout (existing controller -I root behavior)",
+    "runtime_working_directory": "Same frozen repository checkout so existing checks/native_tests/fixtures relative inputs resolve unchanged",
+    "wrapper_location": "E/native-upgrade-120/combined-native; do not modify product trees to stage these proposals"
+  }
+}

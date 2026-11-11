@@ -1,0 +1,123 @@
+{
+  "saved_at": "2026-11-11T20:03:40.498997+00:00",
+  "files": [
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn",
+      "branch": "merge/small-tooling-20261111",
+      "head": "465268739989b40d582aca7de41f14fde2e4209d",
+      "original_path": "docs/measurements/latest/auto/bench-board-amd.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/merge__small-tooling-20261111/docs/measurements/latest/auto/bench-board-amd.json",
+      "bytes": 3845,
+      "sha256": "edba62b17b1a7005a6fb1c56da24be13506a4de78bf830f817a7b2360b68ae1e"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn",
+      "branch": "merge/small-tooling-20261111",
+      "head": "465268739989b40d582aca7de41f14fde2e4209d",
+      "original_path": "docs/measurements/latest/auto/bench-board-apple-smoke.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/merge__small-tooling-20261111/docs/measurements/latest/auto/bench-board-apple-smoke.json",
+      "bytes": 34727,
+      "sha256": "712e842505a21a20b28cb93fd3b3f12eb4f50fa01f7897df884f17b34c8bf137"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn",
+      "branch": "merge/small-tooling-20261111",
+      "head": "465268739989b40d582aca7de41f14fde2e4209d",
+      "original_path": "docs/measurements/latest/auto/bench-board-apple.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/merge__small-tooling-20261111/docs/measurements/latest/auto/bench-board-apple.json",
+      "bytes": 33855,
+      "sha256": "1ae403531f65dd56a9816ac86b4e0044ac6c4c0cea837a93522c342c8d827a5e"
+    },
+    {
+      "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn",
+      "branch": "merge/small-tooling-20261111",
+      "head": "465268739989b40d582aca7de41f14fde2e4209d",
+      "original_path": "docs/measurements/latest/auto/bench-board-nvidia.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/merge__small-tooling-20261111/docs/measurements/latest/auto/bench-board-nvidia.json",
+      "bytes": 21866,
+      "sha256": "8fd8845f20d1c92b313b1284cbb11c357132fe081ff89533c063cbe10441e29c"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+      "branch": "ref/43b5f7c320e0",
+      "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+      "original_path": "docs/verification/latest/auto/identity-apple-m4.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__43b5f7c320e0/docs/verification/latest/auto/identity-apple-m4.json",
+      "bytes": 908,
+      "sha256": "b594bc15efbd60f74c5d41a441872b76666c1d278c448c54f594c85512a43cfd"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+      "branch": "ref/43b5f7c320e0",
+      "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+      "original_path": "docs/verification/latest/auto/identity-amd-mi325x.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__43b5f7c320e0/docs/verification/latest/auto/identity-amd-mi325x.json",
+      "bytes": 954,
+      "sha256": "3ecab6abec6ef5ae7a242cf880cfec997f9cf027b4e64cb384573bbec8062b94"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+      "branch": "ref/43b5f7c320e0",
+      "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+      "original_path": "docs/verification/latest/auto/identity-cpu-amd-epyc-7763-64-core-processor.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__43b5f7c320e0/docs/verification/latest/auto/identity-cpu-amd-epyc-7763-64-core-processor.json",
+      "bytes": 971,
+      "sha256": "9efc1c885e4320ac9977af759cbe2a9e45623b2032c002e52fb255a3fe13a22a"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+      "branch": "ref/43b5f7c320e0",
+      "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+      "original_path": "docs/verification/latest/auto/identity-cpu-amd-epyc-9v45-96-core-processor.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__43b5f7c320e0/docs/verification/latest/auto/identity-cpu-amd-epyc-9v45-96-core-processor.json",
+      "bytes": 971,
+      "sha256": "96253df3360a95f695f2c66f2849489d7a4ffdbf46a5c7b5318dc06ad0c9c125"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+      "branch": "ref/43b5f7c320e0",
+      "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+      "original_path": "docs/verification/latest/auto/identity-nvidia-l40s.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__43b5f7c320e0/docs/verification/latest/auto/identity-nvidia-l40s.json",
+      "bytes": 963,
+      "sha256": "64f5995e1ce4b7189da9f861990188d109720e748e60baad1d596277242b59a8"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+      "branch": "ref/43b5f7c320e0",
+      "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+      "original_path": "docs/verification/latest/auto/identity-nvidia-ptx-l40s-sm80.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__43b5f7c320e0/docs/verification/latest/auto/identity-nvidia-ptx-l40s-sm80.json",
+      "bytes": 1017,
+      "sha256": "6ae2fe8fdb9854660d0233e6fd6a1216b59880d670c6f90003d62159202da143"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/main-integration-20261110",
+      "branch": "main",
+      "head": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+      "original_path": "PREINTEGRATION_MERGE_HOLD_20261111",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/main/PREINTEGRATION_MERGE_HOLD_20261111",
+      "bytes": 414,
+      "sha256": "21df0af290df94d109a08c544d5bd922d6041778066935f0f3ba4661249baa44"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/reference-admit",
+      "branch": "ref/fca4c4773eff",
+      "head": "f9ad06b001463e1812492e6eb1a092955973bd80",
+      "original_path": "docs/verification/latest/auto/identity-apple-m4.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__fca4c4773eff/docs/verification/latest/auto/identity-apple-m4.json",
+      "bytes": 891,
+      "sha256": "8ffc14b4bda970d7c4d8cb33951027048b0e331328ec00b0aacb756e20ddef91"
+    },
+    {
+      "worktree": "/Users/andrewhendel/mojolearn-wt/reference-admit",
+      "branch": "ref/fca4c4773eff",
+      "head": "f9ad06b001463e1812492e6eb1a092955973bd80",
+      "original_path": "docs/verification/latest/auto/identity-cpu-amd-epyc-7542-32-core-processor.json",
+      "saved_path": "docs/handoffs/20261111-weekly-limit/worktree-snapshots/ref__fca4c4773eff/docs/verification/latest/auto/identity-cpu-amd-epyc-7542-32-core-processor.json",
+      "bytes": 883,
+      "sha256": "e91fe506722812e81af51a3a8ead329b34d50ea20ca3fe9ba623755ef6090064"
+    }
+  ],
+  "note": "Exact dirty bytes saved without changing any running worktree or historical verification reference. These snapshots are not accepted measurements or identity verdicts."
+}

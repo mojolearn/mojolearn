@@ -1,0 +1,18 @@
+[
+  {
+    "unit": "05c28cf893ae533d4f1bff9e1e7998041551ef81f21cb6e66ecf1a7d4721609c",
+    "exit_code": 1,
+    "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_byte_trainer_host.log",
+    "diagnostics": [
+      "Mojo/stdlib/std/python/_cpython.mojo:2208:24: error: operand #1 does not dominate this use"
+    ]
+  },
+  {
+    "unit": "54e603771e306b86b891adcbbd43cbfed197f35cd0a3d04873bf82e36df69419",
+    "exit_code": 1,
+    "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_orchestration_host.log",
+    "diagnostics": [
+      "Mojo/stdlib/std/python/_cpython.mojo:2208:24: error: operand #1 does not dominate this use"
+    ]
+  }
+]
