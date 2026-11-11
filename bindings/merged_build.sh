@@ -50,7 +50,9 @@
 # this script removes the members' own files there before it installs the
 # merged one.
 #
-# No build gate runs here: the packers read back vendor, mode and kernels from
+# Before any compile, tools/python_free_dirs.sh (an import grep) refuses a tree
+# whose kernel directories or RUN modules import Python. No gate runs after the
+# compile here: the packers read back vendor, mode and kernels from
 # every member after the build, as they do for the per-binding files.
 set -eu
 
@@ -76,6 +78,14 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# Python-free kernel directories and RUN modules (2026-11-11): an import grep
+# (milliseconds), once, before any plan or compile. Refused builds print its list.
+if ! pyfree=$(bash tools/python_free_dirs.sh 2>&1); then
+    printf '%s\n' "$pyfree" >&2
+    echo "merged_build: REFUSED before any compile by tools/python_free_dirs.sh" >&2
+    exit 1
+fi
 
 PY=${MOJOLEARN_MERGED_PYTHON:-python3}   # build glue only: tools/merged_bindings.py
 MACOS_FLOOR="11.0"

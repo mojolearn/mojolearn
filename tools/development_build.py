@@ -158,6 +158,19 @@ class BuildError(RuntimeError):
     pass
 
 
+def python_free_check(repo):
+    """Refuse before any compile when a kernel directory or a RUN module imports Python.
+
+    Runs tools/python_free_dirs.sh, an import grep that takes milliseconds (never a
+    source-count gate), once per build. Each group's bindings/merged_build.sh runs it
+    again; that costs the same milliseconds and keeps a direct merged build fenced.
+    """
+    run = subprocess.run(["bash", "tools/python_free_dirs.sh"], cwd=repo, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, timeout=120)
+    if run.returncode:
+        raise BuildError("REFUSED before any compile by tools/python_free_dirs.sh:\n" + run.stdout.rstrip())
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
 
@@ -1783,6 +1796,7 @@ def main(argv=None):
             summary(plan)
             return 0
         evidence.mkdir(parents=True, exist_ok=True)
+        python_free_check(REPO)
         limits = dict(seconds=positive_seconds(args.group_seconds, "--group-seconds"),
                       stall_seconds=positive_seconds(args.stall_seconds, "--stall-seconds"),
                       lock_seconds=positive_seconds(args.lock_seconds, "--lock-seconds"))
