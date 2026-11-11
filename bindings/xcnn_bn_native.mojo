@@ -11,9 +11,9 @@ so no bit moves. The Python `backward` reads the same fields (`_aux`,
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
+from core.xcnn_entry_table import XC_BATCHNORM_FORWARD, XC_BATCHNORM_FORWARD_M, XC_BATCHNORM_BACKWARD, XC_BATCHNORM_BACKWARD_M
 from bindings.xcnn_common import (
-    XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
+    XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
     xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr,
     xcnn_dev, xcnn_dev_get, xcnn_dev_upload, xcnn_dev_has, xcnn_dev_handle, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
     xcnn_shape_text,
@@ -211,8 +211,8 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
         _ = xcnn_dev_upload(layer, entries, "running", r, context)
         _set(fields, "_run_dev", dev)
     var rh = xcnn_dev_handle(dev, "running")
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_batchnorm_forward_m"), Python.list(xh, yh, rh, ah),
-                      PythonObject(15 if dev_y else 13), Python.list(n, c, hw, 1 if batch_stats else 0))
+    _ = xcnn_call(entries, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)],
+                  [15 if dev_y else 13, n, c, hw, 1 if batch_stats else 0])
     if _truth(fields["training"]):
         _set(fields, "_run_stale", PythonObject(True))
     _set(fields, "_aux_k", PythonObject(k))
@@ -233,8 +233,8 @@ def xcnn_bn_forward_dev(layer: PythonObject, fields: PythonObject, entries: Pyth
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_batchnorm_forward_m"), Python.list(xh, yh, xcnn_addr(running), xcnn_addr(aux)),
-                      PythonObject(3 if dev_y else 1), Python.list(n, c, hw, 1 if batch_stats else 0))
+    _ = xcnn_call(entries, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)],
+                  [3 if dev_y else 1, n, c, hw, 1 if batch_stats else 0])
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
     _finish(fields, running, context)
@@ -306,8 +306,8 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    _ = py_call_typed(xcnn_entry(b, "x_cnn_batchnorm_forward"), xcnn_addr(x3), xcnn_addr(y), xcnn_addr(running), xcnn_addr(aux),
-                      Python.list(n, c, hw, 1 if batch_stats else 0))
+    _ = xcnn_call(b, XC_BATCHNORM_FORWARD, [xcnn_ptr(x3), xcnn_ptr(y), xcnn_ptr(running), xcnn_ptr(aux)],
+                  [n, c, hw, 1 if batch_stats else 0])
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
@@ -365,7 +365,7 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
     var c = Int(py=fields["num_features"])
     if shape[1] != c:
         raise Error("ValueError: batch normalization configuration changed since forward")
-    var options = Python.list(shape[0], c, shape[2], 1 if _truth(fields["_mode"]) else 0)
+    var stats = 1 if _truth(fields["_mode"]) else 0
     var ad = py_get(fields, "_aux_dev")
     if ad is not None:
         var b = xcnn_builtins()
@@ -375,7 +375,8 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
             and _truth(fields["track_running_stats"]) and xcnn_resident(entries, context)):
         _set(fields, "_g_dev", PythonObject(None))
         var flags = 9 | (2 if dev_g else 0) | (4 if dev_dx else 0)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_batchnorm_backward_m"), Python.list(xh, gh, dxh, ad[1]), PythonObject(flags), options)
+        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_word(ad[1])],
+                      [flags, shape[0], c, shape[2], stats])
         _set(fields, "_g_dev", ad)
         return
     var original = xcnn_f32(fields["_aux"], "saved batch normalization aux", context)
@@ -384,9 +385,12 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
     var aux = xcnn_slice_f32(original, 0, 2 + 7 * c, context)
     if dev_x or dev_g or dev_dx:
         var flags = (1 if dev_x else 0) | (2 if dev_g else 0) | (4 if dev_dx else 0)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_batchnorm_backward_m"), Python.list(xh, gh, dxh, xcnn_addr(aux)), PythonObject(flags), options)
+        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
+                      [flags, shape[0], c, shape[2], stats])
     else:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_batchnorm_backward"), xh, gh, dxh, xcnn_addr(aux), options)
+        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
+                      [shape[0], c, shape[2], stats])
+    _ = aux  # keep the Python object alive through the native call above
     _backward_grads(fields, aux, c, context)
 
 
