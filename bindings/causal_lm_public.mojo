@@ -1789,6 +1789,12 @@ def _resident_group(e: PythonObject, lm: PythonObject, operation: Int, addresses
     return result
 
 
+# TOMBSTONE: transformer_resident_lm_read / transformer_resident_lm_sampling_read (REFACTORED: CausalLM reads run as the decode program, transformer/causal_lm_program.mojo) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
+# (Moved here from providers/python/transformer_resident_pyapi.mojo, deleted
+# by lane causal-lm-sessions-native when its provider arms became session-table calls.)
+
+
 def _resident_close(lm: PythonObject) raises:
     # The handle owner closes the model session, then every layer session.
     if lm is not None:
