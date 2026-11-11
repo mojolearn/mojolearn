@@ -6,7 +6,7 @@
     "e97482b20b",
     "769351665c"
   ],
-  "execution": "uncompiled and unrun; root CPU/GPU bundles owed",
+  "execution": "Actual fixture compilation failed139 on CPU/GPU; no numerical runtime reached. Confirmed standalone immutable nested List pointer capture compiler crash; awaiting supported Mojo/MAX fix.",
   "coverage": {
     "0": "actual provider mode/vendor/fit-partial-query-resident capabilities",
     "1-2": "original 6x3, count2, fit batch3; whiten false/true; state, query and inverse",
@@ -67,5 +67,20 @@
     "saved artifact hashes",
     "Mojo source/ABI/lifetime review",
     "git diff --check"
-  ]
+  ],
+  "compiler_issue": {
+    "source": "E/pca-native-tests/ipca-minimize/13_immutable_nested_capture.mojo",
+    "compile_exit": 139,
+    "controls_compiled": [
+      14,
+      15
+    ],
+    "draft": "E/pca-native-tests/ipca-minimize/UPSTREAM_ISSUE_DRAFT.txt",
+    "submitted": false,
+    "compiler": "Mojo1.0.0(ed45d567)",
+    "max": "26.5.0",
+    "original_fixtures_changed": false,
+    "workaround": false,
+    "accepted_distinct_evidence": "Root reports pure60 passed, thin actual host fit/partial compiled and ran, public boundary compiled. These do not execute the pending original actual fixtures."
+  }
 }
