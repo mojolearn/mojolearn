@@ -8,7 +8,11 @@ from core.linear_fit_types import RIDGE_FIT_ABI
 from x_linear.ridge_descriptor_host import ridge_fit_host_v1
 from x_linear.ridge_descriptor_host import RIDGE_FIT_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from core.host_finite_scan import host_all_finite_f32
+from core.linear_entry_table_ext import xl_ops_publish
+from x_linear.ops_entry_host import (
+    x_linear_ops_host_v1, XLINEAR_OPS_HOST_API, xl_x_status_host, xl_class_prep_host_run, xl_spearman_host_run,
+    xl_best_alpha_host_run,
+)
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
@@ -18,10 +22,7 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_linear.spearman import spearman_sign_host
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
-from x_linear.ridgecv import ridge_best_alpha
-from x_linear.class_prep import class_prep_host
 from x_linear.x_linear_host_impl import x_linear_fit_host, x_linear_decision_host, x_linear_decision_codes_host, x_linear_decision_rows_host, x_linear_decision_huber_out_host
 
 
@@ -35,11 +36,9 @@ def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: Pyt
     var n = Int(py=n_obj)
     var xa = Int(py=x_addr)
     var ya = Int(py=y_addr)
-    if n <= 0 or xa == 0 or ya == 0:
-        raise Error("x_linear spearman: n > 0 and two buffers required")
     var sign = 0
     with GILReleased(Python()):
-        sign = spearman_sign_host(FP(unsafe_from_address=xa), FP(unsafe_from_address=ya), n)
+        sign = xl_spearman_host_run(xa, ya, n)
     return PythonObject(sign)
 
 
@@ -55,26 +54,16 @@ def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr:
     var sa = Int(py=sw_addr)
     var wa = Int(py=cw_addr)
     var oa = Int(py=out_addr)
-    if n <= 0 or k < 1 or ca == 0 or wa == 0:
-        raise Error("x_linear class prep: n > 0, k > 0, codes and class weights required")
-    if weighted and sa == 0:
-        raise Error("x_linear class prep: weighted counts need sample weights")
     var largest = 0
     with GILReleased(Python()):
-        largest = class_prep_host(
-            IP(unsafe_from_address=ca), FP(unsafe_from_address=sa if sa != 0 else wa), sa != 0,
-            FP(unsafe_from_address=wa), n, k, balanced, weighted, FP(unsafe_from_address=oa if oa != 0 else wa),
-            oa != 0)
+        largest = xl_class_prep_host_run(ca, sa, wa, oa, n, k, balanced, weighted)
     return PythonObject(largest)
 
 
 def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     """Lane py-runtime round 2: RidgeCV's best alpha index over the n mean
     CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN."""
-    var na = Int(py=n)
-    if na <= 0:
-        return PythonObject(-1)
-    return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
+    return PythonObject(xl_best_alpha_host_run(Int(py=scores_addr), Int(py=n)))
 
 
 def ridge_fit_native_api_v1_binding() raises -> PythonObject:
@@ -107,16 +96,6 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     return PythonObject(n_out)
 
 
-def _x_status(xa: Int, count: Int, status: Int):
-    """The deferred finite test of X on the CPU column (lane a1b; the
-    status word of core/admitted_finite_status.mojo, by the parallel SIMD
-    scan of core/host_finite_scan.mojo, without that module's device
-    import): the word at host address `status` (0: the door tested X)."""
-    if status != 0:
-        var finite = count <= 0 or host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xa), count)
-        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status)[0] = Int32(0) if finite else Int32(1)
-
-
 def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
                      out_addr: PythonObject) raises -> PythonObject:
     var n = Int(py=dims[0])
@@ -129,7 +108,7 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     var status = Int(py=dims[4]) if len(dims) > 4 else 0
     var cells = 0
     with GILReleased(Python()):
-        _x_status(xa, n * d, status)
+        xl_x_status_host(xa, n * d, status)
         cells = x_linear_decision_host(xa, wa, n, d, k, link, oa)
     return PythonObject(cells)
 
@@ -151,7 +130,7 @@ def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Py
     var status = Int(py=dims[7]) if len(dims) > 7 else 0
     var rows = 0
     with GILReleased(Python()):
-        _x_status(xa, n * d, status)
+        xl_x_status_host(xa, n * d, status)
         rows = x_linear_decision_codes_host(xa, wa, n, d, k, link, strict, below, above, oa)
     return PythonObject(rows)
 
@@ -173,7 +152,7 @@ def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Pyt
     var oa = Int(py=out_addr)
     var rows = 0
     with GILReleased(Python()):
-        _x_status(xa, n * d, status)
+        xl_x_status_host(xa, n * d, status)
         rows = x_linear_decision_rows_host(xa, wa, n, d, k, link, mode, oa)
     return PythonObject(rows)
 
@@ -234,6 +213,10 @@ def _publish_linear_entry_table() raises:
     var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
     linear_table_publish[LINEAR_TABLE_X_LINEAR](key,
         Int(api[].entries.unsafe_ptr()), [String(RIDGE_FIT_ABI)], [1], [ridge_fit_host_v1])
+    # The x_linear operations table (core/linear_entry_table_ext.mojo): the
+    # native owner of the linear expansion estimators calls these entries.
+    var ops = XLINEAR_OPS_HOST_API.get_or_create_ptr()
+    xl_ops_publish(key, Int(ops[].entries.unsafe_ptr()), x_linear_ops_host_v1)
 
 def build__mojolearn_x_linear_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
