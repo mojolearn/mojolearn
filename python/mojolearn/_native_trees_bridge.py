@@ -100,6 +100,21 @@ def _native_key(table):
         table["x_trees_native_key"] = (mode, vendor)
 
 
+def _estimators_native_key(table):
+    # glue: once at import, the connected estimators image's (tier, vendor)
+    # key, which MultiOutputRegressor's one-program ridge reads to reach the
+    # ridge multi table (core/linear_entry_table_multi.mojo; lane
+    # calltable-base-helpers). An image without one leaves the key absent and
+    # the native caller fits one member per column, as before.
+    try:
+        mode = int(table["estimators_numeric_mode"]())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(table["estimators_vendor"]()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        table["estimators_native_key"] = (mode, vendor)
+
+
 def _bindings():
     # glue: connect each tree binding of both numeric modes once at import
     from . import _backend
@@ -114,6 +129,8 @@ def _bindings():
                 per_mode[name] = _refusal(error)
             if name == "_mojolearn_x_trees" and isinstance(per_mode[name], dict):
                 _native_key(per_mode[name])
+            if name == "_mojolearn_estimators" and isinstance(per_mode[name], dict):
+                _estimators_native_key(per_mode[name])
         connected[mode] = per_mode
     return connected
 
