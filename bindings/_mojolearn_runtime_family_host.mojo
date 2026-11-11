@@ -21,6 +21,7 @@ from bindings.host_svc_native import host_svc_attribute_c
 from bindings.gp_resident_boundary import GPPreparedLease
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.gp_kernel_cache_boundary import GPPreparedKernel
+from bindings.gp_state_cache_boundary import GPPreparedState
 from bindings.gp_class_table_boundary import GPPreparedClassTable
 from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
 from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
@@ -188,6 +189,18 @@ def register_GPPreparedKernel(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_GPPreparedKernel", existing)
 
 
+def register_GPPreparedState(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[GPPreparedState]()
+    except error:
+        if not py_type_absent(error, String(reflect[GPPreparedState].name())):
+            raise error
+        _ = module.add_type[GPPreparedState]("_GPPreparedState")
+        return
+    py_type_attach(module.module, "_GPPreparedState", existing)
+
+
 def register_GPPreparedClassTable(mut module: PythonModuleBuilder) raises:
     var existing = PythonObject(None)
     try:
@@ -210,6 +223,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_GPPreparedLease(module)
         register_GPPackedKernel(module)
         register_GPPreparedKernel(module)
+        register_GPPreparedState(module)
         register_GPPreparedClassTable(module)
         register_DBSCANReferenceOwner(module)
         register_DBSCANHolder(module)
