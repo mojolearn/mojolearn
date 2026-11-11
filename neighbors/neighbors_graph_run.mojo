@@ -291,6 +291,12 @@ def xn_louvain_decode(info: Int) -> Tuple[Float64, Float64]:
 # ---------------------------------------------------------------- SVGP
 
 
+def xn_svgp_zero_denominator(lengthscale: Float64) -> Bool:
+    """Whether `xn_svgp_gamma` refuses (its denominator is zero): only then
+    does the boundary read the interpreter's minor version for the wording."""
+    return 2.0 * (lengthscale * lengthscale) == 0.0
+
+
 def xn_svgp_gamma(lengthscale: Float64, python_minor: Int) raises -> Float64:
     """`SVGP._gamma_value()`: 1 / (2 * ls * ls) in IEEE double, ls ** 2 as
     one product. A zero denominator raises the interpreter's own wording

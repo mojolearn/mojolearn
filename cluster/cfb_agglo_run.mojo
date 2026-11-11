@@ -163,10 +163,16 @@ def agglo_publishes_distances(options: AggloOptions) -> Bool:
     return options.has_threshold or options.compute_distances
 
 
+def agglo_cut_counts(options: AggloOptions, plan: AggloTreePlan) -> Bool:
+    """Whether `n_clusters_` is the threshold cut's count (a full tree cut by
+    a threshold); the boundary reads the cut's word only then."""
+    return options.has_threshold and plan.full
+
+
 def agglo_fitted_clusters(options: AggloOptions, plan: AggloTreePlan, cut_clusters: Int, requested: Int) -> Int:
     """`n_clusters_`: the threshold cut's count on a full tree, else the
     requested count."""
-    return cut_clusters if options.has_threshold and plan.full else requested
+    return cut_clusters if agglo_cut_counts(options, plan) else requested
 
 
 def agglo_x_predicts(options: AggloOptions) -> Bool:

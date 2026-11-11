@@ -43,7 +43,7 @@ from neighbors.neighbors_graph_run import (
     xn_pagerank_dense_request, xn_pagerank_decode, xn_pagerank_converged_check, xn_cc_csr_request,
     xn_cc_dense_request, xn_cc_csr_components, xn_cc_relabel_check, xn_louvain_csr_request, xn_louvain_request,
     xn_graph_symmetry_request, xn_louvain_symmetry_check, xn_louvain_device_message, xn_louvain_relabel_check,
-    xn_louvain_decode, xn_svgp_gamma, xn_svgp_even_rows, xn_take_rows_request, xn_svgp_fit_request,
+    xn_louvain_decode, xn_svgp_zero_denominator, xn_svgp_gamma, xn_svgp_even_rows, xn_take_rows_request, xn_svgp_fit_request,
     xn_svgp_fit_decode, xn_svgp_definite_check, xn_svgp_predict_request, xn_kernel_rbf_request,
     xn_unary_scale_request, xn_unary_shift_request, xn_matmul_request, xn_svgp_var_request,
 )
@@ -642,8 +642,12 @@ def _svgp_gamma(model: PythonObject) raises -> Float64:
     one product."""
     var ls = _float(_attr(model, "lengthscale"))
     # The interpreter's minor version picks its own wording for the float
-    # division by zero the former `1.0 / (2 * ls * ls)` raised.
-    return xn_svgp_gamma(ls, Int(py=native_loaded_module("sys").version_info[1]))
+    # division by zero the former `1.0 / (2 * ls * ls)` raised; it is read
+    # only on that refusal path, as before the door split.
+    var python_minor = 0
+    if xn_svgp_zero_denominator(ls):
+        python_minor = Int(py=native_loaded_module("sys").version_info[1])
+    return xn_svgp_gamma(ls, python_minor)
 
 
 def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:

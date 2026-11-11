@@ -7,9 +7,9 @@ Independent fixtures run across the host's cores.
 """
 from core.host_parallel import host_parallelize
 from x_ann.neighbors_ann_run import (
-    ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_code, ivf_check_n_lists, ivf_fit_plan,
+    ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_known, ivf_metric_refusal, ivf_check_n_lists, ivf_fit_plan,
     pq_fit_plan, ann_check_n_lists, sq_check_train_per_list, rabitq_padded_dim, rabitq_code_words,
-    cagra_degrees, cagra_copy_dataset, refine_metric_root, refine_check_features, refine_candidates_refusal,
+    cagra_degrees, cagra_copy_dataset, refine_metric_known, refine_metric_refusal, refine_metric_root, refine_check_features, refine_candidates_refusal,
     refine_candidates_k0, refine_check_candidate_kind, refine_narrow_ids, refine_check_status,
 )
 
@@ -42,13 +42,10 @@ def fixture(unit: Int) raises:
         var scalar = List[Int]()
         require(ann_shape_size(scalar) == 1 and len(ann_c_strides(scalar, 4)) == 0, "rank-0 layout")
     elif unit == 2:
-        require(ivf_metric_code(0.0, "0") == 0 and ivf_metric_code(1.0, "1.0") == 1, "metric codes")
-        try:
-            _ = ivf_metric_code(2.0, "2")
-            raise Error("accepted")
-        except e:
-            require(String(e) == "mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 "
-                    + "(L2SqrtExpanded), got 2", "metric code wording")
+        require(ivf_metric_known(0.0) and ivf_metric_known(1.0) and not ivf_metric_known(2.0), "metric codes")
+        var e = ivf_metric_refusal("2")
+        require(String(e) == "mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 "
+                + "(L2SqrtExpanded), got 2", "metric code wording")
     elif unit == 3:
         ivf_check_n_lists(1)
         try:
@@ -114,14 +111,12 @@ def fixture(unit: Int) raises:
         _ = src
         _ = dst
     elif unit == 11:
-        require(not refine_metric_root("sqeuclidean", "'sqeuclidean'"), "sqeuclidean keeps squares")
-        require(refine_metric_root("euclidean", "'euclidean'"), "euclidean takes roots")
-        try:
-            _ = refine_metric_root("cosine", "'cosine'")
-            raise Error("accepted")
-        except e:
-            require(String(e) == "mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
-                    + "(inner product is not implemented), got 'cosine'", "refine metric wording")
+        require(refine_metric_known("sqeuclidean") and not refine_metric_root("sqeuclidean"), "sqeuclidean keeps squares")
+        require(refine_metric_known("euclidean") and refine_metric_root("euclidean"), "euclidean takes roots")
+        require(not refine_metric_known("cosine"), "cosine refused")
+        var e = refine_metric_refusal("'cosine'")
+        require(String(e) == "mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
+                + "(inner product is not implemented), got 'cosine'", "refine metric wording")
     elif unit == 12:
         refine_check_features(3, 3)
         try:

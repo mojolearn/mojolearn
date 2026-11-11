@@ -39,7 +39,7 @@ from cluster.cfb_agglo_run import (
     agglo_full_tree_mode, agglo_check_solver_rows, agglo_check_solver_clusters, agglo_solver_request,
     agglo_check_tree_rows, agglo_check_precomputed, agglo_checks_zero_rows, agglo_check_zero_rows,
     agglo_zero_rows_request, agglo_check_requested_clusters, agglo_cluster_request, agglo_warns_components,
-    agglo_publishes_distances, agglo_fitted_clusters, agglo_x_predicts, agglo_check_reference_width,
+    agglo_publishes_distances, agglo_cut_counts, agglo_fitted_clusters, agglo_x_predicts, agglo_check_reference_width,
     agglo_check_label_rank, agglo_check_label_words,
 )
 from bindings.decomp_scalar_compare import decomp_equal_admitted
@@ -99,10 +99,13 @@ def _agglo_validate(settings: AggloSettings, context: PythonObject) raises -> Ag
         raise Error("compute_full_tree must be 'auto', True or False, got " + agglo_scalar_repr(compute_full_tree, context))
     var has_threshold = distance_threshold is not None
     agglo_check_cluster_choice(n_clusters is not None, has_threshold)
-    agglo_check_threshold_tree(has_threshold, _truth(compute_full_tree))
+    # compute_full_tree's truth is read only where the pre-split door read it:
+    # with a threshold set, and for a non-'auto' tree mode.
+    if has_threshold:
+        agglo_check_threshold_tree(True, _truth(compute_full_tree))
     var distances = _truth(settings.compute_distances)
-    var tree_mode = agglo_full_tree_mode(family_is_str(compute_full_tree) and String(compute_full_tree) == "auto",
-                                         _truth(compute_full_tree))
+    var auto_tree = family_is_str(compute_full_tree) and String(compute_full_tree) == "auto"
+    var tree_mode = agglo_full_tree_mode(auto_tree, False if auto_tree else _truth(compute_full_tree))
     return AggloOptions(linkage_code, metric_code, not family_is_str(connectivity),
         distance_threshold is not None, distances, False, tree_mode)
 
@@ -241,7 +244,9 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
         lifecycle_admit_fields(fields)
         native_release_admit(py_get(fields, "distances_"), context)
         _ = py_call(fields.pop, PythonObject("distances_"), PythonObject(None))
-    var clusters = PythonObject(agglo_fitted_clusters(options, plan, scalars.clusters(), requested_clusters))
+    # The cut's cluster word is read only when the fitted count is the cut's.
+    var cut_clusters = scalars.clusters() if agglo_cut_counts(options, plan) else 0
+    var clusters = PythonObject(agglo_fitted_clusters(options, plan, cut_clusters, requested_clusters))
     _ = scalars^
     _ = children^
     _ = distances^

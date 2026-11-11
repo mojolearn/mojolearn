@@ -19,6 +19,7 @@ from cluster.dbscan_door_run import (
     dbscan_check_method, dbscan_check_prediction, dbscan_check_eps, dbscan_check_min_samples,
     dbscan_check_max_iterations, dbscan_check_budget, dbscan_check_x, dbscan_fit_request, dbscan_core_request,
 )
+from core.dbscan_native_state import dbscan_method_accepts
 from bindings.cluster_native import _reference_queries
 from bindings.dbscan_native_boundary import (
     DBSCANConnection, dbscan_array, dbscan_publish, dbscan_run_fit, dbscan_run_count, dbscan_run_gather,
@@ -95,8 +96,10 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                     + "cover prunes arithmetically over two flat arrays and "
                     + "measured 2.7x-27x over brute force at 16k-200k rows on "
                     + "this hardware; see the class docstring")
-    dbscan_check_method(method, metric, decomp_scalar_repr(metric_attr, context),
-                        decomp_scalar_repr(algorithm, context))
+    # The two reprs are built only on refusal, as before the door split.
+    if not dbscan_method_accepts(method, metric):
+        dbscan_check_method(method, metric, decomp_scalar_repr(metric_attr, context),
+                            decomp_scalar_repr(algorithm, context))
     var predicting = Bool(py=prediction_data)
     dbscan_check_prediction(metric, predicting)
     var eps_value = family_field(fields, "eps")

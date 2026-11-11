@@ -8,9 +8,9 @@
 # or vendor identity lane is introduced by these boundary repairs.
 from std.python import Python, PythonObject
 from x_ann.neighbors_ann_run import (
-    ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_code, ivf_check_n_lists, ivf_fit_plan,
+    ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_known, ivf_metric_refusal, ivf_check_n_lists, ivf_fit_plan,
     pq_fit_plan, ann_check_n_lists, sq_check_train_per_list, rabitq_code_words, cagra_degrees,
-    cagra_copy_dataset, refine_metric_root, refine_check_features, refine_candidates_refusal,
+    cagra_copy_dataset, refine_metric_known, refine_metric_refusal, refine_metric_root, refine_check_features, refine_candidates_refusal,
     refine_candidates_k0, refine_check_candidate_kind, refine_narrow_ids, refine_check_status,
 )
 from bindings.admitted_family import admit_family_meta
@@ -200,7 +200,10 @@ def _ivf_metric(fields: PythonObject, context: PythonObject) raises -> PythonObj
     # must never execute while admitting mutable estimator parameters.
     if py_type(metric) is not b.int and py_type(metric) is not b.float:
         raise Error("TypeError: mojolearn IVFIndex: metric must be an exact native name or code")
-    return PythonObject(ivf_metric_code(Float64(py=metric), family_repr(metric)))
+    var code = Float64(py=metric)
+    if not ivf_metric_known(code):
+        raise ivf_metric_refusal(family_repr(metric))  # the repr is built only on refusal
+    return PythonObject(Int(code))
 
 
 def ann_keep_array(source: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -652,7 +655,10 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var metric = args[5]
     if py_type(metric) is not b.str:
         raise Error("TypeError: mojolearn refine: metric must be an exact native string")
-    var root = refine_metric_root(String(metric), family_repr(metric))
+    var metric_name = String(metric)
+    if not refine_metric_known(metric_name):
+        raise refine_metric_refusal(family_repr(metric))  # the repr is built only on refusal
+    var root = refine_metric_root(metric_name)
     # Lane a8b-device-x-neighbors-rest: a NaN or an infinity in the dataset or
     # the queries is refused (they were not tested before): a cast by its own
     # verdict, borrowed float32 words by the entry's one status word (behind

@@ -57,13 +57,16 @@ struct IvfFitPlan(Copyable, Movable):
     var data: Int
 
 
-def ivf_metric_code(code: Float64, metric_repr: String) raises -> Int:
+def ivf_metric_known(code: Float64) -> Bool:
     """`IVFIndex._metric_code` for an exact int or float: 0 (L2Expanded) or
-    1 (L2SqrtExpanded)."""
-    if code != 0.0 and code != 1.0:
-        raise Error("mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 (L2SqrtExpanded), got "
-                    + metric_repr)
-    return Int(code)
+    1 (L2SqrtExpanded). The boundary builds the refusal (and the metric's
+    repr) only when this is False."""
+    return code == 0.0 or code == 1.0
+
+
+def ivf_metric_refusal(metric_repr: String) -> Error:
+    return Error("mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 (L2SqrtExpanded), got "
+                 + metric_repr)
 
 
 def ivf_check_n_lists(n_lists: Int) raises:
@@ -157,12 +160,19 @@ def cagra_copy_dataset(dst_address: Int, src_address: Int, count: Int):
 # ---------------------------------------------------------------- refine
 
 
-def refine_metric_root(metric: String, metric_repr: String) raises -> Bool:
-    """'sqeuclidean' or 'euclidean' (the binding takes the roots for the
-    latter); True when the roots are taken."""
-    if metric != "sqeuclidean" and metric != "euclidean":
-        raise Error("mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
-                    + "(inner product is not implemented), got " + metric_repr)
+def refine_metric_known(metric: String) -> Bool:
+    """'sqeuclidean' or 'euclidean'. The boundary builds the refusal (and
+    the metric's repr) only when this is False."""
+    return metric == "sqeuclidean" or metric == "euclidean"
+
+
+def refine_metric_refusal(metric_repr: String) -> Error:
+    return Error("mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
+                 + "(inner product is not implemented), got " + metric_repr)
+
+
+def refine_metric_root(metric: String) -> Bool:
+    """True when the binding takes the roots (an admitted 'euclidean')."""
     return metric == "euclidean"
 
 
