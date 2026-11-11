@@ -13,7 +13,7 @@ Choose the mode when compiling the application; there is one package for both.
 
 ## Build and use locally
 
-Use the repository's locked Mojo 1.0.0 / MAX 26.5.0 environment:
+Use the repository's locked Mojo 1.2.0 / MAX 26.7.0 environment:
 
 ```sh
 PREFIX="$PWD/native-install" pixi run bash packaging/native/build.sh

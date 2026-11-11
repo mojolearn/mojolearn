@@ -17,13 +17,13 @@ requirements:
   build:
     # Unicode 16.0.0 is pinned by the tokenizer's generated native table.
     - python 3.14.*
-    - mojo-compiler ==1.0.0
+    - mojo-compiler ==1.2.0
   host:
-    - mojo-compiler ==1.0.0
-    - max-core ==26.5.0
+    - mojo-compiler ==1.2.0
+    - max-core ==26.7.0
   run:
-    - mojo-compiler ==1.0.0
-    - max-core ==26.5.0
+    - mojo-compiler ==1.2.0
+    - max-core ==26.7.0
 
 tests:
   - files:

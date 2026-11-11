@@ -136,7 +136,7 @@ def stage(root, destination):
             if not init.exists():
                 init.write_text("# SPDX-License-Identifier: Apache-2.0\n")
     manifest = dict(schema=1, default_mode="identical", fast="Apple only", entrypoints=entries,
-                    mojo="1.0.0", max_core="26.5.0", sources=records)
+                    mojo="1.2.0", max_core="26.7.0", sources=records)
     (destination / "native-sources.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"Staged {len(entries)} entry points and {len(paths)} source modules")
 

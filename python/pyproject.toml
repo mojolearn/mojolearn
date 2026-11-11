@@ -109,7 +109,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     # Compiled by the Mojo toolchain against CPython, not the limited API.
-    # No PyPy, no free-threaded build: max 26.5.0 depends on python-gil.
+    # No PyPy, no free-threaded build: max 26.7.0 depends on python-gil.
     "Programming Language :: Python :: Implementation :: CPython",
     "Environment :: GPU :: NVIDIA CUDA",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -141,7 +141,7 @@ verify = ["numpy>=1.26.4"]
 # ROCm build of torch comes from PyTorch's own index.
 # ONNX export is explicit caller preparation; these extras also supply its tools.
 torch = ["torch>=2.13,<2.14", "onnx>=1.18", "onnxscript>=0.5"]
-max = ["max==26.5.0"]
+max = ["max==26.7.0"]
 
 [project.urls]
 Paper = "https://mojolearn.org/paper.pdf"
