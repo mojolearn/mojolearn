@@ -23,8 +23,10 @@ Current execution status and narrow owner-authorized exception (2026-11-10):
   Mechanical source transformation and 29 unchanged hashes are recorded in
   E/pca-native-tests/ipca-flat-room-static.json. Original fixture source is
   E/pca-native-tests/ipca-before-authorized-flat-room.mojo. Refactored actual
-  CPU15/GPU17 remain uncompiled/unrun; root owns execution and raw evidence.
-  The commands below remain owed only for these actual numerical wrappers.
+  CPU15/GPU17 now compile and run successfully at 0f8a2bfdef: both compile
+  and run exits are zero. Evidence: E/ipca-native-execution-accepted-results.json.
+  Execution targets were the local CPU and Apple Metal GPU; NVIDIA/AMD,
+  installed public API execution, timing, identity and concurrency remain untested.
 
 Dependencies e97482b20b additive API and 769351665c typed state/public owner.
 Do not cherry-pick their adoption ancestry. No product files changed here.
@@ -77,17 +79,18 @@ Third chunk: 15 actual CPU +17 ordered GPU graphs, dependencies unchanged.
   not substitute full PCA for IncrementalPCA. Per-component sign-invariant
   eigenspace, spectrum/noise/ratio, Float64 transform/inverse, full-rank data
   reconstruction. Bounds documented in ipca-native-execution.json, matching
-  existing PCA/TSVD conventions. No failing expectation changed; all unrun.
+  existing PCA/TSVD conventions. No failing expectation changed; all actual CPU15/GPU17 fixtures passed.
 
   CPU graphs parallel, GPU graphs ordered over shared DeviceContexts on one
   physical GPU; kernels/oracle cells remain parallel. This cannot establish
   concurrent shared-context safety. Root total: CPU75 (state26+wire34+actual15)
   and GPU17. No product kernel/default/request changes or A/B define.
-RUN OWED:
+REPRODUCTION COMMANDS (already passed; no unchanged rerun owed):
   mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/ipca_native_cpu.mojo
   mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/ipca_native_gpu.mojo
-  Importable ipca_native_{cpu,gpu}_suite.run_checks(). Static AST/TOML/JSON/
-  artifact-hash/source/whitespace checks only. No lane build/test/box job.
+  Importable ipca_native_{cpu,gpu}_suite.run_checks(). Root owns the successful
+  compile/runtime receipts; lane validation was limited to static checks.
+  No product kernel changes, Python fallback or feature deprecation.
   Python deletion split: none. Existing IPCA files exercise real public
   parameter, descriptor, storage mutation, publication and owner lifetimes;
   those cannot be replaced by these internal numerical graphs.
