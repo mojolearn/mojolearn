@@ -34,7 +34,7 @@ struct NMFProviderKernels[E: Exec, D: RDev, RES: Bool, X: DecompDev](NMFNativeKe
 
     @staticmethod
     def vendor() -> Int:
-        return pca_vendor_code(String(COMPILED_VENDOR)) if RES else 1
+        return pca_vendor_code(String(COMPILED_VENDOR)) if Self.RES else 1
 
     @staticmethod
     def capabilities() -> Int:
@@ -54,7 +54,7 @@ struct NMFProviderKernels[E: Exec, D: RDev, RES: Bool, X: DecompDev](NMFNativeKe
         var w_output = _nmf_pointer(r.w_output)
         var h_output = _nmf_pointer(r.h_output)
         var word = List[Int32](length=1, fill=Int32(0))
-        var result = nmf_run[E, D, RES, X](source, r.rows, r.features, r.components, r.initialization,
+        var result = nmf_run[Self.E, Self.D, Self.RES, Self.X](source, r.rows, r.features, r.components, r.initialization,
             w_initial, h_initial, r.args.seed, r.solver, a, w_output, h_output,
             Int(word.unsafe_ptr()) if r.test_finite else 0)
         return NMFFitResult(result[0], result[1], Int(word[0]))
@@ -67,7 +67,7 @@ struct NMFProviderKernels[E: Exec, D: RDev, RES: Bool, X: DecompDev](NMFNativeKe
         var components = _nmf_pointer(r.components)
         _nmf_dimension(r.features)
         var dst = _nmf_pointer(r.dst)
-        nmf_inverse_run[E, D, RES](source, r.rows, r.count, components, r.features, dst)
+        nmf_inverse_run[Self.E, Self.D, Self.RES](source, r.rows, r.count, components, r.features, dst)
 
 
 def nmf_native_v1[E: Exec, D: RDev, RES: Bool, X: DecompDev](operation: Int,
@@ -83,4 +83,4 @@ struct NMFProviderAPI[E: Exec, D: RDev, RES: Bool, X: DecompDev](Defaultable, Mo
     def __init__(out self):
         self.name = String(NMF_NATIVE_ABI)
         self.entries = List[NativeDescriptorCall]()
-        self.entries.append(nmf_native_v1[E, D, RES, X])
+        self.entries.append(nmf_native_v1[Self.E, Self.D, Self.RES, Self.X])
