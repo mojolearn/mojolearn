@@ -128,9 +128,6 @@ class MoEBlock:
         """
         return _SEQ_NATIVE("seqmoe_to_device", self, (a,), None, _SEQ_CONTEXT)
 
-    def _routing_out(self, i):
-        return _SEQ_NATIVE("seqmoe_routing", self, (i,), None, _SEQ_CONTEXT)
-
     @property
     def router_logits_(self):
         """Router logits of the last forward, (n_tokens, num_experts)."""
@@ -148,14 +145,6 @@ class MoEBlock:
 
     def __setattr__(self, name, value):
         return _SEQ_NATIVE("seqmoe_setattr", self, (name, value), None, _SEQ_CONTEXT)
-
-    def _weights_handle(self, b):
-        """The device copies' handle on binding `b`, put again after any
-        weight assignment (the old copies freed)."""
-        return _SEQ_NATIVE("seqmoe_weights", self, (b,), None, _SEQ_CONTEXT)
-
-    def _free_weights(self):
-        return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
 
     def __del__(self):
         return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
