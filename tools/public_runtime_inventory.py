@@ -116,7 +116,7 @@ RANK = {v: i for i, v in enumerate(VERDICTS)}
 
 # The conversion and argument-check layer: calls into these are shell calls,
 # not walked. Everything else in the package is walked.
-SHELL_MODULES = frozenset({"_buffer", "_array", "_arrays", "_cast_in", "_bufcheck", "_sk_validate",
+SHELL_MODULES = frozenset({"_buffer", "_array", "_arrays", "_bufcheck", "_sk_validate",
                            "_backend", "_optional_numpy", "_lazy_out", "_version", "exceptions"})
 
 GETTER_NAMES = frozenset({"binding", "_bind", "load_host_module", "load_door_host", "load_set",

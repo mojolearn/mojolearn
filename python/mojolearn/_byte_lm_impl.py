@@ -107,6 +107,7 @@ import threading
 from . import _backend
 from ._arrays import _addr, _addr_ro
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, full
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, full
 from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 from . import _byte_lm_checkpoint
@@ -481,6 +482,16 @@ def _gpu_logits_ids(ids, shape):
         raise ValueError(f'Byte-LM logits require batch <= {_LOGITS_MAX_BATCH} and '
                          f'batch * length * vocab <= {_LOGITS_MAX_CELLS}')
     return (tokens if copied else tokens.copy()), batch, length
+def _gradient_outputs(shape, named):
+    """Fresh output arrays for a gradient the native call writes: the flat
+    vector and, with `named`, one array per parameter tensor (the native
+    call splits the gradient into them)."""
+    flat = empty((shape.n_total,), '<f4')
+    by_name = {}
+    if named:
+        for name, tensor_shape in zip(shape.parameter_names, shape.parameter_shapes):  # glue: one output array per model parameter tensor
+            by_name[name] = empty(tuple(tensor_shape), '<f4')
+    return flat, by_name
 
 
 # FP32 decoder language-model trainer with runtime dimensions.
@@ -789,6 +800,29 @@ class SmallByteLanguageModelTrainer:
             report it.
         """
         return _LM_TRAINER(self, "attention_stage_report", (), _LM_TRAINER_CONTEXT)
+
+    def _export_state_impl(self, release=False):
+        """Lock held, session open. ONE native call
+        (`byte_lm_trainer_export_state`, training/byte_lm_session_ops.mojo
+        `byte_owner_export_state`): the device state is re-scanned,
+        downloaded into fresh owned arrays and checked against the committed
+        step and flags; with `release` the session is closed after it.
+        Returns the state dict holding those arrays."""
+        shape = state_shape(self._state)
+        binding = self._session_binding
+        out_p = empty((shape.n_total,), '<f4')
+        out_m = empty((shape.n_total,), '<f4')
+        out_v = empty((shape.n_total,), '<f4')
+        out_flags = empty((shape.n_tensors,), '<i4')
+        completed = self._state['completed_steps']
+        addresses = [addr_ro(self._state['flags'], name='flags'), addr(out_p, name='out_p'),
+                     addr(out_m, name='out_m'), addr(out_v, name='out_v'), addr(out_flags, name='out_flags')]
+        returned = binding.byte_lm_trainer_export_state(self._native_session, addresses,
+                                                        list(shape.native_shape), completed, bool(release))
+        if _is_bool(returned) or not isinstance(returned, int) or returned != completed:
+            raise RuntimeError('Byte-LM state export returned a different completed step')
+        self._last_export_step = completed
+        return dict(self._state, parameters=out_p, m=out_m, v=out_v, flags=out_flags)
 
     def close(self):
         """Copy the device state to the host and release the device.
@@ -1111,57 +1145,6 @@ class SmallByteLanguageModelTrainer:
         LanguageModelTrainer
         """
         return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident), _LM_TRAINER_CONTEXT)
-
-
-def _decode_checkpoint(encoded):
-    """`(state, shape)` from checkpoint bytes, every schema, integrity,
-    tensor, optimizer and cursor check applied, no native call. Shared by
-    `from_checkpoint_bytes` and the CPU inference loader (DEVIATION 2610),
-    so there is one decoder."""
-    if type(encoded) is not bytes:
-        raise TypeError('Byte-LM checkpoint capture must be immutable bytes')
-    if len(encoded) > _CHECKPOINT_LIMIT:
-        raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
-    try:
-        envelope = json.loads(encoded, object_pairs_hook=_unique_object)
-    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise ValueError('Byte-LM checkpoint is not valid bounded JSON') from exc
-    if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'payload', 'payload_sha256'}
-            or envelope['schema'] != _CHECKPOINT_SCHEMA):
-        raise ValueError('Byte-LM checkpoint schema mismatch')
-    payload = envelope['payload']
-    if _sha256_hex(_canonical(payload)) != envelope['payload_sha256']:
-        raise ValueError('Byte-LM checkpoint integrity mismatch')
-    if not isinstance(payload, dict):
-        raise ValueError('Byte-LM checkpoint payload must be an object')
-    shape = state_shape(payload)
-    for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
-        value = payload.get(key)
-        cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
-        if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
-                or value['dtype'] != dtype or value['shape'] != [cells]
-                or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):
-            raise ValueError('Byte-LM checkpoint tensor descriptor mismatch')
-        try:
-            raw = bytes.fromhex(value['hex'])
-        except ValueError as exc:
-            raise ValueError('Byte-LM checkpoint tensor is not hexadecimal') from exc
-        if len(raw) != cells * 4:
-            raise ValueError('Byte-LM checkpoint tensor byte count mismatch')
-        # `np.frombuffer(raw, dtype).astype(native, copy=True)`:
-        # `_buffer.frombytes` reads the little-endian bytes into a
-        # fresh native Array (DEVIATION 2432).
-        payload[key] = frombytes(raw, dtype, (cells,))
-    return _validate_state(payload), shape
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:  # glue: walks the checkpoint key value pairs
-        if key in result:
-            raise ValueError('Duplicate byte-LM checkpoint key')
-        result[key] = value
-    return result
 
 
 def _connect_trainer():

@@ -1,21 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The input descriptor of a user's array for the autograd entries."""
+"""The input descriptor of an ndarray for the Sequential native tests.
+
+Moved out of the installed package (lane python-package-audit, 2026-11-11):
+no product module imports it; only these tests build the descriptor."""
 # Engineering note (lane ag-thin-glue, 2026-10-19): the Sequential and
 # ops.Session entries take the user's array as it is. Python checks the
 # arguments and passes [address, NumPy dtype number, item size, rows, cols,
 # row stride, column stride]; Mojo casts to float32 on the executor
 # (core/cast_in.mojo, autograd/cast_ops.mojo). No astype, ascontiguousarray
 # or other copy happens here.
-from ._optional_numpy import require_numpy
-np = require_numpy('_cast_in')
-
-
-def as_input(x):
-    """`x` itself when it is an ndarray; otherwise the ndarray NumPy builds
-    from it (a list or a scalar has no buffer to pass), with no dtype cast."""
-    if isinstance(x, np.ndarray):
-        return x
-    return np.asarray(x)  # glue: pack addresses for one native call; Python sequence or scalar read once by numpy.asarray (no cast, no copy of a buffer)
+import numpy as np
 
 
 def describe(x, name):
@@ -41,16 +35,3 @@ def describe(x, name):
         rows, cols = x.shape
         s0, s1 = x.strides
     return [x.ctypes.data, dt.num, size, rows, cols, s0, s1]
-
-
-def matrix_view(x, name, samples=False):
-    """The row-major matrix view of a C-contiguous ndarray `x` of 3 or more
-    dimensions, the same memory with no copy (numpy's reshape of a
-    C-contiguous array is a view): (product of the leading axes, last axis),
-    or with `samples` (first axis, product of the others). The rank-N
-    entries take this view plus the full shape (docs/plans/AUTOGRAD_RANKN.md
-    section 5: C order first, per-axis strides a follow-up)."""
-    if not x.flags.c_contiguous:
-        raise ValueError(f"{name} with more than two dimensions must be C-contiguous; "
-                         f"pass numpy.ascontiguousarray({name})")
-    return x.reshape(x.shape[0], -1) if samples else x.reshape(-1, x.shape[-1])

@@ -184,10 +184,6 @@ class LayerNorm:
         return _SEQ_NATIVE("seqln_initialize", self,
                            (normalized_shape, eps, elementwise_affine, bias), numeric_mode, _SEQ_CONTEXT)
 
-    def _dev_binding(self):
-        """The sequence binding when it has the resident LayerNorm entry, else None."""
-        return _SEQ_NATIVE("seqln_device_binding", self, (), None, _SEQ_CONTEXT)
-
     @property
     def _device_io(self):
         """Whether this layer takes and returns resident tensors (`to_device`)."""

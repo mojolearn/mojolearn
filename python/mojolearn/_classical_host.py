@@ -156,10 +156,6 @@ class _HostBound:
             )
         return _backend.load_host_module(_HOST_BASENAMES[name])
 
-    def _host_refusals(self):
-        """Raised by `host_model` after `load`, for a saved parameter the
-        host binding has no entry for; a subclass overrides."""
-
     def vendor_used(self):
         return "cpu"
 
@@ -330,20 +326,6 @@ class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression)
         >>> log_probabilities = model.predict_log_proba(X)
         """
         return _native_classical(self, "host_infer_predict_log_proba", (X,), _CLASSICAL)
-
-    def _host_refusals(self):
-        """A model with more than two classes needs the softmax link
-        (`qn_softmax`, lane/logistic-multiclass, 2026-09-14); a host build
-        without it is refused by name at load, not at the first predict."""
-        if len(self.classes_) > 2:
-            binding = self._bind("_mojolearn_estimators")
-            if not callable(getattr(binding, "qn_softmax", None)):
-                raise ImportError(
-                    "mojolearn: this build of _mojolearn_estimators_host does "
-                    "not export qn_softmax, so a LogisticRegression with "
-                    f"{len(self.classes_)} classes cannot predict on the host; "
-                    "rebuild it with bindings/build_estimators_host.sh"
-                )
 
 
 class _HostProjection(_HostBound):
@@ -968,10 +950,6 @@ class HostGaussianProcessClassifier(_NativeArchiveLoad, GaussianProcessClassifie
             return _backend.load_host_module(_GPC_HOST_INFERENCE_BASENAME)
         return _backend.load_host_module(_GPC_HOST_BASENAME)
 
-    def _host_refusals(self):
-        """Nothing beyond `load`'s checks: the host binding exports both
-        classification entries."""
-
     def vendor_used(self):
         return "cpu"
 
@@ -996,10 +974,6 @@ class HostCholesky(_NativeArchiveLoad, Cholesky):
                 f"factor was saved {mode!r}"
             )
         return _backend.load_host_module(_LINALG_HOST_BASENAME), "linalg_numeric_mode"
-
-    def _host_refusals(self):
-        """Nothing beyond `load`'s own checks: the host binding carries all
-        three door names."""
 
     def vendor_used(self):
         return "cpu"
@@ -1146,14 +1120,6 @@ class _HostKernelMethod(_HostBound):
         # glue: register ordinary subclass layouts only at class definition
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)
-
-    def _host_refusals(self):
-        from .kernel_methods import (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
-                                     KERNEL_SIGMOID, KERNEL_LAPLACIAN)
-        kernel = self._kernel_params[0]
-        if kernel not in (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
-                          KERNEL_SIGMOID, KERNEL_LAPLACIAN):
-            raise ImportError(f"mojolearn: unsupported saved kernel code {kernel}")
 
 
 class HostKernelRidge(_NativeArchiveLoad, _HostKernelMethod, KernelRidge):

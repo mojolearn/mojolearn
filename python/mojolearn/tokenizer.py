@@ -40,14 +40,13 @@ issues a DeprecationWarning).
 #   (`mojolearn/_tokenizer_synthetic.py`) and to a pure Python encoder of the
 #   same algorithm; `python/mojolearn/tests/test_tokenizer_surface.py` holds
 #   this door to the same cases plus every refusal by name.
-import array
 import json
 import operator
 import os
 
 from . import _backend
 from . import _tokenizer_synthetic
-from ._buffer import addr, addr_ro
+from ._buffer import addr
 
 _EXTENSION = "_mojolearn_tokenizer_host"
 
@@ -116,21 +115,6 @@ def _native(fn, *args, prefix="mojolearn: "):
             if msg.startswith(name):
                 raise kind(prefix + msg[len(name):]) from None
         raise
-
-
-def _blob(parts, what):
-    """`(bytes, int64 lengths)` of a sequence of bytes-like parts, joined
-    by the C `bytes.join` (no Python loop); a part that is not bytes-like
-    is refused."""
-    try:
-        blob = b"".join(parts)
-    except TypeError as exc:
-        raise TypeError(f"mojolearn: {what} must be bytes-like ({exc})") from None
-    return blob, array.array("q", map(len, parts))
-
-
-def _ro(buf, name):
-    return addr_ro(buf, name=name) if len(buf) else 0
 
 
 def _binding():
@@ -221,10 +205,6 @@ class BpeTokenizer:
 
     def _adopt(self, m, handle, source):
         return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_adopt', (self, handle, source), _TOKENIZER_CONTEXT)
-
-    @classmethod
-    def _from_handle(cls, m, handle, source):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('bpe_handle', (cls, handle, source), _TOKENIZER_CONTEXT)
 
     # ------------------------------------------------------------ loading
 
@@ -410,15 +390,6 @@ class BpeTokenizer:
 
     # ------------------------------------------------------------ decode
 
-    @staticmethod
-    def _id_list(ids):
-        if isinstance(ids, (str, bytes, bytearray)):
-            raise TypeError(f"mojolearn: ids must be a sequence of int, got {type(ids).__name__}")
-        try:
-            return list(ids)
-        except TypeError:
-            raise TypeError(f"mojolearn: ids must be a sequence of int, got {type(ids).__name__}") from None
-
     def decode_bytes(self, ids):
         """Decode ids to bytes.
 
@@ -500,9 +471,6 @@ class TrainedBpeVocabulary:
     def tie_break(self):
         """The rule that settles equal counts, as text."""
         return _TOKENIZER_NATIVE.tokenizer_public_call('trained_fact', (self, 'tie_break'), _TOKENIZER_CONTEXT)
-
-    def _render(self, which):
-        return _TOKENIZER_NATIVE.tokenizer_public_call('trained_render', (self, which), _TOKENIZER_CONTEXT)
 
     # OUR format as text: `rank<TAB>hex_of_token_bytes` per line
     # (`tokenizer/train/emit.mojo::render_ranks`).

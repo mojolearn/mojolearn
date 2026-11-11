@@ -734,18 +734,6 @@ class _Kit:
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
         return out
 
-    def _idn_flags(self):
-        """The binding's `x_decomp_idn_flags` (0 when it has none); asked once
-        per kit."""
-        f = self.__dict__.get("_idn_bits")
-        if f is None:
-            try:
-                f = int(getattr(self._raw(), "x_decomp_idn_flags")())
-            except Exception:
-                f = 0
-            self._idn_bits = f
-        return f
-
     def rand(self, r, c, seed, stream, kind):
         if r * c >= 1024 and self._res():   # a small draw is read at once: one call
             # lane fam-decomp: drawn into a device matrix by the same kernel,
@@ -1403,9 +1391,6 @@ class _Base(SklearnTagsMixin):
         ndarray of shape (n_samples, n_components), float32
         """
         return self.fit(X, y).transform(X)
-
-    def _kit(self):
-        return _Kit(self.numeric_mode_)
 
     def _check(self, attr="components_"):
         if not hasattr(self, attr):
