@@ -1,0 +1,18 @@
+{
+  "family": "DBSCAN",
+  "entry": "checks/native_tests/dbscan_state.mojo",
+  "suite": "dbscan_state_suite.run_checks",
+  "fixtures": 28,
+  "dependency": "a446091b7a",
+  "execution": "authored; uncompiled and unrun",
+  "coverage": {
+    "0-5": "flat zeroed core-mask rooms for0/1/17/1025 rows, independent owners, complete parallel writes and moved allocation lifetime",
+    "6-17": "all nine reference key fields including owner IDs separately from addresses, copied-key independence and empty reference metadata",
+    "18-23": "valid handle0 and >2^53 integer, invalid-1, owner/provider/key mismatches, nonconsuming matching",
+    "24-27": "exact take-once transfer/invalidation, unchanged other fields, moved state retains driver"
+  },
+  "parallel": "independent fixtures and scratch-word work use host_parallelize",
+  "lifetime": "flat native List owners pinned through pointer use; pure owner has no destructor callback; fake handles never query/release a device",
+  "python_removed": 0,
+  "product_changes": false
+}
