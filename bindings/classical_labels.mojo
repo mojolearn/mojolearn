@@ -669,7 +669,7 @@ def _flat_list_labels(y: PythonObject, context: PythonObject) raises -> Optional
     return _native_labels(array, kind == LABELS_LIST_BOOL, context)
 
 
-trait _TextCodeStorage(Copyable, Movable):
+trait _TextCodeStorage(Copyable, Movable, Deinitable):
     def __init__(out self, count: Int, context: PythonObject) raises: ...
     @staticmethod
     def from_values(var values: List[Int32], context: PythonObject) raises -> Self: ...
