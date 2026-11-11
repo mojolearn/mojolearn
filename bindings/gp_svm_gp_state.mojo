@@ -196,7 +196,7 @@ def _gp_residual_arrays(fields: PythonObject, names: PythonObject, context: Pyth
         classical_admit_value(value, context)
 
 
-def _gp_classes_settled(mut mods: NativeModules, classes: List[PythonObject], context: PythonObject) raises -> Bool:
+def _gp_classes_settled(mut mods: NativeModules, classes: PythonObject, context: PythonObject) raises -> Bool:
     """`classes_` is an exact list or tuple of exact builtin scalars: its
     admission depends on nothing the key does not hold."""
     var b = mods.module("builtins")
