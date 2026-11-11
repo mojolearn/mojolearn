@@ -925,7 +925,6 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
     _bagging_validate(fields, context)
     var X = args[0]
     var sample_weight = args[2]
-    var glue = _xr(xt)
     if classifier:
         var labels = trees_encode_labels(args[1], context)
         py_setitem(fields, "classes_", labels.classes)
@@ -937,6 +936,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         if _truthy(fields["oob_score"]):
             # `BaggingClassifier._set_oob_score`
             var xt = _xt(fields, context)
+            var glue = _xr(xt)
             var x = _x_f32(X, context)
             var n = x.rows
             var pair = _bagging_oob_outputs(xt, fields, x, k, True, context)
@@ -957,6 +957,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
     if _truthy(fields["oob_score"]):
         # `BaggingRegressor._set_oob_score`
         var xt = _xt(fields, context)
+        var glue = _xr(xt)
         var x = _x_f32(X, context)
         var n = x.rows
         var pair = _bagging_oob_outputs(xt, fields, x, 1, False, context)
