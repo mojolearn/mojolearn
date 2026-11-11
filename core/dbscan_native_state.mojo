@@ -60,4 +60,6 @@ def dbscan_method_code(name: String) -> Int:
 
 
 def dbscan_method_accepts(method: Int, metric: Int) -> Bool:
-    return (method == 0 and metric >= 0 and metric <= 3) or (method == 1 and metric == 0)
+    # The public RBC spelling admits precomputed matrices, then fit forces
+    # that metric onto the existing brute adjacency route.
+    return (method == 0 and metric >= 0 and metric <= 3) or (method == 1 and (metric == 0 or metric == 3))
