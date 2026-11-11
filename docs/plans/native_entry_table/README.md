@@ -69,3 +69,12 @@ The independent Python crossing observer is root-owned. Its `sys.setprofile`
 counts have known direct-C-call blind spots; zero observed calls is not runtime
 qualification. No speed improvement or Python-free whole-family claim is made
 before the corresponding runtime evidence and NVIDIA/AMD measurements.
+
+`checks/native_tests/linear_entry_production.mojo` closes review NET-P01 at
+the source level: it acquires production linear handles, publishes the real
+host endpoint table, and calls `linear_lease_predict` for narrow and wide
+outputs before/after replacement and release. Literal independent results
+check both state generations. It must run in a fresh process because it first
+checks the missing production table. This is two parallel numerical/lifetime
+graphs plus one ordered precondition control; all remain unrun until root
+execution. The separate-image proof and public boundary cases are still owed.
