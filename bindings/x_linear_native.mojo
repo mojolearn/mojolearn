@@ -20,18 +20,23 @@
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
 from std.ffi import c_int, c_long
 from std.math import isinf
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from core.linear_entry_table import LinearEntryKey, LINEAR_TABLE_X_LINEAR
 from core.linear_entry_table_ext import (
-    xl_ops_entry, XL_OP_FLAGS, XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES,
+    xl_ops_entry, XL_OP_FLAGS, XL_OP_DECISION, XL_OP_DECISION_CODES,
     XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_CLASS_PREP, XL_OP_SPEARMAN, XL_OP_BEST_ALPHA,
     XL_HAS_FIT_FOLD,
 )
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.solver_entry_table import SolverEntryKey, solver_ops_entry, solver_cd_fit_call, solver_cd_predict_call
-from core.native_descriptor_call import native_descriptor_call
+from x_linear.door_run import (
+    ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV,
+    ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, LINK_SIGMOID,
+    xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse, xl_run_word, xl_run_copy, xl_run_join,
+    xl_run_parts, xl_parts_total, xl_block_dims, xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats,
+    XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
+)
 from providers.python.linear_entry_boundary import linear_entry_connection
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
@@ -61,7 +66,7 @@ from bindings.msel_inputs import msel_admit
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.admitted_input import (
     AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    classical_view, admit_ids, admitted_finite_refuse, admitted_finite_entry_refuse,
+    classical_view, admit_ids, admitted_finite_entry_refuse,
 )
 from bindings.classical_arrays import classical_dtype_str, classical_c_order, classical_is_f32
 from bindings.classical_labels import (
@@ -71,27 +76,12 @@ from bindings.classical_labels import (
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
-comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 # x_linear/dispatch.mojo algorithm codes (`_expansion_linear.ALGO_*`).
-comptime ALGO_SGD = 1
-comptime ALGO_GLM = 2
-comptime ALGO_HUBER = 3
-comptime ALGO_BAYES = 4
-comptime ALGO_ARD = 5
-comptime ALGO_LARS = 6
-comptime ALGO_QUANTILE = 7
-comptime ALGO_RIDGE = 8
-comptime ALGO_ISOTONIC = 11
-comptime ALGO_ISOTONIC_PREDICT = 12
-comptime LINK_IDENTITY = 0
-comptime LINK_EXP = 1
-comptime LINK_SIGMOID = 2
 # core/py2mojo_rows.mojo modes (`_ROWS_*`).
 comptime _ROWS_SGD_PROBA = 2
 comptime _ROWS_LRCV_PROBA = 3
 # `_lbfgs_work`'s memory.
-comptime _LBFGS_M = 10
 # ElasticNet / Lasso refusals by name, word for word.
 comptime _CD_COPY_X = "mojolearn ElasticNet: copy_X=False is refused. The design crosses to the device as a copy and the caller's array is never written (DEVIATION 880); there is no in-place arm to select"
 comptime _CD_POSITIVE = "mojolearn ElasticNet: positive=True is not supported (cuML raises UnsupportedOnGPU for it too, elastic_net.py:143)"
@@ -252,7 +242,7 @@ def _xl_call(ops: XLinearOps, operation: Int, addresses: List[Int], ints: List[I
     var result = 0
     var py = Python()
     with GILReleased(py):
-        result = native_descriptor_call(ops.entry, operation, addresses, ints, floats)
+        result = xl_run_call(ops.entry, operation, addresses, ints, floats)
     return result
 
 
@@ -265,7 +255,7 @@ def _xl_check_fitted(fields: PythonObject, model: PythonObject) raises:
 
 
 def _xl_word(out_buf: PythonObject, index: Int) raises -> Float32:
-    return _F32P(unsafe_from_address=labels_address(out_buf))[index]
+    return xl_run_word(labels_address(out_buf), index)
 
 
 def _xl_float(out_buf: PythonObject, index: Int) raises -> PythonObject:
@@ -282,10 +272,8 @@ def _xl_slice(out_buf: PythonObject, offset: Int, count: Int, shape: PythonObjec
     """`Array.from_list(vals[offset:offset + count], '<f4')` (shaped as the
     Python list was nested): one byte copy of the float32 words."""
     var array = admitted_array(shape, "<f4", context)
-    if count > 0:
-        unsafe_memcpy(dest=_F32P(unsafe_from_address=labels_address(array)),
-               src=_F32P(unsafe_from_address=labels_address(out_buf)) + offset, count=count)
-        _ = array  # keep the Python object alive through the native call above
+    xl_run_copy(labels_address(array), labels_address(out_buf), offset, count)
+    _ = out_buf  # keep the Python object alive through the native call above
     return array
 
 
@@ -293,14 +281,7 @@ def _xl_join(first: Int, first_count: Int, second: Int, second_count: Int, conte
     """`_concat_f32(a, b)`: a's then b's 32-bit words in one float32 vector
     (two byte copies)."""
     var out = admitted_vector(first_count + second_count, "<f4", context)
-    var o = _F32P(unsafe_from_address=labels_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    if first_count > 0:
-        unsafe_memcpy(dest=o, src=_F32P(unsafe_from_address=first), count=first_count)
-        _ = out  # keep the Python object alive through the native call above
-    if second_count > 0:
-        unsafe_memcpy(dest=o + first_count, src=_F32P(unsafe_from_address=second), count=second_count)
-        _ = out  # keep the Python object alive through the native call above
+    xl_run_join(labels_address(out), first, first_count, second, second_count)
     return out
 
 
@@ -339,7 +320,8 @@ def _xl_status(x: AdmittedX, context: PythonObject) raises -> Tuple[PythonObject
 def _xl_status_refuse(word: PythonObject, model: PythonObject) raises:
     """Refuse a non-finite X the decision entry found (scikit-learn's wording)."""
     if word is not None:
-        admitted_finite_refuse(Int(_I32P(unsafe_from_address=labels_address(word))[0]), _name(model))
+        xl_run_status_refuse(labels_address(word), _name(model))
+        _ = word  # keep the Python object alive through the native read above
 
 
 def _xl_vector(source: PythonObject, n: Int, context: PythonObject) raises -> AdmittedX:
@@ -376,22 +358,11 @@ def _xl_block(coef: PythonObject, intercept: PythonObject, context: PythonObject
     one float32 vector of k rows of d + 1 words (byte copies)."""
     var c = _xl_words(coef, "coef_", context)
     var b = _xl_words(intercept, "intercept_", context)
-    var k = b.rows * b.cols
-    var d = (c.rows * c.cols) // max(k, 1)
+    var dims = xl_block_dims(c.rows * c.cols, b.rows * b.cols)
+    var k = dims[0]
+    var d = dims[1]
     var out = admitted_vector(k * (d + 1), "<f4", context)
-    var o = _F32P(unsafe_from_address=labels_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    var cp = _F32P(unsafe_from_address=c.address)
-    _ = c  # keep the Python object alive through the native call above
-    var bp = _F32P(unsafe_from_address=b.address)
-    _ = b  # keep the Python object alive through the native call above
-    for j in range(k):  # driver-loop: over the fitted classes' coefficient rows (model structure)
-        unsafe_memcpy(dest=o + j * (d + 1), src=cp + j * d, count=d)
-        _ = out  # keep the Python object alive through the native call above
-        _ = c  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=o + j * (d + 1) + d, src=bp + j, count=1)
-        _ = out  # keep the Python object alive through the native call above
-        _ = b  # keep the Python object alive through the native call above
+    xl_run_block(labels_address(out), c.address, b.address, k, d)
     _ = c^
     _ = b^
     return (out, k)
@@ -443,15 +414,6 @@ def _xl_codes(model: PythonObject, x: AdmittedX, coef: PythonObject, intercept: 
     return out
 
 
-def _xl_fit_ints(header: List[Int], ip: List[Int]) -> List[Int]:
-    """A fit request's Int words: its fixed header, then the route's
-    integer hyperparameters (core/linear_entry_table_ext.mojo)."""
-    var words = header.copy()
-    for i in range(len(ip)):  # driver-loop: over the route's integer hyperparameters (model structure)
-        words.append(ip[i])
-    return words^
-
-
 def _xl_run(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, y_addr: Int, y_size: Int,
             ip: List[Int], fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int,
             context: PythonObject) raises -> PythonObject:
@@ -461,8 +423,10 @@ def _xl_run(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int
     var out = admitted_vector(n_out, "<f4", context)
     var zero = admitted_vector(1, "<f4", context)
     var ya = y_addr if y_size > 0 else labels_address(zero)
-    var header: List[Int] = [algo, n, d, x_size, y_size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)]
-    _ = _xl_call(ops, XL_OP_FIT, [x_addr, ya, labels_address(out)], _xl_fit_ints(header, ip), fp)
+    var out_addr = labels_address(out)
+    var py = Python()
+    with GILReleased(py):
+        _ = xl_run_fit(ops.entry, algo, x_addr, x_size, n, d, ya, y_size, ip, fp, n_out, n_fw, n_iw, out_addr)
     _ = zero  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = zero^
@@ -495,14 +459,15 @@ def _xl_run_x(model: PythonObject, ops: XLinearOps, algo: Int, x: AdmittedX, y_a
     var out = admitted_vector(n_out, "<f4", context)
     var zero = admitted_vector(1, "<f4", context)
     var ya = y_addr if y_size > 0 else labels_address(zero)
-    var words = List[Int](length=2, fill=0)
-    var header: List[Int] = [algo, x.store.base_id, x.store.base_rows, x.store.index_id, x.rows, x.cols,
-                             x.rows * x.cols, y_size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)]
-    _ = _xl_call(ops, XL_OP_FIT_FOLD, [ya, labels_address(out), Int(words.unsafe_ptr())], _xl_fit_ints(header, ip), fp)
+    var out_addr = labels_address(out)
+    var words: Tuple[Int, Int] = (0, 0)
+    var py = Python()
+    with GILReleased(py):
+        words = xl_run_fit_fold(ops.entry, algo, x.store.base_id, x.store.base_rows, x.store.index_id, x.rows,
+                                x.cols, ya, y_size, ip, fp, n_out, n_fw, n_iw, out_addr)
     _ = zero  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     door_rows_refuse(words[0], words[1], _name(model), x.store.base_rows)
-    _ = words^
     _ = zero^
     return out
 
@@ -535,10 +500,6 @@ def _xl_owned(m: AdmittedX, context: PythonObject) raises -> PythonObject:
 
 def _xl_reals(values: List[Float64]) raises -> PythonObject:
     return py_list_f64(values)
-
-
-def _lbfgs_work(p: Int) -> Int:
-    return 4 * p + 2 * _LBFGS_M * p + 2 * _LBFGS_M
 
 
 # ------------------------------------------------------------ class weights
@@ -608,8 +569,7 @@ def _xl_seed(random_state: PythonObject) raises -> Tuple[Int, Int]:
     var s = py_call(op.and_, random_state, mask)
     var lo = Int(py=py_call(op.and_, s, PythonObject(4294967295)))
     var hi = Int(py=py_call(op.rshift, s, PythonObject(32)))
-    var half = 2147483648
-    return (lo - 2 * half if lo >= half else lo, hi - 2 * half if hi >= half else hi)
+    return xl_seed_halves(lo, hi)
 
 
 def _xl_sgd_auto_sum(batch_size: PythonObject, loss: PythonObject, learning_rate: PythonObject,
@@ -665,17 +625,8 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: XLinearOps, x: A
     if class_weight is not None and n_classes >= 2:
         # k scalars: the fit's parameters
         var prep = _xl_class_prep(model, entries, class_weight, classes, codes, 0, False, False, context)
-        var cwp = _F32P(unsafe_from_address=labels_address(prep[0]))
-        if n_classes == 2:
-            fp.append(Float64(cwp[1]))
-            fp.append(Float64(cwp[0]))
-        else:
-            for c in range(n_classes):  # driver-loop: over the classes' positive weights (model structure)
-                fp.append(Float64(cwp[c]))
-            for c in range(n_classes):  # driver-loop: over the classes' negative weights (model structure)
-                fp.append(1.0)
-        # cwp borrows prep's class-weight Array. Retain its owner until the
-        # binary or multiclass parameter reads finish; the pointer owns nothing.
+        xl_sgd_class_floats(fp, labels_address(prep[0]), n_classes)
+        # The class-weight words are prep's Array: retained through the read.
         _ = prep^
         has_cw = 1
     var auto = _isinstance(batch_size, _b().str) and _eq(batch_size, PythonObject("auto"))
@@ -1023,7 +974,7 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     var ip: List[Int] = [_int(fields["max_iter"]), 1 if intercept else 0, has_sw]
     var fp: List[Float64] = [_float(epsilon), _float(fields["alpha"]), _float(fields["tol"])]
     var out = _xl_run(entries, ALGO_HUBER, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
-                      d + 4 + p, _lbfgs_work(p) + n, 1, context)
+                      d + 4 + p, xl_lbfgs_work(p) + n, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
@@ -1696,9 +1647,6 @@ def xl_cd_score(model: PythonObject, args: PythonObject, context: PythonObject) 
 # called once, as the Python did, and its (train, test) index arrays are
 # read natively.
 
-comptime ALGO_ENETCV = 9
-comptime ALGO_LOGCV = 10
-comptime ALGO_RIDGE_KFOLD = 13
 
 
 def _xl_helper(context: PythonObject, name: String) raises -> PythonObject:
@@ -1821,41 +1769,33 @@ def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> 
     return out
 
 
-def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
-    sides partition the rows and every train side is the complement of its
-    test side; None otherwise."""
-    var fold = _xl_full_i32(n, -1, context)
-    var assign = _xl_helper(context, "assign_fold_i64")
-    var covered = 0
-    for k in range(len(splits)):  # driver-loop: over the cv splits
-        var te = splits[k][1]
-        var size = Int(py=te.size)
-        if _int(py_call_typed(assign, PythonObject(labels_address(te) if size > 0 else 0), PythonObject(size), PythonObject(n),
-                              PythonObject(k), PythonObject(labels_address(fold)))) != 0:
-            return PythonObject(None)
-        _ = te  # keep the Python object alive through the native calls above
-        _ = fold  # keep the Python object alive through the native calls above
-        covered += size
-    if covered != n:
-        return PythonObject(None)
-    var check = _xl_helper(context, "check_indices_i64")
-    var hits = _xl_helper(context, "count_fold_hits_i64")
+def _xl_split_words(splits: PythonObject) raises -> XlSplitWords:
+    """UNPACK of the cv splits: each side's int64 index address (0 when
+    empty) and count. The caller keeps `splits` alive through RUN."""
+    var words = XlSplitWords(List[Int](), List[Int](), List[Int](), List[Int]())
     for k in range(len(splits)):  # driver-loop: over the cv splits
         var tr = splits[k][0]
         var te = splits[k][1]
         var tr_size = Int(py=tr.size)
-        if tr_size != n - Int(py=te.size):
-            return PythonObject(None)
-        if tr_size > 0:
-            if _int(py_call_typed(check, PythonObject(labels_address(tr)), PythonObject(tr_size), PythonObject(n))) != 0:
-                return PythonObject(None)
-            _ = tr  # keep the Python object alive through the native calls above
-            if _int(py_call_typed(hits, PythonObject(labels_address(tr)), PythonObject(tr_size),
-                                  PythonObject(labels_address(fold)), PythonObject(n), PythonObject(k))) != 0:
-                return PythonObject(None)
-            _ = tr  # keep the Python object alive through the native calls above
-            _ = fold  # keep the Python object alive through the native calls above
+        var te_size = Int(py=te.size)
+        words.train.append(labels_address(tr) if tr_size > 0 else 0)
+        words.train_sizes.append(tr_size)
+        words.test.append(labels_address(te) if te_size > 0 else 0)
+        words.test_sizes.append(te_size)
+    return words^
+
+
+def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """`_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
+    sides partition the rows and every train side is the complement of its
+    test side; None otherwise (RUN: x_linear/door_run.mojo, on the base
+    helper table)."""
+    var fold = _xl_full_i32(n, -1, context)
+    var key = base_helpers_key(context["xl_helpers"])
+    var partition = xl_cv_fold_ids_run(key, _xl_split_words(splits), n, labels_address(fold))
+    _ = splits  # keep the index Arrays alive through the native calls above
+    if not partition:
+        return PythonObject(None)
     return fold
 
 
@@ -1878,48 +1818,18 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
         _ = ids  # keep the Python object alive through the native call above
         return (out, PythonObject(None))
     # `_cv_roles_f32`: per-split roles (x_linear/cv_roles.mojo)
-    if n + 1 > 16777216:
-        raise Error("NotImplementedError: mojolearn " + name + ": cv splits that are not a partition are limited "
-                    + "to 16,777,215 rows")
-    var mark = _xl_helper(context, "mark_split_roles_f32")
+    xl_cv_roles_limit(n, name)
     var roles = admitted_vector(len(splits) * n, "<f4", context)
-    for k in range(len(splits)):  # driver-loop: over the cv splits
-        for side in range(2):  # driver-loop: over the two sides of one split
-            var rows = splits[k][side]
-            var size = Int(py=rows.size)
-            var status = _int(py_call_typed(mark, PythonObject(labels_address(rows) if size > 0 else 0), PythonObject(size),
-                                            PythonObject(n), PythonObject(k), PythonObject(side + 1),
-                                            PythonObject(labels_address(roles))))
-            _ = rows  # keep the Python object alive through the native call above
-            _ = roles  # keep the Python object alive through the native call above
-            if status == 1:
-                raise Error("mojolearn " + name + ": a cv split holds an index outside [0, n_samples)")
-            _ = rows  # keep the Python object alive through the native calls above
-            _ = roles  # keep the Python object alive through the native calls above
-            if status == 2:
-                raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
-            _ = rows  # keep the Python object alive through the native calls above
-            _ = roles  # keep the Python object alive through the native calls above
-        if Int(py=splits[k][0].size) == 0 or Int(py=splits[k][1].size) == 0:
-            raise Error("mojolearn " + name + ": every cv split needs training and test rows")
+    xl_cv_roles_run(base_helpers_key(context["xl_helpers"]), _xl_split_words(splits), n, labels_address(roles), name)
+    _ = splits  # keep the index Arrays alive through the native calls above
     return (labels_full_f32(n, -Float64(n + 1), context), roles)
 
 
 def _xl_parts(addrs: List[Int], counts: List[Int], context: PythonObject) raises -> PythonObject:
     """`_concat_f32_parts(parts)`: the parts' 32-bit words in order, one
     float32 vector (one byte copy per part)."""
-    var total = 0
-    for i in range(len(counts)):  # driver-loop: over the target vector's parts
-        total += counts[i]
-    var out = admitted_vector(total, "<f4", context)
-    var o = _F32P(unsafe_from_address=labels_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    var at = 0
-    for i in range(len(counts)):  # driver-loop: over the target vector's parts
-        if counts[i] > 0:
-            unsafe_memcpy(dest=o + at, src=_F32P(unsafe_from_address=addrs[i]), count=counts[i])
-            _ = out  # keep the Python object alive through the native call above
-        at += counts[i]
+    var out = admitted_vector(xl_parts_total(counts), "<f4", context)
+    xl_run_parts(labels_address(out), addrs, counts)
     return out
 
 
@@ -2441,7 +2351,7 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     for i in range(nc):  # driver-loop: over the Cs grid
         fp.append(Cs[i])
     var out = _xl_run(entries, ALGO_LOGCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), ip,
-                      fp, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5, context)
+                      fp, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + xl_lbfgs_work(p), 5, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", labels.classes)

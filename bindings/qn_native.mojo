@@ -6,6 +6,10 @@
 # Python exports built, so the same bits; no CPython between the modules) and
 # stores the fitted attributes. score predicts and scores in the same call: the prediction stays
 # a native buffer handed straight to the R^2 program.
+# Split (lane doorsplit-linear, 2026-11-11): fit and predict are UNPACK and
+# PACK in bindings/qn_boundary.mojo around a Python-free RUN in
+# glm/qn_door_run.mojo; this file keeps the registered entry, the public
+# lifecycle admission and the composition.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_owner_lifetime import native_release_admit
@@ -21,61 +25,21 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, _n
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete, estimator_feature_check
 from providers.python.estimator_tabular_boundary_pyapi import _refusal
 from std.python._cpython import PyObjectPtr, GILReleased
-from core.estimators_entry_table import (
-    EstimatorsEntryKey, estimators_table_entry, estimators_vendor_word,
-    ESTIMATORS_TABLE_QN, ESTIMATORS_TABLE_QN_FOLD,
-)
-from core.logistic_native_api import (
-    QnNativeDriver, QnFoldDriver, QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION,
-)
+from glm.qn_door_run import QnDoorFitResult, qn_door_fit_run, qn_door_predict_run
+from bindings.qn_boundary import qn_fit_unpack, qn_fit_pack, qn_predict_unpack, qn_predict_pack
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_dtype_str, classical_c_order
-from bindings.admitted_input import admit_x, admit_x_unrecorded, admitted_finite_refuse, admitted_vector
-from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
-from bindings.classical_validate import classical_view, classical_check_weights_input, classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_arrays import classical_address, classical_typed
+from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from providers.python.linear_score_boundary import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 
-comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _QN_AFTER_FIT_SLOT = "qn_no_after_fit_v1"
 comptime _QN_KNOWN_SLOT = "qn_connected_owner_v1"
-
-
-def _qn_key(fields: PythonObject, context: PythonObject) raises -> EstimatorsEntryKey:
-    # The estimator's numeric mode (None: the process mode) and the native
-    # QN table key of its connected estimators image (the bridge records
-    # it at import), checked against the selected vendor and mode.
-    var b = native_loaded_module("builtins")
-    var mode = py_get(fields, "numeric_mode")
-    if mode is None:
-        mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not b.str:
-        raise Error("numeric_mode must be fast, identical or None")
-    # ASCII strip/lower natively; other spellings take Python's Unicode-aware
-    # strip/lower (same accepted words, same refusal).
-    var mode_name = String(String(String(mode).strip()).lower())
-    if mode_name != "identical" and mode_name != "fast":
-        mode_name = String(py_call(py_call(mode.strip).lower))
-    if mode_name != "identical" and mode_name != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
-    var entries = context["qn_bindings"][PythonObject(mode_name)]
-    if py_type(entries) is b.str:
-        raise Error("ImportError: " + String(entries))
-    # The image's compiled tier and vendor were read once at import; these
-    # compares replace the per-call Python probes (`estimators_vendor`,
-    # `estimators_numeric_mode`) and their per-table verdict cache.
-    var native = entries["native_key"]
-    var key = EstimatorsEntryKey(Int(py=native[0]), Int(py=native[1]))
-    if key.vendor != estimators_vendor_word(String(context["vendor"])):
-        raise Error("RuntimeError: QN native vendor differs from selected execution")
-    if key.mode != (1 if mode_name == "identical" else 0):
-        raise Error("RuntimeError: QN native mode differs from selected execution")
-    return key^
 
 
 def _metric_table(metric: PythonObject, context: PythonObject) raises:
@@ -90,164 +54,22 @@ def _metric_table(metric: PythonObject, context: PythonObject) raises:
     py_setitem(context, "qn_metric_admitted", metric)
 
 
-def _int(value: PythonObject) raises -> Int:
-    return Int(py=py_call(native_loaded_module("builtins").int, value))
-
-
-def _float(value: PythonObject) raises -> Float64:
-    return Float64(py=py_call(native_loaded_module("builtins").float, value))
-
-
 def qn_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = py_fields(model)
-    var key = _qn_key(fields, context)
-    # Lane a7c: the finite test of a borrowed X is the QN fit entry's
-    # (the request's status word: the device scan of the upload, the
-    # CPU column's parallel scan); a cast X is tested in its cast pass.
-    # An identical-mode cross-validation fold (DeviceRows) is fitted by the
-    # base binding's resident-fold QN entry (core/estimators_entry_table.mojo
-    # ESTIMATORS_TABLE_QN_FOLD) on rows gathered on the device out of model
-    # selection's resident base (no host gather, no upload of X).
-    var fold_key = py_get(context, "qn_fold_key")
-    var use_fold = False
-    var base_id = 0
-    var base_rows = 0
-    var index_id = 0
-    var x = PythonObject(None)
-    var rows = 0
-    var cols = 0
-    if fold_key is not None and key.mode == 1 and door_is_device_rows(args[0], context):
-        var fx = admit_x_unrecorded(args[0], "QNRegressor", context, device_x=True)
-        rows = fx.rows
-        cols = fx.cols
-        if fx.store.active():
-            use_fold = True
-            base_id = fx.store.base_id
-            base_rows = fx.store.base_rows
-            index_id = fx.store.index_id
-        else:
-            x = fx.array
-    else:
-        x = admit_x(args[0], 2, "X", context, defer_finite=True)
-        rows = Int(py=x.shape[0])
-        cols = Int(py=x.shape[1])
-    var view = classical_view(args[1], context, "y")
-    if Int(py=view.ndim) != 1:
-        raise Error("mojolearn QNRegressor requires a 1-D y")
-    var target = admit_x(view, 1, "y", context)
-    if Int(py=target.shape[0]) != rows:
-        raise Error("mojolearn QNRegressor X and y lengths differ")
-    var weights = classical_check_weights_input(args[2], rows, context)
-    var tol = _float(fields["tol"])
-    var delta = fields["delta"]
-    var change_tol = _float(delta) if delta is not None else tol * 0.01
-    var loss = py_get(context["qn_losses"], fields["loss"])
-    if loss is None:
-        raise Error("mojolearn QNRegressor: unknown loss " + String(py_call(native_loaded_module("builtins").repr, fields["loss"])))
-    var intercept = Bool(py=fields["fit_intercept"])
-    var w = classical_typed(Python.tuple(cols + (1 if intercept else 0)), "<f4", context["output_context"])
-    var info = classical_typed(Python.tuple(2), "<f4", context["output_context"])
-    var status = admitted_vector(1, "<i4", context["output_context"])
-    var status_addr = Int(py=classical_address(status))
-    var status_word = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
-    # UNPACK: qn_fit's fields as one typed request (the order and values the
-    # Python params list carried: one target, gradient tolerance = tol,
-    # svr_eps 0, the weights' address or 0, then the status word).
-    var x_addr = 0 if use_fold else Int(py=classical_address(x))
-    var request = QnFitRequest(x_addr, Int(py=classical_address(target)), Int(py=classical_address(w)),
-        Int(py=classical_address(info)), Int(py=classical_address(weights)) if weights is not None else 0,
-        0 if use_fold else status_addr, rows, cols, 1, _int(fields["max_iter"]),
-        _int(fields["linesearch_max_iter"]), _int(fields["lbfgs_memory"]), intercept,
-        Bool(py=fields["penalty_normalized"]), _int(loss), _float(fields["l1_strength"]),
-        _float(fields["l2_strength"]), tol, change_tol, 0.0)
-    var n_iter = 0
-    if use_fold:
-        var fold = estimators_table_entry[ESTIMATORS_TABLE_QN_FOLD](
-            EstimatorsEntryKey(Int(py=fold_key[0]), Int(py=fold_key[1])))
-        var words = List[Int32](length=2, fill=0)
-        var words_addr = Int(words.unsafe_ptr())
-        var py = Python()
-        with GILReleased(py):
-            n_iter = QnFoldDriver(fold).fit(QnFoldStore(base_id, base_rows, index_id), request, words_addr)
-        door_rows_refuse(Int(words[0]), Int(words[1]), "QNRegressor", base_rows)
-        _ = words^
-    else:
-        var entry = estimators_table_entry[ESTIMATORS_TABLE_QN](key)
-        var py = Python()
-        with GILReleased(py):
-            n_iter = QnNativeDriver(entry).fit(request)
-        admitted_finite_refuse(Int(status_word[0]), "QNRegressor")
-    _ = status  # keep the Python object alive through the native call above
-    _ = target  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    var coef = classical_typed(Python.tuple(cols), "<f4", context["output_context"])
-    var source = F32P(unsafe_from_address=Int(py=classical_address(w)))
-    _ = w  # keep the Python object alive through the native call above
-    var dest = F32P(unsafe_from_address=Int(py=classical_address(coef)))
-    _ = coef  # keep the Python object alive through the native call above
-    for j in range(cols):  # driver-loop: over the fitted coefficients (model structure)
-        dest[j] = source[j]
-        _ = coef  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
-    var iterations = classical_typed(Python.tuple(1), "<i8", context["output_context"])
-    MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(iterations)))[0] = Int64(n_iter)
-    _ = iterations  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    _ = target  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var words = F32P(unsafe_from_address=Int(py=classical_address(info)))
-    _ = info  # keep the Python object alive through the native call above
-    py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
-    py_setitem(fields, "_w", w)
-    py_setitem(fields, "coef_", coef)
-    py_setitem(fields, "intercept_", PythonObject(Float64(source[cols])) if intercept else PythonObject(0.0))
-    _ = w  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_iter_", iterations)
-    py_setitem(fields, "objective_", PythonObject(Float64(words[0])))
-    _ = info  # keep the Python object alive through the native call above
-    py_setitem(fields, "retcode_", PythonObject(Int(words[1])))
-    _ = info  # keep the Python object alive through the native call above
-    py_setitem(fields, "n_features_in_", cols)
-    _ = x^
-    _ = target^
-    _ = weights^
-    _ = info^
-    return model
+    # UNPACK (GIL held), RUN (GIL released, glm/qn_door_run.mojo), PACK.
+    var fit = qn_fit_unpack(model, args, context)
+    var result = QnDoorFitResult(0.0, 0.0, 0)
+    var py = Python()
+    with GILReleased(py):
+        result = qn_door_fit_run(fit.run)
+    return qn_fit_pack(model, fit^, result)
 
 
 def qn_regressor_predict(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = py_fields(model)
-    if not py_contains(fields, "_w"):
-        raise Error("mojolearn QNRegressor: call fit before predict")
-    var key = _qn_key(fields, context)
-    var x = admit_x(source, 2, "X", context)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    if cols != Int(py=fields["n_features_in_"]):
-        raise Error("mojolearn QNRegressor feature count differs from fit")
-    var weights = classical_view(fields["_w"], context, "fitted coefficients")
-    var expected = cols + (1 if Bool(py=fields["fit_intercept"]) else 0)
-    if classical_dtype_str(weights, context) != "<f4" or not classical_c_order(weights, context) or Int(py=weights.size) != expected:
-        raise Error("TypeError: QN fitted coefficients require contiguous float32 storage matching the fitted width")
-    var out = classical_typed(Python.tuple(rows), "<f4", context["output_context"])
-    # The qn_decision_function request: one target, no status word (X was
-    # tested by admit_x), through the native estimators QN table.
-    var request = QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(weights)),
-        Int(py=classical_address(out)), 0, rows, cols, 1, Bool(py=fields["fit_intercept"]), False)
-    var entry = estimators_table_entry[ESTIMATORS_TABLE_QN](key)
+    var predict = qn_predict_unpack(model, source, context)
     var py = Python()
     with GILReleased(py):
-        QnNativeDriver(entry).query(QN_NATIVE_DECISION, request)
-    _ = weights  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = x^
-    _ = weights^
-    return out
+        qn_door_predict_run(predict.run)
+    return qn_predict_pack(predict^)
 
 
 def qn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
