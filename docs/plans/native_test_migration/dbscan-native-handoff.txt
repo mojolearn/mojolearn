@@ -45,3 +45,21 @@ All old Python assertions stay until root executes actual replacements.
 CPU numerical units parallel; GPU graphs and ownership checks ordered on
 one physical GPU/shared contexts; kernels remain unchanged/parallel.
 The reproduced shared-context concurrency issue remains separate.
+
+Second chunk: 45 wire +41 options/empty-label fixtures, all uncompiled/unrun.
+  Dependencies a446091b7a, db68d9d7db and helper correction5205c33160.
+  Every fixed operation and field, optional weights, exact Int results/handles
+  including zero and >2^53, Float64 precision/signed zero, copy independence,
+  native provider errors, missing spans and all malformed envelope classes.
+  Native output/error fields are heap-owned and pinned; tensor addresses in
+  the wire oracle are never dereferenced or sent to a real provider.
+  Original alias/method table includes RBC/precomputed admission; the public
+  fit force-to-brute seam remains in Python. Empty-core label fill covers
+  0/1/17/1025 words with guards, plus a null zero-length span.
+  Independent fixtures/output words parallel; flat native List owners.
+  Total pure CPU fixtures: state28 +wire45 +options41 =114.
+RUN OWED: checks/native_tests/dbscan_contract.mojo and dbscan_options.mojo,
+  -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I .; importable *_suite.run_checks().
+  No lane compile/run/box; static source/JSON/TOML/whitespace checks only.
+  No Python/product/kernel/default changes or deletions. Actual numerical
+  references/fixtures and resident lease coverage are separate pending work.
