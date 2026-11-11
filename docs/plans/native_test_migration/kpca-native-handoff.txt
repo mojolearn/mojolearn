@@ -22,3 +22,17 @@ rank3, rbf/linear/poly/cosine; eig rtol1e-3 and score/query2e-3/2e-3.
 Keep independent sklearn/public array lifetime/refusal seams. No algorithm
 fork, no old path comparison or identity campaign. GPU graphs ordered over
 shared contexts; kernels parallel and concurrency failures remain separate.
+
+Second chunk: 38 pure route/storage/query-envelope cases, dependency
+2c3a36c216 after c613f33133. Existing route thresholds/default/requested room
+sizes; shape rank/zero dimensions; zeroed scratch, overflow refusals and move
+storage; eigen room capacities/nonnull dummy buffers/nonaliasing; options
+copy; alpha flags; fused/precomputed envelopes and exact Float32 scalar
+rounding; distinct row/column sum operation assertions, kernel/divide/center/
+matmul slots. No numerical algorithm in the wire oracle or product changes.
+All independent cases and storage word checks/writes parallel. Pointer owners
+remain named through use; fake data addresses never dereferenced.
+Wire20 + state/query38 =58 pure fixtures. No Python deletion in this chunk.
+RUN OWED: mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/kpca_state.mojo
+Entry kpca_state_suite.run_checks(); uncompiled/unrun. JSON/TOML/source/
+whitespace checks only, no lane build/test/box/timing/identity execution.
