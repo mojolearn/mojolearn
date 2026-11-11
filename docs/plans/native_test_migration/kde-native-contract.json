@@ -1,0 +1,25 @@
+{
+  "family": "KernelDensity",
+  "entry": "checks/native_tests/kde_contract.mojo",
+  "suite": "kde_contract_suite.run_checks",
+  "fixtures": 32,
+  "dependency": "f052c4918c",
+  "execution": "authored; uncompiled/unrun",
+  "coverage": {
+    "0": "metadata IDs/count",
+    "1-4": "prepare flag combinations, exact Int handle beyond2^53, Float64 width and full Unicode/NUL names",
+    "5-8": "query flags/address/dimension fields, exact binary64 total and negative zero",
+    "9-10": "resident fields/handle/status and totals",
+    "11": "exact native release handle",
+    "12": "request/string copy independence",
+    "13": "provider error propagation",
+    "14-29": "unknown operation, malformed metadata/prepare/release/query/resident spans, missing total output, negative/null name spans",
+    "30": "missing result with heap-owned error storage",
+    "31": "empty names"
+  },
+  "oracle": "Prescribed fields only; no tensor dereference or numerical density computation in mock.",
+  "parallel": "Independent fixtures use host_parallelize.",
+  "lifetime": "String byte spans and total/error rooms stay owned through descriptor calls.",
+  "python_removed": 0,
+  "product_changed": false
+}
