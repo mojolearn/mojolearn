@@ -216,9 +216,9 @@ def record_error(context: Int, message: Int, size: Int) abi("C"):
 
 
 def malformed(unit: Int) raises:
-    var a: InlineArray[Int, 10] = [11,13,17,19,23,29,31,37,41,43]
-    var p: InlineArray[Int, 10] = [2,120,2,431,3,4,10,8,4294967295,1]
-    var f: InlineArray[Float64, 1] = [0.10000000000000002]
+    var a: Array[Int, 10] = [11,13,17,19,23,29,31,37,41,43]
+    var p: Array[Int, 10] = [2,120,2,431,3,4,10,8,4294967295,1]
+    var f: Array[Float64, 1] = [0.10000000000000002]
     var result = List[Int](length=1, fill=-73)
     var error = List[Int](length=2, fill=0)
     var operation = 2

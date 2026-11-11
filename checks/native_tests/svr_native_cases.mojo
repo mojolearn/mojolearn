@@ -53,7 +53,7 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
     var yp = target.unsafe_ptr()
     def fill(row: Int) {imm xp, imm yp, imm d, imm planted, imm kernel}:
         if planted:
-            var weights: InlineArray[Float32, 5] = [0.75, -0.5, 0.25, -1.25, 0.5]
+            var weights: Array[Float32, 5] = [0.75, -0.5, 0.25, -1.25, 0.5]
             var value = Float32(0)
             for column in range(5):  # fixed five-coordinate independent reference dot
                 var x = _unit(row * d + column, UInt64(0x51D3))

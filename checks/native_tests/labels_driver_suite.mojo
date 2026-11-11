@@ -334,9 +334,9 @@ def _wire(unit: Int) raises:
                 expected = "labels native ABI: reduce_stat needs an output span"
                 _ = labels_stat_store(HpStat(0, 0, 0, 0, 0, 0), 0)
             else:
-                var a: InlineArray[Int, 0] = []
-                var p: InlineArray[Int, 0] = []
-                var f: InlineArray[Float64, 0] = []
+                var a: Array[Int, 0] = []
+                var p: Array[Int, 0] = []
+                var f: Array[Float64, 0] = []
                 if unit == 5:
                     expected = "labels native ABI: unknown operation"
                     _ = native_descriptor_call_fixed(_entry, 99, a, p, f)
@@ -345,7 +345,7 @@ def _wire(unit: Int) raises:
                     _ = native_descriptor_call_fixed(_entry, 2, a, p, f)
                 else:
                     expected = "labels native ABI: invalid result or scalar span"
-                    var scalar: InlineArray[Float64, 1] = [1]
+                    var scalar: Array[Float64, 1] = [1]
                     _ = native_descriptor_call_fixed(_entry, 0, a, p, scalar)
         except problem:
             message = String(problem)
