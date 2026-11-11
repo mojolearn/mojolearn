@@ -45,6 +45,26 @@ def test_nmf_fit_depth_is_admitted_before_numeric_hooks(method, subclass):
     assert called == []
 
 
+@pytest.mark.parametrize("method", ["fit", "fit_transform", "transform", "inverse_transform"])
+def test_nmf_namespace_keys_are_admitted_before_hash_collision_equality(method):
+    called = []
+
+    class Key:
+        def __hash__(self):
+            return hash("_mojolearn_fitting")
+
+        def __eq__(self, other):
+            called.append(other)
+            raise AssertionError("Python namespace key equality executed")
+
+    model = _model()
+    vars(model)[Key()] = 0
+    called.clear()
+    with pytest.raises(TypeError, match="exact string state keys"):
+        getattr(model, method)(_data())
+    assert called == []
+
+
 @pytest.mark.parametrize("init", ["random", "nndsvd", "nndsvda", "nndsvdar", "custom"])
 @pytest.mark.parametrize("solver", ["cd", "mu"])
 def test_nmf_public_methods_do_not_call_legacy_python_entries(init, solver, monkeypatch):

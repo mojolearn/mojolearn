@@ -13,6 +13,7 @@ from bindings.decomp_inputs import decomp_admit
 from bindings.decomp_owner_common import decomp_attr, decomp_check, decomp_gemm_check, decomp_set_mode
 from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
 from bindings.host_inference_scalars import host_inference_scalar
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.nmf_descriptor_boundary import nmf_connection, nmf_run_fit, nmf_run_inverse
 from core.nmf_native_state import NMFScratch, nmf_output_shape
 from bindings.classical_arrays import classical_typed_native
@@ -183,6 +184,9 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int
         h_address if h_address >= 0 else h_output, w_output, h_output,
         n, d, nc, init, options.solver, args, not admitted.finite)
     var result = nmf_run_fit(connection, request)
+    # Re-admit model namespace keys after the GIL release, before publishing
+    # fit attributes. Exact-key mutation stamps make unchanged queries cheap.
+    lifecycle_admit_fields(fields)
     if not admitted.finite:
         admitted_finite_refuse(result.finite, "NMF")
     _ = w_scratch^

@@ -10,7 +10,8 @@
 # `lifecycle_result` (same order as `_xl_public_operation` in
 # bindings/x_linear_native.mojo, the pattern this generalizes).
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
+from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
@@ -144,8 +145,20 @@ def lifecycle_check_x_width(model: PythonObject, fields: PythonObject, source: P
     _check_width_shape(model, fields, source, _check_x_values(model, source, sparse_ok, context), context)
 
 
+def lifecycle_admit_fields(fields: PythonObject) raises:
+    """Admit namespace keys before dictionary hashing/equality can run."""
+    var b = native_loaded_module("builtins")
+    if py_type(fields) is not b.dict:
+        raise Error("TypeError: native lifecycle requires an ordinary instance dictionary")
+    if not dict_keys_admitted(fields):
+        if not native_namespace_string_keys(fields._obj_ptr, b.str):
+            raise Error("TypeError: native lifecycle requires exact string state keys")
+        dict_keys_admit(fields)
+
+
 def lifecycle_depth_value(fields: PythonObject) raises -> PythonObject:
     """Read and admit the public fit depth before any numeric conversion."""
+    lifecycle_admit_fields(fields)
     var value = py_get(fields, "_mojolearn_fitting", PythonObject(0))
     if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: native fitting depth requires an exact integer")
@@ -191,6 +204,8 @@ def lifecycle_begin(model: PythonObject, method: String, source: PythonObject, x
 
 def lifecycle_end(model: PythonObject, method: String, depth: Int) raises:
     if lifecycle_fitting(method):
+        # A native operation may have released the GIL since initial admission.
+        lifecycle_admit_fields(py_fields(model))
         estimator_fit_end(model, depth)
 
 
@@ -200,6 +215,7 @@ def lifecycle_complete(model: PythonObject, method: String, source: PythonObject
     for a classifier, the public ClassLabels `classes_`."""
     if not lifecycle_fitting(method):
         return
+    lifecycle_admit_fields(py_fields(model))
     if classifier and not py_contains(py_fields(model), "classes_"):
         estimator_fit_complete(model, source, False, context)
         return
