@@ -879,7 +879,7 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: Python
     py_setattr(tokenizer, "added", bi.dict() if options[1] is None else py_call(bi.dict, options[1]))
     py_setattr(tokenizer, "_added_by_id", bi.dict())
     var keys = py_call(bi.list, tokenizer.added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries, not input data)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries, not input data
         var content = keys[i]
         var id = tokenizer.added[content]
         if py_type(content) is not bi.str or len(content) == 0 or py_type(id) is not bi.int or Int(py=id) < 0:
@@ -890,10 +890,10 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: Python
     var bos = bi.list()
     var eos = bi.list()
     var input = py_call(bi.list, options[3])
-    for i in range(len(input)):  # small-loop(bos ids: configuration words)
+    for i in range(len(input)):  # driver-loop: over bos ids: configuration words
         _ = py_call(bos.append, py_call(bi.int, input[i]))
     input = py_call(bi.list, options[4])
-    for i in range(len(input)):  # small-loop(eos ids: configuration words)
+    for i in range(len(input)):  # driver-loop: over eos ids: configuration words
         _ = py_call(eos.append, py_call(bi.int, input[i]))
     py_setattr(tokenizer, "bos_ids", py_call(bi.tuple, bos))
     py_setattr(tokenizer, "eos_ids", py_call(bi.tuple, eos))
@@ -906,7 +906,7 @@ def _vocab_finish(tokenizer: PythonObject, var tok: VocabTokenizer) raises:
     var sp_lengths = List[Int]()
     var sp_ids = List[Int]()
     var keys = py_call(bi.list, tokenizer.added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries, not input data)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries, not input data
         var text = py_call(keys[i].encode, "utf-8")
         sp_lengths.append(len(text))
         sp_ids.append(Int(py=tokenizer.added[keys[i]]))
@@ -996,7 +996,7 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
         raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
     var found = PythonObject(None)
     var steps = py_get(pre, "pretokenizers", bi.list())
-    for i in range(len(steps)):  # small-loop(pre_tokenizer steps: configuration structure)
+    for i in range(len(steps)):  # driver-loop: over pre_tokenizer steps: configuration structure
         var step = steps[i]
         var t = String(py_get(step, "type"))
         if t == "Split":
@@ -1074,7 +1074,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
         raise Error("tokenizer: model.vocab is not an object")
     var base = py_call(bi.dict, vocab)
     var keys = py_call(bi.list, added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries
         _ = py_call(base.pop, keys[i], PythonObject(None))
     var merges = py_get(model, "merges")
     if merges is None:
@@ -1090,7 +1090,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
             var single = py_get(post, "single", bi.list())
             var specials = py_get(post, "special_tokens", bi.dict())
             var seen = False
-            for i in range(len(single)):  # small-loop(post_processor template items: configuration structure)
+            for i in range(len(single)):  # driver-loop: over post_processor template items: configuration structure
                 var item = single[i]
                 if py_contains(item, "Sequence"):
                     seen = True
@@ -1099,7 +1099,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
                     var ids = py_get(py_get(specials, name, bi.dict()), "ids")
                     if ids is None or len(ids) == 0:
                         raise Error("tokenizer: post_processor special token has no ids")
-                    for j in range(len(ids)):  # small-loop(special token ids: configuration words)
+                    for j in range(len(ids)):  # driver-loop: over special token ids: configuration words
                         if seen:
                             _ = py_call(eos.append, py_call(bi.int, ids[j]))
                         else:
@@ -1130,7 +1130,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
     py_setattr(tokenizer, "bos_token_id", bos[0] if len(bos) != 0 else PythonObject(None))
     py_setattr(tokenizer, "eos_token_id", eos[len(eos) - 1] if len(eos) != 0 else PythonObject(None))
     if cfg is not None and py_type(cfg) is bi.dict:
-        for key in [String("bos_token"), String("eos_token")]:  # small-loop(the two special-token names)
+        for key in [String("bos_token"), String("eos_token")]:  # driver-loop: over the two special-token names
             var value = py_get(cfg, key)
             if py_type(value) is bi.dict:
                 value = py_get(value, "content")

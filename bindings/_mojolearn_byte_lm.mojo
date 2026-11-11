@@ -245,7 +245,7 @@ def _read_addresses(addresses: PythonObject, count: Int) raises -> List[Int]:
     if len(addresses) != count:
         raise Error("byte LM: expected " + String(count) + " addresses")
     var addr = List[Int]()
-    for i in range(count):  # small-loop(count: the call's address slots or shards): reads the addresses, no data
+    for i in range(count):  # driver-loop: over count: the call's address slots or shards: reads the addresses, no data
         addr.append(Int(py=addresses[i]))
     return addr^
 
@@ -466,7 +466,7 @@ def _byte_config(shape: PythonObject) raises -> ByteConfig:
     if len(shape) != 7 and len(shape) != 9 and len(shape) != 10:
         raise Error("byte LM: expected 7, 9 or 10 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab[,chunked_head_v2]])")
     var values = List[Int]()
-    for i in range(len(shape)):  # small-loop(shape: 7 to 10 configuration words)
+    for i in range(len(shape)):  # driver-loop: over shape: 7 to 10 configuration words
         var item = shape[i]
         # Fast path: PyNumber_Index through entries resolved once (no class
         # name String, no operator call); any refusal keeps the original path.
@@ -523,7 +523,7 @@ def _logits_dims(dims: PythonObject, shape: ByteConfig) raises -> List[Int]:
     if len(dims) != 2:
         raise Error("byte LM logits: expected dims [batch, length]")
     var out = List[Int]()
-    for i in range(2):  # small-loop(dims: batch and length words)
+    for i in range(2):  # driver-loop: over dims: batch and length words
         var item = dims[i]
         var word = 0
         if lm_try_index(item, word):
@@ -618,7 +618,7 @@ def byte_lm_session_next_bytes_binding(session: PythonObject, addresses: PythonO
 
 def _read_address_list(addresses: PythonObject) raises -> List[Int]:
     var addr = List[Int]()
-    for i in range(len(addresses)):  # small-loop(addresses: the call's address slots, one per buffer): reads the addresses, no data
+    for i in range(len(addresses)):  # driver-loop: over addresses: the call's address slots, one per buffer: reads the addresses, no data
         addr.append(Int(py=addresses[i]))
     return addr^
 
@@ -773,16 +773,16 @@ def byte_lm_parallel_step_binding(session: PythonObject, addresses: PythonObject
     var shape = owner[].trainers[0].config.copy()
     var n_ids = shape.batch * (shape.length + 1)
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
+    for i in range(count):  # driver-loop: over count: logical shards of the step: per shard slot sizes, no data
         cells.append(n_ids)
     _validate_slot_table(addr, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
+    for i in range(count):  # driver-loop: over count: logical shards of the step: one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
     var out = Python.list()
     try:
-        for i in range(len(losses)):  # small-loop(losses: one loss per shard): returns the shard losses
+        for i in range(len(losses)):  # driver-loop: over losses: one loss per shard: returns the shard losses
             out.append(PythonObject(losses[i]))
     except error:
         owner[].rollback()
@@ -805,7 +805,7 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
     var count = 1 if gradients else 4
     var addr = _read_addresses(addresses, count)
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: one or four exported arrays): per array cell counts, not data
+    for i in range(count):  # driver-loop: over count: one or four exported arrays: per array cell counts, not data
         cells.append(tr.config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr, cells, 0)
     tr.validate_device_state(ctx, tr.completed_steps)
@@ -856,7 +856,7 @@ def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonOb
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
     var out = Python.list()
-    for i in range(len(owner[].trainers)):  # small-loop(trainers: one trainer per replica device): reports per replica ranges, no data
+    for i in range(len(owner[].trainers)):  # driver-loop: over trainers: one trainer per replica device: reports per replica ranges, no data
         ref b = owner[].trainers[i].buffers
         var row = Python.list()
         row.append(PythonObject(b.optimizer_first))
@@ -923,7 +923,7 @@ def byte_lm_model_pool_open_binding(session: PythonObject, addresses: PythonObje
     var flags = _read_flags(addr[3], cells[3])
     byte_validate_state(p, m, v, flags, completed, cfg_shape)
     var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):  # small-loop(devices: the caller's device list): reads device ordinals, no data
+    for i in range(Int(py=devices.__len__())):  # driver-loop: over devices: the caller's device list: reads device ordinals, no data
         device_ids.append(Int(py=devices[i]))
     var owner = session.downcast_value_ptr[ByteModelPool]()
     # Retain the GIL: it is also the native object's exclusion lock.
@@ -944,16 +944,16 @@ def byte_lm_model_pool_step_binding(session: PythonObject, addresses: PythonObje
     var shape = owner[].config.copy()
     var n_ids = shape.batch * (shape.length + 1)
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
+    for i in range(count):  # driver-loop: over count: logical shards of the step: per shard slot sizes, no data
         cells.append(n_ids)
     _validate_slot_table(addr, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
+    for i in range(count):  # driver-loop: over count: logical shards of the step: one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
     try:
         var out = Python.list()
-        for i in range(len(losses)):  # small-loop(losses: one loss per shard): returns the shard losses
+        for i in range(len(losses)):  # driver-loop: over losses: one loss per shard: returns the shard losses
             out.append(PythonObject(losses[i]))
         return out
     except error:
@@ -973,7 +973,7 @@ def byte_lm_model_pool_export_binding(session: PythonObject, addresses: PythonOb
     var count = 1 if gradients else 4
     var addr = _read_addresses(addresses,count)
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
+    for i in range(count):  # driver-loop: over count: one or four exported arrays: per array slot sizes, no data
         cells.append(owner[].config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr,cells,0)
     # N156: each array goes straight into the caller's memory (export_into);
@@ -997,7 +997,7 @@ def byte_lm_model_pool_ownership_binding(session: PythonObject) raises -> Python
     var owner = session.downcast_value_ptr[ByteModelPool]()
     owner[].require_open()
     var out = Python.list()
-    for i in range(len(owner[].chunks)):  # small-loop(chunks: one model chunk per device): reports per chunk ranges, no data
+    for i in range(len(owner[].chunks)):  # driver-loop: over chunks: one model chunk per device: reports per chunk ranges, no data
         ref chunk = owner[].chunks[i]
         var row = Python.list()
         row.append(PythonObject(chunk.owner))
@@ -1036,7 +1036,7 @@ def byte_lm_offload_open_binding(session: PythonObject, addresses: PythonObject,
     var flags = _read_flags(addr[3], cells[3])
     byte_validate_state(p, m, v, flags, completed, cfg_shape)
     var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):  # small-loop(devices: the caller's device list): reads device ordinals, no data
+    for i in range(Int(py=devices.__len__())):  # driver-loop: over devices: the caller's device list: reads device ordinals, no data
         device_ids.append(Int(py=devices[i]))
     var owner = session.downcast_value_ptr[ByteOffloadedReplay]()
     # Retain the GIL: it is also the native object's exclusion lock.
@@ -1057,16 +1057,16 @@ def byte_lm_offload_step_binding(session: PythonObject, addresses: PythonObject,
     var shape = owner[].config.copy()
     var n_ids = shape.batch * (shape.length + 1)
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
+    for i in range(count):  # driver-loop: over count: logical shards of the step: per shard slot sizes, no data
         cells.append(n_ids)
     _validate_slot_table(addr, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
+    for i in range(count):  # driver-loop: over count: logical shards of the step: one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
     try:
         var out = Python.list()
-        for i in range(len(losses)):  # small-loop(losses: one loss per shard): returns the shard losses
+        for i in range(len(losses)):  # driver-loop: over losses: one loss per shard: returns the shard losses
             out.append(PythonObject(losses[i]))
         return out
     except error:
@@ -1086,7 +1086,7 @@ def byte_lm_offload_export_binding(session: PythonObject, addresses: PythonObjec
     var count = 1 if gradients else 4
     var addr = _read_addresses(addresses,count)
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
+    for i in range(count):  # driver-loop: over count: one or four exported arrays: per array slot sizes, no data
         cells.append(owner[].config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr,cells,0)
     # N156: each array goes straight into the caller's memory (export_into);
@@ -1199,12 +1199,12 @@ def _byte_schedule_shards(addresses: List[Int], first: Int, count: Int, shape: B
     var n_ids = shape.batch * (shape.length + 1)
     var slots = List[Int]()
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
+    for i in range(count):  # driver-loop: over count: logical shards of the step: per shard slot sizes, no data
         slots.append(addresses[first + i])
         cells.append(n_ids)
     _validate_slot_table(slots, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
+    for i in range(count):  # driver-loop: over count: logical shards of the step: one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(slots[i], n_ids))
     return shards^
 
@@ -1247,7 +1247,7 @@ def _byte_schedule_open(mut session: ByteScheduleSession, a: List[Int], p: List[
     if n_devices < 1 or len(p) != at + 2 + n_devices:
         raise Error("byte LM schedule: invalid device descriptor")
     var device_ids = List[Int]()
-    for i in range(n_devices):  # small-loop(n_devices: GPU device ordinals of the session): ids, not data
+    for i in range(n_devices):  # driver-loop: over n_devices: GPU device ordinals of the session: ids, not data
         device_ids.append(p[at + 2 + i])
     var cfg = OptimizerConfig(p[1], Float32(f[0]), Float32(f[1]), Float32(f[2]), Float32(f[3]), Float32(f[4]),
         Float32(f[5]), Float32(f[6]), p[2] == 1, Float32(f[7]))
@@ -1283,7 +1283,7 @@ def _byte_schedule_export_canonical(mut session: ByteScheduleSession, a: List[In
         raise Error("byte LM schedule: invalid export descriptor")
     var addr = List[Int]()
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
+    for i in range(count):  # driver-loop: over count: one or four exported arrays: per array slot sizes, no data
         addr.append(a[1 + i])
         cells.append(config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr, cells, 0)
@@ -1315,7 +1315,7 @@ def _byte_schedule_export_replica(mut owner: ByteParallelTrainer, a: List[Int], 
         raise Error("byte LM schedule: invalid export descriptor")
     var addr = List[Int]()
     var cells = List[Int]()
-    for i in range(count):  # small-loop(count: one or four exported arrays): per array cell counts, not data
+    for i in range(count):  # driver-loop: over count: one or four exported arrays: per array cell counts, not data
         addr.append(a[1 + i])
         cells.append(tr.config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr, cells, 0)
@@ -1360,7 +1360,7 @@ def _byte_schedule_ownership(mut session: ByteScheduleSession, a: List[Int], p: 
     if session.kind == BYTE_SCHEDULE_REPLICA:
         ref owner = session.replica
         owner.require_open()
-        for i in range(len(owner.trainers)):  # small-loop(trainers: one trainer per replica device): per replica ranges, no data
+        for i in range(len(owner.trainers)):  # driver-loop: over trainers: one trainer per replica device: per replica ranges, no data
             ref b = owner.trainers[i].buffers
             words.append(b.optimizer_first)
             words.append(b.optimizer_count)
@@ -1374,7 +1374,7 @@ def _byte_schedule_ownership(mut session: ByteScheduleSession, a: List[Int], p: 
             words.append(reduction_bytes)
     elif session.kind == BYTE_SCHEDULE_MODEL_POOL:
         session.pool.require_open()
-        for i in range(len(session.pool.chunks)):  # small-loop(chunks: one model chunk per owner): per chunk ranges, no data
+        for i in range(len(session.pool.chunks)):  # driver-loop: over chunks: one model chunk per owner: per chunk ranges, no data
             ref chunk = session.pool.chunks[i]
             words.append(chunk.owner)
             words.append(chunk.first)
@@ -1571,7 +1571,7 @@ def byte_lm_schedule_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf
         var p = native_descriptor_words(pp, np)
         var f = List[Float64]()
         var fp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
-        for i in range(nf):  # small-loop(nf: at most the eight optimizer scalars): reads scalars, no data
+        for i in range(nf):  # driver-loop: over nf: at most the eight optimizer scalars: reads scalars, no data
             f.append(fp[i])
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = byte_lm_schedule_operation(op, a, p, f)
         return 0

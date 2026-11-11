@@ -112,7 +112,7 @@ def _owner_names() raises -> PythonObject:
     var state = TOKENIZER_PUBLIC_CONNECTION.get_or_create_ptr()
     if state[].owner_names is None:
         var names = Python.list()
-        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # small-loop(the fixed tokenizer state field names, once per process)
+        for name in [String("_handle"), String("_m"), String("_source"), String("_n_vocab"), String("_n_ranks"), String("_identity"), String("_max_token_bytes"), String("_fast"), String("tokens"), String("merges"), String("stats"), String("vocab_size"), String("min_frequency"), String("backend"), String("pattern"), String("normalizer"), String("source"), String("added"), String("_added_by_id"), String("bos_ids"), String("eos_ids"), String("bos_token_id"), String("eos_token_id")]:  # driver-loop: over the fixed tokenizer state field names, once per process
             _ = py_call(names.append, PythonObject(name))
         state[].owner_names = py_call(native_loaded_module("builtins").tuple, names)
     return state[].owner_names
@@ -255,7 +255,7 @@ def _connect_error_handlers() raises:
     var names = Python.tuple("strict", "ignore", "replace", "backslashreplace", "surrogateescape", "surrogatepass")
     var canonical = Python.tuple("strict_errors", "ignore_errors", "replace_errors", "backslashreplace_errors", "surrogateescape", "surrogatepass")
     var handlers = Python.dict()
-    for i in range(len(names)):  # small-loop(canonical CPython UTF-8 error policies)
+    for i in range(len(names)):  # driver-loop: over canonical CPython UTF-8 error policies
         var entry = py_call(lookup, names[i])
         _native(entry)
         # A builtin such as print can still invoke Python hooks. Admit the
@@ -1223,7 +1223,7 @@ def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
     # them; no user repr, field descriptor or tokenizer._m lookup is used.
     var settings = Python.tuple(pattern, normalizer, unicode_version, bos, eos)
     var tail = List[UInt8]()
-    for i in range(5):  # small-loop(the five historical tokenizer fingerprint settings)
+    for i in range(5):  # driver-loop: over the five historical tokenizer fingerprint settings
         var text = py_call(native_loaded_module("builtins").str, settings[i])
         tokenizer_append_bytes(tail, _bytes(text))
         tail.append(10)
@@ -1247,7 +1247,7 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
         raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
     var found = PythonObject(None)
     var steps = py_get(pre, "pretokenizers", bi.list())
-    for i in range(len(steps)):  # small-loop(pre_tokenizer steps: configuration structure)
+    for i in range(len(steps)):  # driver-loop: over pre_tokenizer steps: configuration structure
         var step = steps[i]
         var t = String(py_get(step, "type"))
         if t == "Split":
@@ -1328,7 +1328,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
         raise Error("tokenizer: model.vocab is not an object")
     var base = py_call(bi.dict, vocab)
     var keys = py_call(bi.list, added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries
         _ = py_call(base.pop, keys[i], PythonObject(None))
     var merges = py_get(model, "merges")
     if merges is None:
@@ -1344,7 +1344,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
             var single = py_get(post, "single", bi.list())
             var specials = py_get(post, "special_tokens", bi.dict())
             var seen = False
-            for i in range(len(single)):  # small-loop(post_processor template items: configuration structure)
+            for i in range(len(single)):  # driver-loop: over post_processor template items: configuration structure
                 var item = single[i]
                 if py_contains(item, "Sequence"):
                     seen = True
@@ -1353,7 +1353,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
                     var ids = py_get(py_get(specials, name, bi.dict()), "ids")
                     if ids is None or len(ids) == 0:
                         raise Error("tokenizer: post_processor special token has no ids")
-                    for j in range(len(ids)):  # small-loop(special token ids: configuration words)
+                    for j in range(len(ids)):  # driver-loop: over special token ids: configuration words
                         if seen:
                             _ = py_call(eos.append, py_call(bi.int, ids[j]))
                         else:
@@ -1383,7 +1383,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
     py_setitem(fields, "bos_token_id", bos[0] if len(bos) != 0 else PythonObject(None))
     py_setitem(fields, "eos_token_id", eos[len(eos) - 1] if len(eos) != 0 else PythonObject(None))
     if cfg is not None and py_type(cfg) is bi.dict:
-        for key in [String("bos_token"), String("eos_token")]:  # small-loop(the two special-token names)
+        for key in [String("bos_token"), String("eos_token")]:  # driver-loop: over the two special-token names
             var value = py_get(cfg, key)
             if py_type(value) is bi.dict:
                 value = py_get(value, "content")
@@ -1507,7 +1507,7 @@ def tokenizer_trained_info(vocabulary: PythonObject) raises -> PythonObject:
     py_setitem(result, "backend", py_get(stats, "backend"))
     py_setitem(result, "format", PythonObject("mojolearn.bpe-trainer.v1"))
     py_setitem(result, "tie_break", PythonObject(_str(native_instance_item(stats, PythonObject("tie_break")), "tie break")))
-    for name in [String("vocab_size"), String("min_frequency"), String("n_ties_broken")]:  # small-loop(the three native training recipe counters)
+    for name in [String("vocab_size"), String("min_frequency"), String("n_ties_broken")]:  # driver-loop: over the three native training recipe counters
         py_setitem(result, PythonObject(name), PythonObject(_int(native_instance_item(stats, PythonObject(name)), name)))
     py_setitem(result, "n_tokens", PythonObject(len(tokens)))
     py_setitem(result, "n_merges", PythonObject(len(merges)))

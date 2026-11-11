@@ -76,7 +76,7 @@ struct ParallelByteBoundary(Defaultable, Movable):
         self.index = PythonObject(None)
         self.vendor = String()
         self.classes = List[PythonObject]()
-        for _ in range(3):  # small-loop(3: replica, model_pool and offload schedules)
+        for _ in range(3):  # driver-loop: over 3: replica, model_pool and offload schedules
             self.classes.append(PythonObject(None))
 
 
@@ -126,14 +126,14 @@ struct ParallelByteOwner(Movable, Writable):
         self.logical_shards = logical_shards
         self.dims = List[Int]()
         var dims = shape["dims"]
-        for i in range(len(dims)):  # small-loop(dims: nine or ten admitted shape words)
+        for i in range(len(dims)):  # driver-loop: over dims: nine or ten admitted shape words
             self.dims.append(Int(py=dims[i]))
         self.n_total = Int(py=shape["n_total"])
         self.n_tensors = Int(py=shape["n_tensors"])
         self.state = state
         # Captured once from the freshly admitted native copies.
         self.state_addresses = List[Int]()
-        for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(keys: four state arrays)
+        for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # driver-loop: over keys: four state arrays
             self.state_addresses.append(Int(py=state[key]._addr))
         self.shape = shape
 
@@ -195,7 +195,7 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
         py_setitem(table, "suffix", suffix())
         # Resolve and prove the same mode/vendor/profile witness as _load;
         # the connection-time host proxy is never retained as a runtime call.
-        for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:  # small-loop(names: four profile entry names)
+        for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:  # driver-loop: over names: four profile entry names
             var native_name = "byte_lm_" + name
             if expected_vendor == "cpu":
                 native_name = "byte_lm_host_" + ("profile" if name == "config_profile" else name)
@@ -261,7 +261,7 @@ def parallel_byte_admit_class(cls: PythonObject, name: String) raises:
     var mro = py_call(p[].bi.object.__getattribute__, cls, "__mro__")
     for i in range(len(mro) - 1):  # driver-loop: over the admitted trainer class hierarchy (object excluded)
         var namespace = py_call(p[].bi.object.__getattribute__, mro[i], "__dict__")
-        for hook in forbidden:  # small-loop(forbidden: seven storage and lifecycle hook names)
+        for hook in forbidden:  # driver-loop: over forbidden: seven storage and lifecycle hook names
             if py_contains(namespace, PythonObject(hook)):
                 raise Error("TypeError: parallel: trainer class refuses Python storage or finalizer hook " + hook)
     for i in range(3):  # small-loop(3: admitted schedule classes)
@@ -342,7 +342,7 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False,
         raise Error("TypeError: parallel input requires exact float32 or int32 buffer dtype")
     if len(shape) != len(dims):
         raise Error("parallel input has wrong rank")
-    for i in range(len(dims)):  # small-loop(dims: array rank words)
+    for i in range(len(dims)):  # driver-loop: over dims: array rank words
         if Int(py=shape[i]) != dims[i]:
             raise Error("parallel input has wrong shape")
     var output = generation_array(dims, "i" if integer else "f")
@@ -408,7 +408,7 @@ def _parallel_pin_words(value: PythonObject, dims: List[Int], n: Int, integer: B
             var shape = value.shape
             fits = fits and len(shape) == len(dims)
             if fits:
-                for i in range(len(dims)):  # small-loop(dims: array rank words)
+                for i in range(len(dims)):  # driver-loop: over dims: array rank words
                     fits = fits and Int(py=shape[i]) == dims[i]
         else:
             fits = fits and len(layout.shape) == len(dims)
@@ -546,14 +546,14 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
             var key = String(keys[i])
             if key != "chunked_lm_head_v2" and key not in names:
                 raise Error("Byte-LM model_shape has unknown dimensions")
-        for i in range(7):  # small-loop(names: seven required dimension names)
+        for i in range(7):  # driver-loop: over names: seven required dimension names
             if not py_contains(shape, PythonObject(names[i])):
                 raise Error("Byte-LM model_shape has missing dimensions")
         if py_contains(shape, "n_layers") != py_contains(shape, "vocab_size"):
             raise Error("Byte-LM model_shape must specify both layers and vocabulary")
     var dims = p[].bi.list()
     var normalized = p[].bi.dict()
-    for i in range(len(names)):  # small-loop(names: nine dimension names)
+    for i in range(len(names)):  # driver-loop: over names: nine dimension names
         var value = PythonObject(defaults[i]) if shape is None else py_get(shape, PythonObject(names[i]), PythonObject(defaults[i]))
         var n = _parallel_int(value, 1, 1048576, names[i], False)
         _ = py_call(dims.append, n)
@@ -644,7 +644,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
     var has_shape = py_contains(value, "model_shape")
     if len(value) != len(names) + Int(has_shape):
         raise Error("Byte-LM state has missing or unknown fields")
-    for name in names:  # small-loop(names: fourteen state field names)
+    for name in names:  # driver-loop: over names: fourteen state field names
         if not py_contains(value, PythonObject(name)):
             raise Error("Byte-LM state is missing " + name)
     var mode = String(value["numeric_mode"])
@@ -662,7 +662,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
                      String("weight_decay"), String("momentum"), String("dampening"), String("nesterov"), String("max_norm")]
     if py_type(cfg) is not p[].bi.dict or len(cfg) != len(cfg_names):
         raise Error("Byte-LM optimizer configuration mismatch")
-    for name in cfg_names:  # small-loop(cfg_names: ten optimizer field names)
+    for name in cfg_names:  # driver-loop: over cfg_names: ten optimizer field names
         if not py_contains(cfg, PythonObject(name)):
             raise Error("Byte-LM optimizer configuration is missing " + name)
     if _parallel_int(cfg["kind"], 2, 2, "optimizer kind") != 2 or py_type(cfg["nesterov"]) is not p[].bi.bool or Bool(py=cfg["nesterov"]):
@@ -670,7 +670,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
     var config = p[].bi.dict()
     py_setitem(config, "kind", PythonObject(2))
     py_setitem(config, "nesterov", PythonObject(False))
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"),  # small-loop(names: eight optimizer scalars)
+    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"),  # driver-loop: over names: eight optimizer scalars
                  String("momentum"), String("dampening"), String("max_norm")]:
         var number = _parallel_float(cfg[name], name)
         if ((name == "lr" or name == "eps") and number <= 0) or (name == "weight_decay" and number < 0):
@@ -687,7 +687,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject, exported:
     var n = Int(py=shape["n_total"])
     var flags = PythonObject(None)
     if exported:
-        for name in [String("parameters"), String("m"), String("v")]:  # small-loop(names: three state arrays)
+        for name in [String("parameters"), String("m"), String("v")]:  # driver-loop: over names: three state arrays
             parallel_require_finite_f32(Int(py=value[name]._addr), n)
             py_setitem(result, name, value[name])
         flags = value["flags"]
@@ -734,7 +734,7 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
     if schedule == PARALLEL_OFFLOAD and len(ids) != 1:
         raise Error("offloaded replay requires exactly one device")
     var device_ids = List[Int]()
-    for i in range(len(ids)):  # small-loop(ids: physical device indices)
+    for i in range(len(ids)):  # driver-loop: over ids: physical device indices
         var id = _parallel_int(ids[i], 0, 2147483647, "device index")
         for j in range(len(device_ids)):  # small-loop(device_ids: admitted device indices)
             if device_ids[j] == id:
@@ -785,7 +785,7 @@ def _parallel_execute(record: PythonObject, op: Int, var addresses: List[Int], i
     if rec[].handle == 0:
         raise Error("RuntimeError: parallel trainer has no open session")
     var words: List[Int] = [rec[].handle]
-    for value in addresses:  # small-loop(addresses: the operation's admitted buffer descriptors)
+    for value in addresses:  # driver-loop: over addresses: the operation's admitted buffer descriptors
         words.append(value)
     # Retain the GIL: it is also the native session's exclusion lock.
     var result = neural_descriptor_execute(rec[].provider, op, words, ints, floats, False)
@@ -817,14 +817,14 @@ def parallel_byte_open(owner: PythonObject) raises:
     var completed = Int(py=state["completed_steps"])
     var ints: List[Int] = [completed, Int(py=config["kind"]), 1 if Bool(py=config["nesterov"]) else 0,
                            1 if rec[].pool_optimizer else 0, len(rec[].dims)]
-    for value in rec[].dims:  # small-loop(dims: nine or ten admitted shape words)
+    for value in rec[].dims:  # driver-loop: over dims: nine or ten admitted shape words
         ints.append(value)
     ints.append(rec[].logical_shards)
     ints.append(len(rec[].devices))
-    for value in rec[].devices:  # small-loop(devices: admitted device indices)
+    for value in rec[].devices:  # driver-loop: over devices: admitted device indices
         ints.append(value)
     var floats = List[Float64]()
-    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"),  # small-loop(keys: eight optimizer scalars)
+    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"),  # driver-loop: over keys: eight optimizer scalars
                 String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:
         floats.append(Float64(py=config[key]))
     var session = py_call(rec[].create, PythonObject(rec[].schedule))
@@ -896,7 +896,7 @@ def _parallel_export(owner: PythonObject, rank: PythonObject, into: PythonObject
                 py_setitem(output, key, generation_array([nt if key == "flags" else n], "i" if key == "flags" else "f"))
         if py_type(output) is not p[].bi.dict or len(output) != 4:
             raise Error("into must be a dict with parameters, m, v and flags")
-        for key in keys:  # small-loop(keys: four state arrays)
+        for key in keys:  # driver-loop: over keys: four state arrays
             if not py_contains(output, PythonObject(key)):
                 raise Error("into is missing " + key)
             addresses.append(_parallel_target(output[key], nt if key == "flags" else n, key == "flags", pins))
@@ -940,7 +940,7 @@ def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) r
         raise Error("logical shard count mismatch")
     var losses = List[Float64](length=count, fill=0)
     var addresses: List[Int] = [Int(losses.unsafe_ptr())]
-    for address in shard_addresses:  # small-loop(count: one admitted buffer per logical shard)
+    for address in shard_addresses:  # driver-loop: over count: one admitted buffer per logical shard
         addresses.append(address)
     parallel_byte_open(owner)
     var before = _parallel_completed(record)
@@ -953,7 +953,7 @@ def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) r
         if written != count:
             raise Error("RuntimeError: parallel step returned wrong loss count")
         var values = p[].bi.list()
-        for i in range(count):  # small-loop(count: one loss per logical shard)
+        for i in range(count):  # driver-loop: over count: one loss per logical shard
             _ = py_call(values.append, PythonObject(losses[i]))
         py_setitem(result, "losses", py_call(p[].bi.tuple, values))
         py_setitem(result, "completed_steps", PythonObject(before + 1))
@@ -1032,7 +1032,7 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
                 raise Error("RuntimeError: native ownership names an unknown device owner")
             var row = p[].bi.dict()
             py_setitem(row, "device", rec[].device_objects[device])
-            for j in range(len(pool_fields)):  # small-loop(pool_fields: six ownership record words)
+            for j in range(len(pool_fields)):  # driver-loop: over pool_fields: six ownership record words
                 py_setitem(row, pool_fields[j], PythonObject(words[i * width + j + 1]))
             _ = py_call(result.append, row)
         _ = words^
@@ -1043,7 +1043,7 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
     for i in range(rows):  # driver-loop: over actual physical device ownership records
         var row = p[].bi.dict()
         py_setitem(row, "device", rec[].device_objects[i])
-        for j in range(len(fields)):  # small-loop(fields: five ownership record words)
+        for j in range(len(fields)):  # driver-loop: over fields: five ownership record words
             py_setitem(row, fields[j], PythonObject(words[i * width + j]))
         _ = py_call(result.append, row)
     _ = words^
