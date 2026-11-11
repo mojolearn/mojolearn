@@ -164,7 +164,7 @@ def _linear_svr_fit_target(fields: PythonObject, binding: PythonObject, x: Pytho
         max_iter, linesearch, memory, intercept, penalty_normalized, loss,
         l1, l2, grad_tol, change_tol, svr_eps)
     var connection = linear_svc_connection(binding)
-    linear_svr_run_fit(connection, request, plan)
+    linear_svr_run_fit(connection, request^, plan)
     _ = x
     _ = target
     _ = sw

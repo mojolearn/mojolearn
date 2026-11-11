@@ -6,7 +6,7 @@ from bindings.py_balanced import py_type
 from bindings.cpython_borrowed import borrowed_item
 
 
-struct GPArgumentPins(Movable):
+struct GPArgumentPins(Movable, Sized):
     var values: List[PythonObject]
 
     def __init__(out self, source: PythonObject) raises:

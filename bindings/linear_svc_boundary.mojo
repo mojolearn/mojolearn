@@ -61,11 +61,11 @@ struct LinearSvrFitResult(Movable):
     var state: QnSingleFitPlan
 
 
-def linear_svr_run_fit(connection: LinearSvcConnection, request: QnFitRequest,
+def linear_svr_run_fit(connection: LinearSvcConnection, var request: QnFitRequest,
     mut plan: QnSingleFitPlan) raises:
     try:
         with GILReleased(Python()):
-            plan.run(connection.driver.qn(), request)
+            plan.run(connection.driver.qn(), request^)
     finally:
         _ = connection
         _ = plan
