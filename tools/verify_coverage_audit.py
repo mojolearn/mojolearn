@@ -2018,9 +2018,9 @@ ANNOTATIONS_BY_SRC.update({
 # class slot or a finalizer descriptor), so the Python graph cannot see the
 # call; each annotation names the public operation the lane runs and the
 # native call site that takes the entry.
-_HOST_TREE = ("the saved-model owner (bindings/host_tree_native.mojo) calls the forest binding's entry by "
-              "name from the table _native_host_archive_bridge.connect hands it at import "
-              "(`host_tree_entries`); ")
+_HOST_TREE = ("the saved-model owner (bindings/host_tree_native.mojo) runs the same body through the forest "
+              "binding's native entry in the host entry table (core/host_entry_table.mojo), keyed by the "
+              "`host_tree_native_key` _native_host_archive_bridge.connect records at import; ")
 _FOREST = "bindings/_mojolearn_forest_host.mojo"
 _TOK = "bindings/_mojolearn_tokenizer_host.mojo"
 ANNOTATIONS_BY_SRC.update({

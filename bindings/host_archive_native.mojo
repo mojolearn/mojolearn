@@ -2652,6 +2652,10 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     var t = String(text)
     var ctr = ("\nctr_columns " in t or t.startswith("ctr_columns ") or "\nctr_table " in t or t.startswith("ctr_table ")
                or "\ntensor_ctr_registry " in t or t.startswith("tensor_ctr_registry "))
+    # call-table: sibling entry. gbdt_vendor and gbdt_model_dim are the GBDT
+    # images' exports; their native entry is the gbdt table of lane
+    # calltable-gbdt-forest-dart (core/gbdt_entry_table.mojo, which publishes
+    # the model dimension), not on this base. Convert both sites after merge.
     var vendor = py_get(table, "gbdt_vendor")
     var cpu = vendor is not None and String(py_call(b.str, py_call(vendor))) == "cpu"
     var dim = 0
@@ -2661,7 +2665,7 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
         var entry = py_get(table, "gbdt_model_dim")
         if entry is None:
             raise Error("AttributeError: the GBDT binding has no gbdt_model_dim")
-        dim = Int(py=py_call(entry, text))
+        dim = Int(py=py_call(entry, text))  # call-table: sibling entry (gbdt table, see above)
     py_setitem(fields, "approx_dim_", PythonObject(dim))
     var saved_dim = host_archive_meta_word(meta, 1)
     if dim != saved_dim:
