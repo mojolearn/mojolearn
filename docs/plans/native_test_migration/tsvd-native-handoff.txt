@@ -81,3 +81,8 @@ RUN OWED (repository root)
   timing, identity or box action. Static AST/TOML/JSON, recorded-data hashes,
   whitespace and source/API/lifetime review only. No kernels/defaults/A-B
   definitions changed. Existing green fixtures are not queued again.
+
+Scalar diagnostic follow-up26dd5ed3b4 adopted after the fit chunk. All18
+Python boundary definitions remain; only the previously recorded numerical
+finite-score assertion moved. The appended native parse/refusal seams are
+unchanged by this test lane.

@@ -3,7 +3,7 @@
   "dependencies": {
     "native_api": "7928f536d0",
     "public_owner": "14ad3ca7ab",
-    "scalar_boundary": "0c24c4ca90",
+    "scalar_boundary": "0c24c4ca90 + 26dd5ed3b4",
     "shared_fixture_helpers": "7de9a631bf + 1c3b676dbb",
     "resident_pool_repair": "15ed627362",
     "device_context_stage": "4c76f65dd5 + 469ea0c8e0",
@@ -86,10 +86,10 @@
   "python_split": {
     "path": "python/mojolearn/tests/test_tsvd_native_boundary.py",
     "removed": "One pure finite-score assertion inside descriptor/callback test; same6x3 numerical/finite behavior covered directly by native Gram/fused/randomized fit/query cases",
-    "retained": "All16 current Python definitions including scalar refusal additions, returned-array shapes, descriptor callback audit, fit/fit_transform comparison, weakref ownership, rebinding and serialization seams",
+    "retained": "All18 current Python definitions including scalar refusal additions, returned-array shapes, descriptor callback audit, fit/fit_transform comparison, weakref ownership, rebinding and serialization seams",
     "authorization": "Pilot delegated this single line; finite lane coordinated appended scalar additions.",
     "definitions_removed": 0,
-    "python_definitions_retained": 16
+    "python_definitions_retained": 18
   },
   "commands": {
     "cpu": "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_fit_cpu.mojo",
