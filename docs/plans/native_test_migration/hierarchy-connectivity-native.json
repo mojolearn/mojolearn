@@ -28,9 +28,15 @@
     "DOK/LIL ordered native scalar conversion/refusal",
     "Python buffer/image lifetime pins"
   ],
-  "compiled": false,
-  "executed": false,
-  "runtime_pass_claim": false,
   "performance_claim": false,
-  "cross_device_identity_claim": false
+  "cross_device_identity_claim": false,
+  "accepted_runtime_evidence": "E/native-wave16-accepted-results.json",
+  "execution": {
+    "source": "4acc5a210d403d41e255645d68d4c58abaaecb64",
+    "native_fixtures": 21,
+    "compile_exit": 0,
+    "run_exit": 0,
+    "product_compilation": "pending separately",
+    "python_boundary_cases": "13 authored, unrun"
+  }
 }
