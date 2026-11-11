@@ -82,6 +82,32 @@ def test_weighted_connection_refuses_estimator_owner(monkeypatch):
 
 
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_score_connection_replacement_rechecks_selected_metrics_mode(cls, monkeypatch):
+    entry, context, _, model, x, y = setup_case(cls)
+    mode = context["backend_fields"]["_DEFAULT_MODE"]
+    metrics = context["classical_metrics"][mode]
+    other = context["classical_metrics"]["fast" if mode == "identical" else "identical"]
+    if isinstance(other, str):
+        pytest.skip("The other metrics tier is not installed on this target")
+    entry(model, "score", (x, y), context)
+    monkeypatch.setitem(metrics, "_native_entry_connection", other["_native_entry_connection"])
+    with pytest.raises(RuntimeError, match="metrics mode differs"):
+        entry(model, "score", (x, y), context)
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
+def test_score_connection_rechecks_selected_metrics_vendor(cls, monkeypatch):
+    entry, context, _, model, x, y = setup_case(cls)
+    entry(model, "score", (x, y), context)
+    vendor = context.get("classical_metric_vendor", context["vendor"])
+    # Retain the real canonical metrics owner while changing only the selected
+    # metrics vendor. The estimator context vendor remains valid and unchanged.
+    monkeypatch.setitem(context, "classical_metric_vendor", "metal" if vendor == "cpu" else "cpu")
+    with pytest.raises(RuntimeError, match="metrics vendor differs"):
+        entry(model, "score", (x, y), context)
+
+
+@pytest.mark.parametrize("cls", [Ridge, LinearRegression])
 def test_imported_connection_ignores_legacy_capsule_factories(cls, monkeypatch):
     from mojolearn import _backend
 

@@ -65,12 +65,20 @@ def classical_linear_score(model: PythonObject, args: PythonObject,
         raise Error("ImportError: " + String(metric_pins))
     var metric_connection = linear_entry_connection(metric_pins, LINEAR_TABLE_METRICS)
     var metric_key = metric_connection.key.copy()
-    var metrics = linear_table_entry[LINEAR_TABLE_METRICS](metric_key, 0, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
     var mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
+    # A canonical metrics owner can still belong to another selected route.
+    # Explicit CPU estimators may intentionally use the context's GPU metrics,
+    # so compare against metric selection, not the estimator connection key.
+    if metric_key.vendor != vendor:
+        raise Error("RuntimeError: native linear score metrics vendor differs from selected execution")
+    if metric_key.mode != mode:
+        raise Error("RuntimeError: native linear score metrics mode differs from selected execution")
+    var metrics = linear_table_entry[LINEAR_TABLE_METRICS](metric_key, 0, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var result = Float64(0.0)
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = linear_score_run(predict, metrics, state, x_address, rows, cols,
                 target_address, target_rows, vendor, mode, est)
     finally:
@@ -98,8 +106,9 @@ def classical_r2_score(prediction: PythonObject, target_source: PythonObject,
     var vendor = xd_vendor_code(String(py_get(context, "classical_metric_vendor", context["vendor"])))
     var mode = 1 if String(context["backend_fields"]["_DEFAULT_MODE"]) == "identical" else 0
     var result = Float64(0.0)
+    var py = Python()
     try:
-        with GILReleased(Python()):
+        with GILReleased(py):
             result = linear_r2_run(entry, prediction_address, rows, target_address, target_rows, vendor, mode)
     finally:
         _ = prediction
