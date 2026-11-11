@@ -85,7 +85,7 @@ def _semi_float(value: PythonObject) raises -> Float64:
 def _semi_out(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
     """`_buffer.empty(shape, typestr)` (and `_empty_out`): a zero-filled
     C-order Array, with `_check_shape`'s negative-dimension refusal."""
-    for k in range(len(shape)):  # small-loop(shape: array rank metadata): at most two dimensions
+    for k in range(len(shape)):  # driver-loop: over (shape: array rank metadata): at most two dimensions
         if Int(py=shape[k]) < 0:
             raise Error("mojolearn: negative dimension in shape " + family_repr(shape))
     return family_array(shape, typestr, context)
@@ -107,14 +107,14 @@ def _semi_at(value: PythonObject) raises -> Int:
 
 def _semi_py_ints(values: List[Int]) raises -> PythonObject:
     var result = Python.list()
-    for value in values:  # small-loop(named operation's fixed integer schema)
+    for value in values:  # driver-loop: over (named operation's fixed integer schema)
         _ = py_call(result.append, PythonObject(value))
     return result
 
 
 def _semi_py_floats(values: List[Float64]) raises -> PythonObject:
     var result = Python.list()
-    for value in values:  # small-loop(named operation's fixed scalar schema)
+    for value in values:  # driver-loop: over (named operation's fixed scalar schema)
         _ = py_call(result.append, PythonObject(value))
     return result
 

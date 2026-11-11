@@ -107,7 +107,7 @@ def knn_state_values(fields: PythonObject, names: PythonObject) raises -> Python
     """The admission stamp of `names` in `fields`: the token, then each slot's
     current object (None where it is absent)."""
     var values = Python.list(_admitted_token())
-    for i in range(len(names)):  # small-loop(fixed fitted-state slot names)
+    for i in range(len(names)):  # driver-loop: over (fixed fitted-state slot names)
         _ = py_call(values.append, py_get(fields, names[i]))
     return py_call(_b().tuple, values)
 
@@ -158,7 +158,7 @@ def _knn_lists_record(fields: PythonObject, lists: PythonObject) raises -> Pytho
     predict re-admitted the class lists."""
     var b = _b()
     var record = Python.list(_admitted_token())
-    for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
+    for i in range(len(lists)):  # driver-loop: over (fixed neighbor class owners)
         var value = py_get(fields, lists[i])
         if value is None:
             _ = py_call(record.append, PythonObject(None))

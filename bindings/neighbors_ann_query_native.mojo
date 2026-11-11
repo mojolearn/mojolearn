@@ -51,7 +51,7 @@ struct _StoredArray(Copyable, Movable):
 
     def key(self) raises -> PythonObject:
         var shape = Python.list()
-        for axis in self.shape:  # small-loop(saved array rank)
+        for axis in self.shape:  # driver-loop: over (saved array rank)
             _ = py_call(shape.append, axis)
         return Python.tuple(py_call(native_loaded_module("builtins").id, self.value),
                             self.address, py_call(native_loaded_module("builtins").tuple, shape))
@@ -89,7 +89,7 @@ def _stored(fields: PythonObject, name: String, expected: List[Int], floating: B
     # refuses that axis when its walk from the last axis reaches it.
     var steps = List[Int](length=len(shape), fill=0)
     var non_int_axis = -1
-    for offset in range(len(shape)):  # small-loop(saved array rank)
+    for offset in range(len(shape)):  # driver-loop: over (saved array rank)
         var axis = len(shape) - offset - 1
         if py_type(strides[axis]) is not py_type(PythonObject(0)):
             non_int_axis = axis
@@ -129,7 +129,7 @@ def _stored_all(model: PythonObject, fields: PythonObject, names: List[String], 
     var count = len(names)
     var hit = record is not None and py_type(record) is b.tuple and len(record) == 4 * count
     if hit:
-        for i in range(count):  # small-loop(fixed saved-array schema)
+        for i in range(count):  # driver-loop: over (fixed saved-array schema)
             if record[4 * i] is not py_get(fields, names[i]):
                 hit = False
                 break
@@ -137,7 +137,7 @@ def _stored_all(model: PythonObject, fields: PythonObject, names: List[String], 
             if len(shape) != len(shapes[i]):
                 hit = False
                 break
-            for axis in range(len(shapes[i])):  # small-loop(saved array rank)
+            for axis in range(len(shapes[i])):  # driver-loop: over (saved array rank)
                 if Int(py=shape[axis]) != shapes[i][axis]:
                     hit = False
                     break
@@ -145,14 +145,14 @@ def _stored_all(model: PythonObject, fields: PythonObject, names: List[String], 
                 break
     var arrays = List[_StoredArray]()
     if hit:
-        for i in range(count):  # small-loop(fixed saved-array schema)
+        for i in range(count):  # driver-loop: over (fixed saved-array schema)
             arrays.append(_StoredArray(record[4 * i], record[4 * i + 1], shapes[i].copy(), Int(py=record[4 * i + 2])))
         return arrays^
     var stamp = Python.list()
-    for i in range(count):  # small-loop(fixed saved-array schema)
+    for i in range(count):  # driver-loop: over (fixed saved-array schema)
         arrays.append(_stored(fields, names[i], shapes[i].copy(), floating[i], context))
         var words = Python.list()
-        for axis in arrays[i].shape:  # small-loop(saved array rank)
+        for axis in arrays[i].shape:  # driver-loop: over (saved array rank)
             _ = py_call(words.append, axis)
         _ = py_call(stamp.append, arrays[i].value)
         _ = py_call(stamp.append, arrays[i].owner)
@@ -229,7 +229,7 @@ def _resident(fields: PythonObject) raises -> PythonObject:
 
 def _key(arrays: List[_StoredArray], device_codes: Bool, binding: PythonObject) raises -> PythonObject:
     var values = Python.list()
-    for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
+    for i in range(len(arrays)):  # driver-loop: over (fixed saved-array schema)
         _ = py_call(values.append, arrays[i].key())
     if device_codes:
         _ = py_call(values.append, Python.tuple("device"))
@@ -239,7 +239,7 @@ def _key(arrays: List[_StoredArray], device_codes: Bool, binding: PythonObject) 
 
 def _addresses(arrays: List[_StoredArray]) raises -> PythonObject:
     var result = Python.list()
-    for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
+    for i in range(len(arrays)):  # driver-loop: over (fixed saved-array schema)
         _ = py_call(result.append, arrays[i].address)
     return result
 
@@ -286,7 +286,7 @@ def ann_pq_materialize(model: PythonObject, context: PythonObject) raises -> Pyt
     # fitted array, retaining that array's old key makes the next search
     # prepare a new handle; lazy export must not bless stale device arrays.
     var arrays = Python.list()
-    for i in range(4):  # small-loop(PQ's four non-code array keys)
+    for i in range(4):  # driver-loop: over (PQ's four non-code array keys)
         _ = py_call(arrays.append, key[0][i])
     _ = py_call(arrays.append, exported.key())
     var replacement = Python.tuple(py_call(native_loaded_module("builtins").tuple, arrays), key[1])
@@ -311,7 +311,7 @@ def _handle(fields: PythonObject, kind: Int, binding: PythonObject,
     # and shape, never values, so the fitted arrays become read-only when the
     # device copy is taken; storage that cannot be frozen (a caller-assigned
     # ndarray) keeps the per-call search (bindings/p3nc_fitted_freeze.mojo).
-    for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
+    for i in range(len(arrays)):  # driver-loop: over (fixed saved-array schema)
         if not fitted_is_freezable(arrays[i].value, context):
             if cached is not None:
                 _ = py_call(fields.pop, "_resident", PythonObject(None))
@@ -437,7 +437,7 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
             mask = _mask(PythonObject(None), n, owner, context)
         var mask_address = 0 if mask is None else Int(py=classical_address(mask))
         var stored = List[Int](capacity=len(arrays))
-        for i in range(len(arrays)):  # small-loop(fixed saved-array schema)
+        for i in range(len(arrays)):  # driver-loop: over (fixed saved-array schema)
             stored.append(arrays[i].address)
         var addrs = ann_full_addresses(kind, stored, mask_address, q_address, distances_address, indices_address,
                                        candidates_address)

@@ -420,7 +420,7 @@ struct LinKit(Movable):
             var da = self.device(a)
             var di = self.device(idx)
             var ints: List[Int] = [da, di, self.matrices[out].device]
-            for i in range(len(words)):  # small-loop(params: the ten move words): 10
+            for i in range(len(words)):  # driver-loop: native Mojo values, no CPython call: (params: the ten move words): 10
                 ints.append(words[i])
             _ = self.dcall(XD_DEV_MOVE, ints)
             return out
@@ -475,7 +475,7 @@ struct LinKit(Movable):
             var da = self.device(a)
             var out = self.device_output(cols, rows)
             var ints: List[Int] = [da, da, self.matrices[out].device]
-            for i in range(len(words)):  # small-loop(params: the ten move words): 10
+            for i in range(len(words)):  # driver-loop: native Mojo values, no CPython call: (params: the ten move words): 10
                 ints.append(words[i])
             _ = self.dcall(XD_DEV_MOVE, ints)
             return out
@@ -572,7 +572,7 @@ struct LinKit(Movable):
                     var ds = self.device(source)
                     var di = self.device(one)
                     var ints: List[Int] = [ds, di, self.matrices[out].device]
-                    for i in range(len(words)):  # small-loop(params: the ten move words): 10
+                    for i in range(len(words)):  # driver-loop: native Mojo values, no CPython call: (params: the ten move words): 10
                         ints.append(words[i])
                     _ = self.dcall(XD_DEV_MOVE, ints)
                 else:

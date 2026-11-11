@@ -310,7 +310,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
         top = List[Int]()
         var stop_at = max(j - 1 - nc, -1)
         var t = j - 1
-        while t > stop_at:  # small-loop(components: the wanted Ritz positions): bounded by n_components
+        while t > stop_at:  # driver-loop: native Mojo values, no CPython call: (components: the wanted Ritz positions): bounded by n_components
             top.append(t)
             t -= 1
         if len(top) < nc:
@@ -777,7 +777,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
         var store = mk_store(sq, ctx)
         var sp = mk_store_ptr(store)
         _ = store  # keep the Python object alive through the native call above
-        for i in range(mk_store_len(store)):  # small-loop(components: the refusal lists each column's squared norm): bounded by n_components
+        for i in range(mk_store_len(store)):  # driver-loop: over (components: the refusal lists each column's squared norm): bounded by n_components
             _ = py_call(norms.append, PythonObject(Float64(sp[i])))
             _ = store  # keep the Python object alive through the native call above
         raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of "
@@ -879,7 +879,7 @@ def _mani_arguments(settings: ManifoldSettings, operation: String, args: PythonO
     if default_binding is None:
         default_binding = estimator_binding_mode(settings.default_mode, "_mojolearn_x_decomp", context)
     var resolved = Python.list(binding, default_binding)
-    for i in range(2, len(args)):  # small-loop(args: fixed public operation argument envelope): bounded by the public signature
+    for i in range(2, len(args)):  # driver-loop: over (args: fixed public operation argument envelope): bounded by the public signature
         _ = py_call(resolved.append, args[i])
     return py_call(native_loaded_module("builtins").tuple, resolved)
 

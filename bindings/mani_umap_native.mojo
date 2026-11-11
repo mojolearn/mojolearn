@@ -85,7 +85,7 @@ def _umap_default_extras(extras: PythonObject) raises -> Bool:
 def _umap_head(config: PythonObject, count: Int) raises -> PythonObject:
     """`config[:count]` as a list."""
     var out = Python.list()
-    for i in range(count):  # small-loop(config: the UMAP parameter words): 11
+    for i in range(count):  # driver-loop: over (config: the UMAP parameter words): 11
         _ = py_call(out.append, config[i])
     return out
 

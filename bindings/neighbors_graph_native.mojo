@@ -108,14 +108,14 @@ def _float_of(model: PythonObject, name: String) raises -> Float64:
 
 def _py_ints(values: List[Int]) raises -> PythonObject:
     var result = Python.list()
-    for value in values:  # small-loop(named operation's fixed integer schema)
+    for value in values:  # driver-loop: over (named operation's fixed integer schema)
         _ = py_call(result.append, PythonObject(value))
     return result
 
 
 def _py_floats(values: List[Float64]) raises -> PythonObject:
     var result = Python.list()
-    for value in values:  # small-loop(named operation's fixed scalar schema)
+    for value in values:  # driver-loop: over (named operation's fixed scalar schema)
         _ = py_call(result.append, PythonObject(value))
     return result
 
