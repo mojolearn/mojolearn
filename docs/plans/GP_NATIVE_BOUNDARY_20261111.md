@@ -39,7 +39,11 @@ member objects. Kernel-table `finish()` runs once after boundary unpacking;
 it retains the unused 1.0 word for a kernel with no length scales. Seed
 admission and arbitrary-size integer masking remain boundary work.
 
-Pending next chunk: provider exports/connection pins, exact admitted kernel
+The following provider chunk exports `gp_native_api_v1` from all three GP
+images through native `GPProviderAPI` storage. Host export inventories include
+the factory; this is manifest/source coherence, not tested loading.
+
+Pending next chunk: connection pins, exact admitted kernel
 unpacking and cached state, public fit/query/optimizer switches, canonical
 field-owner pin inspection where needed, and deletion of newly dead request
 envelopes. Public kernel objects, fitted output arrays, mutable GPC member
@@ -54,7 +58,7 @@ are frozen at `b469feccbe`. Existing Python public/external-oracle tests remain.
 
 Affected future build roots: `_mojolearn_gp`, `_mojolearn_gp_host`,
 `_mojolearn_gp_infer_host`, and the GP public lifecycle/runtime host groups.
-There are no live binding-root changes in the additive chunk. No A/B define
+The provider export chunk changes the three GP binding roots above. No A/B define
 or default changes; no intended numerical changes. No kernels or old paths
 deleted yet because public switching is pending. The separate Modular shared
 context submission problem is neither fixed nor worked around here.
