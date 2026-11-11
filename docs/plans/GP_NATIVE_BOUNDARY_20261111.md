@@ -80,3 +80,19 @@ legacy-entry checks temporarily preserve boundary refusal positions; they
 do not execute those numerical entry callables. They will be replaced by
 native capability admission with the complete provider switch. Source-only
 review is not runtime, performance or identity evidence.
+
+GPC request switch (next staged public chunk): binary and fused all-member
+fit/query and OVR combine use typed requests and native scalar/address tables.
+Member output references and latent/combine results have typed boundary pin
+envelopes. The OVR likelihood still uses the same `reduce_stat` operation and
+class order, backed by a native scalar list. Worker fit/query and parent combine
+share these native calls; cross-interpreter transport, worker counts, stored
+request reuse and scheduler behavior remain unchanged. Fused route/default
+switches remain in place. GPC scalar scratch Arrays and address/parameter/result
+Python envelopes were removed. Public estimator/member objects and output
+Arrays are retained; selected latent scratch output packing and label-code
+wrappers still await the shared native span packaging dependency.
+
+This chunk additionally affects `_mojolearn_runtime_parallel_host` and the
+runtime family dispatcher. Its request constructors and unchanged numerical
+source were audited, but no lane builds or runtime tests were run.

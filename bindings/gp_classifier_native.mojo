@@ -10,6 +10,10 @@
 # no session entry), predicts with gpc_predict_all (or gpc_predict per class and
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
+from core.gp_native_api import GPCFitRequest, GPCFitAllRequest, GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest
+from core.gp_native_storage import GPCMemberTables, GPCQueryTables
+from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
@@ -22,7 +26,7 @@ from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_field, FAMILY_F64P,
 )
 from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
-from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32, gp_fit_owned
+from bindings.gp_common_native import gp_extension, gp_caps, gp_kernel_arrays, gp_f32, gp_fit_owned
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
@@ -139,79 +143,95 @@ def _gpc_binary(context: PythonObject, y01: PythonObject, l_out: PythonObject, p
     return fit
 
 
+@fieldwise_init
+struct GPCMemberPins(Movable):
+    var targets: PythonObject
+    var factor: PythonObject
+    var pi: PythonObject
+    var wsr: PythonObject
+
+
+@fieldwise_init
+struct GPCLatentResult(Movable):
+    var mean: PythonObject
+    var variance: PythonObject
+    var probability: PythonObject
+    var output: PythonObject
+
+
+@fieldwise_init
+struct GPCCombinedResult(Movable):
+    var probabilities: PythonObject
+    var codes: PythonObject
+
+
 def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
-                 max_iter: PythonObject, columns: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_fit_all`: every binary fit in one `gpc_fit_all` call."""
+                 max_iter: Int, columns: List[Int], context: PythonObject) raises -> PythonObject:
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
-    var outs = Python.list()
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_fit_all_binding.
-    var addrs = Python.list(classical_address(x), classical_address(codes), classical_address(arrays[0]),
-                            classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]))
-    for _ in range(len(columns)):  # driver-loop: over the one-vs-rest binary fits
+    var pins = List[GPCMemberPins]()
+    var tables = GPCMemberTables(len(columns))
+    tables.prepare_scalars()
+    for i in range(len(columns)):  # driver-loop: allocate each public OVR member's fitted arrays
         var y01 = family_array(Python.tuple(n_rows), "<f4", context)
-        var l_out = family_array(Python.tuple(n_rows, n_rows), "<f4", context)
+        var factor = family_array(Python.tuple(n_rows, n_rows), "<f4", context)
         var pi = family_array(Python.tuple(n_rows), "<f4", context)
         var wsr = family_array(Python.tuple(n_rows), "<f4", context)
-        var scalars = family_array(Python.tuple(3), "<f8", context)
-        _ = py_call(outs.append, Python.tuple(y01, l_out, pi, wsr, scalars))
-        _ = py_call(addrs.extend, Python.list(classical_address(y01), classical_address(l_out), classical_address(pi),
-                                              classical_address(wsr), classical_address(scalars)))
-        _ = pi  # keep the Python object alive through the native call above
-        _ = l_out  # keep the Python object alive through the native call above
-        _ = y01  # keep the Python object alive through the native call above
-        _ = scalars  # keep the Python object alive through the native call above
-        _ = wsr  # keep the Python object alive through the native call above
-    # n_train, n_features, n_nodes, n_ls, max_iter_predict, n_fits, then the classes
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4],
-                             max_iter, PythonObject(len(columns)))
-    _ = py_call(params.extend, columns)
-    _ = family_call(gp_entry(ext, "gpc_fit_all"), addrs, params)
+        tables.columns[i] = columns[i]
+        tables.targets[i] = Int(py=classical_address(y01))
+        tables.factors[i] = Int(py=classical_address(factor))
+        tables.pis[i] = Int(py=classical_address(pi))
+        tables.wsrs[i] = Int(py=classical_address(wsr))
+        pins.append(GPCMemberPins(y01, factor, pi, wsr))
+    var connection = GPConnection(ext)
+    var kernel = gp_kernel_view(arrays)
+    var request = GPCFitAllRequest(Int(py=classical_address(x)), Int(py=classical_address(codes)),
+        Int(tables.columns.unsafe_ptr()), Int(tables.targets.unsafe_ptr()), Int(tables.factors.unsafe_ptr()),
+        Int(tables.pis.unsafe_ptr()), Int(tables.wsrs.unsafe_ptr()), Int(tables.scalars.unsafe_ptr()),
+        n_rows, n_cols, kernel^, max_iter, len(columns))
+    _ = gp_run(connection, request)
+    _ = x
+    _ = codes
+    _ = arrays
+    _ = pins
     var fits = Python.list()
-    for i in range(len(outs)):  # driver-loop: over the one-vs-rest binary fits
-        var o = outs[i]
-        var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(o[4])))
-        _ = py_call(fits.append, _gpc_binary(context, o[0], o[1], o[2], o[3], sp[0], Int(sp[1]), Int(sp[2])))
+    for i in range(len(pins)):  # driver-loop: pack the public mutable binary member objects
+        _ = py_call(fits.append, _gpc_binary(context, pins[i].targets, pins[i].factor, pins[i].pi, pins[i].wsr,
+            tables.scalar_storage[3*i], Int(tables.scalar_storage[3*i+1]), Int(tables.scalar_storage[3*i+2])))
     return fits
 
 
 def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
-                    max_iter: PythonObject, k: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_fit_binary(..., k=k)`: one `gpc_fit`, the 0/1 targets `code == k`
-    built and written back by the binding."""
-    var b = native_loaded_module("builtins")
+                    max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    # The worker transport enters here too; unpack its exact public storage.
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
     var y01 = family_array(Python.tuple(n_rows), "<f4", context)
-    var l_out = family_array(Python.tuple(n_rows, n_rows), "<f4", context)
+    var factor = family_array(Python.tuple(n_rows, n_rows), "<f4", context)
     var pi = family_array(Python.tuple(n_rows), "<f4", context)
     var wsr = family_array(Python.tuple(n_rows), "<f4", context)
-    # lml, n_iter, nb, in that order.
-    var scalars = family_array(Python.tuple(3), "<f8", context)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_fit_binding.
-    # x, y (the codes), kinds, kparams, ls_len, ls, l_out, pi_out, wsr_out, scalars_out, y_out;
-    # n_train, n_features, n_nodes, n_ls, max_iter_predict, k
-    var n_iter = family_call(gp_entry(ext, "gpc_fit"),
-        Python.list(classical_address(x), classical_address(codes), classical_address(arrays[0]),
-                    classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
-                    classical_address(l_out), classical_address(pi), classical_address(wsr),
-                    classical_address(scalars), classical_address(y01)),
-        Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(Int(py=arrays[0].shape[0])), arrays[4], max_iter, k))
-    _ = wsr  # keep the Python object alive through the native call above
-    _ = pi  # keep the Python object alive through the native call above
-    _ = l_out  # keep the Python object alive through the native call above
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = y01  # keep the Python object alive through the native call above
-    var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
-    _ = scalars  # keep the Python object alive through the native call above
-    var _keep_ret_scalars_1 = _gpc_binary(context, y01, l_out, pi, wsr, sp[0], Int(py=family_call(b.int, n_iter)), Int(sp[2]))
-    _ = scalars  # keep the Python object alive through the native call above
-    return _keep_ret_scalars_1^
+    var scalars = List[Float64](length=3, fill=0.0)
+    var connection = GPConnection(ext)
+    var kernel = gp_kernel_view(arrays)
+    var request = GPCFitRequest(Int(py=classical_address(x)), Int(py=classical_address(codes)),
+        Int(py=classical_address(factor)), Int(py=classical_address(pi)), Int(py=classical_address(wsr)),
+        Int(scalars.unsafe_ptr()), n_rows, n_cols, kernel^, max_iter, True, k,
+        Int(py=classical_address(y01)))
+    var iterations = gp_run(connection, request)
+    _ = x
+    _ = codes
+    _ = arrays
+    _ = y01
+    _ = factor
+    _ = pi
+    _ = wsr
+    return _gpc_binary(context, y01, factor, pi, wsr, scalars[0], iterations, Int(scalars[2]))
 
 
 def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject, fits: PythonObject,
                     context: PythonObject) raises:
     """`_set_fitted`."""
+    lifecycle_admit_fields(fields)
     var b = native_loaded_module("builtins")
     var n_classes = len(classes)
     py_setitem(fields, "X_train_", x)
@@ -231,8 +251,8 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
         return
     var iters = Python.list()
     var k = len(fits)
-    var values = family_array(Python.tuple(k), "<f8", context)
-    var vp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
+    var values = List[Float64](length=k, fill=0.0)
+    var vp = values.unsafe_ptr()
     _ = values  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: over the one-vs-rest classes
         var own = py_fields(fits[i])
@@ -242,7 +262,7 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
     py_setitem(fields, "n_iter_", iters)
     # the per-class values summed in storage order by the native reduction
     # (`Array.sum`'s reduce_stat), then divided by the class count
-    var total = reduce_stat(Int(py=classical_address(values)), HP_F64, k, HP_SUM).f
+    var total = reduce_stat(Int(values.unsafe_ptr()), HP_F64, k, HP_SUM).f
     _ = values  # keep the Python object alive through the native call above
     py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(total / Float64(k)))
     _ = values  # keep the Python object alive through the native call above
@@ -271,13 +291,13 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + "(only class " + family_repr(classes[0]) + " is present)")
     var arrays = gp_kernel_arrays(fields["_kernel"], context)
     var ext = _gpc_ext(model, args[0], context)
-    var columns = Python.list()
+    var columns = List[Int]()
     if n_classes == 2:
-        _ = py_call(columns.append, PythonObject(1))
+        columns.append(1)
     else:
         for k in range(n_classes):  # driver-loop: over the one-vs-rest classes
-            _ = py_call(columns.append, PythonObject(k))
-    var max_iter = fields["_max_iter_predict"]
+            columns.append(k)
+    var max_iter = Int(py=fields["_max_iter_predict"])
     var fits: PythonObject
     if (gp_caps(ext) & 1) == 1:
         fits = _gpc_fit_all(ext, x, codes, arrays, max_iter, columns, context)
@@ -310,12 +330,12 @@ def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
-                out_kind: Int, context: PythonObject) raises -> PythonObject:
+                out_kind: Int, context: PythonObject) raises -> GPCLatentResult:
     return _gpc_latent(ext, fields, est, q, want_proba, out_kind, context, PythonObject(None))
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
-                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject) raises -> PythonObject:
+                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject) raises -> GPCLatentResult:
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
     them (a multi-GPU shard worker, which holds no kernel object); else
@@ -340,55 +360,28 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     var pi = gp_f32(own, "pi_", -1, context)
     var wsr = gp_f32(own, "W_sr_", -1, context)
     var lf = gp_f32(own, "L_", -1, context)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_predict_binding.
-    # xtrain, y, pi, wsr, l, xstar, kinds, kparams, ls_len, ls, mean_out, var_out, proba_out (+ out);
-    # n_train, n_features, n_star, n_nodes, n_ls, want_proba (+ out_kind)
-    var addrs = Python.list(classical_address(xt), classical_address(y01), classical_address(pi),
-                            classical_address(wsr), classical_address(lf), classical_address(q),
-                            classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
-                            classical_address(arrays[3]), classical_address(mean), classical_address(var_out),
-                            classical_address(proba))
-    _ = pi  # keep the Python object alive through the native call above
-    _ = y01  # keep the Python object alive through the native call above
-    _ = xt  # keep the Python object alive through the native call above
-    _ = lf  # keep the Python object alive through the native call above
-    _ = wsr  # keep the Python object alive through the native call above
-    _ = var_out  # keep the Python object alive through the native call above
-    _ = mean  # keep the Python object alive through the native call above
-    _ = proba  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
-                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(1 if want_proba else 0))
-    if out_kind != 0:
-        _ = py_call(addrs.append, classical_address(out))
-        _ = lf  # keep the Python object alive through the native call above
-        _ = wsr  # keep the Python object alive through the native call above
-        _ = pi  # keep the Python object alive through the native call above
-        _ = y01  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        _ = proba  # keep the Python object alive through the native call above
-        _ = var_out  # keep the Python object alive through the native call above
-        _ = mean  # keep the Python object alive through the native call above
-        _ = xt  # keep the Python object alive through the native call above
-        _ = py_call(params.append, PythonObject(out_kind))
-    _ = family_call(gp_entry(ext, "gpc_predict"), addrs, params)
-    _ = lf  # keep the Python object alive through the native call above
-    _ = wsr  # keep the Python object alive through the native call above
-    _ = pi  # keep the Python object alive through the native call above
-    _ = y01  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = proba  # keep the Python object alive through the native call above
-    _ = var_out  # keep the Python object alive through the native call above
-    _ = mean  # keep the Python object alive through the native call above
-    _ = xt  # keep the Python object alive through the native call above
+    var connection = GPConnection(ext)
+    var kernel = gp_kernel_view(arrays)
+    var output_address = Int(py=classical_address(out)) if out_kind != 0 else 0
+    var request = GPCQueryRequest(Int(py=classical_address(xt)), Int(py=classical_address(y01)),
+        Int(py=classical_address(pi)), Int(py=classical_address(wsr)), Int(py=classical_address(lf)),
+        Int(py=classical_address(q)), Int(py=classical_address(mean)), Int(py=classical_address(var_out)),
+        Int(py=classical_address(proba)), n_train, n_features, n_star, kernel^, want_proba, out_kind, output_address)
+    _ = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
+    lifecycle_admit_fields(own)
+    _ = mean
+    _ = var_out
+    _ = proba
+    _ = out
+    _ = q
     _ = xt^
     _ = y01^
     _ = pi^
     _ = wsr^
     _ = lf^
     _ = arrays^
-    if out_kind != 0:
-        return Python.tuple(mean, var_out, proba, out)
-    return Python.tuple(mean, var_out, proba)
+    return GPCLatentResult(mean, var_out, proba, out)
 
 
 def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, gq: GpQuery, out_kind: Int,
@@ -410,87 +403,80 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
         out = family_array(Python.tuple(n_star), "<i8", context)
     else:
         out = family_array(Python.tuple(n_star, max(k, 2)), "<f8", context)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_predict_all_binding.
-    var addrs = Python.list(classical_address(xt), gp_query_address(gq), classical_address(arrays[0]),
-                            classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
-                            classical_address(out))
-    _ = xt  # keep the Python object alive through the native call above
-    var kept = Python.list()
-    # The fitted array objects the resident copies would mirror, in slot
-    # order (lane ne1-a-gp-svm): None once one of them is not the field the
-    # binding reads (that state keeps the per-call upload).
+    var tables = GPCQueryTables(k)
+    var kept = List[PythonObject]()
     var mirrors = Python.list(xt) if xt is fields["X_train_"] else PythonObject(None)
     var names = Python.tuple("y_train_", "pi_", "W_sr_", "L_")
-    for i in range(k):  # driver-loop: four model addresses per binary fit
+    for i in range(k):  # driver-loop: four model buffers per fitted OVR member
         var own = py_fields(fits[i])
-        var parts = Python.list(gp_f32(own, "y_train_", -1, context), gp_f32(own, "pi_", -1, context),
-                                gp_f32(own, "W_sr_", -1, context), gp_f32(own, "L_", -1, context))
-        _ = py_call(kept.append, parts)
-        for j in range(4):  # small-loop(model buffers: four per binary fit)
-            _ = py_call(addrs.append, classical_address(parts[j]))
-            _ = xt  # keep the Python object alive through the native call above
+        var parts = List[PythonObject]()
+        parts.append(gp_f32(own, "y_train_", -1, context))
+        parts.append(gp_f32(own, "pi_", -1, context))
+        parts.append(gp_f32(own, "W_sr_", -1, context))
+        parts.append(gp_f32(own, "L_", -1, context))
+        tables.targets[i] = Int(py=classical_address(parts[0]))
+        tables.pis[i] = Int(py=classical_address(parts[1]))
+        tables.wsrs[i] = Int(py=classical_address(parts[2]))
+        tables.factors[i] = Int(py=classical_address(parts[3]))
+        for j in range(4):  # driver-loop: retain each member buffer through native execution
+            kept.append(parts[j])
             if mirrors is not None:
                 if parts[j] is own[names[j]]:
                     _ = py_call(mirrors.append, parts[j])
                 else:
                     mirrors = PythonObject(None)
-    # n_train, n_features, n_star, n_nodes, n_ls, out_kind, k (+ lease: gpc_predict_all_resident)
-    var params = Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
-                             PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(out_kind), PythonObject(k))
-    var name = String("gpc_predict_all")
-    if (gp_caps(ext) & 4) == 4:
-        # Device-resident fitted state: X_train_ and every binary fit's
-        # y_train_, pi_, W_sr_ and L_ cross once per fitted state
-        # (bindings/fitted_resident_door.mojo). Lease 0 uploads per call.
-        var lease = 0
+    var connection = GPConnection(ext)
+    var lease = -1
+    if (connection.capabilities & 4) == 4:
+        lease = 0
         if mirrors is not None:
             lease = fitted_resident_lease(model, _GPC_RESIDENT_SLOT, ext, "gp_resident_lease", mirrors)
         else:
             fitted_resident_drop(model, _GPC_RESIDENT_SLOT)
-        _ = py_call(params.append, PythonObject(lease))
-        name = String("gpc_predict_all_resident")
-    if gq.store.active():
-        # then the fold's store ids (the entry gathers the rows on the device)
-        _ = py_call(addrs.append, PythonObject(gq.store.base_id))
-        _ = py_call(addrs.append, PythonObject(gq.store.base_rows))
-        _ = py_call(addrs.append, PythonObject(gq.store.index_id))
-    var words = family_call(gp_entry(ext, name), addrs, params)
-    gp_query_refuse(Int(py=words[0]), Int(py=words[1]), gq, "GaussianProcessClassifier")
-    _ = xt  # keep the Python object alive through the native call above
-    _ = kept^
-    _ = xt^
-    _ = arrays^
+    var kernel = gp_kernel_view(arrays)
+    var request = GPCQueryAllRequest(Int(py=classical_address(xt)), Int(py=gp_query_address(gq)),
+        Int(py=classical_address(out)), Int(tables.targets.unsafe_ptr()), Int(tables.pis.unsafe_ptr()),
+        Int(tables.wsrs.unsafe_ptr()), Int(tables.factors.unsafe_ptr()), n_train, n_features, n_star,
+        kernel^, out_kind, k, lease, gq.store.base_id if gq.store.active() else -1,
+        gq.store.base_rows if gq.store.active() else 0, gq.store.index_id if gq.store.active() else -1)
+    var answer = gp_run(connection, request)
+    lifecycle_admit_fields(fields)
+    gp_query_refuse(answer.finite, answer.range_status, gq, "GaussianProcessClassifier")
+    _ = tables
+    _ = kept
+    _ = xt
+    _ = arrays
+    _ = gq
     return out
 
 
-def _gpc_ovr_combine(ext: PythonObject, cols: PythonObject, n_star: Int, context: PythonObject) raises -> PythonObject:
-    """`_ovr_combine`: (the (n_star, k) float64 probabilities, the int32 codes)."""
+def _gpc_ovr_combine(ext: PythonObject, cols: List[PythonObject], n_star: Int,
+                     context: PythonObject) raises -> GPCCombinedResult:
     var k = len(cols)
     var proba = family_array(Python.tuple(n_star, k), "<f8", context)
     var codes = family_array(Python.tuple(n_star), "<i4", context)
-    # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding.
-    var addrs = Python.list(classical_address(proba), classical_address(codes))
-    _ = codes  # keep the Python object alive through the native call above
-    _ = proba  # keep the Python object alive through the native call above
-    for i in range(k):  # driver-loop: one class column address per class
-        _ = py_call(addrs.append, classical_address(cols[i]))
-        _ = codes  # keep the Python object alive through the native call above
-        _ = proba  # keep the Python object alive through the native call above
-    _ = family_call(gp_entry(ext, "gpc_ovr_combine"), addrs, Python.list(PythonObject(n_star)))
-    _ = codes  # keep the Python object alive through the native call above
-    _ = proba  # keep the Python object alive through the native call above
-    return Python.tuple(proba, codes)
+    var addresses = List[Int](length=k, fill=0)
+    for i in range(k):  # driver-loop: address metadata for each class probability column
+        addresses[i] = Int(py=classical_address(cols[i]))
+    var connection = GPConnection(ext)
+    var request = GPCCombineRequest(Int(addresses.unsafe_ptr()), Int(py=classical_address(proba)),
+        Int(py=classical_address(codes)), n_star, k)
+    _ = gp_run(connection, request)
+    _ = addresses
+    _ = cols
+    _ = proba
+    _ = codes
+    return GPCCombinedResult(proba, codes)
 
 
 def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, context: PythonObject,
-                 kernel_arrays: PythonObject) raises -> PythonObject:
-    """The per-class probability columns (`_latent(...)[2]` per fit), every
-    fit reading the one packed kernel."""
-    var cols = Python.list()
+                 kernel_arrays: PythonObject) raises -> List[PythonObject]:
+    var cols = List[PythonObject]()
     var fits = fields["estimators_"]
-    for i in range(len(fits)):  # driver-loop: one latent column per class
-        _ = py_call(cols.append, _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays)[2])
-    return cols
+    for i in range(len(fits)):  # driver-loop: preserve the existing non-fused OVR route
+        var latent = _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays)
+        cols.append(latent.probability)
+    return cols^
 
 
 def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -507,9 +493,9 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
     var q = gq.q
     if Int(py=fields["n_classes_"]) == 2:
         # `[1 - p, p]` from the binding (`gpc_binary_out`)
-        return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context, arrays)[3]
+        return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context, arrays).output
     var cols = _gpc_columns(ext, fields, q, context, arrays)
-    return _gpc_ovr_combine(ext, cols, Int(py=q.shape[0]), context)[0]
+    return _gpc_ovr_combine(ext, cols, Int(py=q.shape[0]), context).probabilities
 
 
 def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -527,11 +513,11 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         codes = _gpc_predict_all(model, ext, fields, gq, 1, context, arrays)
     elif Int(py=fields["n_classes_"]) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
-        codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays)[3]
+        codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays).output
     else:
         var n_star = Int(py=q.shape[0])
         var cols = _gpc_columns(ext, fields, q, context, arrays)
-        var codes32 = _gpc_ovr_combine(ext, cols, n_star, context)[1]
+        var codes32 = _gpc_ovr_combine(ext, cols, n_star, context).codes
         # `codes32.astype("<i8")`: the exact widening
         codes = family_array(Python.tuple(n_star), "<i8", context)
         _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
@@ -554,7 +540,7 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, conte
     var ext = _gpc_ext(model, args[0], context)
     var latent = _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 0, context,
                              gp_kernel_arrays_reused(model, fields["_kernel"], context))
-    return Python.tuple(latent[0], latent[1])
+    return Python.tuple(latent.mean, latent.variance)
 
 
 def gp_classifier_operation(model: PythonObject, operation: String, args: PythonObject,
