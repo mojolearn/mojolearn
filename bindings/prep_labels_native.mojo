@@ -400,7 +400,7 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     # cannot read): main's recorded input-step debt
     # (tools/hooks/compute_in_shells_baseline.txt), its body made native
     # for exact int / float labels by lane P2.
-    for i in range(n):  # list-input: one read per label of a ragged Python label set (one pass)
+    for i in range(n):  # list-input: one borrowed read per label of the flattened Python label list (one pass; 'U' vectors take _text_labels)
         var x: Float64
         var is_int: Bool
         if exact:
