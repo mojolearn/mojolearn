@@ -53,6 +53,19 @@ struct SpectralAffinityStatus(Movable):
         return Int(self.words.unsafe_ptr())
 
 
+struct SpectralCOOStorage(Movable):
+    # Private fit intermediates own native vectors. The explicit public COO
+    # boundary allocates its observable Array exporters separately.
+    var rows: List[Int32]
+    var columns: List[Int32]
+    var values: List[Float32]
+
+    def __init__(out self, count: Int):
+        self.rows = List[Int32](length=count, fill=0)
+        self.columns = List[Int32](length=count, fill=0)
+        self.values = List[Float32](length=count, fill=0)
+
+
 trait SpectralPreparationBackend:
     @staticmethod
     def count_wide(source: Int, count: Int) raises -> Int: ...

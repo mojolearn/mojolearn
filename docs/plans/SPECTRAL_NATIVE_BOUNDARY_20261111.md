@@ -217,3 +217,21 @@ its public tuple API, routed argument tuples, normalized scalar instance
 metadata, and shared admission/packing metadata. This tranche does not claim
 that all Spectral Python support is gone. Public buffer/class/provider pins
 remain necessary and are excluded from removal counts.
+
+## Native dense-COO fit storage
+
+`SpectralCOOStorage(count)` owns named rows/columns Int32 vectors and values
+Float32 vector. Private dense fit conversion fills those buffers directly and
+keeps their owner through the graph descriptor call. The boundary `_Coo` also
+retains admitted sparse exporters when needed. The explicit public triples
+operation selects its existing Array allocations directly, so neither route
+adds a tensor copy. The numerical count/fill helpers and finite/minimum
+reductions are unchanged. F32 dense conversion retains the square check then
+its former empty rows-vector refusal via the existing shared refusal helper.
+
+Three private buffer roles move; public returned Arrays and sparse input pins
+are excluded. Source evidence: `E/spectral-native-owner/coo-storage-source-audit.json`.
+The ABI/constructors already frozen remain unchanged; native tests may use the
+new `SpectralCOOStorage` as the production output owner. No lane execution.
+Remaining work is boundary/lifecycle metadata and internal routing tuples,
+not numerical Python execution in these fitted descriptor plans.
