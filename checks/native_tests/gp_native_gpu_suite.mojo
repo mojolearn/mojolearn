@@ -9,7 +9,10 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.gp_native_api import GPDriver, gp_native_dispatch
 from core.gp_native_device import GPDeviceKernels
 from checks.native_tests.gp_native_cases import GP_NATIVE_GPU_FIXTURES, fixture
+from checks.native_tests.gp_native_learning_cases import GP_LEARNING_FIXTURES, learning_fixture
 from checks.native_tests.gp_state_suite import require
+
+comptime GP_NATIVE_GPU_TOTAL = GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES
 
 
 def device_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
@@ -20,11 +23,14 @@ def device_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf
 def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var failed = 0
-    for unit in range(GP_NATIVE_GPU_FIXTURES):
+    for unit in range(GP_NATIVE_GPU_TOTAL):
         try:
-            fixture(GPDriver(device_entry), GPDriver(device_entry), unit, False)
+            if unit < GP_NATIVE_GPU_FIXTURES:
+                fixture(GPDriver(device_entry), GPDriver(device_entry), unit, False)
+            else:
+                learning_fixture(GPDriver(device_entry), unit - GP_NATIVE_GPU_FIXTURES, False)
         except error:
             failed += 1
             print("FAIL gp_native_gpu fixture", unit, String(error))
     require(failed == 0, "gp_native_gpu failed " + String(failed) + " fixtures")
-    print("PASS gp_native_gpu:", GP_NATIVE_GPU_FIXTURES, "actual ordered list/pointer/resident GP graphs")
+    print("PASS gp_native_gpu:", GP_NATIVE_GPU_TOTAL, "actual ordered list/pointer/resident GP graphs")
