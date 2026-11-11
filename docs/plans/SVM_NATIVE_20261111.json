@@ -1,6 +1,6 @@
 {
   "baseline": "78a6a382354bcf3e463b74ebce58f1f77f1c051f",
-  "status": "LinearSVC fit/decision/predict source switched; native and boundary coverage pending; other families remain inventoried",
+  "status": "LinearSVC fit/decision/predict source and focused fixtures ready; compilation/runtime acceptance pending; score composition and other families remain inventoried",
   "selected_scope": "LinearSVC fit/decision/predict transport and private state; shared LinearSVR query behavior preserved",
   "roles": [
     {
@@ -559,5 +559,68 @@
     },
     "status": "pending; avoid GP-owned score helpers until dependency available",
     "counted_completed": false
+  },
+  "tests": {
+    "dependency": "4ecbc2fe7d",
+    "status": "authored/source reviewed, uncompiled/unrun",
+    "CPU": {
+      "entry": "checks/native_tests/linear_svc_native_cpu.mojo",
+      "cases": 10,
+      "numerical": 7,
+      "ABI_refusal": 1,
+      "PACK_ownership": 2,
+      "parallel": "independent cases plus input fill/coefficient/score checks via host_parallelize"
+    },
+    "GPU": {
+      "entry": "checks/native_tests/linear_svc_native_gpu.mojo",
+      "cases": 8,
+      "numerical": 7,
+      "ABI_refusal": 1,
+      "order": "sequential GPU submissions; upstream shared-context concurrency remains parked"
+    },
+    "oracles": [
+      "binary squared-hinge: w=2/(2+lambda), objective=lambda/(2+lambda), normalized and unnormalized",
+      "hinge/l2 lambda2: w=1/2, objective3/4",
+      "squared-hinge/l1 lambda1/2: w=3/4, objective7/16",
+      "weighted1/3 with intercept: w6/7,b1/14,objective3/14",
+      "uniform weights2: w8/9,objective2/9",
+      "3-class one-hot OVR: diagonal4/7, off-diagonal-4/7, objective3/7"
+    ],
+    "shape_coverage": [
+      "400x5 binary normalization",
+      "399x5 multiclass OVR",
+      "8x2 loss/penalty/weight variants"
+    ],
+    "original_oracles_retained": [
+      "python/mojolearn/tests/test_qn_objectives_surface.py random400x5 and class-label/single-target comparisons unchanged",
+      "python/mojolearn/tests/test_host_model_svm.py",
+      "python/mojolearn/tests/_svm_reference.py"
+    ],
+    "replacement_limit": "analytic workload shapes do not replace the original seeded inputs; no prior tests removed",
+    "Python_boundary": {
+      "file": "python/mojolearn/tests/test_linear_svc_native_boundary.py",
+      "definitions": 8,
+      "parametrized_cases": 13,
+      "coverage": [
+        "int64/huge-int/string label PACK",
+        "mutated _w and rebound classes read through existing cache identity policy",
+        "all-one/balanced weights and sample-times-dict analytic objective",
+        "binary scalar and multiclass list public metadata",
+        "public exporter lifetime/pickle",
+        "initial parameter refusal order",
+        "native factory callback traps for fit/predict/decision",
+        "shared LinearSVR query transport mutation behavior"
+      ]
+    },
+    "additional_shared_threshold_cases": {
+      "CPU": 7,
+      "GPU_ordered": 7,
+      "provider_version_Python": 3
+    },
+    "compiled": false,
+    "executed": false,
+    "timed": false,
+    "identity": false,
+    "source_count_method": "AST list cardinalities only; initial ast.literal_eval could not evaluate power-expression data and was corrected without importing/executing tests"
   }
 }
