@@ -11,6 +11,10 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.shared_slot import SharedSlot
+from core.scaler_native_api import PrepProgramAPI
+from core.prep_program_native_device import PrepProgramDeviceKernels
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
@@ -317,10 +321,19 @@ def idn_fam2_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_prep.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime PREPPROGRAM_DEVICE_NATIVE_API = SharedSlot[PrepProgramAPI[PrepProgramDeviceKernels], ("MojolearnPrepProgramDeviceNativeV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnPrepProgramDeviceNativeV1Fast")]
+
+
+def x_prep_native_api_v1_binding() raises -> PythonObject:
+    var api = PREPPROGRAM_DEVICE_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_x_prep() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
+        m.def_function[x_prep_native_api_v1_binding]("x_prep_native_api_v1")
         m.def_function[run_binding]("x_prep_run")
         comptime if NB_TEXT_CSR:
             # lane apple-fast-nb: FAST + Apple default (M3 A/B 186.9 -> 35.4 ms), -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)

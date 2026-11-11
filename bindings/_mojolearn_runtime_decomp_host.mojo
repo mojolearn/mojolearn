@@ -14,6 +14,7 @@ from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from providers.python.pca_query_cache_pyapi import PCAQueryCache
 from bindings.tsvd_owner_boundary import TSVDResidentOwner
+from bindings.ipca_owner_boundary import IPCAResidentOwner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -77,12 +78,25 @@ def register_tsvd_resident_owner(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_TSVDResidentOwner", existing)
 
 
+def register_ipca_resident_owner(mut module: PythonModuleBuilder) raises:
+    var existing: PythonObject
+    try:
+        existing = lookup_py_type_object[IPCAResidentOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[IPCAResidentOwner].name())):
+            raise error
+        _ = module.add_type[IPCAResidentOwner]("_IPCAResidentOwner")
+        return
+    py_type_attach(module.module, "_IPCAResidentOwner", existing)
+
+
 def build__mojolearn_runtime_decomp_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_decomp_host")
         register_pca_query_cache(module)
         register_tsvd_resident_owner(module)
+        register_ipca_resident_owner(module)
         module.def_py_c_function(pca_c, "pca_native_call")
         module.def_py_c_function(decomp_c, "decomp_native_call")
         module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")

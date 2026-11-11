@@ -18,15 +18,15 @@ struct GPKernelSnapshot(Movable):
     var values: List[Float64]
     var lows: List[Float64]
     var highs: List[Float64]
-    var owners: PythonObject
-    var states: PythonObject
+    var owners: List[PythonObject]
+    var states: List[PythonObject]
 
     def __init__(out self) raises:
         self.values = List[Float64]()
         self.lows = List[Float64]()
         self.highs = List[Float64]()
-        self.owners = Python.list()
-        self.states = Python.list()
+        self.owners = List[PythonObject]()
+        self.states = List[PythonObject]()
 
 
 def _kernel_scalar(value: PythonObject) raises -> Float64:
@@ -60,8 +60,8 @@ def _kernel_state(kernel: PythonObject, mut snapshot: GPKernelSnapshot) raises -
         if kernel is snapshot.owners[i]:
             return snapshot.states[i]
     var state = _fields(kernel)
-    _ = py_call(snapshot.owners.append, kernel)
-    _ = py_call(snapshot.states.append, state)
+    snapshot.owners.append(kernel)
+    snapshot.states.append(state)
     return state
 
 

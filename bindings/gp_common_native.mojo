@@ -1,26 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # The shared pieces of the Gaussian process owners (bindings/gp_regressor_native.mojo,
 # bindings/gp_classifier_native.mojo): the binding's compile-time mode cross-check
-# (`_extension`), its capability word (`gp_idn_caps`), `numeric_mode_used`, and the
+# (`_extension`), its typed descriptor capability word, `numeric_mode_used`, and the
 # kernel objects read natively from their instance fields: the postfix spec
 # `_kernel_arrays` packed (bindings/archive_schema_native.mojo reads the same node
 # layouts for `save`), the free hyperparameters `_hyper` listed, and the copy
 # `_replace` / `_with_free_values` built. No method of a kernel class runs.
 from std.python import Python, PythonObject
+from core.gp_native_storage import GPFreeParameters, GPKernelStorage
+from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.admitted_family import admit_family, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from bindings.gp_native_boundary import GPConnection
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from std.memory import memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
-from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
-from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
+from bindings.archive_schema_native import _schema_kernel_nodes
 
 
-comptime _GP_MODE_CODE_SLOT = "p3_gp_binding_mode_code_v1"
-comptime _GP_CAPS_SLOT = "p3_gp_binding_caps_v1"
 
 
 def gp_mode_wanted(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -47,18 +46,8 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     estimator's message head, `rebuild` the sentence after the mode code."""
     var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
-    # The binary's compile-time mode code never changes for one binding
-    # object: read once and kept in a record weak-keyed by the binding (lane
-    # p3-svm-gp-kernel, row 752); -1 records a binding without the entry.
-    var got = -1
-    var held = gpsvm_side_get(_GP_MODE_CODE_SLOT, binding)
-    if held is not None:
-        got = Int(py=held)
-    else:
-        var getter = neural_descriptor_entry(binding, "gp_numeric_mode", False)
-        if getter is not None:
-            got = Int(py=family_call(b.int, family_call(getter)))
-        _ = gpsvm_side_put(_GP_MODE_CODE_SLOT, binding, PythonObject(got))
+    var connection = GPConnection(binding)
+    var got = connection.mode
     if got >= 0:
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
@@ -69,44 +58,17 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
 
 
 def gp_caps(binding: PythonObject) raises -> Int:
-    """`int(ext.gp_idn_caps())`, 0 when the binding has no such entry (the host
-    binding and the `_OFF` builds): bit 1 is gpc_fit_all / gpc_predict_all,
-    bit 2 gpr_fit_ptr / gpr_predict_ptr."""
-    var held = gpsvm_side_get(_GP_CAPS_SLOT, binding)
-    if held is not None:
-        return Int(py=held)
-    var b = native_loaded_module("builtins")
-    var fn_obj = neural_descriptor_entry(binding, "gp_idn_caps", False)
-    var caps = 0 if fn_obj is None else Int(py=family_call(b.int, family_call(fn_obj)))
-    # The capability word is the binary's own: one read per binding object.
-    _ = gpsvm_side_put(_GP_CAPS_SLOT, binding, PythonObject(caps))
-    return caps
-
-
-def gp_entry(binding: PythonObject, name: String) raises -> PythonObject:
-    """`ext.<name>`: an attribute lookup on the binding, refused as it was."""
-    return neural_descriptor_entry(binding, name)
+    var connection = GPConnection(binding)
+    return connection.capabilities
 
 
 def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`NumericModeMixin.numeric_mode_used` on the resolved binding."""
-    var b = native_loaded_module("builtins")
-    var full = String(py_fields(binding)["__name__"])
-    var dotted = full.split(".")
-    var name = String(dotted[len(dotted) - 1])
-    var stem = String("mojolearn")
-    if name != "_mojolearn":
-        stem = String(name.removeprefix("_mojolearn_"))
-    var getter = neural_descriptor_entry(binding, stem + "_numeric_mode", False)
-    if getter is not None:
-        var code = family_call(getter)
-        var table = context["backend_fields"]["_CODE_MODE"]
-        if not py_contains(table, code):
-            raise Error("RuntimeError: mojolearn: " + name + " returned unknown numeric mode " + family_repr(code))
-        return table[code]
-    if len(dotted) < 2:
-        raise Error("IndexError: list index out of range")
-    return PythonObject(String(dotted[len(dotted) - 2]))
+    var connection = GPConnection(binding)
+    var code = PythonObject(connection.mode)
+    var table = context["backend_fields"]["_CODE_MODE"]
+    if not py_contains(table, code):
+        raise Error("RuntimeError: Mojolearn: GP provider returned unknown numeric mode " + String(connection.mode))
+    return table[code]
 
 
 def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
@@ -121,30 +83,56 @@ def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
 
 
 def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_kernel_arrays(kernel)`: (kinds <i4, params <f4, ls_len <i4, ls <f4,
-    n_ls), the postfix nodes packed with `Array.from_list`; an empty
-    length-scale table is one unused 1.0."""
-    var b = native_loaded_module("builtins")
+    """UNPACK the admitted postfix graph into one native storage owner."""
     var nodes = Python.list()
     _schema_kernel_nodes(kernel, context["family_gp_kernel_nodes"], nodes)
-    var kinds = Python.list()
-    var params = Python.list()
-    var lengths = Python.list()
-    var scales = Python.list()
-    for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
-        var node = nodes[i]
-        _ = py_call(kinds.append, family_call(b.int, node[0]))
-        _ = py_call(params.append, family_call(b.float, node[1]))
-        _ = py_call(lengths.append, PythonObject(len(node[2])))
-        for j in range(len(node[2])):  # driver-loop: over one node's length scales
-            _ = py_call(scales.append, node[2][j])
-    var n_ls = len(scales)
-    if n_ls == 0:
-        _ = py_call(scales.append, PythonObject(Float64(1.0)))
-    return Python.tuple(_schema_label_store(kinds, "i", "<i4", context),
-                        _schema_label_store(params, "f", "<f4", context),
-                        _schema_label_store(lengths, "i", "<i4", context),
-                        _schema_label_store(scales, "f", "<f4", context), PythonObject(n_ls))
+    var storage = GPKernelStorage()
+    # Preserve the former separate Array conversions' refusal order: every
+    # integer kind first, then parameters, lengths, and length-scale words.
+    try:
+        for i in range(len(nodes)):  # driver-loop: one admitted integer kind per postfix node
+            var kind = Int(py=nodes[i][0])
+            if kind < -2147483648:
+                raise Error("signed integer is less than minimum")
+            if kind > 2147483647:
+                raise Error("signed integer is greater than maximum")
+            storage.kinds.append(Int32(kind))
+    except error:
+        raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: " + String(error))
+    for i in range(len(nodes)):  # driver-loop: the admitted native parameter of each node
+        storage.parameters.append(Float32(Float64(py=nodes[i][1])))
+    for i in range(len(nodes)):  # driver-loop: length metadata before the scale table
+        var count = len(nodes[i][2])
+        if count > 2147483647:
+            raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
+        storage.lengths.append(Int32(count))
+    for i in range(len(nodes)):  # driver-loop: scales of each postfix node, in the original order
+        var scales = nodes[i][2]
+        for j in range(len(scales)):  # driver-loop: one admitted length-scale parameter
+            storage.scales.append(Float32(Float64(py=scales[j])))
+    storage.finish()
+    return PythonObject(alloc=GPPackedKernel(storage^))
+
+
+def gp_kernel_arrays_transport(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
+    """PACK real owning Arrays only for cross-interpreter worker transport."""
+    var packed = gp_kernel_arrays(kernel, context)
+    var owner = packed.downcast_value_ptr[GPPackedKernel]()
+    var view = owner[].storage.view()
+    var kinds = family_array(Python.tuple(view.nodes), "<i4", context)
+    var parameters = family_array(Python.tuple(view.nodes), "<f4", context)
+    var lengths = family_array(Python.tuple(view.nodes), "<i4", context)
+    var scales = family_array(Python.tuple(max(1, view.scale_count)), "<f4", context)
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(kinds))),
+           src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=view.kinds), count=view.nodes)
+    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parameters))),
+           src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=view.parameters), count=view.nodes)
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(lengths))),
+           src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=view.lengths), count=view.nodes)
+    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(scales))),
+           src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=view.scales), count=max(1, view.scale_count))
+    _ = packed
+    return Python.tuple(kinds, parameters, lengths, scales, PythonObject(view.scale_count))
 
 
 def _gp_kernel_class(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
@@ -165,52 +153,60 @@ def _gp_fixed(bounds: PythonObject) raises -> Bool:
     return family_is_str(bounds) and String(bounds) == "fixed"
 
 
-def gp_free(kernel: PythonObject, flags: PythonObject, values: PythonObject, bounds: PythonObject,
-            context: PythonObject) raises:
-    """`_free_flags()`, `_free_values()` and `_free_bounds()` in one postfix
-    walk of `_hyper()`: a flag per node (1 for a leaf whose bounds are not
-    "fixed"), the free leaves' values and their (low, high) pairs."""
+def gp_free(kernel: PythonObject, mut result: GPFreeParameters, context: PythonObject) raises:
+    """Unpack admitted kernel hyperparameters in their original postfix order."""
     var nodes_table = context["family_gp_kernel_nodes"]
     var cls = _gp_kernel_class(kernel, nodes_table)
     var layout = nodes_table[cls]
     var fields = py_fields(kernel)
     var how = String(layout[0])
     if how == "pair":
-        gp_free(fields[layout[1]], flags, values, bounds, context)
-        gp_free(fields[layout[2]], flags, values, bounds, context)
-        _ = py_call(flags.append, PythonObject(0))
+        gp_free(fields[layout[1]], result, context)
+        gp_free(fields[layout[2]], result, context)
+        result.flags.append(Int32(0))
     elif how == "nodes":
         var saved = fields[layout[1]]
-        for _ in range(len(saved)):  # driver-loop: over a saved kernel's postfix nodes (all fixed)
-            _ = py_call(flags.append, PythonObject(0))
+        for _ in range(len(saved)):  # driver-loop: saved kernel nodes are fixed
+            result.flags.append(Int32(0))
     elif how == "leaf":
         var pairs = fields[context["family_gp_kernel_bounds"][cls]]
         if _gp_fixed(pairs):
-            _ = py_call(flags.append, PythonObject(0))
+            result.flags.append(Int32(0))
             return
-        _ = py_call(flags.append, PythonObject(1))
+        result.flags.append(Int32(1))
         if layout[3] is not None:
             var scales = fields[layout[3]]
-            for i in range(len(scales)):  # driver-loop: over one leaf's length scales
-                _ = py_call(values.append, scales[i])
+            for i in range(len(scales)):  # driver-loop: one free length scale per kernel parameter
+                result.values.append(Float64(py=scales[i]))
         else:
-            _ = py_call(values.append, fields[layout[2]])
-        for i in range(len(pairs)):  # driver-loop: over one leaf's bound pairs
-            _ = py_call(bounds.append, pairs[i])
+            result.values.append(Float64(py=fields[layout[2]]))
+        for i in range(len(pairs)):  # driver-loop: bound pair for each free kernel parameter
+            result.bounds.append(Float32(Float64(py=pairs[i][0])))
+            result.bounds.append(Float32(Float64(py=pairs[i][1])))
     else:
         raise Error("RuntimeError: unknown kernel node layout " + how)
 
 
 def gp_n_dims(kernel: PythonObject, context: PythonObject) raises -> Int:
-    """`kernel.n_dims`."""
-    var flags = Python.list()
-    var values = Python.list()
-    var bounds = Python.list()
-    gp_free(kernel, flags, values, bounds, context)
-    return len(values)
+    # Count metadata without narrowing a bound/value that the caller does not
+    # otherwise consume yet. This preserves the former count-only refusal order.
+    var table = context["family_gp_kernel_nodes"]
+    var cls = _gp_kernel_class(kernel, table)
+    var layout = table[cls]
+    var fields = py_fields(kernel)
+    var how = String(layout[0])
+    if how == "pair":
+        return gp_n_dims(fields[layout[1]], context) + gp_n_dims(fields[layout[2]], context)
+    if how == "nodes":
+        return 0
+    if how == "leaf":
+        if _gp_fixed(fields[context["family_gp_kernel_bounds"][cls]]):
+            return 0
+        return len(fields[layout[3]]) if layout[3] is not None else 1
+    raise Error("RuntimeError: unknown kernel node layout " + how)
 
 
-def gp_replace(kernel: PythonObject, values: PythonObject, mut pos: Int, context: PythonObject) raises -> PythonObject:
+def gp_replace(kernel: PythonObject, values: List[Float64], mut pos: Int, context: PythonObject) raises -> PythonObject:
     """`kernel._replace(values)`: a new kernel of the same classes whose free
     entries are taken from `values[pos:]` in postfix order (`pos` advances)."""
     var b = native_loaded_module("builtins")
@@ -238,30 +234,30 @@ def gp_replace(kernel: PythonObject, values: PythonObject, mut pos: Int, context
             var taken = Python.list()
             for i in range(len(scales)):  # driver-loop: over one leaf's length scales
                 if free:
-                    _ = py_call(taken.append, family_call(b.float, values[pos]))
+                    _ = py_call(taken.append, PythonObject(values[pos]))
                     pos += 1
                 else:
                     _ = py_call(taken.append, family_call(b.float, scales[i]))
             py_setitem(own, layout[3], taken)
         elif free:
-            py_setitem(own, layout[2], family_call(b.float, values[pos]))
+            py_setitem(own, layout[2], PythonObject(values[pos]))
             pos += 1
     else:
         raise Error("RuntimeError: unknown kernel node layout " + how)
     return fresh
 
 
-def gp_with_free_values(kernel: PythonObject, values: PythonObject, theta: PythonObject,
+def gp_with_free_values(kernel: PythonObject, values: List[Float64], theta: List[Float64],
                         context: PythonObject) raises -> PythonObject:
     """`kernel._with_free_values(values, theta)`: the copy with `_theta_fit`
     set to the float list `theta` when it is not None."""
     var b = native_loaded_module("builtins")
     var pos = 0
     var out = gp_replace(kernel, values, pos, context)
-    if theta is not None:
+    if len(theta) != 0:
         var fitted = Python.list()
         for i in range(len(theta)):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-            _ = py_call(fitted.append, family_call(b.float, theta[i]))
+            _ = py_call(fitted.append, PythonObject(theta[i]))
         py_setitem(py_fields(out), "_theta_fit", fitted)
     return out
 

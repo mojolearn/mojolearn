@@ -6,6 +6,7 @@ from std.collections import Dict
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys, shared_dict_watch, shared_dict_epoch
@@ -729,3 +730,45 @@ def neural_descriptor_resource_handle(value: PythonObject, context: List[Int]) r
 def neural_descriptor_resource_close(value: PythonObject, context: List[Int]) raises:
     _ = neural_descriptor_resource_handle(value, context)
     value.downcast_value_ptr[NativeDescriptorResource]()[].close()
+
+
+def neural_descriptor_provider_pins(value: Int, index: Int) abi("C") -> Int:
+    # Native registry inspection only; the caller retains the exact owner.
+    if value == 0 or index < -1 or index >= 2:
+        return -1
+    try:
+        var owner = borrowed_native_owner(value)
+        var native = owner.downcast_value_ptr[NeuralDescriptorProvider]()
+        if index == -1:
+            # Mojolearn descriptor capsules borrow native table/name storage;
+            # they are created with no destructor. Do not exempt an arbitrary
+            # capsule callback merely because its enclosing owner is native.
+            ref cpy = Python().cpython()
+            var destructor = cpy.lib.get_function[PyObjectPtr]("PyCapsule_GetDestructor")(native[].capsule._obj_ptr)
+            if destructor or cpy.PyErr_Occurred():
+                return -1
+        var result = 2
+        if index == 0:
+            result = Int(native[].module._obj_ptr)
+        elif index == 1:
+            result = Int(native[].factory._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1
+
+
+def native_descriptor_resource_pins(value: Int, index: Int) abi("C") -> Int:
+    # Native registry inspection only; the caller retains the exact owner.
+    if value == 0 or index < -1 or index >= 1:
+        return -1
+    try:
+        var owner = borrowed_native_owner(value)
+        var native = owner.downcast_value_ptr[NativeDescriptorResource]()
+        var result = 1
+        if index == 0:
+            result = Int(native[].provider._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1

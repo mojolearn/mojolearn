@@ -8,10 +8,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.native_loaded_module import NativeModules
-from bindings.native_class_admission import class_record, class_admit, class_watch_ready
+from bindings.native_loaded_module import NativeModules, native_namespace_string_keys, native_mapping_string_keys
+from bindings.native_class_admission import class_record, class_admit, class_watch_ready, dict_keys_admitted, dict_keys_admit
 from bindings.cpython_table import cpython_table
 from bindings.native_resident_capsule import resident_capsule_owned
+from bindings.native_owner_registry import NativeOwnerPins, registered_native_owner_pins, borrowed_native_owner
 
 
 comptime _ARRAY_CLASS_SLOT = "owner_release_array_class_v1"
@@ -137,63 +138,50 @@ def _is_class_labels(cls: PythonObject, b: PythonObject, context: PythonObject) 
 
 comptime _PY_TPFLAGS_HAVE_GC = 1 << 14
 
-# Compiled owner types a fitted model can hold (in its `__dict__`, or in a
-# prepared-owner record a reset walk may reach). Each is registered by
-# `add_type` in the compiled bindings, holds only native words or compiled
-# owners, and its deallocation runs only native code (fields read 2026-11-07):
-#   _NeuralDescriptorProvider   module, capsule, compiled factory, native words
-#                               (providers/python/neural_descriptor_pyapi); the
-#                               kernel-methods `_native_kernel_method_provider`,
-#                               the Samba/byte-LM provider fields
-#   _NativeDescriptorResource   its provider, a handle; native close (same file)
-#   _TreesResident              compiled release entry + handle; its __deinit__
-#                               calls that compiled entry (bindings/trees_lifetime);
-#                               a GradientBoosting `_resident` holder
-#   _TreesResidentDeath         a model key; native forget (trees_resident_table)
-#   _TsvdResidentLease, _GpResidentLease, _SvmResidentLease
-#                               a lease word; native fitted_lease_close
-#                               (decomposition/tsvd_, gaussian_process/gp_,
-#                               svm/svm_resident_state; core/fitted_resident_store)
-# The cluster resident table (CresHeld), the sequence resident store, and the
-# ARIMA / Holt-Winters registries are native tables outside every Python
-# object; their per-model capsule (bindings/native_resident_capsule) is
-# admitted by its capsule name below, and the binding modules and compiled
-# entries they record by `_retained_module` / `_retained_entry`.
+# Only audited native registrars add field owners to the exact-identity
+# registry. Their native inspectors enumerate retained Python pins, which
+# follow the same recursive admission as ordinary fields below. Prepared-only
+# caches are not estimator fields and are not admitted through this API.
 
 
-def _native_owner_type(cls: PythonObject, b: PythonObject) raises -> Bool:
-    """`cls` is one of the compiled owner types above: one of the listed names, a
-    direct subclass of object, created by a compiled binding (no `__module__`
-    in its class mapping, which every class statement writes), with no
-    instance dictionary, no weak-reference slot, no garbage-collector
-    support (every Python-defined class has it) and no finalizer. Each
-    binding registers its own copy of the type, so it is recognized by
-    these properties, not by one identity. All reads are C slots of the
-    exact built-in `type`."""
+def _native_owner_pins(cls: PythonObject, b: PythonObject) raises -> Optional[NativeOwnerPins]:
+    # Identity is necessary, but a registered native type may not acquire
+    # Python lifecycle/attribute hooks after registration. Preserve the
+    # existing direct-object, no-dictionary/weakref/GC layout policy as well.
     if py_type(cls) is not b["type"]:
-        return False
+        return None
+    var pins = registered_native_owner_pins(cls)
+    if not pins:
+        return None
     var type_fields = b["type"].__dict__
-    var name = py_call(type_fields["__name__"].__get__, cls)
-    if py_type(name) is not b["str"]:
-        return False
-    var wanted = String(py=name)
-    if (wanted != "_NeuralDescriptorProvider" and wanted != "_NativeDescriptorResource"
-            and wanted != "_TreesResident" and wanted != "_TreesResidentDeath"
-            and wanted != "_TsvdResidentLease" and wanted != "_GpResidentLease"
-            and wanted != "_SvmResidentLease"):
-        return False
     var ancestry = py_call(type_fields["__mro__"].__get__, cls)
     if len(ancestry) != 2 or ancestry[1] is not b["object"]:
-        return False
+        return None
     var mapping = py_call(type_fields["__dict__"].__get__, cls)
+    if not native_mapping_string_keys(mapping, b["str"]):
+        return None
     if (py_get(mapping, "__module__") is not None or py_get(mapping, "__del__") is not None
             or py_get(mapping, "__getattribute__") is not None):
-        return False
+        return None
     if Int(py=py_call(type_fields["__dictoffset__"].__get__, cls)) != 0:
-        return False
+        return None
     if Int(py=py_call(type_fields["__weakrefoffset__"].__get__, cls)) != 0:
+        return None
+    if (Int(py=py_call(type_fields["__flags__"].__get__, cls)) & _PY_TPFLAGS_HAVE_GC) != 0:
+        return None
+    return pins
+
+
+def _owner_string_dictionary(fields: PythonObject, b: PythonObject) raises -> Bool:
+    # Provider pins reach module/entry admission too. A foreign key in a
+    # module namespace or sys.modules must not run equality during lookup.
+    if py_type(fields) is not b["dict"]:
         return False
-    return (Int(py=py_call(type_fields["__flags__"].__get__, cls)) & _PY_TPFLAGS_HAVE_GC) == 0
+    if not dict_keys_admitted(fields):
+        if not native_namespace_string_keys(fields._obj_ptr, b["str"]):
+            return False
+        dict_keys_admit(fields)
+    return True
 
 
 def _retained_module(value: PythonObject, cls: PythonObject, b: PythonObject, context: PythonObject) raises -> Bool:
@@ -207,7 +195,7 @@ def _retained_module(value: PythonObject, cls: PythonObject, b: PythonObject, co
     if module_class is None or modules is None or cls is not module_class:
         return False
     var namespace = py_call(context["owner_module_dict"].__get__, value)
-    if py_type(namespace) is not b["dict"]:
+    if not _owner_string_dictionary(namespace, b) or not _owner_string_dictionary(modules, b):
         return False
     var name = py_get(namespace, "__name__")
     if name is None or py_type(name) is not b["str"]:
@@ -338,7 +326,19 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
     # A fitted model's own compiled owners (its kernel-methods provider, the
     # resident entry's resource) and the binding module they record: set_params
     # and every other reset drop them without running Python code.
-    if _native_owner_type(cls, b):
+    var pins = _native_owner_pins(cls, b)
+    if pins:
+        var inspect = pins.value()
+        var count = inspect(Int(value._obj_ptr), -1)
+        if count < 0:
+            raise Error("TypeError: native owner reinitialization cannot inspect retained native owners")
+        for index in range(count):  # driver-loop: native owner's retained metadata in declaration order
+            var address = inspect(Int(value._obj_ptr), index)
+            if address <= 0:
+                raise Error("TypeError: native owner reinitialization cannot inspect retained native owners")
+            var held = borrowed_native_owner(address)
+            native_release_admit(held, context, depth + 1)
+        _ = value  # the inspector returns borrowed pins from this retained owner
         return
     if _retained_module(value, cls, b, context):
         return

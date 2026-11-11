@@ -153,6 +153,8 @@ def _family_owner_first(model: PythonObject, owner: Int, operation: String, args
     if owner == FR_SVM:
         return svm_mixture_operation(model, operation, args, context)
     if owner == FR_XC:
+        if operation == "family_xc_dbscan_predict":
+            return cluster_fit_b_operation(model, operation, args, context)
         return cluster_operation(model, operation, args, context)
     if owner == FR_METRIC:
         return metrics_reg_operation(operation, args, context)

@@ -2,26 +2,31 @@
 # DBSCAN `fit`, `fit_predict` and `predict`, one native call each
 # (python/mojolearn/density.py). The shell hands over the binding `_bind`
 # resolved; this owner makes the Python method's refusals in its order and
-# wording, calls the binding's `dbscan_fit_core` and `dbscan_core_arrays`
-# with the argument lists the Python made, and stores the attributes the
-# Python stored. With `prediction_data=True` the core rows become resident
-# on the device at fit (bindings/cfb_resident.mojo), so `predict` uploads
-# only its queries. Same entries, same inputs: the bits do not move.
+# wording, then calls typed native fit/core-gather/reference descriptors.
+# With `prediction_data=True` the core rows become resident on the device
+# at fit, so `predict` uploads only its queries. Existing kernels/defaults
+# and transfer counts are retained.
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
-from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array
-from core.admitted_weights import admitted_fill
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.classical_arrays import classical_address, classical_is_array
 from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min, family_field,
+    FAMILY_F32P, family_repr, family_call, family_array, family_min, family_field, family_is_str,
 )
 from bindings.cluster_native import _reference_queries
-from bindings.cfb_resident import cfb_fresh_holder, cfb_mint, cfb_reference_labels
+from bindings.dbscan_native_boundary import (
+    DBSCANConnection, dbscan_array, dbscan_publish, dbscan_run_fit, dbscan_run_count, dbscan_run_gather,
+    dbscan_fresh_holder, dbscan_mint, dbscan_reference_labels,
+)
+from core.dbscan_native_api import DBSCANFitRequest, DBSCANCoreRequest, DBSCANGatherRequest, DBSCANFitWorkspace, dbscan_empty_labels
+from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code, dbscan_method_accepts
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.decomp_scalar_admission import decomp_scalar_repr
 from bindings.native_loaded_module import native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 
 comptime _METRIC_PRECOMPUTED = 3
@@ -42,40 +47,44 @@ def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject
     return out
 
 
-def _wrap(store: PythonObject, shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
-    """`frombytes(store.tobytes(), typestr, shape)`: the binding's
-    `array.array` as the Array's store (the same bytes, no second copy)."""
-    return classical_wrap_array(store, shape, typestr, "C", context)
+def _dbscan_text(value: PythonObject, context: PythonObject) raises -> String:
+    host_inference_scalar(value, context, True)
+    if py_type(value) is py_get(context, "ndarray"):
+        return decomp_scalar_repr(value, context)
+    return String(py=family_call(native_loaded_module("builtins").str, value))
 
 
 def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`DBSCAN.fit(X, y=None, sample_weight=None)`."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
+    lifecycle_admit_fields(fields)
     var binding = args[0]
     var source = args[1]
     var weights_source = args[2]
     var prediction_data = family_field(fields, "prediction_data")
     if py_type(prediction_data) is not b.bool:
         raise Error("TypeError: mojolearn DBSCAN: prediction_data must be a bool, got "
-                    + String(py_type(prediction_data).__name__))
-    var metrics = context["family_dbscan_metrics"]
+                    + String(py_call(b.type.__dict__["__name__"].__get__, py_type(prediction_data))))
     var metric_attr = family_field(fields, "metric")
-    var metric_key = family_call(family_call(b.str, metric_attr).lower)
-    if not py_contains(metrics, metric_key):
-        raise Error("mojolearn DBSCAN: metric=" + family_repr(metric_attr) + " is refused; it "
-                    + "must be one of " + family_repr(py_call(b.sorted, metrics)) + ". 'euclidean'/'l2' is the "
+    var metric_key = _dbscan_text(metric_attr, context).lower()
+    var metric = dbscan_metric_code(metric_key)
+    if metric < 0:
+        raise Error("mojolearn DBSCAN: metric=" + decomp_scalar_repr(metric_attr, context) + " is refused; it "
+                    + "must be one of " + "['cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan', 'precomputed']" + ". 'euclidean'/'l2' is the "
                     + "implemented cuML arm; 'manhattan'/'l1'/'cityblock' is this "
                     + "library's own L1 arm (DEVIATION 27, dbscan/impl/neighbors/"
                     + "epsilon_neighborhood.mojo); 'cosine' and 'precomputed' "
                     + "are cuML's other two (dbscan.pyx:110-115, DEVIATIONS 5113 "
                     + "and 5114)")
-    var metric = Int(py=metrics[metric_key])
-    var algorithms = context["family_cfb_dbscan_algorithms"]
     var algorithm = family_field(fields, "algorithm")
-    if not py_contains(algorithms, algorithm):
-        raise Error("mojolearn DBSCAN: algorithm=" + family_repr(algorithm) + " is refused; "
-                    + "it must be one of " + family_repr(py_call(b.sorted, algorithms)) + ". Both name an "
+    host_inference_scalar(algorithm, context, True)
+    # Preserve native unhashable-option refusals before the name refusal.
+    _ = family_call(b.hash, algorithm)
+    var method = dbscan_method_code(String(py=algorithm)) if family_is_str(algorithm) else -1
+    if method < 0:
+        raise Error("mojolearn DBSCAN: algorithm=" + decomp_scalar_repr(algorithm, context) + " is refused; "
+                    + "it must be one of " + "['brute', 'rbc']" + ". Both name an "
                     + "eps-neighborhood SEARCH: 'rbc' is the random ball cover "
                     + "(the default, DEVIATION 35) and 'brute' is the fused "
                     + "all-pairs scan. scikit-learn's 'kd_tree' and 'ball_tree' "
@@ -86,9 +95,9 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                     + "cover prunes arithmetically over two flat arrays and "
                     + "measured 2.7x-27x over brute force at 16k-200k rows on "
                     + "this hardware; see the class docstring")
-    if not py_contains(context["family_cfb_dbscan_arms"][algorithm], PythonObject(metric)):
-        raise Error("mojolearn DBSCAN: metric=" + family_repr(metric_attr) + " with "
-                    + "algorithm=" + family_repr(algorithm) + " is refused. The ball cover "
+    if not dbscan_method_accepts(method, metric):
+        raise Error("mojolearn DBSCAN: metric=" + decomp_scalar_repr(metric_attr, context) + " with "
+                    + "algorithm=" + decomp_scalar_repr(algorithm, context) + " is refused. The ball cover "
                     + "computes Euclidean distances for its landmark radii and "
                     + "its three pruning bounds (neighbors/impl/"
                     + "ball_cover/) against the radius itself, so it serves "
@@ -105,13 +114,18 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                     + "metric='precomputed' is refused by name: predict needs each "
                     + "query's distances to the core samples, which a distance "
                     + "matrix over the training rows does not give")
-    var eps = family_call(b.float, family_field(fields, "eps"))
-    if Float64(py=eps) <= 0:
+    var eps_value = family_field(fields, "eps")
+    host_inference_scalar(eps_value, context, True)
+    var eps = Float64(py=family_call(b.float, eps_value))
+    if eps <= 0:
         raise Error("mojolearn DBSCAN eps must be positive")
-    var min_samples = Int(py=family_call(b.int, family_field(fields, "min_samples")))
+    var min_value = family_field(fields, "min_samples")
+    host_inference_scalar(min_value, context, True)
+    var min_samples = Int(py=family_call(b.int, min_value))
     if min_samples < 1:
         raise Error("mojolearn DBSCAN min_samples must be at least 1")
     var cap_attr = family_field(fields, "max_iterations")
+    host_inference_scalar(cap_attr, context, True)
     var cap = 0 if cap_attr is None else Int(py=family_call(b.int, cap_attr))
     if cap < 0:
         raise Error("mojolearn DBSCAN max_iterations must be None (the fixed "
@@ -123,6 +137,8 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # snapshot and no second finite pass over it (perf3-cluster-gp-gate;
     # perf2-cluster row 24: one extra full pass + one admission per fit).
     # Any other caller keeps the full admission below.
+    if len(args) > 3 and py_type(args[3]) is not b.bool:
+        raise Error("TypeError: DBSCAN admission marker requires an exact bool")
     var admitted = len(args) > 3 and Bool(py=args[3])
     var x = source if admitted else admit_family(source, 2, "X", context).array
     py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
@@ -142,115 +158,112 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         if Float64(family_min(x)) < 0:
             raise Error("mojolearn DBSCAN: metric='precomputed' refuses a "
                         + "negative distance, as scikit-learn does")
-    var labels = family_array(Python.tuple(n), "<i4", context)
+    var labels = dbscan_array(List[Int](length=1, fill=n), "<i4", context)
     var budget_attr = family_field(fields, "max_mbytes_per_batch")
+    host_inference_scalar(budget_attr, context, True)
     var budget = 0 if budget_attr is None else Int(py=family_call(b.int, budget_attr))
     if budget < 0:
         raise Error("mojolearn DBSCAN max_mbytes_per_batch cannot be negative")
     # sample_weight: `0` is the binding's `sample_weight == nullptr`. The
     # weights are held until after the call (their address is in flight).
     var w = PythonObject(None)
-    var weight_addr = PythonObject(0)
+    var weight_addr = 0
     if weights_source is not None:
         w = admit_family_weights(weights_source, n, True, context).keep
-        weight_addr = classical_address(w)
+        weight_addr = Int(py=classical_address(w))
         _ = w  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding:
     # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
     # eps_nn_method, metric. precomputed takes the brute arm's adjacency path
     # whatever `algorithm` names (DEVIATION 5114).
-    var method = _EPS_NN_BRUTE_FORCE if metric == _METRIC_PRECOMPUTED else Int(py=algorithms[algorithm])
-    var params = Python.list(PythonObject(n), PythonObject(d), eps, PythonObject(min_samples),
-                             PythonObject(budget), PythonObject(cap), PythonObject(method), PythonObject(metric))
-    var core = family_array(Python.tuple(n), "<u1", context)
-    var fit = neural_descriptor_entry(binding, "dbscan_fit_core")
-    var n_iter = family_call(fit, classical_address(x), classical_address(labels), weight_addr,
-                             classical_address(core), params)
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = core  # keep the Python object alive through the native call above
+    if metric == _METRIC_PRECOMPUTED:
+        method = _EPS_NN_BRUTE_FORCE
+    var workspace = DBSCANFitWorkspace(n)
+    var connection = DBSCANConnection(binding)
+    var x_address = Int(py=classical_address(x))
+    var labels_address = Int(py=classical_address(labels))
+    var request = DBSCANFitRequest(x_address, labels_address, weight_addr, workspace.address(),
+        n, d, min_samples, budget, cap, method, metric, eps)
+    var n_iter = dbscan_run_fit(connection, request)
+    _ = labels
+    _ = x
+    _ = workspace
     _ = w^
-    py_setitem(fields, "n_iter_", n_iter)
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, "labels_", labels)
-    py_setitem(fields, "n_features_in_", PythonObject(d))
-    py_setitem(fields, "n_samples_fit_", PythonObject(n))
-    # `_store_core`: the core rows, their training indices and their labels,
-    # ascending training index, from the fit's own core mask.
-    var gather = neural_descriptor_entry(binding, "dbscan_core_arrays")
-    var parts = family_call(gather, classical_address(x), classical_address(labels), classical_address(core),
-                            Python.list(PythonObject(n), PythonObject(d)))
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var m = len(parts[0])
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var indices = _wrap(parts[0], Python.tuple(m), "<i4", context)
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var components = _wrap(parts[1], Python.tuple(m, d), "<f4", context)
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var core_labels = _wrap(parts[2], Python.tuple(m), "<i4", context)
-    _ = core  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
+    dbscan_publish(fields, "n_iter_", PythonObject(n_iter), context)
+    dbscan_publish(fields, "labels_", labels, context)
+    dbscan_publish(fields, "n_features_in_", PythonObject(d), context)
+    dbscan_publish(fields, "n_samples_fit_", PythonObject(n), context)
+    # Keep the original count and gather passes, publication order and exact
+    # destination sizes. The private mask and inter-call dimensions are Mojo.
+    var count_request = DBSCANCoreRequest(x_address, labels_address, workspace.address(), n, d)
+    var m = dbscan_run_count(connection, count_request)
+    var indices = dbscan_array(List[Int](length=1, fill=m), "<i4", context)
+    var shape: List[Int] = [m, d]
+    var components = dbscan_array(shape, "<f4", context)
+    var core_labels = dbscan_array(List[Int](length=1, fill=m), "<i4", context)
+    var gather_request = DBSCANGatherRequest(x_address, labels_address, workspace.address(),
+        Int(py=classical_address(indices)), Int(py=classical_address(components)), Int(py=classical_address(core_labels)), n, d, m)
+    dbscan_run_gather(connection, gather_request)
+    _ = workspace^
+    _ = x^
+    _ = labels
     # p3-neighbors-cluster: the core rows behind predict's resident device
-    # copy (keyed by identity, bindings/cfb_resident.mojo) are read-only.
+    # copy (native identity key, bindings/dbscan_native_boundary.mojo) are read-only.
     _ = fitted_freeze(indices, context)
     _ = fitted_freeze(components, context)
     _ = fitted_freeze(core_labels, context)
-    py_setitem(fields, "core_sample_indices_", indices)
-    py_setitem(fields, "components_", components)
-    py_setitem(fields, "_core_labels", core_labels)
-    _ = core^
-    _ = x^
-    cfb_fresh_holder(model)
+    dbscan_publish(fields, "core_sample_indices_", indices, context)
+    dbscan_publish(fields, "components_", components, context)
+    dbscan_publish(fields, "_core_labels", core_labels, context)
+    dbscan_fresh_holder(model)
     if predicting:
-        cfb_mint(model, binding, components, indices, core_labels, m, d, metric, context)
+        dbscan_mint(model, connection, components, indices, core_labels, m, d, metric, context)
 
 
 def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
+                    context: PythonObject, resident: Bool = True) raises -> PythonObject:
     """`DBSCAN.predict`: the nearest core sample's label within eps, over
     the resident core rows."""
     var b = native_loaded_module("builtins")
     if not family_raw_has(model, "labels_"):
         raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
     var components = family_raw_get_or(model, "components_", PythonObject(None))
-    if not Bool(py=py_call(b.bool, family_raw_get(model, "prediction_data"))) or components is None:
+    var predicting = family_raw_get(model, "prediction_data")
+    host_inference_scalar(predicting, context, True)
+    if not Bool(py=predicting) or components is None:
         raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
                     + "DBSCAN(prediction_data=True), which keeps the core samples this "
                     + "rule needs (DEVIATION 2740)")
-    var n_features = Int(py=family_raw_get(model, "n_features_in_"))
+    var features = family_raw_get(model, "n_features_in_")
+    host_inference_scalar(features, context)
+    var n_features = Int(py=features)
     var q = _reference_queries(source, n_features, "DBSCAN.predict", context)
     var nq = Int(py=q.shape[0])
     var n_core = Int(py=components.shape[0])
     if n_core == 0:
-        var labels = family_array(Python.tuple(nq), "<i4", context)
-        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
+        var labels = dbscan_array(List[Int](length=1, fill=nq), "<i4", context)
+        dbscan_empty_labels(Int(py=classical_address(labels)), nq)
         _ = labels  # keep the Python object alive through the native call above
         return labels
-    var metric_name = py_call(py_call(b.str, family_raw_get(model, "metric")).lower)
-    var metric = Int(py=context["family_dbscan_metrics"][metric_name])
-    var eps = family_call(b.float, family_raw_get(model, "eps"))
-    var result = cfb_reference_labels(model, binding, components,
+    var metric_name = _dbscan_text(family_raw_get(model, "metric"), context).lower()
+    var metric = dbscan_metric_code(metric_name)
+    if metric < 0:
+        raise Error("KeyError: " + family_repr(PythonObject(metric_name)))
+    var eps_value = family_raw_get(model, "eps")
+    host_inference_scalar(eps_value, context, True)
+    var eps = Float64(py=family_call(b.float, eps_value))
+    var result = dbscan_reference_labels(model, binding, components,
                                       family_raw_get(model, "core_sample_indices_"),
                                       family_raw_get(model, "_core_labels"), q, n_core,
-                                      n_features, metric, eps, 1, context)
+                                      n_features, metric, eps, context, resident)
     _ = q^
     return result
 
 
 def cfb_dbscan_operation(model: PythonObject, operation: String, args: PythonObject,
                          context: PythonObject) raises -> PythonObject:
-    """args: (binding, X[, sample_weight[, admitted]])."""
+    """args: (binding, X[, sample_weight[, admitted]]), unpacked here once."""
+    lifecycle_admit_fields(py_fields(model))
     if operation == "family_cfb_dbscan_fit":
         _dbscan_fit(model, args, context)
         return model
@@ -259,4 +272,7 @@ def cfb_dbscan_operation(model: PythonObject, operation: String, args: PythonObj
         return py_fields(model)["labels_"]
     if operation == "family_cfb_dbscan_predict":
         return _dbscan_predict(model, args[0], args[1], context)
+    if operation == "family_xc_dbscan_predict":
+        # The historical internal entry always used direct reference uploads.
+        return _dbscan_predict(model, args[0], args[1], context, False)
     raise Error("RuntimeError: unknown DBSCAN operation " + operation)

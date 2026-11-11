@@ -62,3 +62,121 @@ The provider export chunk changes the three GP binding roots above. No A/B defin
 or default changes; no intended numerical changes. No kernels or old paths
 deleted yet because public switching is pending. The separate Modular shared
 context submission problem is neither fixed nor worked around here.
+
+GPR request switch (staged public chunk): fit, mean/std query, covariance,
+sampling, optimizer, likelihood-gradient and theta-map execution now use
+`GPConnection` / `GPDriver`. GIL-free calls retain the admitted image and all
+buffer owners. Fit and gradient scalars, predictive variance, optimizer
+theta/value/run scratch, free flags/bounds and likelihood return metadata use
+native owners. Python gradient lists and optimizer records are created only
+while packing public results. Post-RUN namespace keys are re-admitted before
+publication. A fit snapshots the normalization setting and owns its ridge
+retry scalar; the same tenfold retry rule and warning remain.
+
+This is not a completed whole-family switch. Kernel-array packing/cache
+records, fitted resident lease records, StandardScaler normalization, GPC and
+cross-interpreter GP workers are still staged dependencies. Existing missing
+legacy-entry checks temporarily preserve boundary refusal positions; they
+do not execute those numerical entry callables. They will be replaced by
+native capability admission with the complete provider switch. Source-only
+review is not runtime, performance or identity evidence.
+
+GPC request switch (next staged public chunk): binary and fused all-member
+fit/query and OVR combine use typed requests and native scalar/address tables.
+Member output references and latent/combine results have typed boundary pin
+envelopes. The OVR likelihood still uses the same `reduce_stat` operation and
+class order, backed by a native scalar list. Worker fit/query and parent combine
+share these native calls; cross-interpreter transport, worker counts, stored
+request reuse and scheduler behavior remain unchanged. Fused route/default
+switches remain in place. GPC scalar scratch Arrays and address/parameter/result
+Python envelopes were removed. Public estimator/member objects and output
+Arrays are retained; selected latent scratch and label-code wrappers still await native storage
+completion. Public and interpreter-transport outputs retain the supported
+exporter-backed Array PACK; no ownerless memoryview is introduced.
+
+This chunk additionally affects `_mojolearn_runtime_parallel_host` and the
+runtime family dispatcher. Its request constructors and unchanged numerical
+source were audited, but no lane builds or runtime tests were run.
+
+The subsequent metadata cleanup removes the temporary legacy numerical-entry
+existence checks. Capability admission now belongs to the actual native GP
+descriptor, including inference-only refusals. Native mode/capability rows
+replace the two boxed scalar cache payloads; rows retain the exact provider
+pin and follow the existing descriptor cache's 64-row bound. A replaced
+factory obtains fresh metadata. These native rows are UNPACK state protected
+by the GIL, not Python objects needing class registration.
+
+The GP worker import prerequisite now requires `gp_native_api_v1`. Seven
+unreferenced GPC Python helpers/private method bodies (209 lines) were removed,
+including their buffer-helper/Array imports. Public methods and archive field
+classes remain. `numbers` stays as an import-time archive class-table dependency.
+Private `_extension` remains used by resident/benchmark controllers; loader
+mode/vendor probes and raw numerical exports still have compatibility consumers.
+The saved inventory distinguishes those references from ordinary product calls.
+No tests or numerical source were deleted by this cleanup.
+
+GP resident preparation now uses `GPLeaseState` for the handle, provider
+identity, model generation, ordered storage identities and take-once cleanup.
+`GPPreparedLease` retains only the provider and mirrored storage pins around
+that native state. Its sole runtime-family registrar does not add it to model
+field release admission: this is a weak-keyed prepared-registry owner. GPR and
+fused GPC keep the existing freeze eligibility, slot order, invalidation and
+non-weakref per-call upload behavior. Native descriptor lease calls replace
+the opener callable and five-item Python record. Registry metadata operations
+retain their original GIL boundary; no tensor copies or numerical calls change.
+The shared legacy resident helper remains used by SVM compatibility paths.
+
+The lease addition is source-reviewed only. Compilation and native lifetime
+fixtures are queued to the integration owner; no lane execution occurred.
+
+GP normalization now runs `gp_normalize_targets` with a typed request/result
+and native column, statistics, program, missing-value and output scratch.
+The public normalized target Array is retained as `y_train_` storage. Two
+separate descriptors pin the original preprocessing and x_prep images. The
+plan uses the existing direct switch, separate fit/transform kernels, exact
+264/248 validation stages, 1/101/102 missing-fit stages, 1/24 missing-fill
+stages and 10/103 restoration stages. Input-to-column and output-to-flat
+copies remain; the temporary Python StandardScaler, fitted-field dictionary,
+private Arrays and one-use prepared-row cache are removed. The cache's unused
+12-word retained-row copy is removed with it. No numerical source changes.
+
+Additive factories: `scaler_native_api_v1` in preprocessing device/full-host,
+`x_prep_native_api_v1` in x_prep device/host. Existing scaler callers and raw
+exports remain intact. Import-time scaler context now retains their owning
+modules; native connection admits actual factories and verifies mode before
+RUN. Required groups include preprocessing, x_prep, runtime family and its
+parallel consumers; affected image roots are listed by the export inventory.
+Source audit only: the orchestrator still owes compilation, normalization
+fixtures (including missing/refusal paths) and installed behavior. No timing
+or cross-vendor identity claim is made.
+
+Selected GPC query outputs now use `GPCQueryScratch` native Float32/Float64
+lists whenever they are private. The caller selects only actual public or
+interpreter-transport outputs for Array packing: public latent mean/variance,
+worker probability or mean, and final binary outputs. Nonfused OVR retains
+native probability columns and supplies their native address table to the
+same combine request. Cross-interpreter columns still unpack through their
+own mandatory exporter pins. No tensor copies, numerical kernels or fused
+route defaults changed. This removes private latent scratch Arrays and
+nonfused probability-column Arrays; native storage stays alive through RUN.
+The query owner addition is uncompiled/unrun in this lane.
+
+Packed kernel tables now live in `GPKernelStorage` behind the prepared-only
+`GPPackedKernel` owner. Ordinary GP calls pass its native postfix spans;
+worker transport explicitly packs real Arrays. The four intermediate Python
+value lists and four internal Array stores are removed from ordinary calls.
+The shared strict node capture still owns the exact boundary validation and
+archive representation; its snapshot owner/state lists are now native lists
+of mandatory public-object pins.
+
+`GPPreparedKernel` replaces the five-item packed-cache tuple, Python key
+list/count boxes and separate stamped payload tuple. It retains native key
+entries, content/generation words, and native lists of object/class pins.
+Identity, exact builtin integer-value matching, four-level container capture,
+class watchers, mutable parameter invalidation and generation/content fast
+reuse remain. The unused old pack-stamp mechanism is removed; the separate
+fitted-state admission record remains because it covers other public fields.
+Two prepared-only types are registered once in runtime_family_host; neither
+is a model field owner. Cache UNPACK still uses exact builtin dictionary/item
+views transiently and the shared archive-compatible postfix capture; these
+are not passed to RUN. No numerical source changes or lane executions.

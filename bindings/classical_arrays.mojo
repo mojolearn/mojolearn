@@ -25,6 +25,7 @@ from core.sequential_input_plan import sequence_array_typestr
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 from bindings.native_buffer_address import native_buffer_address
+from bindings.native_array_storage_admission import array_storage_admit, array_storage_address
 from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_code as _store_code, native_array_itemsize
 from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
 
@@ -60,12 +61,12 @@ def classical_address(value: PythonObject) raises -> PythonObject:
                 var array_key = PythonObject("Array")
                 var cls = t[].PyDict_GetItem(fields, array_key._obj_ptr)
                 if cls and p3_type_word(value._obj_ptr) == Int(cls):
-                    return value._addr
+                    return array_storage_address(value)
                 return sequential_address(value)
             cpython_table()[].PyErr_Clear()
     var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
     if module is not None and py_type(value) is module.Array:
-        return value._addr
+        return array_storage_address(value)
     return sequential_address(value)
 
 
@@ -81,7 +82,9 @@ def classical_wrap_layout(store: PythonObject, layout: NativeArrayLayout, typest
     context: PythonObject) raises -> PythonObject:
     if layout.count != len(store):
         raise Error("RuntimeError: an array store does not match its shape")
-    var array = native_storage_allocate(context["array_class"])
+    var cls = context["array_class"]
+    _ = array_storage_admit(cls, cls, context["array_storage_slots"], "Array native output")
+    var array = native_storage_allocate(cls)
     py_setattr(array, "_store", store)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", PythonObject(None))

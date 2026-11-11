@@ -4,7 +4,9 @@
 # small per-row flag output, no arithmetic on data.
 
 
-def cfb_any_positive_i32(src: MutPointer[Int32, MutUntrackedOrigin], count: Int) -> Bool:
+def cfb_any_positive_i32[src_origin: Origin, //](
+    src: Pointer[Int32, src_origin], count: Int
+) -> Bool:
     """`int(flags.max()) > 0` for `count` >= 1 int32 flags."""
     for i in range(count):  # native output marshaling: one scan of a kernel's per-row flags
         if src[i] > Int32(0):

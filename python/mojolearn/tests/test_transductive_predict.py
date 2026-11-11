@@ -6,15 +6,11 @@ capability that neither cuML nor scikit-learn has).
 
     cd python && python3 -m mojolearn.tests.test_transductive_predict
 
-It gates the WIRING and the RULE on small fixtures built so the rule's
-corners are hit on purpose: a query exactly at eps, a query one ulp past
-eps, a query equidistant from two clusters (the tie rule), duplicated rows,
-far points, float64 queries, rows alone against the batch, reversed query
-order, save and load, and every refusal. It asserts the training-row
-properties the rule guarantees (DBSCAN core rows, DBSCAN noise rows on
-algorithm='brute', every agglomerative row without a distance-0 twin in
-another cluster) and REPORTS the border rows where the rule does not
-promise the fitted label.
+This controller retains DBSCAN numerical/public checks and both models'
+public array packing, prediction-data flags, archive handling and refusals.
+Agglomerative tree and query corner oracles execute in the Mojo suites under
+checks/native_tests/agglo_native_cases.mojo. DBSCAN's numerical controller
+remains until its replacement coverage is complete.
 
 When `MOJOLEARN_HOST_DIR` holds `_mojolearn_estimators_host.so` the HOST
 arm loads every saved model through `_classical_host.host_model` and holds
@@ -165,24 +161,9 @@ def arm_agglomerative(rep):
               "prediction_data=True fits the same labels_ and children_ bytes")
     p = np.asarray(m.predict(x))
     rep.check("AGGLOM", p.dtype == np.int32 and np.array_equal(p, fitted), "every training row predicts its fitted label")
-    mid = np.asarray([[1.0, 1.0]], dtype=np.float32)
-    got = int(np.asarray(m.predict(mid))[0])
-    rep.check("AGGLOM", fitted[1] != fitted[16] and got == int(min(fitted[1], fitted[16])),
-              "a query equidistant from two clusters goes to the lowest cluster label", (got, int(fitted[1]), int(fitted[16])))
-    near_a = np.asarray([[-1.0, 1.0], [3.5, 0.0]], dtype=np.float32)
-    rep.check("AGGLOM", np.array_equal(np.asarray(m.predict(near_a)), [fitted[16], fitted[0]]),
-              "a query takes the cluster of its nearest training row")
 
-    dup = np.concatenate([x, x]).astype(np.float32)
-    dm = AgglomerativeClustering(n_clusters=2, prediction_data=True).fit(dup)
-    rep.check("AGGLOM", np.array_equal(np.asarray(dm.predict(dup)), np.asarray(dm.labels_)),
-              "duplicated rows: every row still predicts its fitted label")
-    many = AgglomerativeClustering(n_clusters=17, prediction_data=True).fit(x)
-    rep.check("AGGLOM", np.array_equal(np.asarray(many.predict(x)), np.asarray(many.labels_)),
-              "n_clusters=17 of 18 distinct rows (singletons): every row predicts its fitted label")
-
-    alone = [int(np.asarray(m.predict(x[i:i + 1]))[0]) for i in range(x.shape[0])]
-    _identical(rep, "AGGLOM", alone == p.tolist(), "rows alone give the batch's bytes")
+    # Tree/query corner oracles execute in native agglo_native_cases.
+    # Keep public packed attributes, prediction-data flags and archive seams.
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "agg.npz")
         m.save(path)

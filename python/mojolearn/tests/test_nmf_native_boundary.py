@@ -15,6 +15,81 @@ def _model(**settings):
     return ml.NMF(**options)
 
 
+@pytest.mark.parametrize("method", ["fit", "fit_transform", "transform", "inverse_transform"])
+@pytest.mark.parametrize("subclass", [False, True])
+def test_nmf_fit_depth_is_admitted_before_numeric_hooks(method, subclass):
+    called = []
+
+    class Depth:
+        def __int__(self):
+            called.append("int")
+            raise AssertionError("Python fitting-depth integer hook executed")
+
+        def __index__(self):
+            called.append("index")
+            raise AssertionError("Python fitting-depth index hook executed")
+
+        def __bool__(self):
+            called.append("bool")
+            raise AssertionError("Python fitting-depth truth hook executed")
+
+    class NativeSubclass(ml.NMF):
+        pass
+
+    model = NativeSubclass(n_components=2) if subclass else _model()
+    model._mojolearn_fitting = Depth()
+    # The exact-int guard precedes fitted-state and source checks on every
+    # method. No fit is needed to exercise this boundary refusal.
+    with pytest.raises(TypeError, match="native fitting depth requires an exact integer"):
+        getattr(model, method)(_data())
+    assert called == []
+
+
+@pytest.mark.parametrize("method", ["fit", "fit_transform", "transform", "inverse_transform"])
+def test_nmf_namespace_keys_are_admitted_before_hash_collision_equality(method):
+    called = []
+
+    class Key:
+        def __hash__(self):
+            return hash("_mojolearn_fitting")
+
+        def __eq__(self, other):
+            called.append(other)
+            raise AssertionError("Python namespace key equality executed")
+
+    model = _model()
+    vars(model)[Key()] = 0
+    called.clear()
+    with pytest.raises(TypeError, match="exact string state keys"):
+        getattr(model, method)(_data())
+    assert called == []
+
+
+@pytest.mark.parametrize("method", ["fit", "fit_transform"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_nmf_sparse_metadata_probe_never_calls_source_metaclass(method, nested):
+    called = []
+
+    class Meta(type):
+        def __getattribute__(cls, name):
+            if name == "__module__":
+                called.append(name)
+                raise AssertionError("Python source metaclass metadata hook executed")
+            return super().__getattribute__(name)
+
+    class Source(metaclass=Meta):
+        pass
+
+    model = _model()
+    # Nested fitting skips the public X check, reaching the algorithm's
+    # separate sparse probe. Both probes must read metadata natively.
+    if nested:
+        model._mojolearn_fitting = 1
+    with pytest.raises(TypeError, match="native|protocol|subclasses"):
+        getattr(model, method)(Source())
+    assert called == []
+
+
 @pytest.mark.parametrize("init", ["random", "nndsvd", "nndsvda", "nndsvdar", "custom"])
 @pytest.mark.parametrize("solver", ["cd", "mu"])
 def test_nmf_public_methods_do_not_call_legacy_python_entries(init, solver, monkeypatch):

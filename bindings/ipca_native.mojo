@@ -1,39 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
-# The native IncrementalPCA owner: every public IncrementalPCA operation
-# (fit, partial_fit, fit_transform, transform, inverse_transform) is one call
-# into ipca_c. It converts X once, selects the numeric-mode decomp binding
-# (`_Kit(numeric_mode_)`), runs one compiled driver (x_decomp/ipca_owner.mojo:
-# the `_partial` / `_gram_svd` / transform steps the Python shell sequenced
-# through the kit, the same entries, operands and order, so the same bits)
-# and stores the fitted attributes under the names, types and shapes the
-# shell published. fit_transform projects the X the fit converted.
+"""IncrementalPCA admission/publication around typed native requests and owners."""
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
-from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed
-from bindings.admitted_input import admit_x
-from bindings.decomp_inputs import decomp_input
-from bindings.entries_verified import entries_verified, entries_mark_verified
+from bindings.classical_arrays import classical_address, classical_typed_native
+from bindings.admitted_input import AdmittedX, admit_f32
+from bindings.decomp_inputs import decomp_admit
+from bindings.decomp_scalar_admission import decomp_scalar_admit
+from bindings.decomp_truth_boundary import decomp_truth as _truth
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
-from bindings.public_lifecycle_owner import lifecycle_end
-from bindings.decomp_kit_native import (
-    decomp_resident_binding, decomp_resident_cached, decomp_resident_operand, decomp_resident_adopt,
-    decomp_resident_drop,
-)
+from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
+from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
+from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
+from bindings.ipca_descriptor_boundary import ipca_connection, ipca_resident, ipca_run_fit, ipca_run_partial, ipca_run_query, ipca_run_free
+from bindings.ipca_owner_boundary import ipca_owner_drop, ipca_owner_adopt, ipca_owner_cached, ipca_owner_operand, ipca_owner_handle
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
-    # IncrementalPCA itself or a subclass: its MRO holds the connected class.
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
@@ -41,294 +33,210 @@ def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
     var target = context["ipca_class"]
     if py_type(target) is not b.type:
         return False
-    # CPython's own subtype test walks the same tp_mro by identity in one
-    # native call (no MRO tuple fetch or per-row Python indexing).
-    # Resolved once per process in the shared table (pass 2), not by name per call.
-    var t = cpython_table()
-    return t[].PyType_IsSubtype(cls._obj_ptr, target._obj_ptr) != 0
+    return cpython_table()[].PyType_IsSubtype(cls._obj_ptr, target._obj_ptr) != 0
 
 
-def _int(value: PythonObject) raises -> Int:
+def _int(value: PythonObject, context: PythonObject) raises -> Int:
+    decomp_scalar_admit(value, context)
     return Int(py=py_call(native_loaded_module("builtins").int, value))
 
 
 def _attr(model: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
-    """`model.<name>` for an instance field, with Python's AttributeError."""
+    lifecycle_admit_fields(fields)
     if not py_contains(fields, name):
         raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '" + name + "'")
     return fields[name]
 
 
-def _entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The connected _mojolearn_x_decomp IncrementalPCA drivers of the
-    fitted numeric mode (`numeric_mode_`), as `_Kit(mode)` resolved it."""
-    var b = native_loaded_module("builtins")
-    var mode = _attr(model, fields, "numeric_mode_")
-    if py_type(mode) is not b.str:
-        raise Error("numeric_mode must be fast, identical or None")
-    # The exact spellings answer natively (N340: two Python calls per query
-    # before); any other text is normalized as before.
-    var text = String(py=mode)
-    var name = mode
-    if text != "identical" and text != "fast":
-        name = py_call(py_call(mode.strip).lower)
-        if String(name) != "identical" and String(name) != "fast":
-            raise Error("numeric_mode must be fast, identical or None")
-    var entries = context["ipca_decomp"][name]
-    if py_type(entries) is b.str:
-        raise Error(String(entries))
-    # The three drivers are probed once per connected table
-    # (bindings/entries_verified.mojo; a table's entries are fixed at import).
-    if entries_verified(context, "ipca_entries_verified", name, entries):
-        return entries
-    if py_get(entries, "x_decomp_ipca_fit") is None or py_get(entries, "x_decomp_ipca_partial") is None \
-            or py_get(entries, "x_decomp_ipca_project") is None:
-        raise Error("NotImplementedError: mojolearn IncrementalPCA: this build of _mojolearn_x_decomp does not export "
-                    + "the x_decomp_ipca_* drivers; rebuild it with bindings/build_x_decomp.sh")
-    entries_mark_verified(context, "ipca_entries_verified", name, entries)
-    return entries
-
-
 def _set_mode(fields: PythonObject, context: PythonObject) raises:
-    # `_mode(self.numeric_mode)`: the process mode when None, else the value as given.
+    lifecycle_admit_fields(fields)
     var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     py_setitem(fields, "numeric_mode_", mode)
 
 
-def _f32(shape: PythonObject, context: PythonObject) raises -> PythonObject:
-    # A zero-filled C-order float32 mojolearn Array (`_M.out`).
-    return classical_typed(shape, "<f4", context["output_context"])
+def _f32(rows: Int, cols: Int, context: PythonObject, vector: Bool = False) raises -> PythonObject:
+    return classical_typed_native(ipca_output_shape(rows, cols, vector), "<f4", context["output_context"])
 
 
-def _requested(fields: PythonObject) raises -> Int:
-    # n_components as `int(...)`, -1 for None.
+def _requested(fields: PythonObject, context: PythonObject) raises -> Int:
+    lifecycle_admit_fields(fields)
     var value = fields["n_components"]
-    if value is None:
-        return -1
-    return _int(value)
+    return -1 if value is None else _int(value, context)
 
 
-def _publish(fields: PythonObject, room: List[List[Float32]], count: Int, d: Int, noise: Float64,
-             context: PythonObject) raises:
-    """`_publish`: the public arrays at the kept count, from the driver's
-    room (components, singular, mean, var, explained variance, ratio)."""
-    var components = _f32(Python.tuple(count, d), context)
-    var singular = _f32(Python.tuple(count), context)
-    var mean = _f32(Python.tuple(d), context)
-    var var_ = _f32(Python.tuple(d), context)
-    var variance = _f32(Python.tuple(count), context)
-    var ratio = _f32(Python.tuple(count), context)
-    var outs = [components, singular, mean, var_, variance, ratio]
-    var sizes = [count * d, count, d, d, count, count]
-    for k in range(6):  # driver-loop: over the six published arrays
-        if sizes[k]:
-            memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(outs[k]))),
-                   src=F32P(unsafe_from_address=Int(room[k].unsafe_ptr())), count=sizes[k])
+def _copy_output(dst: PythonObject, values: List[Float32], count: Int) raises:
+    if count:
+        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(dst))),
+               src=F32P(unsafe_from_address=Int(values.unsafe_ptr())), count=count)
+    _ = values
+    _ = dst
+
+
+def _publish(fields: PythonObject, room: IPCAOutputRoom, count: Int, features: Int,
+             noise: Float64, context: PythonObject) raises:
+    # Keep all six allocations, prefix copies and public writes in their
+    # original order. Only the shape/size envelopes are native now.
+    var components = _f32(count, features, context)
+    var singular = _f32(count, 0, context, True)
+    var mean = _f32(features, 0, context, True)
+    var variance = _f32(features, 0, context, True)
+    var explained = _f32(count, 0, context, True)
+    var ratio = _f32(count, 0, context, True)
+    _copy_output(components, room.values[0], count * features)
+    _copy_output(singular, room.values[1], count)
+    _copy_output(mean, room.values[2], features)
+    _copy_output(variance, room.values[3], features)
+    _copy_output(explained, room.values[4], count)
+    _copy_output(ratio, room.values[5], count)
     py_setitem(fields, "components_", components)
     py_setitem(fields, "singular_values_", singular)
     py_setitem(fields, "mean_", mean)
-    py_setitem(fields, "var_", var_)
-    py_setitem(fields, "explained_variance_", variance)
+    py_setitem(fields, "var_", variance)
+    py_setitem(fields, "explained_variance_", explained)
     py_setitem(fields, "explained_variance_ratio_", ratio)
     py_setitem(fields, "noise_variance_", PythonObject(noise))
+    _ = room
 
 
-# RESIDENT RUNNING STATE (lane ne1-a-decomp-resident, row N310). On a GPU
-# x_decomp binding the driver keeps the state it publishes on the device
-# (x_decomp/ipca_owner.mojo `keep`) and this owner records the five pool ids
-# in the model's decomp resident record (bindings/decomp_kit_native.mojo
-# `decomp_resident_adopt`: outside the model's __dict__, keyed by the model,
-# its generation word and each published Array, which is made read-only).
-# The next partial_fit reads the previous state from them and transform /
-# inverse_transform read components_, mean_ and explained_variance_ from
-# them, so only X crosses to the device; a state array the caller replaced
-# or that cannot be frozen is uploaded per call, as before. The host arrays
-# are still published every call (the public attributes are plain fields:
-# a lazy publish needs a native attribute hook, not settled without a
-# compile). Same words, same routes: no bit change.
-
-#: The state words' attribute names, in x_decomp/ipca_owner.mojo's
-#: IPCA_STATE_WORDS layout (components, singular values, mean, var,
-#: explained variance).
-comptime _IPCA_STATE_COUNT = 5
-
-
-def _state_name(k: Int) -> String:
-    if k == 0:
+def _state_name(index: Int) -> String:
+    if index == 0:
         return "components_"
-    if k == 1:
+    if index == 1:
         return "singular_values_"
-    if k == 2:
+    if index == 2:
         return "mean_"
-    if k == 3:
+    if index == 3:
         return "var_"
     return "explained_variance_"
 
 
-def _adopt_state(model: PythonObject, fields: PythonObject, entries: PythonObject, got: PythonObject,
-                 count: Int, d: Int) raises:
-    """Record the state the driver kept (got[2:7], its pool ids) against the
-    arrays just published; a buffer that cannot be recorded is returned."""
-    if len(got) != 2 + _IPCA_STATE_COUNT:
-        return
-    for k in range(_IPCA_STATE_COUNT):  # driver-loop: over the five state arrays
-        var rows = count if k == 0 else 1
-        var cols = d if (k == 0 or k == 2 or k == 3) else count
-        try:
-            _ = decomp_resident_adopt(model, entries, fields[PythonObject(_state_name(k))], _state_name(k), rows,
-                                      cols, Int(py=got[2 + k]))
-        except error:
-            # adopt returned buffer k itself; the ones not reached go too
-            for j in range(k + 1, _IPCA_STATE_COUNT):  # driver-loop: over the remaining state buffers
-                var handle = Int(py=got[2 + j])
-                if handle >= 0:
-                    _ = py_call(entries["x_decomp_dev_free"], handle)
-            raise error^
+def _state_field(fields: PythonObject, index: Int) raises -> PythonObject:
+    # Resident preparation and stale-owner release may relinquish the GIL.
+    # Re-admit live dictionary keys before the next public-field probe.
+    lifecycle_admit_fields(fields)
+    return fields[PythonObject(_state_name(index))]
 
 
-def _free_kept(entries: PythonObject, got: PythonObject) raises:
-    # A publish failed after the driver kept the state: its buffers go back.
-    if len(got) != 2 + _IPCA_STATE_COUNT:
+def _free_kept(connection: Int, mut result: IPCAFitResult) raises:
+    if not result.kept:
         return
-    for k in range(_IPCA_STATE_COUNT):  # driver-loop: over the five state buffers
-        var handle = Int(py=got[2 + k])
+    for k in range(5):  # driver-loop: five returned resident handles
+        var handle = result.state.values[k]
+        result.state.values[k] = -1
         if handle >= 0:
-            _ = py_call(entries["x_decomp_dev_free"], handle)
+            ipca_run_free(connection, handle)
+    result.kept = False
 
 
-def _room(d: Int) -> List[List[Float32]]:
-    # The driver's outputs at the widest kept count (d components).
-    var room = List[List[Float32]]()
-    room.append(List[Float32](length=max(d * d, 1), fill=Float32(0)))
-    for _ in range(5):  # driver-loop: over the five vector outputs
-        room.append(List[Float32](length=max(d, 1), fill=Float32(0)))
-    return room^
+def _adopt_state(model: PythonObject, fields: PythonObject, connection: Int,
+                 mut result: IPCAFitResult, features: Int) raises:
+    if not result.kept:
+        return
+    for k in range(5):  # driver-loop: five returned resident buffers
+        var rows = result.count if k == 0 else 1
+        var cols = features if (k == 0 or k == 2 or k == 3) else result.count
+        try:
+            var source = _state_field(fields, k)
+            var handle = result.state.values[k]
+            result.state.values[k] = -1
+            # The callee takes this handle even if packing the owner fails.
+            ipca_owner_adopt(model, connection, source, k, rows, cols, handle)
+        except error:
+            _free_kept(connection, result)
+            raise error^
+    result.kept = False
 
 
-def _room_addresses(room: List[List[Float32]], params: PythonObject) raises:
-    for k in range(6):  # driver-loop: over the six driver outputs
-        _ = py_call(params.append, PythonObject(Int(room[k].unsafe_ptr())))
-
-
-def ipca_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`IncrementalPCA.fit`; returns the converted X (kept for fit_transform)."""
-    var fields = py_fields(model)
-    # A new state replaces the old: its device copies go now (N310).
-    decomp_resident_drop(model)
-    _set_mode(fields, context)
-    var names = Python.list("components_", "n_samples_seen_")
-    for k in range(2):  # driver-loop: drops two fitted attribute names
-        if py_contains(fields, names[k]):
-            _ = py_call(fields.pop, names[k])
-    var x = decomp_input(source, "IncrementalPCA", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    var batch = fields["batch_size"]
-    var batch_size = 5 * d if batch is None else _int(batch)
-    py_setitem(fields, "batch_size_", PythonObject(batch_size))
-    var requested = _requested(fields)
-    var entries = _entries(model, fields, context)
-    var room = _room(d)
-    var params = Python.list(classical_address(x), n, d, requested, batch_size)
-    _ = x  # keep the Python object alive through the native call above
-    _room_addresses(room, params)
-    _ = room  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var resident = decomp_resident_binding(entries)
-    if resident:
-        _ = py_call(params.append, 1)  # keep the final state on the device (N310)
-    var got = py_call_typed(entries["x_decomp_ipca_fit"], params)
-    _ = x  # keep the Python object alive through the native call above
-    var count = Int(py=got[0])
+def _finish_fit(model: PythonObject, fields: PythonObject, connection: Int,
+                room: IPCAOutputRoom, mut result: IPCAFitResult, seen: Int,
+                features: Int, context: PythonObject) raises:
     try:
-        py_setitem(fields, "n_samples_seen_", PythonObject(n))
-        py_setitem(fields, "n_components_", PythonObject(count))
-        py_setitem(fields, "n_features_in_", PythonObject(d))
-        _publish(fields, room, count, d, Float64(py=got[1]), context)
+        lifecycle_admit_fields(fields)
+        py_setitem(fields, "n_samples_seen_", PythonObject(seen))
+        py_setitem(fields, "n_components_", PythonObject(result.count))
+        py_setitem(fields, "n_features_in_", PythonObject(features))
+        _publish(fields, room, result.count, features, result.noise, context)
     except error:
-        _free_kept(entries, got)
+        _free_kept(connection, result)
         raise error^
-    _adopt_state(model, fields, entries, got, count, d)
-    _ = room^
-    return x
+    _adopt_state(model, fields, connection, result, features)
+
+
+def ipca_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> AdmittedX:
+    var fields = py_fields(model)
+    ipca_owner_drop(model)
+    _set_mode(fields, context)
+    if py_contains(fields, "components_"):
+        _ = py_call(fields.pop, "components_")
+    if py_contains(fields, "n_samples_seen_"):
+        _ = py_call(fields.pop, "n_samples_seen_")
+    var x = decomp_admit(source, "IncrementalPCA", context)
+    lifecycle_admit_fields(fields)
+    var batch = fields["batch_size"]
+    var batch_size = 5 * x.cols if batch is None else _int(batch, context)
+    py_setitem(fields, "batch_size_", PythonObject(batch_size))
+    var requested = _requested(fields, context)
+    var connection = ipca_connection(model, fields, context)
+    var room = IPCAOutputRoom(x.cols)
+    var request = IPCAFitRequest(x.address, x.rows, x.cols, requested, batch_size,
+        room.outputs(), ipca_resident(connection))
+    try:
+        var result = ipca_run_fit(connection, request)
+        _finish_fit(model, fields, connection, room, result, x.rows, x.cols, context)
+    finally:
+        _ = x
+        _ = room
+    return x^
 
 
 def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`IncrementalPCA.partial_fit`: one more batch on the published state."""
     var fields = py_fields(model)
     if not py_contains(fields, "numeric_mode_"):
         _set_mode(fields, context)
-    var x = decomp_input(source, "IncrementalPCA", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
+    var x = decomp_admit(source, "IncrementalPCA", context)
+    lifecycle_admit_fields(fields)
     var seen_value = py_get(fields, "n_samples_seen_")
-    var seen = 0 if seen_value is None else _int(seen_value)
-    var entries = _entries(model, fields, context)
-    var room = _room(d)
-    var params = Python.list(classical_address(x), n, d, _requested(fields), seen)
-    _ = x  # keep the Python object alive through the native call above
-    # the running state (`components_m_`, ...) is the published arrays' words
-    var state = Python.list()
-    var prev_count = 0
-    var prev_d = d
-    var resident = decomp_resident_binding(entries)
-    # The previous state's device copies (N310): pool ids, -1 for one that
-    # is not resident; `held` keeps their record entries alive through the
-    # call (the new state replaces them in the record after it).
-    var state_ids = List[Int](length=_IPCA_STATE_COUNT, fill=-1)
-    var held = Python.list()
+    var seen = 0 if seen_value is None else _int(seen_value, context)
+    var connection = ipca_connection(model, fields, context)
+    var room = IPCAOutputRoom(x.cols)
+    var requested = _requested(fields, context)
+    var state = List[AdmittedX]()
+    var held = List[PythonObject]()
+    var previous_count = 0
+    var previous_features = x.cols
+    var resident = ipca_resident(connection)
+    var ids = IPCAStateIds()
+    var dummy = room.outputs().components
+    var addresses: InlineArray[Int, 4] = [dummy, dummy, dummy, dummy]
     if seen > 0:
-        var components = admit_x(_attr(model, fields, "components_"), 2, "components_", context)
-        prev_count = Int(py=components.shape[0])
-        prev_d = Int(py=components.shape[1])
-        _ = py_call(state.append, components)
-        _ = py_call(state.append, admit_x(_attr(model, fields, "singular_values_"), 1, "singular_values_", context))
-        _ = py_call(state.append, admit_x(_attr(model, fields, "mean_"), 1, "mean_", context))
-        _ = py_call(state.append, admit_x(_attr(model, fields, "var_"), 1, "var_", context))
-        if resident:
-            for k in range(4):  # driver-loop: over the four state arrays a step reads
-                var stored = fields[PythonObject(_state_name(k))]
-                if state[k] is stored:
-                    # This fitting call's lifecycle already wrote the instance
-                    # dictionary: the state is proven by its identity and the
-                    # read-only rule (decomp_resident_find).
-                    var entry = decomp_resident_cached(model, entries, stored, _state_name(k), False)
-                    if entry is not None:
-                        state_ids[k] = Int(py=entry[5])
-                        _ = py_call(held.append, entry)
-    _ = py_call(params.append, prev_count)
-    _ = x  # keep the Python object alive through the native call above
-    _ = py_call(params.append, prev_d)
-    _ = x  # keep the Python object alive through the native call above
-    for k in range(4):  # driver-loop: over the four state arrays (unread for the first batch)
-        _ = py_call(params.append, classical_address(state[k]) if seen > 0 else PythonObject(Int(room[0].unsafe_ptr())))
-        _ = x  # keep the Python object alive through the native call above
-    _room_addresses(room, params)
-    _ = room  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    if resident:
-        for k in range(_IPCA_STATE_COUNT):  # driver-loop: over the five state words
-            _ = py_call(params.append, state_ids[k])
-        _ = py_call(params.append, 1)  # keep the new state on the device
-    var got = py_call_typed(entries["x_decomp_ipca_partial"], params)
-    _ = x  # keep the Python object alive through the native call above
-    _ = state^
-    _ = held  # the previous state's device copies outlive the native call above
-    var count = Int(py=got[0])
+        var components = admit_f32(_attr(model, fields, "components_"), 2, "components_", context)
+        previous_count = components.rows
+        previous_features = components.cols
+        state.append(components^)
+        state.append(admit_f32(_attr(model, fields, "singular_values_"), 1, "singular_values_", context))
+        state.append(admit_f32(_attr(model, fields, "mean_"), 1, "mean_", context))
+        state.append(admit_f32(_attr(model, fields, "var_"), 1, "var_", context))
+        for k in range(4):  # driver-loop: four admitted prior-state buffers
+            addresses[k] = state[k].address
+            if resident and state[k].array is _state_field(fields, k):
+                var owner = ipca_owner_cached(model, connection, state[k].array, k, False)
+                if owner is not None:
+                    ids.values[k] = ipca_owner_handle(owner)
+                    held.append(owner)
+    var request = IPCAPartialRequest(x.address, x.rows, x.cols, requested, seen,
+        previous_count, previous_features, IPCAPrevious(addresses[0], addresses[1], addresses[2], addresses[3]),
+        room.outputs(), resident, ids^, resident)
     try:
-        py_setitem(fields, "n_samples_seen_", PythonObject(seen + n))
-        py_setitem(fields, "n_components_", PythonObject(count))
-        py_setitem(fields, "n_features_in_", PythonObject(d))
-        _publish(fields, room, count, d, Float64(py=got[1]), context)
-    except error:
-        _free_kept(entries, got)
-        raise error^
-    _adopt_state(model, fields, entries, got, count, d)
-    _ = held^
-    _ = room^
-    _ = x^
+        var result = ipca_run_partial(connection, request)
+        _finish_fit(model, fields, connection, room, result, seen + x.rows, x.cols, context)
+    finally:
+        # Older residents stay alive through adoption of every new owner.
+        _ = held
+        _ = state
+        _ = room
+        _ = x
     return model
 
 
@@ -337,56 +245,55 @@ def _check(model: PythonObject, fields: PythonObject) raises:
         raise Error("RuntimeError: " + String(py_type(model).__name__) + " is not fitted; call fit first")
 
 
-def _project(model: PythonObject, fields: PythonObject, x: PythonObject, inverse: Bool,
+def _project(model: PythonObject, fields: PythonObject, x: AdmittedX, inverse: Bool,
              context: PythonObject) raises -> PythonObject:
-    """transform (X n x d) or inverse_transform (Y n x n_components) on the
-    published components, mean and explained variance."""
-    var entries = _entries(model, fields, context)
-    var n = Int(py=x.shape[0])
-    var width = Int(py=x.shape[1])
-    var components = admit_x(fields["components_"], 2, "components_", context)
-    var nc = Int(py=components.shape[0])
-    var d = Int(py=components.shape[1])
+    lifecycle_admit_fields(fields)
+    var connection = ipca_connection(model, fields, context)
+    var components = admit_f32(fields["components_"], 2, "components_", context)
+    var count = components.rows
+    var features = components.cols
     if not inverse:
-        var fitted = _int(_attr(model, fields, "n_features_in_"))
-        if width != fitted:
-            raise Error("X has " + String(width) + " features, but IncrementalPCA is expecting " + String(fitted))
-    elif width != nc:
-        raise Error("x_decomp: gemm inner dimensions " + String(width) + " and " + String(nc) + " differ")
-    var mean = admit_x(_attr(model, fields, "mean_"), 1, "mean_", context)
-    var variance = admit_x(_attr(model, fields, "explained_variance_"), 1, "explained_variance_", context)
-    var out = _f32(Python.tuple(n, d if inverse else nc), context)
-    var whiten = Bool(py=_attr(model, fields, "whiten"))
-    var params = Python.list(
-        1 if inverse else 0, classical_address(x), n, d, nc, classical_address(mean), classical_address(components),
-        classical_address(variance), 1 if whiten else 0, classical_address(out))
-    # The state's device copies (N310): the ones the last fit kept, or one
-    # upload per fitted state; only for the stored arrays themselves (a
-    # converted copy is a new object per call) and the variance only when
-    # whitening reads it.
-    var held = Python.list()
-    if decomp_resident_binding(entries):
-        var converted = [components, PythonObject(None), mean, PythonObject(None), variance]
-        var rows = [nc, 0, 1, 0, 1]
-        var cols = [d, 0, d, 0, nc]
-        for k in range(_IPCA_STATE_COUNT):  # driver-loop: over the five state words
-            var pool_id = -1
-            if (k == 0 or k == 2 or (k == 4 and whiten)) and converted[k] is fields[PythonObject(_state_name(k))]:
-                var entry = decomp_resident_operand(model, entries, converted[k], _state_name(k), rows[k], cols[k])
-                if entry is not None:
-                    pool_id = Int(py=entry[5])
-                    _ = py_call(held.append, entry)
-            _ = py_call(params.append, pool_id)
-    _ = py_call_typed(entries["x_decomp_ipca_project"], params)
-    _ = held  # the device copies outlive the native call above
-    _ = mean  # keep the Python object alive through the native call above
-    _ = components  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = variance  # keep the Python object alive through the native call above
-    _ = components^
-    _ = mean^
-    _ = variance^
-    return out
+        var fitted = _int(_attr(model, fields, "n_features_in_"), context)
+        if x.cols != fitted:
+            raise Error("X has " + String(x.cols) + " features, but IncrementalPCA is expecting " + String(fitted))
+    elif x.cols != count:
+        raise Error("x_decomp: gemm inner dimensions " + String(x.cols) + " and " + String(count) + " differ")
+    var mean = admit_f32(_attr(model, fields, "mean_"), 1, "mean_", context)
+    var variance = admit_f32(_attr(model, fields, "explained_variance_"), 1, "explained_variance_", context)
+    var dst = _f32(x.rows, features if inverse else count, context)
+    var whiten = _truth(_attr(model, fields, "whiten"), context)
+    var held = List[PythonObject]()
+    var ids = IPCAStateIds()
+    var resident = ipca_resident(connection)
+    if resident:
+        # Only these three stored arrays are read by a query; borrowed and
+        # converted storage keeps the original per-call upload path.
+        if components.array is _state_field(fields, 0):
+            var owner = ipca_owner_operand(model, connection, components.array, 0, count, features, components.address)
+            if owner is not None:
+                ids.values[0] = ipca_owner_handle(owner)
+                held.append(owner)
+        if mean.array is _state_field(fields, 2):
+            var owner = ipca_owner_operand(model, connection, mean.array, 2, 1, features, mean.address)
+            if owner is not None:
+                ids.values[2] = ipca_owner_handle(owner)
+                held.append(owner)
+        if whiten and variance.array is _state_field(fields, 4):
+            var owner = ipca_owner_operand(model, connection, variance.array, 4, 1, count, variance.address)
+            if owner is not None:
+                ids.values[4] = ipca_owner_handle(owner)
+                held.append(owner)
+    var request = IPCAQueryRequest(x.address, x.rows, features, count, mean.address, components.address,
+        variance.address, Int(py=classical_address(dst)), inverse, whiten, resident, ids^)
+    try:
+        ipca_run_query(connection, request)
+    finally:
+        _ = held
+        _ = x
+        _ = components
+        _ = mean
+        _ = variance
+    return dst
 
 
 def _ipca_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -395,18 +302,17 @@ def _ipca_dispatch(model: PythonObject, operation: String, args: PythonObject, c
         _ = ipca_fit(model, args[0], context)
         result = model
     elif operation == "fit_transform":
-        # the transform projects the X the fit converted: one conversion
         var x = ipca_fit(model, args[0], context)
         result = _project(model, py_fields(model), x, False, context)
-        _ = x^
+        _ = x
     elif operation == "partial_fit":
         result = ipca_partial_fit(model, args[0], context)
     elif operation == "transform" or operation == "inverse_transform":
         var fields = py_fields(model)
         _check(model, fields)
-        var x = decomp_input(args[0], "IncrementalPCA", context)
+        var x = decomp_admit(args[0], "IncrementalPCA", context)
         result = _project(model, fields, x, operation == "inverse_transform", context)
-        _ = x^
+        _ = x
     else:
         raise Error("unknown private IncrementalPCA operation")
     return result

@@ -10,19 +10,24 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hierarchy.cluster_descriptor_host import HIERARCHY_CLUSTER_HOST_API
+from x_cluster.variants_host import KMEANS_VARIANTS_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
-from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_cluster.entries import run_entry
-from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
+from x_cluster.host.execution import cluster_host_execute
+from x_cluster.host.host_ops import X_CLUSTER_HOST_SABOTAGE
 from x_cluster.out import ClusterOut
 from providers.python.x_cluster_out_pyapi import cluster_out_to_py, py_floats, py_ints
 
 
 def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
     var api = HIERARCHY_CLUSTER_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def kmeans_variants_native_api_v1_binding() raises -> PythonObject:
+    var api = KMEANS_VARIANTS_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -33,15 +38,16 @@ def call_binding(
     var w = Int(py=which)
     var nx = Int(py=x_len)
     var na = Int(py=a_len)
-    var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
-    var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
+    var source = Int(py=x_addr) if nx > 0 else 0
+    var auxiliary = Int(py=a_addr) if na > 0 else 0
     var ints = py_ints(ip)
     var floats = py_floats(fp)
-    var res = ClusterOut()
+    var result = ClusterOut()
     with GILReleased(Python()):
-        var ops = HostOps()
-        res = run_entry(ops, w, x, a, ints, floats)
-    return cluster_out_to_py(res)
+        result = cluster_host_execute(w, source, nx, auxiliary, na, ints, floats)
+    _ = ints^
+    _ = floats^
+    return cluster_out_to_py(result)
 
 
 def x_cluster_host_numeric_mode_binding() raises -> PythonObject:
@@ -86,6 +92,7 @@ def build__mojolearn_x_cluster_host() -> PythonObject:
         m.def_function[x_cluster_host_sabotage_binding]("x_cluster_host_sabotage")
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[hierarchy_cluster_native_api_v1_binding]("hierarchy_cluster_native_api_v1")
+        m.def_function[kmeans_variants_native_api_v1_binding]("kmeans_variants_native_api_v1")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[vendor_binding]("x_cluster_vendor")
         # TOMBSTONE: x_cluster_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by 15b81c461; code recoverable at a88745022.

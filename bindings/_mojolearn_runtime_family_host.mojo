@@ -5,7 +5,7 @@
 # registered under the same names. bindings/_mojolearn_tokenizer_host.mojo keeps a native refusal under each
 # name, and import setup replaces it with this module's entry (python/mojolearn/host_surface.py
 # HOST_IMPORT_ALIASES). Existing shared Python types stay registered by their
-# prior owners; the KMeans resident type is registered once in this family owner.
+# prior owners; KMeans and density boundary owners are registered once in this family owner.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -18,7 +18,15 @@ from std.sys.compile import is_defined
 from bindings.classical_family_door import classical_family_c
 from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
-from bindings.kmeans_owner_boundary import KMeansResidentOwner
+from bindings.gp_resident_boundary import GPPreparedLease
+from bindings.gp_kernel_storage_boundary import GPPackedKernel
+from bindings.gp_kernel_cache_boundary import GPPreparedKernel
+from bindings.kmeans_owner_boundary import KMeansResidentOwner, kmeans_resident_owner_pins
+from bindings.kde_native_boundary import KDEResidentOwner, kde_resident_owner_pins
+from bindings.dbscan_native_boundary import DBSCANReferenceOwner, DBSCANHolder, dbscan_reference_owner_pins, dbscan_holder_pins
+from bindings.native_owner_registry import register_native_owner
+from bindings.agglo_native_boundary import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
+from bindings.kde_admission_boundary import KDEAdmissionOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -53,10 +61,130 @@ def register_kmeans_resident_owner(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[KMeansResidentOwner].name())):
             raise error
         _ = module.add_type[KMeansResidentOwner]("_KMeansResidentOwner")
+        register_native_owner(lookup_py_type_object[KMeansResidentOwner](), module.module, kmeans_resident_owner_pins)
         return
     # The same initializer can be reached through both package namespaces.
     # Attach the canonical type; never create a second native Python type.
     py_type_attach(module.module, "_KMeansResidentOwner", existing)
+    register_native_owner(existing, module.module, kmeans_resident_owner_pins)
+
+
+
+def register_KDEResidentOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[KDEResidentOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[KDEResidentOwner].name())):
+            raise error
+        _ = module.add_type[KDEResidentOwner]("_KDEResidentOwner")
+        register_native_owner(lookup_py_type_object[KDEResidentOwner](), module.module, kde_resident_owner_pins)
+        return
+    py_type_attach(module.module, "_KDEResidentOwner", existing)
+    register_native_owner(existing, module.module, kde_resident_owner_pins)
+
+
+def register_KDEAdmissionOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[KDEAdmissionOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[KDEAdmissionOwner].name())):
+            raise error
+        _ = module.add_type[KDEAdmissionOwner]("_KDEAdmissionOwner")
+        return
+    py_type_attach(module.module, "_KDEAdmissionOwner", existing)
+
+
+def register_DBSCANReferenceOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[DBSCANReferenceOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[DBSCANReferenceOwner].name())):
+            raise error
+        _ = module.add_type[DBSCANReferenceOwner]("_DBSCANReferenceOwner")
+        register_native_owner(lookup_py_type_object[DBSCANReferenceOwner](), module.module, dbscan_reference_owner_pins)
+        return
+    py_type_attach(module.module, "_DBSCANReferenceOwner", existing)
+    register_native_owner(existing, module.module, dbscan_reference_owner_pins)
+
+
+def register_DBSCANHolder(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[DBSCANHolder]()
+    except error:
+        if not py_type_absent(error, String(reflect[DBSCANHolder].name())):
+            raise error
+        _ = module.add_type[DBSCANHolder]("_DBSCANHolder")
+        register_native_owner(lookup_py_type_object[DBSCANHolder](), module.module, dbscan_holder_pins)
+        return
+    py_type_attach(module.module, "_DBSCANHolder", existing)
+    register_native_owner(existing, module.module, dbscan_holder_pins)
+
+def register_AggloReferenceOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[AggloReferenceOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[AggloReferenceOwner].name())):
+            raise error
+        _ = module.add_type[AggloReferenceOwner]("_AggloReferenceOwner")
+        register_native_owner(lookup_py_type_object[AggloReferenceOwner](), module.module, agglo_reference_owner_pins)
+        return
+    py_type_attach(module.module, "_AggloReferenceOwner", existing)
+    register_native_owner(existing, module.module, agglo_reference_owner_pins)
+
+
+def register_AggloHolder(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[AggloHolder]()
+    except error:
+        if not py_type_absent(error, String(reflect[AggloHolder].name())):
+            raise error
+        _ = module.add_type[AggloHolder]("_AggloHolder")
+        register_native_owner(lookup_py_type_object[AggloHolder](), module.module, agglo_holder_pins)
+        return
+    py_type_attach(module.module, "_AggloHolder", existing)
+    register_native_owner(existing, module.module, agglo_holder_pins)
+
+
+def register_GPPreparedLease(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[GPPreparedLease]()
+    except error:
+        if not py_type_absent(error, String(reflect[GPPreparedLease].name())):
+            raise error
+        _ = module.add_type[GPPreparedLease]("_GPPreparedLease")
+        return
+    py_type_attach(module.module, "_GPPreparedLease", existing)
+
+
+def register_GPPackedKernel(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[GPPackedKernel]()
+    except error:
+        if not py_type_absent(error, String(reflect[GPPackedKernel].name())):
+            raise error
+        _ = module.add_type[GPPackedKernel]("_GPPackedKernel")
+        return
+    py_type_attach(module.module, "_GPPackedKernel", existing)
+
+
+def register_GPPreparedKernel(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[GPPreparedKernel]()
+    except error:
+        if not py_type_absent(error, String(reflect[GPPreparedKernel].name())):
+            raise error
+        _ = module.add_type[GPPreparedKernel]("_GPPreparedKernel")
+        return
+    py_type_attach(module.module, "_GPPreparedKernel", existing)
 
 
 def build__mojolearn_runtime_family_host() -> PythonObject:
@@ -64,6 +192,15 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_family_host")
         register_kmeans_resident_owner(module)
+        register_KDEResidentOwner(module)
+        register_KDEAdmissionOwner(module)
+        register_GPPreparedLease(module)
+        register_GPPackedKernel(module)
+        register_GPPreparedKernel(module)
+        register_DBSCANReferenceOwner(module)
+        register_DBSCANHolder(module)
+        register_AggloReferenceOwner(module)
+        register_AggloHolder(module)
         module.def_py_c_function(classical_family_c, "family_native_call")
         module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")

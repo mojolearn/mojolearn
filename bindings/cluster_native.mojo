@@ -10,6 +10,7 @@
 # Arrays' stores (no second copy). Same entry, same inputs: the bits do not
 # move. The fits of these classes are bindings/cluster_fit_a_native.mojo's.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_arrays import (
@@ -18,18 +19,30 @@ from bindings.classical_arrays import (
 from core.admitted_weights import admitted_fill
 from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
+from bindings.host_inference_scalars import host_inference_scalar
+from bindings.agglo_native_boundary import agglo_reference_labels, agglo_scalar_repr, agglo_hash_admitted
+from core.agglo_native_state import agglo_metric_code
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
-from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store
+from bindings.cluster_resident_table import (
+    CRES_X_CLUSTER, cres_lookup, cres_store, cres_variant_lookup, cres_variant_store,
+)
+from bindings.kmeans_variants_boundary import (
+    variants_connection, variants_span, variants_pack_f32, variants_pack_i32,
+)
+from bindings.kmeans_variants_resident_boundary import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
+from bindings.native_buffer_address import native_buffer_address
+from core.kmeans_variants_api import (
+    VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectPredictRequest, VARIANTS_CAP_RESIDENT,
+)
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_nonfinite,
     family_shape_repr,
 )
 
 comptime _E_NEAREST = 0
-comptime _E_DISTANCES = 1
-comptime _E_BISECT_PREDICT = 4
 # The query kinds of the GPU binding's `x_cluster_resident_query`
 # (x_cluster/resident.mojo XC_RES_*).
 comptime _XC_RES_PREDICT = 0
@@ -201,6 +214,77 @@ def _xc_nearest(model: PythonObject, binding: PythonObject, x: PythonObject, cen
     return _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
 
 
+def _variant_resident(model: PythonObject, binding: PythonObject, centers: PythonObject,
+                      features: Int, context: PythonObject) raises -> Optional[VariantsResidentLease]:
+    if not fitted_is_freezable(centers, context):
+        return None
+    if not _xc_f32_ready(centers, context) or Int(py=centers.shape[1]) != features:
+        return None
+    var clusters = Int(py=centers.shape[0])
+    var dims: List[Int] = [clusters, features]
+    var connection = variants_connection(binding)
+    var held = cres_variant_lookup(model, binding, centers, connection.provider, dims)
+    if held:
+        return held^
+    if (connection.capabilities & VARIANTS_CAP_RESIDENT) == 0:
+        return None
+    _ = fitted_freeze(centers, context)
+    var lease = variants_resident_prepare(connection.driver, connection.provider, centers,
+        Int(py=classical_address(centers)), clusters, features)
+    # Table and caller each own a lease. Eviction or concurrent replacement
+    # retires only the table's reference, never this active query's handle.
+    cres_variant_store(model, binding, dims^, lease.copy(), clusters * features * 4)
+    return lease^
+
+
+def _variant_query(model: PythonObject, binding: PythonObject, x: PythonObject,
+                   centers_field: PythonObject, kind: Int, context: PythonObject) raises -> PythonObject:
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var held = _variant_resident(model, binding, centers_field, d, context)
+    var result = VariantsResultSlot()
+    if held:
+        var k = Int(py=centers_field.shape[0])
+        var output = PythonObject(None)
+        if kind == _XC_RES_PREDICT:
+            output = family_array(Python.tuple(n), "<i4", context)
+        elif kind == _XC_RES_TRANSFORM:
+            output = family_array(Python.tuple(n, k), "<f4", context)
+        var address = 0 if output is None else Int(py=classical_address(output))
+        var source = variants_span(x)
+        var total = Float64(0)
+        try:
+            with GILReleased(Python()):
+                total = held.value().native[].driver.resident_query(held.value().native[].handle,
+                    kind, source.address, n, k, d, address, result)
+        finally:
+            variants_resident_retire(held.take())
+            _ = x
+            _ = output
+        return PythonObject(-total) if kind == _XC_RES_SCORE else output
+    var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
+    var k = Int(py=centers.shape[0])
+    var connection = variants_connection(binding)
+    var center_span = variants_span(centers)
+    var source_span = variants_span(x)
+    var request = VariantsQueryRequest(source_span, center_span, n, k, d, kind == _XC_RES_SCORE)
+    try:
+        with GILReleased(Python()):
+            connection.driver.query(request, kind == _XC_RES_TRANSFORM, result)
+    finally:
+        _ = connection.provider
+        _ = centers
+        _ = x
+    # Pack only the public result. The old nested result envelope also copied
+    # discarded distances/labels to Python for predict/score; those copies
+    # have no observable owner and are unnecessary with typed result fields.
+    if kind == _XC_RES_SCORE:
+        return PythonObject(-result.storage[0].inertia)
+    if kind == _XC_RES_TRANSFORM:
+        return _xc_array(variants_pack_f32(result.storage[0].distances), Python.tuple(n, k), "<f4", "f", context)
+    return _xc_array(variants_pack_i32(result.storage[0].labels), Python.tuple(n), "<i4", "i", context)
+
+
 def _reference_queries(source: PythonObject, n_features: Int, where: String, context: PythonObject) raises -> PythonObject:
     """`density._check_queries`: float32 C order, the fitted feature count,
     at least one row, every value finite."""
@@ -218,60 +302,6 @@ def _reference_queries(source: PythonObject, n_features: Int, where: String, con
     return q
 
 
-def _labeled_reference(binding: PythonObject, refs: PythonObject, keys: PythonObject, labels: PythonObject,
-                       q: PythonObject, n_refs: Int, n_features: Int, metric: Int, eps: PythonObject,
-                       has_thresh: Int, context: PythonObject) raises -> PythonObject:
-    """The binding's `labeled_reference_predict`: the label of the nearest
-    reference row (ORDER MATCHES bindings/_mojolearn_estimators.mojo::
-    labeled_reference_predict_binding)."""
-    var nq = Int(py=q.shape[0])
-    var out = family_array(Python.tuple(nq), "<i4", context)
-    var chosen = family_array(Python.tuple(nq), "<i4", context)
-    var entry = family_entry(binding, "labeled_reference_predict", context)
-    _ = family_call(entry, Python.list(classical_address(refs), classical_address(keys), classical_address(labels),
-                                       classical_address(q), classical_address(out), classical_address(chosen)),
-                    Python.list(PythonObject(n_refs), PythonObject(nq), PythonObject(n_features), PythonObject(metric),
-                                eps, PythonObject(has_thresh)))
-    _ = chosen  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = chosen^
-    return out
-
-
-def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
-                    context: PythonObject) raises -> PythonObject:
-    """`DBSCAN.predict`: the nearest core sample's label within eps."""
-    var b = native_loaded_module("builtins")
-    # Package-internal reads of the model's own fields skip the public
-    # attribute hook (bindings/perf2_shared_fitted_field.mojo).
-    var mods = NativeModules()
-    var absent = py_call(b.object)
-    if native_fitted_get(mods, model, "labels_", absent) is absent:
-        raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-    var components = native_fitted_get(mods, model, "components_", PythonObject(None))
-    if not Bool(py=py_call(b.bool, native_fitted_get(mods, model, "prediction_data"))) or components is None:
-        raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
-                    + "DBSCAN(prediction_data=True), which keeps the core samples this "
-                    + "rule needs (DEVIATION 2740)")
-    var n_features = Int(py=native_fitted_get(mods, model, "n_features_in_"))
-    var q = _reference_queries(source, n_features, "DBSCAN.predict", context)
-    var nq = Int(py=q.shape[0])
-    var n_core = Int(py=components.shape[0])
-    if n_core == 0:
-        var labels = family_array(Python.tuple(nq), "<i4", context)
-        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
-        _ = labels  # keep the Python object alive through the native call above
-        return labels
-    var metric_name = py_call(py_call(b.str, native_fitted_get(mods, model, "metric")).lower)
-    var metric = Int(py=context["family_dbscan_metrics"][metric_name])
-    var eps = family_call(b.float, native_fitted_get(mods, model, "eps"))
-    var result = _labeled_reference(binding, components, native_fitted_get(mods, model, "core_sample_indices_"),
-                                    native_fitted_get(mods, model, "_core_labels"), q, n_core, n_features,
-                                    metric, eps, 1, context)
-    _ = q^
-    return result
-
-
 def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`AgglomerativeClustering.predict`: the nearest training row's cluster
@@ -287,13 +317,16 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
                     + "fitted yet; call fit first")
     var linkage = native_fitted_get(mods, model, "linkage")
     var metric = native_fitted_get(mods, model, "metric")
+    host_inference_scalar(linkage, context, True)
+    host_inference_scalar(metric, context, True)
     # `_predicts`: single linkage under a euclidean metric name.
     var predicts = py_type(linkage) is b.str and String(linkage) == "single"
     if predicts:
-        predicts = Bool(py=family_call(native_loaded_module("operator").contains, context["family_agglo_predict_metrics"], metric))
+        agglo_hash_admitted(metric)
+        predicts = (agglo_metric_code(String(metric)) == -1) if Bool(py=py_call(b.isinstance, metric, b.str)) else False
     if not predicts:
-        raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: linkage=" + family_repr(linkage)
-                    + ", metric=" + family_repr(metric) + " has no predict rule; DEVIATION 2740 is single "
+        raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: linkage=" + agglo_scalar_repr(linkage, context)
+                    + ", metric=" + agglo_scalar_repr(metric, context) + " has no predict rule; DEVIATION 2740 is single "
                     + "linkage's own criterion (the nearest training row's cluster) under "
                     + "the euclidean metric only")
     var refs = native_fitted_get(mods, model, "_fit_X", PythonObject(None))
@@ -301,22 +334,18 @@ def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObj
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not "
                     + "stored. Fit with AgglomerativeClustering(prediction_data=True), "
                     + "which keeps the training rows this rule needs (DEVIATION 2740)")
-    var n_features = Int(py=native_fitted_get(mods, model, "n_features_in_"))
+    var feature_value = native_fitted_get(mods, model, "n_features_in_")
+    host_inference_scalar(feature_value, context)
+    var n_features = Int(py=feature_value)
     var q = _reference_queries(source, n_features, "AgglomerativeClustering.predict", context)
-    # The key of every training row is its label: ties go to the lowest
-    # cluster label, then the lowest training index.
-    var result = _labeled_reference(binding, refs, labels, labels, q, Int(py=refs.shape[0]), n_features, 0,
-                                    PythonObject(0.0), 0, context)
+    classical_admit_value(refs, context)
+    classical_admit_value(labels, context)
+    # Historical internal entry: retain direct uploads without minting a holder.
+    var result = agglo_reference_labels(py_fields(model), binding, refs, labels, q,
+        Int(py=classical_address(refs)), Int(py=classical_address(labels)), Int(py=classical_address(q)),
+        Int(py=refs.shape[0]), Int(py=q.shape[0]), n_features, context, False)
     _ = q^
     return result
-
-
-def family_as_i32_words(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The int32 words of a C-ordered int32 array as a list of ints
-    (`[int(v) for v in flat_bytes(value).cast("i")]`)."""
-    var store = py_call(context["array_type"], PythonObject("i"))
-    _ = py_call(store.frombytes, classical_c_bytes(value, "_tree_nodes", context))
-    return py_call(native_loaded_module("builtins").list, store)
 
 
 def cluster_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -327,59 +356,50 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     # One module handle for every fitted-field read of this call.
     var mods = NativeModules()
     var binding = args[0]
-    if operation == "family_xc_dbscan_predict":
-        return _dbscan_predict(model, binding, args[1], context)
     if operation == "family_xc_agglo_predict":
         return _agglo_predict(model, binding, args[1], context)
+    if (operation == "family_xc_variants_predict" or operation == "family_xc_variants_transform"
+            or operation == "family_xc_variants_score"
+            or operation == "family_xc_transform" or operation == "family_xc_score"):
+        var centers = _xc_fitted(mods, model, "cluster_centers_")
+        var x = _xc_input(mods, model, args[1], context)
+        var kind = _XC_RES_PREDICT if operation == "family_xc_variants_predict" else (
+            _XC_RES_TRANSFORM if (operation == "family_xc_variants_transform" or operation == "family_xc_transform") else _XC_RES_SCORE)
+        return _variant_query(model, binding, x, centers, kind, context)
     if operation == "family_xc_predict":
         var centers = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context)
         return _xc_nearest(model, binding, x, centers, context)
-    if operation == "family_xc_transform":
-        var centers_field = _xc_fitted(mods, model, "cluster_centers_")
-        var x = _xc_input(mods, model, args[1], context)
-        var n = Int(py=x.shape[0])
-        var d = Int(py=x.shape[1])
-        var held = _xc_resident(model, binding, centers_field, d, context)
-        if held is not None:
-            var k_res = Int(py=centers_field.shape[0])
-            var dist = family_array(Python.tuple(n, k_res), "<f4", context)
-            _ = _xc_resident_run(held, _XC_RES_TRANSFORM, x, k_res, dist)
-            return dist
-        var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
-        var k = Int(py=centers.shape[0])
-        var result = _xc_call(binding, _E_DISTANCES, x, centers,
-                              Python.list(PythonObject(n), PythonObject(k), PythonObject(d)), context)
-        _ = centers^
-        return _xc_array(result[0][0], Python.tuple(n, k), "<f4", "f", context)
-    if operation == "family_xc_score":
-        var centers_field = _xc_fitted(mods, model, "cluster_centers_")
-        var x = _xc_input(mods, model, args[1], context)
-        var n = Int(py=x.shape[0])
-        var d = Int(py=x.shape[1])
-        var held = _xc_resident(model, binding, centers_field, d, context)
-        if held is not None:
-            var total = _xc_resident_run(held, _XC_RES_SCORE, x, Int(py=centers_field.shape[0]), PythonObject(None))
-            return family_call(native_loaded_module("operator").neg, total)
-        var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
-        # the float-float fold of the distances, in the binding
-        var result = _xc_call(binding, _E_NEAREST, x, centers,
-                              Python.list(PythonObject(n), PythonObject(Int(py=centers.shape[0])), PythonObject(d),
-                                          PythonObject(1)), context)
-        _ = centers^
-        return family_call(native_loaded_module("operator").neg, result[2][0])
     if operation == "family_xc_bisect_predict":
         _ = _xc_fitted(mods, model, "cluster_centers_")
         var x = _xc_input(mods, model, args[1], context)
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         var fields = py_fields(model)
-        # [n, d] + the fitted bisection tree's node words.
-        var nodes = family_as_i32_words(fields["_tree_nodes"], context)
-        var ints = Python.list(PythonObject(n), PythonObject(d))
-        _ = py_call(ints.extend, nodes)
-        var result = _xc_call(binding, _E_BISECT_PREDICT, x, fields["_tree_centers"], ints, context)
-        return _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
+        var node_source = fields["_tree_nodes"]
+        # Preserve the existing raw C-order byte interpretation, including
+        # rebound storage. The extra array('i') and boxed Int list disappear.
+        var nodes = classical_c_bytes(node_source, "_tree_nodes", context)
+        var byte_count = len(nodes)
+        if byte_count % 4 != 0:
+            raise Error("ValueError: bytes length not a multiple of item size")
+        var centers = fields["_tree_centers"]
+        var connection = variants_connection(binding)
+        var center_span = variants_span(centers)
+        var source_span = variants_span(x)
+        var node_span = VariantsSpan(native_buffer_address(nodes) if byte_count else 0, byte_count // 4)
+        var request = BisectPredictRequest(source_span, center_span, node_span, n, d)
+        var result = VariantsResultSlot()
+        try:
+            with GILReleased(Python()):
+                connection.driver.bisect_predict(request, result)
+        finally:
+            _ = connection.provider
+            _ = node_source
+            _ = nodes
+            _ = centers
+            _ = x
+        return _xc_array(variants_pack_i32(result.storage[0].labels), Python.tuple(n), "<i4", "i", context)
     if operation == "family_xc_ap_predict":
         _ = _xc_fitted(mods, model, "labels_")
         var affinity = native_fitted_get(mods, model, "affinity")

@@ -304,9 +304,15 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support (decided
 2026-10-04; the parked AMD portable prototype is on `lane/amd-portable`). Do not hand-rewrite compiler output, patch
-toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. One authorized repair
-(owner, 2026-10-25): the native CPython dictionary API for instance-field lookup in `get_params` and public
-attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
+toolchain internals or ship unsupported build modes. Record the ask for Modular and move on. The authorized narrow
+exceptions are:
+
+- (Owner, 2026-10-25) The native CPython dictionary API for instance-field lookup in `get_params` and public
+  attribute access, recorded in `bindings/native_instance_item.mojo`; do not reopen it.
+- (Owner, 2026-11-10) Replace the IPCA tests' nested native buffer list with six named Mojo buffer fields to avoid
+  the confirmed compiler crash. This exception covers test storage only: preserve the numerical implementation,
+  input/reference bytes, assertions, tolerances and kernel calls. Retain the original standalone reproducer and
+  upstream report; it does not authorize other compiler workarounds or Python fallbacks.
 
 ### Framework adapters are the same API in another format (Andrew, 2026-10-24)
 
@@ -449,6 +455,19 @@ them for you.
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
 - `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
   Put `comptime assert` inside a function body, never at module scope.
+- Generic struct parameters used by static methods or initializers must be qualified as
+  `Self.E`, `Self.D`, `Self.RES` (and so on), including arguments to generic callees.
+- A Python-registered native owner with non-`Writable` state implements both `write_to` and
+  `write_repr_to`. Otherwise the binding derives repr through the state fields and fails compilation.
+- Construct a native list with a typed literal (`var values: List[Float32] = [1.0, 2.0]`),
+  keyword length/fill, or explicit appends. Positional `List[T](a, b, ...)` is not supported.
+  A one-element native shape uses `List[Int](length=1, fill=n)`; `List[Int](n)` is not a
+  one-element list. Never pass the compiler-internal `__list_literal__` keyword directly.
+- `PyObjectPtr` is an opaque CPython wrapper, not a `Pointer`; it has no
+  `unsafe_from_address` initializer. Native owner inspectors use
+  `borrowed_native_owner` in `bindings/native_owner_registry.mojo`, which uses
+  the supported `upcast_from=Optional(pointer)` constructor and retains the
+  borrowed Python reference. Keep the original owner pinned through inspection.
 
 ## Logs and context
 

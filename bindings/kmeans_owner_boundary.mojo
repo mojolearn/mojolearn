@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A native resident-center owner with boundary-only storage/image pins."""
 from std.python import Python, PythonObject
+from bindings.native_owner_registry import borrowed_native_owner
 from std.python._cpython import GILReleased, ExternalFunction, PyObjectPtr
 from core.shared_slot import SharedSlot
 from core.kmeans_owner_state import KMeansResidentState
@@ -56,6 +57,9 @@ struct KMeansResidentOwner(Movable, Writable):
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("KMeansResidentOwner(", self.state.clusters, ", ", self.state.features, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
 
 
 def kmeans_owner_matching(value: PythonObject, model: PythonObject,
@@ -133,3 +137,21 @@ def kmeans_owner_setstate(model: PythonObject, state: PythonObject) raises:
         var failure = stash_python_error()
         raise failure^
     py_setitem(fields, "_resident_holder", PythonObject(None))
+
+
+def kmeans_resident_owner_pins(value: Int, index: Int) abi("C") -> Int:
+    # Native registry inspection only; the caller retains the exact owner.
+    if value == 0 or index < -1 or index >= 2:
+        return -1
+    try:
+        var owner = borrowed_native_owner(value)
+        var native = owner.downcast_value_ptr[KMeansResidentOwner]()
+        var result = 2
+        if index == 0:
+            result = Int(native[].provider._obj_ptr)
+        elif index == 1:
+            result = Int(native[].centers._obj_ptr)
+        _ = owner
+        return result
+    except:
+        return -1

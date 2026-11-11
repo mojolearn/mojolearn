@@ -88,6 +88,24 @@ struct GPRGradientScratch(Movable):
         self.scalars = List[Float64](length=2, fill=0.0)
 
 
+@fieldwise_init
+struct GPRGradientResult(Movable):
+    var info: Int
+    var likelihood: Float64
+    var gradient: List[Float64]
+
+
+struct GPFreeParameters(Movable):
+    var flags: List[Int32]
+    var values: List[Float64]
+    var bounds: List[Float32]
+
+    def __init__(out self):
+        self.flags = List[Int32]()
+        self.values = List[Float64]()
+        self.bounds = List[Float32]()
+
+
 struct GPOptimizerScratch(Movable):
     var theta: List[Float64]
     var values: List[Float64]
@@ -121,3 +139,30 @@ struct GPCMemberTables(Movable):
     def prepare_scalars(mut self):
         for member in range(len(self.scalars)):  # driver-loop: one metadata entry per fitted OVR member
             self.scalars[member] = Int(self.scalar_storage.unsafe_ptr() + 3 * member)
+
+
+struct GPCQueryTables(Movable):
+    var targets: List[Int]
+    var pis: List[Int]
+    var wsrs: List[Int]
+    var factors: List[Int]
+
+    def __init__(out self, members: Int):
+        self.targets = List[Int](length=members, fill=0)
+        self.pis = List[Int](length=members, fill=0)
+        self.wsrs = List[Int](length=members, fill=0)
+        self.factors = List[Int](length=members, fill=0)
+
+
+struct GPCQueryScratch(Movable):
+    """Only unexposed query outputs; selected public/transport spans are external."""
+    var mean: List[Float32]
+    var variance: List[Float32]
+    var probability: List[Float64]
+
+    def __init__(out self, rows: Int, external: Int) raises:
+        if rows < 0 or external < 0 or external > 7:
+            raise Error("GP query scratch: invalid row count or external span mask")
+        self.mean = List[Float32](length=0 if (external & 1) != 0 else rows, fill=0)
+        self.variance = List[Float32](length=0 if (external & 2) != 0 else rows, fill=0)
+        self.probability = List[Float64](length=0 if (external & 4) != 0 else rows, fill=0)

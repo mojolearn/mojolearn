@@ -2174,6 +2174,7 @@ FAMILIES = (
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
+            "pca_native_api_v1", "tsvd_native_api_v1", "kde_native_api_v1", "dbscan_native_api_v1",
             "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
             # lane hr-small-passes (2026-10-02): the linear models' centering
             "lm_col_sums", "lm_center", "lm_scale_rows",
@@ -2318,6 +2319,7 @@ FAMILIES = (
         display="the standard and min-max scalers",
         host_modules=("preprocessing/host/scaler_oracle.mojo",),
         exports=(
+            "scaler_native_api_v1",
             "preprocessing_host_numeric_mode", "preprocessing_host_vendor",
             "preprocessing_host_column", "preprocessing_host_sabotage",
             "preprocessing_numeric_mode", "preprocessing_vendor",

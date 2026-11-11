@@ -57,7 +57,7 @@ from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
     gpc_validate, _gpc_fit_binary, _gpc_binary, _gpc_set_fitted, _gpc_latent, _gpc_ovr_combine,
 )
-from bindings.gp_common_native import gp_kernel_arrays
+from bindings.gp_common_native import gp_kernel_arrays_transport
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
@@ -372,7 +372,7 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     else:
         for k in range(len(classes)):  # driver-loop: over the one-vs-rest classes
             _ = py_call(columns.append, PythonObject(k))
-    var arrays = gp_kernel_arrays(work["_kernel"], context)
+    var arrays = gp_kernel_arrays_transport(work["_kernel"], context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
@@ -433,7 +433,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var out_kind = 0
     if n_classes == 2:
         out_kind = 2 if proba_method else 1
-    var arrays = gp_kernel_arrays(work["_kernel"], context)
+    var arrays = gp_kernel_arrays_transport(work["_kernel"], context)
     var carried = b.list()
     for i in range(len(arrays)):  # small-loop(the kernel's five packed arrays and words)
         _ = py_call(carried.append, arrays[i])
@@ -463,11 +463,14 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
         if proba_method:
             return columns[0]
         return gp_decode_labels(fields["classes_"], columns[0], _worker_binding("_mojolearn"), context)
-    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp"), columns, n_star, context)
+    var retained_columns = List[PythonObject]()
+    for i in range(len(columns)):  # driver-loop: unpack one returned worker column owner per class
+        retained_columns.append(columns[i])
+    var combined = _gpc_ovr_combine(_worker_binding("_mojolearn_gp"), retained_columns, n_star, context)
     if proba_method:
-        return combined[0]
+        return combined.probabilities
     # `codes32.astype("<i8")`: the exact widening
-    var codes32 = combined[1]
+    var codes32 = combined.codes
     var codes = shard_array("<i8", Python.tuple(n_star), n_star, context)
     _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
     _ = codes32  # keep the Python object alive through the native call above
@@ -1367,7 +1370,7 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         return family_call(entry, model, PythonObject("transform"), Python.tuple(args[0], args[1]), owner_context)
     if operation == "gpc_class_fit":
         var ext = _worker_binding("_mojolearn_gp")
-        var fit = _gpc_fit_binary(ext, args[0], args[1], state[0], state[1], args[2], context)
+        var fit = _gpc_fit_binary(ext, args[0], args[1], state[0], Int(py=state[1]), Int(py=args[2]), context)
         return shard_state(py_fields(fit), b.frozenset(), context)
     if operation == "gpc_class_predict":
         var ext = _worker_binding("_mojolearn_gp")
@@ -1377,10 +1380,10 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         var holder = b.dict()
         py_setitem(holder, "X_train_", state[1])
         var out_kind = Int(py=args[2])
-        var latent = _gpc_latent(ext, holder, fit, args[0], Bool(py=args[1]), out_kind, context, state[0])
+        var latent = _gpc_latent(ext, holder, fit, args[0], Bool(py=args[1]), out_kind, context, state[0], 4 if Bool(py=args[1]) else 1)
         if out_kind != 0:
-            return latent[3]
-        return latent[2] if Bool(py=args[1]) else latent[0]
+            return latent.output
+        return latent.probability if Bool(py=args[1]) else latent.mean
     if operation == "forest_fit":
         var model = shard_model(_t("forest_by_name")[state[0]], state[1])
         py_setitem(py_fields(model), "_has_constructor_parameters", True)

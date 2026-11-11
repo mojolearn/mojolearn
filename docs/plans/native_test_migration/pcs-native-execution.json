@@ -5,7 +5,7 @@
     "d44927e0b6"
   ],
   "contract_commit": "1a46dafa114d7f7676899330792142c9203ded2f",
-  "status": "authored; native compilation and execution owed",
+  "status": "CPU12 and AppleMetalGPU12 actual fixtures passed; additional pure34 CPU contracts passed. Public Python boundary and other vendors untested.",
   "cpu_fixtures": 12,
   "gpu_fixtures": 12,
   "contract_fixtures_additional": 34,
@@ -59,18 +59,24 @@
     "gpu": "graphs ordered one at a time on one physical GPU/shared contexts; kernels and oracle cells remain parallel"
   },
   "concurrency": "Existing MAX/Metal shared-context failures remain separately failed.",
-  "python_removed": 0,
+  "python_removed": {
+    "numerical_assertions": 1,
+    "purpose": "Draw range/signs now checked in independent native original-workload fixtures."
+  },
   "python_retained": "All external sklearn, NumPy RandomState/late-connect, public shape/refusal/ownership and existing numerical assertions are retained. No deletion before root replacement execution.",
   "product_changes": false,
   "kernel_changes": false,
   "algorithm_changes": false,
-  "runtime_evidence": false,
+  "runtime_evidence": {
+    "summary": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-wave13-accepted-results.json",
+    "cpu_source": "9591299c4d62db9160e9651c06738588eb59e65a",
+    "gpu_source_after_empty_query_fix": "59d7c336f4cb421df728e2115d90406acd929e33",
+    "original_gpu_failure_retained": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/wave13-gpu-result.json"
+  },
   "identity_or_performance_run": false,
   "python_pending_cleanup": {
-    "assertions": 1,
-    "source": "test_x_neighbors_sanity.py::test_polynomial_count_sketch (32-component native draw range/sign assertion only)",
-    "condition": "Root compiles and runs replacement actual PCS fixtures first",
-    "patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/pcs-native-python-cleanup.patch",
-    "retained_after_cleanup": "External sklearn numerical oracle, public hash shapes, seeded public repeatability, RandomState16-component/range/feature-name and NumPy late-connect seams"
+    "remaining": false,
+    "applied_patch": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/pcs-native-python-cleanup.patch",
+    "condition": "Applied only after CPU12/GPU12 actual fixtures passed."
   }
 }

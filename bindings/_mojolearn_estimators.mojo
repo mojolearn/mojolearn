@@ -4,6 +4,8 @@ Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
+from std.python.bindings import lookup_py_type_object
+from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
@@ -15,6 +17,10 @@ from core.logistic_native_api import (
 )
 from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
+from core.dbscan_native_api import DBSCANFitRequest
+from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
+from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
 from core.pca_native_device import PCA_DEVICE_API
 from core.tsvd_native_device import TSVD_DEVICE_API
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
@@ -57,14 +63,6 @@ from bindings.labeled_reference_resident_binding import (
     labeled_reference_prepare_binding,
     labeled_reference_release_binding,
     labeled_reference_predict_resident_binding,
-)
-from dbscan.estimator import dbscan_fit
-from kde.estimator import kde_score_samples_host_ptr
-from kde.resident_fit import (
-    KDE_FAST_IMMUTABLE_FIT,
-    kde_fit_prepare,
-    kde_fit_release,
-    kde_score_samples_resident,
 )
 from decomposition.estimator import (
     inverse_transform_host,
@@ -251,14 +249,11 @@ def _dbscan_fit_run(
     var max_iter = Int(py=params[5])
     var eps_nn_method = Int(py=params[6])
     var metric = Int(py=params[7])
+    var request = DBSCANFitRequest(Int(xp), Int(lp), wa, core_address, nr, nf, min_samples,
+                                   budget, max_iter, eps_nn_method, metric, eps)
     var passes = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        passes = dbscan_fit(
-            ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter,
-            eps_nn_method, metric, wa, core_address,
-        )
-        ctx.synchronize()
+        passes = DBSCANDeviceKernels.fit(request)
     return PythonObject(passes)
 
 
@@ -953,6 +948,16 @@ def tsvd_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def dbscan_native_api_v1_binding() raises -> PythonObject:
+    var api = DBSCAN_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def kde_native_api_v1_binding() raises -> PythonObject:
+    var api = KDE_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def pca_native_api_v1_binding() raises -> PythonObject:
     var api = PCA_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1496,25 +1501,18 @@ def kde_score_samples_binding(
     var has_weights = Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    # DEVIATION 2660: X and the queries are validated and staged from the
-    # caller's memory (no `List` copies); the weights, `n_train` values
-    # that `kde_fit_validate` and `host_sum_weights` read, are still one
-    # owned copy. The scores are written to `out_addr` from the pinned
-    # download buffer. Same values in, same bits out.
-    var weights = List[Float32]()
+    var weights_address = 0
     if has_weights:
-        var wp = _f32_ptr(Int(py=weights_addr))
-        weights = read_f32(Int(wp), max(0, n_train))
+        weights_address = Int(_f32_ptr(Int(py=weights_addr)))
+    var request = KDEQueryRequest(Int(tp), Int(qp), weights_address, Int(op), n_train, n_query,
+                                  n_features, Float64(bandwidth), has_weights, False, kname^, mname^)
     with GILReleased(Python()):
-        kde_score_samples_host_ptr(
-            tp, n_train, qp, n_query, n_features, bandwidth, kname,
-            mname, weights, has_weights, op,
-        )
+        _ = KDEDeviceKernels.query(request)
     return PythonObject(n_query)
 
 
 def kde_fast_immutable_fit_binding() raises -> PythonObject:
-    return PythonObject(Int(KDE_FAST_IMMUTABLE_FIT))
+    return PythonObject(Int((KDEDeviceKernels.capabilities() & KDE_CAP_IMMUTABLE) != 0))
 
 
 def kde_fit_prepare_binding(
@@ -1551,20 +1549,20 @@ def kde_fit_prepare_binding(
     var finite_tested = len(params) == 5 and Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var weights = List[Float32]()
+    var weights_address = 0
     if has_weights:
-        var wp = _f32_ptr(Int(py=weights_addr))
-        weights = read_f32(Int(wp), max(0, n_train))
+        weights_address = Int(_f32_ptr(Int(py=weights_addr)))
+    var request = KDEPrepareRequest(Int(tp), weights_address, n_train, n_features, Float64(bandwidth),
+                                    has_weights, finite_tested, kname^, mname^)
     var handle: Int
     with GILReleased(Python()):
-        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights,
-                                 finite_tested)
+        handle = KDEDeviceKernels.prepare(request)
     return PythonObject(handle)
 
 
 def kde_fit_release_binding(handle: PythonObject) raises -> PythonObject:
     """Drop a resident KDE fit set (DEVIATION 3003)."""
-    kde_fit_release(Int(py=handle))
+    KDEDeviceKernels.release(Int(py=handle))
     return PythonObject(None)
 
 
@@ -1600,12 +1598,11 @@ def kde_score_samples_resident_binding(
     var bandwidth = Float32(Float64(py=params[2]))
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var total = Float32(0)
+    var request = KDEResidentQuery(h, Int(qp), Int(op), status, n_query, n_features,
+                                   Float64(bandwidth), want_total, kname^, mname^)
+    var total = Float64(0)
     with GILReleased(Python()):
-        total = kde_score_samples_resident(
-            h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
-            status_addr=status,
-        )
+        total = KDEDeviceKernels.resident(request)
     if want_total:
         return PythonObject(Float64(total))
     return PythonObject(n_query)
@@ -1697,6 +1694,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[inverse_transform_binding]("inverse_transform")
         # Device-resident TruncatedSVD components (lane ne1-a-decomp-resident).
         _ = m.add_type[TsvdResidentLease]("_TsvdResidentLease")
+        register_native_owner(lookup_py_type_object[TsvdResidentLease](), m.module, native_owner_no_pins)
         m.def_function[tsvd_resident_lease_binding]("tsvd_resident_lease")
         m.def_function[tsvd_resident_stats_binding]("tsvd_resident_stats")
         m.def_function[tsvd_transform_resident_binding]("tsvd_transform_resident")
@@ -1718,6 +1716,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
         m.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
+        m.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
+        m.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
         m.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
         m.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
@@ -1752,4 +1752,3 @@ def build__mojolearn_estimators() -> PythonObject:
 
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
-

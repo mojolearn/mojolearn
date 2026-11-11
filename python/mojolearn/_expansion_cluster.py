@@ -142,7 +142,7 @@ class _CentersMixin:
             If `X` is empty, has the wrong number of features, or contains
             NaN or infinity.
         """
-        return _NATIVE(self, "family_xc_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_variants_predict", (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Distance from each row of `X` to every cluster center.
@@ -162,7 +162,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_variants_transform", (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the training labels.
@@ -228,7 +228,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        return _NATIVE(self, "family_xc_score", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_xc_variants_score", (None, X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_kmeans.py` (MiniBatchKMeans),

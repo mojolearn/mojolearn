@@ -14,7 +14,8 @@ from bindings.classical_arrays import classical_address, classical_typed
 from providers.python.linear_metadata_boundary import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
-from bindings.scaler_native import _input, _ptr, _stage, _copy_row
+from bindings.scaler_native import _input, _ptr, _copy_row
+from core.preprocessing_program import prep_program_stage as _stage
 from bindings.p3_prep_fitted import prep_fitted_vector
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values

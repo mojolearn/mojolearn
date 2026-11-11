@@ -17,7 +17,7 @@ def connect(scaler_class):
         try:
             prep = _backend.binding("_mojolearn_preprocessing", mode)
             xprep = _backend.binding("_mojolearn_x_prep", mode)
-            entries = {}
+            entries = {"native_scaler_provider": prep, "native_program_provider": xprep}
             for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
                 try:
                     entry = getattr(prep, name)
@@ -76,6 +76,7 @@ def connect_host(cls, context, prep, xprep, training):
                "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
     if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
         raise TypeError("HostStandardScaler requires compiled CPU entries")
+    entries["native_program_provider"] = xprep
     if isinstance(training, str):
         entries["scaler_training_error"] = training
     else:
@@ -86,6 +87,7 @@ def connect_host(cls, context, prep, xprep, training):
             if training.preprocessing_numeric_mode() != 1 or training.preprocessing_vendor() != "cpu":
                 raise ValueError("HostStandardScaler training requires the CPU identical binding")
             entries["standard_fit"] = entry
+            entries["native_scaler_provider"] = training
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             entries["scaler_training_error"] = type(error).__name__ + ": " + str(error)
 

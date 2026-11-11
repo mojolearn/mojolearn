@@ -1,6 +1,6 @@
 {
   "family": "AgglomerativeClustering",
-  "execution": "authored; uncompiled/unrun",
+  "execution": "Passed at4acc5a210d: Agglomerative CPU140/GPU9 and sparse-connectivity CPU21. Compile/run exits0. Original type-declaration compile failures retained; public Python boundary execution remains owed.",
   "dependencies": [
     "2121167e8471",
     "DBSCAN shared native API/state and labeled-reference lease repair already integrated; public freeze c0878ee2ff has unchanged native API"
@@ -212,13 +212,20 @@
   "routes": "Original single-linkage solver uses cuML metric1/use_knn=False (public default pairwise); general tree Euclidean-1, full original merges, no connectivity, requested cut, p2/no threshold. Shared reference constructor uses labels as keys and values, Euclidean0/no radius. Both borrowed and GPU resident queries execute.",
   "ownership": "Flat typed List owners retained through all raw-address calls and parallel oracle work; native solver/tree scratch/result words; guarded children/labels/distances/query destinations; take-once retained reference release. No borrowed struct-field pointer captures in new fixtures. Blocked DBSCAN state fixture remains unchanged.",
   "parallel": "CPU9 independent graphs and18 individual queries across host cores. GPU9 graphs and their query submissions ordered on one physical GPU/shared contexts. Existing kernels and oracle cells remain parallel. Hierarchical merge/cut ancestor walks are dependency-ordered reference checks, not replacement product algorithms.",
-  "python_removed": 0,
-  "python_cleanup_status": "Original coverage retained until root passes native replacements; public prediction-data/array-packing/save-load/refusal/multi-device seams remain Python. Mixed-family repeated-bits controller is not recreated or run.",
+  "python_removed": {
+    "files": 0,
+    "test_definitions": 0,
+    "rep_check_numerical_assertions": 4,
+    "metamorphic_checks": 1,
+    "scope": "Only the Agglomerative arm in test_transductive_predict.py; numerical preparation and per-row query loop removed after native replacements passed."
+  },
+  "python_cleanup_status": "Applied after CPU140/GPU9 native passes. Public prediction-data, array packing, saved-model and refusal seams remain. DBSCAN arm and mixed-family repeated-bits controller unchanged.",
   "product_changes": false,
   "kernel_changes": false,
   "defines": [
     "MOJOLEARN_NUMERIC_IDENTICAL=1",
     "MOJOLEARN_COLUMN_CPU=1 for CPU only"
   ],
-  "evidence": "E/pca-native-tests/agglo-native-static.json"
+  "evidence": "E/pca-native-tests/agglo-native-static.json",
+  "accepted_runtime_evidence": "E/native-wave16-accepted-results.json"
 }

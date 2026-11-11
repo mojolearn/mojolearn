@@ -3,16 +3,17 @@
 # and publish public fitted state. Initialization and training stay in the
 # existing x_decomp/nmf_owner kernels; no Python call envelopes reach RUN.
 from std.python import Python, PythonObject
-from std.python._cpython import ExternalFunction, PyObjectPtr
-from core.shared_slot import SharedSlot
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
 from bindings.native_buffer_address import native_buffer_address
+from bindings.native_array_storage_admission import array_storage_address
 from bindings.admitted_input import admit_f32, AdmittedX, admitted_finite_refuse
 from bindings.decomp_inputs import decomp_admit
 from bindings.decomp_owner_common import decomp_attr, decomp_check, decomp_gemm_check, decomp_set_mode
 from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
+from bindings.decomp_scalar_compare import decomp_equal_admitted as _equal, decomp_name_admitted as _name
 from bindings.host_inference_scalars import host_inference_scalar
+from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.nmf_descriptor_boundary import nmf_connection, nmf_run_fit, nmf_run_inverse
 from core.nmf_native_state import NMFScratch, nmf_output_shape
 from bindings.classical_arrays import classical_typed_native
@@ -27,21 +28,6 @@ from x_decomp.nmf_owner import (
 )
 
 
-comptime _NMFCompare = ExternalFunction[
-    "PyObject_RichCompareBool", def(PyObjectPtr, PyObjectPtr, Int32) thin abi("C") -> Int32]
-
-
-struct NMFScalarAPI(Defaultable, Movable):
-    var compare: _NMFCompare.type
-
-    def __init__(out self):
-        ref cpy = Python().cpython()
-        self.compare = _NMFCompare.load(cpy.lib.borrow())
-
-
-comptime NMF_SCALAR_API = SharedSlot[NMFScalarAPI, "MojolearnNMFScalarAPIV1"]
-
-
 @fieldwise_init
 struct NMFPackedFit(Movable):
     # Only public output storage pins remain Python objects. The execution
@@ -50,26 +36,6 @@ struct NMFPackedFit(Movable):
     var h: PythonObject
     var count: Int
     var result: NMFFitResult
-
-
-def _equal(value: PythonObject, other: PythonObject) raises -> Bool:
-    # Both operands are exact admitted scalar storage, so their C comparison
-    # slots cannot dispatch to user protocols. Never call operator.eq.
-    var result = NMF_SCALAR_API.get_or_create_ptr()[].compare(value._obj_ptr, other._obj_ptr, Int32(2))
-    _ = value
-    _ = other
-    if result < 0:
-        ref cpy = Python().cpython()
-        raise cpy.unsafe_get_error()
-    return result != 0
-
-
-def _name(value: PythonObject, name: String) raises -> Bool:
-    # Caller admits the scalar first. The common exact-string path compares
-    # native strings; native NumPy scalar/0-D comparisons keep their C slots.
-    if py_type(value) is py_type(PythonObject("")):
-        return String(value) == name
-    return _equal(value, PythonObject(name))
 
 
 def _int(value: PythonObject, context: PythonObject) raises -> Int:
@@ -101,7 +67,7 @@ def _seed(value: PythonObject) raises -> Int:
 
 def _address(value: PythonObject, context: PythonObject) raises -> Int:
     if py_type(value) is context["array_class"]:
-        return Int(py=value._addr)
+        return Int(py=array_storage_address(value, context["array_class"], context["array_storage_slots"]))
     return native_buffer_address(value)
 
 
@@ -181,13 +147,16 @@ def _run(model: PythonObject, fields: PythonObject, admitted: AdmittedX, nc: Int
     var args = NmfArgs(options.beta, update_h, max_iter, tol, regs.l1w, regs.l1h, regs.l2w, regs.l2h, shuffle, seed)
     var request = NMFFitRequest(admitted.address, w_address if w_address >= 0 else h_output,
         h_address if h_address >= 0 else h_output, w_output, h_output,
-        n, d, nc, init, options.solver, args, not admitted.finite)
+        n, d, nc, init, options.solver, args^, not admitted.finite)
     var result = nmf_run_fit(connection, request)
+    # Re-admit model namespace keys after the GIL release, before publishing
+    # fit attributes. Exact-key mutation stamps make unchanged queries cheap.
+    lifecycle_admit_fields(fields)
     if not admitted.finite:
         admitted_finite_refuse(result.finite, "NMF")
     _ = w_scratch^
     _ = h_scratch^
-    return NMFPackedFit(w, h, nc, result)
+    return NMFPackedFit(w, h, nc, result^)
 
 
 def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: PythonObject, h_given: PythonObject,
