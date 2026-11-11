@@ -77,7 +77,7 @@ from providers.python.autograd_graph_metadata_pyapi import graph_record_c
 from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from providers.python.sequence_pyapi import moe_backward_py
 from core.shared_slot import SharedSlot
 
@@ -118,21 +118,6 @@ def rnn_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 def optimizer_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return opt_step_py(ex, addrs, ip, fp)
-
-
-def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return stl_py(ex, addrs, ip)
-
-
-def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return var_fit_py(ex, addrs, ip)
-
-
-def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return var_forecast_py(ex, addrs, ip)
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -645,9 +630,6 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[seq_optimizer_export_host_py]("seq_optimizer_export")
         m.def_function[seq_optimizer_import_host_py]("seq_optimizer_import")
         m.def_function[seq_optimizer_close_host_py]("seq_optimizer_close")
-        m.def_function[stl_binding]("stl")
-        m.def_function[var_fit_binding]("var_fit")
-        m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)

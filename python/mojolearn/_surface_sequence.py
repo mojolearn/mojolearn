@@ -75,8 +75,8 @@ FAMILIES = (
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "moe_forward",
-            # theta, croston, ets, garch and prophet_* left the Python surface
+            "rnn_fit", "rnn_predict", "optimizer_step", "mlp_fit", "mlp_predict", "layer_norm", "moe_forward",
+            # theta, croston, ets, garch, prophet_*, var_fit, var_forecast and stl left the Python surface
             # (lane calltable-xseq, 2026-11-11): the sequence owner reaches them
             # through the native table (core/xseq_entry_table.mojo).
             # the model-description trainer (autograd/model.mojo)

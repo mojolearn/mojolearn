@@ -11,7 +11,7 @@ _CONTEXT = None
 
 #: the compiled `_mojolearn_x_sequence` entries the owner runs
 _SEQUENCE_ENTRIES = ("x_sequence_vendor", "x_sequence_numeric_mode", "model_native_api_v1", "model_labels", "rnn_fit", "rnn_predict",
-                     "mlp_fit", "mlp_predict", "var_fit", "var_forecast", "stl")
+                     "mlp_fit", "mlp_predict")
 #: the sequence table's vendor words (core/xseq_entry_table.mojo
 #: `xseq_vendor_word`, the mapping the images apply at publication)
 _NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}

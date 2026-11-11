@@ -31,7 +31,7 @@ from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
 from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
 from sequence.xseq_glue_device import publish_x_sequence_device
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
 from providers.python.sequence_opt_public_pyapi import (
     seq_optimizer_init_py,
@@ -202,23 +202,6 @@ def layer_norm_dev_binding(handles: PythonObject, addrs: PythonObject, ip: Pytho
 def layer_norm_dev_alloc_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
                                  fp: PythonObject, sizes: PythonObject) raises -> PythonObject:
     return layer_norm_dev_alloc_py(handles, addrs, ip, fp, sizes)
-def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return stl_py(ex, addrs, ip)
-
-
-def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (DROPPED-slower, var taxi-hourly +10.6%) deleted 2026-10-09 on
-    # lane/owed-deletions-D2; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
-    var r = var_fit_py(ex, addrs, ip)
-    return r
-
-
-def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    var r = var_forecast_py(ex, addrs, ip)
-    return r
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -757,11 +740,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[optimizer_step_binding]("optimizer_step")
-        m.def_function[stl_binding]("stl")
-        m.def_function[var_fit_binding]("var_fit")
         # TOMBSTONE: sched_exp_block (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/sched_exp_block.patch
-        m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)

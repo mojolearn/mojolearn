@@ -31,6 +31,9 @@ the same order (`sequence/ops_impl.mojo` documents each `*_impl`):
   XS_PROPHET_FIT            prophet_fit_impl's lists
   XS_PROPHET_PREDICT        prophet_predict_impl's lists
   XS_PROPHET_PREDICT_DAYS   prophet_predict_days_impl's lists
+  XS_VAR_FIT                a [y, params, sigma, resid]   p [n, k, p, trend]
+  XS_VAR_FORECAST           a [history, params, out]      p [k, p, trend, steps]
+  XS_STL                    a [y, season, trend, weights, resid] p [the STL plan words]
 The result word is the body's Int result.
 
 Extending a table's layout requires a new V suffix, never a new loader.
@@ -53,7 +56,10 @@ comptime XS_PROPHET_CHANGEPOINTS = 8
 comptime XS_PROPHET_FIT = 9
 comptime XS_PROPHET_PREDICT = 10
 comptime XS_PROPHET_PREDICT_DAYS = 11
-comptime XS_OP_COUNT = 12
+comptime XS_VAR_FIT = 12
+comptime XS_VAR_FORECAST = 13
+comptime XS_STL = 14
+comptime XS_OP_COUNT = 15
 
 comptime XSEQ_ENTRY_GLUE = 0
 

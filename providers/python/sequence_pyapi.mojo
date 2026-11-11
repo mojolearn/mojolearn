@@ -31,9 +31,6 @@ from sequence.ops_impl import (
     opt_step_impl,
     rnn_fit_impl,
     rnn_predict_impl,
-    stl_impl,
-    var_fit_impl,
-    var_forecast_impl,
 )
 from autograd.route_ops import moe_backward_addrs
 
@@ -92,21 +89,6 @@ def rnn_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
 def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """The Python door of `opt_step_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(opt_step_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
-
-
-def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `stl_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(stl_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `var_fit_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(var_fit_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `var_forecast_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(var_forecast_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:

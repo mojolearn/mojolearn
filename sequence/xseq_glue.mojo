@@ -4,7 +4,7 @@ calltable-xseq, 2026-11-11), over any executor. Request layouts:
 `core/xseq_entry_table.mojo`.
 
 These are the bodies the former Python entries (`theta`, `croston`, `ets`,
-`garch`, `prophet_*` of `_mojolearn_x_sequence[_host]`) ran after their
+`garch`, `prophet_*`, `var_fit`, `var_forecast`, `stl` of `_mojolearn_x_sequence[_host]`) ran after their
 `py_ints`/`py_f64s` conversion, with the same argument checks in the same
 words; the sequence owner reaches them through the native table now. The
 device image overrides ETS(A, A|Ad, N), GARCH and the Prophet fit with its
@@ -14,12 +14,13 @@ Python entries did. No kernel, fold order or route changed.
 from sequence.exec_trait import Exec
 from sequence.ops_impl import (
     theta_impl, theta_forecast_impl, croston_impl, croston_forecast_impl, ets_impl, garch_impl,
-    prophet_fit_impl, prophet_predict_impl, prophet_predict_days_impl,
+    prophet_fit_impl, prophet_predict_impl, prophet_predict_days_impl, var_fit_impl, var_forecast_impl, stl_impl,
 )
 from sequence.prophet_prep import prophet_changepoints, prophet_days, prophet_features
 from core.xseq_entry_table import (
     XS_THETA, XS_THETA_FORECAST, XS_CROSTON, XS_CROSTON_FORECAST, XS_ETS, XS_GARCH, XS_PROPHET_DAYS,
     XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT, XS_PROPHET_PREDICT_DAYS,
+    XS_VAR_FIT, XS_VAR_FORECAST, XS_STL,
 )
 
 
@@ -77,4 +78,10 @@ def xseq_glue_run[E: Exec](mut ex: E, op: Int, addrs: List[Int], ip: List[Int], 
         return prophet_predict_impl(ex, addrs, ip)
     if op == XS_PROPHET_PREDICT_DAYS:
         return prophet_predict_days_impl(ex, addrs, ip, fp)
+    if op == XS_VAR_FIT:
+        return var_fit_impl(ex, addrs, ip)
+    if op == XS_VAR_FORECAST:
+        return var_forecast_impl(ex, addrs, ip)
+    if op == XS_STL:
+        return stl_impl(ex, addrs, ip)
     raise Error("x_sequence glue: unknown operation " + String(op))
