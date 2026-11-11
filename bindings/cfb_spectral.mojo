@@ -23,6 +23,7 @@ from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from core.family_cast_impl import family_min_f32
 from core.spectral_embedding_config import SpectralEmbeddingConfig
+from core.spectral_clustering_config import SpectralClusteringConfig, spectral_assignment_method
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.admitted_family import admit_family_refuse_empty
 from bindings.family_common import (
@@ -412,7 +413,7 @@ def _seed(random_state: PythonObject, who: String, clustering: Bool, context: Py
     return seed
 
 
-def _sc_validate(fields: PythonObject, context: PythonObject) raises:
+def _sc_validate(fields: PythonObject, context: PythonObject) raises -> SpectralClusteringConfig:
     """`SpectralClustering._validate_params`."""
     var b = _builtins()
     var n_clusters = family_field(fields, "n_clusters")
@@ -501,7 +502,8 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
     var neighbors = _int(n_neighbors)
     if neighbors < 1:
         raise Error("mojolearn SpectralClustering: n_neighbors must be at least 1")
-    if n_components is not None and _int(n_components) < 1:
+    var components = clusters if n_components is None else _int(n_components)
+    if n_components is not None and components < 1:
         raise Error("mojolearn SpectralClustering: n_components must be at least "
                     + "1, or None to follow n_clusters")
     py_setitem(fields, "_n_clusters", PythonObject(clusters))
@@ -514,10 +516,13 @@ def _sc_validate(fields: PythonObject, context: PythonObject) raises:
         g = PythonObject(1.0) if gamma is None else _float(gamma)
     py_setitem(fields, "_gamma", g)
     py_setitem(fields, "_seed", PythonObject(seed))
+    return SpectralClusteringConfig(
+        SpectralFitOptions(clusters, components, inits, neighbors, t, seed, predicting),
+        String(py=affinity), spectral_assignment_method(String(py=assign_labels)),
+        Float64(py=g) if rbf else 0.0)
 
 
-def _sc_check_shape(fields: PythonObject, n: Int, k: Int) raises:
-    var clusters = Int(py=family_field(fields, "_n_clusters"))
+def _sc_check_shape(clusters: Int, n: Int, k: Int) raises:
     if clusters > n:
         raise Error("mojolearn SpectralClustering: n_clusters=" + String(clusters) + " "
                     + "exceeds n_samples=" + String(n))
@@ -556,20 +561,19 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     var b = _builtins()
     var fields = py_fields(model)
     var metrics = routes.metrics
-    _sc_validate(fields, context)
+    var config = _sc_validate(fields, context)
     var prediction_data = family_field(fields, "prediction_data")
     if py_type(prediction_data) is not b.bool:
         raise Error("TypeError: mojolearn SpectralClustering: prediction_data must be a bool, "
                     + "got " + String(py_type(prediction_data).__name__))
-    var predicting = Bool(py=prediction_data)
+    var predicting = config.fit.keep_state
     var dropped: List[String] = ["_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X"]
     for i in range(5):  # small-loop(prediction data: the five cached attribute names): 5
         _ = py_call(fields.pop, PythonObject(dropped[i]), PythonObject(None))
-    var clusters = Int(py=family_field(fields, "_n_clusters"))
-    var n_components = family_field(fields, "n_components")
-    var k = clusters if n_components is None else _int(n_components)
+    var clusters = config.fit.clusters
+    var k = config.fit.components
     _ = py_call(fields.pop, PythonObject("affinity_matrix_"), PythonObject(None))
-    var affinity = String(py=family_field(fields, "affinity"))
+    var affinity = config.affinity.copy()
     var graph_affinity = affinity == "precomputed" or affinity == "rbf" or affinity == "precomputed_nearest_neighbors"
     var connection: Optional[SpectralConnection] = None
     var use_dense = False
@@ -592,13 +596,13 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
             dense = admit_family(source, 2, "X", context).array
     elif affinity == "rbf":
         var x = _x_decomp_input(source, context)
-        var aff = _rbf_affinity(x, Float64(py=family_field(fields, "_gamma")), routes.decomp, context)
+        var aff = _rbf_affinity(x, config.gamma, routes.decomp, context)
         py_setitem(fields, "affinity_matrix_", aff.public_array)
         py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
         dense = aff.public_array
         from_matrix = True
     elif affinity == "precomputed_nearest_neighbors":
-        var affinity_room = _knn_affinity(fields, source, True, routes.base, context)
+        var affinity_room = _knn_affinity(fields, source, True, routes.base, context, True, config.fit.neighbors)
         dense = affinity_room.public_array
         from_matrix = True
     var labels = PythonObject(None)
@@ -606,13 +610,11 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     var state = SpectralStatePins()
     var n_out: Int
     var n: Int
-    var options = SpectralFitOptions(clusters, k, Int(py=family_field(fields, "_n_init")),
-        Int(py=family_field(fields, "_n_neighbors")), Float64(py=family_field(fields, "_eigen_tol")),
-        Int(py=family_field(fields, "_seed")), predicting)
+    var options = config.fit
     if use_dense and dense is not None:
         # the dense matrix straight to the device entry
         n = Int(py=dense.shape[0])
-        _sc_check_shape(fields, n, k)
+        _sc_check_shape(clusters, n, k)
         labels = family_array(Python.tuple(n), "<i4", context)
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         if predicting:
@@ -649,7 +651,7 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
             raise Error("mojolearn SpectralClustering: the precomputed affinity "
                         + "matrix has a negative entry (refused by name: sqrt of a "
                         + "negative degree is a NaN in cuVS too)")
-        _sc_check_shape(fields, n, k)
+        _sc_check_shape(clusters, n, k)
         labels = family_array(Python.tuple(n), "<i4", context)
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         if predicting:
@@ -672,8 +674,8 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
         n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
-        _sc_check_shape(fields, n, k)
-        var neighbors = Int(py=family_field(fields, "_n_neighbors"))
+        _sc_check_shape(clusters, n, k)
+        var neighbors = config.fit.neighbors
         if neighbors > n:
             raise Error("mojolearn SpectralClustering: n_neighbors="
                         + String(neighbors) + " exceeds n_samples=" + String(n))
@@ -701,16 +703,15 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     py_setitem(fields, "embedding_", embedding)
     py_setitem(fields, "n_components_", PythonObject(k))
     _ = py_call(fields.pop, PythonObject("n_iter_assign_"), PythonObject(None))
-    var assign = family_field(fields, "assign_labels")
-    if String(py=assign) != "kmeans":
+    if config.assignment >= 0:
         # Preserve ENTRY_SPECTRAL_ASSIGN and its 30/20 restart/iteration
         # settings. Only its options and result envelope become native.
         var request = SpectralAssignmentRequest(Int(py=classical_address(embedding)),
-            Int(py=embedding.size), n, k, Int(py=context["family_cfb_assign_codes"][assign]),
-            _int(family_field(fields, "_seed")), 30, 20)
+            Int(py=embedding.size), n, k, config.assignment,
+            config.fit.seed, 30, 20)
         var result = spectral_assignment_run(routes.cluster, request, context)
         _ = embedding
-        if String(py=assign) == "discretize":
+        if config.assignment == 0:
             py_setitem(fields, "n_iter_assign_", PythonObject(result.storage[0].iterations))
         labels = spectral_assignment_pack(result, n, context)
         _ = embedding
