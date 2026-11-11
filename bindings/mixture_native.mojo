@@ -59,7 +59,8 @@ from core.mixture_native_api import (
     MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_NATIVE_PREDICT_PROBA, MIXTURE_NATIVE_PREDICT,
     MIXTURE_NATIVE_SCORE_BIC_AIC, GmmDriver, GmmFitRequest, GmmScoreRequest,
 )
-from bindings.kmeans_variants_boundary import variants_span, variants_pack_f32, variants_pack_i32
+from bindings.kmeans_variants_boundary import variants_span
+from bindings.boundary_read import read_int_like, read_float_like, read_bool, pack_room
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 
@@ -92,11 +93,6 @@ def _get_or(model: PythonObject, name: String, default: PythonObject) raises -> 
     return family_raw_get_or(model, name, default)
 
 
-def _truthy(value: PythonObject) raises -> Bool:
-    """`bool(value)`."""
-    return Bool(py=family_call(native_loaded_module("builtins").bool, value))
-
-
 def _int(value: PythonObject) raises -> PythonObject:
     """`int(value)`, its exception unchanged."""
     return family_call(native_loaded_module("builtins").int, value)
@@ -107,18 +103,31 @@ def _float(value: PythonObject) raises -> PythonObject:
     return family_call(native_loaded_module("builtins").float, value)
 
 
-def _pack_f(values: List[Float32], shape: PythonObject, context: PythonObject) raises -> PythonObject:
+def _pack_f(values: List[Float32], var shape: List[Int], context: PythonObject) raises -> PythonObject:
     """A result block of the BGMM entry as an owned C-order float32 Array:
-    ONE allocation and one memcpy of the entry's words (the store is the
-    Array's own). Replaces `_from_flat` over the CPython `x_cluster_call`
-    result, which copied each block twice (the exporter's array.array, then
+    ONE allocation (`pack_room`) and one memcpy of the entry's words.
+    Replaces `_from_flat` over the CPython `x_cluster_call` result, which
+    copied each block twice (the exporter's array.array, then
     `array.array(code, flat)`)."""
-    return classical_wrap_array(variants_pack_f32(values), shape, "<f4", "C", context)
+    var room = pack_room("<f4", shape^, context)
+    if len(values):
+        unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=room.address), src=values.unsafe_ptr(), count=len(values))
+    _ = values
+    var result = room.array
+    _ = room^
+    return result
 
 
-def _pack_i(values: List[Int32], shape: PythonObject, context: PythonObject) raises -> PythonObject:
+def _pack_i(values: List[Int32], var shape: List[Int], context: PythonObject) raises -> PythonObject:
     """`_pack_f` for an int32 result block."""
-    return classical_wrap_array(variants_pack_i32(values), shape, "<i4", "C", context)
+    var room = pack_room("<i4", shape^, context)
+    if len(values):
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=room.address),
+                      src=values.unsafe_ptr(), count=len(values))
+    _ = values
+    var result = room.array
+    _ = room^
+    return result
 
 
 def _f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
@@ -258,20 +267,21 @@ def _state(blocks: List[List[Float32]], order: List[Int], zeros_at: Int, zeros: 
             total += zeros
         else:
             total += len(blocks[order[j]])
-    var result = family_array(Python.tuple(total), "<f4", context)
-    var dst = Int(py=classical_address(result))
+    var room = pack_room("<f4", [total], context)  # zero-filled
+    var dst = room.address
     var offset = 0
     for j in range(len(order)):  # small-loop(blocks: the eight fitted parameter blocks)
         if order[j] < 0 or (j == zeros_at and len(blocks[order[j]]) == 0):
-            offset += zeros  # family_array is zero-filled
+            offset += zeros  # pack_room is zero-filled
         else:
             var size = len(blocks[order[j]])
             if size:
                 unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=dst + 4 * offset),
                               src=blocks[order[j]].unsafe_ptr(), count=size)
             offset += size
-    _ = result  # keep the Array alive through the copies above
     _ = blocks
+    var result = room.array
+    _ = room^  # the Array stays alive through the copies above
     return result
 
 
@@ -342,12 +352,12 @@ def _by_type(flat: List[Float32], k: Int, d: Int, ct: Int, context: PythonObject
     k x d x d, tied d x d, diag k x d, spherical k) under the covariance
     type's shape."""
     if ct == 0:
-        return _pack_f(flat, Python.tuple(k, d, d), context)
+        return _pack_f(flat, [k, d, d], context)
     if ct == 1:
-        return _pack_f(flat, Python.tuple(d, d), context)
+        return _pack_f(flat, [d, d], context)
     if ct == 2:
-        return _pack_f(flat, Python.tuple(k, d), context)
-    return _pack_f(flat, Python.tuple(k), context)
+        return _pack_f(flat, [k, d], context)
+    return _pack_f(flat, [k], context)
 
 
 def _sorted_repr(table: PythonObject) raises -> String:
@@ -399,7 +409,7 @@ def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObjec
     """`GaussianMixture._extension`: the binary's own compile-time mode must
     be the one requested."""
     var want = _get_or(model, "numeric_mode", PythonObject(None))
-    if not _truthy(want):
+    if not read_bool(want):
         want = context["backend_fields"]["_DEFAULT_MODE"]
     var getter = neural_descriptor_entry(binding, "mixture_numeric_mode", False)
     if getter is None:
@@ -417,10 +427,10 @@ def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObjec
                     + "; rebuild it with bash bindings/build_mixture.sh")
 
 
-def _real(value: PythonObject, name: String) raises -> PythonObject:
+def _real(value: PythonObject, name: String) raises -> Float64:
     if not family_is_real(value):
         raise Error("TypeError: " + _GMM + name + " must be a real number, got " + family_type_name(value))
-    return _float(value)
+    return read_float_like(value)
 
 
 def _gmm_needs_ext(model: PythonObject) raises -> Bool:
@@ -434,7 +444,7 @@ def _gmm_needs_ext(model: PythonObject) raises -> Bool:
         return True
     if Bool(py=family_call(operator.ne, _int(_get(model, "n_init")), PythonObject(1))):
         return True
-    if _truthy(_get(model, "warm_start")):
+    if read_bool(_get(model, "warm_start")):
         return True
     return (_get(model, "weights_init") is not None or _get(model, "means_init") is not None
             or _get(model, "precisions_init") is not None)
@@ -455,7 +465,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     # `_refuse_knobs`
     if Bool(py=family_call(operator.ne, _get(model, "n_init"), PythonObject(1))):
         raise Error(_GMM + _REFUSE_N_INIT)
-    if _truthy(_get(model, "warm_start")):
+    if read_bool(_get(model, "warm_start")):
         raise Error(_GMM + _REFUSE_WARM)
     if _get(model, "means_init") is not None:
         raise Error(_GMM + "means_init" + _REFUSE_INIT_TAIL)
@@ -475,12 +485,12 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
         raise Error("TypeError: " + _GMM + "covariance_type and init_params are "
                     + "scikit-learn's strings; they are decoded, and refused, by name on "
                     + "the Mojo host")
-    var k = Int(py=_int(n_components))
+    var k = read_int_like(n_components)
     if k < 1:
         raise Error(_GMM + "n_components must be positive, got " + String(k))
     var tol = _real(_get(model, "tol"), "tol")
     var reg_covar = _real(_get(model, "reg_covar"), "reg_covar")
-    var max_iter = Int(py=_int(_get(model, "max_iter")))
+    var max_iter = read_int_like(_get(model, "max_iter"))
     var weights = family_array(Python.tuple(k), "<f4", context)
     var means = family_array(Python.tuple(k, d), "<f4", context)
     var covariances = family_array(Python.tuple(k, d, d), "<f4", context)
@@ -498,7 +508,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     # covariance_type_from_name / init_params_from_name.
     var covariance_name = String(py=covariance_type)
     var init_name = String(py=init_params)
-    var random_state = Int(py=_int(_get(model, "random_state")))
+    var random_state = read_int_like(_get(model, "random_state"))
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_fit_binding.
     var request = GmmFitRequest(
         Int(py=classical_address(x)), Int(py=classical_address(weights)), Int(py=classical_address(means)),
@@ -506,7 +516,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
         Int(py=classical_address(log_det)), Int(scalars.unsafe_ptr()),
         Int(py=classical_address(labels)) if labels is not None else 0,
         Int(covariance_name.as_c_string_slice().unsafe_ptr()), Int(init_name.as_c_string_slice().unsafe_ptr()),
-        n, d, k, max_iter, random_state, Float64(py=tol), Float64(py=reg_covar))
+        n, d, k, max_iter, random_state, tol, reg_covar)
     var n_iter = 0
     try:
         with GILReleased(Python()):
@@ -582,7 +592,7 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
     var flat_p = _any_f32_kept(cholesky, "precisions_cholesky_", context, kept)
     var log_det = _get(model, "log_det_chol_")
     var converged_ = _get(model, "converged_")
-    var converged = 1 if _truthy(converged_) else 0
+    var converged = 1 if read_bool(converged_) else 0
     var n_iter = _get(model, "n_iter_")
     var lower = _get(model, "lower_bound_")
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
@@ -649,7 +659,7 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     var x = _x_finite(source, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var k = Int(py=_int(_get(model, "n_components")))
+    var k = read_int_like(_get(model, "n_components"))
     if k < 1 or n < k:
         raise Error("Expected n_samples >= n_components but got n_components = " + String(k)
                     + ", n_samples = " + String(n))
@@ -660,7 +670,7 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     # component (`x_cluster/entries.mojo::bgmm_entry`, ip[15] = 2, 3, 4)
     var parts = Python.list()
     var prev = _get_or(model, "_ext", PythonObject(None))
-    var warm = _truthy(_get(model, "warm_start")) and prev is not None
+    var warm = read_bool(_get(model, "warm_start")) and prev is not None
     if warm:
         warm = Bool(py=family_call(operator.eq, prev["key"], key))
     if warm:
@@ -706,14 +716,14 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     var aux = _aux(parts)
     var lower = 0.0
     if warm:
-        lower = Float64(py=_float(_get_or(model, "lower_bound_", PythonObject(0.0))))
+        lower = read_float_like(_get_or(model, "lower_bound_", PythonObject(0.0)))
     # ORDER MATCHES x_cluster/entries.mojo::bgmm_entry (the former Python
     # lists, read in the same order): floats, then ints.
-    var floats: List[Float64] = [-1.0, -1.0, -1.0, Float64(py=_float(_get(model, "reg_covar"))),
-                                 Float64(py=_float(_get(model, "tol"))), lower]
-    var max_iter = Int(py=_int(_get(model, "max_iter")))
-    var n_init = Int(py=_int(_get(model, "n_init")))
-    var init_code = Int(py=_int(inits[init_params]))
+    var floats: List[Float64] = [-1.0, -1.0, -1.0, read_float_like(_get(model, "reg_covar")),
+                                 read_float_like(_get(model, "tol")), lower]
+    var max_iter = read_int_like(_get(model, "max_iter"))
+    var n_init = read_int_like(_get(model, "n_init"))
+    var init_code = read_int_like(inits[init_params])
     var seed = Int(py=_seed(_get(model, "random_state")))
     var ints: List[Int] = [n, d, k, 0, max_iter, n_init, init_code, seed, 0, 0, ct, 1 if warm else 0, 1,
                            flag_w, flag_m, flag_p]
@@ -722,11 +732,11 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     ref f = result.storage[0].f
     ref s = result.storage[0].s
     py_setattr(model, "n_features_in_", PythonObject(d))
-    py_setattr(model, "weights_", _pack_f(f[0], Python.tuple(k), context))
-    py_setattr(model, "means_", _pack_f(f[1], Python.tuple(k, d), context))
+    py_setattr(model, "weights_", _pack_f(f[0], [k], context))
+    py_setattr(model, "means_", _pack_f(f[1], [k, d], context))
     py_setattr(model, "covariances_", _by_type(f[13], k, d, ct, context))
     py_setattr(model, "precisions_cholesky_", _by_type(f[14], k, d, ct, context))
-    py_setattr(model, "log_det_chol_", _pack_f(f[12], Python.tuple(k), context))   # x_cluster bgmm_entry
+    py_setattr(model, "log_det_chol_", _pack_f(f[12], [k], context))   # x_cluster bgmm_entry
     # int(), float() and bool() of the entry's float64 scalars, natively.
     py_setattr(model, "n_iter_", PythonObject(Int(s[1])))
     py_setattr(model, "converged_", PythonObject(s[2] != 0.0))
@@ -737,8 +747,8 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     var ext = Python.dict()
     ext["key"] = key
     ext["binding"] = xc_binding
-    ext["pchol"] = _pack_f(f[3], Python.tuple(k, d, d), context)
-    ext["consts"] = _pack_f(f[8], Python.tuple(k), context)
+    ext["pchol"] = _pack_f(f[3], [k, d, d], context)
+    ext["consts"] = _pack_f(f[8], [k], context)
     var order: List[Int] = [11, 4, -1, 6, 1, 7, 2, 3]
     ext["state"] = _state(f, order, -1, k, context)
     _ = result^
@@ -836,10 +846,10 @@ def _gmm_ext_labels(model: PythonObject, x: PythonObject, which: Int, context: P
     var got = _gmm_ext_score(model, x, context)
     var k = Int(py=_get(model, "means_").shape[0])
     if which == 0:
-        return _pack_f(got.storage[0].f[1], Python.tuple(n), context)
+        return _pack_f(got.storage[0].f[1], [n], context)
     if which == 1:
-        return _pack_f(got.storage[0].f[2], Python.tuple(n, k), context)
-    return _pack_i(got.storage[0].i[0], Python.tuple(n), context)
+        return _pack_f(got.storage[0].f[2], [n, k], context)
+    return _pack_i(got.storage[0].i[0], [n], context)
 
 
 def _gmm_default_infer(model: PythonObject, binding: PythonObject, x: PythonObject, which: Int,
@@ -896,11 +906,11 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var x = _x_finite(source, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var k = Int(py=_int(_get(model, "n_components")))
+    var k = read_int_like(_get(model, "n_components"))
     if k < 1 or n < k:
         raise Error("Expected n_samples >= n_components but got n_components = " + String(k)
                     + ", n_samples = " + String(n))
-    if Int(py=_int(_get(model, "n_init"))) < 1 or Int(py=_int(_get(model, "max_iter"))) < 1:
+    if read_int_like(_get(model, "n_init")) < 1 or read_int_like(_get(model, "max_iter")) < 1:
         raise Error("n_init and max_iter must be >= 1")
     # the priors and any warm state as byte copies (`_aux`); the binding
     # expands a diag or spherical covariance prior to d x d
@@ -928,7 +938,7 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                 raise Error("The parameter 'diag covariance prior' should have the shape of (" + String(d) + ",)")
             cov_mode = 2
         else:
-            var value = Float64(py=_float(covariance_prior))
+            var value = read_float_like(covariance_prior)
             cp = family_array(Python.tuple(1), "<f4", context)
             var word = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(cp)))
             word[0] = Float32(value)
@@ -936,7 +946,7 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         _ = py_call(parts.append, cp)
     var key = Python.tuple(PythonObject(k), PythonObject(d), covariance_type)
     var prev = _get_or(model, "_warm", PythonObject(None))
-    var warm = _truthy(_get(model, "warm_start")) and prev is not None
+    var warm = read_bool(_get(model, "warm_start")) and prev is not None
     if warm:
         warm = Bool(py=family_call(operator.eq, prev[0], key))
     if warm:
@@ -946,17 +956,17 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     # lists, read in the same order): floats, then ints.
     var floats = List[Float64]()
     var wcp = _get(model, "weight_concentration_prior")
-    floats.append(-1.0 if wcp is None else Float64(py=_float(wcp)))
+    floats.append(-1.0 if wcp is None else read_float_like(wcp))
     var mpp = _get(model, "mean_precision_prior")
-    floats.append(-1.0 if mpp is None else Float64(py=_float(mpp)))
+    floats.append(-1.0 if mpp is None else read_float_like(mpp))
     var dfp = _get(model, "degrees_of_freedom_prior")
-    floats.append(-1.0 if dfp is None else Float64(py=_float(dfp)))
-    floats.append(Float64(py=_float(_get(model, "reg_covar"))))
-    floats.append(Float64(py=_float(_get(model, "tol"))))
-    floats.append(Float64(py=_float(_get_or(model, "lower_bound_", PythonObject(0.0)))) if warm else 0.0)
-    var max_iter = Int(py=_int(_get(model, "max_iter")))
-    var n_init = Int(py=_int(_get(model, "n_init")))
-    var init_code = Int(py=_int(inits[init_params]))
+    floats.append(-1.0 if dfp is None else read_float_like(dfp))
+    floats.append(read_float_like(_get(model, "reg_covar")))
+    floats.append(read_float_like(_get(model, "tol")))
+    floats.append(read_float_like(_get_or(model, "lower_bound_", PythonObject(0.0))) if warm else 0.0)
+    var max_iter = read_int_like(_get(model, "max_iter"))
+    var n_init = read_int_like(_get(model, "n_init"))
+    var init_code = read_int_like(inits[init_params])
     var seed = Int(py=_seed(_get(model, "random_state")))
     # The BGMM entry's twelve words; the typed request's last four (plain
     # and the three init flags) are 0, which bgmm_entry reads as absent.
@@ -966,30 +976,30 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     _ = parts^
     ref f = result.storage[0].f
     ref s = result.storage[0].s
-    py_setattr(model, "weights_", _pack_f(f[0], Python.tuple(k), context))
-    py_setattr(model, "means_", _pack_f(f[1], Python.tuple(k, d), context))
-    py_setattr(model, "_full_pchol", _pack_f(f[3], Python.tuple(k, d, d), context))
+    py_setattr(model, "weights_", _pack_f(f[0], [k], context))
+    py_setattr(model, "means_", _pack_f(f[1], [k, d], context))
+    py_setattr(model, "_full_pchol", _pack_f(f[3], [k, d, d], context))
     # f[13], f[14], f[15]: the binding's by-type forms (bgmm_entry)
     py_setattr(model, "covariances_", _by_type(f[13], k, d, ct, context))
     py_setattr(model, "precisions_cholesky_", _by_type(f[14], k, d, ct, context))
     if process:
         py_setattr(model, "weight_concentration_",
-                   Python.tuple(_pack_f(f[4], Python.tuple(k), context), _pack_f(f[5], Python.tuple(k), context)))
+                   Python.tuple(_pack_f(f[4], [k], context), _pack_f(f[5], [k], context)))
     else:
-        py_setattr(model, "weight_concentration_", _pack_f(f[4], Python.tuple(k), context))
-    py_setattr(model, "mean_precision_", _pack_f(f[6], Python.tuple(k), context))
+        py_setattr(model, "weight_concentration_", _pack_f(f[4], [k], context))
+    py_setattr(model, "mean_precision_", _pack_f(f[6], [k], context))
     if ct == 1:
         py_setattr(model, "degrees_of_freedom_", PythonObject(Float64(f[7][0])))
     else:
-        py_setattr(model, "degrees_of_freedom_", _pack_f(f[7], Python.tuple(k), context))
-    py_setattr(model, "_log_consts", _pack_f(f[8], Python.tuple(k), context))
-    py_setattr(model, "mean_prior_", _pack_f(f[9], Python.tuple(d), context))
+        py_setattr(model, "degrees_of_freedom_", _pack_f(f[7], [k], context))
+    py_setattr(model, "_log_consts", _pack_f(f[8], [k], context))
+    py_setattr(model, "mean_prior_", _pack_f(f[9], [d], context))
     if ct == 2:
-        py_setattr(model, "covariance_prior_", _pack_f(f[15], Python.tuple(d), context))
+        py_setattr(model, "covariance_prior_", _pack_f(f[15], [d], context))
     elif ct == 3:
         py_setattr(model, "covariance_prior_", PythonObject(Float64(f[15][0])))
     else:
-        py_setattr(model, "covariance_prior_", _pack_f(f[15], Python.tuple(d, d), context))
+        py_setattr(model, "covariance_prior_", _pack_f(f[15], [d, d], context))
     # int(), float() and bool() of the entry's float64 scalars, natively.
     py_setattr(model, "lower_bound_", PythonObject(s[0]))
     py_setattr(model, "n_iter_", PythonObject(Int(s[1])))
@@ -1002,7 +1012,7 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     py_setattr(model, "mean_precision_prior_", PythonObject(s[4]))
     py_setattr(model, "degrees_of_freedom_prior_", PythonObject(s[5]))
     py_setattr(model, "n_features_in_", PythonObject(d))
-    var labels = _pack_i(result.storage[0].i[0], Python.tuple(n), context)
+    var labels = _pack_i(result.storage[0].i[0], [n], context)
     _ = result^
     return labels
 
@@ -1084,18 +1094,18 @@ def mixture_operation(model: PythonObject, operation: String, args: PythonObject
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 0, context, admitted, n, k)
-        return _pack_i(got.storage[0].i[0], Python.tuple(n), context)
+        return _pack_i(got.storage[0].i[0], [n], context)
     if operation == "family_mix_bgmm_predict_proba":
         # the exp of every log responsibility in the binding (bodies.exp_cell)
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 1, context, admitted, n, k)
-        return _pack_f(got.storage[0].f[2], Python.tuple(n, k), context)
+        return _pack_f(got.storage[0].f[2], [n, k], context)
     if operation == "family_mix_bgmm_score_samples":
         var n = 0
         var k = 0
         var got = _bgmm_score(model, args[0], args[1], 0, context, admitted, n, k)
-        return _pack_f(got.storage[0].f[1], Python.tuple(n), context)
+        return _pack_f(got.storage[0].f[1], [n], context)
     if operation == "family_mix_bgmm_score":
         # the float-float fold of log_prob_norm in the binding
         var n = 0
