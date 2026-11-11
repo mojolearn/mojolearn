@@ -86,11 +86,18 @@ def test_binding_registers_the_gpu_names():
         '_want(String("umap_fit_transform"), params, 13)',
         '_want(String("umap_transform addresses"), addrs, 4)',
         '_want(String("umap_transform parameters"), params, 14)',
+    ):
+        assert sentence in src and sentence in gpu, sentence
+    # Both columns run the UMAP operations table's one word decoding
+    # (umap/ops_entry_words.mojo), which holds the shared refusals.
+    assert "umap_ops_host_words(" in src and "umap_ops_device_words(" in gpu
+    words = _read("umap/ops_entry_words.mojo")
+    for sentence in (
         '"UMAP requires positive features and a nonnegative seed"',
         '"UMAP requires 2D/3D output and enough samples for spectral init"',
         '"UMAP transform requires positive dimensions and a nonnegative seed"',
     ):
-        assert sentence in src and sentence in gpu, sentence
+        assert sentence in words, sentence
 
 
 def test_oracle_imports_no_gpu_and_not_the_host_loop():
