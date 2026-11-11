@@ -421,16 +421,6 @@ def _host(x):
     return x.numpy() if _is_t(x) else x
 
 
-def _ones_dev(dev, n):
-    """A resident vector of `n` ones kept with the layer (uploaded when the
-    size changes), the bias gradient's GEMM operand."""
-    n = max(int(n), 1)
-    cur = dev.h.get("ones")
-    if cur is not None and cur[1] == n:
-        return cur[0]
-    return dev.upload("ones", _np().ones(n, _np().float32))
-
-
 class Conv2d(_Layer):
     """2-D convolution, PyTorch `nn.Conv2d` semantics: im2col onto the pinned
     GEMM (mojolearn.identical.gemm.fp32.v1) forward and backward. `padding`
@@ -567,83 +557,8 @@ class Conv2d(_Layer):
         if x.shape[1] != self.in_channels:
             raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
 
-    def _backward_t(self, grad_out, x):
-        """`backward` with a `DeviceTensor` grad_out or input."""
-        np = _np()
-        b = self._binding()
-        xs = self._x if x is None else x
-        if not (_is_t(xs) and self._res_ok(b, grad_out, xs)):
-            dx = Conv2d.backward(self, _host(grad_out), _host(xs))
-            return DeviceTensor._wrap(b, dx) if _is_t(grad_out) else dx
-        self._check_x(xs)
-        shape = self._out_shape(xs.shape)
-        if grad_out.shape != shape:
-            raise ValueError(f"mojolearn: grad_out shape {grad_out.shape}, expected {shape}")
-        # lane fam-neural: the forward's padded tensor when this is its
-        # backward (x not passed), else the pad of the x given
-        held = self.__dict__.get("_xp")
-        if self._explicit and x is None and _is_t(held) and held is not xs and _on_dev(b, held):
-            xp = held
-        else:
-            xp = self._pad_t(b, xs)
-        prm = self._params(xp.shape)
-        dxp = _out_new(b, xp.shape)   # col2im stores every word
-        dw = np.empty(self.weight_.shape, np.float32)
-        db = np.empty(self.out_channels, np.float32)
-        if self._backward_res(b, xp.h, grad_out.h, dxp.h, prm):
-            dw = None   # G3: dW / db stay resident
-        elif self.groups == 1:
-            pw = _pinned(self, b, "weight_", self.weight_.size)
-            if pw is not None:
-                b.x_cnn_conv2d_backward_m([xp.h, pw, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
-                                          0b001111, prm)
-            else:
-                w = np.ascontiguousarray(self.weight_, np.float32)
-                b.x_cnn_conv2d_backward_m([xp.h, w.ctypes.data, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
-                                          0b001101, prm)
-        else:
-            dev = _dev_of(self, b)
-            og = self.out_channels // self.groups
-            xg = dev.get("xg", xp.size // self.groups)
-            gg = dev.get("gg", grad_out.size // self.groups)
-            dxg = dev.get("dxg", xp.size // self.groups)
-            for g in range(self.groups):  # glue: one entry per group
-                wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og], np.float32)
-                dwg = np.empty(wg.shape, np.float32)
-                dbg = np.empty(og, np.float32)
-                b.x_cnn_chan_copy_m([xp.h, xg], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [0])
-                b.x_cnn_chan_copy_m([grad_out.h, gg], 0b11, self._group_prm(shape, self.out_channels, g) + [0])
-                b.x_cnn_conv2d_backward_m([xg, wg.ctypes.data, gg, dxg, dwg.ctypes.data, dbg.ctypes.data],
-                                          0b001101, prm)
-                b.x_cnn_chan_copy_m([dxg, dxp.h], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [1])
-                dw[g * og:(g + 1) * og] = dwg
-                db[g * og:(g + 1) * og] = dbg
-        dx = dxp
-        if self._explicit:
-            dx = _out_new(b, xs.shape)   # the pad's backward stores every word
-            b.x_cnn_pad2d_m([dxp.h, dx.h], 0b11, self._pad_params(xs.shape) + [1])
-        self._x, self._xp = xs, xp
-        if dw is not None:
-            self.grad_weight_ = dw
-            self.grad_bias_ = db if self.bias else np.zeros_like(db)
-        return dx
-
     def forward(self, x):
         return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
-
-    def _bind_input(self, x):
-        """`forward`'s input checks and explicit pad, without the conv."""
-        np = _np()
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: Conv2d.forward takes (N, C, H, W)")
-        if x.shape[1] != self.in_channels:
-            raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
-        xp = x
-        if self._explicit:
-            xp = np.empty(self._padded_shape(x.shape), np.float32)
-            self._binding().x_cnn_pad2d_forward(x.ctypes.data, xp.ctypes.data, self._pad_params(x.shape))
-        self._x, self._xp = x, xp
 
     def _group_dev(self, b):
         """cpu2-l11-neural (2026-10-04): whether a GROUPED conv on host
@@ -670,17 +585,6 @@ class Conv2d(_Layer):
     def fit(self, X, y=None):
         """Layers carry their weights from construction; fit only records the input shape."""
         return _XCNN(self, "conv_fit", (X,), _XCNN_CONTEXT)
-
-
-def _t4(t):
-    """Tensor (N, C, L) as (N, C, 1, L): the same resident words."""
-    if t.ndim != 3:
-        raise ValueError("mojolearn: expected (N, C, L)")
-    return t.reshape(t.shape[0], t.shape[1], 1, t.shape[2])
-
-
-def _t3(t):
-    return t.reshape(t.shape[0], t.shape[1], t.shape[3])
 
 
 class Conv1d(Conv2d):
@@ -1136,9 +1040,6 @@ class _AdaptivePool(_Layer):
 
     def __init__(self, output_size=1, input_shape=None, numeric_mode=None):
         _XCNN(self, "adaptive_init", (output_size, input_shape, numeric_mode), _XCNN_CONTEXT)
-
-    def _divides(self, shape):
-        return shape[2] % self.output_size[0] == 0 and shape[3] % self.output_size[1] == 0
 
     # lane cnn-resident-glue (G3): with CNN resident grads on (the default),
     # callers (the board harness among them) hand x and dy over as
