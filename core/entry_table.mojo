@@ -20,8 +20,8 @@ from std.atomic import Atomic, Ordering
 from std.sys import is_defined
 from std.sys.info import size_of
 from core.native_call_output import NativeCallOutput
-from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call_spans
+from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_call_spans, native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime ENTRY_TABLE_LAYOUT = 1
@@ -105,6 +105,19 @@ struct EntryRef(ImplicitlyCopyable, Movable):
 
     var call: NativeDescriptorCall
     var word: Int
+
+
+def _entry_unresolved(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    native_descriptor_report(Error("native entry table: entry is unavailable: not resolved for this owner"),
+                             context, sink)
+    return 1
+
+
+def entry_ref_unresolved() -> EntryRef:
+    """The ref an owner holds for a table its kind never calls (word 0): a
+    call through it refuses; it never reads a slot."""
+    return EntryRef(_entry_unresolved, 0)
 
 
 def entry_table_resolve[name: StaticString](mode: Int, vendor: Int,
