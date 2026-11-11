@@ -9,7 +9,7 @@ while the GIL is released. The caller holds the GIL on entry."""
 from std.python import Python
 from std.python._cpython import GILReleased
 from core.hotpath_impl import HpStat
-from core.base_entry_table import BaseEntryKey
+from core.entry_table import EntryRef
 from core.base_helpers_calls import (
     base_check_indices_i64 as _base_check_indices_i64,
     base_bincount_i64 as _base_bincount_i64,
@@ -24,71 +24,71 @@ from core.base_helpers_calls import (
 )
 
 
-def base_check_indices_i64(key: BaseEntryKey, idx: Int, n: Int, bound: Int) raises -> Int:
+def base_check_indices_i64(entry: EntryRef, idx: Int, n: Int, bound: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_check_indices_i64(key, idx, n, bound)
+        result = _base_check_indices_i64(entry, idx, n, bound)
     return result
 
 
-def base_bincount_i64(key: BaseEntryKey, src: Int, code: Int, n: Int, k: Int, counts: Int, accumulate: Bool) raises -> Int:
+def base_bincount_i64(entry: EntryRef, src: Int, code: Int, n: Int, k: Int, counts: Int, accumulate: Bool) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_bincount_i64(key, src, code, n, k, counts, accumulate)
+        result = _base_bincount_i64(entry, src, code, n, k, counts, accumulate)
     return result
 
 
-def base_reduce_stat(key: BaseEntryKey, src: Int, code: Int, n: Int, what: Int) raises -> HpStat:
+def base_reduce_stat(entry: EntryRef, src: Int, code: Int, n: Int, what: Int) raises -> HpStat:
     var result = HpStat(0, 0, 0.0, 0, 0, 0)
     with GILReleased(Python()):
-        result = _base_reduce_stat(key, src, code, n, what)
+        result = _base_reduce_stat(entry, src, code, n, what)
     return result^
 
 
-def base_reduce_stat_int(key: BaseEntryKey, src: Int, code: Int, n: Int, what: Int) raises -> Int:
+def base_reduce_stat_int(entry: EntryRef, src: Int, code: Int, n: Int, what: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_reduce_stat_int(key, src, code, n, what)
+        result = _base_reduce_stat_int(entry, src, code, n, what)
     return result
 
 
-def base_equal_elements(key: BaseEntryKey, a: Int, b: Int, code: Int, n: Int, dst: Int) raises -> Int:
+def base_equal_elements(entry: EntryRef, a: Int, b: Int, code: Int, n: Int, dst: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_equal_elements(key, a, b, code, n, dst)
+        result = _base_equal_elements(entry, a, b, code, n, dst)
     return result
 
 
-def base_bincount2_i32(key: BaseEntryKey, a: Int, b: Int, n: Int, ka: Int, kb: Int, counts: Int) raises -> Int:
+def base_bincount2_i32(entry: EntryRef, a: Int, b: Int, n: Int, ka: Int, kb: Int, counts: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_bincount2_i32(key, a, b, n, ka, kb, counts)
+        result = _base_bincount2_i32(entry, a, b, n, ka, kb, counts)
     return result
 
 
-def base_row_means_f64(key: BaseEntryKey, src: Int, rows: Int, cols: Int, dst: Int) raises -> Int:
+def base_row_means_f64(entry: EntryRef, src: Int, rows: Int, cols: Int, dst: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_row_means_f64(key, src, rows, cols, dst)
+        result = _base_row_means_f64(entry, src, rows, cols, dst)
     return result
 
 
-def base_assign_fold_i64(key: BaseEntryKey, idx: Int, m: Int, n: Int, fold: Int, folds: Int) raises -> Int:
+def base_assign_fold_i64(entry: EntryRef, idx: Int, m: Int, n: Int, fold: Int, folds: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_assign_fold_i64(key, idx, m, n, fold, folds)
+        result = _base_assign_fold_i64(entry, idx, m, n, fold, folds)
     return result
 
 
-def base_count_fold_hits_i64(key: BaseEntryKey, idx: Int, m: Int, folds: Int, n: Int, fold: Int) raises -> Int:
+def base_count_fold_hits_i64(entry: EntryRef, idx: Int, m: Int, folds: Int, n: Int, fold: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_count_fold_hits_i64(key, idx, m, folds, n, fold)
+        result = _base_count_fold_hits_i64(entry, idx, m, folds, n, fold)
     return result
 
 
-def base_mark_split_roles_f32(key: BaseEntryKey, idx: Int, m: Int, n: Int, split: Int, role: Int, roles: Int) raises -> Int:
+def base_mark_split_roles_f32(entry: EntryRef, idx: Int, m: Int, n: Int, split: Int, role: Int, roles: Int) raises -> Int:
     var result = 0
     with GILReleased(Python()):
-        result = _base_mark_split_roles_f32(key, idx, m, n, split, role, roles)
+        result = _base_mark_split_roles_f32(entry, idx, m, n, split, role, roles)
     return result
