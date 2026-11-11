@@ -1,0 +1,41 @@
+Mojolearn KDE native test migration (2026-11-10)
+
+Native product API f052c4918c; pure owner/state78be03c73b. Actual device
+registry/workspace lease repair8a624987ef; public boundary still owned by pilot.
+First test chunk:30 pure typed cache/owner/admission fixtures. Exact cache
+identity includes every address/dimension/name and unrounded Float64 width.
+Native strings retain NUL/Unicode; valid handle0 and integer>2^53 remain
+exact. Take-once invalidates matching without changing other fields; move
+retains identity/driver; complete admission metadata comparisons include
+length and owned-copy independence. Mock driver only permits metadata; no
+fake handle release or cleanup callback. Independent cases parallel.
+RUN OWED: kde_state_suite.run_checks()(30), no lane compilation/execution.
+No product/kernel/default/algorithm changes, no timing/bits campaign.
+Nothing removed: existing Python coverage stays until replacement execution.
+
+Inventory:24 existing Python files/104 definitions from a name-based scan,
+not104 migration candidates. Raw inventory is E/pca-native-tests/
+kde-python-inventory.json. Primary eligible numerical block:
+test_neighbors_kde_native.py::test_scores_equal_former_path,48 cases
+(6kernels x4metrics x2weight modes),37x5 seed3 training and11x5 seed9 query,
+bandwidth.75, two resident passes, samples and total. Preserve those inputs
+and settings. Independent NumPy Float64 mathematical references prepared
+without product imports: radial densities/distance definitions/stable log
+sums; cosine normalization by quadrature, not product recurrence.
+Use existing KDE correctness bound2e-4*max(1,abs(reference)); mathematical
+-inf requires actual<=-1e38, exactly as existing kde_check. This is a
+mathematical correctness oracle replacing a legacy byte comparison; no
+previous-version identity campaign is added. References contain200finite
+and328outside-support scores;24 of48profiles are entirely outside support.
+New references are preparation only, not native runtime evidence.
+
+Keep Python storage layout/array dtype/total scalar type, zero-copy owners,
+mutation/refit/cache invalidation hooks, sparse/dataframe/Torch admission,
+refusal/error precedence, archive, sklearn/API and late NumPy seams. Host
+fit formats x weights alone expand to120 boundary cases. Existing raw KDE
+kernel/refusal/float64/workspace suites overlap broad low-level coverage;
+do not rerun their unchanged legacy-path bit checks as a development gate.
+New native execution will use the actual typed driver and independently
+check density/total, released-handle refusal and retained native leases.
+CPU graphs parallel; GPU numeric/ownership graphs ordered over contexts.
+No new shared-context stress or claim that the known Metal failure is fixed.
