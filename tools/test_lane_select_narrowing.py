@@ -899,6 +899,193 @@ def test_a_call_site_no_binding_compiles_does_not_block_narrowing():
     finally:
         ls._in_some_binding = saved
 
+
+# ------------------------------------------- pandas-gated glue (2026-11-05)
+_GATE_HEAD = _d("""
+    from std.python import Python, PythonObject
+    from bindings.py_balanced import py_call, py_type
+    from bindings.classical_pandas import _pd_class
+    """)
+_GATED = _d("""
+    def names_of(source: PythonObject, context: PythonObject) raises -> PythonObject:
+        # only a DataFrame has column names
+        if py_type(source) is not _pd_class("pandas.core.frame", "DataFrame"):
+            return PythonObject(None)
+        var columns = source.columns
+        return columns
+    """)
+_AFTER = _d("""
+    def after_fit(fields: PythonObject, source: PythonObject, context: PythonObject) raises:
+        var names = names_of(source, context)
+        fields["names"] = names
+    """)
+_GATE_PATH = "ns_gate/lifecycle.mojo"
+#: `_AFTER` also calling the helper (bodies are dedented to 4 spaces).
+_CALLING_AFTER = _AFTER.replace("    fields[", "    _ = gate_helper(source)\n    fields[")
+assert _CALLING_AFTER != _AFTER and "gate_helper" in _CALLING_AFTER, "fixture edit did not apply"
+
+
+def _gate_file(*defs):
+    return _GATE_HEAD + "\n\n" + "\n\n".join(defs)
+
+
+class _PandasFree:
+    """Hold `pandas_free_identity_process`'s answer for a synthetic case."""
+
+    def __init__(self, free):
+        self.free = free
+
+    def __enter__(self):
+        self.saved = dict(ls._PANDAS_FREE)
+        ls._PANDAS_FREE.clear()
+        ls._PANDAS_FREE["answer"] = (self.free, "seeded for the test")
+
+    def __exit__(self, *exc):
+        ls._PANDAS_FREE.clear()
+        ls._PANDAS_FREE.update(self.saved)
+
+
+def _gated_lanes(old, new, free=True, calls=None):
+    """`mojo_edit_lanes` for one seeded edit of _GATE_PATH, with one lane that
+    reaches every unit through export `fit` and one kept by the whole-file
+    rule (no recorded export)."""
+    class Graph:
+        def closure(self, src, export, ops=None):
+            units = ls._mojo_units(ls._read(_GATE_PATH)) or dict(top={})
+            return {("t", _GATE_PATH, name): None for name in units["top"]}
+    saved = ls._LANE_SEED_CALLS, ls._LANE_DEVICE_CALLS
+    try:
+        with _Seeded({_GATE_PATH: (old, new)}), _PandasFree(free):
+            ls._LANE_SEED_CALLS = calls or {
+                "through": [("bindings/h.mojo", True, ("fit",), frozenset({_GATE_PATH}))],
+                "kept": [("bindings/h.mojo", True, (), frozenset({_GATE_PATH}))]}
+            ls._LANE_DEVICE_CALLS = None
+            return ls.mojo_edit_lanes(REF, _GATE_PATH, {"through", "kept"}, Graph(), None)
+    finally:
+        ls._LANE_SEED_CALLS, ls._LANE_DEVICE_CALLS = saved
+
+
+def test_pandas_gate_shape_is_exact():
+    assert ls._pandas_gate(_GATED) is not None
+    refused = (
+        ("a statement before the gate", _GATED.replace("    # only", "    var k = 1\n    # only")),
+        ("an else after the gate", _GATED.replace("    var columns", "    else:\n        pass\n    var columns")),
+        ("two statements in the gate", _GATED.replace("        return PythonObject(None)\n",
+                                                      "        touch(source)\n        return PythonObject(None)\n")),
+        ("a gate that returns a call", _GATED.replace("return PythonObject(None)", "return touch(source)")),
+        ("a test that is not `is not`", _GATED.replace("is not _pd_class", "is _pd_class")),
+        ("a class that is not pandas", _GATED.replace('"pandas.core.frame"', '"numpy"')),
+        ("a decorated def", "@always_inline\n" + _GATED),
+        ("a one-line gate", _GATED.replace(":\n        return PythonObject(None)", ": return PythonObject(None)")),
+    )
+    for label, text in refused:
+        assert text != _GATED, label
+        assert ls._pandas_gate(text) is None, label
+
+
+def test_a_post_gate_edit_selects_no_lane_and_its_new_helper_neither():
+    """SELECTED NOWHERE: the edit is past an unchanged gate and the helper it
+    adds is named only there. The kept lane is dropped too: the proof is over
+    every caller."""
+    old = _gate_file(_GATED, _AFTER)
+    new_gated = _GATED.replace("    var columns = source.columns\n",
+                               "    var columns = gate_helper(source)\n")
+    assert new_gated != _GATED, "fixture edit did not apply"
+    helper = "def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n"
+    got = _gated_lanes(old, _gate_file(helper, new_gated, _AFTER))
+    assert got is not None and got[1] == set() and got[3] == set(), got
+    assert any("names_of" in label and "pandas-gated" in label for label in got[0]), got[0]
+    assert any("gate_helper" in label and "pandas-gated" in label for label in got[0]), got[0]
+
+
+def test_a_pandas_gate_selects_as_before_when_any_half_of_the_proof_fails():
+    """SELECTED: each shape that could run the changed code in a lane keeps the
+    ordinary rules (the lane reaching it, and the kept lane)."""
+    old = _gate_file(_GATED, _AFTER)
+    post = _GATED.replace("var columns = source.columns", "var columns = source.columns.copy()")
+    cases = (
+        ("no pandas-free proof", _gate_file(post, _AFTER), False),
+        ("the gate line changed", _gate_file(post.replace('"DataFrame"', '"Series"'), _AFTER), True),
+        ("an ungated definition changed", _gate_file(_GATED, _AFTER.replace('fields["names"]', 'fields["n"]')), True),
+        ("an ungated def that calls the new helper changed too", _gate_file(
+            "def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n",
+            _GATED.replace("var columns = source.columns", "var columns = gate_helper(source)"),
+            _CALLING_AFTER), True),
+        ("_pd_class defined locally", _gate_file(
+            "def _pd_class(m: String, n: String) raises -> PythonObject:\n    return PythonObject(None)\n",
+            post, _AFTER), True),
+    )
+    for label, new, free in cases:
+        got = _gated_lanes(old, new, free)
+        assert got is not None and {"through", "kept"} <= got[1], f"{label}: {got}"
+    # An existing helper the gated body calls, edited together with that body,
+    # while an UNCHANGED ungated definition also calls it: the gate is counted
+    # out, the helper is not.
+    helper_v1 = "def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n"
+    helper_v2 = helper_v1.replace("source.columns", "source.columns.copy()")
+    gated = _GATED.replace("var columns = source.columns", "var columns = gate_helper(source)")
+    after = _CALLING_AFTER
+    old = _gate_file(helper_v1, gated, after)
+    new = _gate_file(helper_v2, gated.replace("return columns", "return columns.copy()"), after)
+    got = _gated_lanes(old, new)
+    assert got is not None and {"through", "kept"} <= got[1], got
+    assert any("names_of" in label and "pandas-gated" in label for label in got[0]), got[0]
+    assert not any("gate_helper" in label and "pandas-gated" in label for label in got[0]), got[0]
+
+
+def test_a_helper_another_file_names_is_not_counted_out():
+    other = "ns_gate/other.mojo"
+    text = "from ns_gate.lifecycle import gate_helper\n\ndef use(x: PythonObject) raises:\n    _ = gate_helper(x)\n"
+    old = _gate_file(_GATED, _AFTER)
+    new = _gate_file("def gate_helper(source: PythonObject) raises -> PythonObject:\n    return source.columns\n",
+                     _GATED.replace("var columns = source.columns", "var columns = gate_helper(source)"), _AFTER)
+    with _Seeded({other: (text, text)}):
+        got = _gated_lanes(old, new)
+    assert got is not None and "through" in got[1], got
+
+
+def test_the_real_feature_names_gate_and_the_pandas_free_process_hold():
+    """THE REAL TREE (finding 1): `classifier_public_lifecycle.mojo:_feature_names`
+    opens with the gate, the identity process holds no pandas object, so an
+    edit past the gate is counted out; an edit to `classifier_after_fit`, which
+    every lifecycle runs, is not."""
+    path = "bindings/classifier_public_lifecycle.mojo"
+    text = ls._read(path)
+    units = ls._mojo_units(text)
+    assert units is not None and ls._pandas_gate(units["top"]["_feature_names"][1][0]) is not None
+    saved = dict(ls._PANDAS_FREE)
+    ls._PANDAS_FREE.clear()
+    try:
+        free, why = ls.pandas_free_identity_process()
+        assert free, why
+        msg = '"TypeError: native pandas column axes are unavailable"'
+        assert text.count(msg) == 1
+        post = text.replace(msg, '"TypeError: native pandas column axes are missing"')
+        changed, _ = ls.mojo_changed_definitions(text, post)
+        assert changed == {("t", "_feature_names")}, changed
+        gated, why = ls.pandas_gated_units(path, text, post, changed)
+        assert gated == {("t", "_feature_names")}, why
+        anchor = '    py_setitem(fields, "_mojolearn_fitted", True)\n'
+        assert text.count(anchor) == 1
+        after = text.replace(anchor, anchor + '    py_setitem(fields, "_probe", True)\n')
+        changed, _ = ls.mojo_changed_definitions(text, after)
+        assert changed == {("t", "classifier_after_fit")}, changed
+        assert ls.pandas_gated_units(path, text, after, changed)[0] == set()
+    finally:
+        ls._PANDAS_FREE.clear()
+        ls._PANDAS_FREE.update(saved)
+
+
+def test_pandas_free_process_refuses_a_harness_or_mojo_pandas_name():
+    assert ls._PANDAS_TOKENS_RE.search("import pandas as pd")
+    assert not ls._PANDAS_TOKENS_RE.search("import numpy as np")
+    probe = "ns_gate/importer.mojo"
+    for text, bad in (('var m = Python.import_module("pandas")\n', True),
+                      ('var m = Python.import_module(name)\n', True),
+                      ('var m = Python.import_module("builtins")  # pandas in a comment\n', False)):
+        with _Seeded({probe: (text, text)}):
+            assert (ls._pandas_free_mojo(probe) is not None) is bad, text
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

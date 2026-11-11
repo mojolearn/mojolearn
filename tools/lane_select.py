@@ -69,8 +69,8 @@ its own docstring and its own test that it still refuses where it must:
 `build_script_roots`, `pixi_tasks_only`, `NATIVE_INPUTS`,
 `_outside_python_unreachable`, `_unimported_mojo_unreachable`,
 `_imported_only_by_unreachable`, `_package_file_unreachable`,
-`_lane_keyed_prose`, `harness_closure_lanes` and the corpus-only reading of
-`test_module_inert`.
+`_lane_keyed_prose`, `harness_closure_lanes`, `pandas_gated_units` and the
+corpus-only reading of `test_module_inert`.
 
 WHAT IT REFUSES TO DO. It never returns an empty selection quietly for a path
 it could not place, and it never widens instead of saying so.
@@ -3973,6 +3973,248 @@ def _mojo_node_label(node):
     return f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}"
 
 
+# ------------------------------------------------- pandas-gated Mojo edits
+# A GLUE EDIT BEHIND A PANDAS TYPE GATE (lane-select-glue-attribution,
+# 2026-11-05). `bindings/classifier_public_lifecycle.mojo:_feature_names` runs
+# after EVERY estimator fit (the shared public lifecycle providers call it), so
+# the definition graph rightly reaches it from all 513 lanes. Its body opens
+# with `if py_type(source) is not _pd_class("pandas.core.frame", "DataFrame"):
+# return PythonObject(None)`, and everything after that line runs only for a
+# pandas DataFrame. The 0.8.66 Arrow feature-name fix changed only code after
+# that line, and still owed a re-record of every lane on every column.
+#
+# THE PROOF HAS TWO HALVES, both read from the tree, never from a diff:
+#   1. the edit (`pandas_gated_units`): every changed unit counted out is
+#      either a top-level def whose text up to and including such a gate is
+#      code-identical before and after, or a top-level def that only those
+#      units' gated bodies, or each other, name anywhere in the tree;
+#   2. the process (`pandas_free_identity_process`): no identity lane can hold
+#      a pandas object. The harness, its fragments, its runtime imports and
+#      the package's Python code name no pandas-family module or API in code,
+#      and no Mojo source imports one. `_pd_class` reads `sys.modules` and
+#      never imports, so without a pandas object the gate's class is either
+#      absent (None: `py_type(x) is not None` always holds) or has no instance.
+# The one assumption not read from this tree: the third-party modules the
+# package imports (numpy, scipy, the sklearn tag classes, torch) never hand
+# back a pandas object for the numpy inputs the harness builds unless asked by
+# a pandas option, and asking needs a name half 2 refuses.
+# Anything else (a gate in a method, a changed gate line, an `else` branch, a
+# helper named outside a gated body) stays with the definition graph.
+
+#: The pandas-family names whose appearance in harness or package CODE means a
+#: lane might build a pandas object. Docstrings and comments do not count.
+_PANDAS_TOKENS_RE = re.compile(r"\b(pandas|pyarrow|polars|DataFrame|as_frame|transform_output|set_output)\b")
+#: A Mojo import of a module by a name in the text (`import_module`,
+#: `__import__`, the C API).
+_MOJO_DYNAMIC_IMPORT_RE = re.compile(r"\b(import_module|__import__|PyImport_Import\w*)\b")
+_MOJO_STRING_RE = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')
+#: The gate: the first statement of a def body, a type test of a plain name
+#: against a pandas class looked up through `_pd_class`, whose block is one
+#: `return` of a constant.
+_PANDAS_GATE_RE = re.compile(r'^if\s+py_type\(\s*[A-Za-z_]\w*\s*\)\s+is\s+not\s+'
+                             r'_pd_class\(\s*"pandas(?:\.[A-Za-z_]\w*)+"\s*,\s*"[A-Za-z_]\w*"\s*\)\s*:$')
+_PANDAS_GATE_EXIT_RE = re.compile(r"^return(?:\s+(?:None|True|False|PythonObject\(None\)))?$")
+#: Where the gate's two names must come from (`_pd_class` reads sys.modules and
+#: never imports; `py_type` is the exact type).
+_PANDAS_GATE_IMPORTS = {"_pd_class": ("bindings.classical_pandas", "_pd_class"),
+                        "py_type": ("bindings.py_balanced", "py_type")}
+_PANDAS_FREE = {}
+_CACHES.append(_PANDAS_FREE)
+MOJO_GATED_WHY = {}
+
+
+def _pandas_free_python(rel):
+    """None when the CODE of Python file `rel` names no pandas-family token,
+    else the reason. A file that does not parse names everything."""
+    try:
+        tree = ast.parse(_read(rel))
+    except (OSError, SyntaxError, ValueError):
+        return f"{rel} cannot be read as Python"
+    m = _PANDAS_TOKENS_RE.search(ast.unparse(_strip_docstrings(tree)))
+    return f"{rel} names `{m.group(1)}` in code" if m else None
+
+
+def _pandas_free_mojo(rel):
+    """None when Mojo file `rel` imports no module by a name a pandas-family
+    token could be, else the reason. An import call with no string literal on
+    its line (a computed name) counts as one."""
+    try:
+        code = _mojo_code_text(_read(rel))
+    except OSError:
+        return None                          # listed but absent: nothing compiles it
+    for line in code.splitlines():
+        if not _MOJO_DYNAMIC_IMPORT_RE.search(line):
+            continue
+        literals = _MOJO_STRING_RE.findall(line)
+        if not literals:
+            return f"{rel} imports a module by a computed name: {line.strip()[:120]}"
+        for lit in literals:
+            if _PANDAS_TOKENS_RE.search(lit):
+                return f"{rel} imports `{lit}`"
+    return None
+
+
+def pandas_free_identity_process():
+    """(True, why) when no identity lane's process can hold a pandas object
+    (half 2 of the gate proof above), else (False, the first file that breaks
+    it). Read once per tree."""
+    if "answer" in _PANDAS_FREE:
+        return _PANDAS_FREE["answer"]
+    python = [HARNESS] + list(HARNESS_RUNTIME_IMPORTS)
+    try:
+        python += sorted(os.path.join(IDENTITY_FRAGMENTS, n) for n in os.listdir(os.path.join(ROOT, IDENTITY_FRAGMENTS))
+                         if n.endswith(".py"))
+    except OSError:
+        pass
+    python += sorted(_python_files())
+    answer = None
+    for rel in python:
+        why = _pandas_free_python(rel)
+        if why:
+            answer = (False, why)
+            break
+    if answer is None:
+        mojo = sorted({p for p in tracked_files() if p.endswith(".mojo")}
+                      | {p for p in _read.cache if p.endswith(".mojo")})
+        for rel in mojo:
+            why = _pandas_free_mojo(rel)
+            if why:
+                answer = (False, why)
+                break
+    if answer is None:
+        answer = (True, f"no pandas object can exist in an identity lane: {len(python)} harness and package "
+                        "Python files name no pandas-family module or API in code, and no Mojo source "
+                        "imports one")
+    _PANDAS_FREE["answer"] = answer
+    return answer
+
+
+def _pandas_gate(text):
+    """(gate prefix, its identifiers) for one top-level def's text whose body
+    opens with a pandas type gate (`_PANDAS_GATE_RE` with a constant `return`
+    as its whole block and no `elif`/`else`), else None. The prefix is the
+    signature and the gate, comments and docstrings blanked, whitespace
+    collapsed: what must be unchanged for the gate to hold before and after."""
+    code = _mojo_code_text(text)
+    scanned = _mojo_scan(code)
+    if scanned is None:
+        return None
+    stmts = _mojo_statements(scanned, 0)
+    if not stmts or len(stmts) != 1:
+        return None                          # a decorator or a second statement
+    first, pairs = stmts[0]
+    if not _MOJO_DEF_RE.match(first):
+        return None
+    k = 1
+    while k < len(pairs) and pairs[k][1]:
+        k += 1
+    header = [ln for ln, _ in pairs[:k]]
+    if not header[-1].rstrip().endswith(":"):
+        return None
+    rest = pairs[k:]
+    starts = [ln for ln, cont in rest if not cont and ln.strip()]
+    if not starts:
+        return None
+    indent = len(starts[0]) - len(starts[0].lstrip(" \t"))
+    if indent == 0:
+        return None
+    body = _mojo_statements(rest, indent)
+    if not body:
+        return None
+    gate_first, gate_pairs = body[0]
+    if not _PANDAS_GATE_RE.match(gate_first.strip()):
+        return None
+    block = [ln.strip() for ln, _ in gate_pairs[1:] if ln.strip()]
+    if len(block) != 1 or not _PANDAS_GATE_EXIT_RE.match(block[0]):
+        return None
+    if len(body) > 1 and re.match(r"^(?:elif|else)\b", body[1][0]):
+        return None
+    prefix = "\n".join(" ".join(ln.split()) for ln in header + [ln for ln, _ in gate_pairs] if ln.strip())
+    return prefix, frozenset(_MOJO_IDENT_RE.findall(prefix))
+
+
+def _mojo_files_naming(name, skip):
+    """The Mojo files other than `skip` whose code names `name`."""
+    out = set()
+    for rel in {p for p in tracked_files() if p.endswith(".mojo")} | {p for p in _read.cache if p.endswith(".mojo")}:
+        if rel == skip:
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if name in text and name in _MOJO_IDENT_RE.findall(_mojo_code_text(text)):
+            out.add(rel)
+    return out
+
+
+def pandas_gated_units(path, old_text, new_text, changed):
+    """(units, why): the changed units of one Mojo file (`changed`, from
+    `mojo_changed_definitions`) that no identity lane can execute, by the
+    pandas-gate proof above, and what it rested on (or why nothing was
+    counted out). Empty unless both halves hold."""
+    if old_text is None:
+        return set(), "a new file"
+    old_u, new_u = _mojo_units(old_text), _mojo_units(new_text)
+    if old_u is None or new_u is None:
+        return set(), "the file cannot be read by definition"
+    for units in (old_u, new_u):
+        for local, binding in _PANDAS_GATE_IMPORTS.items():
+            if local in units["top"] or units["imports"].get(local) != {binding}:
+                return set(), f"`{local}` is not imported from {binding[0]} alone"
+    # A name the gate prefix spells that now means something else (a changed
+    # import, a changed or new top-level name of this file) changes the prefix
+    # even when its text is the same.
+    moved = {n for n in set(old_u["imports"]) | set(new_u["imports"])
+             if old_u["imports"].get(n) != new_u["imports"].get(n)}
+    moved |= {u[1] for u in changed if u[0] == "t"}
+    gates = {}
+    for unit in changed:
+        if unit[0] != "t":
+            continue
+        o, n = old_u["top"].get(unit[1]), new_u["top"].get(unit[1])
+        if not o or not n or o[0] != "def" or n[0] != "def" or len(o[1]) != 1 or len(n[1]) != 1:
+            continue
+        before, after = _pandas_gate(o[1][0]), _pandas_gate(n[1][0])
+        if before is not None and after is not None and before[0] == after[0] \
+                and not (after[1] & (moved - {unit[1]})):
+            gates[unit[1]] = after[1]
+    if not gates:
+        return set(), "no changed definition opens with an unchanged pandas type gate"
+    # Helpers: top-level defs of the new text named only by gated bodies (not
+    # their gate prefix) or by each other, here and in no other Mojo file.
+    helpers = {u[1] for u in changed if u[0] == "t" and u[1] not in gates
+               and new_u["top"].get(u[1], (None,))[0] == "def"}
+    texts = _mojo_unit_texts(new_u)
+    idents = {unit: frozenset(_MOJO_IDENT_RE.findall(_mojo_code_text(text))) for unit, text in texts.items()}
+    residue = frozenset(_MOJO_IDENT_RE.findall(_mojo_code_text("\n".join(new_u["residue"]))))
+    elsewhere = {h: _mojo_files_naming(h, path) for h in helpers}
+    shrinking = True
+    while shrinking:
+        shrinking = False
+        for h in sorted(helpers):
+            ok = not elsewhere[h] and h not in residue
+            for unit, words in idents.items():
+                if not ok:
+                    break
+                if h not in words or unit == ("t", h):
+                    continue
+                if unit[0] == "t" and unit[1] in gates and h not in gates[unit[1]]:
+                    continue
+                if unit[0] == "t" and unit[1] in helpers:
+                    continue
+                ok = False
+            if not ok:
+                helpers.discard(h)
+                shrinking = True
+    free, why_free = pandas_free_identity_process()
+    if not free:
+        return set(), why_free
+    out = {("t", g) for g in gates} | {("t", h) for h in helpers}
+    return out, (f"{', '.join(sorted(gates))} run(s) past a pandas type gate only for a pandas object"
+                 + (f" ({', '.join(sorted(helpers))} named only there)" if helpers else "") + "; " + why_free)
+
+
 def mojo_edit_lanes(ref, path, hit, graph, backend=None):
     """(changed definition labels, selected lanes, lane -> chain, kept lanes)
     for one Mojo source's diff against `ref`, or None (whole file, with the
@@ -4010,8 +4252,19 @@ def mojo_edit_lanes(ref, path, hit, graph, backend=None):
     if changed is None:
         MOJO_EDIT_WHY[key] = why
         return None
-    nodes = {(u[0], path) + u[1:] for u in changed}
-    labels = sorted(_mojo_node_label(n) for n in nodes)
+    # UNITS NO IDENTITY LANE CAN EXECUTE (`pandas_gated_units`) are labelled
+    # but reach no lane, by the graph or by the whole-file rule: the proof is
+    # about every caller, so a lane kept for an unexplained route is not kept
+    # for them. Any other changed unit keeps the ordinary rules below.
+    MOJO_GATED_WHY.pop(key, None)
+    gated, why_gated = pandas_gated_units(path, old_text, new_text, changed) if changed else (set(), "")
+    if gated:
+        MOJO_GATED_WHY[key] = why_gated
+    nodes = {(u[0], path) + u[1:] for u in changed - gated}
+    labels = sorted([_mojo_node_label(n) for n in nodes]
+                    + [_mojo_node_label((u[0], path) + u[1:]) + " (pandas-gated)" for u in gated])
+    if gated and not nodes:
+        return labels, set(), {}, set()
     lanes, chains, kept = set(), {}, set()
     device = backend in DEVICE_BACKENDS and _LANE_DEVICE_CALLS is not None
     for lane in sorted(hit):
@@ -10947,6 +11200,9 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                  f"reach one through the definition graph, plus {len(kept)} kept by the "
                                  f"whole-file rule (reached outside any export they call), of the {len(hit)} "
                                  f"that compile it")
+                if f"{ref}:{path}" in MOJO_GATED_WHY:
+                    reasons[path] += ("; the pandas-gated definitions select no lane: "
+                                      + MOJO_GATED_WHY[f"{ref}:{path}"])
                 continue
         if hit and ref and path.endswith(".py") and path.startswith(PKG + os.sep):
             edited = python_edit_lanes(ref, path, sources, rev)

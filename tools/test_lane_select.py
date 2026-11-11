@@ -3551,3 +3551,34 @@ def test_a_body_only_edit_of_the_same_module_keeps_todays_selection():
     assert got["lanes"] == before["lanes"], (len(got["lanes"]), len(before["lanes"]))
     with _Seeded({path: old}, {path: top}):
         assert lane_select.import_time_code_changed(_FAKE_REF, path)
+
+
+# ------------------------------------------- glue attribution (2026-11-05)
+def test_an_import_time_glue_edit_keeps_every_lane_that_runs_it_and_an_uncalled_helper_none():
+    """lane-select-glue-attribution, finding 1: `_distributed_program.py`'s
+    `_connect_owned_programs` is RUN at import by `ops.py` (line `_connect_owned_programs(_SESSION_CONNECTIONS)`),
+    so a change to its body reaches every lane that loads `ops.py`. It
+    registers providers in a process-wide native registry and can raise at
+    import (the fca4c4773e fix was exactly that on Apple), and no rule proves
+    which lanes read that registry, so it stays broad: SELECTED. A new helper
+    nothing calls in the same file selects no lane: NOT SELECTED."""
+    path, ops = "python/mojolearn/_distributed_program.py", "python/mojolearn/ops.py"
+    old = lane_select._read(path)
+    assert "_connect_owned_programs(_SESSION_CONNECTIONS)" in lane_select._read(ops), \
+        "ops.py no longer runs _connect_owned_programs at import; re-derive the case"
+    anchor = "    from types import SimpleNamespace\n"
+    assert anchor in old
+    sources, rev = _lane_sets()
+    loaders = rev.get(path, set()) & rev.get(ops, set())
+    assert loaders, "no lane loads ops.py; the case proves nothing"
+
+    changed = old.replace(anchor, anchor + "    _probe_unused = len(connections)\n", 1)
+    with _Seeded({path: old}, {path: changed}):
+        got = lane_select.python_edit_lanes(_FAKE_REF, path)
+        why = lane_select.PYTHON_EDIT_WHY.get(f"{_FAKE_REF}:{path}", "")
+    assert got is not None and "_connect_owned_programs" in got[0], got
+    assert loaders <= got[1], f"{len(loaders - got[1])} lane(s) that run the import-time edit were dropped"
+    assert ops in why and "_connect_owned_programs" in why, why
+
+    helper = old + "\n\ndef _probe_glue_helper(x):\n    return x\n"
+    assert _py(helper, old, path) == (["_probe_glue_helper"], set())
