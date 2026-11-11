@@ -1,0 +1,384 @@
+{
+  "schema": 2,
+  "updated_at": "2026-11-11T19:25:18.111838+00:00",
+  "objective": "Complete Python-at-the-boundary and native test migrations without changing tuned kernels or supported semantics. Bundle development changes, compile, repair and merge main.",
+  "main": {
+    "root": "/Users/andrewhendel/mojolearn-wt/main-integration-20261110",
+    "head": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+    "pushed": true,
+    "compiled_source": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+    "tree_equal_to_compiled_source": true,
+    "compilation": "25/25Mac units passed; reconciliation reused25 unchanged units. No runtime/performance/identity claim.",
+    "compile_evidence": "compiled-main-merge-accepted.json",
+    "last_pushed": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1"
+  },
+  "active_build": {
+    "state": "building",
+    "source": "33b043de8b94b06d79f750ba6ae4c34533cc594d",
+    "toolchain": "Mojo1.2/MAX26.7",
+    "attempt": "r2",
+    "evidence": "consolidated-120-r2/build/result.json",
+    "integration_evidence": "consolidated-120-r2/integration.json",
+    "snapshot_counts": {
+      "passed": 6,
+      "failed": 2,
+      "unfinished": 17
+    },
+    "leave_running": "Andrew explicitly requested on2026-11-11; do not interrupt."
+  },
+  "next": {
+    "root": "/Users/andrewhendel/mojolearn-wt/integ-python-next-20261110",
+    "branch": "integ/python-boundary-next-20261110",
+    "head": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "last_pushed": "21f43e730fe059e5f5a1e4ba9bd4f36fff9268ea",
+    "native_check_active": "queued_after_product_exit",
+    "immutable_until_native_compile_finishes": true,
+    "main_merged": "21f43e730fe059e5f5a1e4ba9bd4f36fff9268ea",
+    "post_product_freeze": [
+      "Completed69role batch collected in queued tree and active in W3",
+      "Accepted native totals1192CPU/318AppleGPU; latest HDBSCAN fixtures remain unrun"
+    ],
+    "pending_product_dependency": null,
+    "native_last_attempt": {
+      "source": "439e09413c7bccd18ad0d049c02931b1dc2cda32",
+      "evidence": "native-wave18-accepted-results.json",
+      "cpu_passed": 126,
+      "apple_gpu_passed": 47,
+      "optics_compiler_blocked_cpu": 9,
+      "optics_compiler_blocked_gpu": 9
+    },
+    "dbscan_state_compiler_issue": {
+      "minimal": "pca-native-tests/dbscan-minimize/01_mutable_field_capture.mojo",
+      "compile_exit": 1,
+      "controls_compiled": [
+        2,
+        3
+      ],
+      "control_runtime": "not run",
+      "evidence": "pca-native-tests/dbscan-minimize/compile-results.json",
+      "status": "Original diagnostic reproduced without repository imports; valid-code/toolchain support question drafted, not submitted",
+      "workaround": false,
+      "pending_fixtures": 28
+    },
+    "native_pending": "HDBSCAN23CPU/8GPU retry remains unrun; previous controller stopped after push rejection. Main compilation now accepted independently."
+  },
+  "agents": {
+    "boundary_pilot_resume": "Finish GP private envelopes, label and archive gaps",
+    "finite_tests_resume": "Finish LinearSVR fit/LinearSVC score and remaining SVM roles",
+    "native_tests_resume": "Priority conservative lane-select review repairs, then144class/public-function inventory"
+  },
+  "accepted_native_evidence": [
+    "native-wave4-accepted-results.json",
+    "native-logistic-plans-accepted-results.json",
+    "native-wave5-accepted-results.json",
+    "native-label-score-keys-accepted-results.json",
+    "native-wave6-accepted-results.json",
+    "native-wave8-partial-accepted-results.json",
+    "native-wave8-accepted-results.json",
+    "native-wave9-accepted-results.json",
+    "native-wave11-accepted-results.json"
+  ],
+  "additional_native_evidence": [
+    "kpca-native-contract-centering-accepted.json",
+    "kpca-native-actual-accepted-results.json",
+    "native-wave13-accepted-results.json",
+    "native-wave14-accepted-results.json"
+  ],
+  "latest_native_result": {
+    "source": "439e09413c7bccd18ad0d049c02931b1dc2cda32",
+    "state": "selected_native_suites_passed_with_optics_compiler_blocked",
+    "evidence": "native-wave18-accepted-results.json"
+  },
+  "pending_user_decision": {
+    "answered": true,
+    "decision": "Approved six named Mojo List fields in IPCA test storage only. Implemented and passed. No broader workaround or feature deprecation authorization inferred."
+  },
+  "validation_limits": [
+    "Product build is compilation only",
+    "Native fixture runs do not establish installed public API coverage",
+    "No NVIDIA/AMD product compile or runtime claim",
+    "No performance measurements or cross-device identity run",
+    "Upstream shared Apple Metal DeviceContext concurrency issue remains open; no public deprecation implemented",
+    "Original IPCA compiler reproducer remains failing and preserved; upstream draft not sent"
+  ],
+  "python_object_inventory": "python-object-typed-seven-family.json:88distinctprivatecontainerroles replaced/removed fromef223to b7across7families; notruntimeinstances/exhaustiveallocationcount. KPCA/PCS/NCfollowup excluded.",
+  "upstream_evidence": [
+    "metal-shared-context-upstream-evidence.json",
+    "pca-native-tests/ipca-minimize/UPSTREAM_ISSUE_DRAFT.txt"
+  ],
+  "history_snapshot": "CURRENT_STATUS-before-dbscan-20261110-232238.json",
+  "rules": [
+    "No Python fallback/source guard; retain public pins and smart/tuned kernels.",
+    "Only root builds/tests; bundle integration and reuse valid closure cache.",
+    "No wheel smoke merge gate; no development identity or release.",
+    "Never mutate active build sources.",
+    "Preserve full raw failures/logs; print only selected summaries."
+  ],
+  "post_build_merge_target": null,
+  "next_batch_pending_producers": [],
+  "build_history": [
+    {
+      "root": "/Users/andrewhendel/mojolearn-wt/integ-w3",
+      "branch": "integ/python-boundary-20261110",
+      "source": "aa92247b1b5a2f6d6b1ee0f73170c4e241a4df52",
+      "session": 11067,
+      "evidence": "native-wave10-product-build",
+      "state": "building",
+      "scope": "Frozen combined Mac25-unit optimized release layout: KPCA,PCS,KDE,Array admission and NC native label scratch. Compilation-only merge gate; NVIDIA/AMD and installed public runtime untested.",
+      "observed_state": "building",
+      "completed_units": 21
+    },
+    {
+      "root": "/Users/andrewhendel/mojolearn-wt/integ-w3",
+      "branch": "integ/python-boundary-20261110",
+      "source": "57ef9ab498deb14e3d67b2e04bb9d5238a95adaf",
+      "session": 65868,
+      "evidence": "native-wave11-product-build",
+      "state": "failed",
+      "scope": "Combined optimized Mac25-unit compilation: DBSCAN, Agglomerative, canonical native owner identity/pin admission, typed parallel sparse connectivity. Compile-only development merge gate; other vendors and installed public runtime untested.",
+      "controller_exit": 1,
+      "accepted_units": 12,
+      "failed_units": 13,
+      "failure_summary": "wave11-original-product-failures.json"
+    },
+    {
+      "source": "ae75e20b7858441758dfbf8cadf3dd5816859b7b",
+      "evidence": "native-wave12-product-repair2",
+      "state": "failed",
+      "controller_exit": 1,
+      "built": 4,
+      "reused": 16,
+      "failed": 5,
+      "diagnostics": "wave12-second-repair-failures.json"
+    },
+    {
+      "root": "/Users/andrewhendel/mojolearn-wt/integ-w3",
+      "branch": "integ/python-boundary-20261110",
+      "source": "21f43e730fe059e5f5a1e4ba9bd4f36fff9268ea",
+      "session": 73794,
+      "evidence": "native-wave12-product-repair3",
+      "state": "completed",
+      "scope": "Combined current GP typed state/requests/normalization/labels and MiniBatch/Bisect native fit/query/resident paths; next-tranche GP and MeanShift/AP excluded. Optimized Mac identical+host release layout.",
+      "controller_exit": 0,
+      "accepted_evidence": "native-wave12-accepted-compilation.json"
+    }
+  ],
+  "progress_counts": {
+    "evidence": "python-object-typed-root-anchor-review.json",
+    "bounded_private_roles": 307,
+    "roles_merged_main": 278,
+    "roles_current_integration": 29,
+    "family_refactors_merged": 12,
+    "family_refactors_current_integration": 2,
+    "public_estimator_inventory": "public-estimator-typed-progress-current.json",
+    "public_estimator_classes": 170,
+    "confirmed_remaining": 8,
+    "unreviewed": 144,
+    "limits": "Distinct audited private roles, not instances or a completion percentage.22classes have scoped work, including partial families;148unreviewed. Required Python pins remain.",
+    "latest_source_footprint_evidence": "python-migration-tracked-footprint-5f7d3aaf722c.json",
+    "additional_partial_roles_not_counted": 0,
+    "current_evidence": "python-object-typed-progress-current.json",
+    "roles_next_uncompiled": 0,
+    "gp_partial_roles": 51,
+    "classes_with_audited_migration_roles": 23,
+    "class_counts_overlap": "Use the non-overlapping selected-scope partition in public-estimator-typed-progress-current.json; these statuses do not certify whole-family Python-free execution.",
+    "roles_source_audited": 332,
+    "oneclass_new_distinct_roles": 6
+  },
+  "native_progress_counts": {
+    "cpu_passed": 1192,
+    "apple_gpu_passed": 318,
+    "evidence": "native-migration-counted-progress-after-wave18.json"
+  },
+  "compiler_repairs": {
+    "4acc5a210d": "Origin-generic read-only cfb flag pointer; numerical helper body unchanged",
+    "349dedfeab": "Supported CPython opaque wrapper construction centralized for10 native-owner inspections; standalone SDK probe compile0",
+    "21f43e730fe059e5f5a1e4ba9bd4f36fff9268ea": {
+      "change": "Swap owned fields with empty native values to preserve aggregate destruction without copying buffers",
+      "diagnostics_repaired": 11,
+      "validation": "product repair3 running"
+    }
+  },
+  "future_work": [
+    "GP next-tranche137989842d,e4e6684dbc,9a356f9d01,da1e7a8ef7 held; d37398804f adoption excluded",
+    "MeanShift/AP367bb560f3,553fd45e5f,c47be7762d,6b54b7f9eb,1ec0c867d0 held; preference passive pandas capture ongoing",
+    "GPtheta native fixtures6f4ead351cf held; old Python checks retained",
+    "Current accepted GP numerical Python cleanup/docs pending separately"
+  ],
+  "native_next_plan": {
+    "state": "completed selected suites; OPTICS9/9 compiler-blocked",
+    "evidence": "native-wave18-accepted-results.json"
+  },
+  "queued_integration": {
+    "root": "/Users/andrewhendel/mojolearn-wt/integ-python-repair-20261110",
+    "branch": "integ/python-boundary-repair-20261110",
+    "head": "b471d4778d21ebbdd606fb1dcc891dcf4b38507f",
+    "state": "Small tooling merged; initial three-suite test run active; two reviewed narrowing repairs pending producer",
+    "new_distinct_roles": 69,
+    "current_product_freeze_unchanged": "78a6a382354bcf3e463b74ebce58f1f77f1c051f",
+    "source_queue_evidence": "future-producer-review-queue.json",
+    "numerical_source_evidence": "future-root-numerical-source-review.json",
+    "last_pushed": "672048c986d485a7c7f459c21df64ec5c2b05bb8"
+  },
+  "pending_role_reviews": [
+    "GPR/GPC score tranche separate from completed product freeze"
+  ],
+  "hdbscan_ownership_repair": {
+    "source": "672048c986d485a7c7f459c21df64ec5c2b05bb8",
+    "evidence": "wave13-hdbscan-ownership-repair.json",
+    "status": "proactive known-pattern repair; not compiled"
+  },
+  "next_product_continuation": {
+    "session": 77209,
+    "controller": "continue-wave13-repair2.py",
+    "result": "wave13-continuation2-result.json",
+    "repair_source": "1178e6004d2f0c1ebddb449dd9388a2880a7558b",
+    "scope": "Compile repair2, merge/push if successful, then HDBSCAN native retry; all earlier failures retained",
+    "state": "completed via root remote-main reconciliation; original push rejection preserved"
+  },
+  "future_score_staging": {
+    "source": "87a3c4ccc3e0b79c677c6ad87b4e88a552798a82",
+    "producer_product": "4256e469ae",
+    "claimed_roles": 15,
+    "counted_in_total": true,
+    "independent_audit": "accepted15 roles; product/native execution pending",
+    "product_compilation": "not queued; batch with SVM work"
+  },
+  "accepted_python_cleanup": {
+    "source": "5f7d3aaf722ce04a8f24c12f0b8650fe72728775",
+    "evidence": "wave18-accepted-python-cleanup.json",
+    "definitions_removed": 3,
+    "parameterized_cases_removed": 13,
+    "oracle_helpers_removed": 3
+  },
+  "worktree_cleanup": {
+    "state": "completed",
+    "before": 91,
+    "selected": 60,
+    "archives_verified": 36,
+    "preserved_local_bytes": 1373907695,
+    "results": "worktree-prune-results.json",
+    "preservation": "worktree-prune-preservation.json",
+    "removed": 60,
+    "remaining": 31,
+    "summary": "worktree-prune-summary.json"
+  },
+  "handoff": "docs/plans/PYTHON_MIGRATION_HANDOFF_20261111.json",
+  "combined_native_queue": {
+    "state": "superseded_before_execution",
+    "pid": 57671,
+    "source": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "reason": "Owner requested one consolidated pre-integration batch before new compiles;72 CPU47GPU cases will join the combined native plan.",
+    "compiled": false,
+    "executed": false,
+    "updated_at": "2026-11-11T19:00:01.257174+00:00"
+  },
+  "tooling_test_run": {
+    "initial_source": "b471d4778d21ebbdd606fb1dcc891dcf4b38507f",
+    "result": {
+      "passed": 169,
+      "failed": 7,
+      "xfailed": 3
+    },
+    "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/small-tooling-tests-r2.log",
+    "repair_narrowing_result": {
+      "passed": 65,
+      "failed": 1
+    },
+    "next_source": "fa1609eaad",
+    "next_session": 43023,
+    "diagnostic_session": 22791,
+    "remaining": "Broad lane-selection expectations and reachability under review; no merge claim",
+    "final_source": "ddc7339720",
+    "final_session": 51211,
+    "final_log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/tooling-final-tests.log"
+  },
+  "completion_producer_queue": "post-cohort-completion-producers.json",
+  "native_call_table": {
+    "brief": "/Users/andrewhendel/mojolearn-evidence/briefs-20261111/codex-native-call-table.md",
+    "owner": "native_tests_resume",
+    "branch": "lane/native-entry-table-20261111",
+    "state": "implementing",
+    "scope": "Shared native table, typed generation-checked state and Ridge/LinearRegression proof; family rollout thereafter",
+    "runtime_controller": "tools/python_crossing_probe.py",
+    "observer_controls": "5passed at41f45e7a3c; C-API blind spot explicitly retained",
+    "visibility": "C API builtin invocation invisible in sys.setprofile control; zero events never qualifies Python-free",
+    "runtime_cases": "unrun",
+    "measurements": "NVIDIA/AMD pending; no speed claim",
+    "source_producers": [
+      "b7840529cb",
+      "b3b9fa3ef3",
+      "200cac276b"
+    ],
+    "source_collected": true,
+    "contract_cases_authored": 20,
+    "cross_image_proof": "two separate images authored; compile/run pending"
+  },
+  "followon": {
+    "tree": "/Users/andrewhendel/mojolearn-wt/integ-python-followon-20261111",
+    "head": "fa1609eaad",
+    "state": "source-only, observer/tooling tests active",
+    "product_compile": "unbuilt",
+    "roles": "Not counted beyond307 audited roles; producer independence audit pending"
+  },
+  "inventory_scope": {
+    "artifact": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/current-runtime-remainder-source/HANDOFF.md",
+    "classes_resolved": 144,
+    "methods_traced": 1322,
+    "classes_native_registration_links": 129,
+    "dynamic_or_function_entries": 121,
+    "note": "Read-only tracing, not completed migrations or Python-free qualification"
+  },
+  "integration_policy": {
+    "owner_request": "Consolidate all current work before compiling; merge and push main once",
+    "preintegration_branch": "preinteg/native-consolidated-20261111",
+    "head": "84b0a08b228b9c8e913dcffc1ffe9d645520684a",
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-python-followon-20261111",
+    "old_partial_merge": "held by root-owned clean-main marker; active compile not interrupted",
+    "old_native_queue": "cancelled before execution;72CPU47GPU cases move to combined source",
+    "next_steps": [
+      "Finish current GP/SVM/table source checkpoints and collect",
+      "Freeze consolidated source",
+      "Run existing optimized build with matching-artifact reuse and combined native proof",
+      "Repair failures on pre-integration",
+      "One main merge/push of accepted combined source"
+    ],
+    "historical_branches": "Unreviewed or diagnostic branches remain preserved; not silently merged as product code"
+  },
+  "toolchain_upgrade": {
+    "requested": "2026-11-11",
+    "target": {
+      "mojo": "1.2.0",
+      "max": "26.7.0"
+    },
+    "branch": "preinteg/native-consolidated-20261111",
+    "state": "frozen and pushed; combined build started",
+    "reproducer_evidence": "/Users/andrewhendel/mojolearn-evidence/modular-check-20261111/SUMMARY.md",
+    "historical_build": {
+      "source": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+      "mojo": "1.0.0",
+      "compiled_binding_units": 25,
+      "merged": false,
+      "reason": "held for user-requested single combined merge"
+    }
+  },
+  "tooling_latest": {
+    "full_frozen_run": {
+      "source": "ddc7339720",
+      "passed": 183,
+      "xfailed": 3,
+      "failed": 1,
+      "evidence": "tooling-final-tests.xml"
+    },
+    "failed_case_repair": {
+      "source": "202d2c699d",
+      "passed": 1,
+      "evidence": "tooling-membership-repair.xml"
+    },
+    "toolchain_pin_controls": {
+      "passed": 40,
+      "evidence": "toolchain-pin-tests.xml"
+    },
+    "scope": "Tooling controls only; not product runtime."
+  }
+}

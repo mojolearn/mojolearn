@@ -1,0 +1,103 @@
+{
+  "status": "independent source role audit complete; no compilation/runtime claim",
+  "baseline_distinct_roles": 326,
+  "inventoried_family_roles": 7,
+  "family_source_roles_migrated": 7,
+  "shared_schema_roles_excluded": 1,
+  "supported_distinct_delta": 6,
+  "resulting_source_audited_roles_if_root_accepts": 332,
+  "percentage": null,
+  "source": "fb40a7ad53470f43423ebe03e2e0f7d932863993",
+  "producer_source": "ef64113d6b0a6e7ff90781988b4de017c4a56b8d",
+  "boundary_only_followup": "25fd92712b6abc8931ca6fde9e53b49b939677ab",
+  "anchors": "role-anchors.json",
+  "prior_baseline": "E/pca-native-tests/next-gp-svm-audit/audit.json",
+  "duplicate_evidence": "prior-xn-envelope-roles.json",
+  "exclusions": [
+    "Existing XnDriver address/integer/float request schemas already counted under NC/LOF",
+    "Required Python input/exporter/provider/class identity pins in OcConnection and public output owners",
+    "Existing OneClass coefficient weak-cache tuple in gp_svm_records remains unchanged and is not removed",
+    "Shared NativeArrayLayout/admitted-fill/conversion kernels and per-field declarations",
+    "Native tests/controllers, source inventory/proof documents and final admission-only repair"
+  ],
+  "native_replacements": [
+    "OcWeights native positive-row/value/count ownership",
+    "OcMatrix native private matrix storage with unchanged borrowed/public pins",
+    "OcFitState native alpha/solver/support scratch",
+    "OcResidentRequest native dedicated resident solver arguments",
+    "OcQueryState native private Float32 score/decision storage",
+    "OcQueryState native private Int32 sign-label storage"
+  ],
+  "preservation": {
+    "producer_numerical_shared_sources_unchanged": 11,
+    "stage_byte_changed_files": [
+      "x_neighbors/ocsvm_dev.mojo",
+      "x_neighbors/iter_device.mojo",
+      "x_neighbors/iter_host.mojo",
+      "x_neighbors/device_ops.mojo"
+    ],
+    "evidence": "source-conservation.json",
+    "claim_limit": "Root namespace/API migration is distinct from OneClass role conversion; see exact saved stage diffs. No toolchain/runtime equivalence claim."
+  },
+  "native_run_closure": {
+    "roots": 4,
+    "local_sources": 39,
+    "python_imports": 0,
+    "unresolved_local_imports": 0,
+    "evidence": "native-closure.json"
+  },
+  "followup_core_and_fixture_stability": [
+    {
+      "path": "core/ocsvm_plan.mojo",
+      "byte_unchanged": false,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    },
+    {
+      "path": "core/ocsvm_resident_api.mojo",
+      "byte_unchanged": true,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    },
+    {
+      "path": "x_neighbors/ocsvm_resident_native_host.mojo",
+      "byte_unchanged": true,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    },
+    {
+      "path": "x_neighbors/ocsvm_resident_native_device.mojo",
+      "byte_unchanged": true,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    },
+    {
+      "path": "checks/native_tests/ocsvm_native_cpu_suite.mojo",
+      "byte_unchanged": true,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    },
+    {
+      "path": "checks/native_tests/ocsvm_native_gpu_suite.mojo",
+      "byte_unchanged": true,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    },
+    {
+      "path": "checks/native_tests/ocsvm_native_cases.mojo",
+      "byte_unchanged": true,
+      "unchanged_after_confirmed_sdk_spelling_updates": true
+    }
+  ],
+  "followup_qualification": "core/ocsvm_plan changes only memcpy to unsafe_memcpy, including its import and two existing prefix copies; all seven role anchors remain and all fixture bytes unchanged. The failed first audit assertion is preserved; raw byte identity is not claimed.",
+  "runtime": {
+    "native_CPU_cases": 12,
+    "native_GPU_cases_default": 22,
+    "native_GPU_cases_resident_off": 12,
+    "resident_cases_skipped_when_off": 10,
+    "executed_by_lane": false
+  },
+  "remaining": [
+    "Retained coefficient weak-cache tuple",
+    "Shared public input/lifecycle/archive/serialization mechanisms and mandatory pins",
+    "Final integrated SDK1.2 product/native/boundary execution by root"
+  ],
+  "compiled": false,
+  "executed": false,
+  "product_edits": false,
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/pca-native-tests/oneclass-role-audit"
+}

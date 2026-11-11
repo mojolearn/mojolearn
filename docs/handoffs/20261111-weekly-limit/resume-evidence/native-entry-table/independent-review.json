@@ -1,0 +1,332 @@
+{
+  "reviewer": "/root/boundary_pilot_resume",
+  "created_at_utc": "2026-11-11T19:13:32.915228+00:00",
+  "status": "source_review_complete_with_one_concrete_admission_defect_and_one_native_composition_proof_gap",
+  "snapshot": "0c6a9fd188b65f8fae5e00c8a0ff26fe8ac1bab1",
+  "branch_at_snapshot": "preinteg/native-consolidated-20261111",
+  "producers": [
+    "b7840529cbbf905a0b08a2b14d6f98551a52599a",
+    "b3b9fa3ef303c9699db8e8edc1d3e89f6923330e",
+    "200cac276b494cc1970428782d2c11cd58a07d6f"
+  ],
+  "execution": {
+    "source_analysis_only": true,
+    "product_edits": 0,
+    "root_tree_edits": 0,
+    "compiles_run": 0,
+    "tests_run": 0,
+    "benchmarks_run": 0,
+    "boxes_accessed": 0,
+    "runtime_result": "unrun",
+    "cross_vendor_identity": "not assessed",
+    "performance": "not assessed"
+  },
+  "concrete_defects": [
+    {
+      "id": "NET-001",
+      "status": "handed_to_root_and_native_tests_resume_for_repair",
+      "severity": "correctness_admission",
+      "path": "providers/python/linear_score_boundary.mojo",
+      "lines": [
+        62,
+        74
+      ],
+      "description": "The selected metrics connection key is used to read its native entry, but its mode/vendor are not compared with the selected metrics context mode/vendor passed to linear_score_run. An exact canonical metrics owner from another connected tier/vendor passes family admission and can supply a different provider while execution flags retain the selected context values.",
+      "evidence": [
+        "providers/python/linear_entry_boundary.mojo:119 (exact owner/family checks only)",
+        "providers/python/linear_score_boundary.mojo:67 (canonical metrics connection)",
+        "providers/python/linear_score_boundary.mojo:69 (entry selected by replacement owner key)",
+        "providers/python/linear_score_boundary.mojo:70 (independent expected vendor)",
+        "providers/python/linear_score_boundary.mojo:71 (independent expected mode)"
+      ],
+      "repair": "Compare metrics owner key against selected metrics mode and classical_metric_vendor before RUN. Preserve explicit-CPU estimator plus separately selected metrics-provider semantics; do not compare blindly against the estimator key.",
+      "required_control": "Replace the metrics entry connection with a genuine other-tier/vendor metrics owner and require refusal before execution. Keep absent tier/vendor conditions explicit.",
+      "runtime_reproducer": "not run"
+    }
+  ],
+  "proof_gaps": [
+    {
+      "id": "NET-P01",
+      "status": "handed_to_root_for_test_owner",
+      "path": "checks/native_tests/entry_table_contract_suite.mojo",
+      "lines": [
+        175,
+        211
+      ],
+      "description": "The borrowed LinearModelState fixture exercises the real host predictor directly through linear_predict_run. It bypasses linear_lease_predict and production linear-table lookup. Table-call fixtures and separate-image endpoint are synthetic. Consequently no standalone native fixture currently composes a production handle acquisition, production linear table entry, and predictor in one graph.",
+      "scope": "Does not imply a product defect. Authored public boundary tests exercise the integrated public chain after root execution; a direct native graph would supply the requested native composition proof.",
+      "suggested_control": "Retain explicit coefficient/input/output owners, publish the existing host predictor under the production estimator family key, call linear_lease_predict through an acquired LinearModelState lease, then retain/release/replace and check the literal result and stale-handle refusal."
+    }
+  ],
+  "observations_not_failures": [
+    {
+      "id": "NET-N01",
+      "kind": "unconfirmed_compile_pattern_concern",
+      "description": "Six GILReleased(Python()) sites match a pattern previously discussed during integration. No new compile was run; root notes this form also exists in the active prior build. This review does not classify these sites as compiler failures.",
+      "anchors": [
+        "providers/python/linear_fit_boundary.mojo:54",
+        "providers/python/linear_predict_boundary.mojo:56",
+        "providers/python/linear_ols_boundary.mojo:35",
+        "providers/python/linear_ols_boundary.mojo:62",
+        "providers/python/linear_score_boundary.mojo:73",
+        "providers/python/linear_score_boundary.mojo:102"
+      ]
+    }
+  ],
+  "audited_findings": [
+    {
+      "name": "publication",
+      "anchors": [
+        "core/entry_table.mojo:36",
+        "core/entry_table.mojo:74",
+        "core/entry_table.mojo:79"
+      ],
+      "finding": "Publication mutates metadata under the slot lock, release-stores readiness only after copying all fields, and the reader acquire-loads readiness before reading immutable entries. Repeated publication requires identical publisher, tier/vendor, schemas, operation counts, and function pointer bytes.",
+      "limits": "Source review only; no execution by this lane."
+    },
+    {
+      "name": "first_slot_creation",
+      "anchors": [
+        "core/entry_table.mojo:25",
+        "core/state_registry.mojo:29",
+        "core/shared_slot.mojo:110"
+      ],
+      "finding": "New slot constructors only allocate native metadata/default containers. They create no device context or external registration, so the existing SharedSlot losing-initializer contract is respected.",
+      "limits": "Relies on the existing SharedSlot/_Global runtime contract and recorded runtime evidence; this review did not disassemble or execute the runtime again."
+    },
+    {
+      "name": "slot_layout_and_route_identity",
+      "anchors": [
+        "core/shared_slot.mojo:142",
+        "core/linear_entry_table.mojo"
+      ],
+      "finding": "SharedSlot checks layout version/size before returning a value. A source-map comparison finds 32 unique family/tier/vendor slot names and matching publication/read branch maps across eight tier/vendor conditions.",
+      "limits": "Version/name discipline remains required for semantic or same-size layout changes. No mixed-image execution was performed."
+    },
+    {
+      "name": "publisher_roots",
+      "anchors": [
+        "bindings/_mojolearn_estimators.mojo",
+        "bindings/_mojolearn_estimators_host.mojo",
+        "bindings/_mojolearn_x_linear.mojo",
+        "bindings/_mojolearn_x_linear_host.mojo",
+        "bindings/_mojolearn_x_decomp.mojo",
+        "bindings/_mojolearn_x_decomp_host.mojo",
+        "bindings/_mojolearn_x_metrics.mojo",
+        "bindings/_mojolearn_x_metrics_host.mojo"
+      ],
+      "finding": "All eight publishers retain the existing host/device callback functions and schemas, derive keys from compiled mode/vendor, and publish after module finalization during initialization. No new numerical implementation was introduced by these publication additions.",
+      "limits": "Source review only; no execution by this lane."
+    },
+    {
+      "name": "canonical_connection",
+      "anchors": [
+        "providers/python/linear_entry_boundary.mojo:60",
+        "providers/python/linear_entry_boundary.mojo:119",
+        "providers/python/neural_descriptor_pyapi.mojo:106"
+      ],
+      "finding": "Import connection admits exact compiled functions, requires metadata entries and factory to share the actual C-function owner module, checks expected descriptor ABI/count and published pointer, and retains the exact module in an opaque canonical owner. Runtime entry selection admits exact dictionary keys, owner type, and family.",
+      "limits": "Source review only; no execution by this lane."
+    },
+    {
+      "name": "connection_replacement",
+      "anchors": [
+        "bindings/classical_native.mojo:48",
+        "providers/python/linear_fit_boundary.mojo",
+        "providers/python/linear_ols_boundary.mojo"
+      ],
+      "finding": "The main estimator admission cache includes canonical connection identity, so replacement rechecks selected tier/vendor. Weighted Ridge and OLS TSQR also compare their separate provider keys with the estimator key. Metrics omission is reported separately as NET-001.",
+      "limits": "Source review only; no execution by this lane."
+    },
+    {
+      "name": "registry_metadata",
+      "anchors": [
+        "core/state_registry.mojo:41",
+        "core/state_registry.mojo:67"
+      ],
+      "finding": "Insert/acquire validate under the metadata lock; acquire returns an owning Arc copied before unlock. No registry Dict entry borrow escapes to numerical execution.",
+      "limits": "Source review only; no execution by this lane."
+    },
+    {
+      "name": "generations_and_replacement",
+      "anchors": [
+        "core/state_registry.mojo:41",
+        "core/state_registry.mojo:83",
+        "core/state_registry.mojo:103"
+      ],
+      "finding": "Release removes the registry owner and makes the index reusable; reuse increments generation, and exhausted UInt64 generations retire the slot. Replace leaves an already acquired Arc snapshot intact. Both release and replace retire previous owners after unlocking.",
+      "limits": "Exhaustion/OOM exceptional paths are source-reviewed only; no fault injection or same-handle race execution occurred."
+    },
+    {
+      "name": "borrowed_buffers",
+      "anchors": [
+        "core/linear_registry.mojo",
+        "providers/python/linear_predict_boundary.mojo:24",
+        "providers/python/linear_state_boundary.mojo:82"
+      ],
+      "finding": "LinearModelState carries borrowed addresses, not ownership. Public prediction captures coefficient/scalar fields before argument admission can release the GIL, retains its own admitted coefficient/input/output pins and native Arc through RUN, and refreshes native state for supported coefficient replacement. Concurrent replacement cannot remove that call's explicit source pins.",
+      "limits": "A registry handle alone does not extend an external exporter lifetime. New native meta-estimator callers must retain the buffer owners explicitly. In-place user mutation retains the existing borrowed-buffer semantics, not a new data-race guarantee."
+    },
+    {
+      "name": "image_and_owner_lifetime",
+      "anchors": [
+        "providers/python/linear_entry_boundary.mojo:134",
+        "providers/python/linear_state_boundary.mojo:29",
+        "providers/python/linear_state_boundary.mojo:105",
+        "providers/python/linear_fit_boundary.mojo",
+        "providers/python/linear_ols_boundary.mojo",
+        "providers/python/linear_score_boundary.mojo"
+      ],
+      "finding": "Connection objects pin the actual image directly, and public RUN finally blocks retain those objects independently of mutable entry dictionaries. State owners pin coefficients/means, release registry handles before dropping their pins, and register canonical retained-pin inspectors.",
+      "limits": "Low-level native entry-table pointers themselves are not image owners. The separate-image fixture/controller must retain both loaded images through all calls, as its protocol specifies."
+    },
+    {
+      "name": "authored_proof_scope",
+      "anchors": [
+        "checks/native_tests/entry_table_contract_suite.mojo",
+        "checks/native_tests/entry_table_image_provider.mojo",
+        "checks/native_tests/entry_table_image_consumer.mojo",
+        "python/mojolearn/tests/test_linear_entry_table_boundary.py"
+      ],
+      "finding": "Authored coverage contains 20 native contracts, including 16-worker first-publication and registry stress subgraphs; generic separate-image publication/query/hold/release/schema/layout controls; and nine public-boundary definitions expanding to 22 cases, two conditional on another tier being installed.",
+      "limits": "All were unrun in this review. Native stress covers independent handles and concurrent first publication; it is not a deterministic same-handle replace/release race proof, a GPU submission proof, or a complete production native composition proof (NET-P01)."
+    }
+  ],
+  "source_evidence": {
+    "snapshot_dir": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-entry-table/independent-source/0c6a9fd188b65f8fae5e00c8a0ff26fe8ac1bab1",
+    "source_map": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-entry-table/source-map-review.json",
+    "scope": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-entry-table/pilot-review-scope.json",
+    "commit_stats": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-entry-table/pilot-review-commits.txt",
+    "files": [
+      {
+        "path": "core/entry_table.mojo",
+        "sha256": "e63a730915d5cd0e533cd4db0221cc71960d5ab0775fa1718804806d21ad604a"
+      },
+      {
+        "path": "core/state_registry.mojo",
+        "sha256": "f3a5cb95b2fccf06e3d394ad645ef07a9ee4f1259eaa90fd7813eb93cd2030a5"
+      },
+      {
+        "path": "core/linear_entry_table.mojo",
+        "sha256": "a6b2acb9151a878dd3b2e9a7bb1eaa27459eb9b3a39a7335b07cc58bd605c1ce"
+      },
+      {
+        "path": "core/linear_registry.mojo",
+        "sha256": "7caa8ad82b8a517daa7eaa40081bc121aec391846e9382f0db72364075af6064"
+      },
+      {
+        "path": "core/shared_slot.mojo",
+        "sha256": "8d882668b96722d96885ac0bf069548b9521f20fb49a42acb18988aa8bb3c801"
+      },
+      {
+        "path": "core/linear_model_state.mojo",
+        "sha256": "079b552da59a7952ac28ef5b76e8dee995a3534e36ea6464435ec12af3805339"
+      },
+      {
+        "path": "core/linear_metadata.mojo",
+        "sha256": "35b9d75c11a263ba67c0450c7b806104585c5606c5b3f804c2e0e4d6c0f13d56"
+      },
+      {
+        "path": "providers/python/linear_entry_boundary.mojo",
+        "sha256": "e577058547b4cac6db59304da0cfac2ff4d46b24df2cf3b95999aac2b8b79e9d"
+      },
+      {
+        "path": "providers/python/linear_state_boundary.mojo",
+        "sha256": "49f5dd6be6bf1b4b6fa3f6a875fbd8ba1efdcaaeb124c8b4a4e0fb689b3a4a67"
+      },
+      {
+        "path": "providers/python/linear_execution_boundary.mojo",
+        "sha256": "51a7d11c2c58a05f071fb201856e0137c774b35cdecf65170f97929f4df45efb"
+      },
+      {
+        "path": "providers/python/linear_predict_boundary.mojo",
+        "sha256": "5bf82afef0b0018b450f116cd8eadb8a4cd77a371c73b6c0fb3163cd91dfd210"
+      },
+      {
+        "path": "providers/python/linear_fit_boundary.mojo",
+        "sha256": "75ad9861a3da768c98b05978c02e26a1e8be5d68022b7d6c095c3cec565e3006"
+      },
+      {
+        "path": "providers/python/linear_ols_boundary.mojo",
+        "sha256": "8185900ff7577f63a319f5fe0c50dfeeb85e568d996fceca6f3c6a49c770f6e2"
+      },
+      {
+        "path": "providers/python/linear_score_boundary.mojo",
+        "sha256": "a28d23367fb2609a3f13c20ece00054c2eac81232b015ef028f3632c2e27c242"
+      },
+      {
+        "path": "providers/python/neural_descriptor_pyapi.mojo",
+        "sha256": "daf864ae83d67e2eea70b53cc6214fe0a0980612b5910ba40242674bc30c6bb9"
+      },
+      {
+        "path": "bindings/classical_native.mojo",
+        "sha256": "1b2c2c9c0aa679239b992d7f0e28a2ddc5b64539057ca04d10511027b89ebb6d"
+      },
+      {
+        "path": "bindings/_mojolearn_runtime_classical_host.mojo",
+        "sha256": "7a8411eb2dbffa027656a5fded548bcaae5462831a30e65d478b0c27a324b6d8"
+      },
+      {
+        "path": "python/mojolearn/_native_classical_bridge.py",
+        "sha256": "8d2cee37660c01e00169e279501565b5be7e1b14f0643888e5ae6eca2590ecf9"
+      },
+      {
+        "path": "python/mojolearn/tests/test_linear_entry_table_boundary.py",
+        "sha256": "e1f4a22abc6f06584e4e661ee86c8960cf25c5e0d62a5f777c79f7184a96dc21"
+      },
+      {
+        "path": "checks/native_tests/entry_table_contract_suite.mojo",
+        "sha256": "81b9234a8e5a418fec2ae378f426fa1301f33361ea0f18191f25893b9810ae22"
+      },
+      {
+        "path": "checks/native_tests/entry_table_image_provider.mojo",
+        "sha256": "dc7060dd788357f0c7ee0bf6fa45909d8373c6b5a03e8bfc65492f10d7f97457"
+      },
+      {
+        "path": "checks/native_tests/entry_table_image_consumer.mojo",
+        "sha256": "5d46402908553fd651cd5ab1568caa4be4250d3479b8026dad36b87151058272"
+      },
+      {
+        "path": "checks/native_tests/entry_table_image_common.mojo",
+        "sha256": "f15b2111347975077bb3ff550c8633a5f9ca2dc065c22188b67f4f33bf62c96e"
+      },
+      {
+        "path": "docs/plans/native_entry_table/native-proof.json",
+        "sha256": "aeccd28a7322de3fe6020f07578ba79db86fca8496acd21424cb4f82c92d45f9"
+      },
+      {
+        "path": "bindings/_mojolearn_estimators.mojo",
+        "sha256": "52e873b47f6b81885ffeed2a04cd7d4738be421e677fd83426d461077fede0fb"
+      },
+      {
+        "path": "bindings/_mojolearn_estimators_host.mojo",
+        "sha256": "e4760f7bc2f0b272a1f89ae0303d37ca7eb6cbcb8295539cd18649662cd7467e"
+      },
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "sha256": "6a14370d68a41e2976802bc48a52b43089734b97b68174878ef427c6f5f3af0a"
+      },
+      {
+        "path": "bindings/_mojolearn_x_decomp_host.mojo",
+        "sha256": "b1b8883aceea71e7714b2c6ce367b1dda579fb984e92bc28434475d0da192ad4"
+      },
+      {
+        "path": "bindings/_mojolearn_x_linear.mojo",
+        "sha256": "ece32b45cdc61bfec8f85533adce9c816463b547f3927853e704caae745e25bd"
+      },
+      {
+        "path": "bindings/_mojolearn_x_linear_host.mojo",
+        "sha256": "4796f0fd591d23bc1014ef9ab4fc4744278d20b6348be6d80df06bad0b6582e2"
+      },
+      {
+        "path": "bindings/_mojolearn_x_metrics.mojo",
+        "sha256": "48f1b4ba9c8485f8996d8960f2a9612341ba89e54405b789ff18bd2ae6f9332d"
+      },
+      {
+        "path": "bindings/_mojolearn_x_metrics_host.mojo",
+        "sha256": "2873f47bb775229f901e0f82ec89db92ed629b045f83f9c2a40e47902097a4f4"
+      }
+    ]
+  },
+  "conclusion": "One concrete metrics key-admission defect and one native composition proof gap were sent to root. No additional concrete publication, handle-generation, replacement/release, or live-call pin defect was found within this bounded source review. This is not compile/runtime/performance acceptance."
+}
