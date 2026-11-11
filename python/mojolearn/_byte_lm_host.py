@@ -32,20 +32,14 @@ from pathlib import Path
 
 from . import _backend
 from . import _numeric_profile
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
-from ._bufcheck import flat_view, le_bytes
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, frombytes
+from ._bufcheck import flat_view
 from ._byte_lm_config import ByteLanguageModelConfig
 from . import _ragged
 
 _EXTENSION = '_mojolearn_byte_lm_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
 _IDENTICAL_CODE = 1
-
-
-def _parameters_sha256(parameters):
-    """SHA-256 of float32 parameters' little-endian bytes, by the Mojo SHA-256
-    (core/sha256.mojo) behind the CPU tokenizer binding's `sha256_hex`."""
-    return str(_backend.load_host_module('_mojolearn_tokenizer_host').sha256_hex(le_bytes(parameters, 'f')))
 
 
 # THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):
@@ -370,16 +364,6 @@ class LanguageModelHostTrainer:
                  weight_decay=.01):
         return _HOST_TRAIN(self, "construct", (parameters, m, v, shape, completed_steps,
                                                lr, betas, eps, weight_decay), _HOST_TRAIN_CONTEXT)
-
-    def _moment(self, given, name, n):
-        if given is None:
-            return zeros((n,), '<f4')
-        array, _ = as_f32_c(given, ndim=1, name=name)
-        if array.size != n:
-            raise ValueError(f'{name} must hold {n} float32 values')
-        if not all_finite(array):
-            raise ValueError(f'{name} must be finite')
-        return frombytes(le_bytes(array, 'f'), '<f4', (n,))
 
     @classmethod
     def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):
