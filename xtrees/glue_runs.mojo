@@ -686,7 +686,7 @@ def normalize_rows_run(c: XtCall) raises -> Int:
 
 
 def scatter_run(c: XtCall) raises -> Int:
-    """dst (float64, N x n_dst_cols)[rows[r], col0 + j] = src (float32, m x c)[r, j];
+    """dst (float64, N x n_dst_cols)[rows[r], col0 + j] = src (float32, m x n_src_cols)[r, j];
     params = [n_dst_rows, n_dst_cols, m, c, col0]."""
     _addrs(c, 3, "x_trees_scatter")
     var dst = _a(c, 0)
@@ -696,19 +696,19 @@ def scatter_run(c: XtCall) raises -> Int:
     var n_dst = _i(c, 0)
     var n_cols = _i(c, 1)
     var m = _count(_i(c, 2), "x_trees_scatter")
-    var c = _count(_i(c, 3), "x_trees_scatter")
+    var n_src_cols = _count(_i(c, 3), "x_trees_scatter")
     var col0 = _count(_i(c, 4), "x_trees_scatter")
-    if col0 + c > n_cols:
+    if col0 + n_src_cols > n_cols:
         raise Error("x_trees_scatter: columns out of range")
     var rp = i32_ptr(rows) if m > 0 else i32_ptr(1)
     comptime if XTREES_DEVICE_OPS:
         # the row refusal is the device's check kernel (lane cpu2-l5-trees)
-        elem_dev.scatter_device(f64_ptr(dst), n_dst, n_cols, f32_ptr(src), m, c, rp, col0)
+        elem_dev.scatter_device(f64_ptr(dst), n_dst, n_cols, f32_ptr(src), m, n_src_cols, rp, col0)
     else:
         scatter_rows_check(rp, m, n_dst)
-        if m * c > 0:
-            scatter(f64_ptr(dst), n_cols, f32_ptr(src), m, c, rp, col0)
-    return m * c
+        if m * n_src_cols > 0:
+            scatter(f64_ptr(dst), n_cols, f32_ptr(src), m, n_src_cols, rp, col0)
+    return m * n_src_cols
 
 
 def platt_fit_run(c: XtCall) raises -> Int:

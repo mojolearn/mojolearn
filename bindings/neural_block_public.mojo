@@ -982,7 +982,7 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
             pass
     if code != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: native training binding numeric mode differs from the block")
-    var key = NeuralEntryKey(code, neural_entry_vendor(vendor))
+    var entry_key = NeuralEntryKey(code, neural_entry_vendor(vendor))
     if String(fields["_native_route"]) == "cpu":
         if vendor != "cpu":
             raise Error("RuntimeError: CPU backward requires native CPU kernels")
@@ -996,7 +996,7 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
         py_setitem(fields, "_arithmetic_profile_mode", mode)
         py_setitem(fields, "_arithmetic_profile_changed", profile_changed)
     # The provider-capsule caches below no longer serve this file's forward,
-    # backward or Mamba3 restore (they call the neural entry table by `key`).
+    # backward or Mamba3 restore (they call the neural entry table by `entry_key`).
     # They remain for their unconverted readers: bindings/neural_prefill_native.mojo,
     # bindings/samba_inference_native.mojo, providers/python/samba_execution_pyapi.mojo
     # and bindings/mamba_public_native.mojo.
@@ -1020,7 +1020,7 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
                 _native_function(mods, entries, "mamba_state_api_v1"), String(MAMBA_STATE_ABI_NAME), 6)
             mods.released()
         py_setitem(fields, "_native_mamba_state", state_provider)
-    return NeuralTrainingSelection(entries, key)
+    return NeuralTrainingSelection(entries, entry_key)
 
 
 def neural_training_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
