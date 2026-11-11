@@ -44,10 +44,17 @@ import traceback
 
 CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
          "RandomForestClassifier", "GradientBoosting",
-         "GaussianProcessRegressor", "GaussianProcessClassifier")
+         "GaussianProcessRegressor", "GaussianProcessClassifier",
+         "LinearSVC_str", "SVC_precomputed", "SVR_precomputed")
+
+# Cases that run a public class under another name (lane thin-unpack-svm):
+# LinearSVC with string labels and a full-size score (the score UNPACK is
+# per used class, so its count must not grow with rows); SVC/SVR with
+# kernel='precomputed' (predict reads support_, which grows with rows).
+ESTIMATOR_CLASS = {"LinearSVC_str": "LinearSVC", "SVC_precomputed": "SVC", "SVR_precomputed": "SVR"}
 
 # Classifier cases: integer 0/1 targets.
-CLASSIFIERS = ("LogisticRegression", "RandomForestClassifier", "GaussianProcessClassifier")
+CLASSIFIERS = ("LogisticRegression", "RandomForestClassifier", "GaussianProcessClassifier", "SVC_precomputed")
 
 # uprobe group of the CPython call count (`--cpython-count perf`).
 PERF_GROUP = "mojolearn_cpy"
@@ -155,6 +162,9 @@ def model_parameters(name):
         # compares the same work at both shapes.
         "GaussianProcessRegressor": {"optimizer": None},
         "GaussianProcessClassifier": {"optimizer": None},
+        "LinearSVC_str": {"max_iter": 50},
+        "SVC_precomputed": {"kernel": "precomputed"},
+        "SVR_precomputed": {"kernel": "precomputed"},
     }
     return dict(numeric_mode="identical", **parameters[name])
 
@@ -220,10 +230,19 @@ def run_case(case):
             result["label_dtype"] = str(y.dtype)
         result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
         result["parameters"] = model_parameters(name)
-        model = getattr(ml, name)(**result["parameters"])
+        model = getattr(ml, ESTIMATOR_CLASS.get(name, name))(**result["parameters"])
         query = query_operation(name)
-        operations = [("fit", model.fit, (x,) if name in ("PCA", "KMeans") else (x, y)),
-                      (query, getattr(model, query), (x[:min(7, rows)],))]
+        fit_x, query_x = x, x[:min(7, rows)]
+        if name.endswith("_precomputed"):
+            # Linear Gram matrices: train (rows, rows), query (7, rows).
+            fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
+        if name == "LinearSVC_str":
+            y = np.where(y > 0, "pos", "neg").astype(object)
+        operations = [("fit", model.fit, (x,) if name in ("PCA", "KMeans") else (fit_x, y)),
+                      (query, getattr(model, query), (query_x,))]
+        if name == "LinearSVC_str":
+            # The full-size score: its CPython count must not grow with rows.
+            operations.append(("score", model.score, (x, y)))
         for operation, function, arguments in operations:
             # These two dependent operations cannot run concurrently: query
             # consumes the fitted state produced by this exact fit.
@@ -244,7 +263,10 @@ def run_case(case):
                     record["cpython_counted"] = True
                 else:
                     value = function(*arguments)
-                if operation != "fit":
+                if operation == "score":
+                    if not math.isfinite(float(value)):
+                        raise AssertionError("score returned a nonfinite value")
+                elif operation != "fit":
                     output = np.asarray(value)
                     if output.shape[0] != min(7, rows) or not np.isfinite(output).all():
                         raise AssertionError("query returned invalid shape or nonfinite output")
@@ -333,6 +355,11 @@ def perf_counts(path):
 
 def query_operation(name):
     return "transform" if name == "PCA" else "predict"
+
+
+def case_operations(name):
+    """Every operation counted for a case, in run order."""
+    return ("fit", query_operation(name)) + (("score",) if name == "LinearSVC_str" else ())
 
 
 def merge_counted(case, counted):
@@ -451,7 +478,7 @@ def main(argv=None):
     try:
         if count == "perf":
             # Every (case, operation) process is an independent unit: one pool.
-            units = [(case, operation) for case in cases for operation in ("fit", query_operation(case[0]))]
+            units = [(case, operation) for case in cases for operation in case_operations(case[0])]
             workers = min(allocation, len(units)) if args.backend == "cpu" else 1
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 counted = list(pool.map(partial(launch_counted, seconds=args.seconds), units))
