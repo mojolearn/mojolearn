@@ -18,6 +18,7 @@ from bindings.gp_score_boundary import GPCPredictionCodes
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from std.python import Python, PythonObject
+from bindings.gp_argument_pins import GPArgumentPins
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
@@ -324,7 +325,7 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
     py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(fits.summary.likelihood()))
 
 
-def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+def _gpc_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises:
     """`fit(X, y)`; args = (binding, base binding, X, y)."""
     classical_connect_numpy(context)
     gpc_validate(model, context)
@@ -582,7 +583,7 @@ def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, conte
     return cols^
 
 
-def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpc_predict_proba(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`predict_proba(X)`; args = (binding, X)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
@@ -601,7 +602,7 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
     return _gpc_ovr_combine(ext, cols, Int(py=q.shape[0]), context).probabilities
 
 
-def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpc_predict(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """Public prediction packing; arguments are (binding, base binding, X)."""
     var result = _gpc_prediction_codes(model, args[0], args[2], context)
     return gp_decode_labels(model, result.classes, result.codes, args[1], context)
@@ -640,7 +641,7 @@ def _gpc_prediction_codes(model: PythonObject, binding: PythonObject,
     return GPCPredictionCodes(codes^, fields["classes_"])
 
 
-def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpc_latent_mean_and_variance(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`latent_mean_and_variance(X)`; args = (binding, X)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
@@ -656,7 +657,7 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, conte
     return Python.tuple(latent.mean, latent.variance)
 
 
-def gp_classifier_operation(model: PythonObject, operation: String, args: PythonObject,
+def gp_classifier_operation(model: PythonObject, operation: String, args: GPArgumentPins,
                             context: PythonObject) raises -> PythonObject:
     """GaussianProcessClassifier's public operations: args[0] is the resolved binding."""
     if operation == "family_gp_gpc_lml":
@@ -705,3 +706,11 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         _ = pred
         return PythonObject(result)
     raise Error("RuntimeError: unknown gaussian process classifier operation " + operation)
+
+
+def gp_classifier_operation(model: PythonObject, operation: String, args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    # Compatibility UNPACK for internal archive/model-selection callers.
+    # Public GP lifecycle already owns these slots in its native call record.
+    var inputs = GPArgumentPins(args)
+    return gp_classifier_operation(model, operation, inputs, context)

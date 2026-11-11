@@ -10,6 +10,7 @@ from bindings.gp_score_boundary import GPRPredictionRoom, gpr_score_result
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word, gp_require
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.gp_argument_pins import GPArgumentPins
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.metrics_native_support import metric_warn, metric_is_integral, metric_is_bool
@@ -243,7 +244,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     return gp_with_free_values(base, scratch.values, scratch.theta, context)
 
 
-def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+def _gpr_fit(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises:
     """`GaussianProcessRegressor.fit(X, y)`; args = (binding, X, y)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
@@ -382,7 +383,7 @@ def _gpr_normalization(fields: PythonObject) raises -> GPRNormalization:
     return GPRNormalization(False, 1.0, 0.0)
 
 
-def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpr_predict(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`predict(X, return_std, return_cov)`; args = (binding, X, return_std, return_cov)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
@@ -495,7 +496,7 @@ def _gpr_predict_result(model: PythonObject, fields: PythonObject,
     return mean^
 
 
-def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpr_predict_cov(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`predict(X, return_cov=True)`: (mean, cov) through `gpr_predict_cov`."""
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
@@ -538,7 +539,7 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     return Python.tuple(mean, cov)
 
 
-def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpr_sample_y(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`sample_y(X, n_samples, random_state)`; args = (binding, X, n_samples, random_state)."""
     classical_connect_numpy(context)
     var b = native_loaded_module("builtins")
@@ -624,7 +625,7 @@ def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> List[Float6
     return values^
 
 
-def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpr_log_marginal_likelihood(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`log_marginal_likelihood(theta, eval_gradient, clone_kernel)`;
     args = (binding, theta, eval_gradient, clone_kernel)."""
     classical_connect_numpy(context)
@@ -689,7 +690,7 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, contex
     return fields["log_marginal_likelihood_value_"]
 
 
-def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject) raises -> PythonObject:
     """`score(X, y)`: R^2 from `linear_model._r2_sums`' one program (the y
     mean rounded to float32 on the device, both sums of squares binary64);
     1.0 for a constant target predicted exactly, else 0.0 when SS_tot is 0.
@@ -715,7 +716,7 @@ def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     return PythonObject(result)
 
 
-def gp_regressor_operation(model: PythonObject, operation: String, args: PythonObject,
+def gp_regressor_operation(model: PythonObject, operation: String, args: GPArgumentPins,
                            context: PythonObject) raises -> PythonObject:
     """GaussianProcessRegressor's public operations: args[0] is the resolved binding."""
     if operation == "family_gp_gpr_fit":
@@ -730,3 +731,11 @@ def gp_regressor_operation(model: PythonObject, operation: String, args: PythonO
     if operation == "family_gp_gpr_score":
         return _gpr_score(model, args, context)
     raise Error("RuntimeError: unknown gaussian process regressor operation " + operation)
+
+
+def gp_regressor_operation(model: PythonObject, operation: String, args: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    # Compatibility UNPACK for internal archive/model-selection callers.
+    # Public GP lifecycle already owns these slots in its native call record.
+    var inputs = GPArgumentPins(args)
+    return gp_regressor_operation(model, operation, inputs, context)
