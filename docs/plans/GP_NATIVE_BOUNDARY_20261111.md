@@ -160,3 +160,23 @@ own mandatory exporter pins. No tensor copies, numerical kernels or fused
 route defaults changed. This removes private latent scratch Arrays and
 nonfused probability-column Arrays; native storage stays alive through RUN.
 The query owner addition is uncompiled/unrun in this lane.
+
+Packed kernel tables now live in `GPKernelStorage` behind the prepared-only
+`GPPackedKernel` owner. Ordinary GP calls pass its native postfix spans;
+worker transport explicitly packs real Arrays. The four intermediate Python
+value lists and four internal Array stores are removed from ordinary calls.
+The shared strict node capture still owns the exact boundary validation and
+archive representation; its snapshot owner/state lists are now native lists
+of mandatory public-object pins.
+
+`GPPreparedKernel` replaces the five-item packed-cache tuple, Python key
+list/count boxes and separate stamped payload tuple. It retains native key
+entries, content/generation words, and native lists of object/class pins.
+Identity, exact builtin integer-value matching, four-level container capture,
+class watchers, mutable parameter invalidation and generation/content fast
+reuse remain. The unused old pack-stamp mechanism is removed; the separate
+fitted-state admission record remains because it covers other public fields.
+Two prepared-only types are registered once in runtime_family_host; neither
+is a model field owner. Cache UNPACK still uses exact builtin dictionary/item
+views transiently and the shared archive-compatible postfix capture; these
+are not passed to RUN. No numerical source changes or lane executions.

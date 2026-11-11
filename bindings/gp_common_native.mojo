@@ -7,7 +7,8 @@
 # layouts for `save`), the free hyperparameters `_hyper` listed, and the copy
 # `_replace` / `_with_free_values` built. No method of a kernel class runs.
 from std.python import Python, PythonObject
-from core.gp_native_storage import GPFreeParameters
+from core.gp_native_storage import GPFreeParameters, GPKernelStorage
+from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.admitted_family import admit_family, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
@@ -16,7 +17,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from std.memory import memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
-from bindings.archive_schema_native import _schema_kernel_nodes, _schema_label_store
+from bindings.archive_schema_native import _schema_kernel_nodes
 
 
 
@@ -82,30 +83,56 @@ def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
 
 
 def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_kernel_arrays(kernel)`: (kinds <i4, params <f4, ls_len <i4, ls <f4,
-    n_ls), the postfix nodes packed with `Array.from_list`; an empty
-    length-scale table is one unused 1.0."""
-    var b = native_loaded_module("builtins")
+    """UNPACK the admitted postfix graph into one native storage owner."""
     var nodes = Python.list()
     _schema_kernel_nodes(kernel, context["family_gp_kernel_nodes"], nodes)
-    var kinds = Python.list()
-    var params = Python.list()
-    var lengths = Python.list()
-    var scales = Python.list()
-    for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
-        var node = nodes[i]
-        _ = py_call(kinds.append, family_call(b.int, node[0]))
-        _ = py_call(params.append, family_call(b.float, node[1]))
-        _ = py_call(lengths.append, PythonObject(len(node[2])))
-        for j in range(len(node[2])):  # driver-loop: over one node's length scales
-            _ = py_call(scales.append, node[2][j])
-    var n_ls = len(scales)
-    if n_ls == 0:
-        _ = py_call(scales.append, PythonObject(Float64(1.0)))
-    return Python.tuple(_schema_label_store(kinds, "i", "<i4", context),
-                        _schema_label_store(params, "f", "<f4", context),
-                        _schema_label_store(lengths, "i", "<i4", context),
-                        _schema_label_store(scales, "f", "<f4", context), PythonObject(n_ls))
+    var storage = GPKernelStorage()
+    # Preserve the former separate Array conversions' refusal order: every
+    # integer kind first, then parameters, lengths, and length-scale words.
+    try:
+        for i in range(len(nodes)):  # driver-loop: one admitted integer kind per postfix node
+            var kind = Int(py=nodes[i][0])
+            if kind < -2147483648:
+                raise Error("signed integer is less than minimum")
+            if kind > 2147483647:
+                raise Error("signed integer is greater than maximum")
+            storage.kinds.append(Int32(kind))
+    except error:
+        raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: " + String(error))
+    for i in range(len(nodes)):  # driver-loop: the admitted native parameter of each node
+        storage.parameters.append(Float32(Float64(py=nodes[i][1])))
+    for i in range(len(nodes)):  # driver-loop: length metadata before the scale table
+        var count = len(nodes[i][2])
+        if count > 2147483647:
+            raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
+        storage.lengths.append(Int32(count))
+    for i in range(len(nodes)):  # driver-loop: scales of each postfix node, in the original order
+        var scales = nodes[i][2]
+        for j in range(len(scales)):  # driver-loop: one admitted length-scale parameter
+            storage.scales.append(Float32(Float64(py=scales[j])))
+    storage.finish()
+    return PythonObject(alloc=GPPackedKernel(storage^))
+
+
+def gp_kernel_arrays_transport(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
+    """PACK real owning Arrays only for cross-interpreter worker transport."""
+    var packed = gp_kernel_arrays(kernel, context)
+    var owner = packed.downcast_value_ptr[GPPackedKernel]()
+    var view = owner[].storage.view()
+    var kinds = family_array(Python.tuple(view.nodes), "<i4", context)
+    var parameters = family_array(Python.tuple(view.nodes), "<f4", context)
+    var lengths = family_array(Python.tuple(view.nodes), "<i4", context)
+    var scales = family_array(Python.tuple(max(1, view.scale_count)), "<f4", context)
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(kinds))),
+           src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=view.kinds), count=view.nodes)
+    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parameters))),
+           src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=view.parameters), count=view.nodes)
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(lengths))),
+           src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=view.lengths), count=view.nodes)
+    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(scales))),
+           src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=view.scales), count=max(1, view.scale_count))
+    _ = packed
+    return Python.tuple(kinds, parameters, lengths, scales, PythonObject(view.scale_count))
 
 
 def _gp_kernel_class(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
