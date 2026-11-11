@@ -181,6 +181,7 @@ comptime P3_DICT_INT_IDS = 3            # model-selection resident entries: int 
 comptime P3_DICT_STR_INT = 4            # numpy sctypeDict: str or int keys
 comptime P3_DICT_CACHE_KEYS = 5         # DeviceCache entries: arena_cache_stats._admit_entry_keys
 comptime P3_DICT_ARRAY_STORAGE = 6      # complete native Array member descriptor inventory
+comptime P3_DICT_NATIVE_STRING_KEYS = 7 # exact dictionary with only exact native string keys
 
 
 struct P3DictRecords(Defaultable, Movable):

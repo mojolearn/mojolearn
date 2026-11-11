@@ -31,8 +31,9 @@ from bindings.classical_arrays import classical_address
 from bindings.x_prep_native_owner import xprep_r3, xprep_address, _resident, _cached_slot, _resident_scope, _resident_cache, _cache_state, _cached_slot_in
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
 from bindings.x_prep_native_owner import xprep_drop_resident
-from bindings.native_loaded_module import native_namespace_string_keys
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from bindings.cpython_table import cpython_table
+from bindings.p3_array_arena_records import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime INT32_MAX = 2147483647
@@ -76,32 +77,58 @@ def _drop_pending(error: Error):
         _ = ignored^
 
 
+def _family_dictionary(value: PythonObject, builtins: PythonObject) raises:
+    # Exact dictionaries and native key iteration cannot enter __getitem__
+    # or a colliding key's __eq__. The shared key helper caches unchanged maps.
+    if py_type(value) is not builtins.dict:
+        raise Error("TypeError: arena program metadata requires exact string-keyed dictionaries")
+    if not p3_dict_admitted(P3_DICT_NATIVE_STRING_KEYS, value):
+        if not native_namespace_string_keys(value._obj_ptr, builtins.str):
+            raise Error("TypeError: arena program metadata requires exact string-keyed dictionaries")
+        p3_dict_admit(P3_DICT_NATIVE_STRING_KEYS, value)
+
+
 def _family_entries(mode: PythonObject, family: String, context: PythonObject) raises -> PythonObject:
-    # The family's entries for `mode` (None: the package default), connected
-    # at import for both numeric modes. A mode whose binding did not connect
-    # raises the error its connection raised.
+    # Keep live context and mode selection, admitting each mapping before
+    # its first keyed read. Unused modes retain their original error records.
+    var b = native_loaded_module("builtins")
+    _family_dictionary(context, b)
     var types = context["prog_types"]
+    _family_dictionary(types, b)
+    if types["str"] is not b.str:
+        raise Error("TypeError: arena program string metadata requires the native str type")
     var selected = mode
     if selected is None:
-        selected = context["backend_fields"]["_DEFAULT_MODE"]
-    # p3-array-arena: the refusal text is converted only when refusing.
-    if py_type(selected) is not types["str"]:
-        raise Error("ValueError: " + String(context["prog_mode_refusal"]))
-    # Only a non-canonical spelling pays the two str method calls (as in
-    # estimator_binding_mode); an exact "fast"/"identical" is its own
-    # normalization.
+        var backend = context["backend_fields"]
+        _family_dictionary(backend, b)
+        selected = backend["_DEFAULT_MODE"]
+    if py_type(selected) is not b.str:
+        var refusal = context["prog_mode_refusal"]
+        if py_type(refusal) is not b.str:
+            raise Error("TypeError: arena program mode refusal requires a native string")
+        raise Error("ValueError: " + String(refusal))
     var word = String(py=selected)
     if word != "fast" and word != "identical":
         selected = py_call(py_call(selected.strip).lower)
         word = String(py=selected)
     if word != "fast" and word != "identical":
-        raise Error("ValueError: " + String(context["prog_mode_refusal"]))
-    var entries = context["prog_bindings"][selected]
-    if py_type(entries) is types["str"]:
+        var refusal = context["prog_mode_refusal"]
+        if py_type(refusal) is not b.str:
+            raise Error("TypeError: arena program mode refusal requires a native string")
+        raise Error("ValueError: " + String(refusal))
+    var bindings = context["prog_bindings"]
+    _family_dictionary(bindings, b)
+    var entries = bindings[selected]
+    if py_type(entries) is b.str:
         raise Error(String(entries))
-    if String(entries["prog_family"]) != family:
+    _family_dictionary(entries, b)
+    var connected_family = entries["prog_family"]
+    if py_type(connected_family) is not b.str:
+        raise Error("TypeError: arena program family metadata requires a native string")
+    if String(connected_family) != family:
         raise Error("TypeError: arena program family does not match its connected binding")
     return entries
+
 
 
 def _store(words: Int, code: String, mapped: Bool, context: PythonObject) raises -> PythonObject:

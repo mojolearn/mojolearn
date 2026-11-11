@@ -37,7 +37,7 @@ from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _p
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
-from bindings.arena_prog_native import _metrics_run_plan
+from bindings.arena_prog_native import _metrics_run_plan, _family_dictionary
 from bindings.metrics_plan_admission import MetricArenaOwner
 from core.metrics_program_plan import MetricProgramPlan
 from core.labels_accuracy_plan import label_accuracy_plan
@@ -1321,7 +1321,13 @@ struct ScoreLabels(Movable):
         self.kind = kind
 
 
-def _native_classification(var values: PythonObject, context: PythonObject) raises -> Optional[ScoreLabels]:
+@fieldwise_init
+struct NativeClassificationInput(Movable):
+    var view: PythonObject
+    var typestr: String
+
+
+def _native_classification_input(var values: PythonObject, context: PythonObject) raises -> Optional[NativeClassificationInput]:
     """`_metrics_impl._native_classification_labels`: an integer or bool
     buffer (or a flat list of exact ints) through the native encoder."""
     values = classifier_label_list(values, context)
@@ -1367,6 +1373,15 @@ def _native_classification(var values: PythonObject, context: PythonObject) rais
         typestr = "<i4"
     if typestr != "<i4" and typestr != "<i8" and typestr != "<u4" and typestr != "<u1":
         return None
+    return NativeClassificationInput(view, typestr)
+
+
+def _native_classification(values: PythonObject, context: PythonObject) raises -> Optional[ScoreLabels]:
+    var input = _native_classification_input(values, context)
+    if not input:
+        return None
+    var view = input.value().view
+    var typestr = input.value().typestr
     # A bool buffer's classes are read as the ints 0 and 1 (`int(c)`).
     # Preserve the existing device/host encoder, but keep its class words
     # native instead of boxing them and later probing Python sets/dicts.
@@ -1444,8 +1459,7 @@ def _refuse_multilabel(y: PythonObject, name: String, caller: String, context: P
                     + "IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
 
 
-def _accuracy_run(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
-                  context: PythonObject) raises -> MetricArenaOwner:
+def _accuracy_context(context: PythonObject) raises -> PythonObject:
     # UNPACK the connected runner context once. All stage/offset state is
     # already native; the existing runner retains resident/range behavior.
     var sys = native_loaded_module("sys")
@@ -1455,7 +1469,13 @@ def _accuracy_run(plan: MetricProgramPlan, inputs: List[PythonObject], mode: Pyt
     var prog_context = py_get(py_fields(module), "_PROG_CONTEXT")
     if prog_context is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")
-    return _metrics_run_plan(plan, inputs, mode, prog_context)
+    _family_dictionary(prog_context, labels_builtins())
+    return prog_context
+
+
+def _accuracy_run(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
+                  context: PythonObject) raises -> MetricArenaOwner:
+    return _metrics_run_plan(plan, inputs, mode, _accuracy_context(context))
 
 
 def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
