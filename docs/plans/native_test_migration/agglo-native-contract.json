@@ -1,0 +1,24 @@
+{
+  "family": "AgglomerativeClustering",
+  "suite": "agglo_contract_suite.run_checks",
+  "entry": "checks/native_tests/agglo_contract.mojo",
+  "fixtures": 28,
+  "dependency": "2121167e8471",
+  "execution": "authored; uncompiled/unrun",
+  "coverage": {
+    "0-1": "solver four addresses/five integers, fixed cuML sqrt metric1, both knn flags, exact Int result above2^53",
+    "2-17": "cluster six addresses/eleven integers/two Float64 scalars across four linkage/metric codes, threshold flags and edge modes; signed zero and binary64 precision; guarded output markers prove invocation",
+    "18,27": "existing Xn row_all_zero operation36 with exact address/dimension slots, guarded invocation marker and copied request independence",
+    "19-21": "shared-reference constructor fields: labels are tie keys and values, Euclidean0/no threshold, exact large resident handle",
+    "22-23": "solver/cluster native request copy independence and original requests still dispatch",
+    "24-26": "all three drivers propagate native provider refusal unchanged"
+  },
+  "parallel": "28 independent native contract fixtures via host_parallelize",
+  "ownership": "all real mock result markers heap-owned and pinned through synchronous calls; fake tensor addresses never dereferenced; no actual kernel, registry or Python object",
+  "python_removed": 0,
+  "product_changes": false,
+  "remaining": "actual solver/general-tree numerical and retained-query fixtures; original Python coverage intact",
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+  ]
+}
