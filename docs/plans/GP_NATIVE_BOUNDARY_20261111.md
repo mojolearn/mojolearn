@@ -90,8 +90,9 @@ share these native calls; cross-interpreter transport, worker counts, stored
 request reuse and scheduler behavior remain unchanged. Fused route/default
 switches remain in place. GPC scalar scratch Arrays and address/parameter/result
 Python envelopes were removed. Public estimator/member objects and output
-Arrays are retained; selected latent scratch output packing and label-code
-wrappers still await the shared native span packaging dependency.
+Arrays are retained; selected latent scratch and label-code wrappers still await native storage
+completion. Public and interpreter-transport outputs retain the supported
+exporter-backed Array PACK; no ownerless memoryview is introduced.
 
 This chunk additionally affects `_mojolearn_runtime_parallel_host` and the
 runtime family dispatcher. Its request constructors and unchanged numerical
@@ -113,3 +114,17 @@ Private `_extension` remains used by resident/benchmark controllers; loader
 mode/vendor probes and raw numerical exports still have compatibility consumers.
 The saved inventory distinguishes those references from ordinary product calls.
 No tests or numerical source were deleted by this cleanup.
+
+GP resident preparation now uses `GPLeaseState` for the handle, provider
+identity, model generation, ordered storage identities and take-once cleanup.
+`GPPreparedLease` retains only the provider and mirrored storage pins around
+that native state. Its sole runtime-family registrar does not add it to model
+field release admission: this is a weak-keyed prepared-registry owner. GPR and
+fused GPC keep the existing freeze eligibility, slot order, invalidation and
+non-weakref per-call upload behavior. Native descriptor lease calls replace
+the opener callable and five-item Python record. Registry metadata operations
+retain their original GIL boundary; no tensor copies or numerical calls change.
+The shared legacy resident helper remains used by SVM compatibility paths.
+
+The lease addition is source-reviewed only. Compilation and native lifetime
+fixtures are queued to the integration owner; no lane execution occurred.

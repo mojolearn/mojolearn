@@ -30,7 +30,8 @@ from bindings.gp_common_native import gp_extension, gp_caps, gp_kernel_arrays, g
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
 from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
-from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
+from bindings.fitted_resident_door import fitted_resident_drop
+from bindings.gp_resident_boundary import gp_resident_lease
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
 from bindings.host_inference_scalars import host_inference_scalar
@@ -405,7 +406,10 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
         out = family_array(Python.tuple(n_star, max(k, 2)), "<f8", context)
     var tables = GPCQueryTables(k)
     var kept = List[PythonObject]()
-    var mirrors = Python.list(xt) if xt is fields["X_train_"] else PythonObject(None)
+    var mirrors = List[PythonObject]()
+    var can_mirror = xt is fields["X_train_"]
+    if can_mirror:
+        mirrors.append(xt)
     var names = Python.tuple("y_train_", "pi_", "W_sr_", "L_")
     for i in range(k):  # driver-loop: four model buffers per fitted OVR member
         var own = py_fields(fits[i])
@@ -420,17 +424,17 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
         tables.factors[i] = Int(py=classical_address(parts[3]))
         for j in range(4):  # driver-loop: retain each member buffer through native execution
             kept.append(parts[j])
-            if mirrors is not None:
+            if can_mirror:
                 if parts[j] is own[names[j]]:
-                    _ = py_call(mirrors.append, parts[j])
+                    mirrors.append(parts[j])
                 else:
-                    mirrors = PythonObject(None)
+                    can_mirror = False
     var connection = GPConnection(ext)
     var lease = -1
     if (connection.capabilities & 4) == 4:
         lease = 0
-        if mirrors is not None:
-            lease = fitted_resident_lease(model, _GPC_RESIDENT_SLOT, ext, "gp_resident_lease", mirrors)
+        if can_mirror:
+            lease = gp_resident_lease(model, _GPC_RESIDENT_SLOT, connection, mirrors)
         else:
             fitted_resident_drop(model, _GPC_RESIDENT_SLOT)
     var kernel = gp_kernel_view(arrays)
