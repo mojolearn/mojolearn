@@ -1,0 +1,130 @@
+{
+  "base": "ed7d3711a61c84aa3fe293c846b9f967b6a4f9ad",
+  "family": "OneClassSVM",
+  "status": "inventory before implementation; no execution",
+  "roles": [
+    {
+      "family": "OneClassSVM",
+      "role": "numeric operation pointer/int/float lists",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 38,
+        "text": "def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,"
+      },
+      "after_plan": "typed existing x_neighbors/x_decomp requests",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "sample-weight positive compaction scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 176,
+        "text": "var prow = family_array(Python.tuple(PythonObject(n)), \"<i4\", context)"
+      },
+      "after_plan": "native compaction owner",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "kernel matrix private scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 77,
+        "text": "def _kernel(binding: PythonObject, a: PythonObject, b: PythonObject, code: Int, gamma: Float64, coef0: Float64,"
+      },
+      "after_plan": "native matrix owner; same kernel",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "solver alpha and result scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 220,
+        "text": "var alpha = family_array(Python.tuple(PythonObject(m)), \"<f4\", context)"
+      },
+      "after_plan": "native solver state",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "solver request addresses",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 230,
+        "text": "var addresses = Python.list(_a(xw), _a(cv), _a(alpha), _a(info), _a(iters))"
+      },
+      "after_plan": "typed same solver request",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "private query score storage",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 354,
+        "text": "var s = family_array(Python.tuple(PythonObject(nq)), \"<f4\", context)"
+      },
+      "after_plan": "native score owner until requested public PACK",
+      "status": "pending",
+      "scope": "remaining"
+    },
+    {
+      "family": "OneClassSVM",
+      "role": "private sign-label code scratch",
+      "before": {
+        "file": "bindings/svc_ocsvm_native.mojo",
+        "line": 342,
+        "text": "var lab = family_array(Python.tuple(PythonObject(nq)), \"<i4\", context)"
+      },
+      "after_plan": "native code owner; same fused/default routes",
+      "status": "pending",
+      "scope": "remaining"
+    }
+  ],
+  "role_count": 7,
+  "call_graph": [
+    "svc_ocsvm_operation -> xn_admit_arguments -> fit/run/decision/predict",
+    "fit -> input/weights admission -> positive compaction -> row/column gather -> gamma variance -> kernel/Gram or resident op_ocsvm_x -> alpha init -> solver -> support compaction -> public publication",
+    "query -> coefficient weak-cache admission -> fused kernel_matmul / ocsvm_labels or full Gram+matmul -> optional unary/sign/cast -> public output"
+  ],
+  "routes": {
+    "computed_fit": "same x_neighbors operations, resident availability checked at original stage",
+    "precomputed_fit": "same take_rows/take_cols Gram and ocsvm solver",
+    "resident_idn": "same OCSVM_IDN_RES and op_ocsvm_x",
+    "resident_fast_existing": "same OCSVM_CLS2_RES export, no default change/no dedicated fast work",
+    "candidate": "existing admitted x_neighbors v1 provider snapshot and its capability word",
+    "fused_labels": "existing bit4/export condition and op_ocsvm_labels, same kernel/unary/sign launches",
+    "old_items": "context family_svc_xn_old_items keeps Gram+matmul route"
+  },
+  "typed_plan": [
+    "native CV/positive-row/positive-value/info owners",
+    "native filtered X/Gram/alpha/solver metadata/support compaction",
+    "native query score/decision/label scratch with same public output allocation stages",
+    "native fixed XnDriver requests and additive exact resident descriptor"
+  ],
+  "boundaries": [
+    "public support_/support_vectors_/dual_coef_/intercept_/offset_/n_iter_/n_features_in_/fit_status_",
+    "existing observable _gamma early publication",
+    "coefficient weak-cache identity/pin semantics",
+    "exact admitted Python storage/protocol refusals; no callback fallback"
+  ],
+  "shared_files_reserved": [
+    "additive _mojolearn_x_neighbors/_host resident factory; no existing numerical bodies or generated ABI edits"
+  ],
+  "parallel_fixture_plan": "independent native CPU cases in host_parallelize; GPU ordered numerical cases under existing upstream shared-context park; retain Python until accepted",
+  "unchanged_numerical_sources": [
+    "x_neighbors/ocsvm_dev.mojo",
+    "x_neighbors/ocsvm_host.mojo",
+    "x_neighbors/ocsvm_init.mojo",
+    "x_neighbors/iter_device.mojo"
+  ],
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/svm-native/ocsvm",
+  "jobs": "none; root only"
+}
