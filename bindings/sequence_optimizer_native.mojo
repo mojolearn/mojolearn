@@ -382,8 +382,8 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         py_setitem(fields, "_handles", handles)
         # p = [words, ip...] (seq_optimizer_init's words and ip)
         var init: List[Int] = [Int(py=classical_address(words)), 2 if kind == 5 else (1 if kind == 6 else 0), len(params)]
-        init.extend(sizes)
-        init.extend(extra)
+        init.extend(sizes^)
+        init.extend(extra^)
         var n = seq_opt_call(seq_key(selected), SO_INIT, List[Int](), init, List[Float64]())
         if kind < 5 and n < 1:
             raise Error("ValueError: sequence optimizer has no parameters")
@@ -475,23 +475,23 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
                 _ = py_call(keep.append, prepared)
         if total != Int(py=fields["n_total"]):
             raise Error("ValueError: sequence parameter size changed after construction")
-        addrs.extend(ga)
+        addrs.extend(ga^)
         # p = [words, handles, ip...] with ip = [J, dev, kinds.., sizes.., (rows.., cols.. | kind, flags)]
         var ip = List[Int](capacity=4 + 4 * count)
         ip.append(words)
         ip.append(handles)
         ip.append(count)
         ip.append(Int(dev))
-        ip.extend(kinds)
-        ip.extend(sizes)
+        ip.extend(kinds^)
+        ip.extend(sizes^)
         var slots = seq_slots(fields, kind, context, buffer_pins)
         if kind == 5:
             for i in range(len(params)):  # driver-loop: over Adafactor first moment slot addresses
                 addrs.append(Int(py=slots[i * 2]))
             for i in range(len(params)):  # driver-loop: over Adafactor second moment slot addresses
                 addrs.append(Int(py=slots[i * 2 + 1]) if Int(py=slots[i * 2 + 1]) != 0 else Int(py=slots[i * 2]))
-            ip.extend(rows)
-            ip.extend(cols)
+            ip.extend(rows^)
+            ip.extend(cols^)
         else:
             for i in range(len(slots)):  # driver-loop: over two or three optimizer state slot addresses
                 addrs.append(Int(py=slots[i]))

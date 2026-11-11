@@ -105,7 +105,7 @@ def _step_fp() -> List[Float64]:
 
 
 def _with(var head: List[Int], tail: List[Int]) -> List[Int]:
-    head.extend(tail)
+    head.extend(tail.copy())
     return head^
 
 
