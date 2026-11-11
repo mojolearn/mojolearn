@@ -54,12 +54,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext
-from core.native_descriptor_abi import NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_report
-from core.shared_slot import SharedSlot as _R2SharedSlot
-from core.metrics_entry_table import (
-    MetricsEntryKey, MetricsR2Owner, MR_R2, metrics_r2_check_spans, metrics_r2_publish, metrics_vendor_word,
-)
+from metrics.r2_entry_device import _r2_value, _r2_weighted_value, publish_metrics_r2_device
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -491,56 +486,6 @@ def r2_score_binding(
     with GILReleased(Python()):
         out = _r2_value(y_word, yh_word, n)
     return PythonObject(Float64(out))
-
-
-def _r2_value(y_addr: Int, yh_addr: Int, n: Int) raises -> Float32:
-    """`r2_score`'s body over plain addresses: the Python entry above and the
-    native table entry `metrics_r2_device_v1` (core/metrics_entry_table.mojo)."""
-    var y = _load_f32(y_addr, n)
-    var yh = _load_f32(yh_addr, n)
-    return r2_score_host(y, yh, n)
-
-
-def _r2_weighted_value(y_addr: Int, yh_addr: Int, w_addr: Int, n: Int) raises -> Float32:
-    """`r2_score_weighted`'s body over plain addresses (both entries)."""
-    var y = _load_f32(y_addr, n)
-    var yh = _load_f32(yh_addr, n)
-    var w = _load_f32(w_addr, n)
-    return r2_score_weighted_host(y, yh, w, n)
-
-
-def metrics_r2_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
-    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """The R^2 entry of this image's metrics table (`METRICS_R2_ABI`), for
-    native callers in other modules; the caller releases the GIL."""
-    try:
-        var n = metrics_r2_check_spans(operation, aa, na, pp, np, nf, result)
-        var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
-        var value: Float32
-        if operation == MR_R2:
-            value = _r2_value(a[0], a[1], n)
-            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[2])[] = Float64(value)
-        else:
-            value = _r2_weighted_value(a[0], a[1], a[2], n)
-            MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a[3])[] = Float64(value)
-        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = 0
-        return 0
-    except problem:
-        native_descriptor_report(problem, context, sink)
-        return 1
-
-
-comptime METRICS_R2_DEVICE_OWNER = _R2SharedSlot[MetricsR2Owner, "MojolearnMetricsR2DeviceOwnerV1"]
-
-
-def publish_metrics_r2_device() raises:
-    """Publish the R^2 entry at module init; a build with no GPU vendor
-    publishes nothing (its callers refuse: "provider is not published")."""
-    var word = metrics_vendor_word(COMPILED_VENDOR)
-    if word < 0:
-        return
-    var owner = METRICS_R2_DEVICE_OWNER.get_or_create_ptr()
-    metrics_r2_publish(MetricsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(owner), metrics_r2_device_v1)
 
 
 
