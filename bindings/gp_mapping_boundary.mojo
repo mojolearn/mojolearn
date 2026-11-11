@@ -37,3 +37,28 @@ def gp_mapping_snapshot[Values: Bool = True, Keys: Bool = True](value: PythonObj
             result.values.append(PythonObject(from_borrowed=items[1]))
     _ = value
     return result^
+
+
+struct GPFieldUpdates(Movable):
+    # Private constructor publication plan. Hash lookup retains the first field
+    # name and insertion order while a repeated name replaces only its value,
+    # matching the former exact Python dictionary. Public values remain pins.
+    var indices: Dict[String, Int]
+    var keys: List[PythonObject]
+    var values: List[PythonObject]
+
+    def __init__(out self):
+        self.indices = Dict[String, Int]()
+        self.keys = List[PythonObject]()
+        self.values = List[PythonObject]()
+
+    def put(mut self, name: PythonObject, value: PythonObject) raises:
+        if py_type(name) is not native_loaded_module("builtins").str:
+            raise Error("TypeError: GP kernel publication requires exact native field names")
+        var text = String(name)
+        if text in self.indices:
+            self.values[self.indices[text]] = value
+        else:
+            self.indices[text] = len(self.keys)
+            self.keys.append(name)
+            self.values.append(value)
