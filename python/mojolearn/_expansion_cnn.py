@@ -44,12 +44,6 @@ def _f32(x, name):
     return np.ascontiguousarray(a)
 
 
-def _rng(random_state):
-    """The layer's init stream (`_buffer.InitStream`: seeded draws in Mojo)."""
-    from ._buffer import InitStream
-    return InitStream(None if random_state is None else int(random_state))
-
-
 class _Layer:
     """A layer on `_mojolearn_x_cnn` (the GPU binding, or its CPU host twin
     on a CPU-only install / MOJOLEARN_VENDOR=cpu)."""
