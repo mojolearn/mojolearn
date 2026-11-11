@@ -7,6 +7,7 @@
 # layouts for `save`), the free hyperparameters `_hyper` listed, and the copy
 # `_replace` / `_with_free_values` built. No method of a kernel class runs.
 from std.python import Python, PythonObject
+from core.gp_native_storage import GPFreeParameters
 from bindings.admitted_family import admit_family, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
@@ -165,52 +166,60 @@ def _gp_fixed(bounds: PythonObject) raises -> Bool:
     return family_is_str(bounds) and String(bounds) == "fixed"
 
 
-def gp_free(kernel: PythonObject, flags: PythonObject, values: PythonObject, bounds: PythonObject,
-            context: PythonObject) raises:
-    """`_free_flags()`, `_free_values()` and `_free_bounds()` in one postfix
-    walk of `_hyper()`: a flag per node (1 for a leaf whose bounds are not
-    "fixed"), the free leaves' values and their (low, high) pairs."""
+def gp_free(kernel: PythonObject, mut result: GPFreeParameters, context: PythonObject) raises:
+    """Unpack admitted kernel hyperparameters in their original postfix order."""
     var nodes_table = context["family_gp_kernel_nodes"]
     var cls = _gp_kernel_class(kernel, nodes_table)
     var layout = nodes_table[cls]
     var fields = py_fields(kernel)
     var how = String(layout[0])
     if how == "pair":
-        gp_free(fields[layout[1]], flags, values, bounds, context)
-        gp_free(fields[layout[2]], flags, values, bounds, context)
-        _ = py_call(flags.append, PythonObject(0))
+        gp_free(fields[layout[1]], result, context)
+        gp_free(fields[layout[2]], result, context)
+        result.flags.append(Int32(0))
     elif how == "nodes":
         var saved = fields[layout[1]]
-        for _ in range(len(saved)):  # driver-loop: over a saved kernel's postfix nodes (all fixed)
-            _ = py_call(flags.append, PythonObject(0))
+        for _ in range(len(saved)):  # driver-loop: saved kernel nodes are fixed
+            result.flags.append(Int32(0))
     elif how == "leaf":
         var pairs = fields[context["family_gp_kernel_bounds"][cls]]
         if _gp_fixed(pairs):
-            _ = py_call(flags.append, PythonObject(0))
+            result.flags.append(Int32(0))
             return
-        _ = py_call(flags.append, PythonObject(1))
+        result.flags.append(Int32(1))
         if layout[3] is not None:
             var scales = fields[layout[3]]
-            for i in range(len(scales)):  # driver-loop: over one leaf's length scales
-                _ = py_call(values.append, scales[i])
+            for i in range(len(scales)):  # driver-loop: one free length scale per kernel parameter
+                result.values.append(Float64(py=scales[i]))
         else:
-            _ = py_call(values.append, fields[layout[2]])
-        for i in range(len(pairs)):  # driver-loop: over one leaf's bound pairs
-            _ = py_call(bounds.append, pairs[i])
+            result.values.append(Float64(py=fields[layout[2]]))
+        for i in range(len(pairs)):  # driver-loop: bound pair for each free kernel parameter
+            result.bounds.append(Float32(Float64(py=pairs[i][0])))
+            result.bounds.append(Float32(Float64(py=pairs[i][1])))
     else:
         raise Error("RuntimeError: unknown kernel node layout " + how)
 
 
 def gp_n_dims(kernel: PythonObject, context: PythonObject) raises -> Int:
-    """`kernel.n_dims`."""
-    var flags = Python.list()
-    var values = Python.list()
-    var bounds = Python.list()
-    gp_free(kernel, flags, values, bounds, context)
-    return len(values)
+    # Count metadata without narrowing a bound/value that the caller does not
+    # otherwise consume yet. This preserves the former count-only refusal order.
+    var table = context["family_gp_kernel_nodes"]
+    var cls = _gp_kernel_class(kernel, table)
+    var layout = table[cls]
+    var fields = py_fields(kernel)
+    var how = String(layout[0])
+    if how == "pair":
+        return gp_n_dims(fields[layout[1]], context) + gp_n_dims(fields[layout[2]], context)
+    if how == "nodes":
+        return 0
+    if how == "leaf":
+        if _gp_fixed(fields[context["family_gp_kernel_bounds"][cls]]):
+            return 0
+        return len(fields[layout[3]]) if layout[3] is not None else 1
+    raise Error("RuntimeError: unknown kernel node layout " + how)
 
 
-def gp_replace(kernel: PythonObject, values: PythonObject, mut pos: Int, context: PythonObject) raises -> PythonObject:
+def gp_replace(kernel: PythonObject, values: List[Float64], mut pos: Int, context: PythonObject) raises -> PythonObject:
     """`kernel._replace(values)`: a new kernel of the same classes whose free
     entries are taken from `values[pos:]` in postfix order (`pos` advances)."""
     var b = native_loaded_module("builtins")
@@ -238,30 +247,30 @@ def gp_replace(kernel: PythonObject, values: PythonObject, mut pos: Int, context
             var taken = Python.list()
             for i in range(len(scales)):  # driver-loop: over one leaf's length scales
                 if free:
-                    _ = py_call(taken.append, family_call(b.float, values[pos]))
+                    _ = py_call(taken.append, PythonObject(values[pos]))
                     pos += 1
                 else:
                     _ = py_call(taken.append, family_call(b.float, scales[i]))
             py_setitem(own, layout[3], taken)
         elif free:
-            py_setitem(own, layout[2], family_call(b.float, values[pos]))
+            py_setitem(own, layout[2], PythonObject(values[pos]))
             pos += 1
     else:
         raise Error("RuntimeError: unknown kernel node layout " + how)
     return fresh
 
 
-def gp_with_free_values(kernel: PythonObject, values: PythonObject, theta: PythonObject,
+def gp_with_free_values(kernel: PythonObject, values: List[Float64], theta: List[Float64],
                         context: PythonObject) raises -> PythonObject:
     """`kernel._with_free_values(values, theta)`: the copy with `_theta_fit`
     set to the float list `theta` when it is not None."""
     var b = native_loaded_module("builtins")
     var pos = 0
     var out = gp_replace(kernel, values, pos, context)
-    if theta is not None:
+    if len(theta) != 0:
         var fitted = Python.list()
         for i in range(len(theta)):  # driver-loop: over the kernel hyperparameters (n_dims entries)
-            _ = py_call(fitted.append, family_call(b.float, theta[i]))
+            _ = py_call(fitted.append, PythonObject(theta[i]))
         py_setitem(py_fields(out), "_theta_fit", fitted)
     return out
 
