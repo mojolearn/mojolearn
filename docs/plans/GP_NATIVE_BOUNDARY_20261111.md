@@ -332,3 +332,15 @@ hook. The numerical RUN closure remains unchanged. Broader shared kernel
 construction/release boundaries and mixed real/NumPy label ordering still need
 review; this bounded change does not assert that every GP-related Python object
 or callback-sensitive boundary has been eliminated.
+
+The separate following-tranche audit at producer `ef29e98ad9` records **13
+additional private roles**: one scratch role, eight boundary-container roles
+and four state roles. All before/after anchors are present. It excludes the
+partially migrated general label ordering and shared release-class key paths,
+and excludes actual public/context/provider lifetime pins. The earlier frozen
+51-role audit remains unchanged. This additional source scope has 210 local
+native RUN sources with no Python imports; the complete `gaussian_process/`,
+`preprocessing/` and `x_prep/` numerical trees are unchanged from `de371e5d37`.
+These are source facts, with compilation/runtime/performance pending for this
+tranche. Complete rows and remaining groups:
+`~/mojolearn-evidence/python-mojo-migration-20261110/python-object-typed-gp-next-tranche.json`.
