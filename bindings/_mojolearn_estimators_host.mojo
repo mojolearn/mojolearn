@@ -64,7 +64,8 @@ from core.logistic_native_api import (
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
-from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
+from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API, qn_host_native_v1
+from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, ESTIMATORS_TABLE_QN
 from glm.host.linear_svc_native_host import LINEAR_SVC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
@@ -1587,6 +1588,15 @@ def _publish_linear_entry_table() raises:
     linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
         Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_host_v1, linear_predict_host_v1])
 
+def _publish_estimators_qn_table() raises:
+    # The CPU column of the estimators QN table
+    # (core/estimators_entry_table.mojo): QNRegressor's owner calls it
+    # instead of the `qn_fit` / `qn_decision_function` Python exports, which
+    # remain for the other doors and the Python tests.
+    var api = LOGISTIC_HOST_API.get_or_create_ptr()
+    estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
+        Int(api[].entries.unsafe_ptr()), qn_host_native_v1)
+
 def build__mojolearn_estimators_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1656,6 +1666,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
         var published_module = module.finalize()
         _publish_linear_entry_table()
+        _publish_estimators_qn_table()
         return published_module
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

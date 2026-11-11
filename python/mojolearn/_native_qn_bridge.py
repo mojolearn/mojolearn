@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of QNRegressor's native owner and its fixed ABI."""
 
+#: The native tables' vendor words (core/estimators_entry_table.mojo
+#: estimators_vendor_word applies the same mapping at publication).
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
 
 def connect(losses):
     # glue: compiled entries and plain metadata are retained during import;
@@ -25,15 +29,16 @@ def connect(losses):
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI setup
         try:
+            # glue: the estimators image's (tier, vendor) key of the native
+            # estimators QN table (core/estimators_entry_table.mojo), read
+            # once here; the owner calls the image's published entry with it,
+            # never the binding's Python exports. `_module` retains the image.
             estimator = _backend.binding("_mojolearn_estimators", mode)
-            entries = {}
-            for name in ("estimators_vendor", "estimators_numeric_mode", "qn_fit", "qn_decision_function"):  # glue: fixed native exports
-                entry = getattr(estimator, name)
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"QNRegressor requires compiled {name}")
-                entries[name] = entry
-            entries["_module"] = entries["qn_fit"].__self__
-            connected[mode] = entries
+            tier = int(estimator.estimators_numeric_mode())  # import-time: the image's compiled tier
+            vendor = _NATIVE_VENDORS.get(str(estimator.estimators_vendor()), -1)  # import-time: the image's vendor
+            if vendor < 0 or tier not in (0, 1):
+                raise ImportError("QNRegressor: the estimators image publishes no native QN table")
+            connected[mode] = {"_module": estimator, "native_key": (tier, vendor)}
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
         try:
@@ -61,19 +66,21 @@ def connect(losses):
     # the fitted coefficient stores are mojolearn Arrays whatever is installed
     context.update(qn_bindings=connected, classical_metrics=metric_bindings, qn_losses=dict(losses),
                    environment=os.environ._data, output_context=_numpy_free_context(),
-                   qn_fit_fold=_qn_fit_fold())
+                   qn_fold_key=_qn_fold_key())
     return call, context
 
 
-def _qn_fit_fold():
-    # glue (lane a7c): the QN fit of a cross-validation fold resident on the
-    # device, exported by the identical GPU base binding next to the fold
-    # store it reads (bindings/msel_device.mojo); a build without it (the
-    # CPU column) leaves None and the door gathers host rows.
-    from types import BuiltinFunctionType
+def _qn_fold_key():
+    # glue (lane a7c; table key since lane calltable-solver-estimators): the
+    # (tier, vendor) key of the resident-fold QN entry the GPU base binding
+    # publishes next to the fold store it reads (bindings/msel_device.mojo,
+    # core/estimators_entry_table.mojo ESTIMATORS_TABLE_QN_FOLD); a build
+    # without it (the CPU column) leaves None and the door gathers host rows.
     from ._buffer import _native
     try:
-        fold = _native('qn_fit_fold')
-    except (ImportError, AttributeError, TypeError, RuntimeError):
-        fold = None
-    return fold if isinstance(fold, BuiltinFunctionType) else None
+        _native('logistic_fold_native_api_v1')  # import-time: the base image carries the fold entry
+        tier = int(_native('mojolearn_numeric_mode')())  # import-time: the base image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(_native('mojolearn_vendor')()), -1)  # import-time: its vendor
+    except (ImportError, AttributeError, KeyError, TypeError, ValueError, RuntimeError):
+        return None
+    return (tier, vendor) if vendor > 0 and tier in (0, 1) else None

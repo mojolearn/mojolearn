@@ -178,7 +178,6 @@ from bindings.msel_device import (
     pca_transform_fold_binding,
     pca_fit_fold_binding,
     tsvd_fit_fold_binding,
-    qn_fit_fold_binding,
     logistic_fold_native_api_v1_binding,
     pca_fold_native_api_v1_binding,
     tsvd_fold_native_api_v1_binding,
@@ -208,6 +207,8 @@ from core.labels_admission import labels_argmax_shape, labels_gather_shape, labe
 from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_prepare, labels_legacy_address
 
 from checks.vendor import COMPILED_VENDOR
+from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_v1
+from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN_FOLD
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -2057,6 +2058,21 @@ def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def _publish_qn_fold_table() raises:
+    # The resident-fold QN entry (core/estimators_entry_table.mojo family
+    # ESTIMATORS_TABLE_QN_FOLD, the former `qn_fit_fold` export's body):
+    # QNRegressor's owner (bindings/qn_native.mojo) fits a device fold
+    # through it. LogisticRegression's door still reaches the same entry
+    # through the `logistic_fold_native_api_v1` capsule. A build with no GPU
+    # vendor ("none") publishes nothing.
+    var word = estimators_vendor_word(String(COMPILED_VENDOR))
+    if word < 0:
+        return
+    var api = LOGISTIC_FOLD_API.get_or_create_ptr()
+    estimators_table_publish[ESTIMATORS_TABLE_QN_FOLD](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
+        Int(api[].entries.unsafe_ptr()), logistic_fold_v1)
+
+
 def build__mojolearn() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
@@ -2123,7 +2139,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[pca_transform_fold_binding]("pca_transform_fold")
         m.def_function[pca_fit_fold_binding]("pca_fit_fold")
         m.def_function[tsvd_fit_fold_binding]("tsvd_fit_fold")
-        m.def_function[qn_fit_fold_binding]("qn_fit_fold")
         m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
         m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")
         m.def_function[tsvd_fold_native_api_v1_binding]("tsvd_fold_native_api_v1")
@@ -2201,7 +2216,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_qn_fold_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn module: ", e))
 

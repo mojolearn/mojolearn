@@ -20,7 +20,8 @@ from core.logistic_native_api import (
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
-from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
+from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API, qn_device_native_v1
+from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN
 from glm.linear_svc_native_device import LINEAR_SVC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.dbscan_native_device import DBSCAN_DEVICE_API, DBSCANDeviceKernels
@@ -1673,6 +1674,19 @@ def _publish_linear_entry_table() raises:
     linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
         Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_device_v1, linear_predict_device_v1])
 
+def _publish_estimators_qn_table() raises:
+    # The QN entry of the estimators table (core/estimators_entry_table.mojo):
+    # QNRegressor's owner (bindings/qn_native.mojo) calls it instead of the
+    # `qn_fit` / `qn_decision_function` Python exports, which remain for the
+    # other doors and the Python tests that call the binding directly. A
+    # build with no GPU vendor ("none") publishes nothing.
+    var word = estimators_vendor_word(String(COMPILED_VENDOR))
+    if word < 0:
+        return
+    var api = LOGISTIC_DEVICE_API.get_or_create_ptr()
+    estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
+        Int(api[].entries.unsafe_ptr()), qn_device_native_v1)
+
 def build__mojolearn_estimators() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1764,6 +1778,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[qn_softmax_binding]("qn_softmax")
         var published_module = m.finalize()
         _publish_linear_entry_table()
+        _publish_estimators_qn_table()
         return published_module
     except e:
         abort(String("failed to create _mojolearn_estimators: ", e))
