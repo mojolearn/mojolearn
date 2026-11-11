@@ -28,7 +28,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_field, FAMILY_F64P,
 )
-from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
+from core.hotpath_impl import cast_elements, HP_I32, HP_I64
+from core.gp_native_fit_summary import GPCFitSummary
 from bindings.gp_common_native import gp_extension, gp_caps, gp_kernel_arrays, gp_f32, gp_fit_owned
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
@@ -132,8 +133,34 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "_max_iter_predict", family_call(b.int, max_iter))
 
 
-def _gpc_binary(context: PythonObject, y01: PythonObject, l_out: PythonObject, pi: PythonObject,
-                wsr: PythonObject, lml: Float64, n_iter: Int, nb: Int) raises -> PythonObject:
+@fieldwise_init
+struct GPCBinaryPublication(Movable):
+    var member: PythonObject
+    var iterations: PythonObject
+    var likelihood: Float64
+
+
+struct GPCFitPublication(Movable):
+    # Members and iteration objects are the actual public output pins. The
+    # likelihood summary stays native until the final public scalar PACK.
+    var members: PythonObject
+    var iterations: List[PythonObject]
+    var summary: GPCFitSummary
+
+    def __init__(out self, count: Int) raises:
+        self.members = Python.list()
+        self.iterations = List[PythonObject](capacity=count if count > 1 else 0)
+        self.summary = GPCFitSummary(count if count > 1 else 0)
+
+    def append(mut self, value: GPCBinaryPublication) raises:
+        _ = py_call(self.members.append, value.member)
+        if len(self.summary.values) > 0:
+            self.summary.set(len(self.iterations), value.likelihood)
+            self.iterations.append(value.iterations)
+
+
+def _gpc_binary_result(context: PythonObject, y01: PythonObject, l_out: PythonObject, pi: PythonObject,
+                wsr: PythonObject, lml: Float64, n_iter: Int, nb: Int) raises -> GPCBinaryPublication:
     """A `_BinaryLaplace(y_train, L, pi, W_sr, lml, n_iter, nb)`, its fields set."""
     var b = native_loaded_module("builtins")
     var fit = family_call(b.object.__new__, context["family_gp_binary_laplace"])
@@ -143,9 +170,19 @@ def _gpc_binary(context: PythonObject, y01: PythonObject, l_out: PythonObject, p
     py_setitem(f, "pi_", pi)
     py_setitem(f, "W_sr_", wsr)
     py_setitem(f, "log_marginal_likelihood_value_", PythonObject(lml))
-    py_setitem(f, "n_iter_", PythonObject(n_iter))
+    var iterations = PythonObject(n_iter)
+    py_setitem(f, "n_iter_", iterations)
     py_setitem(f, "nb_", PythonObject(nb))
-    return fit
+    return GPCBinaryPublication(fit, iterations, lml)
+
+
+
+def _gpc_binary(context: PythonObject, y01: PythonObject, l_out: PythonObject, pi: PythonObject,
+                wsr: PythonObject, lml: Float64, n_iter: Int, nb: Int) raises -> PythonObject:
+    # Explicit worker/interpreter PACK compatibility: no opaque Mojo owner
+    # crosses into another interpreter's transport.
+    var result = _gpc_binary_result(context, y01, l_out, pi, wsr, lml, n_iter, nb)
+    return result.member
 
 
 @fieldwise_init
@@ -179,7 +216,7 @@ struct GPCPredictAllResult(Movable):
 
 
 def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes, arrays: PythonObject,
-                 max_iter: Int, columns: List[Int], context: PythonObject) raises -> PythonObject:
+                 max_iter: Int, columns: List[Int], context: PythonObject) raises -> GPCFitPublication:
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
     var pins = List[GPCMemberPins]()
@@ -207,18 +244,21 @@ def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes, ar
     _ = codes
     _ = arrays
     _ = pins
-    var fits = Python.list()
+    var fits = GPCFitPublication(len(pins))
     for i in range(len(pins)):  # driver-loop: pack the public mutable binary member objects
-        _ = py_call(fits.append, _gpc_binary(context, pins[i].targets, pins[i].factor, pins[i].pi, pins[i].wsr,
-            tables.scalar_storage[3*i], Int(tables.scalar_storage[3*i+1]), Int(tables.scalar_storage[3*i+2])))
-    return fits
+        var member = _gpc_binary_result(context, pins[i].targets, pins[i].factor, pins[i].pi, pins[i].wsr,
+            tables.scalar_storage[3*i], Int(tables.scalar_storage[3*i+1]), Int(tables.scalar_storage[3*i+2]))
+        fits.append(member)
+    _ = tables
+    _ = pins
+    return fits^
 
 
 def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: NativeLabelCodes, arrays: PythonObject,
-                    max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
+                    max_iter: Int, k: Int, context: PythonObject) raises -> GPCBinaryPublication:
     var answer = _gpc_fit_binary_address(ext, x, codes.address(), arrays, max_iter, k, context)
     _ = codes
-    return answer
+    return answer^
 
 
 def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays: PythonObject,
@@ -226,11 +266,11 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
     # UNPACK of the existing worker transport Array.
     var answer = _gpc_fit_binary_address(ext, x, Int(py=classical_address(codes)), arrays, max_iter, k, context)
     _ = codes
-    return answer
+    return answer.member
 
 
 def _gpc_fit_binary_address(ext: PythonObject, x: PythonObject, codes: Int, arrays: PythonObject,
-                    max_iter: Int, k: Int, context: PythonObject) raises -> PythonObject:
+                    max_iter: Int, k: Int, context: PythonObject) raises -> GPCBinaryPublication:
     # The worker transport enters here too; unpack its exact public storage.
     var n_rows = Int(py=x.shape[0])
     var n_cols = Int(py=x.shape[1])
@@ -253,10 +293,10 @@ def _gpc_fit_binary_address(ext: PythonObject, x: PythonObject, codes: Int, arra
     _ = factor
     _ = pi
     _ = wsr
-    return _gpc_binary(context, y01, factor, pi, wsr, scalars[0], iterations, Int(scalars[2]))
+    return _gpc_binary_result(context, y01, factor, pi, wsr, scalars[0], iterations, Int(scalars[2]))
 
 
-def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject, fits: PythonObject,
+def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject, fits: GPCFitPublication,
                     context: PythonObject) raises:
     """`_set_fitted`."""
     lifecycle_admit_fields(fields)
@@ -266,10 +306,10 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
     py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
     py_setitem(fields, "classes_", py_call(b.list, classes))
     py_setitem(fields, "n_classes_", PythonObject(n_classes))
-    py_setitem(fields, "estimators_", fits)
+    py_setitem(fields, "estimators_", fits.members)
     py_setitem(fields, "kernel_", fields["_kernel"])
     if n_classes == 2:
-        var only = py_fields(fits[0])
+        var only = py_fields(fits.members[0])
         py_setitem(fields, "y_train_", only["y_train_"])
         py_setitem(fields, "L_", only["L_"])
         py_setitem(fields, "pi_", only["pi_"])
@@ -278,23 +318,10 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
         py_setitem(fields, "log_marginal_likelihood_value_", only["log_marginal_likelihood_value_"])
         return
     var iters = Python.list()
-    var k = len(fits)
-    var values = List[Float64](length=k, fill=0.0)
-    var vp = values.unsafe_ptr()
-    _ = values  # keep the Python object alive through the native call above
-    for i in range(k):  # driver-loop: over the one-vs-rest classes
-        var own = py_fields(fits[i])
-        _ = py_call(iters.append, own["n_iter_"])
-        vp[i] = Float64(py=family_call(b.float, own["log_marginal_likelihood_value_"]))
-        _ = values  # keep the Python object alive through the native call above
+    for i in range(len(fits.iterations)):  # driver-loop: public n_iter_ retains each member's exact scalar object
+        _ = py_call(iters.append, fits.iterations[i])
     py_setitem(fields, "n_iter_", iters)
-    # the per-class values summed in storage order by the native reduction
-    # (`Array.sum`'s reduce_stat), then divided by the class count
-    var total = reduce_stat(Int(values.unsafe_ptr()), HP_F64, k, HP_SUM).f
-    _ = values  # keep the Python object alive through the native call above
-    py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(total / Float64(k)))
-    _ = values  # keep the Python object alive through the native call above
-    _ = values^
+    py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(fits.summary.likelihood()))
 
 
 def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
@@ -327,13 +354,14 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         for k in range(n_classes):  # driver-loop: over the one-vs-rest classes
             columns.append(k)
     var max_iter = Int(py=fields["_max_iter_predict"])
-    var fits: PythonObject
+    var fits: GPCFitPublication
     if (gp_caps(ext) & 1) == 1:
         fits = _gpc_fit_all(ext, x, codes, arrays, max_iter, columns, context)
     else:
-        fits = Python.list()
+        fits = GPCFitPublication(len(columns))
         for i in range(len(columns)):  # driver-loop: one binding call per one-vs-rest class
-            _ = py_call(fits.append, _gpc_fit_binary(ext, x, codes, arrays, max_iter, columns[i], context))
+            var member = _gpc_fit_binary(ext, x, codes, arrays, max_iter, columns[i], context)
+            fits.append(member)
     _gpc_set_fitted(fields, x, classes, fits, context)
     _ = arrays^
     _ = codes^
