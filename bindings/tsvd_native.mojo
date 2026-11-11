@@ -28,7 +28,7 @@ from bindings.admitted_input import admit_x, AdmittedX, admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse
 from bindings.decomp_inputs import decomp_admit, decomp_input_copied
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
-from bindings.decomp_scalar_admission import decomp_scalar_admit
+from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
 from core.pca_native_api import PCAFoldStore
 from core.tsvd_native_api import (
     TSVDFitRequest, TSVDQueryRequest, TSVD_GRAM, TSVD_FUSED, TSVD_EXPLAINED,
@@ -44,11 +44,6 @@ from bindings.tsvd_owner_boundary import tsvd_owner_drop, tsvd_owner_lease, TSVD
 comptime _TS_MAX_N = 512
 #: x_decomp/qfix.mojo TSVD_QFIX's bit in `x_decomp_qfix_flags`
 comptime _QFIX_TSVD = 2
-
-
-def _repr(value: PythonObject, context: PythonObject) raises -> String:
-    decomp_scalar_admit(value, context)
-    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def _admitted(model: PythonObject, context: PythonObject) raises -> Bool:
@@ -132,7 +127,7 @@ def _host_connection(model: PythonObject, fields: PythonObject, context: PythonO
     if mode is not None and (py_type(mode) is not py_type(PythonObject("")) or String(mode) != "identical"):
         var type_type = native_loaded_module("builtins").type
         var name = String(py_call(type_type.__dict__["__name__"].__get__, py_type(model)))
-        raise Error("mojolearn: " + name + " runs IDENTICAL only on the host; this model was saved " + _repr(mode, context))
+        raise Error("mojolearn: " + name + " runs IDENTICAL only on the host; this model was saved " + decomp_scalar_repr(mode, context))
     return tsvd_connect(context["tsvd_host_factory"], 1, "cpu")
 
 
@@ -323,7 +318,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
                     + "and algorithm='arpack' is not implemented; leave tol=0.0")
     var algorithm = _algorithm(fields)
     if algorithm != "randomized" and algorithm != "covariance_eigh" and algorithm != "jacobi":
-        raise Error("NotImplementedError: mojolearn TruncatedSVD: algorithm=" + _repr(fields["algorithm"], context)
+        raise Error("NotImplementedError: mojolearn TruncatedSVD: algorithm=" + decomp_scalar_repr(fields["algorithm"], context)
                     + " is not implemented; this class runs ('covariance_eigh', 'jacobi', 'randomized'). "
                     + "'arpack' is scipy's svds (implicitly restarted Lanczos), a different algorithm; "
                     + "accepting the name and running the Gram arm would be a silent substitution, which is "

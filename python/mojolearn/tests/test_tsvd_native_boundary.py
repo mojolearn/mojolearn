@@ -309,10 +309,38 @@ def test_native_text_array_subclass_cannot_run_conversion_hooks(dtype, field):
 
 
 @pytest.mark.parametrize("dtype", ["U8", "S8"])
-def test_native_text_array_invalid_algorithm_keeps_native_repr(dtype):
+def test_native_text_array_invalid_algorithm_uses_native_diagnostic(dtype):
     value = np.array("arpack", dtype=dtype)
     model = _model(algorithm=value)
     with pytest.raises(NotImplementedError) as actual:
         model.fit(_data())
-    assert "algorithm=" + repr(value) + " is not implemented" in str(actual.value)
+    assert "algorithm=<native scalar array> is not implemented" in str(actual.value)
     assert "input_copied_" not in vars(model)
+
+
+@pytest.mark.parametrize("dtype", ["U8", "S8", "f8", "i8"])
+@pytest.mark.parametrize("printing", ["formatter", "override_repr"])
+def test_invalid_array_algorithm_cannot_invoke_numpy_print_callbacks(dtype, printing):
+    calls = []
+
+    def forbidden(value):
+        calls.append(True)
+        raise AssertionError("NumPy Python printing callback executed")
+
+    if printing == "override_repr" and printing not in np.get_printoptions():
+        pytest.skip("This NumPy version has no override_repr option; formatter coverage remains active")
+    value = np.array("arpack" if dtype in ("U8", "S8") else 1, dtype=dtype)
+    model = _model(algorithm=value)
+    option = {"all": forbidden} if printing == "formatter" else forbidden
+    with np.printoptions(**{printing: option}):
+        with pytest.raises(NotImplementedError, match="algorithm=<native scalar array> is not implemented"):
+            model.fit(_data())
+    assert calls == []
+
+
+@pytest.mark.parametrize("value", ["arpack", None, 4, 1.5, False])
+def test_invalid_builtin_algorithm_keeps_ordinary_diagnostic(value):
+    model = _model(algorithm=value)
+    with pytest.raises(NotImplementedError) as actual:
+        model.fit(_data())
+    assert "algorithm=" + repr(value) + " is not implemented" in str(actual.value)
