@@ -28,15 +28,12 @@ native owner now refuses before any entry is read:
 import hashlib
 import json
 import math
-import struct
 
 import numpy as np
 import pytest
 
 from mojolearn import ByteLanguageModelConfig as Shape, SmallByteLanguageModelTrainer as Trainer
-from mojolearn import _byte_lm_host as host_mod
 from mojolearn import _byte_lm_impl as impl
-from mojolearn._buffer import frombytes
 
 SCHEDULE = {'dataset': 'logits-test'}
 
@@ -105,25 +102,23 @@ def test_bad_ids_and_shapes_raise_value_error(resident):
     model.close()
 
 
+def _greedy_reference(logits):
+    """Test oracle: the first-max argmax of each row's last position (ties go
+    to the lowest byte). The Python `_byte_lm_host._greedy_next_bytes` it
+    replaces was deleted; the product pick is native (pyout-neural-lm)."""
+    last = np.asarray(logits, dtype=np.float32)[:, -1, :]
+    return [int(i) for i in np.argmax(last, axis=1)]
+
+
 @pytest.mark.parametrize('resident', [False, True])
 def test_next_bytes_is_the_greedy_pick_of_the_last_position(resident):
     model = Trainer(initial(), data_schedule=SCHEDULE, resident=resident)
     x = tokens(3, 5)
     logits = np.asarray(model.logits(x))
-    assert model.next_bytes(x) == host_mod._greedy_next_bytes(logits)
+    assert model.next_bytes(x) == _greedy_reference(logits)
     assert len(model.next_bytes(tokens(1, 1))) == 1
     assert model.step_ == 0
     model.close()
-
-
-def test_the_greedy_helper_reads_the_last_position_and_ties_go_low():
-    values = [0.0] * (2 * 3 * 5)
-    values[0 * 15 + 0 * 5 + 2] = 9.0   # row 0, first position, ignored
-    values[0 * 15 + 2 * 5 + 1] = 4.0   # row 0, last position, tie at 1 and 4
-    values[0 * 15 + 2 * 5 + 4] = 4.0
-    values[1 * 15 + 2 * 5 + 0] = -0.0  # row 1, last position, all equal
-    logits = frombytes(struct.pack('<30f', *values), '<f4', (2, 3, 5))
-    assert host_mod._greedy_next_bytes(logits) == [1, 0]
 
 
 def test_a_runtime_shape_bounds_the_length():
