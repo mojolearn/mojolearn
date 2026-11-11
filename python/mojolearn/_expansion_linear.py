@@ -22,8 +22,6 @@ which validates, encodes labels, assigns CV folds (integers) and unpacks the
 flat float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
 from . import _backend
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._bufcheck import memcopy
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
 from ._native_params_setter import NativeParamsSetter
@@ -51,22 +49,6 @@ LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 
 
 # ------------------------------------------------------------------ plumbing
-
-
-def _coef_block(coef, intercept):
-    """[coef row | intercept] per class as one float32 Array (k rows of d + 1):
-    byte copies of the fitted Arrays."""
-    c = as_f32_c(coef, ndim=None, name="coef_")[0]
-    b = as_f32_c(intercept, ndim=None, name="intercept_")[0]
-    k = b.size
-    d = c.size // max(k, 1)
-    out = empty((k * (d + 1),), "<f4")
-    o = addr(out, name="coef")
-    ca, ba = addr_ro(c, name="coef_"), addr_ro(b, name="intercept_")
-    for j in range(k):                  # glue: one row copy per class
-        memcopy(o + 4 * j * (d + 1), ca + 4 * j * d, 4 * d)
-        memcopy(o + 4 * (j * (d + 1) + d), ba + 4 * j, 4)
-    return out
 
 
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
