@@ -54,6 +54,11 @@ from core.bgmm_native_api import (
     BGMM_NATIVE_ABI, BGMM_NATIVE_COUNT, BgmmDriver, BgmmFitRequest, BgmmResultSlot,
 )
 from core.kmeans_variants_api import VariantsSpan
+from core.mixture_native_api import (
+    MIXTURE_NATIVE_ABI, MIXTURE_NATIVE_COUNT, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_CAP_FIT_PREDICT,
+    MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_NATIVE_PREDICT_PROBA, MIXTURE_NATIVE_PREDICT,
+    MIXTURE_NATIVE_SCORE_BIC_AIC, GmmDriver, GmmFitRequest, GmmScoreRequest,
+)
 from bindings.kmeans_variants_boundary import variants_span, variants_pack_f32, variants_pack_i32
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
@@ -350,6 +355,46 @@ def _sorted_repr(table: PythonObject) raises -> String:
 
 
 # ----------------------------------------------------- GaussianMixture, default
+@fieldwise_init
+struct _GmmConnection(Movable):
+    var provider: PythonObject
+    var driver: GmmDriver
+
+
+def _gmm_connection(binding: PythonObject) raises -> _GmmConnection:
+    """The typed GaussianMixture provider of the mixture `binding`
+    (`mixture_native_api_v1`), connected once per process."""
+    var factory = neural_descriptor_entry(binding, "mixture_native_api_v1")
+    var provider = neural_descriptor_connect_factory_once(factory, String(MIXTURE_NATIVE_ABI), MIXTURE_NATIVE_COUNT)
+    var driver = GmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
+    return _GmmConnection(provider, driver^)
+
+
+def _gmm_operation(name: String) raises -> Int:
+    """The scoring operation of the former Python entry `name`."""
+    if name == "gmm_score_samples":
+        return MIXTURE_NATIVE_SCORE_SAMPLES
+    if name == "gmm_predict_proba":
+        return MIXTURE_NATIVE_PREDICT_PROBA
+    if name == "gmm_predict":
+        return MIXTURE_NATIVE_PREDICT
+    if name == "gmm_score_bic_aic":
+        return MIXTURE_NATIVE_SCORE_BIC_AIC
+    raise Error("RuntimeError: unknown GaussianMixture scoring entry " + name)
+
+
+def _gmm_score_run(binding: PythonObject, operation: Int, request: GmmScoreRequest) raises:
+    """One scoring entry on the typed transport, the GIL released around it
+    (the Python entries released it around the body only). The caller keeps
+    every array the request addresses alive past this call."""
+    var connection = _gmm_connection(binding)
+    try:
+        with GILReleased(Python()):
+            connection.driver.score(operation, request)
+    finally:
+        _ = connection.provider
+
+
 def _check_mode(binding: PythonObject, model: PythonObject, context: PythonObject) raises:
     """`GaussianMixture._extension`: the binary's own compile-time mode must
     be the one requested."""
@@ -435,63 +480,60 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
         raise Error(_GMM + "n_components must be positive, got " + String(k))
     var tol = _real(_get(model, "tol"), "tol")
     var reg_covar = _real(_get(model, "reg_covar"), "reg_covar")
-    var max_iter = _int(_get(model, "max_iter"))
+    var max_iter = Int(py=_int(_get(model, "max_iter")))
     var weights = family_array(Python.tuple(k), "<f4", context)
     var means = family_array(Python.tuple(k, d), "<f4", context)
     var covariances = family_array(Python.tuple(k, d, d), "<f4", context)
     var precisions = family_array(Python.tuple(k, d, d), "<f4", context)
     var log_det = family_array(Python.tuple(k), "<f4", context)
-    var scalars = family_array(Python.tuple(3), "<f8", context)
+    # n_iter, converged, lower_bound: a Mojo buffer (was a Python <f8 Array).
+    var scalars = List[Float64](length=3, fill=0.0)
     _check_mode(binding, model, context)
+    var connection = _gmm_connection(binding)
     var labels = PythonObject(None)
-    var entry = PythonObject(None)
-    if fit_predict:
-        entry = neural_descriptor_entry(binding, "gmm_fit_predict", False)
-    if entry is not None:
+    if fit_predict and (connection.driver.metadata(MIXTURE_NATIVE_CAPABILITIES) & MIXTURE_CAP_FIT_PREDICT) != 0:
         labels = family_array(Python.tuple(n), "<i4", context)
-    else:
-        entry = neural_descriptor_entry(binding, "gmm_fit")
+    # The two names cross as NUL-terminated UTF-8 (one str read each; both
+    # were checked to be str above) and are decoded by the binding's own
+    # covariance_type_from_name / init_params_from_name.
+    var covariance_name = String(py=covariance_type)
+    var init_name = String(py=init_params)
+    var random_state = Int(py=_int(_get(model, "random_state")))
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_fit_binding.
-    # x, weights_out, means_out, covariances_out, precisions_chol_out, log_det_chol_out, scalars_out
-    # (gmm_fit_predict: then labels_out);
-    # n, d, n_components, covariance_type, tol, reg_covar, max_iter, init_params, random_state
-    var addrs = Python.list(classical_address(x), classical_address(weights), classical_address(means),
-                            classical_address(covariances), classical_address(precisions),
-                            classical_address(log_det), classical_address(scalars))
-    if labels is not None:
-        _ = py_call(addrs.append, classical_address(labels))
-    _ = means  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = precisions  # keep the Python object alive through the native call above
-    _ = covariances  # keep the Python object alive through the native call above
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = log_det  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), covariance_type, tol, reg_covar,
-                             max_iter, init_params, _int(_get(model, "random_state")))
-    var n_iter = family_call(entry, addrs, params)
-    _ = scalars  # keep the Python object alive through the native call above
-    _ = log_det  # keep the Python object alive through the native call above
-    _ = precisions  # keep the Python object alive through the native call above
-    _ = covariances  # keep the Python object alive through the native call above
-    _ = means  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
-    _ = scalars  # keep the Python object alive through the native call above
+    var request = GmmFitRequest(
+        Int(py=classical_address(x)), Int(py=classical_address(weights)), Int(py=classical_address(means)),
+        Int(py=classical_address(covariances)), Int(py=classical_address(precisions)),
+        Int(py=classical_address(log_det)), Int(scalars.unsafe_ptr()),
+        Int(py=classical_address(labels)) if labels is not None else 0,
+        Int(covariance_name.as_c_string_slice().unsafe_ptr()), Int(init_name.as_c_string_slice().unsafe_ptr()),
+        n, d, k, max_iter, random_state, Float64(py=tol), Float64(py=reg_covar))
+    var n_iter = 0
+    try:
+        with GILReleased(Python()):
+            n_iter = connection.driver.fit(request)
+    finally:
+        # Every address above stays owned through the native call.
+        _ = connection.provider
+        _ = x
+        _ = weights
+        _ = means
+        _ = covariances
+        _ = precisions
+        _ = log_det
+        _ = scalars
+        _ = labels
+        _ = covariance_name
+        _ = init_name
     py_setattr(model, "n_features_in_", PythonObject(d))
     py_setattr(model, "weights_", weights)
     py_setattr(model, "means_", means)
     py_setattr(model, "covariances_", covariances)
     py_setattr(model, "precisions_cholesky_", precisions)
     py_setattr(model, "log_det_chol_", log_det)
-    py_setattr(model, "n_iter_", _int(n_iter))
-    py_setattr(model, "converged_", PythonObject(Int(words[1]) != 0))
-    _ = scalars  # keep the Python object alive through the native call above
-    py_setattr(model, "lower_bound_", PythonObject(words[2]))
-    _ = scalars  # keep the Python object alive through the native call above
+    py_setattr(model, "n_iter_", PythonObject(n_iter))
+    py_setattr(model, "converged_", PythonObject(Int(scalars[1]) != 0))
+    py_setattr(model, "lower_bound_", PythonObject(scalars[2]))
     _ = scalars^
-    _ = labels  # keep the Python object alive through the native call above
     return Python.tuple(x, labels)
 
 
@@ -514,13 +556,15 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
         var width = held[6]
         if Bool(py=family_call(native_loaded_module("operator").ne, PythonObject(d), width)):
             raise Error(_GMM + "X has " + String(d) + " features, the fit had " + family_str(width))
-        # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model (below).
-        var held_addrs = Python.list(classical_address(held[1]), classical_address(held[2]), classical_address(held[3]),
-                                     classical_address(held[4]), classical_address(held[5]), classical_address(x),
-                                     classical_address(out_buf))
-        var held_params = Python.list(held[7], PythonObject(d), held[8], held[9], held[10], PythonObject(n))
-        _ = family_call(neural_descriptor_entry(binding, name), held_addrs, held_params)
+        # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
+        _gmm_score_run(binding, _gmm_operation(name), GmmScoreRequest(
+            Int(py=classical_address(held[1])), Int(py=classical_address(held[2])),
+            Int(py=classical_address(held[3])), Int(py=classical_address(held[4])),
+            Int(py=classical_address(held[5])), Int(py=classical_address(x)), Int(py=classical_address(out_buf)),
+            Int(py=held[7]), d, Int(py=held[8]), Int(py=held[9]) != 0, n, Float64(py=held[10])))
         _ = held^  # the recorded operands stay owned through the native call above
+        _ = x
+        _ = out_buf
         return
     if not family_raw_has(model, "weights_"):
         raise Error(_GMM + "call fit before " + what)
@@ -543,19 +587,16 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
     var lower = _get(model, "lower_bound_")
     # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
     # weights, means, covariances, precisions_chol, log_det_chol, x, out;
-    # k, d, n_iter, converged, lower_bound, n
-    var addrs = Python.list(classical_address(weights), classical_address(flat_m), classical_address(flat_c),
-                            classical_address(flat_p), classical_address(log_det), classical_address(x),
-                            classical_address(out_buf))
-    _ = flat_c  # keep the Python object alive through the native call above
-    _ = flat_m  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    _ = log_det  # keep the Python object alive through the native call above
-    _ = flat_p  # keep the Python object alive through the native call above
-    var params = Python.list(PythonObject(k), PythonObject(d), n_iter, PythonObject(converged),
-                             lower, PythonObject(n))
+    # k, d, n_iter, converged, lower_bound, n (each read once, natively,
+    # after the mode check, as the Python entry read them).
     _check_mode(binding, model, context)
-    _ = family_call(neural_descriptor_entry(binding, name), addrs, params)
+    var request = GmmScoreRequest(
+        Int(py=classical_address(weights)), Int(py=classical_address(flat_m)), Int(py=classical_address(flat_c)),
+        Int(py=classical_address(flat_p)), Int(py=classical_address(log_det)), Int(py=classical_address(x)),
+        Int(py=classical_address(out_buf)), k, d, Int(py=n_iter), converged != 0, n, Float64(py=lower))
+    _gmm_score_run(binding, _gmm_operation(name), request)
+    _ = x
+    _ = out_buf
     _ = log_det  # keep the Python object alive through the native call above
     _ = flat_p  # keep the Python object alive through the native call above
     _ = flat_c  # keep the Python object alive through the native call above
@@ -1249,7 +1290,9 @@ def _gmm_public_operation(model: PythonObject, operation: String, args: PythonOb
     var prepared = PythonObject(None)
     if fitting:
         var cluster_binding = estimator_binding(model, "_mojolearn_x_cluster", context)
-        _ = neural_descriptor_entry(cluster_binding, "x_cluster_call")
+        # The admission probe names the entry the fit calls (the typed BGMM
+        # transport; the door no longer calls x_cluster_call).
+        _ = neural_descriptor_entry(cluster_binding, "bgmm_native_api_v1")
         var retained = context["gmm_retained_cluster_bindings"]
         if py_type(retained) is not py_type(Python.list()):
             raise Error("TypeError: GaussianMixture requires its native retained-provider list")
