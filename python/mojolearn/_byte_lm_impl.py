@@ -58,8 +58,6 @@ import json
 from . import _portable_math as math
 from . import _numeric_profile
 import operator
-import os
-import time as _time
 
 
 class _LogitsPool:
@@ -108,7 +106,7 @@ import threading
 
 from . import _backend
 from ._arrays import _addr, _addr_ro
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, full, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, full
 from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 from . import _byte_lm_checkpoint
@@ -528,26 +526,6 @@ def _greedy_next_bytes(logits):
     return _argmax_last_positions(logits, batch, length, vocab).tolist()
 
 
-def _gpu_logits_ids(ids, shape):
-    """`(tokens, batch, length)` for `logits` (DEVIATION 2658). The CPU
-    class's admission (`_logits_ids` above) plus the native batch
-    and cell limits, returned as an owned copy so the trainer never aliases
-    caller memory. An empty 2-D buffer is refused by its reported shape
-    before any conversion."""
-    try:
-        pb = probe(ids)
-    except TypeError:
-        pb = None
-    if pb is not None and pb.ndim == 2 and 0 in pb.shape:
-        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
-    tokens, copied = _logits_ids(ids, shape)
-    batch, length = tokens.shape
-    if batch > _LOGITS_MAX_BATCH or batch * length * shape.vocab_size > _LOGITS_MAX_CELLS:
-        raise ValueError(f'Byte-LM logits require batch <= {_LOGITS_MAX_BATCH} and '
-                         f'batch * length * vocab <= {_LOGITS_MAX_CELLS}')
-    return (tokens if copied else tokens.copy()), batch, length
-
-
 def _gradient_outputs(shape, named):
     """Fresh output arrays for a gradient the native call writes: the flat
     vector and, with `named`, one array per parameter tensor (the native
@@ -558,11 +536,6 @@ def _gradient_outputs(shape, named):
         for name, tensor_shape in zip(shape.parameter_names, shape.parameter_shapes):  # glue: one output array per model parameter tensor
             by_name[name] = empty(tuple(tensor_shape), '<f4')
     return flat, by_name
-
-
-def _require_written(written, expected):
-    if _is_bool(written) or not isinstance(written, int) or written != expected:
-        raise RuntimeError('Byte-LM native logits wrote an unexpected number of logits')
 
 
 # FP32 decoder language-model trainer with runtime dimensions.
@@ -903,22 +876,6 @@ class SmallByteLanguageModelTrainer:
             raise RuntimeError('Byte-LM state export returned a different completed step')
         self._last_export_step = completed
         return dict(self._state, parameters=out_p, m=out_m, v=out_v, flags=out_flags)
-
-    def _export_gradients_impl(self, step, named):
-        """ONE native call (`byte_lm_trainer_export_gradients`): the last
-        step's gradient, scanned on the device, into a fresh flat array and,
-        with `named`, also split into one fresh array per tensor."""
-        shape = state_shape(self._state)
-        flat, by_name = _gradient_outputs(shape, named)
-        addresses = [addr(flat, name='out_grad')] + [addr(by_name[name], name='out_grad') for name in by_name]  # glue: one address per model parameter tensor
-        returned = self._session_binding.byte_lm_trainer_export_gradients(
-            self._native_session, addresses, list(shape.native_shape), step)
-        if _is_bool(returned) or not isinstance(returned, int) or returned != step:
-            raise RuntimeError('Byte-LM gradient export returned a different step')
-        result = dict(flat_gradients=flat)
-        if named:
-            result['gradients'] = by_name
-        return result
 
     def close(self):
         """Copy the device state to the host and release the device.
@@ -1340,73 +1297,6 @@ class SmallByteLanguageModelTrainer:
         """
         return _LM_TRAINER(self, "next_bytes", (ids, lengths), _LM_TRAINER_CONTEXT)
 
-    def _logits_call(self, entry_name, tokens, out, batch, length, shape):
-        """Lock held, resident. ONE native call (`byte_lm_trainer_logits` or
-        `byte_lm_trainer_next_bytes`, training/byte_lm_session_ops.mojo
-        `byte_owner_logits`): the ids are admitted, the host state is
-        admitted and uploaded when no session is open, and the forward runs
-        on the session. No state is written, so a failure rolls nothing back;
-        the last gradient is no longer exportable, and a session that no
-        longer reports itself usable at the committed step is lost."""
-        self._require_not_lost()
-        binding = self._session_entries((entry_name,))
-        session = self._session_handle(binding)
-        addresses = [addr_ro(tokens, name='ids'), addr(out, name='out'),
-                     addr_ro(self._state['flags'], name='flags'), *self._admission_addresses()]
-        try:
-            written = getattr(binding, entry_name)(session, addresses, [batch, length],
-                                                   self._parameters(False), list(shape.native_shape))
-        except BaseException:
-            self._after_native_failure()
-            raise
-        self._adopt_open_session()
-        _require_written(written, batch if entry_name == _SESSION_NEXT_ENTRY else batch * length * shape.vocab_size)
-        _mode()
-        return out
-
-    def _next_bytes_resident(self, tokens, batch, length, shape):
-        out = zeros((batch,), '<i4')
-        return self._logits_call(_SESSION_NEXT_ENTRY, tokens, out, batch, length, shape).tolist()
-
-    def _logits_stateless(self, tokens, batch, length, shape):
-        """ONE native call (`byte_lm_logits`): the binding copies and admits
-        the parameters and the ids before any device work, builds and
-        destroys one device context and writes the logits."""
-        binding = self._binding()
-        entry = getattr(binding, _LOGITS_ENTRY, None)
-        if not callable(entry):
-            raise ImportError('Byte-LM binding lacks GPU logits (%s); rebuild bindings/build_byte_lm.sh'
-                              % _LOGITS_ENTRY)
-        out = zeros((batch, length, shape.vocab_size), '<f4')
-        written = entry([addr_ro(self._state['parameters'], name='parameters'), addr_ro(tokens, name='ids'),
-                         addr(out, name='logits')], [batch, length], list(shape.native_shape))
-        _require_written(written, batch * length * shape.vocab_size)
-        _mode()
-        return out
-
-    def _logits_resident(self, tokens, batch, length, shape):
-        timing = bool(os.environ.get('MOJOLEARN_TRANSFORMER_TIMING'))
-        t0 = _time.perf_counter() if timing else 0.0
-        pool = getattr(self, '_logits_pool', None)
-        if pool is None:
-            pool = self._logits_pool = _LogitsPool()
-        n_out = batch * length * shape.vocab_size
-        store = pool.take(n_out)
-        if store is None:
-            out = _PooledLogits((batch, length, shape.vocab_size), '<f4')
-            reused = 'fresh'
-        else:
-            out = _PooledLogits._owned(store, (batch, length, shape.vocab_size), '<f4', 'C')
-            reused = 'pooled'
-        out._pool = pool
-        if timing:
-            t1 = _time.perf_counter()
-            print('timing python.logits_out %.3f ms %s' % ((t1 - t0) * 1000.0, reused), flush=True)
-        self._logits_call(_SESSION_LOGITS_ENTRY, tokens, out, batch, length, shape)
-        if timing:
-            print('timing python.logits_binding %.3f ms' % ((_time.perf_counter() - t1) * 1000.0), flush=True)
-        return out
-
     def save_checkpoint(self, path):
         """Same as :meth:`export_checkpoint`."""
         return _LM_TRAINER(self, "export_checkpoint", (path,), _LM_TRAINER_CONTEXT)
@@ -1525,57 +1415,6 @@ class SmallByteLanguageModelTrainer:
         LanguageModelTrainer
         """
         return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident), _LM_TRAINER_CONTEXT)
-
-
-def _decode_checkpoint(encoded):
-    """`(state, shape)` from checkpoint bytes, every schema, integrity,
-    tensor, optimizer and cursor check applied, no native call. Shared by
-    `from_checkpoint_bytes` and the CPU inference loader (DEVIATION 2610),
-    so there is one decoder."""
-    if type(encoded) is not bytes:
-        raise TypeError('Byte-LM checkpoint capture must be immutable bytes')
-    if len(encoded) > _CHECKPOINT_LIMIT:
-        raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
-    try:
-        envelope = json.loads(encoded, object_pairs_hook=_unique_object)
-    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise ValueError('Byte-LM checkpoint is not valid bounded JSON') from exc
-    if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'payload', 'payload_sha256'}
-            or envelope['schema'] != _CHECKPOINT_SCHEMA):
-        raise ValueError('Byte-LM checkpoint schema mismatch')
-    payload = envelope['payload']
-    if _sha256_hex(_canonical(payload)) != envelope['payload_sha256']:
-        raise ValueError('Byte-LM checkpoint integrity mismatch')
-    if not isinstance(payload, dict):
-        raise ValueError('Byte-LM checkpoint payload must be an object')
-    shape = state_shape(payload)
-    for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
-        value = payload.get(key)
-        cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
-        if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
-                or value['dtype'] != dtype or value['shape'] != [cells]
-                or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):
-            raise ValueError('Byte-LM checkpoint tensor descriptor mismatch')
-        try:
-            raw = bytes.fromhex(value['hex'])
-        except ValueError as exc:
-            raise ValueError('Byte-LM checkpoint tensor is not hexadecimal') from exc
-        if len(raw) != cells * 4:
-            raise ValueError('Byte-LM checkpoint tensor byte count mismatch')
-        # `np.frombuffer(raw, dtype).astype(native, copy=True)`:
-        # `_buffer.frombytes` reads the little-endian bytes into a
-        # fresh native Array (DEVIATION 2432).
-        payload[key] = frombytes(raw, dtype, (cells,))
-    return _validate_state(payload), shape
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:  # glue: walks the checkpoint key value pairs
-        if key in result:
-            raise ValueError('Duplicate byte-LM checkpoint key')
-        result[key] = value
-    return result
 
 
 def _connect_trainer():
