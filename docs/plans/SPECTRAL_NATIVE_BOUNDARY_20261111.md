@@ -404,3 +404,15 @@ No numerical provider source, transfer, output allocation or default changes.
 Only the runtime-family binding closure and import-time Spectral metadata
 change. Native configuration/method cases and public seams remain root-owned
 execution work; no lane tests or compilation were run.
+
+The final bounded source follow-ups are independently frozen:
+`ff2719a3d8` owns standalone affinity storage and `ed92cae10f` owns clustering
+configuration/assignment mapping. Their respective audits are
+`E/python-object-typed-spectral-affinity-state.json` and
+`E/python-object-typed-spectral-assignment-config.json`. Together with the
+immutable prior audits,25 distinct private Spectral roles are anchored; this
+is a bounded minimum, not an exhaustive percentage or runtime allocation count.
+The final16 native roots reach278 local sources with zero Python-support
+imports (`E/spectral-native-owner/config-native-run-closure.json`). This is
+source-only evidence; the complete public/transitive boundary still retains
+shared input/sparse/metadata work outside that native closure.
