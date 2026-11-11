@@ -98,13 +98,14 @@ def pandas_arrow_ndarray(values: PythonObject, context: PythonObject) raises -> 
     # exact class as the previous one has its code (the class lookups ran
     # per chunk).
     var chunks = Python.list()
-    var last_class = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546).
+    var last_class = Optional[PythonObject]()
     for c in range(count):  # driver-loop: over Arrow chunks, admitting one dtype before any copy
         var chunk_c = py_call(chunked.chunk, c)
         _ = py_call(chunks.append, chunk_c)
         var cls_c = py_type(chunk_c)
         var code = typestr
-        if c == 0 or cls_c is not last_class:
+        if not last_class or cls_c is not last_class.value():
             code = _arrow_typestr(chunk_c)
         last_class = cls_c
         if c > 0 and code != typestr:

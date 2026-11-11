@@ -45,6 +45,21 @@ The upgrade integration and compilation remain owned by the orchestrator.
   The 18-line reproduction, control and filed ask are retained under `src/`
   and `issues/default_arg.md`. Keep explicit runtime arguments; no Python
   fallback or compiler patch is authorized.
+- **Loop-carried PythonObject read then reassigned: new in 1.2.0, filed as
+  [Modular issue #7546](https://github.com/modular/modular/issues/7546).**
+  A `PythonObject` local read and then reassigned in the same loop iteration
+  fails lowering with `_cpython.mojo:2208:24: error: operand #1 does not
+  dominate this use` (the destructor's `kgen.call_indirect` uses the loop's
+  block argument). Mojo 1.0.0 compiles and runs the same 14-line file. It
+  blocked seven host units (byte_trainer, orchestration, classical_trees,
+  classical_family, tokenizer, classical_prep, classical_decomp) at eight
+  loops, every one a `PythonObject(None)` "not read yet" sentinel. Those
+  sentinels are now typed `Optional[PythonObject]` (same reads, same order),
+  which lowers on 1.2.0. Reproducer, control, bisection steps and the filed
+  text: `~/mojolearn-evidence/mojo12-dominate/` (`dominate_min.mojo`,
+  `dominate_control.mojo`, `ISSUE.md`). No lowering-flag change, toolchain
+  patch or Python fallback. Once #7546 is fixed the Optional form stays: it is
+  the typed form of an absent value, not a workaround.
 - **Concurrent shared DeviceContext submission on Metal: still open, filed
   as [Modular issue #7544](https://github.com/modular/modular/issues/7544).**
   The retained recheck failed in two of three runs on each version. Selecting

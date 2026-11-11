@@ -263,10 +263,11 @@ def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
         var sources = Python.list()
         var sizes = List[Int]()
         var total = 0
-        var checked = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546).
+        var checked = Optional[PythonObject]()
         for i in range(count):  # driver-loop: read each fitted tree's node arrays once
             var member = trees[i]
-            if checked is None or not (py_type(member) is checked):
+            if not checked or not (py_type(member) is checked.value()):
                 _ = _kind(member, context)
                 checked = py_type(member)
             var state = _fields(member)

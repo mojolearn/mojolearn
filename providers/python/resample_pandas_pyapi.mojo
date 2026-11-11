@@ -1729,7 +1729,8 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
     var has_sparse = False
     var has_categorical = False
     var all_categorical = len(blocks) > 1
-    var categorical_dtype = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546).
+    var categorical_dtype = Optional[PythonObject]()
     var same_categorical_dtype = True
     # A mixed manager's extension common dtype exports as object. Retain the
     # original extension owners as well as the admitted storage snapshots.
@@ -1747,10 +1748,10 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
             if len(blocks) > 1 and category_kind is not _pd_class("pandas.core.arrays.sparse.array", "SparseArray") and category_kind is not context["ndarray"] and category_kind is not _pd_class("pandas.core.arrays.datetimes", "DatetimeArray") and category_kind is not _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"):
                 force_object = True
             var dtype = record[1]
-            if categorical_dtype is None:
+            if not categorical_dtype:
                 categorical_dtype = dtype
             else:
-                same_categorical_dtype = same_categorical_dtype and dtype is categorical_dtype
+                same_categorical_dtype = same_categorical_dtype and dtype is categorical_dtype.value()
         if len(blocks) > 1 and not categorical and cls is not _pd_class("pandas.core.arrays.sparse.array", "SparseArray") and cls is not context["ndarray"] and cls is not _pd_class("pandas.core.arrays.datetimes", "DatetimeArray") and cls is not _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"):
             force_object = True
     var use_sparse_promotion = has_sparse and not has_categorical
@@ -1814,16 +1815,17 @@ def _rp_materialize(value: PythonObject, context: PythonObject) raises -> Python
         owned.append(data^)
     if len(blocks) > 1 and use_sparse_promotion:
         var logical_same = same
-        var first_sparse = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546).
+        var first_sparse = Optional[PythonObject]()
         for k in range(len(blocks)):  # driver-loop: original sparse dtype equality includes native fill semantics
             if logical_sparse[k] is None:
                 logical_same = False
             else:
                 var record = logical_sparse[k]
-                if first_sparse is None:
+                if not first_sparse:
                     first_sparse = record
-                elif record[3] is not first_sparse[3]:
-                    logical_same = logical_same and _rp_sparse_fills_equal(first_sparse[5], record[5], context)
+                elif record[3] is not first_sparse.value()[3]:
+                    logical_same = logical_same and _rp_sparse_fills_equal(first_sparse.value()[5], record[5], context)
         same = same and logical_same
     force_object = force_object or (booleans and other and not use_sparse_promotion)
     var dtype = logical[0].dtype

@@ -96,14 +96,15 @@ def _pls_settings(model: PythonObject, state: PythonObject, operation: String,
     if not fitting:
         # Fitted detection must precede synthesized default-mode metadata.
         _pls_require_fitted(fields, operation, context)
-    var default_mode = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: Mojo 1.2.0 fails to lower a loop-carried PythonObject read and reassigned in the loop (modular/modular#7546).
+    var default_mode = Optional[PythonObject]()
     var modes = Python.tuple("numeric_mode") if fitting else (Python.tuple("numeric_mode", "numeric_mode_") if operation == "score" else Python.tuple("numeric_mode_"))
     for index in range(len(modes)):  # driver-loop: current/fitted modes actually consumed by this operation
         var mode = py_get(fields, modes[index])
         if mode is None:
-            if default_mode is None:
+            if not default_mode:
                 default_mode = context["backend_fields"]["_DEFAULT_MODE"]
-            mode = default_mode
+            mode = default_mode.value()
         if py_type(mode) is not b.str:
             raise Error("numeric_mode must be fast, identical or None")
         py_setitem(fields, modes[index], mode)
