@@ -4,19 +4,13 @@ expansion's estimators (bindings/decomp_native.mojo)."""
 
 #: The compiled decomp drivers the owners call (a build without one refuses
 #: that operation by name).
-ENTRY_NAMES = ("x_decomp_native_api_v1", "x_decomp_ica_fit", "x_decomp_ica_project",
-               "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig",
+ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project",
+               "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner",
                "x_decomp_rp_fit", "x_decomp_rp_project",
                # the pool entries a resident fitted matrix is held through
                # (GPU bindings only; bindings/rp_native.mojo, lane
                # ne1-a-decomp-resident): a build without them uploads per call
                "x_decomp_dev_alloc", "x_decomp_dev_upload", "x_decomp_dev_free", "x_decomp_dev_ew")
-
-#: The x_neighbors entries KernelPCA's kernel matrix steps call (connected
-#: only for a caller that asks, `neighbors=True`).
-NEIGHBOR_NAMES = ("x_neighbors_native_api_v1", "x_neighbors_vendor", "x_neighbors_numeric_mode", "x_neighbors_kpca_resident", "xn_kernel",
-                  "xn_colsum", "xn_rowsum", "xn_scale_div", "xn_kpca_center", "xn_kpca_alpha_scale",
-                  "xn_kpca_transform", "xn_matmul")
 
 
 def connect(classes, neighbors=False, metadata=None):
@@ -33,7 +27,9 @@ def connect(classes, neighbors=False, metadata=None):
     context = dict(shared)
     decomp = {}
     nmf = {}
-    near = {}
+    kpca_near = {}
+    kpca_info = {}
+    kpca_decomp = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
@@ -50,26 +46,27 @@ def connect(classes, neighbors=False, metadata=None):
             # NMF runs through one typed descriptor, with no per-function map.
             factory = getattr(binding, "nmf_native_api_v1", None)
             nmf[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
+            factory = getattr(binding, "kpca_decomp_native_api_v1", None)
+            kpca_decomp[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             decomp[mode] = type(error).__name__ + ": " + str(error)
             nmf[mode] = decomp[mode]
+            kpca_decomp[mode] = decomp[mode]
         if neighbors:
             try:
                 binding = _backend.binding("_mojolearn_x_neighbors", mode)
-                entries = {}
-                for name in NEIGHBOR_NAMES:  # glue: retain checked compiled neighbors symbols
-                    try:
-                        entry = getattr(binding, name)
-                    except (AttributeError, ImportError):
-                        continue
-                    if isinstance(entry, BuiltinFunctionType):
-                        entries[name] = entry
-                near[mode] = entries
+                factory = getattr(binding, "x_neighbors_native_api_v1", None)
+                kpca_near[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
+                factory = getattr(binding, "kpca_neighbors_native_api_v1", None)
+                kpca_info[mode] = factory if isinstance(factory, BuiltinFunctionType) else None
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-                near[mode] = type(error).__name__ + ": " + str(error)
+                kpca_near[mode] = type(error).__name__ + ": " + str(error)
+                kpca_info[mode] = kpca_near[mode]
     # Fitted arrays and results are mojolearn Arrays, as `_M.out` made them.
     context["output_context"] = _numpy_free_context()
-    context.update(decomp_classes=dict(classes), decomp_entries=decomp, decomp_neighbors=near, nmf_bindings=nmf)
+    context.update(decomp_classes=dict(classes), decomp_entries=decomp, nmf_bindings=nmf,
+                   kpca_neighbors_bindings=kpca_near, kpca_info_bindings=kpca_info,
+                   kpca_decomp_bindings=kpca_decomp)
     context.update(metadata or {})
     entry = _binding()._module.decomp_native_call
     if not isinstance(entry, BuiltinFunctionType):

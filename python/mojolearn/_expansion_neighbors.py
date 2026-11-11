@@ -999,11 +999,6 @@ class KernelPCA(_XNeighbors):
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
 
-    def _k(self, A, B):
-        if self.kernel == "precomputed":
-            return A
-        return self._kernel(A, B, self.kernel, self._gamma, self.coef0, self.degree)
-
     def fit(self, X, y=None):
         """Fit the model on the training data.
 
@@ -1039,12 +1034,6 @@ class KernelPCA(_XNeighbors):
         X_new : Array of shape (n_samples, n_components), float32
         """
         return _KPCA_CALL(self, "fit_transform", (X,), _KPCA_CONTEXT)
-
-    def _alpha_scale(self, divide):
-        V = self.eigenvectors_
-        out = empty(V.shape, "<f4")
-        self._op("kpca_alpha_scale", [(V, 0), (self.eigenvalues_, 0), (out, 1)], (V.shape[0], V.shape[1], divide))
-        return out
 
     def transform(self, X):
         """Project new samples onto the fitted components.
@@ -2362,8 +2351,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
 from . import _native_decomp_bridge  # noqa: E402
 _KPCA_CALL, _KPCA_CONTEXT = _native_decomp_bridge.connect_public(
     {"KernelPCA": KernelPCA}, neighbors=True,
-    metadata={"kpca_kernels": dict(_KERNELS), "kpca_precomputed_kind": _XN_PRECOMPUTED_KIND,
-              "kpca_old_items": _OLD_ITEMS})
+    metadata={"kpca_kernels": dict(_KERNELS), "kpca_old_items": _OLD_ITEMS})
 
 # Import connection; selected public operations admit the live native binding.
 _native_family_bridge.connect_bindings("_mojolearn_x_neighbors", "_mojolearn_metrics")

@@ -28,3 +28,10 @@ single-word total and all other outputs. It does not merely change the expected
 value in the frozen failing reproduction. Root owns its compile/run, plus the
 ongoing native test lane's centering/eigen/query cases. This lane has executed
 none of those checks and makes no performance or cross-vendor identity claim.
+
+Root subsequently compiled and ran the shared-helper regression successfully:
+exit 0, mean `2.25`, centered `[.25,-.25,-.25,.25]`, all canaries intact. The
+separate batch also passed 58 pure KPCA contract/state cases. Evidence is
+`~/mojolearn-evidence/python-mojo-migration-20261110/kpca-contract-centering-r2-result.json`
+and its run log. This result does not establish the later public-boundary build,
+all numerical routes, performance or cross-vendor identity.
