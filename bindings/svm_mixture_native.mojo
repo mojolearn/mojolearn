@@ -12,6 +12,9 @@ from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_r
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.classical_arrays import classical_address
+from bindings.linear_svc_boundary import LinearSvcConnection, linear_svc_connection, linear_svc_run_query
+from core.linear_svc_native_api import LinearSvcScores
+from core.logistic_native_api import QnQueryRequest, QN_NATIVE_DECISION
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_int, family_isinstance, family_call, family_entry, family_array,
@@ -20,34 +23,53 @@ from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 
 
-def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject, n_targets: Int,
-               context: PythonObject) raises -> PythonObject:
-    """`linear_model._qn_scores`: `qn_decision_function` on the fitted block,
-    (n,) for one target, (n, n_targets) for the one-vs-rest block."""
+@fieldwise_init
+struct QnScoreInput(Movable):
+    var source: PythonObject
+    var rows: Int
+    var features: Int
+    var intercept: Bool
+
+
+def _qn_score_input(model: PythonObject, source: PythonObject, context: PythonObject) raises -> QnScoreInput:
     var b = native_loaded_module("builtins")
     var x = admit_family(source, 2, "X", context).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    # Generic attribute reads (lane p3-svm-gp-kernel, row 347): no Python
-    # attribute protocol call per field.
     if d != Int(py=family_raw_get(model, "n_features_in_")):
         raise Error("mojolearn " + String(py_type(model).__name__) + " feature count differs from fit")
-    var intercept = 1 if Bool(py=py_call(b.bool, family_raw_get(model, "fit_intercept"))) else 0
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(intercept))
-    var out: PythonObject
-    if n_targets > 1:
-        _ = py_call(params.append, PythonObject(n_targets))
-        out = family_array(Python.tuple(n, n_targets), "<f4", context)
-    else:
-        out = family_array(Python.tuple(n), "<f4", context)
+    var intercept = Bool(py=py_call(b.bool, family_raw_get(model, "fit_intercept")))
+    return QnScoreInput(x, n, d, intercept)
+
+
+def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject, n_targets: Int,
+               context: PythonObject) raises -> PythonObject:
+    var inputs = _qn_score_input(model, source, context)
+    var result = family_array(Python.tuple(inputs.rows, n_targets), "<f4", context) if n_targets > 1 else family_array(Python.tuple(inputs.rows), "<f4", context)
     var w = family_raw_get(model, "_w")
-    _ = family_call(family_entry(binding, "qn_decision_function", context), classical_address(x),
-                    classical_address(w), classical_address(out), params)
-    _ = x  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
-    _ = x^
-    _ = w^
-    return out
+    var connection = linear_svc_connection(binding)
+    var request = QnQueryRequest(Int(py=classical_address(inputs.source)), Int(py=classical_address(w)),
+        Int(py=classical_address(result)), 0, inputs.rows, inputs.features,
+        n_targets if n_targets > 1 else 1, inputs.intercept, False)
+    linear_svc_run_query(connection, QN_NATIVE_DECISION, request)
+    _ = inputs
+    _ = w
+    return result
+
+
+def _qn_scores_native(model: PythonObject, connection: LinearSvcConnection, source: PythonObject,
+    n_targets: Int, context: PythonObject) raises -> LinearSvcScores:
+    var inputs = _qn_score_input(model, source, context)
+    var result = LinearSvcScores(inputs.rows, n_targets)
+    var w = family_raw_get(model, "_w")
+    var request = QnQueryRequest(Int(py=classical_address(inputs.source)), Int(py=classical_address(w)),
+        Int(result.values.unsafe_ptr()), 0, inputs.rows, inputs.features,
+        n_targets if n_targets > 1 else 1, inputs.intercept, False)
+    linear_svc_run_query(connection, QN_NATIVE_DECISION, request)
+    _ = inputs
+    _ = w
+    _ = result
+    return result^
 
 
 def _class_count(classes: PythonObject) raises -> Int:

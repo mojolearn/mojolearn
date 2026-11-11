@@ -1,6 +1,6 @@
 {
   "baseline": "78a6a382354bcf3e463b74ebce58f1f77f1c051f",
-  "status": "before inventory; no role migrated yet",
+  "status": "LinearSVC fit/decision/predict source switched; native and boundary coverage pending; other families remain inventoried",
   "selected_scope": "LinearSVC fit/decision/predict transport and private state; shared LinearSVR query behavior preserved",
   "roles": [
     {
@@ -12,7 +12,7 @@
         "text": "def _linear_strengths(fields: PythonObject) raises -> PythonObject:"
       },
       "after_plan": "typed pair; shared LinearSVR wrapper remains until converted",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -24,7 +24,7 @@
         "text": "def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: PythonObject,"
       },
       "after_plan": "native weight owner with existing label-weight plans and kernels",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -36,7 +36,7 @@
         "text": "var w_all = family_array(Python.tuple(PythonObject(n_fits), PythonObject(n_coefs)), \"<f4\", context)"
       },
       "after_plan": "native Float32 owner; same public coefficient PACK copies",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -48,7 +48,7 @@
         "text": "var info = family_array(Python.tuple(PythonObject(n_fits), PythonObject(3)), \"<f4\", context)"
       },
       "after_plan": "native Float32 metadata owner",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -60,7 +60,7 @@
         "text": "var params = Python.list(PythonObject(rows), PythonObject(cols), PythonObject(first), PythonObject(n_fits),"
       },
       "after_plan": "typed request to same existing GPU OVR door",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -72,7 +72,7 @@
         "text": "var y_enc = family_array(Python.tuple(PythonObject(rows)), \"<f4\", context)"
       },
       "after_plan": "native owner, independent conversion partitions",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -84,7 +84,7 @@
         "text": "var result = _qn_fit_one_target(fields, binding, x, y_enc, 2, loss, strengths[0], strengths[1], tol,"
       },
       "after_plan": "typed result; preserve shared LinearSVR caller behavior",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -96,7 +96,7 @@
         "text": "var objectives = Python.list()"
       },
       "after_plan": "typed metadata until scalar/list public PACK",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -108,7 +108,7 @@
         "text": "var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(intercept))"
       },
       "after_plan": "existing typed QnQueryRequest/driver; shared LinearSVR consumer preserved",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -120,7 +120,7 @@
         "text": "var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(fi))"
       },
       "after_plan": "typed query config",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -132,7 +132,7 @@
         "text": "var codes = family_array(Python.tuple(PythonObject(n)), \"<i8\", context)"
       },
       "after_plan": "native Int64 owner through label PACK",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -144,7 +144,7 @@
         "text": "var scores = _qn_scores(model, binding, source, 1 if k == 2 else k, context)"
       },
       "after_plan": "native owner feeding unchanged threshold/argmax routes",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -156,7 +156,7 @@
         "text": "comptime _SVC_LINEAR_FLAGS_SLOT = \"p3_svc_linear_flags_v1\""
       },
       "after_plan": "native capability metadata; preserve flag-selected fused route",
-      "status": "pending",
+      "status": "source migrated; compilation/runtime acceptance pending",
       "scope": "selected"
     },
     {
@@ -487,5 +487,77 @@
       "estimators_host",
       "transitive consumers of shared label/class-weight helpers; root closure builder determines reuse"
     ]
+  },
+  "linear_svc_switch": {
+    "status": "source reviewed only; public switch uncompiled/unrun",
+    "preservation": {
+      "bindings/svc_linear_native.mojo::_qn_fit_one_target": true,
+      "bindings/svc_linear_native.mojo::_linear_svr_fit": true,
+      "bindings/svc_linear_native.mojo::_linear_svr_predict": true,
+      "bindings/svc_linear_native.mojo::_r2_host": true,
+      "bindings/svm_mixture_native.mojo::_gmm_sample": true,
+      "bindings/svm_mixture_native.mojo::_svm_mixture_operation_route": true,
+      "bindings/svm_mixture_native.mojo::svm_mixture_operation": true,
+      "glm/estimator.mojo": true,
+      "core/estimators_impl.mojo": true,
+      "core/estimators_host_impl.mojo": true,
+      "core/classical_host_predict.mojo": true,
+      "glm/logistic_native_device.mojo": true,
+      "glm/host/logistic_native_host.mojo": true,
+      "core/hotpath_impl_rows.mojo": true,
+      "core/hotpath_device.mojo": true,
+      "core/hotpath_device_impl.mojo": true
+    },
+    "all_reviewed_bodies_unchanged": true,
+    "same_gpu_ovr": "qn_fit_ovr_host under QN_OVR_ONE_UPLOAD, identical context/arguments/synchronize; opt-out retains separate QnDeviceKernels.fit",
+    "same_cpu_solver": "QnHostKernels.fit per class; target writes and PACK copies partitioned with host_parallelize; original ordered fit driver keeps per-fit allocation/release peak",
+    "iteration_semantics": "CPU returned Int maximum retained as Int; GPU OVR iteration metadata retains its existing Float32 conversion",
+    "copy_policy": [
+      "native row-major coefficients replace private w_all exporter",
+      "CPU per-class target/weights/info allocations and weight-to-OVR memcpy retained",
+      "GPU one-upload solver writes same row-major block",
+      "one transpose/coef/intercept PACK with same word copies and public allocation/address/publication order",
+      "sample/class weight same count/cast/ratio/gather/multiply kernels and generated scratch sizes; borrowed input pin released after multiply"
+    ],
+    "removed": [
+      "private LinearSVC regularization tuple use",
+      "_class_weight_rows wrapper with no remaining consumer",
+      "private weight Arrays",
+      "private w_all/info/CPU target/returned-result Python objects",
+      "OVR Python option lists and compiled-Python dispatch",
+      "fit-time objective/retcode Python accumulation (public PACK forms retained)",
+      "_SVC_LINEAR_FLAGS_SLOT and _py2mojo_flags cache",
+      "private fused prediction codes and params",
+      "fallback private score Array and threshold/argmax output Array",
+      "shared _qn_scores Python parameter list and compiled-Python dispatch"
+    ],
+    "retained": [
+      "LinearSVR fit _qn_fit_one_target and _linear_strengths compatibility envelope remain live",
+      "public Arrays/scalars/list metadata and shared class-table weak cache",
+      "shared parameter admission/lifecycle and label publication",
+      "score still composes public prediction result with existing svc_accuracy; shared score-native helper ownership is GP lane"
+    ],
+    "affected_roots": [
+      "runtime_family_host",
+      "estimators",
+      "estimators_host",
+      "base _mojolearn and core_host from threshold dependency"
+    ],
+    "dependencies": [
+      "380a4acf70",
+      "f44b4894f3"
+    ],
+    "tests": "LinearSVC native solver/plan and Python boundary fixtures pending; threshold7CPU/7GPU and version3 cases already authored, not run",
+    "compiled": false,
+    "executed": false
+  },
+  "remaining_score_composition": {
+    "before": {
+      "file": "bindings/svc_linear_native.mojo",
+      "function": "svc_linear_operation",
+      "text": "var pred = _linear_svc_predict(...) -> svc_accuracy(...)"
+    },
+    "status": "pending; avoid GP-owned score helpers until dependency available",
+    "counted_completed": false
   }
 }
