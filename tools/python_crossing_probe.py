@@ -54,10 +54,19 @@ CASES = ("Ridge", "LinearRegression", "LogisticRegression", "PCA", "KMeans",
          # count the same at both shapes. One case per lengths form: an
          # ndarray (one buffer export) and a Python list (one borrowed C read
          # per row, the irreducible form of a list).
-         "Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
+         "Mamba1Block_lengths_array", "Mamba1Block_lengths_list",
+         # Tokenizer id reads (lane loops-lm): decode_bytes of an int32 array
+         # (one buffer read: the count must not grow with rows) and of a
+         # Python list (public type sequence of int: one C-API read per id,
+         # expected to grow; recorded for the API decision).
+         "BpeTokenizer_decode_array", "BpeTokenizer_decode_list")
 
 # Neural cases (lane loops-neural): one `forward` operation, no fit/query.
 NEURAL_CASES = ("Mamba1Block_lengths_array", "Mamba1Block_lengths_list")
+
+# Tokenizer cases: no fit/query pair; each counts its one operation.
+TOKENIZER_CASES = {"BpeTokenizer_decode_array": ("decode_bytes",),
+                   "BpeTokenizer_decode_list": ("decode_bytes",)}
 
 # Cases that run a public class under another name (lane thin-unpack-svm):
 # LinearSVC with string labels and a full-size score (the score UNPACK is
@@ -278,7 +287,10 @@ def run_case(case):
             y = (y > 0).astype(os.environ.get("MOJOLEARN_PROBE_LABEL_DTYPE", "int64"))
             result["label_dtype"] = str(y.dtype)
         result["input_sha256"] = hashlib.sha256(x.tobytes() + y.tobytes()).hexdigest()
-        if name in NEURAL_CASES:
+        if name in TOKENIZER_CASES:
+            result["parameters"] = {}
+            operations = tokenizer_operations(name, rows, np)
+        elif name in NEURAL_CASES:
             operations = _neural_operations(name, rows, np, ml, result)
         else:
             result["parameters"] = model_parameters(name)
@@ -290,13 +302,11 @@ def run_case(case):
                 fit_x, query_x = (x @ x.T).astype(np.float32), (query_x @ x.T).astype(np.float32)
             if name == "LinearSVC_str":
                 y = np.where(y > 0, "pos", "neg").astype(object)
-            operations = [("fit", model.fit, (x,) if name in ("PCA", "KMeans") else (fit_x, y)),
+            operations = [("fit", model.fit, (x,) if name in UNSUPERVISED else (fit_x, y)),
                           (query, getattr(model, query), (query_x,))]
             if name == "LinearSVC_str":
                 # The full-size score: its CPython count must not grow with rows.
                 operations.append(("score", model.score, (x, y)))
-            operations = [("fit", model.fit, (x,) if name in UNSUPERVISED else (x, y)),
-                          (query, getattr(model, query), (x[:min(7, rows)],))]
         for operation, function, arguments in operations:
             # These two dependent operations cannot run concurrently: query
             # consumes the fitted state produced by this exact fit.
@@ -322,6 +332,10 @@ def run_case(case):
                     if output.shape != (rows, 8, 32) or not np.isfinite(output).all():
                         raise AssertionError("forward returned invalid shape or nonfinite output")
                     record["output_shape"] = list(output.shape)
+                elif name in TOKENIZER_CASES:
+                    if not isinstance(value, bytes) or len(value) != 16 * rows:
+                        raise AssertionError("decode_bytes returned the wrong byte count")
+                    record["output_bytes"] = len(value)
                 elif operation == "score":
                     if not math.isfinite(float(value)):
                         raise AssertionError("score returned a nonfinite value")
@@ -412,6 +426,17 @@ def perf_counts(path):
     return counts
 
 
+def tokenizer_operations(name, rows, np):
+    """The single-byte tokenizer and its one counted operation: decode
+    `16 * rows` ids, as an int32 array or as a Python list."""
+    from mojolearn.tokenizer import BpeTokenizer
+    tokenizer = BpeTokenizer.from_token_bytes([bytes([i]) for i in range(256)])
+    ids = (np.arange(16 * rows) % 256).astype(np.int32)
+    if name == "BpeTokenizer_decode_list":
+        ids = ids.tolist()
+    return [("decode_bytes", tokenizer.decode_bytes, (ids,))]
+
+
 def query_operation(name):
     if name in FIT_PREDICT_QUERY:
         return "fit_predict"
@@ -422,6 +447,8 @@ def case_operations(name):
     """Every operation counted for a case, in run order."""
     if name in NEURAL_CASES:
         return ("forward",)
+    if name in TOKENIZER_CASES:
+        return TOKENIZER_CASES[name]
     return ("fit", query_operation(name)) + (("score",) if name == "LinearSVC_str" else ())
 
 

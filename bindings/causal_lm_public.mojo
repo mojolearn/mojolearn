@@ -711,7 +711,7 @@ def _transformer_arg_words(
         var packed = blk["_int15"]
         for j in range(len(packed)):  # driver-loop: over packed block weight slots
             var trip = packed[j]
-            for k in range(3):  # small-loop(int15 plane triple)
+            for k in range(3):  # driver-loop: over int15 plane triple
                 addresses.append(0 if trip is None else _weight_addr(trip[k], keep))
     return addresses^
 
@@ -1858,7 +1858,7 @@ def _resident_open_all(mut mods: NativeModules,
         # MOJOLEARN_IDN_LM_RESIDENT_GENERATE; see `_resident_norm_ok`).
         var top: List[Int] = [_weight_addr(model._embed, keep), 0 if model._norm is None else _weight_addr(model._norm, keep)]
         if int15:
-            for i in range(3):  # small-loop(int15 head plane triple)
+            for i in range(3):  # driver-loop: over int15 head plane triple
                 top.append(_weight_addr(model._head_int15[i], keep))
         else:
             top.append(0 if model._head is model._embed else _weight_addr(model._head, keep))
@@ -2097,7 +2097,7 @@ def _options(mut mods: NativeModules, mut s: GenerationHandle, options: PythonOb
         var values = options[5]
         if py_type(values) is g[].bi.int:
             values = py_ints([Int(py=values)])
-        for i in range(len(values)):  # small-loop(eos token id arguments)
+        for i in range(len(values)):  # driver-loop: over eos token id arguments
             if py_type(values[i]) is not g[].bi.int:
                 raise Error("generation: eos_token_id must be integer or sequence of integers")
             var id = Int(py=values[i])
@@ -2257,7 +2257,7 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
         lens_p[r] = Int32(s.lengths[r])
     var a: List[Int] = [_weight_addr(mf["_embed"], keep), pn, _weight_addr(mf["_head"], keep),
                         _addr(s.current, keep), _addr(tokens, keep), Int(fin_p), Int(lens_p)]
-    for i in range(len(s.eos)):  # small-loop(eos: the stream's end ids): argument words
+    for i in range(len(s.eos)):  # driver-loop: over eos: the stream's end ids: argument words
         a.append(s.eos[i])
     var f: List[Float64] = [Float64(py=mf["norm_eps"]) if pn != 0 else 0.0, Float64(s.temperature), s.top_p]
     var sts = List[PythonObject]()
@@ -2432,7 +2432,7 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
     try:
         for i in range(len(state.layers)):  # driver-loop: one read's retained layer state admission
             var fields = causal_snapshot_fields(mods, state.layers[i])
-            for name in [String("k_cache"), String("v_cache")]:  # small-loop(two KV storage spans)
+            for name in [String("k_cache"), String("v_cache")]:  # driver-loop: over two KV storage spans
                 var value = py_get(fields, name)
                 if py_type(value) is not cls:
                     return False
@@ -2463,7 +2463,7 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
             weights.append(model._norm)
             var packed = model._head_int15 is not None
             if packed:
-                for k in range(3):  # small-loop(consumed packed head planes)
+                for k in range(3):  # driver-loop: over consumed packed head planes
                     weights.append(model._head_int15[k])
             else:
                 weights.append(model._head)
@@ -2480,7 +2480,7 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
                     var planes = block["_int15"]
                     for j in range(len(planes)):  # driver-loop: consumed packed layer planes
                         if planes[j] is not None:
-                            for k in range(3):  # small-loop(int15 plane triple)
+                            for k in range(3):  # driver-loop: over int15 plane triple
                                 weights.append(planes[j][k])
             for value in weights:  # driver-loop: compare captured live weight spans against KV storage
                 if value is None:

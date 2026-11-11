@@ -144,17 +144,17 @@ def _admitted_shape(mut mods: NativeModules, trainer: PythonObject, state: Pytho
             if same:
                 var words = record[4]
                 var d = List[Int]()
-                for i in range(9):  # small-loop(the nine dimensions)
+                for i in range(9):  # driver-loop: over the nine dimensions
                     d.append(Int(py=words[i]))
                 return _Shape(d^, Int(py=words[9]) == 1)
     var shape = _shape_of(state)
     if py_type(value) is b.dict:
         var keys = py_call(b.list, value)
         var held = Python.list()
-        for i in range(len(keys)):  # small-loop(the admitted dimension fields, at most ten)
+        for i in range(len(keys)):  # driver-loop: over the admitted dimension fields, at most ten
             _ = py_call(held.append, value[keys[i]])
         var words = Python.list()
-        for i in range(9):  # small-loop(the nine dimensions)
+        for i in range(9):  # driver-loop: over the nine dimensions
             _ = py_call(words.append, shape.d[i])
         _ = py_call(words.append, Int(shape.chunked))
         _ = records_put(RECORDS_PREPARED, trainer, _SHAPE_RECORD,
@@ -180,7 +180,7 @@ def _gradient_outputs(mut mods: NativeModules, shape: _Shape, named: Bool, conte
         for i in range(len(names)):  # driver-loop: one output array per model parameter tensor
             var dims = Python.list()
             var count = 1
-            for j in range(len(shapes[i])):  # small-loop(one tensor's shape words)
+            for j in range(len(shapes[i])):  # driver-loop: over one tensor's shape words
                 _ = py_call(dims.append, shapes[i][j])
                 count *= shapes[i][j]
             py_setitem(by_name, names[i], tsa_array("f", "<f4", py_call(_b(mods).tuple, dims), count, 4, context))
@@ -247,7 +247,7 @@ def _key(fields: PythonObject) raises -> ByteLmEntryKey:
 def _shape_words(shape: _Shape) -> List[Int]:
     """The ten shape words of the glue ABI (nine dimensions, chunked head)."""
     var words = List[Int]()
-    for i in range(9):  # small-loop(the nine dimensions)
+    for i in range(9):  # driver-loop: over the nine dimensions
         words.append(shape.d[i])
     words.append(Int(shape.chunked))
     return words^
@@ -307,7 +307,7 @@ def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0
                  length: Int = 0, release: Bool = False) raises -> Tuple[List[Int], List[Float64]]:
     var cfg = state["config"]
     var ints = List[Int]()
-    for i in range(9):  # small-loop(the admitted model shape)
+    for i in range(9):  # driver-loop: over the admitted model shape
         ints.append(shape.d[i])
     ints.append(Int(shape.chunked))
     ints.append(Int(train))
@@ -318,7 +318,7 @@ def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0
     ints.append(length)
     ints.append(Int(release))
     var floats = List[Float64]()
-    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:  # small-loop(the eight optimizer scalars)
+    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:  # driver-loop: over the eight optimizer scalars
         floats.append(Float64(py=cfg[key]))
     return (ints^, floats^)
 
@@ -561,7 +561,7 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
     a.append(Int(py=classical_address(tokens)))
     a.append(Int(py=classical_address(state["flags"])))
     var is_open = Bool(py=fields["_session_open"])
-    for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three named state arrays)
+    for key in [String("parameters"), String("m"), String("v")]:  # driver-loop: over the three named state arrays
         a.append(0 if is_open else Int(py=classical_address(state[key])))
     a.append(Int(py=classical_address(out_loss)))
     a.append(Int(py=classical_address(out_flags)) if train else 0)
@@ -638,9 +638,9 @@ def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: Python
     var key = _key(fields)
     var descriptors = List[Int]()
     descriptors.append(0)
-    for name in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(the four named state arrays)
+    for name in [String("parameters"), String("m"), String("v"), String("flags")]:  # driver-loop: over the four named state arrays
         descriptors.append(Int(py=classical_address(state[name])))
-    for value in [tokens, out_p, out_m, out_v, flat, out_flags, out_loss]:  # small-loop(the step's seven buffers)
+    for value in [tokens, out_p, out_m, out_v, flat, out_flags, out_loss]:  # driver-loop: over the step's seven buffers
         descriptors.append(Int(py=classical_address(value)) if value is not None else 0)
     var keys = py_call(b.list, by_name)
     for i in range(len(keys)):  # driver-loop: one address per model parameter tensor
@@ -739,7 +739,7 @@ def _optimizer_configuration(mut mods: NativeModules, lr: PythonObject, beta_val
     var keys = [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]
     var scalars: List[PythonObject] = [lr, betas[0], betas[1], eps, weight_decay]
     var numeric = List[Float64]()
-    for i in range(5):  # small-loop(the five optimizer configuration scalars)
+    for i in range(5):  # driver-loop: over the five optimizer configuration scalars
         numeric.append(training_f32_scalar(scalars[i], "Byte-LM " + keys[i], context, True))
         mods.released()
         py_setitem(config, keys[i], numeric[i])
@@ -872,7 +872,7 @@ def byte_lm_construct(mut mods: NativeModules, trainer: PythonObject, args: Pyth
         _ = py_call(named.append, names[i])
         var dims = Python.list()
         var count = 1
-        for width in shapes[i]:  # small-loop(parameter rank)
+        for width in shapes[i]:  # driver-loop: over parameter rank
             _ = py_call(dims.append, width)
             count *= width
         _ = py_call(shaped.append, dims)
@@ -1361,7 +1361,7 @@ def _pooled_logits(mut mods: NativeModules, fields: PythonObject, batch: Int, le
         raise Error("TypeError: Byte-LM logits pool requires a native list")
     var count = batch * length * vocab
     var store = PythonObject(None)
-    for i in range(len(free)):  # small-loop(the bounded reusable host-buffer pool)
+    for i in range(len(free)):  # driver-loop: over the bounded reusable host-buffer pool
         if py_type(free[i]) is not context["array_type"]:
             raise Error("TypeError: Byte-LM logits pool contains a foreign buffer")
         if len(free[i]) == count:
@@ -1449,7 +1449,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             var state = fields["_state"]
             var addresses: List[Int] = [Int(py=classical_address(tokens)), output_address, Int(py=classical_address(state["flags"]))]
             var is_open = Bool(py=fields["_session_open"])
-            for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three session admission buffers)
+            for key in [String("parameters"), String("m"), String("v")]:  # driver-loop: over the three session admission buffers
                 addresses.append(0 if is_open else Int(py=classical_address(state[key])))
             if row_lengths is not None:
                 addresses.append(Int(py=classical_address(row_lengths)))
@@ -1507,7 +1507,7 @@ def _registry(mut mods: NativeModules, shape: _Shape) raises -> PythonObject:
     for i in range(len(names)):  # driver-loop: configured parameter tensors
         var dims = Python.list()
         var count = 1
-        for width in shapes[i]:  # small-loop(parameter rank)
+        for width in shapes[i]:  # driver-loop: over parameter rank
             _ = py_call(dims.append, width)
             count *= width
         var record = _b(mods).dict()
@@ -1566,7 +1566,7 @@ def _runtime_metadata(mut mods: NativeModules, fields: PythonObject, shape: _Sha
         var inventory = _b(mods).dict()
         var root = String(py=context["byte_lm_source_root"])
         var names = context["byte_lm_source_names"]
-        for i in range(len(names)):  # small-loop(6 direct source paths)
+        for i in range(len(names)):  # driver-loop: over 6 direct source paths
             var path = root + "/" + String(py=names[i])
             if native_path_exists(PythonObject(path)):
                 mods.released()

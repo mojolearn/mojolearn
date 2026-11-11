@@ -63,7 +63,7 @@ def checkpoint_connect(mut mods: NativeModules, context: PythonObject) raises ->
     py_setitem(connected, "linalg_context", context["linalg_context"])
     var entries = Python.dict()
     var posix = Python.import_module("posix")
-    for name in ["open", "read", "close", "fstat", "listdir"]:  # small-loop(import-only native checkpoint filesystem entries)
+    for name in ["open", "read", "close", "fstat", "listdir"]:  # driver-loop: over import-only native checkpoint filesystem entries
         var entry = py_call(bi.getattr, posix, name)
         if py_type(entry) is not py_type(bi.len):
             raise Error("TypeError: checkpoint filesystem entry must be native")
@@ -144,7 +144,7 @@ def _info_validate(mut mods: NativeModules, fields: PythonObject) raises -> Pyth
     var count = 1
     var input_shape = fields[2]
     model_sequence(mods, input_shape)
-    for j in range(len(input_shape)):  # small-loop(tensor shape metadata)
+    for j in range(len(input_shape)):  # driver-loop: over tensor shape metadata
         var size = model_integer(mods, input_shape[j])
         if size < 0 or (size != 0 and count > 9223372036854775807 // size):
             raise Error("TensorInfo shape must hold non-negative dimensions")
@@ -165,7 +165,7 @@ def _info_validate(mut mods: NativeModules, fields: PythonObject) raises -> Pyth
 def _info_snapshot(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
     var slots = _info_slots(mods, value)
     var fields = Python.list()
-    for name in ["name", "dtype", "shape", "begin", "end", "file"]:  # small-loop(capture each TensorInfo slot once)
+    for name in ["name", "dtype", "shape", "begin", "end", "file"]:  # driver-loop: over capture each TensorInfo slot once
         _ = py_call(fields.append, py_call(slots[name].__get__, value, _checkpoint_context()["info_class"]))
     return _info_validate(mods, fields)
 
@@ -259,7 +259,7 @@ def _checkpoint_array_from(mut mods: NativeModules, store: PythonObject, shape: 
     var count = 1
     var strides = Python.list()
     var stride = itemsize
-    for i in range(len(captured_shape)):  # small-loop(tensor shape and row-major stride metadata)
+    for i in range(len(captured_shape)):  # driver-loop: over tensor shape and row-major stride metadata
         var size = model_integer(mods, captured_shape[len(captured_shape) - i - 1])
         if size < 0 or (size != 0 and stride > 9223372036854775807 // size):
             raise Error("safetensors: tensor shape exceeds native indexing")
@@ -275,7 +275,7 @@ def _checkpoint_array_from(mut mods: NativeModules, store: PythonObject, shape: 
         itemsize=PythonObject(itemsize), order=PythonObject("C"), strides=py_call(bi.tuple, strides))
     mods.released()
     var names = py_call(bi.list, fields.keys())
-    for i in range(len(names)):  # small-loop(publish through admitted native Array member descriptors)
+    for i in range(len(names)):  # driver-loop: over publish through admitted native Array member descriptors
         _ = py_call(slots[names[i]].__set__, result, fields[names[i]])
     return result
 
@@ -289,7 +289,7 @@ def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array
 def tensor_info_init_binding(mut mods: NativeModules, value: PythonObject, fields: PythonObject) raises -> PythonObject:
     var slots = _info_slots(mods, value)
     var captured = _info_validate(mods, fields)
-    for name in ["name", "dtype", "shape", "begin", "end", "file"]:  # small-loop(publish admitted native TensorInfo fields)
+    for name in ["name", "dtype", "shape", "begin", "end", "file"]:  # driver-loop: over publish admitted native TensorInfo fields
         _ = py_call(slots[name].__set__, value, captured[name])
     return PythonObject(None)
 
@@ -321,7 +321,7 @@ def safetensors_init_binding(mut mods: NativeModules, value: PythonObject, input
         if len(head) != 8:
             raise Error("safetensors: file is shorter than its 8-byte header length")
         var length = UInt64(0)
-        for i in range(8):  # small-loop(the little-endian 8-byte header length)
+        for i in range(8):  # driver-loop: over the little-endian 8-byte header length
             length |= UInt64(Int(py=head[i])) << UInt64(8 * i)
         if length > 100 * 1024 * 1024:
             raise Error("safetensors: header length exceeds 104857600")
@@ -693,7 +693,7 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
     if py_type(value) is cls:
         var names = py_call(mods.module("builtins").list, slots.keys())
         captured = py_call(mods.module("builtins").object.__new__, cls)
-        for i in range(len(names)):  # small-loop(capture caller Array slots once before dtype normalization)
+        for i in range(len(names)):  # driver-loop: over capture caller Array slots once before dtype normalization
             _ = py_call(slots[names[i]].__set__, captured, py_call(slots[names[i]].__get__, value, cls))
     else:
         # The pre-migration public operation also accepted ordinary NumPy
@@ -710,7 +710,7 @@ def checkpoint_widen_f16(mut mods: NativeModules, value: PythonObject) raises ->
                  and code != "=e" and code != "=H" and code != "@e" and code != "@H")):
             raise Error("TypeError: widen_f16 requires little-endian float16 or uint16 bit storage")
         var shape = Python.list()
-        for axis in range(len(pin.layout.value().shape)):  # small-loop(captured native buffer shape)
+        for axis in range(len(pin.layout.value().shape)):  # driver-loop: over captured native buffer shape
             _ = py_call(shape.append, PythonObject(pin.layout.value().shape[axis]))
         # Row N204: the pinned bits go straight into the store (one copy).
         var store = PythonObject(None)
