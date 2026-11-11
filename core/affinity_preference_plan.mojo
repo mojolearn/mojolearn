@@ -19,13 +19,15 @@ struct AffinityPreferencePlan(Movable):
         self.count = 0
         self.direct = False
 
-    def prepare(mut self, plan: SequenceInputPlan, numpy_connected: Bool) raises:
+    def capture(mut self, plan: SequenceInputPlan) raises:
         # Materialize the inferred dtype before narrowing, exactly as the old
         # sequence Array did. In particular mixed signed/unsigned 64-bit words
         # first round to Float64; direct integer-to-Float32 would change bits.
         var layout = NativeArrayLayout(plan.shape.copy(), plan.itemsize)
         self.inferred = List[UInt8](unsafe_uninit_length=layout.nbytes)
         sequence_write(plan, Int(self.inferred.unsafe_ptr()))
+
+    def finish(mut self, plan: SequenceInputPlan, numpy_connected: Bool) raises:
         if not numpy_connected:
             _ = sequence_array_typestr(plan.kind, plan.itemsize, "preference")
         if len(plan.shape) != 2:
@@ -53,6 +55,10 @@ struct AffinityPreferencePlan(Movable):
             self.inferred = List[UInt8]()
         if not finite:
             raise Error("mojolearn: preference contains NaN or infinity")
+
+    def prepare(mut self, plan: SequenceInputPlan, numpy_connected: Bool) raises:
+        self.capture(plan)
+        self.finish(plan, numpy_connected)
 
     def span(self) -> VariantsSpan:
         if self.count == 0:
