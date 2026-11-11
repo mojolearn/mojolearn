@@ -2,7 +2,7 @@
 # Spectral public UNPACK/PACK and lifecycle metadata. Numerical execution,
 # scratch, requests and resident handles use the typed native plans. Public
 # Arrays and provider images remain boundary pins. Normalized scalar fields
-# and the standalone convenience method's temporary model are staged below.
+# retain archive/attribute compatibility; execution consumes native config.
 from std.math import isinf
 from core.spectral_native_api import (
     SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
@@ -22,6 +22,8 @@ from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_f
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from core.family_cast_impl import family_min_f32
+from core.spectral_embedding_config import SpectralEmbeddingConfig
+from bindings.host_inference_scalars import host_inference_scalar
 from bindings.admitted_family import admit_family_refuse_empty
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_call, family_array,
@@ -305,7 +307,8 @@ def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, contex
 
 
 def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, base: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
+                   context: PythonObject, native_options: Bool = False, neighbors: Int = 0,
+                   automatic_neighbors: Bool = False) raises -> PythonObject:
     """`SpectralEmbedding._precomputed_knn_affinity`: scikit-learn's
     `kneighbors_graph(mode='connectivity')` of a precomputed distance matrix,
     symmetrized 0.5 (C + C^T), by the base binding's `knn_affinity_f32`.
@@ -335,10 +338,11 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
         n = Int(py=dense.shape[0])
         if Int(py=dense.shape[1]) != n:
             raise Error("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
-    var k = _resolved_neighbors(fields, n, clustering)
+    var k = (max(n // 10, 1) if automatic_neighbors else neighbors) if native_options else _resolved_neighbors(fields, n, clustering)
     var a = family_array(Python.tuple(n, n), "<f4", context)
     if n == 0:
-        py_setitem(fields, "affinity_matrix_", a)
+        if fields is not None:
+            py_setitem(fields, "affinity_matrix_", a)
         return a
     var status = SpectralAffinityStatus()
     var sp = dense is None
@@ -364,7 +368,8 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     if code == 2:
         raise Error("mojolearn SpectralEmbedding: row " + String(bad_row) + " of the precomputed graph has "
                     + String(stored) + " stored distances, fewer than n_neighbors=" + String(k))
-    py_setitem(fields, "affinity_matrix_", a)
+    if fields is not None:
+        py_setitem(fields, "affinity_matrix_", a)
     return a
 
 
@@ -832,16 +837,27 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     return SpectralPredictionPins(labels, emb)
 
 
-def _se_validate(fields: PythonObject, context: PythonObject) raises:
+@fieldwise_init
+struct _EmbeddingOptionPins(Movable):
+    var components: PythonObject
+    var affinity: PythonObject
+    var seed: PythonObject
+    var neighbors: PythonObject
+    var gamma: PythonObject
+    var solver: PythonObject
+    var tolerance: PythonObject
+
+
+def _se_validate_options(options: _EmbeddingOptionPins, context: PythonObject) raises -> SpectralEmbeddingConfig:
     """`SpectralEmbedding._validate_params`."""
     var b = _builtins()
-    var n_components = family_field(fields, "n_components")
-    var affinity = family_field(fields, "affinity")
-    var random_state = family_field(fields, "random_state")
-    var n_neighbors = family_field(fields, "n_neighbors")
-    var gamma = family_field(fields, "gamma")
-    var eigen_solver = family_field(fields, "eigen_solver")
-    var eigen_tol = family_field(fields, "eigen_tol")
+    var n_components = options.components
+    var affinity = options.affinity
+    var random_state = options.seed
+    var n_neighbors = options.neighbors
+    var gamma = options.gamma
+    var eigen_solver = options.solver
+    var eigen_tol = options.tolerance
     var affinities = context["family_cfb_se_affinities"]
     if not py_contains(affinities, affinity):
         raise Error("mojolearn SpectralEmbedding: affinity=" + family_repr(affinity) + " is "
@@ -852,52 +868,75 @@ def _se_validate(fields: PythonObject, context: PythonObject) raises:
     if gamma is not None and not rbf:
         raise Error("NotImplementedError: mojolearn SpectralEmbedding: gamma is refused; it "
                     + "parameterizes an RBF affinity, and affinity is not 'rbf'")
-    if gamma is not None and not (Float64(py=_float(gamma)) > 0):
-        raise Error("mojolearn SpectralEmbedding: gamma must be positive")
+    var gamma_value = Float64(1.0)
+    if gamma is not None:
+        gamma_value = Float64(py=_float(gamma))
+        if not (gamma_value > 0):
+            raise Error("mojolearn SpectralEmbedding: gamma must be positive")
     if eigen_solver is not None:
         raise Error("NotImplementedError: mojolearn SpectralEmbedding: eigen_solver=" + family_repr(eigen_solver) + " "
                     + "is refused; there is one solver here, RAFT's thick-restart "
                     + "Lanczos. scikit-learn's 'arpack', 'lobpcg' and 'amg' are "
                     + "other algorithms, and running the Lanczos under their names "
                     + "would be a silent substitution (spectral/NOT_IMPLEMENTED.tsv)")
+    var tolerance = Float64(Float32(1e-5))
     if family_is_str(eigen_tol):
         if String(py=eigen_tol) != "auto":
             raise Error("mojolearn SpectralEmbedding: eigen_tol=" + family_repr(eigen_tol) + " "
                         + "must be 'auto' or a positive float")
     elif eigen_tol is not None:
         var tol = Float64(py=_float(eigen_tol))
+        tolerance = tol
         if not (tol > 0.0) or tol != tol or isinf(tol):
             raise Error("mojolearn SpectralEmbedding: eigen_tol must be a positive "
                         + "finite float or 'auto', got " + family_repr(eigen_tol) + " (0 disables the "
                         + "Lanczos convergence test, DEVIATION 890)")
-    if _int(n_components) < 1:
+    var components = _int(n_components)
+    if components < 1:
         raise Error("mojolearn SpectralEmbedding: n_components must be at least 1")
-    if n_neighbors is not None and _int(n_neighbors) < 1:
+    var neighbors = 0 if n_neighbors is None else _int(n_neighbors)
+    if n_neighbors is not None and neighbors < 1:
         raise Error("mojolearn SpectralEmbedding: n_neighbors must be at least 1, "
                     + "or None for max(n_samples // 10, 1)")
     var seed = _seed(random_state, "SpectralEmbedding", False)
-    py_setitem(fields, "_n_components", PythonObject(_int(n_components)))
-    py_setitem(fields, "_n_neighbors", PythonObject(None) if n_neighbors is None else PythonObject(_int(n_neighbors)))
-    py_setitem(fields, "_seed", PythonObject(seed))
-    py_setitem(fields, "_gamma", PythonObject(None) if gamma is None else _float(gamma))
+    return SpectralEmbeddingConfig(String(py=affinity), components, neighbors, seed,
+        gamma_value, tolerance, n_neighbors is None, gamma is None)
 
 
-def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject,
-            admit_source: Bool = False) raises:
+def _se_validate(fields: PythonObject, context: PythonObject) raises -> SpectralEmbeddingConfig:
+    var options = _EmbeddingOptionPins(family_field(fields, "n_components"),
+        family_field(fields, "affinity"), family_field(fields, "random_state"),
+        family_field(fields, "n_neighbors"), family_field(fields, "gamma"),
+        family_field(fields, "eigen_solver"), family_field(fields, "eigen_tol"))
+    var config = _se_validate_options(options, context)
+    # Existing observable/private-name fields remain the archive/attribute
+    # boundary. This fit consumes config directly, with no scalar readback.
+    py_setitem(fields, "_n_components", PythonObject(config.components))
+    py_setitem(fields, "_n_neighbors", PythonObject(None) if config.automatic_neighbors else PythonObject(config.neighbors))
+    py_setitem(fields, "_seed", PythonObject(config.seed))
+    py_setitem(fields, "_gamma", PythonObject(None) if config.automatic_gamma else PythonObject(config.gamma))
+    return config^
+
+
+def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject) raises:
     """SpectralEmbedding fit over admitted source and provider pins."""
     var b = _builtins()
     var fields = py_fields(model)
-    var metrics = routes.metrics
-    _se_validate(fields, context)
-    var k = Int(py=family_field(fields, "_n_components"))
-    # `_drop_first` / `_norm_laplacian`: class attributes, or the instance's
-    # (spectral_embedding sets them).
+    var config = _se_validate(fields, context)
     var drop_first = Bool(py=family_call(b.bool, family_raw_get(model, "_drop_first")))
     var norm_laplacian = Bool(py=family_call(b.bool, family_raw_get(model, "_norm_laplacian")))
+    _ = _se_execute(config, drop_first, norm_laplacian, fields, routes, source, context, False)
+
+
+def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacian: Bool,
+                 fields: PythonObject, routes: SpectralRoutePins, source: PythonObject,
+                 context: PythonObject, admit_source: Bool) raises -> PythonObject:
+    var metrics = routes.metrics
+    var k = config.components
     # The one piece of arithmetic the reference keeps in Python
     # (spectral_embedding.pyx:294): the transform receives this number.
     var n_lanczos = k + 1 if drop_first else k
-    var affinity = String(py=family_field(fields, "affinity"))
+    var affinity = config.affinity.copy()
     var graph_affinity = affinity == "precomputed" or affinity == "rbf" or affinity == "precomputed_nearest_neighbors"
     var connection: Optional[SpectralConnection] = None
     var use_dense = False
@@ -912,7 +951,7 @@ def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     var dense = PythonObject(None)
     var from_matrix = False
     if affinity == "precomputed_nearest_neighbors":
-        dense = _knn_affinity(fields, source, False, routes.base, context)
+        dense = _knn_affinity(fields, source, False, routes.base, context, True, config.neighbors, config.automatic_neighbors)
         from_matrix = True
     if affinity == "precomputed" and use_dense and not _is_sparse(source):
         var shape = _shape_of(source)
@@ -924,25 +963,25 @@ def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     if affinity == "rbf":
         var x = _x_decomp_input(source, context)
         var d = Int(py=x.shape[1])
-        var gamma_field = family_field(fields, "_gamma")
-        var gamma = Float64(py=gamma_field) if gamma_field is not None else 1.0 / Float64(d)
-        py_setitem(fields, "gamma_", PythonObject(gamma))
+        var gamma = config.gamma_for(d)
+        if fields is not None:
+            py_setitem(fields, "gamma_", PythonObject(gamma))
         var aff = _rbf_affinity(x, gamma, routes.decomp, context)
-        py_setitem(fields, "affinity_matrix_", aff)
-        py_setitem(fields, "n_features_in_", PythonObject(d))
+        if fields is not None:
+            py_setitem(fields, "affinity_matrix_", aff)
+        if fields is not None:
+            py_setitem(fields, "n_features_in_", PythonObject(d))
         dense = aff
         from_matrix = True
-    var tolerance = Float64(Float32(1e-5))
-    var eigen_tol = family_field(fields, "eigen_tol")
-    if eigen_tol is not None and not family_is_str(eigen_tol):
-        tolerance = Float64(py=_float(eigen_tol))
-    var seed = Int(py=family_field(fields, "_seed"))
+    var tolerance = config.tolerance
+    var seed = config.seed
     var embedding = PythonObject(None)
     var n_out: Int
     if use_dense and dense is not None:
         var n = Int(py=dense.shape[0])
-        _se_check_shape(fields, n, n_lanczos)
-        py_setitem(fields, "n_neighbors_", PythonObject(_resolved_neighbors(fields, n, False)))
+        _se_check_shape(k, n, n_lanczos)
+        if fields is not None:
+            py_setitem(fields, "n_neighbors_", PythonObject(config.neighbors_for(n)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         var request = SpectralEmbeddingRequest(
             SpectralInput(Int(py=classical_address(dense)), 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
@@ -973,8 +1012,9 @@ def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
                 raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
                             + "matrix has a negative entry (refused by name: sqrt of a "
                             + "negative degree is a NaN)")
-        _se_check_shape(fields, n, n_lanczos)
-        py_setitem(fields, "n_neighbors_", PythonObject(_resolved_neighbors(fields, n, False)))
+        _se_check_shape(k, n, n_lanczos)
+        if fields is not None:
+            py_setitem(fields, "n_neighbors_", PythonObject(config.neighbors_for(n)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         var request = SpectralEmbeddingRequest(
             SpectralInput(0, coo.row_address(), coo.column_address(),
@@ -988,15 +1028,17 @@ def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         # Lane a8d: the admission's finite test (see `_x_decomp_input`).
         var x = admit_family(source, 2, "X", context, finite=True,
                              refusal="mojolearn SpectralEmbedding: X contains NaN or infinity").array
-        py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
+        if fields is not None:
+            py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
-        _se_check_shape(fields, n, n_lanczos)
-        var neighbors = _resolved_neighbors(fields, n, False)
+        _se_check_shape(k, n, n_lanczos)
+        var neighbors = config.neighbors_for(n)
         if neighbors > n:
             raise Error("mojolearn SpectralEmbedding: n_neighbors=" + String(neighbors) + " "
                         + "exceeds n_samples=" + String(n))
-        py_setitem(fields, "n_neighbors_", PythonObject(neighbors))
+        if fields is not None:
+            py_setitem(fields, "n_neighbors_", PythonObject(neighbors))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         connection = SpectralConnection(metrics, context)
         var request = SpectralEmbeddingRequest(
@@ -1006,17 +1048,21 @@ def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         n_out = spectral_embedding_run(connection.value(), request)
         _ = x
         _ = embedding
-        py_setitem(fields, "n_features_in_", PythonObject(d))
+        if fields is not None:
+            py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
     if n_out != k:
         raise Error("RuntimeError: mojolearn SpectralEmbedding: the kernel returned " + String(n_out) + " "
                     + "embedding columns where " + String(k) + " were expected")
-    py_setitem(fields, "embedding_", embedding)
+    if fields is not None:
+        py_setitem(fields, "embedding_", embedding)
+
+    return embedding
 
 
-def _se_check_shape(fields: PythonObject, n: Int, n_lanczos: Int) raises:
+def _se_check_shape(components: Int, n: Int, n_lanczos: Int) raises:
     if n_lanczos >= n:
-        raise Error("mojolearn SpectralEmbedding: n_components=" + String(Int(py=family_field(fields, "_n_components"))) + " "
+        raise Error("mojolearn SpectralEmbedding: n_components=" + String(components) + " "
                     + "needs " + String(n_lanczos) + " eigenpairs, which must be below "
                     + "n_samples=" + String(n))
 
@@ -1031,26 +1077,17 @@ def _spectral_embedding(args: PythonObject, routes: SpectralRoutePins, context: 
             var type_name = py_call(b.type.__dict__["__name__"].__get__, py_type(value))
             raise Error("TypeError: mojolearn spectral_embedding: " + names[i] + " must be a bool, got "
                         + String(type_name))
-    # The model the function's Python built: the constructor's fields, in
-    # its order, then the two switches.
-    var model = py_call(b.object.__new__, args[0])
-    var fields = py_fields(model)
-    py_setitem(fields, "n_components", args[2])
-    py_setitem(fields, "affinity", args[3])
-    py_setitem(fields, "random_state", args[4])
-    py_setitem(fields, "n_neighbors", args[5])
-    py_setitem(fields, "gamma", PythonObject(None))
-    py_setitem(fields, "eigen_solver", PythonObject(None))
-    py_setitem(fields, "eigen_tol", PythonObject(None))
-    py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "verbose", PythonObject(False))
-    py_setitem(fields, "_drop_first", args[7])
-    py_setitem(fields, "_norm_laplacian", args[6])
-    # Match the estimator door's exact scalar/class admission before the
-    # validator compares or converts any rebound/public parameter.
-    _ = spectral_admit(model, False, False, context)
-    _se_fit(model, routes, args[1], context, True)
-    return fields["embedding_"]
+    # Public convenience arguments cross the same exact scalar admission in
+    # constructor-schema order. No temporary estimator/dictionary is needed.
+    host_inference_scalar(args[2], context, True)
+    host_inference_scalar(args[3], context, True)
+    host_inference_scalar(args[4], context, True)
+    host_inference_scalar(args[5], context, True)
+    var options = _EmbeddingOptionPins(args[2], args[3], args[4], args[5],
+        PythonObject(None), PythonObject(None), PythonObject(None))
+    var config = _se_validate_options(options, context)
+    return _se_execute(config, Bool(py=args[7]), Bool(py=args[6]), PythonObject(None),
+        routes, args[1], context, True)
 
 
 def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -1085,7 +1122,7 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
         var result = _sc_predict(model, binding, source, context)
         return Python.tuple(result.labels, result.embedding)
     if operation == "family_cfb_se_validate":
-        _se_validate(py_fields(model), context)
+        _ = _se_validate(py_fields(model), context)
         return PythonObject(None)
     if operation == "family_cfb_se_knn_affinity":
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
