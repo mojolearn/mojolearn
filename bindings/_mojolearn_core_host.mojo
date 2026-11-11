@@ -188,6 +188,9 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
+from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
+from bindings.py_balanced import py_setattr
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
 from core.core_host_impl import (
@@ -1146,6 +1149,19 @@ def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def _publish_neighbors_ops(module: PythonObject) raises:
+    # The CPU column of the neighbors operations table
+    # (core/neighbors_entry_table.mojo): the k-NN owner
+    # (bindings/neighbors_knn_native.mojo) calls this entry with plain values
+    # and reads the key from the module attribute `neighbors_native_key`.
+    # The `knn_classify` / `knn_regress` exports remain for the unconverted
+    # caller bindings/host_knn_predict_native.mojo.
+    var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
+    neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
+                          neighbors_ops_host_v1)
+    py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
+
+
 def build__mojolearn_core_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
@@ -1266,6 +1282,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
-        return module.finalize()
+        var published_module = module.finalize()
+        _publish_neighbors_ops(published_module)
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))
