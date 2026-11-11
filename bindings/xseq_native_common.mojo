@@ -17,8 +17,8 @@ from bindings.sequential_admission import _one_of
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from std.python._cpython import GILReleased
-from core.native_descriptor_call import native_descriptor_call
-from core.xseq_entry_table import XseqEntryKey, xseq_glue_entry
+from core.xseq_entry_table import XseqEntryKey
+from sequence.xseq_door_run import xseq_run_glue
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
@@ -83,11 +83,10 @@ def xseq_glue(key: XseqEntryKey, operation: Int, addresses: List[Int], ints: Lis
     """One synchronous call of the image's glue entry
     (core/xseq_entry_table.mojo layouts) with the GIL released. The caller
     keeps every addressed buffer alive."""
-    var entry = xseq_glue_entry(key)
     var result = 0
     var py = Python()
     with GILReleased(py):
-        result = native_descriptor_call(entry, operation, addresses, ints, floats)
+        result = xseq_run_glue(key, operation, addresses, ints, floats)
     return result
 
 
