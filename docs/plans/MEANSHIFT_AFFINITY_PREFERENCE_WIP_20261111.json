@@ -1,0 +1,88 @@
+{
+  "status": "unwired additive boundary work; source review only; not ready to count as the final public preference migration",
+  "parent_product": "c47be7762d",
+  "core_dependency": "a5c9d1d9c6",
+  "files": [
+    "bindings/affinity_preference_boundary.mojo",
+    "bindings/pandas_preference_items.mojo"
+  ],
+  "implemented": [
+    "exact native C iterator identity and length-hint handling for sequences, mappings, bytes and borrowed buffers",
+    "Array metadata/storage capture without Array Python methods or scalar lists; 1-D scalar snapshot retains the GIL while the same native parallel writer runs",
+    "ordinary/nullable pandas Series and DataFrame column labels, RangeIndex/native cached storage, CategoricalIndex and numeric category codes, MultiIndex label tuples",
+    "native Arrow primitive scalar extraction and existing compiled sparse-index lookup, retaining original input storage pins",
+    "separate native inferred-dtype storage and final Float32 conversion; no extra tensor materialization for pandas inspection"
+  ],
+  "remaining_before_public_switch": [
+    "Complete native encoded Arrow numeric storage (dictionary/run-end/union) admission; current primitive-only Arrow constructor would otherwise narrow previously accepted numeric Series. It is not wired.",
+    "Review categorical sparse/common-dtype and MultiIndex boxing/refusal details against the retained upstream source before claiming exact compatibility.",
+    "Author focused pandas/Array/native-iterator hook traps and supported input conversion cases, then hand the coherent switch to root for the combined compile."
+  ],
+  "preservation": [
+    "All existing public fit/query code remains at c47be7762d; the ninth preference role remains on the old path until this helper is complete.",
+    "No changed numerical kernels, algorithms, defaults, model owner registrations or resident table layout.",
+    "Serial item loops are CPython boundary admission/boxing under the GIL. Existing native conversion work remains parallel."
+  ],
+  "counts": {
+    "family_completed": 8,
+    "family_total": 9,
+    "new_distinct_aggregate_completed": 6,
+    "pending_preference_counted": false
+  },
+  "sources": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/_libs-arrays.pyx",
+      "sha256": "4d740363b092c6cffef5cab70e4f076e1efc9069f611c6d7221d6a3d709eebbc",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-arrays-categorical.py",
+      "sha256": "7262c16924a3cca6803406cc8bae04ba4f8bc6fbba9fe3d9d332c7fafc6b4b6a",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-arrays-masked.py",
+      "sha256": "815269c68884698e6471af2e980911b7a033d8bd062b77dfc2307adc42c6eb63",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-arrays-sparse-array.py",
+      "sha256": "bd99e0f2bd0f5ad2956fbe23734365122a56cae7afaae7915ad3a102df31eb10",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-base.py",
+      "sha256": "b6f5e6b15ae57e173e06bddb69ee472a2b9096628f58bf6d4556e2ecc861669c",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-generic.py",
+      "sha256": "504217660fbe1aa74ff98b31bea093bd9043cd61c35aba272073464f38e46f22",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-indexes-base.py",
+      "sha256": "2d50f8000608294d074d8bf14a9cdc489f4bdd32ba5b81f233bcd00c44c3ff24",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-indexes-multi.py",
+      "sha256": "26c91948abcaa2da9b792fb6504e614c1e5ec89e6dbaea2da19deee3bbf7dd46",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-indexes-range.py",
+      "sha256": "aade484b66dab639ce1def7450ae63112ee9661825a695bffb5c2278b959cac0",
+      "upstream_version": "pandas v2.2.3"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/pandas-source/core-internals-array_manager.py",
+      "sha256": "abf40a9444c629d6f5afc6852957d5e19acca153b5c053400b624d1c267aac61",
+      "upstream_version": "pandas v2.2.3"
+    }
+  ],
+  "upstream_base": "https://github.com/pandas-dev/pandas/tree/v2.2.3/pandas",
+  "source_import_review": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/meanshift-affinity-native/preference-import-review.json",
+  "compiled": false,
+  "executed": false
+}
