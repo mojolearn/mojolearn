@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-# Spectral public UNPACK/PACK and staged lifecycle metadata. Fit/embedding
-# execute typed native requests through an image-pinned provider. Public
-# Arrays remain the output and fitted-state owners. Affinity preparation,
-# alternative label assignment and query/cache plumbing are still staged
-# below and migrate independently without changing their numerical routes.
+# Spectral public UNPACK/PACK and lifecycle metadata. Numerical execution,
+# scratch, requests and resident handles use the typed native plans. Public
+# Arrays and provider images remain boundary pins. Normalized scalar fields
+# and the standalone convenience method's temporary model are staged below.
 from std.math import isinf
 from core.spectral_native_api import (
     SPECTRAL_CAP_DENSE, SPECTRAL_CAP_RESIDENT, SPECTRAL_DATASET, SPECTRAL_GRAPH, SPECTRAL_DENSE,
@@ -12,7 +11,8 @@ from core.spectral_native_api import (
     SpectralQueryRequest, SpectralPrepareRequest, SpectralResidentQueryRequest,
 )
 from bindings.spectral_native_boundary import (
-    SpectralConnection, SpectralStatePins, spectral_fit_run, spectral_embedding_run, spectral_query_run,
+    SpectralConnection, SpectralStatePins, SpectralRoutePins, SpectralPredictionPins,
+    spectral_fit_run, spectral_embedding_run, spectral_query_run,
 )
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding
@@ -527,13 +527,11 @@ def _sc_refusal(n_out: Int, who: String) raises:
                     + "negative degree is a NaN)")
 
 
-def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`SpectralClustering.fit(X)`. args: (metrics, x_decomp, base,
-    x_cluster, X)."""
+def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject) raises:
+    """SpectralClustering fit over admitted source and retained provider pins."""
     var b = _builtins()
     var fields = py_fields(model)
-    var metrics = args[0]
-    var source = args[4]
+    var metrics = routes.metrics
     _sc_validate(fields, context)
     var prediction_data = family_field(fields, "prediction_data")
     if py_type(prediction_data) is not b.bool:
@@ -570,13 +568,13 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             dense = admit_family(source, 2, "X", context).array
     elif affinity == "rbf":
         var x = _x_decomp_input(source, context)
-        var aff = _rbf_affinity(x, Float64(py=family_field(fields, "_gamma")), args[1], context)
+        var aff = _rbf_affinity(x, Float64(py=family_field(fields, "_gamma")), routes.decomp, context)
         py_setitem(fields, "affinity_matrix_", aff)
         py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
         dense = aff
         from_matrix = True
     elif affinity == "precomputed_nearest_neighbors":
-        dense = _knn_affinity(fields, source, True, args[2], context)
+        dense = _knn_affinity(fields, source, True, routes.base, context)
         from_matrix = True
     var labels = PythonObject(None)
     var embedding = PythonObject(None)
@@ -608,9 +606,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         # the dense entry (the CPU-only host binding)
         var coo: _Coo
         if from_matrix:
-            coo = _dense_coo(dense, "SpectralClustering", args[2], context)
+            coo = _dense_coo(dense, "SpectralClustering", routes.base, context)
         else:
-            coo = _coo_triples(coo_source, "SpectralClustering", args[2], context)
+            coo = _coo_triples(coo_source, "SpectralClustering", routes.base, context)
         n = coo.n
         var nnz = coo.count()
         if nnz == 0:
@@ -685,7 +683,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var request = SpectralAssignmentRequest(Int(py=classical_address(embedding)),
             Int(py=embedding.size), n, k, Int(py=context["family_cfb_assign_codes"][assign]),
             _int(family_field(fields, "_seed")), 30, 20)
-        var result = spectral_assignment_run(args[3], request, context)
+        var result = spectral_assignment_run(routes.cluster, request, context)
         _ = embedding
         if String(py=assign) == "discretize":
             py_setitem(fields, "n_iter_assign_", PythonObject(result.storage[0].iterations))
@@ -739,7 +737,7 @@ def _sc_resident(model: PythonObject, binding: PythonObject, state: SpectralStat
 
 
 def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
-                context: PythonObject) raises -> PythonObject:
+                context: PythonObject) raises -> SpectralPredictionPins:
     """`SpectralClustering._predict_embedding`: (labels, embedding). The Nystrom extension of the fitted
     eigenvectors, then the nearest fitted k-means centroid."""
     var b = _builtins()
@@ -819,7 +817,7 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
             _ = q
             _ = emb
             _ = labels
-        return Python.tuple(labels, emb)
+        return SpectralPredictionPins(labels, emb)
     if not connection:
         connection = SpectralConnection(binding, context)
     var request = SpectralQueryRequest(Int(py=classical_address(q)), train_addr, state.view(),
@@ -830,7 +828,7 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     _ = training
     _ = emb
     _ = labels
-    return Python.tuple(labels, emb)
+    return SpectralPredictionPins(labels, emb)
 
 
 def _se_validate(fields: PythonObject, context: PythonObject) raises:
@@ -883,11 +881,11 @@ def _se_validate(fields: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "_gamma", PythonObject(None) if gamma is None else _float(gamma))
 
 
-def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, context: PythonObject) raises:
-    """`SpectralEmbedding.fit(X)`. args: (metrics, x_decomp, base, ...)."""
+def _se_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject, context: PythonObject) raises:
+    """SpectralEmbedding fit over admitted source and provider pins."""
     var b = _builtins()
     var fields = py_fields(model)
-    var metrics = args[0]
+    var metrics = routes.metrics
     _se_validate(fields, context)
     var k = Int(py=family_field(fields, "_n_components"))
     # `_drop_first` / `_norm_laplacian`: class attributes, or the instance's
@@ -907,7 +905,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
     var dense = PythonObject(None)
     var from_matrix = False
     if affinity == "precomputed_nearest_neighbors":
-        dense = _knn_affinity(fields, source, False, args[2], context)
+        dense = _knn_affinity(fields, source, False, routes.base, context)
         from_matrix = True
     if affinity == "precomputed" and use_dense and not _is_sparse(source):
         var shape = _shape_of(source)
@@ -922,7 +920,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         var gamma_field = family_field(fields, "_gamma")
         var gamma = Float64(py=gamma_field) if gamma_field is not None else 1.0 / Float64(d)
         py_setitem(fields, "gamma_", PythonObject(gamma))
-        var aff = _rbf_affinity(x, gamma, args[1], context)
+        var aff = _rbf_affinity(x, gamma, routes.decomp, context)
         py_setitem(fields, "affinity_matrix_", aff)
         py_setitem(fields, "n_features_in_", PythonObject(d))
         dense = aff
@@ -950,9 +948,9 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
     elif graph_affinity:
         var coo: _Coo
         if from_matrix:
-            coo = _dense_coo(dense, "SpectralEmbedding", args[2], context)
+            coo = _dense_coo(dense, "SpectralEmbedding", routes.base, context)
         else:
-            coo = _coo_triples(source, "SpectralEmbedding", args[2], context)
+            coo = _coo_triples(source, "SpectralEmbedding", routes.base, context)
         var n = coo.n
         var nnz = coo.count()
         if nnz == 0:
@@ -1016,15 +1014,12 @@ def _se_check_shape(fields: PythonObject, n: Int, n_lanczos: Int) raises:
                     + "n_samples=" + String(n))
 
 
-def _spectral_embedding(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`spectral_embedding(A, ...)`: `SpectralEmbedding(...).fit_transform(A)`
-    with the two switches the class fixes. args: (SpectralEmbedding,
-    metrics, x_decomp, base, A, n_components, affinity, random_state,
-    n_neighbors, norm_laplacian, drop_first)."""
+def _spectral_embedding(args: PythonObject, routes: SpectralRoutePins, context: PythonObject) raises -> PythonObject:
+    """Unpack the public spectral_embedding arguments; retain route pins separately."""
     var b = _builtins()
     var names: List[String] = ["norm_laplacian", "drop_first"]
     for i in range(2):  # small-loop(flags: norm_laplacian, drop_first): 2
-        var value = args[9 + i]
+        var value = args[6 + i]
         if py_type(value) is not b.bool:
             raise Error("TypeError: mojolearn spectral_embedding: " + names[i] + " must be a bool, got "
                         + String(py_type(value).__name__))
@@ -1032,31 +1027,31 @@ def _spectral_embedding(args: PythonObject, context: PythonObject) raises -> Pyt
     # its order, then the two switches.
     var model = py_call(b.object.__new__, args[0])
     var fields = py_fields(model)
-    py_setitem(fields, "n_components", args[5])
-    py_setitem(fields, "affinity", args[6])
-    py_setitem(fields, "random_state", args[7])
-    py_setitem(fields, "n_neighbors", args[8])
+    py_setitem(fields, "n_components", args[2])
+    py_setitem(fields, "affinity", args[3])
+    py_setitem(fields, "random_state", args[4])
+    py_setitem(fields, "n_neighbors", args[5])
     py_setitem(fields, "gamma", PythonObject(None))
     py_setitem(fields, "eigen_solver", PythonObject(None))
     py_setitem(fields, "eigen_tol", PythonObject(None))
     py_setitem(fields, "n_jobs", PythonObject(None))
     py_setitem(fields, "verbose", PythonObject(False))
-    py_setitem(fields, "_drop_first", args[10])
-    py_setitem(fields, "_norm_laplacian", args[9])
-    _se_fit(model, Python.tuple(args[1], args[2], args[3]), args[4], context)
+    py_setitem(fields, "_drop_first", args[7])
+    py_setitem(fields, "_norm_laplacian", args[6])
+    _se_fit(model, routes, args[1], context)
     return fields["embedding_"]
 
 
 def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, args: PythonObject,
-                           context: PythonObject, supplied_binding: PythonObject) raises -> PythonObject:
+                           context: PythonObject, supplied_binding: PythonObject, source: PythonObject) raises -> PythonObject:
     """Fit/predict shells pass (X,); route selection belongs to this owner."""
     if operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict":
-        var routed = Python.tuple(
+        var routed = SpectralRoutePins(
             spectral_umap_route(context, "metrics", PythonObject(None)),
             spectral_umap_route(context, "decomp", PythonObject(None)),
             spectral_umap_route(context, "base", PythonObject("identical")),
-            spectral_umap_route(context, "cluster", py_get(py_fields(model), "numeric_mode")), args[0])
-        _sc_fit(model, routed, context)
+            spectral_umap_route(context, "cluster", py_get(py_fields(model), "numeric_mode")))
+        _sc_fit(model, routed, source, context)
         if operation == "family_cfb_sc_fit":
             return model
         return py_fields(model)["labels_"]
@@ -1067,7 +1062,8 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
             binding = host_estimator_binding(model, "_mojolearn_metrics", mode, context)
         if binding is None:
             binding = spectral_umap_route(context, "metrics", mode)
-        return _sc_predict(model, binding, args[0], context)[0]
+        var result = _sc_predict(model, binding, source, context)
+        return result.labels
     if operation == "family_cfb_sc_predict_embedding":
         var mode = py_get(py_fields(model), "numeric_mode")
         var binding = supplied_binding
@@ -1075,64 +1071,65 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: String, ar
             binding = host_estimator_binding(model, "_mojolearn_metrics", mode, context)
         if binding is None:
             binding = spectral_umap_route(context, "metrics", mode)
-        return _sc_predict(model, binding, args[0], context)
+        var result = _sc_predict(model, binding, source, context)
+        return Python.tuple(result.labels, result.embedding)
     if operation == "family_cfb_se_validate":
         _se_validate(py_fields(model), context)
         return PythonObject(None)
     if operation == "family_cfb_se_knn_affinity":
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
-        return _knn_affinity(py_fields(model), args[0], False, base, context)
+        return _knn_affinity(py_fields(model), source, False, base, context)
     if operation == "family_cfb_coo_triples":
         var base = spectral_umap_route(context, "base", PythonObject("identical"))
         var coo = _coo_triples(args[0], String(py=args[1]), base, context, True)
         return Python.tuple(coo.rows, coo.cols, coo.vals, PythonObject(coo.n))
     if operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform":
-        var routed = Python.tuple(
+        var routed = SpectralRoutePins(
             spectral_umap_route(context, "metrics", PythonObject(None)),
             spectral_umap_route(context, "decomp", PythonObject(None)),
-            spectral_umap_route(context, "base", PythonObject("identical")))
-        _se_fit(model, routed, args[0], context)
+            spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
+        _se_fit(model, routed, source, context)
         if operation == "family_cfb_se_fit":
             return model
         return py_fields(model)["embedding_"]
     if operation == "family_cfb_spectral_embedding":
-        var routed = Python.tuple(args[0],
+        var routed = SpectralRoutePins(
             spectral_umap_route(context, "metrics", PythonObject(None)),
             spectral_umap_route(context, "decomp", PythonObject(None)),
-            spectral_umap_route(context, "base", PythonObject("identical")),
-            args[1], args[2], args[3], args[4], args[5], args[6], args[7])
-        return _spectral_embedding(routed, context)
+            spectral_umap_route(context, "base", PythonObject("identical")), PythonObject(None))
+        return _spectral_embedding(args, routed, context)
     raise Error("RuntimeError: unknown spectral operation " + operation)
 
 
-def cfb_spectral_operation(model: PythonObject, operation: String, var args: PythonObject,
+def cfb_spectral_operation(model: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
     var b = _builtins()
     if py_type(args) is not b.tuple:
         raise Error("TypeError: spectral public arguments require an exact tuple")
     var supplied_binding = PythonObject(None)
+    var source_index = 0
     if operation == "family_cfb_sc_predict" and len(args) == 2:
         # The archive recipe already carries its admitted CPU owner.
         supplied_binding = args[0]
-        args = Python.tuple(args[1])
+        source_index = 1
     var clustering = operation.startswith("family_cfb_sc_")
     if model is None:
-        return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding)
+        return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding, PythonObject(None))
     var fitting = operation == "family_cfb_sc_fit" or operation == "family_cfb_sc_fit_predict" or operation == "family_cfb_se_fit" or operation == "family_cfb_se_fit_transform"
     var fields = spectral_admit(model, clustering, fitting, context)
     if operation == "family_cfb_se_validate":
         for name in ["_n_components", "_n_neighbors", "_seed", "_gamma"]:  # small-loop(private validation output fields)
             if py_contains(fields, name):
                 native_release_admit(fields[name], context)
-        return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding)
+        return _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding, PythonObject(None))
     var method = String("fit_predict") if operation.endswith("_fit_predict") else (String("fit_transform") if operation.endswith("_fit_transform") else (String("fit") if fitting else String("predict")))
     var public_prediction = operation == "family_cfb_sc_predict"
     if public_prediction:
         classical_require_fitted(model, False, method, context)
     if operation == "family_cfb_se_knn_affinity" and py_contains(fields, "affinity_matrix_"):
         native_release_admit(fields["affinity_matrix_"], context)
-    var source = args[0]
+    var source = args[source_index]
     var name = classical_estimator_name(model)
     var prepared = spectral_input(source, name, context)
     var rows = Int(py=prepared.shape[0])
@@ -1150,7 +1147,7 @@ def cfb_spectral_operation(model: PythonObject, operation: String, var args: Pyt
     var outside = estimator_outside()
     var result = PythonObject(None)
     try:
-        result = _cfb_spectral_algorithm_operation(model, operation, Python.tuple(prepared), context, supplied_binding)
+        result = _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding, prepared)
     except error:
         var refusal = _refusal(error, fitting, depth > 0, rows, columns, name)
         raise refusal^
