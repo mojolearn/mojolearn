@@ -17,8 +17,8 @@ from bindings.sequential_admission import _one_of
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from std.python._cpython import GILReleased
-from core.native_descriptor_call import native_descriptor_call
-from core.xseq_entry_table import XseqEntryKey, xseq_glue_entry
+from core.entry_table import EntryRef, entry_ref_call
+from core.xseq_entry_table import XseqEntryKey, xseq_glue_ref
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
@@ -71,23 +71,23 @@ def _xseq_key_of(mode: PythonObject, context: PythonObject) raises -> XseqEntryK
     return XseqEntryKey(code, Int(py=key[1]))
 
 
-def xseq_key(fields: PythonObject, context: PythonObject) raises -> XseqEntryKey:
-    """The sequence-table key of the model's mode (lane calltable-xseq): the
-    forecaster operations run through that image's published glue entry
-    (`xseq_glue`), not through Python entries."""
-    return _xseq_key_of(xseq_mode(fields, context), context)
+def xseq_key(fields: PythonObject, context: PythonObject) raises -> EntryRef:
+    """The glue entry of the model's mode, resolved once per operation (lane
+    entry-table-zero-alloc; the table refusals raise here): the forecaster
+    operations run through that image's published glue entry (`xseq_glue`),
+    not through Python entries."""
+    return xseq_glue_ref(_xseq_key_of(xseq_mode(fields, context), context))
 
 
-def xseq_glue(key: XseqEntryKey, operation: Int, addresses: List[Int], ints: List[Int],
+def xseq_glue(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
               floats: List[Float64]) raises -> Int:
     """One synchronous call of the image's glue entry
     (core/xseq_entry_table.mojo layouts) with the GIL released. The caller
     keeps every addressed buffer alive."""
-    var entry = xseq_glue_entry(key)
     var result = 0
     var py = Python()
     with GILReleased(py):
-        result = native_descriptor_call(entry, operation, addresses, ints, floats)
+        result = entry_ref_call(entry, operation, addresses, ints, floats)
     return result
 
 

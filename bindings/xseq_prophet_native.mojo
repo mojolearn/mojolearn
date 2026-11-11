@@ -5,8 +5,9 @@ from std.math import floor
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xseq_native_common import xseq_key, xseq_glue, xseq_base, xseq_addr, xseq_column_i64, xseq_copy
+from core.entry_table import EntryRef
 from core.xseq_entry_table import (
-    XseqEntryKey, XS_PROPHET_DAYS, XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT,
+    XS_PROPHET_DAYS, XS_PROPHET_FEATURES, XS_PROPHET_CHANGEPOINTS, XS_PROPHET_FIT, XS_PROPHET_PREDICT,
     XS_PROPHET_PREDICT_DAYS,
 )
 from bindings.native_loaded_module import native_loaded_module
@@ -83,7 +84,7 @@ def _contig(value: PythonObject, dtype: PythonObject, context: PythonObject) rai
     return prophet_contiguous(prophet_source(value, context), dtype is context["float64"], context)
 
 
-def _days(source: PythonObject, key: XseqEntryKey, context: PythonObject) raises -> PythonObject:
+def _days(source: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
     """`_days(t, mode)`: (days float64 (N,), info [status, span, least
     spacing]), converted and checked by `prophet_days`."""
     var t = prophet_source(source, context)
@@ -122,7 +123,7 @@ def _periods(fields: PythonObject, context: PythonObject) raises -> PythonObject
     return _contig(periods, context["float64"], context)
 
 
-def _features(fields: PythonObject, days: PythonObject, key: XseqEntryKey, context: PythonObject) raises -> PythonObject:
+def _features(fields: PythonObject, days: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
     """`_features(days)`: (t scaled float32 (N,), frac float32 (N, max(ns, 1)))."""
     var rows = _seasonal_rows(fields)
     var periods_a = _periods(fields, context)
