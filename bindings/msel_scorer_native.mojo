@@ -345,6 +345,7 @@ struct MselMetricPrepared(Movable):
             # SetItem steals the new reference, including on failure.
             if cpy.PyTuple_SetItem(envelope._obj_ptr, i, cpy.Py_NewRef(value._obj_ptr)) != 0:
                 raise cpy.unsafe_get_error()
+        # call-table: member metric (x_metrics door over Python arrays) has no native entry yet
         return family_call(entry, PythonObject(None), self.operation, envelope, self.metric_context)
 
 

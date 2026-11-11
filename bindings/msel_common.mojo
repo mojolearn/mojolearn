@@ -979,6 +979,7 @@ def msel_shuffle_sizes(n: Int, test_size_in: PythonObject, train_size: PythonObj
 def msel_resident_op(res: PythonObject, op: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """One `_Resident` lifecycle operation through its compiled door
     (bindings/arena_resident_native.mojo), as the Python methods call it."""
+    # call-table: member resident rows (arena_resident_native door over the Python _Resident) has no native entry yet
     return family_call(context["family_msel_resident_call"], res, PythonObject(op), args,
                        context["family_msel_resident_context"])
 

@@ -292,6 +292,7 @@ def _arena_rows_call(obj: PythonObject, op: String, args: PythonObject, context:
     var entry = context["family_msel_rows_entry"]
     if py_type(entry) is not py_type(msel_b().len):
         raise Error("ImportError: native cross-validation resident-row binding is unavailable")
+    # call-table: member DeviceRows (arena rows door over the Python owner) has no native entry yet
     return family_call(entry, obj, PythonObject(op), args, context["family_msel_rows_context"])
 
 
