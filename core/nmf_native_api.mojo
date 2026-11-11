@@ -17,6 +17,12 @@ comptime NMF_CAP_INVERSE = 2
 
 
 @fieldwise_init
+struct NMFOptions(Copyable, Movable):
+    var beta: Float64
+    var solver: Int
+
+
+@fieldwise_init
 struct NMFRegularization(Copyable, Movable):
     var l1w: Float64
     var l1h: Float64
