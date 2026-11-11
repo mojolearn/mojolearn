@@ -21,18 +21,21 @@ from core.scaler_fit_impl import scaler_cast
 from core.host_tree_impl import host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64, host_tree_widen, host_tree_argmax, host_tree_column_copy
 from core.sha256 import Sha256
 from core.host_entry_table import HostEntryKey, FH_RF_PREDICT_PROBA, FH_RF_PREDICT_REG, FH_ET_PREDICT
-from core.host_entry_table_calls import fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict, fh_gbdt_sigmoid_pair
+from core.entry_table import EntryRef
+from core.host_entry_table_calls import fh_ref, fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict, fh_gbdt_sigmoid_pair
 
 
-def host_tree_key(context: PythonObject) raises -> HostEntryKey:
-    """The host entry table key of the forest host image connected at import
+def host_tree_key(context: PythonObject) raises -> EntryRef:
+    """The resolved host entry (lane entry-table-zero-alloc: resolved here
+    once per operation, the table refusals raise here) of the forest host
+    image connected at import
     (the archive bridge records it as `host_tree_native_key`): the CPU tree
     operations run through that image's published native entry
     (core/host_entry_table_calls.mojo), not through its Python exports."""
     var key = py_get(context, "host_tree_native_key")
     if key is None:
         raise Error("ImportError: the CPU tree binding publishes no native entry table")
-    return HostEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return fh_ref(HostEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def host_tree_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
