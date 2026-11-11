@@ -32,7 +32,8 @@ still moves the row index and the flag plane one element per thread.
 
 from gbdt.gpu_data.gpu_structures import CFeature
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
@@ -117,7 +118,7 @@ def dw2_flags_count_kernel[GUARD: Bool = False](
             var f4 = SIMD[DType.uint8, 4](0)
             comptime for e in range(4):
                 var feature_val = (
-                    ldg(compressed_index + (f_offset + Int(idx4[e]))) & mask
+                    (compressed_index + (f_offset + Int(idx4[e]))).unsafe_load[invariant=True]() & mask
                 )
                 var goes_right = (
                     feature_val == value
@@ -133,7 +134,7 @@ def dw2_flags_count_kernel[GUARD: Bool = False](
                 if j >= offset and j < end:
                     var load_index = Int(row_index.unsafe_load(j))
                     var feature_val = (
-                        ldg(compressed_index + (f_offset + load_index)) & mask
+                        (compressed_index + (f_offset + load_index)).unsafe_load[invariant=True]() & mask
                     )
                     var goes_right = (
                         feature_val == value

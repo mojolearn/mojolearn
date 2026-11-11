@@ -249,7 +249,8 @@ from core.device_zero import enqueue_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.math import copysign
 
 # DEVIATION 258 (row 10 sqrt on NVIDIA; row 12 log): both seam calls are
@@ -732,10 +733,10 @@ def find_optimal_split_solar_kernel[
                 var test_off = Int(
                     helper.data_partition_offset(UInt32(leaf), UInt32(fold + 1))
                 )
-                var part_learn_weight = ldg(parts.unsafe_offset(3 * learn_off + 0))
-                var part_learn_sum = ldg(parts.unsafe_offset(3 * learn_off + 1))
-                var part_test_weight = ldg(parts.unsafe_offset(3 * test_off + 0))
-                var part_test_sum = ldg(parts.unsafe_offset(3 * test_off + 1))
+                var part_learn_weight = parts.unsafe_offset(3 * learn_off + 0).unsafe_load[invariant=True]()
+                var part_learn_sum = parts.unsafe_offset(3 * learn_off + 1).unsafe_load[invariant=True]()
+                var part_test_weight = parts.unsafe_offset(3 * test_off + 0).unsafe_load[invariant=True]()
+                var part_test_sum = parts.unsafe_offset(3 * test_off + 1).unsafe_load[invariant=True]()
 
                 var h_learn = (
                     bin_feature_count
@@ -809,10 +810,10 @@ def find_optimal_split_solar_kernel[
         # `:117-120`
         var feature_id = Int(bf.unsafe_load(3 * b))
         # `score * cat_w - before` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
-        var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
-        var gain = fma(score, cat_w, -score_before_split) * ldg(
+        var cat_w = cat_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()
+        var gain = fma(score, cat_w, -score_before_split) * (
             bin_features_weights.unsafe_offset(feature_id)
-        )
+        ).unsafe_load[invariant=True]()
         score *= cat_w
 
         if gain < best_gain:
@@ -927,8 +928,8 @@ def find_optimal_split_single_fold_kernel[
             var part_off = Int(
                 helper.data_partition_offset(UInt32(leaf), UInt32(0))
             )
-            var part_weight = ldg(parts.unsafe_offset(3 * part_off + 0))
-            var part_sum = ldg(parts.unsafe_offset(3 * part_off + 1))
+            var part_weight = parts.unsafe_offset(3 * part_off + 0).unsafe_load[invariant=True]()
+            var part_sum = parts.unsafe_offset(3 * part_off + 1).unsafe_load[invariant=True]()
 
             var weight_left = Float32(0.0)
             var sum_left = Float32(0.0)
@@ -959,10 +960,10 @@ def find_optimal_split_single_fold_kernel[
 
         var feature_id = Int(bf.unsafe_load(3 * b))
         # `score * cat_w - before` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
-        var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
+        var cat_w = cat_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()
         var gain = fma(score, cat_w, -score_before_split)
         score *= cat_w
-        gain *= ldg(bin_features_weights.unsafe_offset(feature_id))
+        gain *= bin_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()
 
         if gain < best_gain:
             best_score = score
@@ -1101,10 +1102,10 @@ def find_optimal_split_cosine_kernel[
                     var test_off = Int(
                         helper.data_partition_offset(UInt32(leaf), UInt32(fold + 1))
                     )
-                    v_plw = ldg(parts.unsafe_offset(3 * learn_off + 0))
-                    v_pls = ldg(parts.unsafe_offset(3 * learn_off + 1))
-                    v_ptw = ldg(parts.unsafe_offset(3 * test_off + 0))
-                    v_pts = ldg(parts.unsafe_offset(3 * test_off + 1))
+                    v_plw = parts.unsafe_offset(3 * learn_off + 0).unsafe_load[invariant=True]()
+                    v_pls = parts.unsafe_offset(3 * learn_off + 1).unsafe_load[invariant=True]()
+                    v_ptw = parts.unsafe_offset(3 * test_off + 0).unsafe_load[invariant=True]()
+                    v_pts = parts.unsafe_offset(3 * test_off + 1).unsafe_load[invariant=True]()
                     var h_learn = (
                         bin_feature_count
                         * Int(helper.histogram_offset(UInt32(leaf), UInt32(fold)))
@@ -1172,7 +1173,7 @@ def find_optimal_split_cosine_kernel[
             score = FLOAT32_MAX
 
         var feature_id = Int(bf.unsafe_load(3 * b))
-        score *= ldg(cat_features_weights.unsafe_offset(feature_id))
+        score *= cat_features_weights.unsafe_offset(feature_id).unsafe_load[invariant=True]()
 
         var noisy_score = score
         if score_std_dev != Float32(0.0):
@@ -1185,9 +1186,9 @@ def find_optimal_split_cosine_kernel[
             # the first default configuration to reach this line
             noisy_score = identical_mul_add(draw[0], score_std_dev, noisy_score)
 
-        var gain = (noisy_score - score_before_split) * ldg(
+        var gain = (noisy_score - score_before_split) * (
             bin_features_weights.unsafe_offset(feature_id)
-        )
+        ).unsafe_load[invariant=True]()
         if gain < best_gain:
             best_score = noisy_score
             best_gain = gain
@@ -1384,7 +1385,7 @@ def gather_histograms_by_leaves_kernel[
                     helper.histogram_offset(UInt32(leaf_id), UInt32(fold_id))
                 )
             ) * hist_count + hist_id
-            leaf_vals[hist_id] = ldg(histogram.unsafe_offset(src))
+            leaf_vals[hist_id] = histogram.unsafe_offset(src).unsafe_load[invariant=True]()
 
         comptime for hist_id2 in range(hist_count):
             var idx = (

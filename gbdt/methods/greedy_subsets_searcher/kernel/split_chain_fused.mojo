@@ -38,7 +38,8 @@ schedule change against the FAST path it replaces.
 from gbdt.gpu_data.gpu_structures import CFeature
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_tree_experiments import AFT_N05
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import bitcast
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -88,9 +89,9 @@ def fused_flags_count_kernel[GUARD: Bool = False](
         var i = chunk * FUSED_CHAIN_BLOCK + tid
         var v = Int32(0)
         if i < size:
-            var load_index = Int(ldg(row_index + (offset + i)))
+            var load_index = Int((row_index + (offset + i)).unsafe_load[invariant=True]())
             var feature_val = (
-                ldg(compressed_index + (f_offset + load_index)) & mask
+                (compressed_index + (f_offset + load_index)).unsafe_load[invariant=True]() & mask
             )
             var goes_right = (
                 feature_val == value
@@ -264,7 +265,7 @@ def fused_place_scatter_kernel[GUARD: Bool = False](
             else:
                 dst = n_zeros + ones_before + rank_one
             temp_index.unsafe_store(
-                offset + dst, ldg(row_index + (offset + i))
+                offset + dst, (row_index + (offset + i)).unsafe_load[invariant=True]()
             )
         barrier()
         chunk += Int(grid_dim.x)
@@ -290,7 +291,7 @@ def fused_copy_back_kernel[GUARD: Bool = False](
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while i < size:
-        row_index.unsafe_store(offset + i, ldg(temp_index + (offset + i)))
+        row_index.unsafe_store(offset + i, (temp_index + (offset + i)).unsafe_load[invariant=True]())
         i += stride
 
 

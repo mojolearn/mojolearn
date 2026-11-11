@@ -41,7 +41,8 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 
 from std.atomic import Atomic, Ordering
 from max.gpu import block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -156,7 +157,7 @@ def hist2_8bit_wide_kernel[
         var pos = p_offset + i
         var row = pos
         comptime if gather:
-            row = Int(ldg(indices + pos))
+            row = Int((indices + pos).unsafe_load[invariant=True]())
         var u = hist2_dither(pos)
         var q = SIMD[DType.int32, ns](0)
         comptime for s in range(ns):
@@ -168,13 +169,13 @@ def hist2_8bit_wide_kernel[
                 comptime if ridx_stats:
                     sp = row
                 qs = hist2_quantize(
-                    ldg(stats + (st * stat_line_size + sp)), fixed_scale, u
+                    (stats + (st * stat_line_size + sp)).unsafe_load[invariant=True](), fixed_scale, u
                 )
             q[s] = qs
         comptime for c in range(fg):
             var col = gb * fg + c
             if col < columns:
-                var ci = ldg(cbase + (bins_line_size * col + row))
+                var ci = (cbase + (bins_line_size * col + row)).unsafe_load[invariant=True]()
                 comptime for k in range(4):
                     # rotate the feature by lane, as the fused kernel does,
                     # to spread a warp's atomics over banks

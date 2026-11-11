@@ -115,7 +115,8 @@ depth. The same contract every shared-Int32 arm in this package rides on.
 
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -192,10 +193,10 @@ def quantize_pair_kernel[ridx_stats: Bool = False](
             # pair the permuted plane would have held here and the
             # positional load in `qh_hist_gather_kernel` stays correct
             # unchanged.
-            src = Int(ldg(indices + pos))
-        var q1 = hist2_quantize(ldg(stats + src), fixed_scale, u)
+            src = Int((indices + pos).unsafe_load[invariant=True]())
+        var q1 = hist2_quantize((stats + src).unsafe_load[invariant=True](), fixed_scale, u)
         var q2 = hist2_quantize(
-            ldg(stats + (stat_line_size + src)), fixed_scale, u
+            (stats + (stat_line_size + src)).unsafe_load[invariant=True](), fixed_scale, u
         )
         var pair = SIMD[DType.int32, 2](q1, q2)
         q_stats.unsafe_store(pos, bitcast[DType.uint64, 1](pair)[0])
@@ -224,7 +225,7 @@ def qh_add_row(
     never reads -- `bin < folds` bounds every flush, the ladder's own drop.
     """
     for w in range(words):
-        var ci = ldg(bins_p + (w * bins_line_size + row))
+        var ci = (bins_p + (w * bins_line_size + row)).unsafe_load[invariant=True]()
         comptime for i in range(4):
             var j = (tid + i) & 3
             var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
@@ -360,7 +361,7 @@ def qh_hist_kernel(
     var stride = active_block_count * QH_BLOCK
     var pend = p_offset + p_size
     while pos < pend:
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+        var pair = bitcast[DType.int32, 2]((q_stats + pos).unsafe_load[invariant=True]())
         qh_add_row(pair, words, pos, bins_line_size, bins_p, tid, smem)
         pos += stride
 
@@ -438,8 +439,8 @@ def qh_hist_gather_kernel(
     var stride = active_block_count * QH_BLOCK
     var pend = p_offset + p_size
     while pos < pend:
-        var row = Int(ldg(indices + pos))
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+        var row = Int((indices + pos).unsafe_load[invariant=True]())
+        var pair = bitcast[DType.int32, 2]((q_stats + pos).unsafe_load[invariant=True]())
         qh_add_row(pair, words, row, bins_line_size, bins_p, tid, smem)
         pos += stride
 
@@ -533,7 +534,7 @@ def qh_add_row_skip(
     per thread so the index stays comptime (registers, no local array)."""
     comptime for w in range(QH_GROUP_WORDS):
         if w < words:
-            var ci = ldg(bins_p + (w * bins_line_size + row))
+            var ci = (bins_p + (w * bins_line_size + row)).unsafe_load[invariant=True]()
             comptime for i in range(4):
                 var j = (tid + i) & 3
                 var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
@@ -628,8 +629,8 @@ def qh_hist_skip_kernel[gather: Bool](
     while pos < pend:
         var row = pos
         comptime if gather:
-            row = Int(ldg(indices + pos))
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+            row = Int((indices + pos).unsafe_load[invariant=True]())
+        var pair = bitcast[DType.int32, 2]((q_stats + pos).unsafe_load[invariant=True]())
         tot += pair
         qh_add_row_skip(
             pair, words, row, bins_line_size, bins_p, rot_skip, smem, tid

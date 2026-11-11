@@ -37,7 +37,8 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     update_partitions_after_split_kernel,
     update_partitions_and_plan_kernel,
@@ -80,10 +81,10 @@ def update_partitions_and_plan_inverted_kernel(
     while i <= part_sz:
         var flag0 = 1
         if i < part_sz:
-            flag0 = Int(ldg(sorted_flags + (offset + i)))
+            flag0 = Int((sorted_flags + (offset + i)).unsafe_load[invariant=True]())
         var flag1 = 0
         if i != 0:
-            flag1 = Int(ldg(sorted_flags + (offset + i - 1)))
+            flag1 = Int((sorted_flags + (offset + i - 1)).unsafe_load[invariant=True]())
 
         if flag0 != flag1:
             part_size.unsafe_store(left_leaf, UInt32(i))

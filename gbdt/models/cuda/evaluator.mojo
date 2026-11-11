@@ -99,7 +99,8 @@ from checks.kernel_matrix import (
     quantize_search_for,
 )
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -159,7 +160,7 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
         address_space = AddressSpace.SHARED,
     ]()
     if tid < border_count:
-        borders_local[tid] = ldg(borders + (border_base + tid))
+        borders_local[tid] = (borders + (border_base + tid)).unsafe_load[invariant=True]()
     barrier()
 
     var f = Array[Float32, EVAL_OBJECTS_PER_THREAD](fill=NEG_INFTY)
@@ -167,7 +168,7 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
     comptime for j in range(EVAL_OBJECTS_PER_THREAD):
         var doc = first_doc + j * EVAL_WARP
         if doc < object_count:
-            f[j] = ldg(values + (feature * stride + doc))
+            f[j] = (values + (feature * stride + doc)).unsafe_load[invariant=True]()
 
     var bins = Array[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
 
@@ -271,13 +272,13 @@ def _calc_tree_index[
     comptime if unroll_depth > 0:
 
         comptime for d in range(unroll_depth):
-            var fi = Int(ldg(bin_feature_idx + (split_base + d)))
-            var fv = ldg(bin_feature_val + (split_base + d))
-            var buckets = ldg(quantized + (quant_base + fi))
+            var fi = Int((bin_feature_idx + (split_base + d)).unsafe_load[invariant=True]())
+            var fv = (bin_feature_val + (split_base + d)).unsafe_load[invariant=True]()
+            var buckets = (quantized + (quant_base + fi)).unsafe_load[invariant=True]()
             var xm = UInt32(0)
 
             comptime if need_xor_mask:
-                xm = ldg(bin_feature_xor + (split_base + d))
+                xm = (bin_feature_xor + (split_base + d)).unsafe_load[invariant=True]()
 
             comptime for k in range(EVAL_OBJECTS_PER_THREAD):
                 var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
@@ -285,13 +286,13 @@ def _calc_tree_index[
                     idx[k] += UInt32(1 << d)
     else:
         for d in range(depth):
-            var fi = Int(ldg(bin_feature_idx + (split_base + d)))
-            var fv = ldg(bin_feature_val + (split_base + d))
-            var buckets = ldg(quantized + (quant_base + fi))
+            var fi = Int((bin_feature_idx + (split_base + d)).unsafe_load[invariant=True]())
+            var fv = (bin_feature_val + (split_base + d)).unsafe_load[invariant=True]()
+            var buckets = (quantized + (quant_base + fi)).unsafe_load[invariant=True]()
             var xm = UInt32(0)
 
             comptime if need_xor_mask:
-                xm = ldg(bin_feature_xor + (split_base + d))
+                xm = (bin_feature_xor + (split_base + d)).unsafe_load[invariant=True]()
 
             comptime for k in range(EVAL_OBJECTS_PER_THREAD):
                 var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
@@ -365,11 +366,11 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
     )
 
     if first_tree < last_tree and first_doc < document_count:
-        var split_base = Int(ldg(tree_start_offsets + first_tree))
-        var leaf_base = Int(ldg(first_leaf_offset + first_tree))
+        var split_base = Int((tree_start_offsets + first_tree).unsafe_load[invariant=True]())
+        var leaf_base = Int((first_leaf_offset + first_tree).unsafe_load[invariant=True]())
         var idx = Array[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
         for tree in range(first_tree, last_tree):
-            var depth = Int(ldg(tree_sizes + tree))
+            var depth = Int((tree_sizes + tree).unsafe_load[invariant=True]())
             if depth == 6:
                 _calc_tree_index[6, need_xor_mask](
                     depth, bin_feature_idx, bin_feature_val, bin_feature_xor,
@@ -392,9 +393,9 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
                 )
 
             comptime for k in range(EVAL_OBJECTS_PER_THREAD):
-                local_result[k] += ldg(
+                local_result[k] += (
                     leaf_values + (leaf_base + Int(idx[k]))
-                )
+                ).unsafe_load[invariant=True]()
             split_base += depth
             leaf_base += 1 << depth
 

@@ -86,7 +86,8 @@ DETERMINISTIC run to run, which CatBoost's own float path is not.
 
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 
 from max.gpu.memory import AddressSpace
@@ -712,16 +713,16 @@ def hist2_one_byte_kernel[
         var hq1 = Array[Int32, 1](fill=Int32(0))
         var hq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len and preq:
-            hb[0] = ldg(bins_p + (p_offset + pe))
-            hq1[0] = ldg(qs_p + (p_offset + pe))
-            hq2[0] = ldg(qs_p + (p_offset + pe + stat_line_size))
+            hb[0] = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hq1[0] = (qs_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hq2[0] = (qs_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < head_len and not preq:
             # `Ldg(bins, idx)`, `Ldg(stats, idx)`,
             # `Ldg(stats, idx + statsLineSize)`
             # (`compute_hist_loop_two_stats.cuh:81-83`).
-            hb[0] = ldg(bins_p + (p_offset + pe))
-            hs1[0] = ldg(stats_p + (p_offset + pe))
-            hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
+            hb[0] = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hs1[0] = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hs2[0] = (stats_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
 
             comptime if DT == DType.int32:
                 var u = hist2_dither(p_offset + pe)
@@ -737,15 +738,15 @@ def hist2_one_byte_kernel[
         var tq1 = Array[Int32, 1](fill=Int32(0))
         var tq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len and preq:
-            tb[0] = ldg(bins_p + (tail_start + pe))
-            tq1[0] = ldg(qs_p + (tail_start + pe))
-            tq2[0] = ldg(qs_p + (tail_start + pe + stat_line_size))
+            tb[0] = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            tq1[0] = (qs_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            tq2[0] = (qs_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < tail_len and not preq:
             # `Ldg(bins, tailOffset + idx)` and the two stat loads
             # (`compute_hist_loop_two_stats.cuh:100-102`).
-            tb[0] = ldg(bins_p + (tail_start + pe))
-            ts1[0] = ldg(stats_p + (tail_start + pe))
-            ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
+            tb[0] = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            ts1[0] = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            ts2[0] = (stats_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
 
             comptime if DT == DType.int32:
                 var u = hist2_dither(tail_start + pe)
@@ -811,29 +812,29 @@ def hist2_one_byte_kernel[
         # stride and the same `alignment=4` note as `hist_one_byte.mojo`.
         comptime for k in range(HIST2_UNROLL):
             if active and preq:
-                var wb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var wb = (
                     b_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq1 = (
                     q_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq2 = (
                     q_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
                 comptime for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = wb[e]
                     local_q1[k * HIST2_LOAD_SIZE + e] = wq1[e]
                     local_q2[k * HIST2_LOAD_SIZE + e] = wq2[e]
             elif active:
-                var vb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var vb = (
                     b_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var vs1 = (
                     s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var vs2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var vs2 = (
                     s_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
 
                 comptime for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = vb[e]
@@ -1017,24 +1018,24 @@ def hist2_one_byte_gather_kernel[
         var hq1 = Array[Int32, 1](fill=Int32(0))
         var hq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len and preq:
-            hb[0] = ldg(cindex_p + Int(ldg(indices + (p_offset + pe))))
-            hq1[0] = ldg(qs_p + (p_offset + pe))
-            hq2[0] = ldg(qs_p + (p_offset + pe + stat_line_size))
+            hb[0] = (cindex_p + Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())).unsafe_load[invariant=True]()
+            hq1[0] = (qs_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hq2[0] = (qs_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < head_len and not preq:
             # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, both stat loads
             # (`compute_hist_loop_two_stats.cuh:134-137`).
-            var hrow = Int(ldg(indices + (p_offset + pe)))
-            hb[0] = ldg(cindex_p + hrow)
+            var hrow = Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())
+            hb[0] = (cindex_p + hrow).unsafe_load[invariant=True]()
 
             comptime if ridx_stats:
                 # DEVIATION 1902: stationary planes, both stats ride the
                 # same gathered row id as the bin -- same bits as the
                 # permuted plane held here (`split_points_ridx.mojo`).
-                hs1[0] = ldg(stats_p + hrow)
-                hs2[0] = ldg(stats_p + (hrow + stat_line_size))
+                hs1[0] = (stats_p + hrow).unsafe_load[invariant=True]()
+                hs2[0] = (stats_p + (hrow + stat_line_size)).unsafe_load[invariant=True]()
             else:
-                hs1[0] = ldg(stats_p + (p_offset + pe))
-                hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
+                hs1[0] = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
+                hs2[0] = (stats_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
 
             comptime if DT == DType.int32:
                 var u = hist2_dither(p_offset + pe)
@@ -1050,21 +1051,21 @@ def hist2_one_byte_gather_kernel[
         var tq1 = Array[Int32, 1](fill=Int32(0))
         var tq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len and preq:
-            tb[0] = ldg(cindex_p + Int(ldg(indices + (tail_start + pe))))
-            tq1[0] = ldg(qs_p + (tail_start + pe))
-            tq2[0] = ldg(qs_p + (tail_start + pe + stat_line_size))
+            tb[0] = (cindex_p + Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())).unsafe_load[invariant=True]()
+            tq1[0] = (qs_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            tq2[0] = (qs_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < tail_len and not preq:
             # (`compute_hist_loop_two_stats.cuh:154-157`)
-            var trow = Int(ldg(indices + (tail_start + pe)))
-            tb[0] = ldg(cindex_p + trow)
+            var trow = Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())
+            tb[0] = (cindex_p + trow).unsafe_load[invariant=True]()
 
             comptime if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
-                ts1[0] = ldg(stats_p + trow)
-                ts2[0] = ldg(stats_p + (trow + stat_line_size))
+                ts1[0] = (stats_p + trow).unsafe_load[invariant=True]()
+                ts2[0] = (stats_p + (trow + stat_line_size)).unsafe_load[invariant=True]()
             else:
-                ts1[0] = ldg(stats_p + (tail_start + pe))
-                ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
+                ts1[0] = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
+                ts2[0] = (stats_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
 
             comptime if DT == DType.int32:
                 var u = hist2_dither(tail_start + pe)
@@ -1125,51 +1126,51 @@ def hist2_one_byte_gather_kernel[
         # gathered one at a time, because a gather has no vector form.
         comptime for k in range(HIST2_UNROLL):
             if active and preq:
-                var wi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var wi = (
                     i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq1 = (
                     q_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq2 = (
                     q_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
                 comptime for e in range(HIST2_LOAD_SIZE):
-                    local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
+                    local_bins[k * HIST2_LOAD_SIZE + e] = (
                         cindex_p + Int(wi[e])
-                    )
+                    ).unsafe_load[invariant=True]()
                     local_q1[k * HIST2_LOAD_SIZE + e] = wq1[e]
                     local_q2[k * HIST2_LOAD_SIZE + e] = wq2[e]
             elif active:
-                var vi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var vi = (
                     i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
                 var vs1 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
                 var vs2 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
 
                 comptime if not ridx_stats:
-                    vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    vs1 = (
                         s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                    )
-                    vs2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                    vs2 = (
                         s_ptr
                         + stat_line_size
                         + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                    )
+                    ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
 
                 comptime for e in range(HIST2_LOAD_SIZE):
-                    local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
+                    local_bins[k * HIST2_LOAD_SIZE + e] = (
                         cindex_p + Int(vi[e])
-                    )
+                    ).unsafe_load[invariant=True]()
 
                     comptime if ridx_stats:
                         # DEVIATION 1902: both stats join the bins' scalar
                         # gather through the same loaded row id; the wide
                         # loads above are traded for it.
-                        vs1[e] = ldg(stats_p + Int(vi[e]))
-                        vs2[e] = ldg(
+                        vs1[e] = (stats_p + Int(vi[e])).unsafe_load[invariant=True]()
+                        vs2[e] = (
                             stats_p + (Int(vi[e]) + stat_line_size)
-                        )
+                        ).unsafe_load[invariant=True]()
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
 

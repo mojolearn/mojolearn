@@ -44,7 +44,8 @@ A/B (`SYM_FUSED_LEVEL` in `greedy_search_helper.mojo`).
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
@@ -291,8 +292,8 @@ def sym_resolve_split_count_kernel(
     var max_chunks = Int(max_chunks_in)
     var leaf_slot = Int(block_idx.y)
     var leaf_id = Int(leaf_ids.unsafe_load(leaf_slot))
-    var size = Int(ldg(part_size + leaf_id))
-    var offset = Int(ldg(part_offset + leaf_id))
+    var size = Int((part_size + leaf_id).unsafe_load[invariant=True]())
+    var offset = Int((part_offset + leaf_id).unsafe_load[invariant=True]())
 
     var f_offset = Int(d_off)
     var shift = d_shift
@@ -306,9 +307,9 @@ def sym_resolve_split_count_kernel(
         var at = chunk * PARTITION_BLOCK + tid
         var v = Int32(0)
         if at < size:
-            var load_index = Int(ldg(load_indices + (offset + at)))
+            var load_index = Int((load_indices + (offset + at)).unsafe_load[invariant=True]())
             var feature_val = (
-                ldg(compressed_index + (f_offset + load_index)) & mask
+                (compressed_index + (f_offset + load_index)).unsafe_load[invariant=True]() & mask
             )
             indices.unsafe_store(offset + at, UInt32(at))
             var goes_right = (
@@ -392,10 +393,10 @@ def sym_copy_update_kernel[vec4: Bool](
     while i <= part_sz:
         var flag0 = 1
         if i < part_sz:
-            flag0 = Int(ldg(sorted_flags + (offset + i)))
+            flag0 = Int((sorted_flags + (offset + i)).unsafe_load[invariant=True]())
         var flag1 = 0
         if i != 0:
-            flag1 = Int(ldg(sorted_flags + (offset + i - 1)))
+            flag1 = Int((sorted_flags + (offset + i - 1)).unsafe_load[invariant=True]())
         if flag0 != flag1:
             part_size.unsafe_store(left_leaf, UInt32(i))
             host_offset.unsafe_store(left_leaf, UInt32(offset))

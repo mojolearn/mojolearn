@@ -28,7 +28,8 @@ the caller, which is why a binary feature costs one fold and not two.
 
 from std.atomic import Atomic, Ordering
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -245,8 +246,8 @@ def binary_hist_kernel(
             # `cub::ThreadLoad<cub::LOAD_LDG>` (`kernel_helpers.cuh:180`),
             # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is
             # its Mojo spelling.
-            hb = ldg(bins_p + (p_offset + pe))
-            hs = ldg(stats_p + (p_offset + pe))
+            hb = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hs = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
@@ -254,8 +255,8 @@ def binary_hist_kernel(
         if local_block_idx == 0 and pe < tail_len:
             # `Ldg(bins, tailOffset + idx)` and `Ldg(stats, tailOffset + idx)`
             # (`compute_hist_loop_one_stat.cuh:98-99`).
-            tb = ldg(bins_p + (tail_start + pe))
-            ts = ldg(stats_p + (tail_start + pe))
+            tb = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            ts = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -335,12 +336,12 @@ def binary_hist_kernel(
                 # is `n_rows` (`greedy_search_helper.mojo`), so a column base
                 # is not 4-element aligned in general and the width-4 load
                 # keeps the element alignment the plain load already assumed.
-                var vb = ldg[width=LOAD_SIZE, alignment=4](
+                var vb = (
                     b_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
-                var vs = ldg[width=LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
+                var vs = (
                     s_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
+                ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
 
                 comptime for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = vb[e]
@@ -713,16 +714,16 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
             # (`compute_hist_loop_one_stat.cuh:130-132`). All three streams
             # are read-only for the kernel's lifetime, which is what `Ldg`
             # declares.
-            var hrow = Int(ldg(indices + (p_offset + pe)))
-            hb = ldg(cindex_p + hrow)
+            var hrow = Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())
+            hb = (cindex_p + hrow).unsafe_load[invariant=True]()
 
             comptime if ridx_stats:
                 # DEVIATION 1902: the stat plane is stationary and the
                 # stat rides the SAME gathered row id as the bin
                 # (`split_points_ridx.mojo`'s invariant).
-                hs = ldg(stats_p + hrow)
+                hs = (stats_p + hrow).unsafe_load[invariant=True]()
             else:
-                hs = ldg(stats_p + (p_offset + pe))
+                hs = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
@@ -731,14 +732,14 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
             # `Ldg(indices, tailOffset + idx)`, `Ldg(cindex, loadIdx)`,
             # `Ldg(stats, tailOffset + idx)`
             # (`compute_hist_loop_one_stat.cuh:149-151`).
-            var trow = Int(ldg(indices + (tail_start + pe)))
-            tb = ldg(cindex_p + trow)
+            var trow = Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())
+            tb = (cindex_p + trow).unsafe_load[invariant=True]()
 
             comptime if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
-                ts = ldg(stats_p + trow)
+                ts = (stats_p + trow).unsafe_load[invariant=True]()
             else:
-                ts = ldg(stats_p + (tail_start + pe))
+                ts = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -821,15 +822,15 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                 # is `n_rows` (`greedy_search_helper.mojo`), so a column base
                 # is not 4-element aligned in general and the width-4 load
                 # keeps the element alignment the plain load already assumed.
-                var vi = ldg[width=LOAD_SIZE, alignment=4](
+                var vi = (
                     i_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
+                ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
                 var vs = SIMD[DType.float32, LOAD_SIZE](0.0)
 
                 comptime if not ridx_stats:
-                    vs = ldg[width=LOAD_SIZE, alignment=4](
+                    vs = (
                         s_ptr + LANE_WIDTH * LOAD_SIZE * k
-                    )
+                    ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
 
                 comptime for e in range(LOAD_SIZE):
                     # THE GATHER: position -> row -> bin.
@@ -837,15 +838,15 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
                     # its y, z, w twins
                     # (`compute_hist_loop_one_stat.cuh:415-418`). Scalar,
                     # because a gather has no vector form.
-                    local_bins[k * LOAD_SIZE + e] = ldg(
+                    local_bins[k * LOAD_SIZE + e] = (
                         cindex_p + Int(vi[e])
-                    )
+                    ).unsafe_load[invariant=True]()
 
                     comptime if ridx_stats:
                         # DEVIATION 1902: the stat joins the bins' scalar
                         # gather through the same loaded row id; the wide
                         # load above is traded for it.
-                        vs[e] = ldg(stats_p + Int(vi[e]))
+                        vs[e] = (stats_p + Int(vi[e])).unsafe_load[invariant=True]()
                     local_stats[k * LOAD_SIZE + e] = vs[e]
             else:
                 # No row: contribute zero. The slot it lands in is harmless

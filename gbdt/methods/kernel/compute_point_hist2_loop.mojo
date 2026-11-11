@@ -65,7 +65,8 @@ this file.
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (
@@ -259,10 +260,10 @@ def _peel[
         var wt = Float32(0.0)
         var row = UInt32(0)
         if col < span and col < valid:
-            row = ldg(indices.unsafe_offset(at + col))
-            ci = ldg(cindex.unsafe_offset(Int(row)))
-            w = ldg(weight.unsafe_offset(at + col))
-            wt = ldg(target.unsafe_offset(at + col))
+            row = indices.unsafe_offset(at + col).unsafe_load[invariant=True]()
+            ci = cindex.unsafe_offset(Int(row)).unsafe_load[invariant=True]()
+            w = weight.unsafe_offset(at + col).unsafe_load[invariant=True]()
+            wt = target.unsafe_offset(at + col).unsafe_load[invariant=True]()
         hist.add_point(ci, wt, w, _hist_doc_key(row,dither_ids))
         col += col_step
 
@@ -311,10 +312,10 @@ def compute_histogram[
         var w = Float32(0.0)
         var wt = Float32(0.0)
         if i < last_id:
-            index = ldg(indices.unsafe_offset(base + i))
-            ci = ldg(cindex.unsafe_offset(Int(index)))
-            w = ldg(weight.unsafe_offset(base + i))
-            wt = ldg(target.unsafe_offset(base + i))
+            index = indices.unsafe_offset(base + i).unsafe_load[invariant=True]()
+            ci = cindex.unsafe_offset(Int(index)).unsafe_load[invariant=True]()
+            w = weight.unsafe_offset(base + i).unsafe_load[invariant=True]()
+            wt = target.unsafe_offset(base + i).unsafe_load[invariant=True]()
         # UNCONDITIONAL, exactly as theirs is: a thread outside the head
         # still calls AddPoint, with a zero bin and zero stats. Guarding it
         # would drop a barrier that the accumulators take inside AddPoint.
@@ -333,10 +334,10 @@ def compute_histogram[
             var w = Float32(0.0)
             var wt = Float32(0.0)
             if i < unaligned_tail:
-                index = ldg(indices.unsafe_offset(base + tail_offset + i))
-                ci = ldg(cindex.unsafe_offset(Int(index)))
-                w = ldg(weight.unsafe_offset(base + tail_offset + i))
-                wt = ldg(target.unsafe_offset(base + tail_offset + i))
+                index = indices.unsafe_offset(base + tail_offset + i).unsafe_load[invariant=True]()
+                ci = cindex.unsafe_offset(Int(index)).unsafe_load[invariant=True]()
+                w = weight.unsafe_offset(base + tail_offset + i).unsafe_load[invariant=True]()
+                wt = target.unsafe_offset(base + tail_offset + i).unsafe_load[invariant=True]()
             hist.add_point(ci, wt, w, _hist_doc_key(index,dither_ids))
     ds_size -= unaligned_tail
 
@@ -409,16 +410,16 @@ def compute_histogram[
                 var v_w = Float32(0)
                 var v_wt = Float32(0)
                 if done + k < own_iters:
-                    v_row = ldg(
+                    v_row = (
                         indices.unsafe_offset(cur + stripe * k)
-                    )
-                    v_ci = ldg(cindex.unsafe_offset(Int(v_row)))
-                    v_w = ldg(
+                    ).unsafe_load[invariant=True]()
+                    v_ci = cindex.unsafe_offset(Int(v_row)).unsafe_load[invariant=True]()
+                    v_w = (
                         weight.unsafe_offset(cur + stripe * k)
-                    )
-                    v_wt = ldg(
+                    ).unsafe_load[invariant=True]()
+                    v_wt = (
                         target.unsafe_offset(cur + stripe * k)
-                    )
+                    ).unsafe_load[invariant=True]()
                 local_row[k] = v_row
                 local_ci[k] = v_ci
                 local_w[k] = v_w
@@ -438,10 +439,10 @@ def compute_histogram[
             var wt = Float32(0.0)
             var index = UInt32(0)
             if done < own_iters:
-                index = ldg(indices.unsafe_offset(cur))
-                ci = ldg(cindex.unsafe_offset(Int(index)))
-                w = ldg(weight.unsafe_offset(cur))
-                wt = ldg(target.unsafe_offset(cur))
+                index = indices.unsafe_offset(cur).unsafe_load[invariant=True]()
+                ci = cindex.unsafe_offset(Int(index)).unsafe_load[invariant=True]()
+                w = weight.unsafe_offset(cur).unsafe_load[invariant=True]()
+                wt = target.unsafe_offset(cur).unsafe_load[invariant=True]()
             cur += stripe
             done += 1
             hist.add_point(ci, wt, w, _hist_doc_key(index,dither_ids))
@@ -542,20 +543,20 @@ def compute_histogram_2[
             var li = SIMD[DType.uint32, 2](0)
             if j < own_iters:
                 li = SIMD[DType.uint32, 2](
-                    ldg(indices.unsafe_offset(cur)),
-                    ldg(indices.unsafe_offset(cur + 1)),
+                    indices.unsafe_offset(cur).unsafe_load[invariant=True](),
+                    indices.unsafe_offset(cur + 1).unsafe_load[invariant=True](),
                 )
                 bins = SIMD[DType.uint32, 2](
-                    ldg(cindex.unsafe_offset(Int(li[0]))),
-                    ldg(cindex.unsafe_offset(Int(li[1]))),
+                    cindex.unsafe_offset(Int(li[0])).unsafe_load[invariant=True](),
+                    cindex.unsafe_offset(Int(li[1])).unsafe_load[invariant=True](),
                 )
                 lt = SIMD[DType.float32, 2](
-                    ldg(target.unsafe_offset(cur)),
-                    ldg(target.unsafe_offset(cur + 1)),
+                    target.unsafe_offset(cur).unsafe_load[invariant=True](),
+                    target.unsafe_offset(cur + 1).unsafe_load[invariant=True](),
                 )
                 lw = SIMD[DType.float32, 2](
-                    ldg(weight.unsafe_offset(cur)),
-                    ldg(weight.unsafe_offset(cur + 1)),
+                    weight.unsafe_offset(cur).unsafe_load[invariant=True](),
+                    weight.unsafe_offset(cur + 1).unsafe_load[invariant=True](),
                 )
             cur += stripe
             hist.add_point_2(bins, lt, lw, _hist_doc_keys[2](li,dither_ids))
@@ -658,28 +659,28 @@ def compute_histogram_4[
             var li = SIMD[DType.uint32, 4](0)
             if j < own_iters:
                 li = SIMD[DType.uint32, 4](
-                    ldg(indices.unsafe_offset(cur)),
-                    ldg(indices.unsafe_offset(cur + 1)),
-                    ldg(indices.unsafe_offset(cur + 2)),
-                    ldg(indices.unsafe_offset(cur + 3)),
+                    indices.unsafe_offset(cur).unsafe_load[invariant=True](),
+                    indices.unsafe_offset(cur + 1).unsafe_load[invariant=True](),
+                    indices.unsafe_offset(cur + 2).unsafe_load[invariant=True](),
+                    indices.unsafe_offset(cur + 3).unsafe_load[invariant=True](),
                 )
                 bins = SIMD[DType.uint32, 4](
-                    ldg(cindex.unsafe_offset(Int(li[0]))),
-                    ldg(cindex.unsafe_offset(Int(li[1]))),
-                    ldg(cindex.unsafe_offset(Int(li[2]))),
-                    ldg(cindex.unsafe_offset(Int(li[3]))),
+                    cindex.unsafe_offset(Int(li[0])).unsafe_load[invariant=True](),
+                    cindex.unsafe_offset(Int(li[1])).unsafe_load[invariant=True](),
+                    cindex.unsafe_offset(Int(li[2])).unsafe_load[invariant=True](),
+                    cindex.unsafe_offset(Int(li[3])).unsafe_load[invariant=True](),
                 )
                 lt = SIMD[DType.float32, 4](
-                    ldg(target.unsafe_offset(cur)),
-                    ldg(target.unsafe_offset(cur + 1)),
-                    ldg(target.unsafe_offset(cur + 2)),
-                    ldg(target.unsafe_offset(cur + 3)),
+                    target.unsafe_offset(cur).unsafe_load[invariant=True](),
+                    target.unsafe_offset(cur + 1).unsafe_load[invariant=True](),
+                    target.unsafe_offset(cur + 2).unsafe_load[invariant=True](),
+                    target.unsafe_offset(cur + 3).unsafe_load[invariant=True](),
                 )
                 lw = SIMD[DType.float32, 4](
-                    ldg(weight.unsafe_offset(cur)),
-                    ldg(weight.unsafe_offset(cur + 1)),
-                    ldg(weight.unsafe_offset(cur + 2)),
-                    ldg(weight.unsafe_offset(cur + 3)),
+                    weight.unsafe_offset(cur).unsafe_load[invariant=True](),
+                    weight.unsafe_offset(cur + 1).unsafe_load[invariant=True](),
+                    weight.unsafe_offset(cur + 2).unsafe_load[invariant=True](),
+                    weight.unsafe_offset(cur + 3).unsafe_load[invariant=True](),
                 )
             cur += stripe
             hist.add_point_4(bins, lt, lw, _hist_doc_keys[4](li,dither_ids))
