@@ -10,9 +10,13 @@ from bindings.xcnn_common import (
     xcnn_builtins, xcnn_tensor, xcnn_tensor_slot, xcnn_tensor_set, xcnn_tensor_admit,
     xcnn_shape, xcnn_size, xcnn_tuple, xcnn_new, xcnn_out_new, xcnn_wrap,
     xcnn_host_of, xcnn_f32, xcnn_entries, xcnn_module_entries, xcnn_device_io_off,
-    xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw, xcnn_call,
+    xcnn_is_t, xcnn_reshape_t, xcnn_tensor_layout, _xcnn_set_raw, _xcnn_slot_raw, xcnn_key,
 )
-from core.xcnn_entry_table import XC_RES_FREE
+from std.python._cpython import GILReleased
+from x_cnn.tensor_run import (
+    xcnn_tensor_run_check_dim, xcnn_tensor_run_check_handle, xcnn_tensor_run_handle_live,
+    xcnn_tensor_run_reshape_dims, xcnn_tensor_run_free,
+)
 
 
 def _shape(value: PythonObject, context: PythonObject, infer: Bool = False) raises -> List[Int]:
@@ -24,8 +28,7 @@ def _shape(value: PythonObject, context: PythonObject, infer: Bool = False) rais
         if not sequential_integer(value[i], context):
             raise Error("TypeError: CNN tensor dimensions require native integers")
         var size = Int(py=value[i])
-        if size < (-1 if infer else 0):
-            raise Error("ValueError: CNN tensor dimensions must be nonnegative")
+        xcnn_tensor_run_check_dim(size, infer)
         out.append(size)
     return out^
 
@@ -57,8 +60,10 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
     if operation == "tensor_init":
         var entries = xcnn_module_entries(args[0], context)
         var shape = _shape(args[1], context)
-        if args[2] is not None and (py_type(args[2]) is not b.int or Int(py=args[2]) < 1):
-            raise Error("TypeError: CNN tensor handle requires a positive native integer")
+        if args[2] is not None:
+            if py_type(args[2]) is not b.int:
+                raise Error("TypeError: CNN tensor handle requires a positive native integer")
+            xcnn_tensor_run_check_handle(Int(py=args[2]))
         if args[3] is not None:
             sequential_admit_value(args[3], context)
         if args[4] is not None and not xcnn_is_t(args[4], context):
@@ -80,11 +85,15 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
             var handle = _xcnn_slot_raw(owner, "h", context)
             var base = _xcnn_slot_raw(owner, "_base", context)
             if base is None and handle is not None:
-                if py_type(handle) is not b.int or Int(py=handle) < 1:
+                if py_type(handle) is not b.int or not xcnn_tensor_run_handle_live(Int(py=handle)):
                     return PythonObject(None)
                 var entries = xcnn_module_entries(_xcnn_slot_raw(owner, "b", context), context)
                 _xcnn_set_raw(owner, "h", PythonObject(None), context)
-                _ = xcnn_call(entries, XC_RES_FREE, [Int(py=handle)], List[Int]())
+                var key = xcnn_key(entries)
+                var word = Int(py=handle)
+                var py = Python()
+                with GILReleased(py):
+                    xcnn_tensor_run_free(key, word)
         except:
             pass
         return PythonObject(None)
@@ -105,17 +114,6 @@ def xcnn_tensor_operation(owner: PythonObject, operation: String, args: PythonOb
             raise Error("TypeError: CNN reshape requires a native argument tuple")
         if len(requested) == 1 and (py_type(requested[0]) is b.list or py_type(requested[0]) is b.tuple):
             requested = requested[0]
-        var dims = _shape(requested, context, True)
-        var missing = -1
-        var known = 1
-        for i in range(len(dims)):  # driver-loop: shape inference from admitted integer metadata
-            if dims[i] == -1:
-                if missing >= 0:
-                    raise Error("ValueError: CNN reshape accepts only one inferred dimension")
-                missing = i
-            else:
-                known *= dims[i]
-        if missing >= 0:
-            dims[missing] = xcnn_size(shape) // known if known else 0
+        var dims = xcnn_tensor_run_reshape_dims(_shape(requested, context, True), shape)
         return xcnn_reshape_t(owner, dims, context)
     raise Error("ValueError: unknown CNN tensor operation")

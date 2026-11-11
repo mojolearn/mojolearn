@@ -11,9 +11,8 @@ so no bit moves. The Python `backward` reads the same fields (`_aux`,
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from core.xcnn_entry_table import XC_BATCHNORM_FORWARD, XC_BATCHNORM_FORWARD_M, XC_BATCHNORM_BACKWARD, XC_BATCHNORM_BACKWARD_M
 from bindings.xcnn_common import (
-    XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_call, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
+    XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
     xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr,
     xcnn_dev, xcnn_dev_get, xcnn_dev_upload, xcnn_dev_has, xcnn_dev_handle, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
     xcnn_shape_text,
@@ -22,10 +21,14 @@ from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value
 from bindings.native_loaded_module import NativeModules
 from bindings.sequential_admission import sequential_admit_value
-from bindings.xcnn_common import xcnn_out_new, xcnn_dev_fields
-
-
-comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+from bindings.xcnn_common import xcnn_out_new, xcnn_dev_fields, xcnn_key
+from std.python._cpython import GILReleased
+from x_cnn.door_run import xcnn_run_fill_f32
+from x_cnn.bn_run import (
+    BnSettings, bn_run_prep, bn_run_aux_head, bn_run_aux_count, bn_run_untracked_running, bn_run_check_channels,
+    bn_run_host_dims, bn_run_check_saved, bn_run_check_nonneg, bn_run_forward, bn_run_forward_m, bn_run_backward,
+    bn_run_flags, bn_run_dx_shape_check,
+)
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -59,9 +62,7 @@ def _bn_admit(layer: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _ones(count: Int, context: PythonObject) raises -> PythonObject:
     var result = xcnn_host_f32([count], context)
-    var words = _F32P(unsafe_from_address=Int(py=xcnn_addr(result)))
-    for i in range(count):  # driver-loop: initialize one passive affine scale per channel
-        words[i] = 1.0
+    xcnn_run_fill_f32(Int(py=xcnn_addr(result)), count, 1.0)
     _ = result
     return result
 
@@ -155,20 +156,20 @@ def _prep(fields: PythonObject, need_running: Bool, context: PythonObject) raise
     var c = Int(py=fields["num_features"])
     var training = _truth(fields["training"])
     var track = _truth(fields["track_running_stats"])
-    var batch_stats = training or not track
-    var factor = 0.0
+    # UNPACK: the counter and momentum are read only when they move (as before)
+    var tracked = 0
+    var momentum = fields["momentum"] if training and track else PythonObject(None)
     if training and track:
-        var tracked = Int(py=fields["num_batches_tracked_"]) + 1
-        _set(fields, "num_batches_tracked_", PythonObject(tracked))
-        var momentum = fields["momentum"]
-        factor = 1.0 / Float64(tracked) if momentum is None else Float64(py=momentum)
-    var aux = xcnn_host_f32([2 + 7 * c], context)
-    var words = _F32P(unsafe_from_address=Int(py=xcnn_addr(aux)))
-    _ = aux  # keep the Python object alive through the native call above
-    words[0] = Float32(Float64(py=fields["eps"]))
-    _ = aux  # keep the Python object alive through the native call above
-    words[1] = Float32(factor)
-    _ = aux  # keep the Python object alive through the native call above
+        tracked = Int(py=fields["num_batches_tracked_"])
+    var settings = BnSettings(c, Float64(py=fields["eps"]), training, track, tracked,
+                              momentum is not None, 0.0 if momentum is None else Float64(py=momentum))
+    var prep = bn_run_prep(settings)
+    if prep.counted:
+        _set(fields, "num_batches_tracked_", PythonObject(prep.tracked))
+    var batch_stats = prep.batch_stats
+    var aux = xcnn_host_f32([bn_run_aux_count(c)], context)
+    bn_run_aux_head(Int(py=xcnn_addr(aux)), settings.eps, prep.factor)
+    _ = aux  # keep the Python object alive through the native writes above
     xcnn_put_f32(aux, 2 + 5 * c, fields["weight_"], c, "weight_", context)
     xcnn_put_f32(aux, 2 + 6 * c, fields["bias_"], c, "bias_", context)
     var running = PythonObject(None)
@@ -177,11 +178,8 @@ def _prep(fields: PythonObject, need_running: Bool, context: PythonObject) raise
             running = _running(fields, context)
         else:
             running = xcnn_host_f32([2 * c], context)
-            var r = _F32P(unsafe_from_address=Int(py=xcnn_addr(running)))
-            _ = running  # keep the Python object alive through the native call above
-            for i in range(c):  # driver-loop: over BatchNorm channels of the initial running variance
-                r[c + i] = 1.0
-                _ = running  # keep the Python object alive through the native call above
+            bn_run_untracked_running(Int(py=xcnn_addr(running)), c)
+            _ = running  # keep the Python object alive through the native writes above
     return Python.tuple(aux, running, batch_stats)
 
 
@@ -211,8 +209,11 @@ def _forward_res(layer: PythonObject, fields: PythonObject, entries: PythonObjec
         _ = xcnn_dev_upload(layer, entries, "running", r, context)
         _set(fields, "_run_dev", dev)
     var rh = xcnn_dev_handle(dev, "running")
-    _ = xcnn_call(entries, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)],
-                  [15 if dev_y else 13, n, c, hw, 1 if batch_stats else 0])
+    var key = xcnn_key(entries)
+    var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_word(rh), xcnn_word(ah)]
+    var py = Python()
+    with GILReleased(py):
+        bn_run_forward_m(key, addrs[0], addrs[1], addrs[2], addrs[3], 15 if dev_y else 13, n, c, hw, batch_stats)
     if _truth(fields["training"]):
         _set(fields, "_run_stale", PythonObject(True))
     _set(fields, "_aux_k", PythonObject(k))
@@ -233,8 +234,11 @@ def xcnn_bn_forward_dev(layer: PythonObject, fields: PythonObject, entries: Pyth
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    _ = xcnn_call(entries, XC_BATCHNORM_FORWARD_M, [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)],
-                  [3 if dev_y else 1, n, c, hw, 1 if batch_stats else 0])
+    var key = xcnn_key(entries)
+    var addrs: List[Int] = [xcnn_word(xh), xcnn_word(yh), xcnn_ptr(running), xcnn_ptr(aux)]
+    var py = Python()
+    with GILReleased(py):
+        bn_run_forward_m(key, addrs[0], addrs[1], addrs[2], addrs[3], 3 if dev_y else 1, n, c, hw, batch_stats)
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
     _finish(fields, running, context)
@@ -266,8 +270,7 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
         if xcnn_on_dev(b, x, context) and xcnn_idn(b, XCNN_F_LAYER_IO) and len(shape) >= 2 and xcnn_size(shape) > 0:
             var n = shape[0]
             var c = shape[1]
-            if c != features:
-                raise Error("mojolearn: input has " + String(c) + " channels, the layer " + String(features))
+            bn_run_check_channels(c, features)
             var hw = xcnn_size(shape) // (n * c)
             var y = xcnn_new(b, shape, True, context)   # bn_apply stores every word
             _ = xcnn_bn_forward_dev(layer, fields, b, x.h, y.h, n, c, hw, True, context)
@@ -281,15 +284,10 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     # `_nchw(x)`: (N, C, -1) C-ordered, the caller's shape kept
     var a = xcnn_f32(x, "x", context)
     var shape = xcnn_shape(a)
-    if len(shape) < 2:
-        raise Error("IndexError: tuple index out of range")
-    var n = shape[0]
-    var c = shape[1]
-    if c != features:
-        raise Error("mojolearn: input has " + String(c) + " channels, the layer " + String(features))
-    var hw = xcnn_size(shape) // max(n * c, 1) if n * c != 0 else 0
-    if len(shape) == 2:
-        hw = 1
+    var dims = bn_run_host_dims(shape, features)
+    var n = dims[0]
+    var c = dims[1]
+    var hw = dims[2]
     var x3 = xcnn_reshape(a, [n, c, hw], context)
     var b = xcnn_entries(fields, context)
     var y = xcnn_host_f32([n, c, hw], context)
@@ -306,8 +304,11 @@ def _bn_forward_admitted(layer: PythonObject, fields: PythonObject, x: PythonObj
     var aux = prepared[0]
     var running = prepared[1]
     var batch_stats = Bool(py=prepared[2])
-    _ = xcnn_call(b, XC_BATCHNORM_FORWARD, [xcnn_ptr(x3), xcnn_ptr(y), xcnn_ptr(running), xcnn_ptr(aux)],
-                  [n, c, hw, 1 if batch_stats else 0])
+    var key = xcnn_key(b)
+    var addrs: List[Int] = [xcnn_ptr(x3), xcnn_ptr(y), xcnn_ptr(running), xcnn_ptr(aux)]
+    var py = Python()
+    with GILReleased(py):
+        bn_run_forward(key, addrs[0], addrs[1], addrs[2], addrs[3], n, c, hw, batch_stats)
     _ = running  # keep the Python object alive through the native call above
     _ = aux  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
@@ -343,8 +344,7 @@ def _shape_words(value: PythonObject, context: PythonObject) raises -> List[Int]
     var out = List[Int]()
     for i in range(len(value)):  # driver-loop: saved forward shape metadata
         var dim = Int(py=value[i])
-        if dim < 0:
-            raise Error("ValueError: batch normalization saved shape must be nonnegative")
+        bn_run_check_nonneg(dim)
         out.append(dim)
     return out^
 
@@ -360,11 +360,8 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
                       xh: PythonObject, gh: PythonObject, dxh: PythonObject,
                       dev_x: Bool, dev_g: Bool, dev_dx: Bool, context: PythonObject) raises:
     var shape = _shape_words(fields["_x3shape"], context)
-    if len(shape) != 3:
-        raise Error("ValueError: batch normalization requires saved rank-three activation metadata")
     var c = Int(py=fields["num_features"])
-    if shape[1] != c:
-        raise Error("ValueError: batch normalization configuration changed since forward")
+    bn_run_check_saved(shape, c)
     var stats = 1 if _truth(fields["_mode"]) else 0
     var ad = py_get(fields, "_aux_dev")
     if ad is not None:
@@ -374,22 +371,24 @@ def _backward_execute(layer: PythonObject, fields: PythonObject, entries: Python
     if (dev_x and ad is not None and _fields(ad[0])["b"] is entries["module"]
             and _truth(fields["track_running_stats"]) and xcnn_resident(entries, context)):
         _set(fields, "_g_dev", PythonObject(None))
-        var flags = 9 | (2 if dev_g else 0) | (4 if dev_dx else 0)
-        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_word(ad[1])],
-                      [flags, shape[0], c, shape[2], stats])
+        var flags = 8 | bn_run_flags(True, dev_g, dev_dx)
+        var key = xcnn_key(entries)
+        var addrs: List[Int] = [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_word(ad[1])]
+        var py = Python()
+        with GILReleased(py):
+            bn_run_backward(key, addrs[0], addrs[1], addrs[2], addrs[3], flags, True, shape, c, stats)
         _set(fields, "_g_dev", ad)
         return
     var original = xcnn_f32(fields["_aux"], "saved batch normalization aux", context)
-    if Int(py=original.size) != 2 + 7 * c:
+    if Int(py=original.size) != bn_run_aux_count(c):
         raise Error("ValueError: batch normalization saved aux has the wrong size")
-    var aux = xcnn_slice_f32(original, 0, 2 + 7 * c, context)
-    if dev_x or dev_g or dev_dx:
-        var flags = (1 if dev_x else 0) | (2 if dev_g else 0) | (4 if dev_dx else 0)
-        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD_M, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
-                      [flags, shape[0], c, shape[2], stats])
-    else:
-        _ = xcnn_call(entries, XC_BATCHNORM_BACKWARD, [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)],
-                      [shape[0], c, shape[2], stats])
+    var aux = xcnn_slice_f32(original, 0, bn_run_aux_count(c), context)
+    var key = xcnn_key(entries)
+    var addrs: List[Int] = [xcnn_word(xh), xcnn_word(gh), xcnn_word(dxh), xcnn_ptr(aux)]
+    var py = Python()
+    with GILReleased(py):
+        bn_run_backward(key, addrs[0], addrs[1], addrs[2], addrs[3], bn_run_flags(dev_x, dev_g, dev_dx),
+                        dev_x or dev_g or dev_dx, shape, c, stats)
     _ = aux  # keep the Python object alive through the native call above
     _backward_grads(fields, aux, c, context)
 
@@ -423,8 +422,7 @@ def _bn_backward_admitted(layer: PythonObject, fields: PythonObject, gradient: P
         _backward_execute(layer, fields, entries, xh, gradient.h, result.h, True, True, True, context)
         return result
     var g = xcnn_f32(gradient, "grad_out", context)
-    if Int(py=g.size) != xcnn_size(saved):
-        raise Error("ValueError: batch normalization gradient must match the saved activation size")
+    bn_run_dx_shape_check(Int(py=g.size), xcnn_size(saved))
     var result = xcnn_host_f32(shape, context)
     var original = PythonObject(None)
     if not resident_x:

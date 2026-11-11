@@ -7,8 +7,9 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_call, xcnn_word
-from core.xcnn_entry_table import XC_RES_FREE
+from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_key, xcnn_word
+from std.python._cpython import GILReleased
+from x_cnn.tensor_run import xcnn_tensor_run_free
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.py_balanced import py_type, py_call, py_setitem
 from bindings.xcnn_tensor_native import xcnn_tensor_operation
@@ -44,7 +45,11 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
             var names = py_call(xcnn_builtins().list, table.keys())
             py_setitem(fields, "h", Python.dict())
             for i in range(len(names)):  # driver-loop: release the owner's native allocation handles
-                _ = xcnn_call(entries, XC_RES_FREE, [xcnn_word(table[names[i]][0])], List[Int]())
+                var key = xcnn_key(entries)
+                var word = xcnn_word(table[names[i]][0])
+                var py = Python()
+                with GILReleased(py):
+                    xcnn_tensor_run_free(key, word)
     except:
         pass  # partially initialized owner or interpreter shutdown
     return PythonObject(None)
