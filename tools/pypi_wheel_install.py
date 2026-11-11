@@ -24,6 +24,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 INDEX_URL = "https://pypi.org/simple"
@@ -233,7 +234,9 @@ def installed_refusal(manifest, loaded):
         if not _in_site_packages(rec.get("location")):
             return "%s is installed at %s, not site-packages" % (f["distribution"], rec.get("location"))
         du = rec.get("direct_url") or {}
-        if os.path.basename(str(du.get("url") or "")) != f["file"]:
+        # direct_url is a URL: pip percent-encodes the file name (a local version's
+        # "+" is "%2B"), so decode it before comparing with the verified file name.
+        if urllib.parse.unquote(os.path.basename(str(du.get("url") or ""))) != f["file"]:
             return "%s was not installed from the verified file %s (direct_url %s)" % (
                 f["distribution"], f["file"], du.get("url"))
         h = (du.get("archive_info") or {}).get("hashes", {}).get("sha256")
