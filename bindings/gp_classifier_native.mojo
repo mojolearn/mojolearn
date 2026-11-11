@@ -11,6 +11,7 @@
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
 from core.gp_native_api import GPCFitRequest, GPCFitAllRequest, GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest
+from core.gp_native_storage import GPCQueryScratch
 from core.gp_native_storage import GPCMemberTables, GPCQueryTables
 from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
@@ -154,6 +155,7 @@ struct GPCMemberPins(Movable):
 
 @fieldwise_init
 struct GPCLatentResult(Movable):
+    var scratch: GPCQueryScratch
     var mean: PythonObject
     var variance: PythonObject
     var probability: PythonObject
@@ -336,7 +338,7 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
-                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject) raises -> GPCLatentResult:
+                out_kind: Int, context: PythonObject, kernel_arrays: PythonObject, pack: Int = 7) raises -> GPCLatentResult:
     """`_latent(ext, est, q, want_proba, out_kind)`: (mean, var, proba[, out]).
     `kernel_arrays`: the kernel's packed arrays when the caller already has
     them (a multi-GPU shard worker, which holds no kernel object); else
@@ -348,14 +350,16 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     var arrays = kernel_arrays
     if arrays is None:
         arrays = gp_kernel_arrays(fields["_kernel"], context)
-    var mean = family_array(Python.tuple(n_star), "<f4", context)
-    var var_out = family_array(Python.tuple(n_star), "<f4", context)
-    var proba = family_array(Python.tuple(n_star), "<f8", context)
-    var out = PythonObject(None)
+    var exposed = pack if out_kind == 0 else 0
+    var scratch = GPCQueryScratch(n_star, exposed)
+    var mean = family_array(Python.tuple(n_star), "<f4", context) if (exposed & 1) != 0 else PythonObject(None)
+    var var_out = family_array(Python.tuple(n_star), "<f4", context) if (exposed & 2) != 0 else PythonObject(None)
+    var proba = family_array(Python.tuple(n_star), "<f8", context) if (exposed & 4) != 0 else PythonObject(None)
+    var dst = PythonObject(None)
     if out_kind == 1:
-        out = family_array(Python.tuple(n_star), "<i8", context)
+        dst = family_array(Python.tuple(n_star), "<i8", context)
     elif out_kind == 2:
-        out = family_array(Python.tuple(n_star, 2), "<f8", context)
+        dst = family_array(Python.tuple(n_star, 2), "<f8", context)
     var own = py_fields(est)
     var y01 = gp_f32(own, "y_train_", -1, context)
     var pi = gp_f32(own, "pi_", -1, context)
@@ -363,18 +367,21 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     var lf = gp_f32(own, "L_", -1, context)
     var connection = GPConnection(ext)
     var kernel = gp_kernel_view(arrays)
-    var output_address = Int(py=classical_address(out)) if out_kind != 0 else 0
+    var output_address = Int(py=classical_address(dst)) if out_kind != 0 else 0
+    var mean_address = Int(py=classical_address(mean)) if (exposed & 1) != 0 else Int(scratch.mean.unsafe_ptr())
+    var variance_address = Int(py=classical_address(var_out)) if (exposed & 2) != 0 else Int(scratch.variance.unsafe_ptr())
+    var probability_address = Int(py=classical_address(proba)) if (exposed & 4) != 0 else Int(scratch.probability.unsafe_ptr())
     var request = GPCQueryRequest(Int(py=classical_address(xt)), Int(py=classical_address(y01)),
         Int(py=classical_address(pi)), Int(py=classical_address(wsr)), Int(py=classical_address(lf)),
-        Int(py=classical_address(q)), Int(py=classical_address(mean)), Int(py=classical_address(var_out)),
-        Int(py=classical_address(proba)), n_train, n_features, n_star, kernel^, want_proba, out_kind, output_address)
+        Int(py=classical_address(q)), mean_address, variance_address,
+        probability_address, n_train, n_features, n_star, kernel^, want_proba, out_kind, output_address)
     _ = gp_run(connection, request)
     lifecycle_admit_fields(fields)
     lifecycle_admit_fields(own)
     _ = mean
     _ = var_out
     _ = proba
-    _ = out
+    _ = dst
     _ = q
     _ = xt^
     _ = y01^
@@ -382,7 +389,7 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     _ = wsr^
     _ = lf^
     _ = arrays^
-    return GPCLatentResult(mean, var_out, proba, out)
+    return GPCLatentResult(scratch^, mean, var_out, proba, dst)
 
 
 def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, gq: GpQuery, out_kind: Int,
@@ -454,32 +461,49 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     return out
 
 
-def _gpc_ovr_combine(ext: PythonObject, cols: List[PythonObject], n_star: Int,
-                     context: PythonObject) raises -> GPCCombinedResult:
-    var k = len(cols)
+def _gpc_combine_addresses(ext: PythonObject, addresses: List[Int], n_star: Int,
+                           context: PythonObject) raises -> GPCCombinedResult:
+    var k = len(addresses)
     var proba = family_array(Python.tuple(n_star, k), "<f8", context)
     var codes = family_array(Python.tuple(n_star), "<i4", context)
-    var addresses = List[Int](length=k, fill=0)
-    for i in range(k):  # driver-loop: address metadata for each class probability column
-        addresses[i] = Int(py=classical_address(cols[i]))
     var connection = GPConnection(ext)
     var request = GPCCombineRequest(Int(addresses.unsafe_ptr()), Int(py=classical_address(proba)),
         Int(py=classical_address(codes)), n_star, k)
     _ = gp_run(connection, request)
     _ = addresses
-    _ = cols
     _ = proba
     _ = codes
     return GPCCombinedResult(proba, codes)
 
 
+def _gpc_ovr_combine(ext: PythonObject, cols: List[PythonObject], n_star: Int,
+                     context: PythonObject) raises -> GPCCombinedResult:
+    # UNPACK of cross-interpreter Array transport.
+    var addresses = List[Int](length=len(cols), fill=0)
+    for i in range(len(cols)):  # driver-loop: one address per transported class column
+        addresses[i] = Int(py=classical_address(cols[i]))
+    var answer = _gpc_combine_addresses(ext, addresses, n_star, context)
+    _ = cols
+    return answer^
+
+
+def _gpc_ovr_combine(ext: PythonObject, cols: List[List[Float64]], n_star: Int,
+                     context: PythonObject) raises -> GPCCombinedResult:
+    var addresses = List[Int](length=len(cols), fill=0)
+    for i in range(len(cols)):  # driver-loop: one native probability span per class
+        addresses[i] = Int(cols[i].unsafe_ptr())
+    var answer = _gpc_combine_addresses(ext, addresses, n_star, context)
+    _ = cols
+    return answer^
+
+
 def _gpc_columns(ext: PythonObject, fields: PythonObject, q: PythonObject, context: PythonObject,
-                 kernel_arrays: PythonObject) raises -> List[PythonObject]:
-    var cols = List[PythonObject]()
+                 kernel_arrays: PythonObject) raises -> List[List[Float64]]:
+    var cols = List[List[Float64]]()
     var fits = fields["estimators_"]
     for i in range(len(fits)):  # driver-loop: preserve the existing non-fused OVR route
-        var latent = _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays)
-        cols.append(latent.probability)
+        var latent = _gpc_latent(ext, fields, fits[i], q, True, 0, context, kernel_arrays, 0)
+        cols.append(latent.scratch.probability^)
     return cols^
 
 
@@ -543,7 +567,7 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, conte
                     + String(n_classes) + " classes.")
     var ext = _gpc_ext(model, args[0], context)
     var latent = _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 0, context,
-                             gp_kernel_arrays_reused(model, fields["_kernel"], context))
+                             gp_kernel_arrays_reused(model, fields["_kernel"], context), 3)
     return Python.tuple(latent.mean, latent.variance)
 
 

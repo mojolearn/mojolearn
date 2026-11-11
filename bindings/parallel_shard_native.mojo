@@ -1380,7 +1380,7 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         var holder = b.dict()
         py_setitem(holder, "X_train_", state[1])
         var out_kind = Int(py=args[2])
-        var latent = _gpc_latent(ext, holder, fit, args[0], Bool(py=args[1]), out_kind, context, state[0])
+        var latent = _gpc_latent(ext, holder, fit, args[0], Bool(py=args[1]), out_kind, context, state[0], 4 if Bool(py=args[1]) else 1)
         if out_kind != 0:
             return latent.output
         return latent.probability if Bool(py=args[1]) else latent.mean
