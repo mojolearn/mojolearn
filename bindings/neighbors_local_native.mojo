@@ -20,7 +20,7 @@
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi import xn_capabilities
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.math import floor, isinf
+from std.math import floor
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -42,7 +42,7 @@ from bindings.family_common import (
     family_isinstance,
 )
 from bindings.classical_labels import (
-    labels_cast, labels_fsum_f64, classical_encode_labels,
+    labels_cast, classical_encode_labels,
     classical_decode_labels, classical_accuracy,
 )
 from bindings.labels_descriptor_boundary import labels_class_ratio_f64
@@ -220,16 +220,6 @@ def _pow2_steps(count: Int) -> Tuple[Int, Int]:
 def _f32_scalar(value: PythonObject) raises -> Float64:
     """`_f32_scalar(v)`: `float(v)` rounded once to float32."""
     return Float64(Float32(Float64(py=family_call(_b().float, value))))
-
-
-def _isclose(a: Float64, b: Float64, rel_tol: Float64, abs_tol: Float64) -> Bool:
-    """`_portable_math.isclose` (finite tolerances, already floats)."""
-    if a == b:
-        return True
-    if isinf(a) or isinf(b):
-        return False
-    var difference = abs(b - a)
-    return difference <= abs(rel_tol * b) or difference <= abs(rel_tol * a) or difference <= abs_tol
 
 
 def _astype_i64(lab: PythonObject, context: PythonObject) raises -> PythonObject:
