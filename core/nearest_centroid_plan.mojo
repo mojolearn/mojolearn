@@ -65,6 +65,8 @@ def nc_uniform(prior: Int, count: Int) raises -> Bool:
 
 
 def nc_narrow_priors(src: Int, dst: Int, count: Int) raises:
+    if count == 0:
+        return
     var source = _F64(unsafe_from_address=src)
     var target = _F32(unsafe_from_address=dst)
     var tasks = host_predict_task_count_work(count, 1)
@@ -81,6 +83,8 @@ def nc_normalize_priors(address: Int, count: Int) raises:
     The fsum dependency is serial by its arithmetic definition; independent
     validation and rescaling ranges run across the host workers.
     """
+    if count == 0:
+        raise Error("ZeroDivisionError: float division by zero")
     var p = _F64(unsafe_from_address=address)
     var tasks = host_predict_task_count_work(count, 1)
     var chunk = host_predict_chunk(count, tasks)
@@ -114,8 +118,10 @@ def nc_normalize_priors(address: Int, count: Int) raises:
 
 def nc_class_offsets(counts: Int, count: Int) raises -> List[Int32]:
     """Parallel block prefix of the existing integer class-count metadata."""
-    var source = _I64(unsafe_from_address=counts)
     var result = List[Int32](length=count + 1, fill=0)
+    if count == 0:
+        return result^
+    var source = _I64(unsafe_from_address=counts)
     var dst = result.unsafe_ptr()
     var tasks = host_predict_task_count_work(count, 1)
     var chunk = host_predict_chunk(count, tasks)

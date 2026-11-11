@@ -69,6 +69,7 @@ def prior_case(unit: Int) raises:
         var steps = nc_power_steps(257)
         require(steps[0] == 512 and steps[1] == 45, "median network metadata")
         require(nc_uniform(0, 0), "empty prior uniformity")
+        nc_narrow_priors(0, 0, 0)
 
 
 def refusal_case(unit: Int) raises:
@@ -82,11 +83,9 @@ def refusal_case(unit: Int) raises:
         values[0] = 1e308
         values[1] = 1e308
         expected = "OverflowError: math range error"
-    elif unit == 3:
-        values[0] = -0.0
     var refused = False
     try:
-        nc_normalize_priors(Int(values.unsafe_ptr()), 2)
+        nc_normalize_priors(0 if unit == 3 else Int(values.unsafe_ptr()), 0 if unit == 3 else 2)
     except error:
         refused = String(error) == expected
     require(refused, "prior refusal order/message changed")
