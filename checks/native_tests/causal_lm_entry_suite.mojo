@@ -30,6 +30,11 @@ from core.causal_lm_entry_table import (
 )
 from core.causal_entry_neural_host import publish_causal_neural_host
 from gemm.host.causal_entry_host import publish_causal_linalg_host
+from core.state_registry import StateHandle
+from core.causal_lm_entry_table_sessions import (
+    causal_sessions_call, causal_session_handle_word, causal_session_handle_of, CAUSAL_SESSIONS_TRANSFORMER,
+    CAUSAL_SESSIONS_MAMBA, CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_PROGRAM_READ,
+)
 
 comptime CAUSAL_ENTRY_CASES = 9
 
@@ -202,8 +207,39 @@ def case(unit: Int) raises:
             _refuses(problem, "CPU Mamba state: invalid descriptor arity")
 
 
+def sessions_table_contract() raises:
+    # The session table (core/causal_lm_entry_table_sessions.mojo) on any
+    # column: the handle word round trip, the CPU-key refusal (CPU images own
+    # no resident session) and an unpublished GPU key's refusal. Its
+    # per-operation cases need the GPU images' publications:
+    # checks/native_tests/causal_lm_session_gpu_suite.mojo.
+    var word = causal_session_handle_word(StateHandle(5, UInt64(3)))
+    var back = causal_session_handle_of(word)
+    require(word > 0 and back.index == 5 and back.generation == 3, "session handle word round trip")
+    try:
+        _ = causal_session_handle_of(0)
+        raise Error("a zero handle word was admitted")
+    except problem:
+        _refuses(problem, "no session handle")
+    var none = List[Int]()
+    try:
+        _ = causal_sessions_call(CAUSAL_SESSIONS_TRANSFORMER, CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
+            CAUSAL_SESSION_LM_CREATE, none, none, List[Float64]())
+        raise Error("a CPU session key was admitted")
+    except problem:
+        _refuses(problem, "GPU images only")
+    comptime if TARGET_COLUMN == COLUMN_CPU:
+        try:
+            _ = causal_sessions_call(CAUSAL_SESSIONS_MAMBA, CausalEntryKey(Int(GLOBAL_NUMERIC_MODE), 2),
+                CAUSAL_SESSION_PROGRAM_READ, none, none, List[Float64]())
+            raise Error("an unpublished session table was admitted")
+        except problem:
+            _refuses(problem, "provider is not published")
+
+
 def run_checks() raises:
     precondition_unpublished()
+    sessions_table_contract()
     # The publications _mojolearn_neural_host and _mojolearn_linalg_host make
     # at module init; a second init publishes the same pointers.
     publish_causal_neural_host()
