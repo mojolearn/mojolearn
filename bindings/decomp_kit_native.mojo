@@ -1038,20 +1038,19 @@ struct DecompKit(Movable):
                 raise Error("x_decomp: order_f exceeds the float32 index bound")
             var maximum = self.device_output(1, 1)
             var da = self.device(a)
-            _ = py_call(self._entry(_DK_DEV_REDUCE, "x_decomp_dev_reduce"), da, self.matrices[maximum].device, Python.list(n, 1))
+            _ = self.xd(XD_DEV_REDUCE, List[Int](), [da, self.matrices[maximum].device, n, 1], List[Float64](), False)
             var v = self.word(maximum)
             if v != v:
                 raise Error("x_decomp: a NaN has no order (refused)")
             var out = self.device_output(n, 1)
             var count = self.device_output(1, 1)
-            _ = py_call(self.entries["x_decomp_dev_order_f"], da, da, self.matrices[out].device,
-                        self.matrices[count].device, Python.list(n, 0, 0))
+            _ = self.xd(XD_DEV_ORDER, List[Int](), [da, da, self.matrices[out].device, self.matrices[count].device, n, 0, 0],
+                        List[Float64](), False)
             return out
         var out = self.zeros(n, 1)
         if n:
-            var aa = self.address(a)
-            _ = py_call(self.entries["x_decomp_order_f"], aa, n, self.address(out))
-            _ = out  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(a), self.at(out)]
+            _ = self.xd(XD_ORDER, addresses, [n], List[Float64](), False)
         return out
 
     def neg_signs(mut self, v: Int) raises -> Int:
@@ -1066,30 +1065,30 @@ struct DecompKit(Movable):
         var rows = self.matrices[a].rows
         var cols = self.matrices[a].cols
         var count = cols if by_col else rows
-        var params = Python.list(rows, cols, 1 if by_col else 0)
+        var flag = 1 if by_col else 0
         var out: Int
         if count and rows * cols and self.use(a):
             out = self.device_output(1, count)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_absmax"], da, self.matrices[out].device, params)
+            _ = self.xd(XD_DEV_ABSMAX, List[Int](), [da, self.matrices[out].device, rows, cols, flag], List[Float64](), False)
         else:
             out = self.zeros(1, count)
             if count and rows * cols:
-                var aa = self.address(a)
-                _ = py_call(self.entries["x_decomp_absmax_sign"], aa, self.address(out), params)
+                var addresses: List[Int] = [self.at(a), self.at(out)]
+                _ = self.xd(XD_ABSMAX_SIGN, addresses, [rows, cols, flag], List[Float64](), True)
         return self.neg_signs(out if by_col else self.reshape(out, count, 1))
 
     def rand(mut self, rows: Int, cols: Int, seed: Int, stream: Int, kind: Int) raises -> Int:
         # `_Kit.rand` (seed already masked to 32 bits).
-        var params = Python.list(rows * cols, seed, stream, kind)
         if rows * cols >= 1024 and self.resident:
             var out = self.device_output(rows, cols)
-            _ = py_call(self.entries["x_decomp_dev_rand"], self.matrices[out].device, params)
+            _ = self.xd(XD_DEV_RAND, List[Int](), [self.matrices[out].device, rows * cols, seed, stream, kind],
+                        List[Float64](), False)
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
-            _ = py_call(self.entries["x_decomp_rand"], self.address(out), params)
-            _ = out  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(out)]
+            _ = self.xd(XD_RAND, addresses, [rows * cols, seed, stream, kind], List[Float64](), True)
         return out
 
     # ---- small dense linear algebra
@@ -1101,14 +1100,11 @@ struct DecompKit(Movable):
         var v = self.zeros(n, n)
         if m >= n and n >= 1 and self.opt_dev("x_decomp_dev_svd") and self.use(a):
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_svd"], da, self.address(s), self.address(v), Python.list(m, n))
-            _ = v  # keep the Python object alive through the native call above
-            _ = s  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(s), self.at(v)]
+            _ = self.xd(XD_DEV_SVD, addresses, [da, m, n], List[Float64](), True)
         else:
-            var aa = self.address(a)
-            _ = py_call(self.entries["x_decomp_svd"], aa, self.address(s), self.address(v), Python.list(m, n))
-            _ = v  # keep the Python object alive through the native call above
-            _ = s  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(a), self.at(s), self.at(v)]
+            _ = self.xd(XD_SVD, addresses, [m, n], List[Float64](), False)
         var negated = self.ew(XD_SCALE, s, scalar=-1.0)
         var o = self.order(negated)
         var st = self.transpose(s)
@@ -1156,41 +1152,36 @@ struct DecompKit(Movable):
         var n = self.matrices[a].rows
         var piv = py_call(self.context["array_type"], PythonObject("i"), py_call(self.context["native_bytes_type"], 4 * max(n, 1)))
         var info = self.zeros(1, 1)
-        var pa = py_call(piv.buffer_info)[0]
+        var pa = Int(py=py_call(piv.buffer_info)[0])
         var lu: Int
         if n >= 1 and self.matrices[a].cols == n and self.opt_dev("x_decomp_dev_lu") and self.use(a):
             lu = self.device_output(n, n)
             var da = self.device(a)
-            var info_address = self.address(info)
-            _ = info  # keep the Python object alive through the native call above
-            var lu_device = self.matrices[lu].device
-            _ = py_call(self.entries["x_decomp_dev_lu"], da, lu_device, pa, info_address, Python.list(n))
-            _ = info  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [pa, self.at(info)]
+            _ = self.xd(XD_DEV_LU, addresses, [da, self.matrices[lu].device, n], List[Float64](), True)
         else:
             lu = self.copy_host(a)
-            _ = py_call(self.entries["x_decomp_lu"], self.address(lu), pa, self.address(info), Python.list(n))
-            _ = info  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(lu), pa, self.at(info)]
+            _ = self.xd(XD_LU, addresses, [n], List[Float64](), True)
             self.wrote_host(lu)
+        _ = piv  # keep the pivot store alive through the native calls above
         return (lu, piv, Int(self.word(info)))
 
     def lu_resid(mut self, a: Int, x: Int, b: Int) raises -> Int:
         # `_Kit.lu_resid`: B - A X, folded in float-float on the device.
         var out = self.zeros(self.matrices[b].rows, self.matrices[b].cols)
-        var aa = self.address(a)
-        var ax = self.address(x)
-        var ab = self.address(b)
-        _ = py_call(self.entries["x_decomp_lu_resid"], aa, ax, ab, self.address(out),
-                    Python.list(self.matrices[a].rows, self.matrices[b].cols))
-        _ = out  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(a), self.at(x), self.at(b), self.at(out)]
+        _ = self.xd(XD_LU_RESID, addresses, [self.matrices[a].rows, self.matrices[b].cols], List[Float64](), True)
         return out
 
     def lu_solve(mut self, lu: Int, piv: PythonObject, b: Int) raises -> Int:
         # `_Kit.lu_solve(lu, piv, B)` (trans 0): on a host copy of B.
         var out = self.copy_host(b)
-        var al = self.address(lu)
-        _ = py_call(self.entries["x_decomp_lu_solve"], al, py_call(piv.buffer_info)[0], self.address(out),
-                    Python.list(self.matrices[lu].rows, self.matrices[b].cols))
-        _ = out  # keep the Python object alive through the native call above
+        var pa = Int(py=py_call(piv.buffer_info)[0])
+        var addresses: List[Int] = [self.at(lu), pa, self.at(out)]
+        # lu_solve_py's trans, absent from the kit's words: 0
+        _ = self.xd(XD_LU_SOLVE, addresses, [self.matrices[lu].rows, self.matrices[b].cols, 0], List[Float64](), True)
+        _ = piv  # keep the pivot store alive through the native call above
         self.wrote_host(out)
         return out
 
@@ -1203,17 +1194,12 @@ struct DecompKit(Movable):
             var dg = self.device(g)
             var dq = self.device(q)
             var dw = self.device(w)
-            _ = py_call(self.entries["x_decomp_dev_code_rows"], dg, dq, dw,
-                        Python.list(0, rows, cols, max_iter, positive), Python.list(alpha, tol))
+            _ = self.xd(XD_DEV_CODE_ROWS, List[Int](), [dg, dq, dw, 0, rows, cols, max_iter, positive], [alpha, tol], True)
             self.wrote_device(w)
             return w
         var its = self.zeros(rows, 1)
-        var ag = self.address(g)
-        var aq = self.address(q)
-        var aw = self.address(w)
-        _ = py_call(self.entries["x_decomp_lasso_rows"], ag, aq, aw, self.address(its),
-                    Python.list(rows, cols, max_iter, positive), Python.list(alpha, tol))
-        _ = its  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(g), self.at(q), self.at(w), self.at(its)]
+        _ = self.xd(XD_LASSO_ROWS, addresses, [rows, cols, max_iter, positive], [alpha, tol], True)
         self.wrote_host(w)
         return w
 
@@ -1225,18 +1211,14 @@ struct DecompKit(Movable):
             var w = self.device_output(rows, cols)
             var dg = self.device(g)
             var dq = self.device(q)
-            _ = py_call(self.entries["x_decomp_dev_code_rows"], dg, dq, self.matrices[w].device,
-                        Python.list(1, rows, cols, m, nnz), Python.list(Float64(0.0), Float64(0.0)))
+            _ = self.xd(XD_DEV_CODE_ROWS, List[Int](), [dg, dq, self.matrices[w].device, 1, rows, cols, m, nnz],
+                        [Float64(0.0), Float64(0.0)], True)
             return w
         var w = self.zeros(rows, cols)
         var na = self.zeros(rows, 1)
         if rows * cols:
-            var ag = self.address(g)
-            var aq = self.address(q)
-            _ = py_call(self.entries["x_decomp_lars_rows"], ag, aq, self.address(w), self.address(na),
-                        Python.list(rows, cols, m, nnz))
-            _ = na  # keep the Python object alive through the native call above
-            _ = w  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(g), self.at(q), self.at(w), self.at(na)]
+            _ = self.xd(XD_LARS_ROWS, addresses, [rows, cols, m, nnz], List[Float64](), True)
         return w
 
     def omp_rows(mut self, g: Int, q: Int, nnz: Int) raises -> Int:
@@ -1247,17 +1229,13 @@ struct DecompKit(Movable):
             var w = self.device_output(rows, cols)
             var dg = self.device(g)
             var dq = self.device(q)
-            _ = py_call(self.entries["x_decomp_dev_code_rows"], dg, dq, self.matrices[w].device,
-                        Python.list(2, rows, cols, nnz, 0), Python.list(Float64(0.0), Float64(0.0)))
+            _ = self.xd(XD_DEV_CODE_ROWS, List[Int](), [dg, dq, self.matrices[w].device, 2, rows, cols, nnz, 0],
+                        [Float64(0.0), Float64(0.0)], True)
             return w
         var w = self.zeros(rows, cols)
         var na = self.zeros(rows, 1)
-        var ag = self.address(g)
-        var aq = self.address(q)
-        _ = py_call(self.entries["x_decomp_omp_rows"], ag, aq, self.address(w), self.address(na),
-                    Python.list(rows, cols, nnz))
-        _ = na  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(g), self.at(q), self.at(w), self.at(na)]
+        _ = self.xd(XD_OMP_ROWS, addresses, [rows, cols, nnz], List[Float64](), True)
         return w
 
     # ---- reductions, selections and factor companions (MinCovDet)
@@ -1269,12 +1247,11 @@ struct DecompKit(Movable):
         if self.use(a):
             var out = self.device_output(1, 1)
             var da = self.device(a)
-            _ = py_call(self._entry(_DK_DEV_REDUCE, "x_decomp_dev_reduce"), da, self.matrices[out].device, Python.list(n, op))
+            _ = self.xd(XD_DEV_REDUCE, List[Int](), [da, self.matrices[out].device, n, op], List[Float64](), False)
             return out
         var out = self.zeros(1, 1)
-        var aa = self.address(a)
-        _ = py_call(self._entry(_DK_REDUCE, "x_decomp_reduce"), aa, self.address(out), Python.list(n, op))
-        _ = out  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(a), self.at(out)]
+        _ = self.xd(XD_REDUCE, addresses, [n, op], List[Float64](), False)
         return out
 
     def total_word(mut self, a: Int) raises -> Float64:
@@ -1286,7 +1263,6 @@ struct DecompKit(Movable):
     def eigh(mut self, a: Int) raises -> Tuple[Int, Int]:
         # `_Kit.eigh(A)` (uplo 0): ascending values (1 x n), vectors in columns.
         var n = self.matrices[a].rows
-        var params = Python.list(n, 0)
         if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh_to"):
             # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
             # device (`x_decomp_dev_eigh_to`, the executor op eigh_op_sym;
@@ -1294,15 +1270,13 @@ struct DecompKit(Movable):
             # the next device op (MinCovDet's pinvh product) uploaded again.
             var wd = self.device_output(1, n)
             var vd = self.device_output(n, n)
-            _ = py_call(self.entries["x_decomp_dev_eigh_to"], self.matrices[a].device, self.matrices[wd].device,
-                        self.matrices[vd].device, params)
+            _ = self.xd(XD_DEV_EIGH_TO, List[Int](), [self.matrices[a].device, self.matrices[wd].device,
+                        self.matrices[vd].device, n, 0], List[Float64](), True)
             return (wd, vd)
         var w = self.zeros(1, n)
         var v = self.zeros(n, n)
-        var aa = self.address(a)
-        _ = py_call(self.entries["x_decomp_eigh"], aa, self.address(w), self.address(v), params)
-        _ = v  # keep the Python object alive through the native call above
-        _ = w  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(a), self.at(w), self.at(v)]
+        _ = self.xd(XD_EIGH, addresses, [n, 0], List[Float64](), False)
         return (w, v)
 
     def refuse_nan(mut self, a: Int) raises:
@@ -1321,16 +1295,15 @@ struct DecompKit(Movable):
             var out = self.device_output(n, 1)
             var count = self.device_output(1, 1)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_argmin_all"], da, self.matrices[out].device,
-                        self.matrices[count].device, Python.list(n))
+            _ = self.xd(XD_DEV_ARGMIN_ALL, List[Int](), [da, self.matrices[out].device, self.matrices[count].device, n],
+                        List[Float64](), False)
             var c = Int(self.word(count))
             return self.rows_of(out, 0, c) if c else self.zeros(0, 1)
         var buffer = self.zeros(max(n, 1), 1)
         var c = 0
         if n:
-            var aa = self.address(a)
-            c = Int(py=py_call(self.entries["x_decomp_argmin_all"], aa, n, self.address(buffer)))
-            _ = buffer  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(a), self.at(buffer)]
+            c = self.xd(XD_ARGMIN_ALL, addresses, [n], List[Float64](), False)
         return self.rows_of(buffer, 0, c)
 
     def select_smallest(mut self, a: Int, h: Int) raises -> Tuple[Int, Int, PythonObject]:
@@ -1345,16 +1318,15 @@ struct DecompKit(Movable):
             var sel = self.device_output(h, 1)
             var mask = self.device_output(n, 1)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_select_smallest"], da, self.matrices[sel].device,
-                        self.matrices[mask].device, Python.list(n, h))
+            _ = self.xd(XD_DEV_SELECT_SMALLEST, List[Int](), [da, self.matrices[sel].device, self.matrices[mask].device,
+                        n, h], List[Float64](), False)
             return (sel, mask, PythonObject(None))
         var sel = self.zeros(h, 1)
         var store = py_call(self.context["array_type"], PythonObject("i"), py_call(self.context["native_bytes_type"], 4 * max(n, 1)))
         if n:
-            var aa = self.address(a)
-            _ = py_call(self.entries["x_decomp_select_smallest"], aa, Python.list(n, h), self.address(sel),
-                        py_call(store.buffer_info)[0])
-            _ = sel  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(a), self.at(sel), Int(py=py_call(store.buffer_info)[0])]
+            _ = self.xd(XD_SELECT_SMALLEST, addresses, [n, h], List[Float64](), False)
+            _ = store  # keep the membership store alive through the native call above
         return (sel, Int(-1), store)
 
     def lu_aux(mut self, lu: Int, piv: PythonObject) raises -> Tuple[Int, Int]:
@@ -1365,24 +1337,16 @@ struct DecompKit(Movable):
         var im = self.zeros(n, 1)
         var diag = self.zeros(1, n)
         var st = self.zeros(1, 4)
-        var pa = py_call(piv.buffer_info)[0]
-        var params = Python.list(n, 0)
+        var pa = Int(py=py_call(piv.buffer_info)[0])
         if n >= 1 and self.matrices[lu].on_device and self.opt_dev("x_decomp_dev_lu"):
             var dl = self.matrices[lu].device
-            _ = py_call(self.entries["x_decomp_dev_lu_aux"], dl, pa, self.address(pm), self.address(im),
-                        self.address(diag), self.address(st), params)
-            _ = im  # keep the Python object alive through the native call above
-            _ = pm  # keep the Python object alive through the native call above
-            _ = st  # keep the Python object alive through the native call above
-            _ = diag  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [pa, self.at(pm), self.at(im), self.at(diag), self.at(st)]
+            _ = self.xd(XD_DEV_LU_AUX, addresses, [dl, n, 0], List[Float64](), True)
+            _ = piv  # keep the pivot store alive through the native call above
             return (st, diag)
-        var al = self.address(lu)
-        _ = py_call(self.entries["x_decomp_lu_aux"], al, pa, self.address(pm), self.address(im),
-                    self.address(diag), self.address(st), params)
-        _ = im  # keep the Python object alive through the native call above
-        _ = pm  # keep the Python object alive through the native call above
-        _ = st  # keep the Python object alive through the native call above
-        _ = diag  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(lu), pa, self.at(pm), self.at(im), self.at(diag), self.at(st)]
+        _ = self.xd(XD_LU_AUX, addresses, [n, 0], List[Float64](), True)
+        _ = piv  # keep the pivot store alive through the native call above
         return (st, diag)
 
     # ---- top-N orders (AlternatingLeastSquares)
@@ -1396,8 +1360,8 @@ struct DecompKit(Movable):
         var count = self.device_output(1, 1)
         var sid = self.device(skip) if skip >= 0 else self.device(a)
         var da = self.device(a)
-        _ = py_call(self.entries["x_decomp_dev_order_f"], da, sid, self.matrices[out].device,
-                    self.matrices[count].device, Python.list(n, neg, 1 if skip >= 0 else 0))
+        _ = self.xd(XD_DEV_ORDER, List[Int](), [da, sid, self.matrices[out].device, self.matrices[count].device, n, neg,
+                    1 if skip >= 0 else 0], List[Float64](), False)
         return (out, count)
 
     def take_cols_m(mut self, a: Int, idx: Int, w: Int) raises -> Int:
@@ -1422,20 +1386,15 @@ struct DecompKit(Movable):
         var rows = self.matrices[a].rows
         var cols = self.matrices[a].cols
         var diag = self.zeros(1, cols)
-        var params = Python.list(rows, cols)
         if rows * cols and self.use(a):
             var q = self.device_output(rows, cols)
             var da = self.device(a)
-            var diag_address = self.address(diag)
-            _ = diag  # keep the Python object alive through the native call above
-            var q_device = self.matrices[q].device
-            _ = py_call(self.entries["x_decomp_dev_orth_diag"], da, q_device, diag_address, params)
-            _ = diag  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(diag)]
+            _ = self.xd(XD_DEV_ORTH_DIAG, addresses, [da, self.matrices[q].device, rows, cols], List[Float64](), True)
             return (q, diag)
         var q = self.copy_host(a)
-        _ = py_call(self.entries["x_decomp_orth_diag"], self.address(q), self.address(diag), params)
-        _ = q  # keep the Python object alive through the native call above
-        _ = diag  # keep the Python object alive through the native call above
+        var addresses: List[Int] = [self.at(q), self.at(diag)]
+        _ = self.xd(XD_ORTH_DIAG, addresses, [rows, cols], List[Float64](), True)
         self.wrote_host(q)
         return (q, diag)
 
@@ -1449,10 +1408,8 @@ struct DecompKit(Movable):
         var r = 0
         if n:
             _ = self.word(s, 0)      # `S.s[0]`: S comes to the host, as before
-            var sa = self.address(s)
-            _ = s  # keep the Python object alive through the native call above
-            r = Int(py=py_call(self.entries["x_decomp_rank_above"], sa, Python.list(n), PythonObject(Float64(0.00000095367431640625))))
-            _ = s  # keep the Python object alive through the native call above
+            var addresses: List[Int] = [self.at(s)]
+            r = self.xd(XD_RANK, addresses, [n], [Float64(0.00000095367431640625)], False)
         var av = self.mm(a, vt, tb=True)
         var left = self.cols_of(av, 0, r) if r < n else av
         var right = self.cols_of(s, 0, r) if r < n else s
@@ -1472,21 +1429,13 @@ struct DecompKit(Movable):
         # geqrf + orgqr of A V / s, Q's columns signed by R's diagonal.
         var h = self.copy_host(ug)
         var tau = self.zeros(1, min(self.matrices[ug].rows, self.matrices[ug].cols))
-        _ = py_call(self.entries["x_decomp_geqrf"], self.address(h), self.address(tau),
-                    Python.list(self.matrices[ug].rows, self.matrices[ug].cols))
-        _ = tau  # keep the Python object alive through the native call above
-        _ = h  # keep the Python object alive through the native call above
+        var hq: List[Int] = [self.at(h), self.at(tau)]
+        _ = self.xd(XD_GEQRF, hq, [self.matrices[ug].rows, self.matrices[ug].cols], List[Float64](), True)
         self.wrote_host(h)
         var qc = self.zeros(self.matrices[h].rows, n)
-        var ah = self.address(h)
-        _ = h  # keep the Python object alive through the native call above
-        var at = self.address(tau)
-        _ = tau  # keep the Python object alive through the native call above
-        _ = py_call(self.entries["x_decomp_orgqr"], ah, at, self.address(qc),
-                    Python.list(self.matrices[h].rows, self.matrices[h].cols, self.matrices[tau].cols, n))
-        _ = qc  # keep the Python object alive through the native call above
-        _ = tau  # keep the Python object alive through the native call above
-        _ = h  # keep the Python object alive through the native call above
+        var hq2: List[Int] = [self.at(h), self.at(tau), self.at(qc)]
+        _ = self.xd(XD_ORGQR, hq2, [self.matrices[h].rows, self.matrices[h].cols, self.matrices[tau].cols, n],
+                    List[Float64](), True)
         self.wrote_host(qc)
         var diagonal = self.strided(h, r, r + 1, 0)
         var sg = self.neg_signs(diagonal)
