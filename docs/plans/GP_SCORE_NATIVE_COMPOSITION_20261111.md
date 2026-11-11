@@ -74,3 +74,14 @@ pending. This extraction preserves all-entry, binary and multiclass fallback
 routes, the existing widening/gathers and class lookup timing after prediction.
 It adds one private request role to the seven GPR score roles, without counting
 class pins or the already-native code buffer again.
+
+## Additive GPC native COUNT program
+
+`GPCAccuracyProgram` owns the existing `label_accuracy_plan(rows, classes,
+False)` arena. It preserves both int32 input copies, original stage order and
+the full complement of input/scratch download ranges (including the existing
+group/count outputs), then reads the same COUNT fraction words. It does not
+replace the classifier's count pipeline with a match-reduction shortcut.
+The provider descriptor and range switch are the existing metrics program
+interface. Public GPC score still waits for exact label admission/decode
+composition; this additive owner adds no removal count by itself.
