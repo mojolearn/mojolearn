@@ -7,7 +7,14 @@ allocation, layer traversal, token traversal and selection are native. Calling
 a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
-from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run
+from core.causal_lm_entry_table_sessions import (
+    causal_sessions_call, causal_sessions_tables_admit, CAUSAL_SESSIONS_TRANSFORMER, CAUSAL_SESSIONS_MAMBA,
+    CAUSAL_SESSION_DECODE_CREATE, CAUSAL_SESSION_DECODE_OPEN, CAUSAL_SESSION_DECODE_OPEN15,
+    CAUSAL_SESSION_DECODE_EXPORT, CAUSAL_SESSION_DECODE_LOAD, CAUSAL_SESSION_LM_CREATE, CAUSAL_SESSION_LM_OPEN,
+    CAUSAL_SESSION_LM_OPEN15, CAUSAL_SESSION_LM_RUN, CAUSAL_SESSION_LM_FORWARD, CAUSAL_SESSION_LM_CLOSE,
+    CAUSAL_SESSION_PROGRAM_READ, CAUSAL_SESSION_PROGRAM_RELEASE,
+)
+from core.causal_session_handles import CausalSessionHandles
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
@@ -298,23 +305,19 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         if model._head_int15 is not None and _native_has_entry(mods, block_binding, "transformer_session_forward_int15"):
             py_setitem(entries, "create", _native_function(mods, block_binding, "transformer_session_create"))
             py_setitem(entries, "forward15", _native_function(mods, block_binding, "transformer_session_forward_int15"))
-        # Preserve the existing resident GPU route for fixed-length greedy
-        # generation. No performance default changes with this migration.
-        if _native_has_entry(mods, block_binding, "causal_lm_session_run"):
-            py_setitem(entries, "resident_vendor", _native_function(mods, block_binding, "transformer_vendor")())
-            mods.released()
-            for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),  # small-loop(resident entry names)
-                         String("transformer_decode_session_close"), String("causal_lm_session_create"),
-                         String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
-                py_setitem(entries, name, _native_function(mods, block_binding, name))
-            for name in [String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),  # small-loop(optional resident entry names)
-                         String("causal_lm_session_forward"), String("transformer_arithmetic_profile"),
-                         String("transformer_arithmetic_profile_changed")]:
+        # The resident GPU route for fixed-length greedy generation and the
+        # resident forward: every session operation is the transformer
+        # image's session entry (core/causal_lm_entry_table_sessions.mojo),
+        # sessions are native registry handles. The former Python entry
+        # lookups (transformer_decode_session_*, causal_lm_session_*,
+        # transformer_vendor) are gone (lane causal-lm-sessions-native).
+        if requested_gpu:
+            causal_sessions_tables_admit(key, CAUSAL_SESSIONS_TRANSFORMER)
+            py_setitem(entries, "resident", PythonObject(True))
+            py_setitem(entries, "resident_vendor", PythonObject(vendor))
+            for name in [String("transformer_arithmetic_profile"), String("transformer_arithmetic_profile_changed")]:  # small-loop(optional profile entry names)
                 if _native_has_entry(mods, block_binding, name):
                     py_setitem(entries, name, _native_function(mods, block_binding, name))
-            if model._head_int15 is not None:
-                py_setitem(entries, "transformer_decode_session_open_int15", _native_function(mods, block_binding, "transformer_decode_session_open_int15"))
-                py_setitem(entries, "causal_lm_session_open_int15", _native_function(mods, block_binding, "causal_lm_session_open_int15"))
     elif kind == "mamba1":
         var profile = 1
         if _native_has_entry(mods, block_binding, "mamba1_profile"):
@@ -326,8 +329,12 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
     # Lane x45c: the decode program door (every GPU kind).
-    if requested_gpu and _native_has_entry(mods, block_binding, "causal_lm_program_read_v1"):
-        py_setitem(entries, "program_read", _native_function(mods, block_binding, "causal_lm_program_read_v1"))
+    # The program is the block image's session entry (CAUSAL_SESSIONS_TRANSFORMER
+    # or CAUSAL_SESSIONS_MAMBA); "program_read" holds that family word.
+    if requested_gpu:
+        var program_family = CAUSAL_SESSIONS_TRANSFORMER if kind == "transformer" else CAUSAL_SESSIONS_MAMBA
+        causal_sessions_tables_admit(key, program_family)
+        py_setitem(entries, "program_read", PythonObject(program_family))
     # Native ownership migration: resolve descriptor tables at admission by
     # default, so supported local operations enter the native execution engine.
     # Explicit MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 retains the compatibility route.
