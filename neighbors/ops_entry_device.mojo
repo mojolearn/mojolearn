@@ -47,6 +47,16 @@ def _i32(address: Int) raises -> _I32P:
     return i32_ptr(address)
 
 
+def _resident_queries(index: _F32P, address: Int, has_fold: Int) raises -> _F32P:
+    # A fold's queries are gathered on the device from the store; the owner
+    # passes no host query address (0) for it. The Python exports refused
+    # that 0 as a null buffer, so a fold never reached the device gather
+    # through them; here the index pointer stands in, never read as queries.
+    if has_fold != 0 and address == 0:
+        return index
+    return _f32(address)
+
+
 def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p: MutPointer[Int, MutUntrackedOrigin],
                       np: Int, f: MutPointer[Float64, MutUntrackedOrigin]) raises -> Int:
     if operation == NB_OP_INDEX_PREPARE:
@@ -94,7 +104,7 @@ def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p:
     if operation == NB_OP_CLASSIFY_RESIDENT:
         var n_classes = nb_class_counts(p, NB_CLASSIFY_RESIDENT_FIXED, np, p[6])
         var ip = _f32(a[0])
-        var qp = _f32(a[1])
+        var qp = _resident_queries(ip, a[1], p[10])
         var yp = _i32(a[2])
         var lp = _i32(a[3])
         var pp = _f32(a[4])
@@ -107,7 +117,7 @@ def nb_ops_device_run(operation: Int, a: MutPointer[Int, MutUntrackedOrigin], p:
         )
     # NB_OP_REGRESS_RESIDENT (nb_ops_check_spans refused any other id)
     var ip = _f32(a[0])
-    var qp = _f32(a[1])
+    var qp = _resident_queries(ip, a[1], p[9])
     var yp = _f32(a[2])
     var op = _f32(a[3])
     var status = nb_status_word(a[4])
