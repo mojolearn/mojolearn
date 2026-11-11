@@ -10,6 +10,7 @@ from core.boundary_layout import (
     BufferLayout, buffer_layout_from_words, layout_is_c_contiguous, format_kind, format_matches,
     gather_f32, gather_f64, gather_i64, c_strides, PY_BUFFER_WORDS,
     BOUNDARY_KIND_FLOAT, BOUNDARY_KIND_INT, BOUNDARY_KIND_UINT, BOUNDARY_KIND_BOOL,
+    BOUNDARY_KIND_UCS4, BOUNDARY_KIND_BYTES, text_format_kind, text_rows,
 )
 
 # Fixtures 0-7 run across the pool; fixture 8 (a conversion that itself
@@ -194,6 +195,71 @@ def fixture(unit: Int) raises:
         _ = strides^
 
 
+def text_fixture() raises:
+    """Fixed-width text storage (lane loops-prep-host): the text format
+    kinds, a strided UCS4 vector and a bytes vector read by `text_rows`
+    (trailing NULs dropped, as NumPy's tolist), and the numeric gathers'
+    refusal of text storage. Runs after the pool fixtures: `text_rows`
+    itself splits across the pool."""
+    require(text_format_kind("w") == BOUNDARY_KIND_UCS4, "text kind w")
+    require(text_format_kind("<3w") == BOUNDARY_KIND_UCS4, "text kind <3w")
+    require(text_format_kind("=12w") == BOUNDARY_KIND_UCS4, "text kind =12w")
+    require(text_format_kind("5s") == BOUNDARY_KIND_BYTES, "text kind 5s")
+    require(text_format_kind("s") == BOUNDARY_KIND_BYTES, "text kind s")
+    require(text_format_kind(">3w") == 0, "text kind >3w is not admitted")
+    require(text_format_kind("<f") == 0 and text_format_kind("f") == 0, "numeric formats are not text")
+    require(text_format_kind("3x") == 0 and text_format_kind("<") == 0 and text_format_kind("") == 0,
+            "malformed formats are not text")
+    # Three UCS4 elements of width 3 at a 24-byte stride (every other slot):
+    # "ab", "", "xyz".
+    var wide = List[UInt32](length=18, fill=0)
+    wide[0] = 97
+    wide[1] = 98
+    wide[12] = 120
+    wide[13] = 121
+    wide[14] = 122
+    wide[3] = 0x1F600  # padding slot between elements: never read
+    var shape: List[Int] = [3]
+    var strides: List[Int] = [24]
+    var layout = buffer_layout_from_words(_words(Int(wide.unsafe_ptr()), 3 * 12, 12, 1, Int(shape.unsafe_ptr()),
+                                                 Int(strides.unsafe_ptr())))
+    var rows = text_rows(layout, BOUNDARY_KIND_UCS4)
+    require(rows.count == 3, "text_rows ucs4 count")
+    require(rows.lengths[0] == 2 and rows.lengths[1] == 0 and rows.lengths[2] == 3, "text_rows ucs4 lengths")
+    require(rows.starts[0] == 0 and rows.starts[1] == 2 and rows.starts[2] == 2, "text_rows ucs4 starts")
+    require(len(rows.points) == 5 and rows.points[0] == 97 and rows.points[1] == 98 and rows.points[2] == 120
+            and rows.points[4] == 122, "text_rows ucs4 points")
+    var refused = False
+    try:
+        var sink = List[Float64](length=3, fill=0.0)
+        gather_f64(layout, BOUNDARY_KIND_UCS4, Int(sink.unsafe_ptr()))
+        _ = sink^
+    except:
+        refused = True
+    require(refused, "numeric gather refuses text storage")
+    # Two bytes elements of width 4: "hi", "abcd" (an interior NUL is kept).
+    var narrow = List[UInt8](length=8, fill=0)
+    narrow[0] = 104
+    narrow[1] = 105
+    narrow[4] = 97
+    narrow[5] = 0
+    narrow[6] = 99
+    narrow[7] = 100
+    var bshape: List[Int] = [2]
+    var bstrides: List[Int] = [4]
+    var blayout = buffer_layout_from_words(_words(Int(narrow.unsafe_ptr()), 8, 4, 1, Int(bshape.unsafe_ptr()),
+                                                  Int(bstrides.unsafe_ptr())))
+    var brows = text_rows(blayout, BOUNDARY_KIND_BYTES)
+    require(brows.lengths[0] == 2 and brows.lengths[1] == 4, "text_rows bytes lengths")
+    require(brows.points[2] == 97 and brows.points[3] == 0 and brows.points[5] == 100, "text_rows bytes points")
+    _ = wide^
+    _ = shape^
+    _ = strides^
+    _ = narrow^
+    _ = bshape^
+    _ = bstrides^
+
+
 def run_checks() raises:
     var failures = List[Int](length=BOUNDARY_LAYOUT_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
@@ -209,4 +275,5 @@ def run_checks() raises:
         failed += value
     require(failed == 0, "boundary_layout failed " + String(failed) + " fixtures")
     fixture(BOUNDARY_LAYOUT_FIXTURES)
-    print("PASS boundary_layout:", BOUNDARY_LAYOUT_FIXTURES + 1, "Py_buffer decode / format / conversion fixtures")
+    text_fixture()
+    print("PASS boundary_layout:", BOUNDARY_LAYOUT_FIXTURES + 2, "Py_buffer decode / format / conversion / text fixtures")
