@@ -5,7 +5,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_type, py_get, py_call
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from core.shared_slot import SharedSlot
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_type
 from bindings.decomp_scalar_compare import decomp_equal_admitted
 from bindings.family_common import family_repr
 from bindings.p3_array_arena_records import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
@@ -56,16 +56,33 @@ def oc_dictionary(value: PythonObject) raises:
         p3_dict_admit(P3_DICT_NATIVE_STRING_KEYS, value)
 
 
+def _oc_ndarray(context: PythonObject) raises -> PythonObject:
+    # The public context is mutable. Admit the lookup containers and compare
+    # its advertised type with the retained native extension identity before
+    # reading any dtype/shape/item field on a candidate instance.
+    oc_dictionary(context)
+    var advertised = py_get(context, "ndarray")
+    if advertised is None:
+        return PythonObject(None)
+    oc_dictionary(context["modules"])
+    var native = native_numpy_type("ndarray", context)
+    if advertised is not native:
+        raise Error("TypeError: OneClassSVM ndarray metadata must retain NumPy's native type")
+    return native
+
+
 def oc_scalar_admit(value: PythonObject, context: PythonObject) raises:
     var current = value
     var visited = List[Int]()
     var b = native_loaded_module("builtins")
-    var ndarray = py_get(context, "ndarray")
+    var ndarray = PythonObject(None)
     while True:  # boundary-only traversal of a scalar object-array owner chain
         var cls = py_type(current)
         if (cls is b.float or cls is b.int or cls is b.bool or cls is b.str or cls is b.bytes
             or cls is b.bytearray or cls is b.complex or cls is py_type(PythonObject(None))):
             return
+        if ndarray is None:
+            ndarray = _oc_ndarray(context)
         if ndarray is None:
             raise Error("TypeError: OneClassSVM parameters require native scalar values without Python hooks")
         var constructor = native_numpy_dtype(context)
@@ -104,6 +121,24 @@ def oc_name(value: PythonObject, name: String, context: PythonObject) raises -> 
     return decomp_equal_admitted(value, PythonObject(name))
 
 
+def oc_precomputed(value: PythonObject, context: PythonObject) raises -> Bool:
+    # The old route compared str(kernel), not ndarray equality. A rank-one
+    # one-element string array compares equal but formats with brackets and
+    # must still reach the later native unhashable-key refusal. Unwrap only
+    # zero-dimensional native arrays; never invoke NumPy's formatting hooks.
+    oc_scalar_admit(value, context)
+    var current = value
+    var b = native_loaded_module("builtins")
+    if py_type(current) is b.str:
+        return String(current) == "precomputed"
+    var ndarray = _oc_ndarray(context)
+    while ndarray is not None and py_type(current) is ndarray:
+        if Int(py=current.ndim) != 0:
+            return False
+        current = py_call(current.item)
+    return decomp_equal_admitted(current, PythonObject("precomputed"))
+
+
 def oc_kernel_admit(value: PythonObject, context: PythonObject) raises -> Bool:
     oc_scalar_admit(value, context)
     for name in ["linear", "poly", "rbf", "sigmoid", "precomputed"]:  # five native option names
@@ -113,7 +148,7 @@ def oc_kernel_admit(value: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def oc_parameter_repr(value: PythonObject, context: PythonObject) raises -> String:
-    if py_type(value) is py_get(context, "ndarray"):
+    if py_type(value) is _oc_ndarray(context):
         return "<native scalar array>"
     return family_repr(value)
 

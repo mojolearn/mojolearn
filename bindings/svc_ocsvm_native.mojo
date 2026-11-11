@@ -13,14 +13,14 @@ from providers.python.x_neighbors_descriptor_pyapi import xn_admit, xn_module, x
 from providers.python.estimator_binding_pyapi import estimator_binding
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from bindings.ocsvm_provider import OcConnection
 from bindings.labels_descriptor_boundary import labels_gather
 from core.ocsvm_plan import (OcMatrix, OcWeights, OcFitState, oc_f32_address, oc_i32_address,
     oc_take_rows, oc_take_rows_into, oc_take_cols, oc_kernel, oc_variance, OcQueryState,
     oc_kernel_product, oc_fused_labels, oc_product, oc_decision, oc_sign)
 from bindings.ocsvm_output_boundary import OcOutput
-from bindings.ocsvm_scalar_boundary import oc_dictionary, oc_name, oc_kernel_admit, oc_parameter_repr, oc_mode_value
+from bindings.ocsvm_scalar_boundary import oc_dictionary, oc_name, oc_kernel_admit, oc_parameter_repr, oc_mode_value, oc_scalar_admit, oc_precomputed
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import _loaded_fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -36,6 +36,16 @@ from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_prefix, svc_scalar_array,
 )
+
+def _oc_float(value: PythonObject, context: PythonObject) raises -> Float64:
+    oc_scalar_admit(value, context)
+    return svc_float(value)
+
+
+def _oc_int(value: PythonObject, context: PythonObject) raises -> Int:
+    oc_scalar_admit(value, context)
+    return svc_int(value)
+
 
 def _a(value: PythonObject) raises -> PythonObject:
     return classical_address(value)
@@ -75,7 +85,7 @@ def _resolve_gamma_native(mut connection: OcConnection, gamma: PythonObject,
         with GILReleased(Python()):
             value = oc_variance(driver, address, rows * columns)
         return 1.0 / (Float64(columns) * value) if value != 0 else 1.0
-    return svc_float(gamma)
+    return _oc_float(gamma, context)
 
 
 def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -87,14 +97,14 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
         raise Error("NotImplementedError: OneClassSVM callable kernels require a native kernel name")
     if not oc_kernel_admit(kernel, context):
         raise Error("NotImplementedError: OneClassSVM: kernel=" + oc_parameter_repr(kernel, context) + " is not implemented")
-    var nu = svc_float(svc_field(fields, "nu"))
+    var nu = _oc_float(svc_field(fields, "nu"), context)
     if not (0.0 < nu and nu <= 1.0):
         raise Error("nu must be in (0, 1]")
     var x = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var x_address = Int(py=_a(x))
-    var precomputed = oc_name(kernel, "precomputed", context)
+    var precomputed = oc_precomputed(kernel, context)
     if precomputed and n != d:
         raise Error("Precomputed matrix must be a square matrix.")
     var weights = OcWeights()
@@ -131,8 +141,8 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
                 _ = selected_rows
         has_gram = True
     else:
-        degree = svc_int(svc_field(fields, "degree"))
-        coef0 = svc_float(svc_field(fields, "coef0"))
+        degree = _oc_int(svc_field(fields, "degree"), context)
+        coef0 = _oc_float(svc_field(fields, "coef0"), context)
         var gamma = _f32_scalar(_resolve_gamma_native(connection, svc_field(fields, "gamma"), x_address, n, d, context))
         py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
         if weights.selected:
@@ -156,12 +166,12 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
     with GILReleased(Python()):
         state.initialize(driver, oc_f32_address(weights.values), nu)
     state.prepare_metadata()
-    var max_iter = svc_int(svc_field(fields, "max_iter"))
+    var max_iter = _oc_int(svc_field(fields, "max_iter"), context)
     var cap = 10000000 if max_iter < 0 else max_iter
-    var tol = _f32_scalar(svc_float(svc_field(fields, "tol")))
+    var tol = _f32_scalar(_oc_float(svc_field(fields, "tol"), context))
     if not has_gram:
         var code = Int(py=context["family_svc_xn_kernels"][kernel])
-        var gamma = svc_float(svc_field(fields, "_gamma"))
+        var gamma = _oc_float(svc_field(fields, "_gamma"), context)
         if xn_is_module(binding):
             var resident = connection.resident_driver()
             with GILReleased(Python()):
@@ -183,7 +193,7 @@ def _ocsvm_fit_native(model: PythonObject, binding: PythonObject, source: Python
         # The former first prefix Array was private. Preserve its copy in a
         # native owner before allocating the final mapped public support.
         var prefix = List[Int32](length=n_sv, fill=0)
-        memcpy(dest=prefix.unsafe_ptr(), src=state.support_rows.unsafe_ptr(), count=n_sv)
+        unsafe_memcpy(dest=prefix.unsafe_ptr(), src=state.support_rows.unsafe_ptr(), count=n_sv)
         support = family_array(Python.tuple(PythonObject(n_sv)), "<i4", context)
         labels_gather(context, 0, oc_i32_address(weights.rows), m, oc_i32_address(prefix), n_sv, Int(py=_a(support)))
         _ = prefix
@@ -265,16 +275,16 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
         coef = admit_family(dual, 2, "dual_coef_", context, False).array
         ocsvm_coef_remember(model, dual, coef)
     var kernel = svc_field(fields, "kernel")
-    var precomputed = oc_name(kernel, "precomputed", context)
+    var precomputed = oc_precomputed(kernel, context)
     var nq = Int(py=q.shape[0])
     var sv = svc_field(fields, "support_vectors_")
     if not precomputed and n_sv > 0 and nq > 0 and not svc_truthy(context["family_svc_xn_old_items"]):
-        var degree = svc_int(svc_field(fields, "degree"))
-        var gamma = svc_float(svc_field(fields, "_gamma"))
-        var coef0 = svc_float(svc_field(fields, "coef0"))
+        var degree = _oc_int(svc_field(fields, "degree"), context)
+        var gamma = _oc_float(svc_field(fields, "_gamma"), context)
+        var coef0 = _oc_float(svc_field(fields, "coef0"), context)
         var d = Int(py=q.shape[1])
         if labels and _ocsvm_labels_available(binding):
-            var offset = svc_float(svc_field(fields, "offset_"))
+            var offset = _oc_float(svc_field(fields, "offset_"), context)
             var result = OcOutput(nq, True, False, context)
             var query_address = Int(py=_a(q))
             var reference_address = Int(py=_a(sv))
@@ -312,9 +322,9 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
         _ = support
     else:
         var code = Int(py=context["family_svc_xn_kernels"][kernel])
-        var gamma = svc_float(svc_field(fields, "_gamma"))
-        var coef0 = svc_float(svc_field(fields, "coef0"))
-        var degree = svc_int(svc_field(fields, "degree"))
+        var gamma = _oc_float(svc_field(fields, "_gamma"), context)
+        var coef0 = _oc_float(svc_field(fields, "coef0"), context)
+        var degree = _oc_int(svc_field(fields, "degree"), context)
         var features = Int(py=q.shape[1])
         var references = Int(py=sv.shape[0])
         var query_address = Int(py=_a(q))
@@ -347,7 +357,7 @@ def _ocsvm_decision(model: PythonObject, binding: PythonObject, source: PythonOb
     context: PythonObject, mut connection: OcConnection) raises -> PythonObject:
     var scores = _ocsvm_run(model, binding, source, False, False, context, connection)
     var result = family_array(Python.tuple(PythonObject(scores.state.count)), "<f4", context)
-    var offset = svc_float(svc_field(py_fields(model), "offset_"))
+    var offset = _oc_float(svc_field(py_fields(model), "offset_"), context)
     var address = Int(py=_a(result))
     var driver = connection.driver()
     with GILReleased(Python()):
@@ -366,7 +376,7 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     var label_address = first.state.address()
     if not first.state.labels:
         decision = OcQueryState(n, False, True)
-        var offset = svc_float(svc_field(py_fields(model), "offset_"))
+        var offset = _oc_float(svc_field(py_fields(model), "offset_"), context)
         var driver = connection.driver()
         with GILReleased(Python()):
             oc_decision(driver, first.state.address(), decision.address(), n, offset)
