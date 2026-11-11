@@ -147,22 +147,16 @@ def forest_strict_predict_host_binding[RF_INPUT: Bool](
         Int(py=handle), Int(py=x_addr), Int(py=out_addr), Int(py=params[0]), Int(py=params[1]), Int(py=params[2])))
 
 
-def forest_strict_release_host_native[RF_INPUT: Bool](handle: Int):
+def forest_strict_release_host_native[RF_INPUT: Bool](handle: Int) raises:
     """XF_STRICT_RELEASE: an unknown handle is already released."""
     comptime if RF_INPUT:
         var state = RF_STRICT_REGISTRY.get_or_create_ptr()
         if handle in state[].entries:
-            try:
-                _ = state[].entries.pop(handle)
-            except:
-                pass
+            _ = state[].entries.pop(handle)
     else:
         var state = ET_STRICT_REGISTRY.get_or_create_ptr()
         if handle in state[].entries:
-            try:
-                _ = state[].entries.pop(handle)
-            except:
-                pass
+            _ = state[].entries.pop(handle)
 
 
 def forest_strict_release_host_binding[RF_INPUT: Bool](handle: PythonObject) raises -> PythonObject:
