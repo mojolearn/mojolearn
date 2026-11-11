@@ -49,8 +49,8 @@ from bindings.family_common import (
     family_entry, family_array,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
-from core.svr_native_api import SvrFitPlan, SvrFitRequest
-from bindings.svr_native_boundary import svr_connection, svr_run_fit
+from core.svr_native_api import SvrFitPlan, SvrFitRequest, SvrQueryRequest
+from bindings.svr_native_boundary import svr_connection, svr_run_fit, svr_run_query, SvrResidentPin, svr_resident_pin
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
     svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
@@ -81,7 +81,7 @@ from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from core.host_finite_scan import host_all_finite_f32_strided
-from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
+from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from std.os import getenv
@@ -1237,6 +1237,13 @@ def _svm_query(source: PythonObject, est: String, context: PythonObject, entry_t
     return _SvmQuery(q.keep, q.owner, q.source.addr, q.shape[0], q.shape[1], DoorRowsStore.none())
 
 
+def _svm_query_refuse(finite: Int, range_word: Int, q: _SvmQuery, est: String) raises:
+    if q.store.active():
+        door_rows_refuse(finite, range_word, est, q.store.base_rows)
+    else:
+        admitted_finite_refuse(finite, est)
+
+
 def _svm_query_refuse(words: PythonObject, q: _SvmQuery, est: String) raises:
     """The refusal of a query the resident entry flagged (its [finite,
     range] words; None: another route, which tests the query itself), in
@@ -1496,14 +1503,6 @@ def _pred_count(pred: PythonObject) raises -> Int:
 # ---------------------------------------------------------------- SVR
 
 
-def _kernel_tail(fields: PythonObject, params: PythonObject) raises:
-    """degree and coef0 as the optional trailing params, only for 'poly'
-    and 'sigmoid'."""
-    var k = String(svc_field(fields, "_hp_kernel"))
-    if k == "poly" or k == "sigmoid":
-        _ = py_call(params.append, family_call(svc_builtins().int, svc_field(fields, "_hp_degree")))
-        _ = py_call(params.append, family_call(svc_builtins().float, svc_field(fields, "_hp_coef0")))
-
 
 def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, native: PythonObject) raises:
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
@@ -1635,7 +1634,6 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     var query = q
     var query_address = q_meta.address
     var held = PythonObject(None)
-    var words = PythonObject(None)
     if precomputed and n_support > 0:
         # the cross-kernel's columns at the support vectors (SVC's rule)
         held = _i32_array(svc_field(fields, "support_"), context)
@@ -1645,48 +1643,42 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
         query_address = _addr(query)
         n_features = n_support
         sv = dual
-    # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_predict_binding:
-    # n_rows, n_features, n_support, b, kernel, gamma, cache_size_mib
-    var params = Python.list(PythonObject(n_rows), PythonObject(n_features), PythonObject(n_support),
-                             PythonObject(svc_read_f32(svc_field(fields, "intercept_"), 0)),
-                             PythonObject(_kernel_code(fields, context)), svc_field(fields, "_gamma"),
-                             svc_field(fields, "_hp_cache_size"))
-    _kernel_tail(fields, params)
-    if resident_entry is not None:
-        # Device-resident support rows and duals (lane ne1-a-gp-svm;
-        # bindings/fitted_resident_door.mojo). ORDER MATCHES
-        # bindings/_mojolearn_svm.mojo::svr_predict_resident_binding:
-        # svr_predict's 9 (degree 3 and coef0 0 where the kernel reads
-        # neither, svr_predict's own defaults), then lease, slot.
-        if len(params) == 7:
-            _ = py_call(params.append, PythonObject(3))
-            _ = py_call(params.append, PythonObject(Float64(0.0)))
-        var lease = 0
-        if not (String(svc_field(fields, "_hp_kernel")) == "precomputed"):
-            # precomputed reads no support rows (its query is the gathered cross-kernel)
-            lease = fitted_resident_lease(model, _SVR_RESIDENT_SLOT, binding, "svm_resident_lease",
-                                          Python.list(dual, sv))
-        _ = py_call(params.append, PythonObject(lease))
-        _ = py_call(params.append, PythonObject(0))
-        if q_meta.store.active():
-            # then the fold's store ids (no query address; lane a7a)
-            _ = py_call(params.append, PythonObject(q_meta.store.base_id))
-            _ = py_call(params.append, PythonObject(q_meta.store.base_rows))
-            _ = py_call(params.append, PythonObject(q_meta.store.index_id))
-        words = family_call(resident_entry, PythonObject(query_address),
-                        classical_address(dual) if n_support > 0 else PythonObject(0),
-                        classical_address(sv) if n_support > 0 else PythonObject(0),
-                        classical_address(out), params)
-    else:
-        _ = svr_execute(binding, native, False, Python.list(PythonObject(query_address),
-                        classical_address(dual) if n_support > 0 else PythonObject(0),
-                        classical_address(sv) if n_support > 0 else PythonObject(0),
-                        classical_address(out)), params)
+    var bias = svc_read_f32(svc_field(fields, "intercept_"), 0)
+    var kernel = _kernel_code(fields, context)
+    var gamma_value = svc_field(fields, "_gamma")
+    var cache_value = svc_field(fields, "_hp_cache_size")
+    var degree = 3
+    var coef0 = Float64(0)
+    var k = String(svc_field(fields, "_hp_kernel"))
+    if k == "poly" or k == "sigmoid":
+        degree = svc_int(svc_field(fields, "_hp_degree"))
+        coef0 = svc_float(svc_field(fields, "_hp_coef0"))
+    var connection = svr_connection(binding)
+    var resident = resident_entry is not None
+    var lease = SvrResidentPin(PythonObject(None), 0)
+    if resident and String(svc_field(fields, "_hp_kernel")) != "precomputed":
+        var mirrors: List[PythonObject] = [dual, sv]
+        lease = svr_resident_pin(model, _SVR_RESIDENT_SLOT, binding, connection, mirrors)
+    var dual_address = Int(py=classical_address(dual)) if n_support > 0 else 0
+    var vector_address = Int(py=classical_address(sv)) if n_support > 0 else 0
+    var output_address = Int(py=classical_address(out))
+    var gamma = Float64(py=gamma_value)
+    var cache_mib = Float64(py=cache_value)
+    var status: InlineArray[Int32, 2] = [0, 0]
+    var request = SvrQueryRequest(query_address, dual_address, vector_address, output_address,
+        Int(status.unsafe_ptr()), n_rows, n_features, n_support, kernel, degree,
+        lease.handle, 0, q_meta.store.base_id, q_meta.store.base_rows, q_meta.store.index_id,
+        bias, gamma, cache_mib, coef0)
+    svr_run_query(connection, request, resident)
     _ = query  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = sv  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    _svm_query_refuse(words, q_meta, "SVR")
+    if resident:
+        _svm_query_refuse(Int(status[0]), Int(status[1]), q_meta, "SVR")
+    _ = status
+    _ = lease
+    _ = connection
     _ = query^
     _ = held^
     _ = q^

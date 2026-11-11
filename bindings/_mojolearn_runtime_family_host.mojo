@@ -20,6 +20,7 @@ from bindings.classical_family_door import classical_family_c
 from bindings.host_svr_native import host_svr_attribute_c
 from bindings.host_svc_native import host_svc_attribute_c
 from bindings.gp_resident_boundary import GPPreparedLease
+from bindings.svr_native_boundary import SvrPreparedLease
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.gp_kernel_cache_boundary import GPPreparedKernel
 from bindings.gp_state_cache_boundary import GPPreparedState
@@ -168,6 +169,18 @@ def register_AggloHolder(mut module: PythonModuleBuilder) raises:
     register_native_owner(existing, module.module, agglo_holder_pins)
 
 
+def register_SvrPreparedLease(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[SvrPreparedLease]()
+    except error:
+        if not py_type_absent(error, String(reflect[SvrPreparedLease].name())):
+            raise error
+        _ = module.add_type[SvrPreparedLease]("_SvrPreparedLease")
+        return
+    py_type_attach(module.module, "_SvrPreparedLease", existing)
+
+
 def register_GPPreparedLease(mut module: PythonModuleBuilder) raises:
     var existing = PythonObject(None)
     try:
@@ -237,6 +250,7 @@ def build__mojolearn_runtime_family_host() -> PythonObject:
         register_KDEResidentOwner(module)
         register_KDEAdmissionOwner(module)
         register_GPPreparedLease(module)
+        register_SvrPreparedLease(module)
         register_GPPackedKernel(module)
         register_GPPreparedKernel(module)
         register_GPPreparedState(module)
