@@ -275,3 +275,22 @@ path. This is scalar UNPACK under the GIL, not a numerical kernel replacement;
 the original single input conversion is retained without an extra data copy.
 The 51-role frozen audit remains immutable; this pending follow-up is separate.
 No lane build, runtime test or timing was performed.
+
+### Following tranche: native postfix capture
+
+Ordinary GP kernel packing now consumes `gp_kernel_native_nodes` directly. The
+shared capture keeps postfix records, scale words and its traversal stack in
+Mojo containers. It no longer creates a synthetic Python context dictionary,
+node tuples or an intermediate Python postfix list. Exact integer kind objects
+remain temporary UNPACK pins so an overflowing saved kind cannot overtake a
+later node's admission error; all kinds still convert before parameters,
+lengths and scale words. Public kernel/storage references remain lifetime pins.
+
+The archive entry packs its existing tuple/list schema from that same capture.
+Layout validation retains archive destination admission first. No numerical
+kernel, provider call, default, transfer or public archive schema changes.
+This source is for the batch after the frozen `d6090df58b` tranche. Source
+review and `git diff --check` only; compilation, runtime seams and performance
+are pending with the integrator. The frozen 51-role audit is unchanged; the
+following-tranche role audit records additions separately. General primitive
+label ordering/index metadata and broader fitted-state admission remain open.

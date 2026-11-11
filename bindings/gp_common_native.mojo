@@ -17,7 +17,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from std.memory import memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
-from bindings.archive_schema_native import _schema_kernel_nodes
+from bindings.archive_schema_native import _schema_kernel_layouts
+from bindings.gp_kernel_public_native import gp_kernel_native_nodes
 
 
 
@@ -84,14 +85,15 @@ def gp_model_kernel(fields: PythonObject) raises -> PythonObject:
 
 def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
     """UNPACK the admitted postfix graph into one native storage owner."""
-    var nodes = Python.list()
-    _schema_kernel_nodes(kernel, context["family_gp_kernel_nodes"], nodes)
+    var table = context["family_gp_kernel_nodes"]
+    _schema_kernel_layouts(table)
+    var nodes = gp_kernel_native_nodes(kernel, table)
     var storage = GPKernelStorage()
     # Preserve the former separate Array conversions' refusal order: every
     # integer kind first, then parameters, lengths, and length-scale words.
     try:
         for i in range(len(nodes)):  # driver-loop: one admitted integer kind per postfix node
-            var kind = Int(py=nodes[i][0])
+            var kind = Int(py=nodes[i].kind)
             if kind < -2147483648:
                 raise Error("signed integer is less than minimum")
             if kind > 2147483647:
@@ -100,16 +102,15 @@ def gp_kernel_arrays(kernel: PythonObject, context: PythonObject) raises -> Pyth
     except error:
         raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: " + String(error))
     for i in range(len(nodes)):  # driver-loop: the admitted native parameter of each node
-        storage.parameters.append(Float32(Float64(py=nodes[i][1])))
+        storage.parameters.append(Float32(nodes[i].parameter))
     for i in range(len(nodes)):  # driver-loop: length metadata before the scale table
-        var count = len(nodes[i][2])
+        var count = len(nodes[i].scales)
         if count > 2147483647:
             raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
         storage.lengths.append(Int32(count))
     for i in range(len(nodes)):  # driver-loop: scales of each postfix node, in the original order
-        var scales = nodes[i][2]
-        for j in range(len(scales)):  # driver-loop: one admitted length-scale parameter
-            storage.scales.append(Float32(Float64(py=scales[j])))
+        for j in range(len(nodes[i].scales)):  # driver-loop: one admitted length-scale parameter
+            storage.scales.append(Float32(nodes[i].scales[j]))
     storage.finish()
     return PythonObject(alloc=GPPackedKernel(storage^))
 

@@ -44,15 +44,19 @@ def _kernel_sequence(value: PythonObject) raises:
         raise Error("TypeError: GP kernel state requires exact lists or tuples without Python sequence hooks")
 
 
-def _kernel_class(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
+def _kernel_class_table(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
     var cls = py_type(kernel)
     # Identity comparison precedes keyed lookup: an application metaclass may
     # otherwise execute __hash__ or __eq__ through a table membership test.
-    var classes = py_call(native_loaded_module("builtins").list, context["family_gp_kernel_nodes"].keys())
+    var classes = py_call(native_loaded_module("builtins").list, table.keys())
     for i in range(len(classes)):  # driver-loop: fixed import-connected kernel types
         if cls is classes[i]:
             return cls
     raise Error("TypeError: native GP kernels require a connected built-in kernel without Python subclass protocols")
+
+
+def _kernel_class(kernel: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _kernel_class_table(kernel, context["family_gp_kernel_nodes"])
 
 
 def _kernel_state(kernel: PythonObject, mut snapshot: GPKernelSnapshot) raises -> PythonObject:
@@ -77,7 +81,7 @@ def _kernel_read(kernel: PythonObject, fields: PythonObject, name: PythonObject,
     return native_instance_item(fields, name)
 
 
-def _kernel_walk(kernel: PythonObject, context: PythonObject, active: PythonObject,
+def _kernel_walk(kernel: PythonObject, context: PythonObject, mut active: List[PythonObject],
                  mut snapshot: GPKernelSnapshot) raises:
     var cls = _kernel_class(kernel, context)
     for i in range(len(active)):  # driver-loop: reject cycles before descending into a composite
@@ -85,7 +89,7 @@ def _kernel_walk(kernel: PythonObject, context: PythonObject, active: PythonObje
             raise Error("ValueError: cyclic GP kernel graph")
     if len(active) >= 512:
         raise Error("ValueError: GP kernel graph exceeds native traversal depth")
-    _ = py_call(active.append, kernel)
+    active.append(kernel)
     var fields = _kernel_state(kernel, snapshot)
     var layout = context["family_gp_kernel_nodes"][cls]
     var how = String(layout[0])
@@ -138,12 +142,13 @@ def _kernel_walk(kernel: PythonObject, context: PythonObject, active: PythonObje
                 snapshot.highs.append(_kernel_scalar(pair[1]))
     else:
         raise Error("RuntimeError: unknown connected GP kernel layout")
-    _ = py_call(active.pop)
+    _ = active.pop()
 
 
 def gp_kernel_snapshot(kernel: PythonObject, context: PythonObject) raises -> GPKernelSnapshot:
     var snapshot = GPKernelSnapshot()
-    _kernel_walk(kernel, context, Python.list(), snapshot)
+    var active = List[PythonObject]()
+    _kernel_walk(kernel, context, active, snapshot)
     return snapshot^
 
 
@@ -450,7 +455,7 @@ def _kernel_construct(kernel: PythonObject, operation: String, args: PythonObjec
     elif how == "pair":
         # Shared leaves retain one dictionary capture across both operands.
         var snapshot = GPKernelSnapshot()
-        var active = Python.list()
+        var active = List[PythonObject]()
         _kernel_walk(args[0], context, active, snapshot)
         _kernel_walk(args[1], context, active, snapshot)
         var op = args[2]
@@ -521,25 +526,40 @@ def _kernel_allocation_class(cls: PythonObject) raises:
             raise Error("TypeError: native GP kernel allocation refuses Python finalizers")
 
 
-def _kernel_node_scales(source: PythonObject) raises -> PythonObject:
+struct GPKernelNode(Movable):
+    # The exact integer kind remains an UNPACK pin until every node is admitted.
+    # Its later Int32 conversion must not overtake a later node's refusal.
+    var kind: PythonObject
+    var parameter: Float64
+    var scales: List[Float64]
+
+    def __init__(out self, kind: PythonObject, parameter: Float64,
+                 var scales: List[Float64]):
+        self.kind = kind
+        self.parameter = parameter
+        self.scales = scales^
+
+
+def _kernel_node_scales(source: PythonObject) raises -> List[Float64]:
     _kernel_sequence(source)
-    var result = Python.list()
-    for i in range(len(source)):  # driver-loop: copy admitted native scale words into the finished node
-        _ = py_call(result.append, PythonObject(_kernel_scalar(source[i])))
-    return result
+    var result = List[Float64]()
+    for i in range(len(source)):  # driver-loop: admitted scale metadata in the finished node
+        result.append(_kernel_scalar(source[i]))
+    return result^
 
 
-def _kernel_nodes_walk(kernel: PythonObject, context: PythonObject, active: PythonObject,
-                       mut snapshot: GPKernelSnapshot, nodes: PythonObject) raises:
-    var cls = _kernel_class(kernel, context)
+def _kernel_nodes_walk(kernel: PythonObject, table: PythonObject,
+                       mut active: List[PythonObject], mut snapshot: GPKernelSnapshot,
+                       mut nodes: List[GPKernelNode]) raises:
+    var cls = _kernel_class_table(kernel, table)
     for i in range(len(active)):  # driver-loop: refuse cyclic postfix graph construction
         if kernel is active[i]:
             raise Error("ValueError: cyclic GP kernel graph")
     if len(active) >= 512:
         raise Error("ValueError: GP kernel graph exceeds native traversal depth")
-    _ = py_call(active.append, kernel)
+    active.append(kernel)
     var fields = _kernel_state(kernel, snapshot)
-    var layout = context["family_gp_kernel_nodes"][cls]
+    var layout = table[cls]
     var how = String(layout[0])
     if how == "pair":
         var left = _kernel_read(kernel, fields, layout[1])
@@ -547,9 +567,9 @@ def _kernel_nodes_walk(kernel: PythonObject, context: PythonObject, active: Pyth
         var op = _kernel_read(kernel, fields, layout[3])
         if py_type(op) is not py_type(PythonObject(0)) or (Int(py=op) != 4 and Int(py=op) != 5):
             raise Error("TypeError: native GP kernel operator must be the sum or product code")
-        _kernel_nodes_walk(left, context, active, snapshot, nodes)
-        _kernel_nodes_walk(right, context, active, snapshot, nodes)
-        _ = py_call(nodes.append, Python.tuple(op, PythonObject(0.0), Python.list()))
+        _kernel_nodes_walk(left, table, active, snapshot, nodes)
+        _kernel_nodes_walk(right, table, active, snapshot, nodes)
+        nodes.append(GPKernelNode(op, Float64(0.0), List[Float64]()))
     elif how == "nodes":
         var source = _kernel_read(kernel, fields, layout[1])
         _kernel_sequence(source)
@@ -558,29 +578,42 @@ def _kernel_nodes_walk(kernel: PythonObject, context: PythonObject, active: Pyth
             _kernel_sequence(node)
             if len(node) != 3 or py_type(node[0]) is not py_type(PythonObject(0)):
                 raise Error("TypeError: saved GP kernel nodes require an integer kind, parameter and scale list")
-            _ = py_call(nodes.append, Python.tuple(node[0], PythonObject(_kernel_scalar(node[1])), _kernel_node_scales(node[2])))
+            var parameter = _kernel_scalar(node[1])
+            var scales = _kernel_node_scales(node[2])
+            nodes.append(GPKernelNode(node[0], parameter, scales^))
     elif how == "leaf":
         var parameter = Float64(0.0)
         if layout[2] is not None:
             parameter = _kernel_scalar(_kernel_read(kernel, fields, layout[2]))
-        var scales = Python.list()
+        var scales = List[Float64]()
         if layout[3] is not None:
             scales = _kernel_node_scales(_kernel_read(kernel, fields, layout[3]))
-        _ = py_call(nodes.append, Python.tuple(layout[1], PythonObject(parameter), scales))
+        nodes.append(GPKernelNode(layout[1], parameter, scales^))
     else:
         raise Error("RuntimeError: unknown connected GP kernel layout")
-    _ = py_call(active.pop)
+    _ = active.pop()
+
+
+def gp_kernel_native_nodes(kernel: PythonObject, table: PythonObject) raises -> List[GPKernelNode]:
+    # UNPACK only: one shared owner capture, a native active stack and native
+    # postfix/scalar containers. The import-connected layout table stays pinned.
+    var snapshot = GPKernelSnapshot()
+    var active = List[PythonObject]()
+    var nodes = List[GPKernelNode]()
+    _kernel_nodes_walk(kernel, table, active, snapshot, nodes)
+    return nodes^
 
 
 def gp_kernel_nodes(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
-    # Archive/kernel-array consumers supply only their import-connected node
-    # layout table. Bounds are deliberately unnecessary for saved fixed kernels.
-    # Each distinct owner dictionary is captured once and retained through the
-    # entire native postfix walk; the returned tuples/lists own their scalars.
-    var context = Python.dict(family_gp_kernel_nodes=table)
-    var snapshot = GPKernelSnapshot()
+    # Archive PACK: materialize the supported saved tuple/list schema only at
+    # this serialization boundary, over the same capture used by ordinary GP.
+    var captured = gp_kernel_native_nodes(kernel, table)
     var nodes = Python.list()
-    _kernel_nodes_walk(kernel, context, Python.list(), snapshot, nodes)
+    for i in range(len(captured)):  # driver-loop: archive records in postfix order
+        var scales = Python.list()
+        for j in range(len(captured[i].scales)):  # driver-loop: saved scale metadata
+            _ = py_call(scales.append, PythonObject(captured[i].scales[j]))
+        _ = py_call(nodes.append, Python.tuple(captured[i].kind, PythonObject(captured[i].parameter), scales))
     return nodes
 
 
