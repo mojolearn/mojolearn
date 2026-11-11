@@ -12,25 +12,25 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_is_array
-from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_call, family_array, family_min, family_field, family_is_str,
+    FAMILY_F32P, family_repr, family_call, family_array, family_field, family_is_str,
+)
+from cluster.dbscan_door_run import (
+    dbscan_check_method, dbscan_check_prediction, dbscan_check_eps, dbscan_check_min_samples,
+    dbscan_check_max_iterations, dbscan_check_budget, dbscan_check_x, dbscan_fit_request, dbscan_core_request,
 )
 from bindings.cluster_native import _reference_queries
 from bindings.dbscan_native_boundary import (
     DBSCANConnection, dbscan_array, dbscan_publish, dbscan_run_fit, dbscan_run_count, dbscan_run_gather,
     dbscan_fresh_holder, dbscan_mint, dbscan_reference_labels,
 )
-from core.dbscan_native_api import DBSCANFitRequest, DBSCANCoreRequest, DBSCANGatherRequest, DBSCANFitWorkspace, dbscan_empty_labels
-from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code, dbscan_method_accepts
+from core.dbscan_native_api import DBSCANGatherRequest, DBSCANFitWorkspace, dbscan_empty_labels
+from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.decomp_scalar_admission import decomp_scalar_repr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
-
-comptime _METRIC_PRECOMPUTED = 3
-comptime _EPS_NN_BRUTE_FORCE = 0
 
 
 def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -95,41 +95,22 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                     + "cover prunes arithmetically over two flat arrays and "
                     + "measured 2.7x-27x over brute force at 16k-200k rows on "
                     + "this hardware; see the class docstring")
-    if not dbscan_method_accepts(method, metric):
-        raise Error("mojolearn DBSCAN: metric=" + decomp_scalar_repr(metric_attr, context) + " with "
-                    + "algorithm=" + decomp_scalar_repr(algorithm, context) + " is refused. The ball cover "
-                    + "computes Euclidean distances for its landmark radii and "
-                    + "its three pruning bounds (neighbors/impl/"
-                    + "ball_cover/) against the radius itself, so it serves "
-                    + "'euclidean' only ('cosine' compares unit rows against "
-                    + "2 * eps, a threshold the index does not take). Pass "
-                    + "algorithm='brute', which serves this metric. This is a "
-                    + "scope boundary and not a property of the algorithm: the "
-                    + "ball cover's pruning rests on the triangle inequality, "
-                    + "which L1 satisfies, so an L1 index is reachable work in "
-                    + "that lane")
+    dbscan_check_method(method, metric, decomp_scalar_repr(metric_attr, context),
+                        decomp_scalar_repr(algorithm, context))
     var predicting = Bool(py=prediction_data)
-    if metric == _METRIC_PRECOMPUTED and predicting:
-        raise Error("mojolearn DBSCAN: prediction_data=True with "
-                    + "metric='precomputed' is refused by name: predict needs each "
-                    + "query's distances to the core samples, which a distance "
-                    + "matrix over the training rows does not give")
+    dbscan_check_prediction(metric, predicting)
     var eps_value = family_field(fields, "eps")
     host_inference_scalar(eps_value, context, True)
     var eps = Float64(py=family_call(b.float, eps_value))
-    if eps <= 0:
-        raise Error("mojolearn DBSCAN eps must be positive")
+    dbscan_check_eps(eps)
     var min_value = family_field(fields, "min_samples")
     host_inference_scalar(min_value, context, True)
     var min_samples = Int(py=family_call(b.int, min_value))
-    if min_samples < 1:
-        raise Error("mojolearn DBSCAN min_samples must be at least 1")
+    dbscan_check_min_samples(min_samples)
     var cap_attr = family_field(fields, "max_iterations")
     host_inference_scalar(cap_attr, context, True)
     var cap = 0 if cap_attr is None else Int(py=family_call(b.int, cap_attr))
-    if cap < 0:
-        raise Error("mojolearn DBSCAN max_iterations must be None (the fixed "
-                    + "point) or a positive cap")
+    dbscan_check_max_iterations(cap)
     # args[3] (present and True) marks `source` as the X the public door
     # already admitted with classical_check_x (providers/python/
     # density_public_lifecycle_pyapi.mojo): 2-D, non-empty, C-order float32
@@ -144,26 +125,14 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if not admitted and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-        # Before this check a NaN row reached the kernel and came back
-        # labelled noise (-1), silently; scikit-learn refuses it.
-        raise Error("mojolearn DBSCAN: X contains a NaN or an infinity; a "
-                    + "non-finite row has no distance to any other, so it is "
-                    + "refused by name")
-    _ = x  # keep the Python object alive through the native calls above
-    if metric == _METRIC_PRECOMPUTED:
-        if n != d:
-            raise Error("mojolearn DBSCAN: metric='precomputed' needs a square "
-                        + "distance matrix, got shape " + family_repr(py_call(b.tuple, x.shape)))
-        if Float64(family_min(x)) < 0:
-            raise Error("mojolearn DBSCAN: metric='precomputed' refuses a "
-                        + "negative distance, as scikit-learn does")
+    var x_address = Int(py=classical_address(x))
+    dbscan_check_x(x_address, n, d, admitted, metric)
+    _ = x  # keep the Python object alive through the native checks above
     var labels = dbscan_array(List[Int](length=1, fill=n), "<i4", context)
     var budget_attr = family_field(fields, "max_mbytes_per_batch")
     host_inference_scalar(budget_attr, context, True)
     var budget = 0 if budget_attr is None else Int(py=family_call(b.int, budget_attr))
-    if budget < 0:
-        raise Error("mojolearn DBSCAN max_mbytes_per_batch cannot be negative")
+    dbscan_check_budget(budget)
     # sample_weight: `0` is the binding's `sample_weight == nullptr`. The
     # weights are held until after the call (their address is in flight).
     var w = PythonObject(None)
@@ -172,17 +141,10 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         w = admit_family_weights(weights_source, n, True, context).keep
         weight_addr = Int(py=classical_address(w))
         _ = w  # keep the Python object alive through the native call above
-    # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding:
-    # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
-    # eps_nn_method, metric. precomputed takes the brute arm's adjacency path
-    # whatever `algorithm` names (DEVIATION 5114).
-    if metric == _METRIC_PRECOMPUTED:
-        method = _EPS_NN_BRUTE_FORCE
     var workspace = DBSCANFitWorkspace(n)
     var connection = DBSCANConnection(binding)
-    var x_address = Int(py=classical_address(x))
     var labels_address = Int(py=classical_address(labels))
-    var request = DBSCANFitRequest(x_address, labels_address, weight_addr, workspace.address(),
+    var request = dbscan_fit_request(x_address, labels_address, weight_addr, workspace.address(),
         n, d, min_samples, budget, cap, method, metric, eps)
     var n_iter = dbscan_run_fit(connection, request)
     _ = labels
@@ -195,7 +157,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     dbscan_publish(fields, "n_samples_fit_", PythonObject(n), context)
     # Keep the original count and gather passes, publication order and exact
     # destination sizes. The private mask and inter-call dimensions are Mojo.
-    var count_request = DBSCANCoreRequest(x_address, labels_address, workspace.address(), n, d)
+    var count_request = dbscan_core_request(x_address, labels_address, workspace.address(), n, d)
     var m = dbscan_run_count(connection, count_request)
     var indices = dbscan_array(List[Int](length=1, fill=m), "<i4", context)
     var shape: List[Int] = [m, d]
