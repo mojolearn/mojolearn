@@ -300,8 +300,7 @@ def hist2_smem_add[
     each accumulator.
     """
 
-    @__parameter
-    if dt == DType.int32:
+    comptime if dt == DType.int32:
         # DEVIATION 1898: the reference's atomicAdd is relaxed; the non-Apple Mojo
         # default is seq_cst.
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
@@ -900,8 +899,7 @@ def write_reduces_from_fixed_kernel[
             # cell means a zero histogram cell. It stays True for the
             # binary and half-byte families, whose single-block stores
             # are exact floats in the scratch.
-            @__parameter
-            if read_scratch:
+            comptime if read_scratch:
                 val = block_histogram.unsafe_load(src)
 
         var dst = (

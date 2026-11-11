@@ -29,11 +29,9 @@ def gp_mapping_snapshot[Values: Bool = True, Keys: Bool = True](value: PythonObj
     var api = cpython_table()
     while api[].PyDict_Next(value._obj_ptr, Int(cursor.unsafe_ptr()),
                            Int(items.unsafe_ptr()), Int(items.unsafe_ptr() + 1)):
-        @__parameter
-        if Keys:
+        comptime if Keys:
             result.keys.append(PythonObject(from_borrowed=items[0]))
-        @__parameter
-        if Values:
+        comptime if Values:
             result.values.append(PythonObject(from_borrowed=items[1]))
     _ = value
     return result^

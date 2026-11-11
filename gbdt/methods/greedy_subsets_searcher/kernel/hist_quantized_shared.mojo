@@ -183,8 +183,7 @@ def quantize_pair_kernel[ridx_stats: Bool = False](
         var u = hist2_dither(pos)
         var src = pos
 
-        @__parameter
-        if ridx_stats:
+        comptime if ridx_stats:
             # DEVIATION 1902 x 1911: the stat plane is stationary, so the
             # VALUE is gathered through the row id at this position while
             # the dither stays keyed on the storage position -- the same

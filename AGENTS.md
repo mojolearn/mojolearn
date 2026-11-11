@@ -452,10 +452,11 @@ them for you.
   before assigning it back to the source. `unsafe_memcpy` requires the `dest=`, `src=` and `count=` keywords.
 - A Mojo module containing `main()` cannot be imported as a package. Put reusable native test
   bodies in a suite module with `run_checks()` and keep the standalone `main()` wrapper separate.
-- The existing custom `sort` comparators use a local `@__parameter` closure, passed with `cmp_fn` over a
-  mutable `Span`; a top-level thin function does not satisfy its capturing comparator signature.
-  Import it from `std.builtin.sort`. In contrast, `host_parallelize` takes a runtime closure with
-  explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
+- Mojo 1.1/1.2 `sort` takes its comparator as a runtime argument: `sort(span, comparator)` over a
+  mutable `Span`. Use a runtime closure with explicit captures when the comparator needs outer values;
+  import `sort` from `std.builtin.sort`. `host_parallelize` likewise takes a runtime closure with
+  explicit captures (`def task(unit: Int) {imm pointer, imm count}:`). Use `comptime if`/`comptime for`
+  for compile-time control flow; those statements no longer accept a parameter decorator.
 - `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
   Put `comptime assert` inside a function body, never at module scope.
 - Generic struct parameters used by fields, static methods or initializers must be qualified as

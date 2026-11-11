@@ -4987,8 +4987,7 @@ def fit_with_test(
             # streamed than theirs.
             var compute_mags = False
 
-            @__parameter
-            if _needs_magnitudes:
+            comptime if _needs_magnitudes:
                 compute_mags = True
             launch_bootstrap(
                 ctx, boot_kind, boot_seeds, stats, n_rows, boot_param,
@@ -5083,8 +5082,7 @@ def fit_with_test(
         loop_times.stop_host("iter_gradients_enqueue", t_grad)
         var mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-        @__parameter
-        if _needs_magnitudes:
+        comptime if _needs_magnitudes:
             mags_opt = Optional(mags.copy())
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
@@ -5147,12 +5145,10 @@ def fit_with_test(
             # DEVIATION 95), so this per-tree drain is not taken.
             var ns_mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-            @__parameter
-            if _needs_magnitudes and IDN_NS_SCALE_DEVICE:
+            comptime if _needs_magnitudes and IDN_NS_SCALE_DEVICE:
                 ns_mags_opt = Optional(mags.copy())
 
-            @__parameter
-            if _needs_magnitudes and not IDN_NS_SCALE_DEVICE:
+            comptime if _needs_magnitudes and not IDN_NS_SCALE_DEVICE:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
                 ctx.synchronize()
@@ -5569,8 +5565,7 @@ def fit_with_test(
                     noise_sm if noise_sm > 0 else 1,
                 )
             var scale = Float32(1.0)
-            @__parameter
-            if _needs_magnitudes:
+            comptime if _needs_magnitudes:
                 var sym_scale_ready = False
                 comptime if SYM_BUF_ARENA:
                     # the fit's `h_mags` instead of a host buffer per tree
@@ -5606,8 +5601,7 @@ def fit_with_test(
             # lane/sym-quality: the gradient plane onto the tree's grid, as
             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
             # only where the scale above is a real one
-            @__parameter
-            if _needs_magnitudes:
+            comptime if _needs_magnitudes:
                 var g_plane = planes[1].copy()
                 enqueue_snap_plane(ctx, g_plane, n_rows, scale)
             splits = fit_oblivious_tree_structure_traced(

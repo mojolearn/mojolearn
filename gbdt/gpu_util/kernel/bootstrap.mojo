@@ -178,8 +178,7 @@ def bootstrap_kernel[bootstrap_type: Int](
     while i < n:
         var bw: Float32
 
-        @__parameter
-        if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
+        comptime if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
             var draw = next_uniform_f(s)
             s = draw[1]
             var tmp = -identical_log(draw[0] + Float32(1e-20))

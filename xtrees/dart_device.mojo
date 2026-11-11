@@ -147,8 +147,7 @@ def dart_row_kernel(
     var e = Int(block_idx.x) * TPB * AFT_DART_ROWS + Int(thread_idx.x)
     var stride = _tstride() * AFT_DART_ROWS
     while e < Int(units):
-        @__parameter
-        for tile in range(AFT_DART_ROWS):
+        comptime for tile in range(AFT_DART_ROWS):
             var item = e + tile * TPB
             if item < Int(units):
                 dart_row_unit(
@@ -234,8 +233,7 @@ def dart_add_kernel(
     var e = Int(block_idx.x) * TPB * AFT_DART_ADD_ROWS + Int(thread_idx.x)
     var stride = _tstride() * AFT_DART_ADD_ROWS
     while e < Int(units):
-        @__parameter
-        for tile in range(AFT_DART_ADD_ROWS):
+        comptime for tile in range(AFT_DART_ADD_ROWS):
             var item = e + tile * TPB
             if item < Int(units):
                 dart_add_unit(item, Int(class_off), Int(row_off), Int(voff), factor, shrink, nodes, values, dsum, score, cached)
@@ -261,8 +259,7 @@ def dart_predict_kernel(
     var e = Int(block_idx.x) * TPB * AFT_DART_ROWS + Int(thread_idx.x)
     var stride = _tstride() * AFT_DART_ROWS
     while e < Int(units):
-        @__parameter
-        for tile in range(AFT_DART_ROWS):
+        comptime for tile in range(AFT_DART_ROWS):
             var item = e + tile * TPB
             if item < Int(units):
                 dart_predict_unit(

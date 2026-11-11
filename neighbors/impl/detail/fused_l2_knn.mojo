@@ -441,8 +441,7 @@ def fused_l2_knn_kernel[
                 for kk in range(FKNN_KBLK):
                     var regy = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
-                    @__parameter
-                    for j in range(FKNN_ACC_COLS_PER_TH):
+                    comptime for j in range(FKNN_ACC_COLS_PER_TH):
                         regy[j] = sy[
                             (tc + j * FKNN_ACC_TH_COLS) * FKNN_SMEM_STRIDE + kk
                         ]
@@ -490,8 +489,7 @@ def fused_l2_knn_kernel[
             # as `OutT* regyn` (`:346`).
             var regyn = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
-            @__parameter
-            for j in range(FKNN_ACC_COLS_PER_TH):
+            comptime for j in range(FKNN_ACC_COLS_PER_TH):
                 var cj = n0 + tc + j * FKNN_ACC_TH_COLS
                 if cj < n:
                     regyn[j] = yn.unsafe_load(cj)
@@ -500,8 +498,7 @@ def fused_l2_knn_kernel[
             # by hand because `acc0`/`acc1` are separate SIMD values. The
             # `if (gmemRowId < m)` guard is `:459` and is warp-uniform.
             if have0:
-                @__parameter
-                for j in range(FKNN_ACC_COLS_PER_TH):
+                comptime for j in range(FKNN_ACC_COLS_PER_TH):
                     # `Pair otherKV = {keyMax, identity};` `:463`, overwritten
                     # only when `colId < ldd`. The out-of-range lane still calls
                     # `add`, which is both their code and the call contract
@@ -514,8 +511,7 @@ def fused_l2_knn_kernel[
                         val = UInt32(col)
                     heap0.add(key, val)
             if have1:
-                @__parameter
-                for j in range(FKNN_ACC_COLS_PER_TH):
+                comptime for j in range(FKNN_ACC_COLS_PER_TH):
                     var col1 = n0 + tc + j * FKNN_ACC_TH_COLS
                     var key1 = FKNN_IDENTITY
                     var val1 = FKNN_KEY_MAX
