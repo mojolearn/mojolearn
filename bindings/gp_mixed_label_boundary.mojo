@@ -20,8 +20,11 @@ struct GPScalarBucket(ImplicitlyCopyable, Movable):
 
 struct GPScalarIndex(Movable):
     # The retained values are observable class identities, not algorithm state.
-    # An insertion-only same-hash chain visits keys in insertion order, exactly
-    # as the former CPython dict probe sequence does for equal hash values.
+    # For these insertion-only stable-hash dictionaries, first encounters of
+    # equal-hash keys follow insertion order, including ordered resize rebuilds.
+    # The chain omits different-hash occupants and repeated false comparisons;
+    # it preserves the first matching key, not CPython's physical probe count.
+    # Proof and supported-version anchors: GP_MIXED_INDEX_PROOF_20261111.md.
     var buckets: Dict[Int, GPScalarBucket]
     var values: List[PythonObject]
     var following: List[Int]
