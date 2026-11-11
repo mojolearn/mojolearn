@@ -98,7 +98,26 @@ comptime XD_DEV_CODE_ROWS = 53 # i: [g, q, w, kind, n, k, a, b] f: [alpha, tol] 
 comptime XD_DEV_EIGH_TO = 54   # i: [a, w, v, n, uplo]                         (IDN_EIGH_RESIDENT)
 comptime XD_DEV_ARGMIN_ALL = 55  # i: [a, dst, cnt, n]
 comptime XD_DEV_SELECT_SMALLEST = 56  # i: [a, sel, mask, n, h]
-comptime XD_OPERATION_COUNT = 57
+# lane pyout-decomp-linalg (2026-11-11): the solver and owner doors the
+# native decomposition owners (bindings/{als,dict_learning,mcd,pls,linalg_decomp}_native.mojo)
+# called as Python entries of the binding module (`kit.entries[...]`).
+# Implemented in x_decomp/descriptor_owner_ops.mojo (both images) and
+# x_decomp/descriptor_owner_device.mojo / descriptor_owner_host.mojo.
+# An "out" address is a host word the operation writes (int64 or float64).
+comptime XD_ALS_FIT = 57          # a: [c, x, y, losses(f64)] i: [n, m, f, iterations, use_cg, cg_steps, calc_loss] f: [reg]
+comptime XD_TOPN_DESC = 58        # a: [x, skip (0: none), dst(int32)] i: [m, n]       -> count
+comptime XD_GATHER = 59           # a: [src, idx(int32), dst] i: [count]
+comptime XD_DICT_LEARNING = 60    # a: [x, code, d, errs(f64), ne out(int64)] i: [n, m, nc, algo, max_iter, enc_iter, pos_dict, pos_code, seed, nnz, max_no_imp] f: [alpha, tol] -> ii
+comptime XD_DICT_MINIBATCH = 61   # a: [x, d] i: [the 11 words of XD_DICT_LEARNING, bs, n_steps] f: [alpha, tol] -> steps
+comptime XD_MCD = 62              # a: [x, loc, cov, sup(int32), dist] i: [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m]
+comptime XD_CONSISTENCY_FACTOR = 63  # a: [dst out(f64)] f: [p, num, den]
+comptime XD_CHI2_QUANTILE = 64    # a: [dst out(f64)] f: [dof, upper]
+comptime XD_PLS_FIT = 65          # a: [x, y, xw, yw, xs, ys, xl, yl, its(int32), nits out(int64)] i: [n, px, q, nc, max_iter, mode_b, norm_y, canonical, svd_algo] f: [tol] -> done
+comptime XD_LU_GESV = 66          # a: [a, b, info] i: [n, nrhs]
+comptime XD_DEV_LU_FACTOR = 67    # a: [a, lu, piv(int32), info] i: [ia, ilu, ipv, n]   (LU_RESIDENT_ENTRIES)
+comptime XD_DEV_LU_SOLVE = 68     # a: [b, x] i: [ilu, ipv, ia, n, nrhs, refine]        (LU_RESIDENT_ENTRIES)
+comptime XD_RANDOMIZED_SVD = 69   # a: [x, u, s, vt] i: [rows, cols, nc, oversamples, iterations, auto, transpose, flip_sign, seed, deferred]
+comptime XD_OPERATION_COUNT = 70
 
 comptime XD_CAP_HOST = 1       # the host-address operations
 comptime XD_CAP_RESIDENT = 2   # the device-resident operations
@@ -205,6 +224,32 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (0, 4, 0)
     if op == XD_DEV_SELECT_SMALLEST:
         return (0, 5, 0)
+    if op == XD_ALS_FIT:
+        return (4, 7, 1)
+    if op == XD_TOPN_DESC:
+        return (3, 2, 0)
+    if op == XD_GATHER:
+        return (3, 1, 0)
+    if op == XD_DICT_LEARNING:
+        return (5, 11, 2)
+    if op == XD_DICT_MINIBATCH:
+        return (2, 13, 2)
+    if op == XD_MCD:
+        return (5, 11, 0)
+    if op == XD_CONSISTENCY_FACTOR:
+        return (1, 0, 3)
+    if op == XD_CHI2_QUANTILE:
+        return (1, 0, 2)
+    if op == XD_PLS_FIT:
+        return (10, 9, 1)
+    if op == XD_LU_GESV:
+        return (3, 2, 0)
+    if op == XD_DEV_LU_FACTOR:
+        return (4, 4, 0)
+    if op == XD_DEV_LU_SOLVE:
+        return (2, 6, 0)
+    if op == XD_RANDOMIZED_SVD:
+        return (4, 10, 0)
     raise Error("x_decomp native ABI: unknown operation " + String(op))
 
 
