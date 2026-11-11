@@ -4,7 +4,7 @@
   "suite": "dbscan_state_suite.run_checks",
   "fixtures": 28,
   "dependency": "a446091b7a",
-  "execution": "Original CPU bundle compile exited1 on unit4 captured workspace pointer then owner move; no CPU runtime. Scoped mutable-borrow test correction authored, uncompiled/unrun.",
+  "execution": "Blocked: both original same-scope spelling and explicit mutable-helper correction compiled with exit1 and the same tracked pointer origin/ref diagnostic; state28 has not executed. No further fixture changes authorized.",
   "coverage": {
     "0-5": "flat zeroed core-mask rooms for0/1/17/1025 rows, independent owners, complete parallel writes and moved allocation lifetime",
     "6-17": "all nine reference key fields including owner IDs separately from addresses, copied-key independence and empty reference metadata",
@@ -21,6 +21,25 @@
     "changes": "test lifetime scope only; no unsafe cast, serial route, removed coverage or product edit",
     "evidence": "E/pca-native-tests/dbscan-state-scoped-borrow-static.json",
     "prior_failure": "E/wave15-cpu-build.log",
-    "compiler_bug_claim": false
+    "compiler_bug_claim": false,
+    "result": "Root compile1, no runtime; same diagnostic now at fill_workspace declaration. This did not resolve the source/compiler issue."
+  },
+  "compiler_investigation": {
+    "standalone_candidates": "E/pca-native-tests/dbscan-minimize/manifest.json",
+    "candidates": [
+      "01_mutable_field_capture.mojo",
+      "02_mutable_flat_capture.mojo",
+      "03_mutable_field_no_capture.mojo"
+    ],
+    "status": "authored outside repository; awaiting root compilation, no standalone compiler-bug verdict yet",
+    "draft": "E/pca-native-tests/dbscan-minimize/UPSTREAM_ISSUE_DRAFT.txt",
+    "external_submission": false,
+    "workaround": false,
+    "preserved": "original and scoped fixture source plus both complete failed logs; all28 fixture assertions/cases remain intact",
+    "logs": [
+      "E/wave15-cpu-build.log",
+      "E/wave15r2-cpu-build.log"
+    ],
+    "independent_evidence": "Root passed CPU103 (wire45/options41/actual17) atbda409162a and GPU20 at4583aac78f. These do not include state28; pending Python cleanup remains withheld."
   }
 }

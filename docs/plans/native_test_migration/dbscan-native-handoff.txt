@@ -1,5 +1,21 @@
 Mojolearn DBSCAN native tests (2026-11-10)
 
+Current partial execution and blocked state fixtures:
+  Root passed CPU103 (contract45/options41/actual17) atbda409162a and GPU20
+  (actual17/ownership3) at4583aac78f. State28 remains blocked: both the original
+  same-scope capture/move and scoped mutable-helper correction compiled1 with
+  the same contradictory tracked-origin/ref diagnostic. Neither failed CPU
+  bundle reached runtime. No further fixture rearrangements/casts are being
+  attempted; all original workloads/assertions remain. The pending Python
+  numerical cleanup is withheld for root's coverage review.
+  E/pca-native-tests/dbscan-minimize contains three standalone compile-only
+  candidates (struct-field capture, flat-list capture, field/no-capture),
+  hashes/commands/platform record and an unsent upstream draft. No repository
+  imports or product changes. Candidates await root compilation; there is no
+  standalone compiler-bug verdict yet. Original full failure logs are
+  E/wave15-cpu-build.log and E/wave15r2-cpu-build.log. The IPCA test-layout
+  exception does not authorize a workaround for this distinct issue.
+
 Typed API/state/provider dependency a446091b7a. Registry ownership repair
 6b3832cfc7 is needed by eventual device lease coverage. Pilot owns the
 public boundary and all product files; this lane owns new fixtures only.
@@ -110,6 +126,6 @@ CPU state borrow-scope correction (root wave15 compile1; no CPU runtime):
   ownership scope correction, not a compiler-bug workaround or an extension
   of the separate IPCA authorization. Original source/log retained; inverse
   mechanical transformation is exact in E/pca-native-tests/
-  dbscan-state-scoped-borrow-static.json. Corrected state28 uncompiled/unrun.
+  dbscan-state-scoped-borrow-static.json. Corrected state28 subsequently compiled1 with the same diagnostic; no runtime.
   Root separately passed GPU20 at4583aac78f; those files are unchanged here.
   CPU131 remains owed, and the pending Python numerical cleanup is held.
