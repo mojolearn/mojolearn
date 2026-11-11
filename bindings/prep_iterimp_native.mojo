@@ -32,8 +32,8 @@ from bindings.prep_encode_native import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
-alias F64P = MutPointer[Float64, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
 
 # x_prep stage codes (_expansion_prep._OPS).
 comptime OP_COL_STATS = 1

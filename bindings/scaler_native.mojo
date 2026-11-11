@@ -20,7 +20,7 @@ from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.prep_entry_cache import prep_mode_checked
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def _ptr(value: PythonObject) raises -> F32P:
