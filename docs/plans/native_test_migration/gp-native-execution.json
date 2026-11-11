@@ -1,10 +1,11 @@
 {
-  "family": "GaussianProcessRegressor native execution",
-  "status": "Authored CPU13/GPU14; not compiled or executed by lane",
+  "family": "GaussianProcessRegressor/GaussianProcessClassifier native execution",
+  "status": "Authored CPU17/GPU20; not compiled or executed by lane",
   "dependencies": {
     "typed_api_provider": "7f5f0bf795",
     "independent_reference_inputs": "b469feccbe",
-    "shared_native_assertion_helper": "3a42d6d768"
+    "shared_native_assertion_helper": "3a42d6d768",
+    "production_descriptor_entry": "5f8a2d28a9"
   },
   "entries": {
     "cpu": "checks/native_tests/gp_native_cpu.mojo",
@@ -76,11 +77,35 @@
       "source": "test_gp_optimizer.py::arm_restarts",
       "workload": "Original seed6/48x3, Constant1*Matern[1,1,1]nu2.5+White.1, original2restarts/key7/default bounds/alpha",
       "checks": "Three saved starts, selected minimum negative likelihood/earliest tie, finite selected objective, fit/re-evaluated likelihood consistency; retain permitted failed non-selected starts rather than require all starts to converge."
+    },
+    {
+      "unit": "CPU13-14/GPU14-15",
+      "source": "test_gpc_surface.py::test_binary_and_multiclass_fit_predict",
+      "workload": "Original Python random.Random0.gauss48x3; labels ranked before Float32 admission; first10query; binary Constant1*RBF1 and three-class Constant2*Matern1 nu1.5; max_iterations100",
+      "checks": "Actual coded-target native binary fits and per-member query/combine; original1e-12 normalization, probability range, iterations1..100, binary latent-mean sign and positive variance. Additional native target projection, finite/positive fitted diagonal, per-member output guards and immutable borrowed inputs."
+    },
+    {
+      "unit": "CPU15-16",
+      "source": "Existing inference-only GPC provider image",
+      "workload": "Same original binary/multiclass48x3 fitted by full host; queries/combine by inference-only host",
+      "checks": "Capability0 remains; actual binary queries and OVR combine preserve original probability/latent invariants."
+    },
+    {
+      "unit": "GPU16-17",
+      "source": "Existing tuned GPC all-member route",
+      "workload": "Same original binary/multiclass48x3 inputs/kernels/max_iterations100",
+      "checks": "Actual fused all-member fit, probability and prediction queries; original row/latent invariants, typed tables hold separate native member buffers. Binary latent operation stays a separate native request, as in public API."
+    },
+    {
+      "unit": "GPU18-19",
+      "source": "Existing GPC resident all-member route",
+      "workload": "Same original binary/multiclass48x3 inputs/kernels/max_iterations100",
+      "checks": "Actual fused fit and resident all-member probability/prediction requests; lease closes once while source/model/table owners remain alive; guards and original invariants retained."
     }
   ],
   "additional_independent_oracles": "All posterior graphs also compare NumPy Float64 mean (atol2e-3/rtol2e-4) and covariance (atol2e-3). These extend independent coverage to the original workloads; they are not weakened replacements for prior failures. The strict original surface/diagonal/sample bounds are retained separately. No saved product output or old-version bits are references.",
   "storage_checks": "All raw result spans have prefix/suffix guards; borrowed training/target/query values are checked unchanged. Named owners survive every synchronous descriptor call and resident cleanup. Flat List captures only; DBSCAN blocked and original IPCA compiler reproductions are untouched.",
-  "parallel_plan": "CPU independent graphs use host_parallelize; independent oracle cells and every pairwise-reduction level use the same host policy. GPU graphs run one at a time on the physical GPU due the separately reproduced unsupported concurrent shared-context submission; kernels remain parallel. This does not clear that concurrency failure.",
+  "parallel_plan": "CPU independent graphs, binary fits, binary queries, gradient perturbations, oracle cells and pairwise-reduction levels use host_parallelize. Small metadata construction/traversal follows native model structure. GPU graphs/perturbations/member calls run one at a time on the physical GPU due the separately reproduced unsupported concurrent shared-context submission; kernels remain parallel. This does not clear that failure.",
   "compile_flags": {
     "both": [
       "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
@@ -94,11 +119,11 @@
     "Typed request-wire/envelope/error-propagation contracts",
     "Native production normalization via final scaler dependency; normalized Python assertions stay",
     "Public fixed-kernel/no-free-parameter optimizer bypass and kernel object publication remain Python until native plan coverage is available",
-    "Binary/all-member classifier fit/query/combine and native owner-state coverage",
+    "Final native public-boundary query/lease owner-state coverage when pilot freezes those types",
     "Native source tests compile/run by root, followed by reviewed Python numerical-only cleanup"
   ],
   "python_removed": 0,
   "product_or_kernel_changes": 0,
-  "removals": "Nothing removed yet: keep all original Python coverage until replacement native execution passes.",
+  "removals": "Removed three temporary test-local descriptor wrappers now that production gp_native_v1[K] is frozen. Original Python coverage remains unchanged until replacement native execution passes.",
   "identity_or_performance_claim": "None; no lane compilation/test/identity/timing/box job."
 }

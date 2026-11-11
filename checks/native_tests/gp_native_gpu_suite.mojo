@@ -5,19 +5,15 @@ The separately reproduced concurrent shared-DeviceContext submission failure
 remains open. This ordered numerical suite makes no concurrency claim.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.native_descriptor_abi import NativeDescriptorError
-from core.gp_native_api import GPDriver, gp_native_dispatch
+from core.gp_native_api import GPDriver
+from core.gp_native_provider import gp_native_v1
 from core.gp_native_device import GPDeviceKernels
 from checks.native_tests.gp_native_cases import GP_NATIVE_GPU_FIXTURES, fixture
 from checks.native_tests.gp_native_learning_cases import GP_LEARNING_FIXTURES, learning_fixture
+from checks.native_tests.gp_native_classifier_cases import GP_CLASSIFIER_GPU_FIXTURES, classifier_fixture
 from checks.native_tests.gp_state_suite import require
 
-comptime GP_NATIVE_GPU_TOTAL = GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES
-
-
-def device_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
-                 result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    return gp_native_dispatch[GPDeviceKernels](operation, aa, na, pp, np, ff, nf, result, context, sink)
+comptime GP_NATIVE_GPU_TOTAL = GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES + GP_CLASSIFIER_GPU_FIXTURES
 
 
 def run_checks() raises:
@@ -26,9 +22,12 @@ def run_checks() raises:
     for unit in range(GP_NATIVE_GPU_TOTAL):
         try:
             if unit < GP_NATIVE_GPU_FIXTURES:
-                fixture(GPDriver(device_entry), GPDriver(device_entry), unit, False)
+                fixture(GPDriver(gp_native_v1[GPDeviceKernels]), GPDriver(gp_native_v1[GPDeviceKernels]), unit, False)
+            elif unit < GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES:
+                learning_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), unit - GP_NATIVE_GPU_FIXTURES, False)
             else:
-                learning_fixture(GPDriver(device_entry), unit - GP_NATIVE_GPU_FIXTURES, False)
+                classifier_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), GPDriver(gp_native_v1[GPDeviceKernels]),
+                    unit - GP_NATIVE_GPU_FIXTURES - GP_LEARNING_FIXTURES, False)
         except error:
             failed += 1
             print("FAIL gp_native_gpu fixture", unit, String(error))

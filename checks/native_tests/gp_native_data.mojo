@@ -9,6 +9,22 @@ comptime GP_GUARD = Float32(123456.75)
 comptime GP_GUARD64 = Float64(987654.125)
 
 
+def input_labels(name: String, part: String, count: Int) raises -> List[Int32]:
+    var values = List[Int32](unsafe_uninit_length=count)
+    with open("checks/native_tests/fixtures/gp/" + name + "-" + part + ".i32", "r") as file:
+        var bytes = file.read_bytes()
+        require(len(bytes) == 4 * count, "GP label fixture extent")
+        var bp = bytes.unsafe_ptr()
+        var vp = values.unsafe_ptr()
+        def word(index: Int) {imm bp, imm vp}:
+            var at = 4 * index
+            var bits = UInt32(bp[at]) | (UInt32(bp[at + 1]) << 8) | (UInt32(bp[at + 2]) << 16) | (UInt32(bp[at + 3]) << 24)
+            vp.unsafe_store(index, bitcast[DType.int32](bits))
+        host_parallelize(word, count)
+        _ = bytes^
+    return values^
+
+
 def input_values(name: String, part: String, count: Int) raises -> List[Float32]:
     var values = List[Float32](unsafe_uninit_length=count)
     with open("checks/native_tests/fixtures/gp/" + name + "-" + part + ".f32", "r") as file:
