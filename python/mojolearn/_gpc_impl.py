@@ -74,11 +74,9 @@ box.
 """
 
 from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 import numbers
 
-from ._gp_impl import _KERNEL_NODES, _MODE_CODE, ConstantKernel, Kernel, RBF
+from ._gp_impl import _KERNEL_NODES, _MODE_CODE, Kernel
 from ._mode import NumericModeMixin
 
 #: The saved-model format tag.
@@ -99,33 +97,8 @@ _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn")
 
 
-def _ovr_combine(ext, cols, n_star):
-    """DEVIATION 2833 on the binding (`gpc_ovr_combine`, the device on a GPU
-    install): the k unnormalized class-1 probability columns normalized per
-    row and the first strictly largest column per row. Returns the
-    (n_star, k) float64 probabilities and the n_star int32 codes."""
-    k = len(cols)
-    proba = empty((n_star, k), "<f8")
-    codes = empty((n_star,), "<i4")
-    ext.gpc_ovr_combine(
-        # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding.
-        [addr(proba, name="proba_out"), addr(codes, name="codes_out")]
-        + [addr_ro(c, name=f"class_{i}") for i, c in enumerate(cols)],  # glue: one class column address per class
-        [int(n_star)],
-    )
-    return proba, codes
 
 
-def _kernel_arrays(kernel):
-    """The postfix spec as the four flat arrays `_gp_impl.py` sends
-    (DEVIATION 1756), plus the length-scale count."""
-    nodes = kernel._nodes()
-    kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")  # glue: packs the kernel's postfix nodes
-    params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")  # glue: packs the kernel's postfix nodes
-    ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")  # glue: packs the kernel's postfix nodes
-    table = [v for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
-    ls = Array.from_list(table if table else [1.0], "<f4")
-    return kinds, params, ls_len, ls, len(table)
 
 
 class _SavedKernel(Kernel):
@@ -290,78 +263,6 @@ class GaussianProcessClassifier(NumericModeMixin):
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
 
-    def _validate_params(self):
-        """The constructor checks, run first in `fit` and `load`; the
-        resolved kernel and the iteration cap go to private attributes."""
-        kernel, optimizer, n_restarts_optimizer = self.kernel, self.optimizer, self.n_restarts_optimizer
-        max_iter_predict, warm_start, copy_X_train = self.max_iter_predict, self.warm_start, self.copy_X_train
-        random_state, multi_class, n_jobs = self.random_state, self.multi_class, self.n_jobs
-        if kernel is None:
-            # scikit-learn's default, `_gpc.py:186-189`, bounds "fixed"
-            # there; there is no optimizer here, so the two coincide.
-            kernel = ConstantKernel(1.0) * RBF(1.0)
-        if not isinstance(kernel, Kernel):
-            raise TypeError(
-                f"{_NAME}: kernel must be a composition of mojolearn's RBF, "
-                "Matern, ConstantKernel and WhiteKernel (DEVIATION 1761)"
-            )
-        if not (optimizer is None
-                or (isinstance(optimizer, str) and optimizer.lower() == "none")):
-            raise NotImplementedError(
-                f"{_NAME}: optimizer={optimizer!r} is refused; only None runs "
-                "(DEVIATION 1761). An optimizer's iteration count is data "
-                "dependent and its line search, gradient fold and tolerance "
-                "are not pinned. scikit-learn's default is 'fmin_l_bfgs_b', "
-                "so this default DIFFERS from theirs and the fitted kernel_ "
-                "is the kernel you passed"
-            )
-        if isinstance(n_restarts_optimizer, bool) or int(n_restarts_optimizer) != 0:
-            raise NotImplementedError(
-                f"{_NAME}: n_restarts_optimizer={n_restarts_optimizer!r} is "
-                "refused; it restarts the optimizer, which is refused "
-                "(DEVIATION 1761)"
-            )
-        if isinstance(max_iter_predict, bool) or not isinstance(max_iter_predict, int):
-            raise TypeError(
-                f"{_NAME}: max_iter_predict must be an int, got {max_iter_predict!r}"
-            )
-        if max_iter_predict < 1:
-            raise ValueError(
-                f"{_NAME}: max_iter_predict must be at least 1, got {max_iter_predict}"
-            )
-        if warm_start:
-            raise NotImplementedError(
-                f"{_NAME}: warm_start=True is refused. It starts the Newton "
-                "loop from the previous fit's latent values (_gpc.py:454-459), "
-                "so a second fit would depend on the first; every fit here "
-                "starts from zero"
-            )
-        if not copy_X_train:
-            raise NotImplementedError(
-                f"{_NAME}: copy_X_train=False is refused; X always crosses to "
-                "float32 C-order memory, so there is no reference to keep"
-            )
-        # random_state is accepted and unused: in the reference only the
-        # optimizer's restarts draw random numbers, and those are refused
-        # (n_restarts_optimizer=0), so it never changes a fit there either
-        if multi_class == "one_vs_one":
-            raise NotImplementedError(
-                f"{_NAME}: multi_class='one_vs_one' is refused BY NAME; it is "
-                "not implemented (and the reference gives it no "
-                "predict_proba). 'one_vs_rest' runs (DEVIATION 2833)"
-            )
-        if multi_class != "one_vs_rest":
-            raise ValueError(
-                f"{_NAME}: multi_class must be 'one_vs_rest' or 'one_vs_one', "
-                f"got {multi_class!r}"
-            )
-        if n_jobs is not None:
-            raise NotImplementedError(
-                f"{_NAME}: n_jobs={n_jobs!r} is refused; the one-vs-rest "
-                "binary fits run one after another on one device"
-            )
-        self._kernel = kernel
-        self._max_iter_predict = int(max_iter_predict)
 
     # -- the binding ----------------------------------------------------------
 
@@ -404,123 +305,11 @@ class GaussianProcessClassifier(NumericModeMixin):
         """
         return _NATIVE(self, "family_gp_gpc_fit", (None, None, X, y), _NATIVE_CONTEXT)
 
-    def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls, k=None):
-        """With `k`, `y01` is the int32 class codes and the targets are
-        `code == k`: the binding builds them and writes them back for the
-        model (every build: the Python fallback loop was removed by lane
-        fam2-kernel-gp, a GPU route does no Python arithmetic)."""
-        n_rows, n_cols = x.shape
-        extra_addrs, extra_params, codes = [], [], None
-        if k is not None:
-            codes, _ = as_i32_c(y01, ndim=1, name="class codes")
-            y01 = empty((n_rows,), "<f4")
-            extra_addrs, extra_params = [addr(y01, name="y_out")], [int(k)]
-        l_out = empty((n_rows * n_rows,), "<f4")
-        pi = empty((n_rows,), "<f4")
-        wsr = empty((n_rows,), "<f4")
-        # lml, n_iter, nb, in that order.
-        scalars = empty((3,), "<f8")
-        # Every array addressed below is bound to a local of this frame.
-        n_iter = ext.gpc_fit(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_fit_binding.
-            [
-                addr_ro(x, name="x"),
-                addr_ro(codes if codes is not None else y01, name="y"),
-                addr_ro(kinds, name="kinds"),
-                addr_ro(kparams, name="kparams"),
-                addr_ro(ls_len, name="ls_len"),
-                addr_ro(ls, name="ls"),
-                addr(l_out, name="l_out"),
-                addr(pi, name="pi_out"),
-                addr(wsr, name="wsr_out"),
-                addr(scalars, name="scalars_out"),
-            ] + extra_addrs,
-            # n_train, n_features, n_nodes, n_ls, max_iter_predict (+ k)
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._max_iter_predict] + extra_params,
-        )
-        return _BinaryLaplace(y01, l_out.reshape((n_rows, n_rows)), pi, wsr,
-                              float(scalars[0]), int(n_iter), int(scalars[2]))
 
-    def _set_fitted(self, x, classes, fits):
-        self.X_train_ = x
-        self.n_features_in_ = int(x.shape[1])
-        self.classes_ = list(classes)
-        self.n_classes_ = len(classes)
-        self.estimators_ = fits
-        self.kernel_ = self._kernel
-        if self.n_classes_ == 2:
-            only = fits[0]
-            self.y_train_ = only.y_train_
-            self.L_ = only.L_
-            self.pi_ = only.pi_
-            self.W_sr_ = only.W_sr_
-            self.n_iter_ = only.n_iter_
-            self.log_marginal_likelihood_value_ = only.log_marginal_likelihood_value_
-        else:
-            self.n_iter_ = [e.n_iter_ for e in fits]  # glue: iteration counts per class
-            # the per-class values summed in storage order by the native
-            # reduction (lane py-runtime-b: was a Python accumulation)
-            lml = Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8")  # glue: one saved scalar per class
-            self.log_marginal_likelihood_value_ = float(lml.sum()) / len(fits)  # glue: Array.sum is the native reduce_stat over the k class values
 
     # -- prediction -------------------------------------------------------------
 
-    def _query(self, X):
-        if not hasattr(self, "estimators_"):
-            raise ValueError(f"{_NAME}: call fit() or load() first")
-        q, _ = as_f32_c(X, ndim=2, name="X")
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"{_NAME}: X has {q.shape[1]} features, fit saw {self.n_features_in_}"
-            )
-        return q
 
-    def _latent(self, ext, est, q, want_proba, out_kind=0):
-        """(mean, var, proba) of one binary fit at the query rows; var and
-        proba are written only with `want_proba`. `out_kind` 1 / 2 (lane
-        apple-fast-py2mojo-cluster): a fourth item, the int64 class codes of
-        `predict` / the float64 `[1 - p, p]` rows of `predict_proba`, from
-        the binding (`gaussian_process/unnorm.mojo::gpc_binary_out`)."""
-        n_star = int(q.shape[0])
-        n_train, n_features = self.X_train_.shape
-        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self._kernel)
-        mean = empty((n_star,), "<f4")
-        var = empty((n_star,), "<f4")
-        proba = empty((n_star,), "<f8")
-        out = None
-        if out_kind == 1:
-            out = empty((n_star,), "<i8")
-        elif out_kind == 2:
-            out = empty((n_star, 2), "<f8")
-        xt = self.X_train_
-        y01 = est.y_train_
-        pi = est.pi_
-        wsr = est.W_sr_
-        lf = est.L_
-        ext.gpc_predict(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_predict_binding.
-            [
-                addr_ro(xt, name="xtrain"),
-                addr_ro(y01, name="y"),
-                addr_ro(pi, name="pi"),
-                addr_ro(wsr, name="wsr"),
-                addr_ro(lf, name="l"),
-                addr_ro(q, name="xstar"),
-                addr_ro(kinds, name="kinds"),
-                addr_ro(kparams, name="kparams"),
-                addr_ro(ls_len, name="ls_len"),
-                addr_ro(ls, name="ls"),
-                addr(mean, name="mean_out"),
-                addr(var, name="var_out"),
-                addr(proba, name="proba_out"),
-            ] + ([addr(out, name="out")] if out is not None else []),
-            # n_train, n_features, n_star, n_nodes, n_ls, want_proba (+ out_kind)
-            [int(n_train), int(n_features), n_star, int(kinds.shape[0]), n_ls,
-             1 if want_proba else 0] + ([out_kind] if out is not None else []),
-        )
-        if out is not None:
-            return mean, var, proba, out
-        return mean, var, proba
 
     # Reference: sklearn `_gpc.py:410-441`, binary only as `_gpc.py:873-878`.
     def latent_mean_and_variance(self, X):

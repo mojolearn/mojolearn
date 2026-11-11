@@ -4,14 +4,13 @@
 # execution uses typed GP requests and the existing numerical providers.
 # Kernel packing, resident admission records and StandardScaler normalization
 # are staged boundary dependencies, migrated in the following chunk.
-from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest
+from core.gp_native_api import GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest, GP_CAP_GRADIENT, GP_CAP_OPTIMIZE, GP_CAP_SAMPLE, GP_CAP_THETA, GP_CAP_COVARIANCE
 from core.gp_native_storage import GPRFitScratch, GPRGradientScratch, GPRGradientResult, GPOptimizerScratch, GPFreeParameters
-from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word
+from bindings.gp_native_boundary import GPConnection, gp_kernel_view, gp_run, gp_seed_word, gp_require
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_f64, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_warn, metric_is_integral, metric_is_bool
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -32,7 +31,7 @@ from bindings.scaler_lifecycle_native import scaler_initialize, scaler_transform
 from bindings.metrics_reg_native import _reg_new, _reg_run, _arena_double, _RE_DIV
 from bindings.gp_common_native import gp_fit_owned
 from bindings.gp_common_native import (
-    gp_extension, gp_entry, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
+    gp_extension, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
     gp_free, gp_n_dims, gp_with_free_values, gp_f32,
 )
 
@@ -198,8 +197,8 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
     var scratch = GPRGradientScratch(len(free.values))
     var fields = py_fields(model)
     var ext = _gpr_ext(model, binding, context)
-    _ = gp_entry(ext, "gpr_lml_grad")
     var connection = GPConnection(ext)
+    gp_require(connection, GP_CAP_GRADIENT, "gpr_lml_grad")
     var view = gp_kernel_view(arrays)
     var request = GPRGradientRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
         Int(free.flags.unsafe_ptr()), Int(scratch.gradient.unsafe_ptr()), Int(scratch.scalars.unsafe_ptr()),
@@ -233,8 +232,8 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     var b = native_loaded_module("builtins")
     var bits = gp_seed_word(family_call(b.int, seed))
     var ext = _gpr_ext(model, binding, context)
-    _ = gp_entry(ext, "gpr_optimize")
     var connection = GPConnection(ext)
+    gp_require(connection, GP_CAP_OPTIMIZE, "gpr_optimize")
     var kernel = gp_kernel_view(arrays)
     var request = GPROptimizeRequest(Int(py=classical_address(x)), Int(py=classical_address(targets)),
         Int(free.flags.unsafe_ptr()), Int(free.bounds.unsafe_ptr()), Int(scratch.theta.unsafe_ptr()),
@@ -511,11 +510,8 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
     var ext = _gpr_ext(model, args[0], context)
-    var entry = neural_descriptor_entry(ext, "gpr_predict_cov", False)
-    if entry is None:
-        raise Error("ImportError: " + String(_GPR) + ": " + String(py_fields(ext)["__name__"])
-                    + " does not export gpr_predict_cov, so return_cov=True cannot run on it; rebuild the GP binding")
     var connection = GPConnection(ext)
+    gp_require(connection, GP_CAP_COVARIANCE, "gpr_predict_cov")
     # n_star >= 1 (as_f32_c refuses an empty X), so max(n, 1) is n.
     var mean = family_array(Python.tuple(n_star), "<f4", context)
     var cov = family_array(Python.tuple(n_star, n_star), "<f4", context)
@@ -579,9 +575,9 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var ext = _gpr_ext(model, args[0], context)
     var seed_bits = gp_seed_word(seed)
     var normalization = _gpr_normalization(fields)
-    # Keep the missing-entry refusal at this original boundary position.
-    _ = gp_entry(ext, "gpr_sample_y")
+    # Admit the actual native provider capability at this boundary position.
     var connection = GPConnection(ext)
+    gp_require(connection, GP_CAP_SAMPLE, "gpr_sample_y")
     var kernel = gp_kernel_view(arrays)
     var request = GPRSampleRequest(Int(py=classical_address(xt)), Int(py=classical_address(lf)),
         Int(py=classical_address(dual)), Int(py=classical_address(q)), Int(py=classical_address(out)),
@@ -647,8 +643,8 @@ def _gpr_log_marginal_likelihood(model: PythonObject, args: PythonObject, contex
             raise Error(String(_GPR) + ": theta has " + String(len(theta)) + " entries, "
                         + "kernel_ has " + String(n_dims) + " free hyperparameters")
         var ext = _gpr_ext(model, args[0], context)
-        _ = gp_entry(ext, "gp_theta_params")
         var connection = GPConnection(ext)
+        gp_require(connection, GP_CAP_THETA, "gp_theta_params")
         var params = List[Float64](length=len(theta), fill=0.0)
         var request = GPThetaRequest(Int(theta.unsafe_ptr()), Int(params.unsafe_ptr()), len(theta))
         _ = gp_run(connection, request)

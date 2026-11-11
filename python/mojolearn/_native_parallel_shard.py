@@ -43,7 +43,7 @@ _WORKER_BINDINGS = {
     "_mojolearn_kernel_methods": _connect_binding(
         "_mojolearn_kernel_methods", ("rbf_sampler_transform",), ("kernel_methods_numeric_mode",)),
     "_mojolearn_gp": _connect_binding(
-        "_mojolearn_gp", ("gpc_fit", "gpc_predict", "gpc_ovr_combine"), ("gp_numeric_mode",)),
+        "_mojolearn_gp", ("gp_native_api_v1",), ("gp_numeric_mode",)),
     "_mojolearn": _connect_binding(
         "_mojolearn", ("prepare_targets", "gather_i64", "gather_f64", "msel_rebase_offsets_i32")),
     "neighbors_base": _connect_binding(

@@ -96,3 +96,20 @@ wrappers still await the shared native span packaging dependency.
 This chunk additionally affects `_mojolearn_runtime_parallel_host` and the
 runtime family dispatcher. Its request constructors and unchanged numerical
 source were audited, but no lane builds or runtime tests were run.
+
+The subsequent metadata cleanup removes the temporary legacy numerical-entry
+existence checks. Capability admission now belongs to the actual native GP
+descriptor, including inference-only refusals. Native mode/capability rows
+replace the two boxed scalar cache payloads; rows retain the exact provider
+pin and follow the existing descriptor cache's 64-row bound. A replaced
+factory obtains fresh metadata. These native rows are UNPACK state protected
+by the GIL, not Python objects needing class registration.
+
+The GP worker import prerequisite now requires `gp_native_api_v1`. Seven
+unreferenced GPC Python helpers/private method bodies (209 lines) were removed,
+including their buffer-helper/Array imports. Public methods and archive field
+classes remain. `numbers` stays as an import-time archive class-table dependency.
+Private `_extension` remains used by resident/benchmark controllers; loader
+mode/vendor probes and raw numerical exports still have compatibility consumers.
+The saved inventory distinguishes those references from ordinary product calls.
+No tests or numerical source were deleted by this cleanup.
