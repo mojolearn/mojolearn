@@ -449,6 +449,8 @@ them for you.
   explicit captures (`def task(unit: Int) {imm pointer, imm count}:`), not an `@parameter` worker.
 - `match` is a reserved keyword, including for local variables; use `matched` for a Boolean result.
   Put `comptime assert` inside a function body, never at module scope.
+- A one-element native shape uses `List[Int](length=1, fill=n)` or an explicit append.
+  `List[Int](n)` does not construct a one-element list from an integer.
 
 ## Logs and context
 
