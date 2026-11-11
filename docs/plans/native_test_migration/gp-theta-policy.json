@@ -1,0 +1,88 @@
+{
+  "family": "GP theta Float32 precision and FTZ",
+  "status": "CPU2/GPU2 authored, uncompiled and unrun",
+  "dependency": {
+    "native_api": "7f5f0bf795",
+    "descriptor_factory": "5f8a2d28a9",
+    "root_compile_repair": "e93fcc09ef6",
+    "root_fixture_contract_repair_adopted": "20bef004c214"
+  },
+  "local_adoptions_not_producers": [
+    "78619dc6e6",
+    "fc19ae1eee"
+  ],
+  "entries": {
+    "cpu": "checks/native_tests/gp_theta_cpu.mojo",
+    "gpu": "checks/native_tests/gp_theta_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.gp_theta_cpu_suite.run_checks",
+    "gpu": "checks.native_tests.gp_theta_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "fixtures_per_backend": 2,
+    "grid": {
+      "count": 4097,
+      "input": "i/32 for i=-2048..2048 inclusive",
+      "expected": "independent Python stdlib math.exp, rounded to Float32 words",
+      "bound_ulp": 2,
+      "requirement": "finite and strictly positive"
+    },
+    "adjacent_inputs": {
+      "count_each": 4097,
+      "directions": [
+        "negative infinity",
+        "positive infinity"
+      ],
+      "expected": "Float32 result words equal original grid result words, preserving the original input precision contract",
+      "zero_neighbors": [
+        "0x8000000000000001",
+        "0x0000000000000001"
+      ]
+    },
+    "ftz": {
+      "input": [
+        -100,
+        -90,
+        -88,
+        0
+      ],
+      "expected": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "comparison": "exact numerical equality, original sign-of-zero convention unchanged"
+    },
+    "storage": "Output counts, two canary words per output span and input binary64 immutability"
+  },
+  "original": "packaging/portable_math/test_host_math.py::test_gp_theta_float32_policy",
+  "reference_manifest": "checks/native_tests/fixtures/gp/theta_policy-reference.json",
+  "reference_preparation": "Four artifact spans prepared in132 independent chunks using os.cpu_count() processes; no product imports/runtime. Raw complete output at E/pca-native-tests/gp-theta-reference-preparation.log.",
+  "parallel_plan": "Two independent CPU fixtures use host_parallelize;4097 oracle cells are also parallel. GPU graphs execute in order on the physical device; existing kernels remain unchanged. Shared-context concurrency failure is not relabeled fixed.",
+  "compile_flags": {
+    "all": [
+      "-D MOJOLEARN_NUMERIC_IDENTICAL=1",
+      "-I ."
+    ],
+    "cpu": [
+      "-D MOJOLEARN_COLUMN_CPU=1"
+    ]
+  },
+  "python_cleanup": {
+    "status": "prepared only; unapplied, requires root acceptance of native replacements",
+    "source_sha256": "5b1f25ba7b11e640f487ca17691c27b47c9960e313047ef530ce1e1c54a9793c",
+    "definition": "test_gp_theta_float32_policy",
+    "line": 140,
+    "definitions_removed_if_applied": 1,
+    "assertion_sites_removed_if_applied": 5,
+    "scope": "Only the GP theta numerical policy function; other Python API/boundary/portable-math tests untouched. No export/benchmark change."
+  },
+  "cleanup_patch": "E/pca-native-tests/gp-theta-python-cleanup.patch",
+  "source_evidence": "E/pca-native-tests/gp-theta-static.json",
+  "product_or_kernel_changes": 0,
+  "benchmark_or_timing_changes": 0,
+  "python_deletions": 0,
+  "runtime_identity_performance_claim": false
+}

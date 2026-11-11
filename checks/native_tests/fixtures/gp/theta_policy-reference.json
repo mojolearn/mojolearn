@@ -1,0 +1,47 @@
+{
+  "purpose": "independent reference preparation; no product imports or native execution",
+  "original": "packaging/portable_math/test_host_math.py::test_gp_theta_float32_policy",
+  "original_line": 140,
+  "original_function_ast_sha256": "98f540cc922389c26c6fb4d11728b3c22e422044190a0aa17d3a229bfb59708e",
+  "inputs": "i/32 for i=-2048..2048 inclusive; math.nextafter toward both infinities",
+  "oracle": "Python stdlib math.exp followed by the original binary32 word comparison, tolerance2ULP",
+  "ftz": {
+    "input": [
+      -100.0,
+      -90.0,
+      -88.0,
+      0.0
+    ],
+    "expected": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  "count_per_span": 4097,
+  "chunk_size": 128,
+  "independent_chunks": 132,
+  "workers": 10,
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "artifacts": {
+    "theta_policy-base.f64": {
+      "bytes": 32776,
+      "sha256": "eabafe0ae53594be3e16acacb984e9b3e1997fba7f476407f695752cb12d875c"
+    },
+    "theta_policy-lower.f64": {
+      "bytes": 32776,
+      "sha256": "6d5d45dfcfc2a1b0ec0df8d5f32dd5bfc6b649ff23c5efc0dce9efe635244fcc"
+    },
+    "theta_policy-upper.f64": {
+      "bytes": 32776,
+      "sha256": "6386b16ecb201d41fad777814be306ded84a76814effdb655b46b7a0867d762b"
+    },
+    "theta_policy-exp.f64": {
+      "bytes": 32776,
+      "sha256": "20585815549e2dc263b0b9ac2112827071802f52a9a64f96f24f33a5da4641cb"
+    }
+  },
+  "limits": "Oracle comes from stdlib libm, never native GP outputs or an old release hash."
+}
