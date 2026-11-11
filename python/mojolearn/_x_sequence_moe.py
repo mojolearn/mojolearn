@@ -162,10 +162,6 @@ class MoEBlock:
         """
         return _SEQ_NATIVE("seqmoe_load", self, (sd,), None, _SEQ_CONTEXT)
 
-    def _check_weights(self):
-        # `want`, not `shape`: the caller's `shape` holds x's shape for the final reshape
-        return _SEQ_NATIVE("seqmoe_check_weights", self, (), None, _SEQ_CONTEXT)
-
     def forward(self, x):
         """Apply the block to `x` of shape (..., hidden_size); also callable as ``block(x)``.
 
