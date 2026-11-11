@@ -8,7 +8,6 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
 from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
@@ -50,19 +49,21 @@ def xprep_call(key: PrepEntryKey, op: Int, addresses: List[Int], ints: List[Int]
 
 
 def _store_put(entries: PythonObject, prefix: String, address: Int, words: Int) raises -> Int:
-    # x_prep: the native transport; x_metrics (bindings/arena_prog_native.mojo,
-    # not converted by lane calltable-prep-decomp) keeps its Python entry.
-    if prefix == "x_prep":
-        var src: List[Int] = [address]
-        return xprep_call(xprep_key(entries), XP_DEV_PUT, src, [words])
-    return Int(py=py_call_typed(entries[PythonObject(prefix+"_dev_put")], address, words))
+    # x_prep: the native transport. x_metrics has no resident store: its
+    # `x_metrics_dev_put/_free` entries were deleted (c209716bf), so
+    # `_resident_scope` returns None for it and no x_metrics slot reaches here.
+    # TOMBSTONE: the x_metrics Python-entry arms of `_store_put`/`_store_free` (unreachable; lane
+    # pyout-metrics-cnn) deleted 2026-11-11; code recoverable at 6f82d0255d.
+    if prefix != "x_prep":
+        raise Error("RuntimeError: arena family " + prefix + " has no resident store")
+    var src: List[Int] = [address]
+    return xprep_call(xprep_key(entries), XP_DEV_PUT, src, [words])
 
 
 def _store_free(entries: PythonObject, prefix: String, slot: Int) raises:
-    if prefix == "x_prep":
-        _ = xprep_call(xprep_key(entries), XP_DEV_FREE, List[Int](), [slot])
-        return
-    _ = py_call_typed(entries[PythonObject(prefix+"_dev_free")], slot)
+    if prefix != "x_prep":
+        raise Error("RuntimeError: arena family " + prefix + " has no resident store")
+    _ = xprep_call(xprep_key(entries), XP_DEV_FREE, List[Int](), [slot])
 
 
 def xprep_r3(name: String) -> Bool:
