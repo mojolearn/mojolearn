@@ -13,36 +13,22 @@ from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_it
 from x_neighbors.proba64_nc import softmax64_item
 from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
-from core.shared_slot import SharedSlot
+from core.device_plan import DevicePlan
+from core.neural_context import process_ctx
 
 comptime BLOCK = 128
 
 
-struct _NeighborsContext(Defaultable, Movable):
-    """ONE process-lifetime DeviceContext for every x_neighbors driver. A
-    context per call let a driver's DeviceBuffers outlive the context they
-    were made on (Mojo destroys the context at its last use, the
-    synchronize, before the buffers), and a second GPU call in the same
-    process hung (LocalOutlierFactor on an RTX 4090, 2026-09-27); a context
-    per call also exhausts Metal's per-process command queues. Storage is
-    `std.ffi._Global` (x_cnn/device.mojo's pattern), one slot per numeric
-    tier so a FAST and an IDENTICAL .so in one process never share it."""
-    var ctx: Optional[DeviceContext]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-
-
-comptime _CTX_NAME = "MojolearnXNeighborsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXNeighborsContextFastV3"
-comptime X_NEIGHBORS_CONTEXT = SharedSlot[_NeighborsContext, _CTX_NAME]
+comptime _CTX_NAME = "MojolearnXNeighborsContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXNeighborsContextFastV4"
 
 
 def xn_ctx() raises -> DeviceContext:
-    """The shared context, created on first use."""
-    var slot = X_NEIGHBORS_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    # Native descriptor calls release the GIL. The shared owner synchronizes
+    # first construction and publishes the process-lifetime context before
+    # other callers read it. Root zero retains this family's device choice;
+    # it does not consult a newly bound thread plan or create per-call contexts.
+    var plan = DevicePlan("", 1, 0, List[Int](), False)
+    return process_ctx[_CTX_NAME](plan)
 
 
 @always_inline
