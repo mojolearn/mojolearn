@@ -45,8 +45,9 @@ from bindings.native_process_pool import (
     process_pool_close,
 )
 from bindings.native_transport import transport_close
+from core.entry_table import EntryRef
 from core.parallel_entry_table import (
-    ParallelEntryKey, parallel_ivf_finalize, parallel_ivf_merge_shards, parallel_ivf_shard_plan,
+    ParallelEntryKey, parallel_ref, PARALLEL_TABLE_BASE, PARALLEL_TABLE_IVF, parallel_ivf_finalize, parallel_ivf_merge_shards, parallel_ivf_shard_plan,
     parallel_rebase_offsets_i32, parallel_topk_merge_f32,
 )
 from std.python._cpython import GILReleased
@@ -99,14 +100,17 @@ def _ctx() raises -> PythonObject:
     return _t("context")
 
 
-def _table_key(family: String) raises -> ParallelEntryKey:
-    """UNPACK: the (tier, vendor) key of the image whose native table the
-    owner calls for `family` ("base" or "ivf"), recorded at import by
-    python/mojolearn/_native_parallel_shard.py (core/parallel_entry_table.mojo)."""
+def _table_key(family: String) raises -> EntryRef:
+    """UNPACK: the entry of the image whose native table the owner calls for
+    `family` ("base" or "ivf"), keyed by the (tier, vendor) pair recorded at
+    import by python/mojolearn/_native_parallel_shard.py
+    (core/parallel_entry_table.mojo), resolved once per operation (lane
+    entry-table-zero-alloc); the table refusals raise here."""
     var key = py_get(_t("table_keys"), PythonObject(family))
     if key is None:
         raise Error("ImportError: mojolearn: the " + family + " binding publishes no native entry table")
-    return ParallelEntryKey(Int(py=key[0]), Int(py=key[1]))
+    return parallel_ref(PARALLEL_TABLE_BASE if family == "base" else PARALLEL_TABLE_IVF,
+                        ParallelEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def _worker_binding(name: String) raises -> PythonObject:
@@ -638,7 +642,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     return estimator
 
 
-def _rebase_offsets(arrays: PythonObject, key: ParallelEntryKey, context: PythonObject) raises -> PythonObject:
+def _rebase_offsets(arrays: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
     """`parallel_ensemble._merge_offsets`: the shards' int32 node-offset
     tables joined, then rebased by the base image's `msel_rebase_offsets_i32`
     (its parallel table entry, core/parallel_entry_table.mojo) into one table
@@ -914,7 +918,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     return parallel_public_result(result, method, kind, context)
 
 
-def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k: Int, key: ParallelEntryKey,
+def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k: Int, key: EntryRef,
                       context: PythonObject) raises -> PythonObject:
     """`parallel_neighbors_reference._merge`: (float32 distances, uint32
     global indices), each (n_queries, k), from the reference blocks'

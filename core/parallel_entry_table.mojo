@@ -34,9 +34,8 @@ Extending a layout requires a new V suffix, never a new loader. Publication
 and lookup are small metadata operations with no independent numerical work
 to split.
 """
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call
 
 comptime PARALLEL_TABLE_BASE = 0
 comptime PARALLEL_TABLE_IVF = 1
@@ -226,57 +225,60 @@ def parallel_table_entry(family: Int, key: ParallelEntryKey) raises -> NativeDes
     raise Error("native parallel entries: unsupported execution key")
 
 
+def parallel_ref(family: Int, key: ParallelEntryKey) raises -> EntryRef:
+    """The keyed image's entry of `family`, resolved once (lane
+    entry-table-zero-alloc); the table refusals raise here."""
+    var operations = PB_OPERATION_COUNT if family == PARALLEL_TABLE_BASE else PI_OPERATION_COUNT
+    return EntryRef(parallel_table_entry(family, key), entry_ref_word(key.mode, key.vendor, operations))
+
+
 # ---------------------------------------------------------------- typed calls
-# The callers' side: plain addresses and words in the documented layout, the
-# published pointer of the keyed image, the provider's refusal text raised
-# unchanged. The caller keeps every addressed buffer alive until return.
+# The callers' side: plain addresses and words in the documented layout, one
+# indirect call through the entry the caller resolved once (`parallel_ref`),
+# the provider's refusal text raised unchanged. The caller keeps every
+# addressed buffer alive until return.
 
 
-def parallel_fold_pair_f32(key: ParallelEntryKey, dst: Int, src: Int, count: Int) raises -> Int:
-    var entry = parallel_table_entry(PARALLEL_TABLE_BASE, key)
+def _parallel_call(entry: EntryRef, operation: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
+    var result = entry_ref_call(entry, operation, Int(addrs.unsafe_ptr()), len(addrs), Int(ints.unsafe_ptr()), len(ints), 0, 0)
+    _ = addrs
+    _ = ints
+    return result
+
+
+def parallel_fold_pair_f32(entry: EntryRef, dst: Int, src: Int, count: Int) raises -> Int:
     var addrs: List[Int] = [dst, src]
     var ints: List[Int] = [count]
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, PB_FOLD_PAIR_F32, addrs, ints, floats)
+    return _parallel_call(entry, PB_FOLD_PAIR_F32, addrs, ints)
 
 
-def parallel_rebase_offsets_i32(key: ParallelEntryKey, raw: Int, n_raw: Int, lens: Int, parts: Int,
+def parallel_rebase_offsets_i32(entry: EntryRef, raw: Int, n_raw: Int, lens: Int, parts: Int,
                                 n_out: Int, dst: Int) raises -> Int:
-    var entry = parallel_table_entry(PARALLEL_TABLE_BASE, key)
     var addrs: List[Int] = [raw, lens, dst]
     var ints: List[Int] = [n_raw, parts, n_out]
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, PB_REBASE_OFFSETS, addrs, ints, floats)
+    return _parallel_call(entry, PB_REBASE_OFFSETS, addrs, ints)
 
 
-def parallel_topk_merge_f32(key: ParallelEntryKey, table: Int, shards: Int, queries: Int, k: Int,
+def parallel_topk_merge_f32(entry: EntryRef, table: Int, shards: Int, queries: Int, k: Int,
                             out_dist: Int, out_idx: Int) raises -> Int:
-    var entry = parallel_table_entry(PARALLEL_TABLE_BASE, key)
     var addrs: List[Int] = [table, out_dist, out_idx]
     var ints: List[Int] = [shards, queries, k]
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, PB_TOPK_MERGE_F32, addrs, ints, floats)
+    return _parallel_call(entry, PB_TOPK_MERGE_F32, addrs, ints)
 
 
-def parallel_ivf_shard_plan(key: ParallelEntryKey, ind: Int, offs: Int, soff: Int, local_ids: Int, id_map: Int,
+def parallel_ivf_shard_plan(entry: EntryRef, ind: Int, offs: Int, soff: Int, local_ids: Int, id_map: Int,
                             n: Int, n_lists: Int, shards: Int) raises -> Int:
-    var entry = parallel_table_entry(PARALLEL_TABLE_IVF, key)
     var addrs: List[Int] = [ind, offs, soff, local_ids, id_map]
     var ints: List[Int] = [n, n_lists, shards]
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, PI_SHARD_PLAN, addrs, ints, floats)
+    return _parallel_call(entry, PI_SHARD_PLAN, addrs, ints)
 
 
-def parallel_ivf_merge_shards(key: ParallelEntryKey, addrs: List[Int], ints: List[Int]) raises -> Int:
+def parallel_ivf_merge_shards(entry: EntryRef, addrs: List[Int], ints: List[Int]) raises -> Int:
     """`addrs` and `ints` in the PI_MERGE_SHARDS layout; the merge status."""
-    var entry = parallel_table_entry(PARALLEL_TABLE_IVF, key)
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, PI_MERGE_SHARDS, addrs, ints, floats)
+    return _parallel_call(entry, PI_MERGE_SHARDS, addrs, ints)
 
 
-def parallel_ivf_finalize(key: ParallelEntryKey, distances: Int, count: Int, metric: Int) raises -> Int:
-    var entry = parallel_table_entry(PARALLEL_TABLE_IVF, key)
+def parallel_ivf_finalize(entry: EntryRef, distances: Int, count: Int, metric: Int) raises -> Int:
     var addrs: List[Int] = [distances]
     var ints: List[Int] = [count, metric]
-    var floats = List[Float64]()
-    return native_descriptor_call(entry, PI_FINALIZE, addrs, ints, floats)
+    return _parallel_call(entry, PI_FINALIZE, addrs, ints)
