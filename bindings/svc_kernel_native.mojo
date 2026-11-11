@@ -1664,7 +1664,7 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     var output_address = Int(py=classical_address(out))
     var gamma = Float64(py=gamma_value)
     var cache_mib = Float64(py=cache_value)
-    var status: InlineArray[Int32, 2] = [0, 0]
+    var status: Array[Int32, 2] = [0, 0]
     var request = SvrQueryRequest(query_address, dual_address, vector_address, output_address,
         Int(status.unsafe_ptr()), n_rows, n_features, n_support, kernel, degree,
         lease.handle, 0, q_meta.store.base_id, q_meta.store.base_rows, q_meta.store.index_id,

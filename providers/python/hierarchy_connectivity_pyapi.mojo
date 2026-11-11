@@ -46,8 +46,8 @@ def _kind(dtype: PythonObject, context: PythonObject) raises -> Int:
     if py_type(types) is not b.dict:
         raise Error("TypeError: sparse connectivity dtype metadata requires a native dictionary")
     var known = False
-    var cursor = InlineArray[Int, 1](fill=0)
-    var pair = InlineArray[PyObjectPtr, 2](fill=PyObjectPtr())
+    var cursor = Array[Int, 1](fill=0)
+    var pair = Array[PyObjectPtr, 2](fill=PyObjectPtr())
     var api = cpython_table()
     while api[].PyDict_Next(types._obj_ptr, Int(cursor.unsafe_ptr()), Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):
         # Boundary metadata: no dtype list allocation or key hashing.
@@ -156,8 +156,8 @@ def hierarchy_connectivity(source: PythonObject, n: Int, context: PythonObject) 
         var records = List[ConnectivityEdge]()
         var kinds = _SparseKinds(context)
         var api = cpython_table()
-        var cursor = InlineArray[Int, 1](fill=0)
-        var pair = InlineArray[PyObjectPtr, 2](fill=PyObjectPtr())
+        var cursor = Array[Int, 1](fill=0)
+        var pair = Array[PyObjectPtr, 2](fill=PyObjectPtr())
         # Inherently serial boundary admission under the GIL: native dictionary
         # storage order and per-item key/value refusals must remain ordered.
         # No Python items/list envelope or coordinate/value protocol executes.

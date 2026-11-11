@@ -298,12 +298,12 @@ def sparse_mr_search_tiled_kernel(
                         uc = Int32(-2)
             uc_s[unsafe_offset=0] = uc if uc >= 0 else Int32(-2)
         barrier()
-    var ci = InlineArray[Int32, SMR_RI](fill=Int32(-1))
-    var ni = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
-    var cri = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
-    var bk = InlineArray[Int32, SMR_RI](fill=WEIGHT_KEY_SENTINEL)
-    var bj = InlineArray[Int32, SMR_RI](fill=SMR_NONE_J)
-    var bad = InlineArray[Bool, SMR_RI](fill=False)
+    var ci = Array[Int32, SMR_RI](fill=Int32(-1))
+    var ni = Array[Float32, SMR_RI](fill=Float32(0.0))
+    var cri = Array[Float32, SMR_RI](fill=Float32(0.0))
+    var bk = Array[Int32, SMR_RI](fill=WEIGHT_KEY_SENTINEL)
+    var bj = Array[Int32, SMR_RI](fill=SMR_NONE_J)
+    var bad = Array[Bool, SMR_RI](fill=False)
     comptime for r in range(SMR_RI):
         var i = Int(ti_s[unsafe_offset = ty + r * SMR_TY])
         if i >= 0:
@@ -336,7 +336,7 @@ def sparse_mr_search_tiled_kernel(
                 barrier()
                 jt += SMR_TJ
                 continue
-        var acc = InlineArray[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
+        var acc = Array[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
         var k0 = 0
         while k0 < d:
             comptime for q in range(SMR_KC * SMR_TI // SMR_TILED_TPB):
@@ -364,8 +364,8 @@ def sparse_mr_search_tiled_kernel(
             if kmax > SMR_KC:
                 kmax = SMR_KC
             for kk in range(kmax):
-                var av = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
-                var bv = InlineArray[Float32, SMR_RJ](fill=Float32(0.0))
+                var av = Array[Float32, SMR_RI](fill=Float32(0.0))
+                var bv = Array[Float32, SMR_RJ](fill=Float32(0.0))
                 comptime for r in range(SMR_RI):
                     av[r] = a_s[unsafe_offset = kk * SMR_TI + ty + r * SMR_TY]
                 comptime for c in range(SMR_RJ):

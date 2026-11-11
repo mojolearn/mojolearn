@@ -184,10 +184,10 @@ def t_chol_solve_cols(t: Team, l: FP, loff: Int, m: Int, b: FP, boff: Int, w: FP
 
 
 @always_inline
-def q_layout(n: Int, d: Int, m: Int) -> InlineArray[Int, 12]:
+def q_layout(n: Int, d: Int, m: Int) -> Array[Int, 12]:
     """fw offsets: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d |
     v d | next rhs m | dsq d; [11] the total."""
-    var o = InlineArray[Int, 12](fill=0)
+    var o = Array[Int, 12](fill=0)
     o[0] = 0
     o[1] = m * m
     o[2] = o[1] + m
@@ -203,11 +203,11 @@ def q_layout(n: Int, d: Int, m: Int) -> InlineArray[Int, 12]:
     return o^
 
 
-def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> InlineArray[Float32, 3]:
+def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> Array[Float32, 3]:
     """(den, rho, ||y||) from the folded sums (nf = the row count as a
     float): den = n or sum(w), rho = 1 / (n * max(mean |y - ym|, 1e-6)),
     the target norm."""
-    var r = InlineArray[Float32, 3](fill=Float32(0))
+    var r = Array[Float32, 3](fill=Float32(0))
     r[0] = den_sum if sw else nf
     var spread = fmax(fd(spread_sum, nf), Float32(1e-6))
     r[1] = fd(Float32(1), fm(nf, spread))
@@ -321,10 +321,10 @@ def qp_rounds(k: Int) -> Int:
 
 
 @always_inline
-def qp_layout(d: Int, m: Int) -> InlineArray[Int, 10]:
+def qp_layout(d: Int, m: Int) -> Array[Int, 10]:
     """Polish words: Q m*m | L m*m | y_R m | a m | v m | c m | t m | S m |
     coef d, intercept 1; [9] the total."""
-    var o = InlineArray[Int, 10](fill=0)
+    var o = Array[Int, 10](fill=0)
     o[0] = 0
     o[1] = m * m
     o[2] = 2 * m * m

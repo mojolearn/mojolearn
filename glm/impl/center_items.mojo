@@ -57,7 +57,7 @@ def scale_cell(x: Float32, w: Float32) -> Float32:
 
 
 @always_inline
-def exact_add(mut acc: InlineArray[Int64, CS_WORDS], v: Float32):
+def exact_add(mut acc: Array[Int64, CS_WORDS], v: Float32):
     """acc += v exactly (limbs 0..8), or the flag word for an infinity or a
     NaN. The limb index is compared against compile-time indices so the
     accumulator stays in registers on a GPU."""
@@ -92,18 +92,18 @@ def exact_add(mut acc: InlineArray[Int64, CS_WORDS], v: Float32):
 
 
 @always_inline
-def exact_merge(mut acc: InlineArray[Int64, CS_WORDS], other: InlineArray[Int64, CS_WORDS]):
+def exact_merge(mut acc: Array[Int64, CS_WORDS], other: Array[Int64, CS_WORDS]):
     comptime for L in range(CS_LIMBS):
         acc[L] = acc[L] + other[L]
     acc[CS_LIMBS] = acc[CS_LIMBS] | other[CS_LIMBS]
 
 
 @always_inline
-def _bit(d: InlineArray[UInt64, CS_WORDS], i: Int) -> UInt64:
+def _bit(d: Array[UInt64, CS_WORDS], i: Int) -> UInt64:
     return (d[i >> 5] >> UInt64(i & 31)) & UInt64(1)
 
 
-def exact_finish(acc: InlineArray[Int64, CS_WORDS]) -> UInt64:
+def exact_finish(acc: Array[Int64, CS_WORDS]) -> UInt64:
     """The float64 bits of the exact total, rounded once to nearest even."""
     var flags = acc[CS_LIMBS]
     if (flags & CS_FLAG_NAN) != 0 or (flags & (CS_FLAG_PINF | CS_FLAG_NINF)) == (CS_FLAG_PINF | CS_FLAG_NINF):
@@ -113,7 +113,7 @@ def exact_finish(acc: InlineArray[Int64, CS_WORDS]) -> UInt64:
     if (flags & CS_FLAG_NINF) != 0:
         return UInt64(0xFFF0000000000000)
     # carry propagation: ten base-2^32 digits, the top one signed
-    var d = InlineArray[UInt64, CS_WORDS](fill=UInt64(0))
+    var d = Array[UInt64, CS_WORDS](fill=UInt64(0))
     var c = Int64(0)
     for L in range(CS_LIMBS):
         var t = acc[L] + c

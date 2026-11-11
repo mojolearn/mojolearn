@@ -92,7 +92,7 @@ def _p(l: List[Float32]) -> F32Ptr:
 def ts_dot_host(x: F32Ptr, ldx: Int, cx: Int, y: F32Ptr, ldy: Int, cy: Int, lo: Int, hi: Int) -> Float32:
     """sum over rows [lo, hi) of x[i, cx] y[i, cy]: TS_P chains (row i into
     chain i mod TS_P, ascending), then `ts_fold`."""
-    var part = InlineArray[Float32, TS_P](fill=Float32(0.0))
+    var part = Array[Float32, TS_P](fill=Float32(0.0))
     var g = lo % TS_P
     for i in range(lo, hi):
         part[g] = ts_fma(ftz(x.unsafe_load(i * ldx + cx)), ftz(y.unsafe_load(i * ldy + cy)), part[g])
@@ -104,7 +104,7 @@ def ts_dot_host(x: F32Ptr, ldx: Int, cx: Int, y: F32Ptr, ldy: Int, cy: Int, lo: 
 
 def ts_wy_host[transpose: Bool, W: Int = TS_NB](
     y: F32Ptr, ldy: Int, x: F32Ptr, ldx: Int, c_lo: Int, c_hi: Int, mb: Int, j0: Int, pw: Int,
-    t: InlineArray[Float32, W * W],
+    t: Array[Float32, W * W],
 ):
     """Columns [c_lo, c_hi) of x (mb rows) times the block reflector of pw
     (<= W) reflectors with the W x W compact WY factor t: (I - Y T^T Y^T) x
@@ -113,11 +113,11 @@ def ts_wy_host[transpose: Bool, W: Int = TS_NB](
     tail below it, zero above. W = TS_NB for one panel, TS_W2 for a pair
     (TS_WY_PAIR; the device's `_wy_chunk_kern` and `_wy_chunk_kern2`)."""
     for c in range(c_lo, c_hi):
-        var z = InlineArray[Float32, W](fill=Float32(0.0))
+        var z = Array[Float32, W](fill=Float32(0.0))
         for p in range(pw):
             var tail = ts_dot_host(y, ldy, j0 + p, x, ldx, c, j0 + p + 1, mb)
             z[p] = ftz(ftz(x.unsafe_load((j0 + p) * ldx + c)) + tail)
-        var w = InlineArray[Float32, W](fill=Float32(0.0))
+        var w = Array[Float32, W](fill=Float32(0.0))
         for p in range(pw):
             var acc = Float32(0.0)
             comptime if transpose:
@@ -137,8 +137,8 @@ def ts_wy_host[transpose: Bool, W: Int = TS_NB](
 
 
 def ts_pair_t_host(
-    blk: F32Ptr, mb: Int, n: Int, pa: Int, npan: Int, ta: InlineArray[Float32, _TT], tb: InlineArray[Float32, _TT],
-    mut t2: InlineArray[Float32, TS_T2],
+    blk: F32Ptr, mb: Int, n: Int, pa: Int, npan: Int, ta: Array[Float32, _TT], tb: Array[Float32, _TT],
+    mut t2: Array[Float32, TS_T2],
 ):
     """TS_WY_PAIR: the pair's T2 (TS_W2 x TS_W2) from panel pa's Ta and panel
     pa + 1's Tb (zeros when that panel does not exist): T2 = [[Ta, -Ta (G Tb)],
@@ -151,9 +151,9 @@ def ts_pair_t_host(
     var j0b = j0a + TS_NB
     var has_b = pa + 1 < npan
     var pwb = min(TS_NB, n - j0b) if has_b else 0
-    var g = InlineArray[Float32, _TT](fill=Float32(0.0))
-    var gt = InlineArray[Float32, _TT](fill=Float32(0.0))
-    var mm = InlineArray[Float32, _TT](fill=Float32(0.0))
+    var g = Array[Float32, _TT](fill=Float32(0.0))
+    var gt = Array[Float32, _TT](fill=Float32(0.0))
+    var mm = Array[Float32, _TT](fill=Float32(0.0))
     if has_b:
         for p in range(TS_NB):
             for q in range(pwb):
@@ -194,7 +194,7 @@ def ts_factor_block_host(blk: F32Ptr, mb: Int, n: Int, tst: F32Ptr, tst2: F32Ptr
             var pa = 2 * q
             var j0a = pa * TS_NB
             var ta = _ts_panel_host(blk, mb, n, pa, tst)
-            var tb = InlineArray[Float32, _TT](fill=Float32(0.0))
+            var tb = Array[Float32, _TT](fill=Float32(0.0))
             if pa + 1 < npan:
                 # panel a's reflectors on panel b's columns only: the words
                 # panel b sees before its own factorization
@@ -202,7 +202,7 @@ def ts_factor_block_host(blk: F32Ptr, mb: Int, n: Int, tst: F32Ptr, tst2: F32Ptr
                 var pwb = min(TS_NB, n - j0b)
                 ts_wy_host[True, TS_NB](blk, n, blk, n, j0b, j0b + pwb, mb, j0a, TS_NB, ta)
                 tb = _ts_panel_host(blk, mb, n, pa + 1, tst)
-            var t2 = InlineArray[Float32, TS_T2](fill=Float32(0.0))
+            var t2 = Array[Float32, TS_T2](fill=Float32(0.0))
             ts_pair_t_host(blk, mb, n, pa, npan, ta, tb, t2)
             for e in range(TS_T2):
                 tst2.unsafe_store(q * TS_T2 + e, t2[e])
@@ -218,13 +218,13 @@ def ts_factor_block_host(blk: F32Ptr, mb: Int, n: Int, tst: F32Ptr, tst2: F32Ptr
             ts_wy_host[True, TS_NB](blk, n, blk, n, j0 + pw, n, mb, j0, pw, t)
 
 
-def _ts_panel_host(blk: F32Ptr, mb: Int, n: Int, pan: Int, tst: F32Ptr) -> InlineArray[Float32, _TT]:
+def _ts_panel_host(blk: F32Ptr, mb: Int, n: Int, pan: Int, tst: F32Ptr) -> Array[Float32, _TT]:
     """Panel `pan` of a leaf block: (F) its reflectors and (T) its compact WY
     factor T, stored into tst's slot and returned. The trailing update is
     the caller's."""
     var j0 = pan * TS_NB
     var pw = min(TS_NB, n - j0)
-    var t = InlineArray[Float32, _TT](fill=Float32(0.0))
+    var t = Array[Float32, _TT](fill=Float32(0.0))
     # (F) the panel's reflectors, one at a time, each applied to the
     # panel's columns to its right
     for p in range(pw):
@@ -255,7 +255,7 @@ def _ts_panel_host(blk: F32Ptr, mb: Int, n: Int, pan: Int, tst: F32Ptr) -> Inlin
                     blk.unsafe_store(i * n + c, ts_fma(-td, ftz(blk.unsafe_load(i * n + j)), ftz(blk.unsafe_load(i * n + c))))
     # (T) larft, forward and columnwise: T[0:p, p] = -tau_p T[0:p, 0:p] (Y^T y_p)
     for p in range(1, pw):
-        var gq = InlineArray[Float32, TS_NB](fill=Float32(0.0))
+        var gq = Array[Float32, TS_NB](fill=Float32(0.0))
         for q in range(p):
             var tail = ts_dot_host(blk, n, j0 + q, blk, n, j0 + p, j0 + p + 1, mb)
             gq[q] = ftz(ftz(blk.unsafe_load((j0 + p) * n + j0 + q)) + tail)
@@ -358,7 +358,7 @@ def ts_apply_block_host(blk: F32Ptr, n: Int, tst: F32Ptr, tst2: F32Ptr, x: F32Pt
         var npair = ts_pairs(n)
         for qq in range(npair):
             var q = npair - 1 - qq
-            var t2 = InlineArray[Float32, TS_T2](fill=Float32(0.0))
+            var t2 = Array[Float32, TS_T2](fill=Float32(0.0))
             for e in range(TS_T2):
                 t2[e] = tst2.unsafe_load(q * TS_T2 + e)
             ts_wy_host[False, TS_W2](blk, n, x, k, 0, k, mb, 2 * q * TS_NB, ts_pair_width(n, q), t2)
@@ -368,7 +368,7 @@ def ts_apply_block_host(blk: F32Ptr, n: Int, tst: F32Ptr, tst2: F32Ptr, x: F32Pt
             var pan = npan - 1 - pp
             var j0 = pan * TS_NB
             var pw = min(TS_NB, n - j0)
-            var t = InlineArray[Float32, _TT](fill=Float32(0.0))
+            var t = Array[Float32, _TT](fill=Float32(0.0))
             for e in range(_TT):
                 t[e] = tst.unsafe_load(pan * _TT + e)
             ts_wy_host[False, TS_NB](blk, n, x, k, 0, k, mb, j0, pw, t)

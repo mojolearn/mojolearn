@@ -312,8 +312,8 @@ def binary_hist_kernel(
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
-        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
+        var local_bins = Array[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = Array[Float32, POINTS_PER_ITER](fill=0)
 
         # `Ldg((uint4*) bins, warpSize * k)` and its `float4` twin
         # (`compute_hist_loop_one_stat.cuh:366-375`). Indexing a `uint4*` by
@@ -807,8 +807,8 @@ def binary_hist_gather_kernel[ridx_stats: Bool = False](
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
-        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
+        var local_bins = Array[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = Array[Float32, POINTS_PER_ITER](fill=0)
 
         # Their gather batch (`compute_hist_loop_one_stat.cuh:406-424`):
         #

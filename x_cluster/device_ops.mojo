@@ -3682,10 +3682,10 @@ def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int3
 def _xc_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):
     comptime assert XC_ASSIGN_ROWS == 2 or XC_ASSIGN_ROWS == 4, "MOJOLEARN_XCLUSTER_ROW_ASSIGN takes 2 or 4"
     var first=_tid()*XC_ASSIGN_ROWS
-    var best=InlineArray[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
-    var ids=InlineArray[Int32,XC_ASSIGN_ROWS](fill=Int32(0))
+    var best=Array[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
+    var ids=Array[Int32,XC_ASSIGN_ROWS](fill=Int32(0))
     for center in range(Int(k)):
-        var acc=InlineArray[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
+        var acc=Array[Float32,XC_ASSIGN_ROWS](fill=Float32(0))
         for f in range(Int(d)):
             var cv=ftz(c[center*Int(d)+f])
             comptime for r in range(XC_ASSIGN_ROWS):

@@ -26,7 +26,7 @@ comptime WORDS = 256
 def probe_kernel(dst: MutPointer[Int32, MutAnyOrigin], salt_in: Int32):
     var t = Int(thread_idx.x)
     var salt = Int(salt_in)
-    var arr = InlineArray[Int32, WORDS](fill=Int32(0))
+    var arr = Array[Int32, WORDS](fill=Int32(0))
     comptime if SCRATCH:
         for i in range(WORDS):
             arr[(i * 7 + t + salt) & (WORDS - 1)] += Int32(i)

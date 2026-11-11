@@ -48,8 +48,8 @@ def pair_parts(pm: P, ps: P, base: Int, count: Int) -> Tuple[Float32, Float32]:
 def pair_row(row: P, n: Int, leaf_rows: Int = C52_ROWS) -> Tuple[Float32, Float32]:
     """Same logical tree as pair_parts, streaming leaves with bounded storage."""
     var ni = bitcast[DType.float32](UInt32(0xFF800000))
-    var ms = InlineArray[Float32, 64](fill=ni)
-    var ss = InlineArray[Float32, 64](fill=Float32(0))
+    var ms = Array[Float32, 64](fill=ni)
+    var ss = Array[Float32, 64](fill=Float32(0))
     var occupied = UInt64(0)
     for lo in range(0, n, leaf_rows):
         var m = ni

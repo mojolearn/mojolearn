@@ -235,7 +235,7 @@ def identical_gemm_int8_apple_chunk_kernel[
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var total = SIMD[DType.int32, NC](0)
     var windows = (k + KB - 1) // KB
     for w in range(windows):
@@ -244,8 +244,8 @@ def identical_gemm_int8_apple_chunk_kernel[
         _stage_codes[BN, KB, NT, False, BST](bt, qb, n0, n, k0, k, tid)
         barrier()
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):

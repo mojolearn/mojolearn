@@ -621,7 +621,7 @@ def _tree_shared_kern(
     var w = w_in
     while w > 1:
         var pairs = w // 2
-        var vals = InlineArray[Float32, 8](fill=Float32(0.0))
+        var vals = Array[Float32, 8](fill=Float32(0.0))
         var k = 0
         for q in range(tid, pairs, nth):
             vals[k] = ts_z_add(buf[2 * q], buf[2 * q + 1])

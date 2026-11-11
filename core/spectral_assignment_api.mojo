@@ -78,10 +78,10 @@ struct SpectralAssignmentDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def assign(self, request: SpectralAssignmentRequest, mut output: SpectralAssignmentOutput) raises:
-        var a: InlineArray[Int, 2] = [request.source, output.address()]
-        var p: InlineArray[Int, 7] = [request.count, request.rows, request.components,
+        var a: Array[Int, 2] = [request.source, output.address()]
+        var p: Array[Int, 7] = [request.count, request.rows, request.components,
             request.method, request.seed, request.restarts, request.iterations]
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         try:
             _ = native_descriptor_call_fixed(self.entry, 0, a, p, f)
         finally:

@@ -67,12 +67,12 @@ def _span(f: FP, K: Int, k: Int, nspl: Int, x: Float32) -> Int:
     return i
 
 
-def _bsplvb(f: FP, K: Int, i: Int, k: Int, x: Float32, mut out: InlineArray[Float32, MAX_DEGREE + 1]):
+def _bsplvb(f: FP, K: Int, i: Int, k: Int, x: Float32, mut out: Array[Float32, MAX_DEGREE + 1]):
     """The k+1 nonzero degree-k basis values B_{i-k} .. B_i at x on span i
     into out[0..k] (de Boor's BSPLVB)."""
     out[0] = Float32(1)
-    var left = InlineArray[Float32, MAX_DEGREE + 1](fill=Float32(0))
-    var right = InlineArray[Float32, MAX_DEGREE + 1](fill=Float32(0))
+    var left = Array[Float32, MAX_DEGREE + 1](fill=Float32(0))
+    var right = Array[Float32, MAX_DEGREE + 1](fill=Float32(0))
     for j in range(1, k + 1):
         left[j] = sub(x, ld(f, K + i + 1 - j))
         right[j] = sub(ld(f, K + i + j), x)
@@ -87,7 +87,7 @@ def _bsplvb(f: FP, K: Int, i: Int, k: Int, x: Float32, mut out: InlineArray[Floa
         out[j] = saved
 
 
-def _basis(f: FP, K: Int, k: Int, nspl: Int, x: Float32, mut out: InlineArray[Float32, MAX_DEGREE + 1]) -> Int:
+def _basis(f: FP, K: Int, k: Int, nspl: Int, x: Float32, mut out: Array[Float32, MAX_DEGREE + 1]) -> Int:
     """The k+1 nonzero basis values at x into out[0..k]; returns the span i
     (they are B_{i-k} .. B_i). x outside the base interval uses the boundary
     span's polynomials (scipy's extrapolate=True)."""
@@ -96,7 +96,7 @@ def _basis(f: FP, K: Int, k: Int, nspl: Int, x: Float32, mut out: InlineArray[Fl
     return i
 
 
-def _deriv(f: FP, K: Int, i: Int, k: Int, x: Float32, mut out: InlineArray[Float32, MAX_DEGREE + 1]):
+def _deriv(f: FP, K: Int, i: Int, k: Int, x: Float32, mut out: Array[Float32, MAX_DEGREE + 1]):
     """The first derivatives of B_{i-k} .. B_i at x on span i into out[0..k]:
     B'_j = k * (N_j / (t_{j+k} - t_j) - N_{j+1} / (t_{j+k+1} - t_{j+1})) with
     N the degree k-1 basis (a zero-length span's term is 0); degree 0: 0."""
@@ -104,7 +104,7 @@ def _deriv(f: FP, K: Int, i: Int, k: Int, x: Float32, mut out: InlineArray[Float
         out[r] = Float32(0)
     if k == 0:
         return
-    var lo = InlineArray[Float32, MAX_DEGREE + 1](fill=Float32(0))
+    var lo = Array[Float32, MAX_DEGREE + 1](fill=Float32(0))
     _bsplvb(f, K, i, k - 1, x, lo)
     for r in range(k + 1):
         var j = i - k + r
@@ -187,7 +187,7 @@ def spline_apply_unit(t: Int, f: FP, q: IP):
         return
     var xmin = ld(f, K + k)
     var xmax = ld(f, K + k + nk - 1)
-    var b = InlineArray[Float32, MAX_DEGREE + 1](fill=Float32(0))
+    var b = Array[Float32, MAX_DEGREE + 1](fill=Float32(0))
     if extrap == 3:
         var per = sub(xmax, xmin)
         var xr = Float32(0)
@@ -221,7 +221,7 @@ def spline_apply_unit(t: Int, f: FP, q: IP):
             if keep and col < width:
                 st(f, O + col, b[r])
         return
-    var db = InlineArray[Float32, MAX_DEGREE + 1](fill=Float32(0))
+    var db = Array[Float32, MAX_DEGREE + 1](fill=Float32(0))
     _deriv(f, K, span, k, edge, db)
     var nlin = k if k > 1 else k + 1
     var dx = sub(x, edge)

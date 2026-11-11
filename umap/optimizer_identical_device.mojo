@@ -281,8 +281,8 @@ def umap_identical_epoch_kernel_rt(
     var key = SIMD[DType.uint32, 2](
         UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
     )
-    var x = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
-    var acc = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var x = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var acc = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
     for c in range(C):
         x[c] = source.unsafe_load(v * C + c)
     var begin = Int(row_offsets.unsafe_load(v))
@@ -293,7 +293,7 @@ def umap_identical_epoch_kernel_rt(
         if Int(next_f * s) <= Int(epoch_f * s):
             continue
         var u = Int(tails.unsafe_load(e))
-        var delta = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+        var delta = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
         var d2 = Float32(0.0)
         for c in range(C):
             delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
@@ -337,7 +337,7 @@ def umap_identical_epoch_kernel_rt(
             var other = Int(draw[lane] % n_u)
             if other == v:
                 continue
-            var nd = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+            var nd = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
             var n2 = Float32(0.0)
             for c in range(C):
                 nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))
@@ -433,8 +433,8 @@ def _c44_epoch_kernel(
     var key = SIMD[DType.uint32, 2](
         UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
     )
-    var x = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
-    var acc = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var x = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var acc = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
     for c in range(C):
         x[c] = source.unsafe_load(v * C + c)
     var begin = Int(row_offsets.unsafe_load(v))
@@ -444,7 +444,7 @@ def _c44_epoch_kernel(
         if samples[e*(rate+1)] == UInt32(0):
             continue
         var u = Int(tails.unsafe_load(e))
-        var delta = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+        var delta = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
         var d2 = Float32(0.0)
         for c in range(C):
             delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
@@ -476,7 +476,7 @@ def _c44_epoch_kernel(
             var other = Int(samples[e*(rate+1)+j+1])
             if other == v:
                 continue
-            var nd = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+            var nd = Array[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
             var n2 = Float32(0.0)
             for c in range(C):
                 nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))

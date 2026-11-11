@@ -21,7 +21,7 @@ comptime IPCA_CAP_RESIDENT = 8
 
 
 struct IPCAStateIds(Copyable, Movable):
-    var values: InlineArray[Int, 5]
+    var values: Array[Int, 5]
 
     def __init__(out self):
         self.values = [-1, -1, -1, -1, -1]
@@ -206,51 +206,51 @@ struct IPCANativeDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: IPCAFitRequest) raises -> IPCAFitResult:
         var words = List[Int](length=7, fill=-1)
         var noise = List[Float64](length=1, fill=0.0)
-        var a: InlineArray[Int, 9] = [r.source, r.outputs.components, r.outputs.singular, r.outputs.mean,
+        var a: Array[Int, 9] = [r.source, r.outputs.components, r.outputs.singular, r.outputs.mean,
             r.outputs.population_variance, r.outputs.explained_variance, r.outputs.ratio,
             Int(words.unsafe_ptr()), Int(noise.unsafe_ptr())]
-        var p: InlineArray[Int, 5] = [r.rows, r.features, r.requested, r.batch_size, Int(r.keep)]
-        var f: InlineArray[Float64, 0] = []
+        var p: Array[Int, 5] = [r.rows, r.features, r.requested, r.batch_size, Int(r.keep)]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, IPCA_FIT, a, p, f)
         return _ipca_read_result(words, noise[0])
 
     def partial(self, r: IPCAPartialRequest) raises -> IPCAFitResult:
         var words = List[Int](length=7, fill=-1)
         var noise = List[Float64](length=1, fill=0.0)
-        var a: InlineArray[Int, 13] = [r.source, r.previous.components, r.previous.singular,
+        var a: Array[Int, 13] = [r.source, r.previous.components, r.previous.singular,
             r.previous.mean, r.previous.population_variance, r.outputs.components, r.outputs.singular,
             r.outputs.mean, r.outputs.population_variance, r.outputs.explained_variance, r.outputs.ratio,
             Int(words.unsafe_ptr()), Int(noise.unsafe_ptr())]
-        var p: InlineArray[Int, 13] = [r.rows, r.features, r.requested, r.seen, r.previous_count,
+        var p: Array[Int, 13] = [r.rows, r.features, r.requested, r.seen, r.previous_count,
             r.previous_features, Int(r.resident), Int(r.keep), r.state.values[0], r.state.values[1],
             r.state.values[2], r.state.values[3], r.state.values[4]]
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, IPCA_PARTIAL, a, p, f)
         return _ipca_read_result(words, noise[0])
 
     def query(self, r: IPCAQueryRequest) raises:
-        var a: InlineArray[Int, 5] = [r.source, r.mean, r.components, r.variance, r.dst]
-        var p: InlineArray[Int, 11] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.whiten), Int(r.resident),
+        var a: Array[Int, 5] = [r.source, r.mean, r.components, r.variance, r.dst]
+        var p: Array[Int, 11] = [r.rows, r.features, r.count, Int(r.inverse), Int(r.whiten), Int(r.resident),
             r.state.values[0], r.state.values[1], r.state.values[2], r.state.values[3], r.state.values[4]]
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, IPCA_QUERY, a, p, f)
 
     def prepare(self, address: Int, count: Int) raises -> Int:
-        var a: InlineArray[Int, 1] = [address]
-        var p: InlineArray[Int, 1] = [count]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 1] = [address]
+        var p: Array[Int, 1] = [count]
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, IPCA_PREPARE, a, p, f)
 
     def free(self, handle: Int) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 1] = [handle]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 1] = [handle]
+        var f: Array[Float64, 0] = []
         _ = native_descriptor_call_fixed(self.entry, IPCA_FREE, a, p, f)

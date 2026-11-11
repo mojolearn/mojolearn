@@ -97,7 +97,7 @@ def apple_mma_distance_tile_kernel(
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var rmin = stack_allocation[BM, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var cmin = stack_allocation[BN, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, FM * FN](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, FM * FN](fill=_AMMA_M64(0))
     # Thread t < 64 owns row t's running minimum, t >= 64 column t - 64's.
     var mine = UInt32(0xFF)
     var k0 = 0

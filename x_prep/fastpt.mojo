@@ -205,9 +205,9 @@ def pt_tile_kernel(f: FP, pp: FP, X: Int32, n: Int32, d: Int32, method: Int32, L
     var chunk = Int(block_idx.x)
     var row0 = chunk * Int(rows)
     var row1 = min(row0 + Int(rows), Int(n))
-    var lam = InlineArray[Float32, PT_MAXM](fill=Float32(0))
-    var mean = InlineArray[Float32, PT_MAXM](fill=Float32(0))
-    var m2 = InlineArray[Float32, PT_MAXM](fill=Float32(0))
+    var lam = Array[Float32, PT_MAXM](fill=Float32(0))
+    var mean = Array[Float32, PT_MAXM](fill=Float32(0))
+    var m2 = Array[Float32, PT_MAXM](fill=Float32(0))
     var lb = Int(LAMS) + c * Int(lstride)
     for j in range(m):
         lam[j] = f[lb + j]

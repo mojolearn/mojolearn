@@ -60,11 +60,11 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False, PPT: Int = 1](
     var m = Int(m_in)
     var dim = Int(d_in)
     var base_t = (Int(block_idx.x) * FB_TPB + Int(thread_idx.x)) * PPT
-    var live = InlineArray[Bool, PPT](fill=False)
-    var ii = InlineArray[Int, PPT](fill=0)
-    var ci = InlineArray[Int32, PPT](fill=Int32(-1))
-    var cri = InlineArray[Float32, PPT](fill=0.0)
-    var xi = InlineArray[Float32, PPT * DMAX](fill=0.0)
+    var live = Array[Bool, PPT](fill=False)
+    var ii = Array[Int, PPT](fill=0)
+    var ci = Array[Int32, PPT](fill=Int32(-1))
+    var cri = Array[Float32, PPT](fill=0.0)
+    var xi = Array[Float32, PPT * DMAX](fill=0.0)
     comptime for pp in range(PPT):
         if base_t + pp < Int(n_todo_in):
             live[pp] = True
@@ -85,9 +85,9 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False, PPT: Int = 1](
     var tcore = stack_allocation[
         FB_TILE, Float32, address_space=AddressSpace.SHARED
     ]()
-    var bd = InlineArray[Float32, PPT](fill=Float32.MAX)
-    var bj = InlineArray[Int32, PPT](fill=Int32(-1))
-    var bad = InlineArray[Bool, PPT](fill=False)
+    var bd = Array[Float32, PPT](fill=Float32.MAX)
+    var bj = Array[Int32, PPT](fill=Int32(-1))
+    var bad = Array[Bool, PPT](fill=False)
     var j0 = 0
     while j0 < m:
         var e = Int(thread_idx.x)

@@ -76,11 +76,11 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False, LOWER: 
     comptime if SPLIT:
         first = Int(block_idx.y) * per
         last = min(k, first + per)
-    var acc = InlineArray[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
+    var acc = Array[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
     for kb in range(first, last, 16):
         for ks in range(0, 16, 8):
-            var af = InlineArray[SIMD[DType.float32, 2], RM](fill=SIMD[DType.float32, 2](0))
-            var bf = InlineArray[SIMD[DType.float32, 2], RN](fill=SIMD[DType.float32, 2](0))
+            var af = Array[SIMD[DType.float32, 2], RM](fill=SIMD[DType.float32, 2](0))
+            var bf = Array[SIMD[DType.float32, 2], RN](fill=SIMD[DType.float32, 2](0))
             comptime for mi in range(RM):
                 var row = bm + sr + mi * 8 + fr
                 var fragment = SIMD[DType.float32, 2](0)

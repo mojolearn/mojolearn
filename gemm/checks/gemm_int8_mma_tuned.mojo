@@ -1012,7 +1012,7 @@ def identical_gemm_int8_mma_tuned_kernel[
         address_space = AddressSpace.SHARED,
     ]()
 
-    var acc = InlineArray[SIMD[DType.int32, 4], NACC](fill=SIMD[DType.int32, 4](0))
+    var acc = Array[SIMD[DType.int32, 4], NACC](fill=SIMD[DType.int32, 4](0))
 
     var windows = (k + KB - 1) // KB
     for w in range(windows):
@@ -1033,7 +1033,7 @@ def identical_gemm_int8_mma_tuned_kernel[
                         var g = lane >> 2
                         var t = lane & 3
                         var kw = ks * 8 + t
-                        var bfr = InlineArray[Int32, 4 * FN](fill=Int32(0))
+                        var bfr = Array[Int32, 4 * FN](fill=Int32(0))
                         comptime for fq in range(FN):
                             comptime for h in range(2):
                                 var br = (lcol + fq * 16 + h * 8 + g) * SW + kw
@@ -1062,7 +1062,7 @@ def identical_gemm_int8_mma_tuned_kernel[
                         # steps `8 (l >> 4) .. + 7` of the 32.
                         var i16 = lane & 15
                         var kw = ks * 8 + (lane >> 4) * 2
-                        var bfr = InlineArray[Int64, FN](fill=Int64(0))
+                        var bfr = Array[Int64, FN](fill=Int64(0))
                         comptime for fq in range(FN):
                             bfr[fq] = bitcast[DType.int64, 1](
                                 bs_.unsafe_load[width=2, alignment=8](
@@ -1823,7 +1823,7 @@ def identical_gemm_int8_pieces_flat_kernel(
 def _pieces_window_steps[
     FM: Int, FN: Int, KB: Int, SW: Int, APLANE: Int, BPLANE: Int, NACC: Int
 ](
-    mut acc: InlineArray[SIMD[DType.int32, 4], 3 * NACC],
+    mut acc: Array[SIMD[DType.int32, 4], 3 * NACC],
     as_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     bs_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     abase: Int,
@@ -1848,7 +1848,7 @@ def _pieces_window_steps[
                     var kw = ks * 8 + t
                     # Per half tile of B: the high plane's two words,
                     # then the low plane's.
-                    var bfr = InlineArray[Int32, 8 * FN](fill=Int32(0))
+                    var bfr = Array[Int32, 8 * FN](fill=Int32(0))
                     comptime for fq in range(FN):
                         comptime for h in range(2):
                             var br = (lcol + fq * 16 + h * 8 + g) * SW + kw
@@ -1898,7 +1898,7 @@ def _pieces_window_steps[
                 elif is_amd_gpu():
                     var i16 = lane & 15
                     var kw = ks * 8 + (lane >> 4) * 2
-                    var bfr = InlineArray[Int64, 2 * FN](fill=Int64(0))
+                    var bfr = Array[Int64, 2 * FN](fill=Int64(0))
                     comptime for fq in range(FN):
                         var br = (lcol + fq * 16 + i16) * SW + kw
                         bfr[fq * 2] = bitcast[DType.int64, 1](
@@ -2031,7 +2031,7 @@ def _pieces_block[
     ]()
 
     # Three accumulators per half tile: HH, HL + LH, LL.
-    var acc = InlineArray[SIMD[DType.int32, 4], 3 * NACC](fill=SIMD[DType.int32, 4](0))
+    var acc = Array[SIMD[DType.int32, 4], 3 * NACC](fill=SIMD[DType.int32, 4](0))
 
     var windows = (k + KB - 1) // KB
     comptime if PIPE:
@@ -2203,7 +2203,7 @@ def identical_gemm_int8_pieces_decode_kernel[FUSED: Bool, NW: Int](
         V * NW * WARP_SIZE, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     # acc[h * 3 + p]: half `h` of the sixteen columns, sum `p` (HH, MID, LL).
-    var acc = InlineArray[SIMD[DType.int32, 4], 6](fill=SIMD[DType.int32, 4](0))
+    var acc = Array[SIMD[DType.int32, 4], 6](fill=SIMD[DType.int32, 4](0))
     var chunks = (k + INT8_DECODE_CHUNK - 1) // INT8_DECODE_CHUNK
     var ch = w
     while ch < chunks:

@@ -686,8 +686,8 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
             # register-staged slabs: every load of this thread's words is
             # issued before the first store (slot q = tid + j GT_TPB; the
             # same index math, the same guards, the same words and slots)
-            var av = InlineArray[Float32, NA](fill=Float32(0.0))
-            var aslot = InlineArray[Int32, NA](fill=Int32(-1))
+            var av = Array[Float32, NA](fill=Float32(0.0))
+            var aslot = Array[Int32, NA](fill=Int32(-1))
             comptime for j in range(NA):
                 var q = tid + j * GT_TPB
                 if q < TM * cnt:
@@ -702,8 +702,8 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
                     aslot[j] = Int32(row * AS + kk)
                     if m0 + row < M:
                         av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-            var bv = InlineArray[Float32, NB](fill=Float32(0.0))
-            var bslot = InlineArray[Int32, NB](fill=Int32(-1))
+            var bv = Array[Float32, NB](fill=Float32(0.0))
+            var bslot = Array[Int32, NB](fill=Int32(-1))
             comptime for j in range(NB):
                 var q = tid + j * GT_TPB
                 if q < cnt * TN:
@@ -866,8 +866,8 @@ def seq_gemm_micro_kernel[EK: Int](
         var cnt = min(TK, K - k0)
         # register-staged slabs (seq_gemm_tile_kernel's GT_V3 staging,
         # TM = GM_M, TN = GM_N, TK = GM_K): every load before the first store
-        var av = InlineArray[Float32, NA](fill=Float32(0.0))
-        var aslot = InlineArray[Int32, NA](fill=Int32(-1))
+        var av = Array[Float32, NA](fill=Float32(0.0))
+        var aslot = Array[Int32, NA](fill=Int32(-1))
         comptime for j in range(NA):
             var q = tid + j * GT_TPB
             if q < TM * cnt:
@@ -882,8 +882,8 @@ def seq_gemm_micro_kernel[EK: Int](
                 aslot[j] = Int32(row * AS + kk)
                 if m0 + row < M:
                     av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-        var bv = InlineArray[Float32, NB](fill=Float32(0.0))
-        var bslot = InlineArray[Int32, NB](fill=Int32(-1))
+        var bv = Array[Float32, NB](fill=Float32(0.0))
+        var bslot = Array[Int32, NB](fill=Int32(-1))
         comptime for j in range(NB):
             var q = tid + j * GT_TPB
             if q < cnt * TN:

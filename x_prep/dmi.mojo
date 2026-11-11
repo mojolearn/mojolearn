@@ -202,7 +202,7 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
     var wb = c * Int(big_n)
     var fillb = as_
     if nlab <= MLAB:
-        var cntr = InlineArray[UInt32, MLAB + 1](fill=UInt32(0))
+        var cntr = Array[UInt32, MLAB + 1](fill=UInt32(0))
         for j0 in range(0, full, MRUN):
             var blv = run_block[MRUN](f, lb + j0, 1)
             comptime for v in range(MRUN):
@@ -215,19 +215,19 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
         for l in range(nlab + 1):
             fu[start + l] = cntr[l]
         # cntr[l] is now label l's fill counter
-        var multi = InlineArray[Bool, MLAB](fill=False)
+        var multi = Array[Bool, MLAB](fill=False)
         for l in range(nlab):
             multi[l] = Int(ld(f, cb + l)) > 1
         var na = 0
         var r0 = 0
         while r0 < n:
             var m = min(MRUN, n - r0)
-            var jj = InlineArray[Int, MRUN](fill=0)
+            var jj = Array[Int, MRUN](fill=0)
             for v in range(m):
                 jj[v] = Int(w[wb + r0 + v])
-            var ll = InlineArray[Int, MRUN](fill=0)
-            var xx = InlineArray[UInt32, MRUN](fill=UInt32(0))
-            var ss = InlineArray[UInt32, MRUN](fill=UInt32(0))
+            var ll = Array[Int, MRUN](fill=0)
+            var xx = Array[UInt32, MRUN](fill=UInt32(0))
+            var ss = Array[UInt32, MRUN](fill=UInt32(0))
             for v in range(m):
                 ll[v] = Int(ld(f, lb + jj[v]))
                 xx[v] = bitcast[DType.uint32](ld(f, zb + jj[v] * d))
@@ -368,8 +368,8 @@ def _point_kernel(f: FP, u: UP, q: IP, total: Int32):
     var start = U + 5 * n
     var b = Int(u[start + li])
     var e = Int(u[start + li + 1])
-    var bp = InlineArray[Float32, MAX_K](fill=BIG)
-    var bs = InlineArray[Float32, MAX_K](fill=BIG)
+    var bp = Array[Float32, MAX_K](fill=BIG)
+    var bs = Array[Float32, MAX_K](fill=BIG)
     var pi = Int(u[U + 2 * n + i])
     var L = pi - 1
     var R = pi + 1
@@ -459,8 +459,8 @@ def _run_lo(u: UP, xb: Int, lo: Int, hi: Int) -> Int:
 
 
 @always_inline
-def _take(dp: Float32, dsec: Float32, kl: Int, mut bp: InlineArray[Float32, MAX_K],
-          mut bs: InlineArray[Float32, MAX_K]) -> Bool:
+def _take(dp: Float32, dsec: Float32, kl: Int, mut bp: Array[Float32, MAX_K],
+          mut bs: Array[Float32, MAX_K]) -> Bool:
     """`_point_kernel`'s insertion; False when the pair is not below the kl-th."""
     if not _less(dp, dsec, bp[kl - 1], bs[kl - 1]):
         return False
@@ -475,7 +475,7 @@ def _take(dp: Float32, dsec: Float32, kl: Int, mut bp: InlineArray[Float32, MAX_
 
 
 def _take_run(u: UP, xb: Int, sbb: Int, rs: Int, re: Int, skip: Int, xi: Float32, si: Float32, kl: Int,
-              mut bp: InlineArray[Float32, MAX_K], mut bs: InlineArray[Float32, MAX_K]):
+              mut bp: Array[Float32, MAX_K], mut bs: Array[Float32, MAX_K]):
     """Offer the candidates of run [rs, re) (point `skip` excluded; -1: none)
     in ascending secondary distance until one is not below the kl-th."""
     var xr = _fx(u, xb + rs)
@@ -673,8 +673,8 @@ def _point_ties_kernel(f: FP, u: UP, q: IP, total: Int32):
     var start = U + 5 * n
     var b = Int(u[start + li])
     var e = Int(u[start + li + 1])
-    var bp = InlineArray[Float32, MAX_K](fill=BIG)
-    var bs = InlineArray[Float32, MAX_K](fill=BIG)
+    var bp = Array[Float32, MAX_K](fill=BIG)
+    var bs = Array[Float32, MAX_K](fill=BIG)
     var pi = Int(u[U + 2 * n + i])
     # the run holding point i, then runs outward with the walk's stop rule:
     # stop once kl points were considered and the next run is farther

@@ -309,7 +309,7 @@ def prune_kernel[KMAX: Int](n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned
     # representatives: sorted position p holds rank r; r represents its id
     # when eligible and least (cnt, rank) among its id's eligible entries
     comptime PER = KMAX // PRUNE_TPB if KMAX >= PRUNE_TPB else 1
-    var sel = InlineArray[UInt64, PER](fill=U64_MAX)
+    var sel = Array[UInt64, PER](fill=U64_MAX)
     for j in range(PER):
         var pos = t + j * PRUNE_TPB
         if pos < k:

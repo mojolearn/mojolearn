@@ -300,11 +300,11 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
 def hist2_add_points[
     bits: Int, n: Int, dt: DType
 ](
-    ci: InlineArray[UInt32, n],
-    s1: InlineArray[Float32, n],
-    s2: InlineArray[Float32, n],
-    q1: InlineArray[Int32, n],
-    q2: InlineArray[Int32, n],
+    ci: Array[UInt32, n],
+    s1: Array[Float32, n],
+    s2: Array[Float32, n],
+    q1: Array[Int32, n],
+    q2: Array[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
@@ -714,11 +714,11 @@ def hist2_one_byte_kernel[
     comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
     while pe < PEEL_END:
-        var hb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var hq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var hb = Array[UInt32, 1](fill=UInt32(0))
+        var hs1 = Array[Float32, 1](fill=Float32(0.0))
+        var hs2 = Array[Float32, 1](fill=Float32(0.0))
+        var hq1 = Array[Int32, 1](fill=Int32(0))
+        var hq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len and preq:
             hb[0] = ldg(bins_p + (p_offset + pe))
             hq1[0] = ldg(qs_p + (p_offset + pe))
@@ -740,11 +740,11 @@ def hist2_one_byte_kernel[
             hb, hs1, hs2, hq1, hq2, tid, slice_base, smem
         )
 
-        var tb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var ts1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var tq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var tq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var tb = Array[UInt32, 1](fill=UInt32(0))
+        var ts1 = Array[Float32, 1](fill=Float32(0.0))
+        var ts2 = Array[Float32, 1](fill=Float32(0.0))
+        var tq1 = Array[Int32, 1](fill=Int32(0))
+        var tq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len and preq:
             tb[0] = ldg(bins_p + (tail_start + pe))
             tq1[0] = ldg(qs_p + (tail_start + pe))
@@ -802,17 +802,17 @@ def hist2_one_byte_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var local_bins = InlineArray[UInt32, HIST2_POINTS_PER_ITER](fill=0)
-        var local_stats1 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_bins = Array[UInt32, HIST2_POINTS_PER_ITER](fill=0)
+        var local_stats1 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_stats2 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_stats2 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_q1 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q1 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
-        var local_q2 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q2 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
 
@@ -1026,11 +1026,11 @@ def hist2_one_byte_gather_kernel[
     comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
     while pe < PEEL_END:
-        var hb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var hq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var hb = Array[UInt32, 1](fill=UInt32(0))
+        var hs1 = Array[Float32, 1](fill=Float32(0.0))
+        var hs2 = Array[Float32, 1](fill=Float32(0.0))
+        var hq1 = Array[Int32, 1](fill=Int32(0))
+        var hq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len and preq:
             hb[0] = ldg(cindex_p + Int(ldg(indices + (p_offset + pe))))
             hq1[0] = ldg(qs_p + (p_offset + pe))
@@ -1061,11 +1061,11 @@ def hist2_one_byte_gather_kernel[
             hb, hs1, hs2, hq1, hq2, tid, slice_base, smem
         )
 
-        var tb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var ts1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var tq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var tq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var tb = Array[UInt32, 1](fill=UInt32(0))
+        var ts1 = Array[Float32, 1](fill=Float32(0.0))
+        var ts2 = Array[Float32, 1](fill=Float32(0.0))
+        var tq1 = Array[Int32, 1](fill=Int32(0))
+        var tq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len and preq:
             tb[0] = ldg(cindex_p + Int(ldg(indices + (tail_start + pe))))
             tq1[0] = ldg(qs_p + (tail_start + pe))
@@ -1126,17 +1126,17 @@ def hist2_one_byte_gather_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var local_bins = InlineArray[UInt32, HIST2_POINTS_PER_ITER](fill=0)
-        var local_stats1 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_bins = Array[UInt32, HIST2_POINTS_PER_ITER](fill=0)
+        var local_stats1 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_stats2 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_stats2 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_q1 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q1 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
-        var local_q2 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q2 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
 

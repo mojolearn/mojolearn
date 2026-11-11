@@ -26,7 +26,7 @@
 # Host loops here run over tensor axes (at most RN_MAX_RANK = 8) to build
 # descriptors, over node inputs, and over fold tree levels; none over rows
 # or elements.
-from std.collections import InlineArray
+from std.collections import Array
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
 from checks.numerics import identical_div
@@ -49,7 +49,7 @@ comptime RN_TAG_MAX = 143
 
 # ---------------------------------------------------------------- shapes
 def _ones(ndim: Int) -> ShapeN:
-    return ShapeN(ndim, InlineArray[Int, RN_MAX_RANK](fill=1))
+    return ShapeN(ndim, Array[Int, RN_MAX_RANK](fill=1))
 
 
 def _aligned_dim(s: ShapeN, out_ndim: Int, j: Int) -> Int:
@@ -61,7 +61,7 @@ def _aligned_dim(s: ShapeN, out_ndim: Int, j: Int) -> Int:
     return s.d[k]
 
 
-def _aligned_stride(s: ShapeN, strides: InlineArray[Int, RN_MAX_RANK], so: ShapeN, j: Int) -> Int:
+def _aligned_stride(s: ShapeN, strides: Array[Int, RN_MAX_RANK], so: ShapeN, j: Int) -> Int:
     """The stride that reads s (right-aligned) on output axis j: 0 on an
     axis s lacks or broadcasts."""
     var k = j - (so.ndim - s.ndim)
@@ -70,8 +70,8 @@ def _aligned_stride(s: ShapeN, strides: InlineArray[Int, RN_MAX_RANK], so: Shape
     return strides[k]
 
 
-def _row_major(s: ShapeN) -> InlineArray[Int, RN_MAX_RANK]:
-    var r = InlineArray[Int, RN_MAX_RANK](fill=0)
+def _row_major(s: ShapeN) -> Array[Int, RN_MAX_RANK]:
+    var r = Array[Int, RN_MAX_RANK](fill=0)
     var acc = 1
     var k = s.ndim - 1
     while k >= 0:  # small-loop(ndim <= 8: tensor rank, shape metadata)
@@ -256,9 +256,9 @@ def _binary_vjp[E: Exec](
 
 
 # ---------------------------------------------------------------- reductions
-def _axis_flags(s: ShapeN, axes: List[Int]) raises -> InlineArray[Bool, RN_MAX_RANK]:
+def _axis_flags(s: ShapeN, axes: List[Int]) raises -> Array[Bool, RN_MAX_RANK]:
     """Which axes of s are reduced; an empty list reduces every axis."""
-    var red = InlineArray[Bool, RN_MAX_RANK](fill=False)
+    var red = Array[Bool, RN_MAX_RANK](fill=False)
     if len(axes) == 0:
         for k in range(s.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
             red[k] = True
@@ -272,7 +272,7 @@ def _axis_flags(s: ShapeN, axes: List[Int]) raises -> InlineArray[Bool, RN_MAX_R
 
 
 def _reduce_desc(
-    s: ShapeN, red: InlineArray[Bool, RN_MAX_RANK], base: Int, strides: InlineArray[Int, RN_MAX_RANK],
+    s: ShapeN, red: Array[Bool, RN_MAX_RANK], base: Int, strides: Array[Int, RN_MAX_RANK],
 ) -> List[Int]:
     """The (F) descriptor of a reduction of s: kept records then reduced
     records, columns [extent, 0, read stride, logical row-major stride]."""
@@ -295,7 +295,7 @@ def _reduce_desc(
     return w^
 
 
-def _kept_shape(s: ShapeN, red: InlineArray[Bool, RN_MAX_RANK]) -> ShapeN:
+def _kept_shape(s: ShapeN, red: Array[Bool, RN_MAX_RANK]) -> ShapeN:
     var so = s
     for k in range(s.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
         if red[k]:

@@ -437,8 +437,8 @@ def multiclass_one_step_kernel(
         if sf64_lt(weight, min_leaf_weight_bits):
             keep = False
 
-    var sol = InlineArray[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
-    var sigma = InlineArray[
+    var sol = Array[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
+    var sigma = Array[
         UInt64, MC_ONE_STEP_MAX_CLASSES * MC_ONE_STEP_MAX_CLASSES
     ](fill=UInt64(0))
 

@@ -33,9 +33,9 @@ comptime FLS_RSZ = FLS_MAX_COLS * FLS_MAX_COLS + FLS_MAX_COLS
 
 @always_inline
 def _givens_row(
-    mut r: InlineArray[Float32, FLS_MAX_COLS * FLS_MAX_COLS],
-    mut qb: InlineArray[Float32, FLS_MAX_COLS],
-    mut a: InlineArray[Float32, FLS_MAX_COLS],
+    mut r: Array[Float32, FLS_MAX_COLS * FLS_MAX_COLS],
+    mut qb: Array[Float32, FLS_MAX_COLS],
+    mut a: Array[Float32, FLS_MAX_COLS],
     b_in: Float32,
     n: Int,
 ):
@@ -64,8 +64,8 @@ def _fls_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
     sh: MutPointer[Float32, so, address_space = AddressSpace.SHARED],
     tid: Int,
     n: Int,
-    mut r: InlineArray[Float32, FLS_MAX_COLS * FLS_MAX_COLS],
-    mut qb: InlineArray[Float32, FLS_MAX_COLS],
+    mut r: Array[Float32, FLS_MAX_COLS * FLS_MAX_COLS],
+    mut qb: Array[Float32, FLS_MAX_COLS],
     x_out: MutPointer[Float32, xo, address_space = AddressSpace.SHARED],
     info_out: MutPointer[Int32, io, address_space = AddressSpace.SHARED],
 ):
@@ -81,7 +81,7 @@ def _fls_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
     comptime for t in range(FLS_MAX_COLS):
         sh[tid * FLS_RSZ + FLS_MAX_COLS * FLS_MAX_COLS + t] = qb[t]
     barrier()
-    var a = InlineArray[Float32, FLS_MAX_COLS](fill=0.0)
+    var a = Array[Float32, FLS_MAX_COLS](fill=0.0)
     var stride = 1
     while stride < FLS_TPB:
         if tid % (2 * stride) == 0:
@@ -169,9 +169,9 @@ def fast_arma_ls_kernel(
     var sinfo = stack_allocation[
         1, Scalar[DType.int32], address_space=AddressSpace.SHARED
     ]()
-    var r = InlineArray[Float32, FLS_MAX_COLS * FLS_MAX_COLS](fill=0.0)
-    var qb = InlineArray[Float32, FLS_MAX_COLS](fill=0.0)
-    var a = InlineArray[Float32, FLS_MAX_COLS](fill=0.0)
+    var r = Array[Float32, FLS_MAX_COLS * FLS_MAX_COLS](fill=0.0)
+    var qb = Array[Float32, FLS_MAX_COLS](fill=0.0)
+    var a = Array[Float32, FLS_MAX_COLS](fill=0.0)
 
     # -- 1. the AR(p_ar) pre-fit whose residual stands in for the MA lags
     if q != 0:

@@ -107,13 +107,13 @@ def main() raises:
                 var w = Float32(0.5 + 2.0 * frac(i, UInt64(44)))
                 # the six libm anchors sit in the first slots of their mode
                 if has_border and i < 5:
-                    var av: InlineArray[Float32, 5] = [
+                    var av: Array[Float32, 5] = [
                         0.3, -1.7, 200.0, -200.0, 1.0
                     ]
-                    var at: InlineArray[Float32, 5] = [
+                    var at: Array[Float32, 5] = [
                         1.0, 0.0, 0.0, 1.0, 0.5
                     ]
-                    var aw: InlineArray[Float32, 5] = [
+                    var aw: Array[Float32, 5] = [
                         1.0, 2.5, 1.0, 1.0, 1.0
                     ]
                     v = av[i]
@@ -202,7 +202,7 @@ def main() raises:
             # include each case's weight. This is the leg that pins
             # `std.math.exp`/`log` to an oracle OUTSIDE this repository.
             if has_border and has_weights:
-                var want: InlineArray[Float64, 5] = [
+                var want: Array[Float64, 5] = [
                     0.42555748318834097,
                     -0.38616316270883677,
                     -1.0,
@@ -259,13 +259,13 @@ def main() raises:
                 t = Float32(frac(i, UInt64(33)))
             var w = Float32(0.5 + 2.0 * frac(i, UInt64(44)))
             if has_border and i < 5:
-                var av: InlineArray[Float32, 5] = [
+                var av: Array[Float32, 5] = [
                     0.3, -1.7, 200.0, -200.0, 1.0
                 ]
-                var at: InlineArray[Float32, 5] = [
+                var at: Array[Float32, 5] = [
                     1.0, 0.0, 0.0, 1.0, 0.5
                 ]
-                var aw: InlineArray[Float32, 5] = [
+                var aw: Array[Float32, 5] = [
                     1.0, 2.5, 1.0, 1.0, 1.0
                 ]
                 v = av[i]
@@ -340,7 +340,7 @@ def main() raises:
         # der2 libm anchors (CPython float64, decimal-pasted). Slot 3's
         # 1e-40 sits in the zero band by design: float32 flushes it.
         if has_border:
-            var want2: InlineArray[Float64, 5] = [
+            var want2: Array[Float64, 5] = [
                 0.24445831169074586,
                 0.32651436741552015,
                 0.0,

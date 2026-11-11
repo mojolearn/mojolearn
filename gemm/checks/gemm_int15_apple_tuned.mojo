@@ -411,10 +411,10 @@ def _stage_planes[
 def _flush_deferred[
     NC: Int
 ](
-    mut hi: InlineArray[Int32, NC],
-    mut lo: InlineArray[Int32, NC],
-    mut run_h: InlineArray[Int32, NC],
-    mut run_l: InlineArray[Int32, NC],
+    mut hi: Array[Int32, NC],
+    mut lo: Array[Int32, NC],
+    mut run_h: Array[Int32, NC],
+    mut run_l: Array[Int32, NC],
 ):
     """TWO's deferred carry: each run cut in 16-bit halves (an arithmetic
     shift and a mask), `HI += (run_h >> 16) * 2^7 + (run_l >> 16)` and
@@ -433,8 +433,8 @@ def _flush_deferred[
 def _fetch_planes[
     ROWS: Int, KB: Int, NT: Int, SL: Int
 ](
-    mut hs: InlineArray[SIMD[DType.float32, 4], SL],
-    mut ls: InlineArray[SIMD[DType.float32, 4], SL],
+    mut hs: Array[SIMD[DType.float32, 4], SL],
+    mut ls: Array[SIMD[DType.float32, 4], SL],
     qh: MutPointer[Int8, MutAnyOrigin],
     ql: MutPointer[Int8, MutAnyOrigin],
     row0: Int,
@@ -476,8 +476,8 @@ def _put_planes[
     dh: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     dl: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     ds: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
-    hs: InlineArray[SIMD[DType.float32, 4], SL],
-    ls: InlineArray[SIMD[DType.float32, 4], SL],
+    hs: Array[SIMD[DType.float32, 4], SL],
+    ls: Array[SIMD[DType.float32, 4], SL],
     tid: Int,
 ):
     """The STORE half of `_stage_planes`: the fetched slots into
@@ -592,17 +592,17 @@ def _tuned_body[
     var bt = stack_allocation[NPLB * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     # The running sums. THREE and FOUR: `HH`, `MID`, `LL`. TWO: `hh_total`
     # is the HIGH half of the carry and `ll_total` the LOW one.
-    var hh_total = InlineArray[Int32, NC](fill=Int32(0))
-    var mid_total = InlineArray[Int32, NC](fill=Int32(0))
-    var ll_total = InlineArray[Int32, NC](fill=Int32(0))
+    var hh_total = Array[Int32, NC](fill=Int32(0))
+    var mid_total = Array[Int32, NC](fill=Int32(0))
+    var ll_total = Array[Int32, NC](fill=Int32(0))
     # TWO with DEFER: `mid_total` is the run of `a * bh` and `run_l` the
     # run of `a * bl`, both since the last flush.
-    var run_l = InlineArray[Int32, NC](fill=Int32(0))
+    var run_l = Array[Int32, NC](fill=Int32(0))
     # `mid_acc` is `MID` under FOUR and `PP` under THREE. Under TWO
     # `hh_acc` is `a * bh` and `ll_acc` is `a * bl`.
-    var hh_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var mid_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
-    var ll_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var hh_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var mid_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var ll_acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var windows = (k + KB - 1) // KB
     var step = 0
     for w in range(windows):
@@ -617,10 +617,10 @@ def _tuned_body[
             # window's codes go into registers, read while the unit works
             # on this one, and are stored after the barrier below.
             if w == 0:
-                var h0 = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
-                var l0 = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
-                var h1 = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
-                var l1 = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+                var h0 = Array[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+                var l0 = Array[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+                var h1 = Array[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+                var l1 = Array[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
                 _fetch_planes[BM, KB, NT, PSLA](h0, l0, ah, al, m0, m, 0, k, tid, aligned)
                 _fetch_planes[BN, KB, NT, PSLB](h1, l1, bh, bl, n0, n, 0, k, tid, aligned)
                 _put_planes[BM, KB, NT, True, AST, MODE_A, PSLA](
@@ -639,21 +639,21 @@ def _tuned_body[
             )
             barrier()
         # Under PF the next window (zeros past `k`: every load is guarded).
-        var fah = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
-        var fal = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
-        var fbh = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
-        var fbl = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+        var fah = Array[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+        var fal = Array[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+        var fbh = Array[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+        var fbl = Array[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
         comptime if PF:
             if w + 1 < windows:
                 _fetch_planes[BM, KB, NT, PSLA](fah, fal, ah, al, m0, m, k0 + KB, k, tid, aligned)
                 _fetch_planes[BN, KB, NT, PSLB](fbh, fbl, bh, bl, n0, n, k0 + KB, k, tid, aligned)
         comptime for p8 in range(KB // 8):
-            var ahf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var alf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var asf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-            var bhf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
-            var blf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
-            var bsf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var ahf = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var alf = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var asf = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+            var bhf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var blf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
+            var bsf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
             comptime for fm in range(FM):
                 ahf[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime if not TWO:

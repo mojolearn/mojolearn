@@ -321,8 +321,8 @@ def non_weighted_bin_freq_ctrs_kernel(
         thread_idx.x
     )
 
-    var dst_indices = InlineArray[Int32, CTR_DOCS_PER_THREAD](fill=-1)
-    var bins_local = InlineArray[UInt32, CTR_DOCS_PER_THREAD](fill=0)
+    var dst_indices = Array[Int32, CTR_DOCS_PER_THREAD](fill=-1)
+    var bins_local = Array[UInt32, CTR_DOCS_PER_THREAD](fill=0)
 
     for j in range(CTR_DOCS_PER_THREAD):
         var idx = i + CTR_BLOCK_SIZE * j
@@ -600,7 +600,7 @@ def fill_binarized_targets_stats_kernel(
         Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     ) * AFT_CTR_TARGET_DOCS
 
-    var local_samples = InlineArray[Float32, AFT_CTR_TARGET_DOCS](fill=0)
+    var local_samples = Array[Float32, AFT_CTR_TARGET_DOCS](fill=0)
     for k in range(AFT_CTR_TARGET_DOCS):
         var idx = i + k
         var v = Float32(0.0)

@@ -53,8 +53,8 @@ def logdet_serial(diag: MutPointer[Float32, MutAnyOrigin], n: Int) -> Float32:
     """The whole order on one thread: the partials, the aligned tree by a
     binary counter (complete blocks merged as they close, the open right
     spine merged right to left), the doubling."""
-    var vals = InlineArray[Float32, _LD_STACK](fill=Float32(0))
-    var lvls = InlineArray[Int, _LD_STACK](fill=0)
+    var vals = Array[Float32, _LD_STACK](fill=Float32(0))
+    var lvls = Array[Int, _LD_STACK](fill=0)
     var top = 0
     for b in range(logdet_blocks(n)):
         var v = logdet_part(diag, n, b)
@@ -99,8 +99,8 @@ def sqsum_part(x: MutPointer[Float32, MutAnyOrigin], n: Int, b: Int) -> Float32:
 def sqsum_serial(x: MutPointer[Float32, MutAnyOrigin], n: Int) -> Float32:
     """The whole sum x_k^2 order on one thread (the host column): the
     partials, then the aligned tree by `logdet_serial`'s binary counter."""
-    var vals = InlineArray[Float32, _LD_STACK](fill=Float32(0))
-    var lvls = InlineArray[Int, _LD_STACK](fill=0)
+    var vals = Array[Float32, _LD_STACK](fill=Float32(0))
+    var lvls = Array[Int, _LD_STACK](fill=0)
     var top = 0
     for b in range(logdet_blocks(n)):
         var v = sqsum_part(x, n, b)

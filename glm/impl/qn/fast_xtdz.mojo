@@ -84,9 +84,9 @@ def fx_partial_kernel(
     var zs = stack_allocation[
         FX_ROWS * FX_MAX_C, Float32, address_space=AddressSpace.SHARED
     ]()
-    var acc = InlineArray[Float32, FX_CELLS_PER_THREAD](fill=0.0)
-    var jj = InlineArray[Int, FX_CELLS_PER_THREAD](fill=0)
-    var cc = InlineArray[Int, FX_CELLS_PER_THREAD](fill=0)
+    var acc = Array[Float32, FX_CELLS_PER_THREAD](fill=0.0)
+    var jj = Array[Int, FX_CELLS_PER_THREAD](fill=0)
+    var cc = Array[Int, FX_CELLS_PER_THREAD](fill=0)
     comptime for k in range(FX_CELLS_PER_THREAD):
         var cell = t + k * FX_TPB
         jj[k] = cell // C

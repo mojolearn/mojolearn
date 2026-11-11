@@ -354,11 +354,11 @@ def ii_gram_tile_kernel(f: FP, q: IP, w: RUP):
     var cells = dd * dd
     var sx = stack_allocation[IIG_TILE * IIG_DMAX, Float32, address_space = AddressSpace.SHARED]()
     var sm = stack_allocation[IIG_TILE, Float32, address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[Float32, IIG_CELLS](fill=Float32(0))
-    var ma = InlineArray[Float32, IIG_CELLS](fill=Float32(0))
-    var mb = InlineArray[Float32, IIG_CELLS](fill=Float32(0))
-    var ca = InlineArray[Int, IIG_CELLS](fill=0)
-    var cb = InlineArray[Int, IIG_CELLS](fill=0)
+    var acc = Array[Float32, IIG_CELLS](fill=Float32(0))
+    var ma = Array[Float32, IIG_CELLS](fill=Float32(0))
+    var mb = Array[Float32, IIG_CELLS](fill=Float32(0))
+    var ca = Array[Int, IIG_CELLS](fill=0)
+    var cb = Array[Int, IIG_CELLS](fill=0)
     comptime for u in range(IIG_CELLS):
         var cell = tid + u * TGR
         if cell < cells:

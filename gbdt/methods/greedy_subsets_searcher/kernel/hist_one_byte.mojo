@@ -642,9 +642,9 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
-        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
-        var local_q = InlineArray[Int32, POINTS_PER_ITER](fill=0)
+        var local_bins = Array[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = Array[Float32, POINTS_PER_ITER](fill=0)
+        var local_q = Array[Int32, POINTS_PER_ITER](fill=0)
 
         # `Ldg((uint4*) bins, warpSize * k)` and its `float4` twin
         # (`compute_hist_loop_two_stats.cuh:293`). Indexing a `uint4*` by
@@ -746,7 +746,7 @@ def one_byte_hist_kernel[bits: Int, smem_mode: Int](
     comptime warp_hist_block_count = 8 >> inner_bits
     comptime sub_block = 4 * (1 << inner_bits)
     var fold_r = tid
-    var sums = InlineArray[Scalar[DT], 4](fill=Scalar[DT](0))
+    var sums = Array[Scalar[DT], 4](fill=Scalar[DT](0))
     if fold_r < hist_size_bins:
         var lower_bits_offset = (fold_r & 31) << 5
         var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)
@@ -1115,9 +1115,9 @@ def one_byte_hist_gather_kernel[
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
-        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
-        var local_q = InlineArray[Int32, POINTS_PER_ITER](fill=0)
+        var local_bins = Array[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = Array[Float32, POINTS_PER_ITER](fill=0)
+        var local_q = Array[Int32, POINTS_PER_ITER](fill=0)
 
         # Their gather batch (`compute_hist_loop_two_stats.cuh:410`):
         #
@@ -1238,7 +1238,7 @@ def one_byte_hist_gather_kernel[
     comptime warp_hist_block_count = 8 >> inner_bits
     comptime sub_block = 4 * (1 << inner_bits)
     var fold_r = tid
-    var sums = InlineArray[Scalar[DT], 4](fill=Scalar[DT](0))
+    var sums = Array[Scalar[DT], 4](fill=Scalar[DT](0))
     if fold_r < hist_size_bins:
         var lower_bits_offset = (fold_r & 31) << 5
         var higher_bin = (fold_r >> 5) & ((1 << inner_bits) - 1)

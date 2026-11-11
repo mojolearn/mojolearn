@@ -54,11 +54,11 @@ def hist2_slice_offset_7(tid: Int) -> Int:
 def hist2_add_points_7[
     n: Int, dt: DType
 ](
-    ci: InlineArray[UInt32, n],
-    s1: InlineArray[Float32, n],
-    s2: InlineArray[Float32, n],
-    q1: InlineArray[Int32, n],
-    q2: InlineArray[Int32, n],
+    ci: Array[UInt32, n],
+    s1: Array[Float32, n],
+    s2: Array[Float32, n],
+    q1: Array[Int32, n],
+    q2: Array[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
@@ -87,10 +87,10 @@ def hist2_add_points_7[
     """
     var flag = tid & 1
 
-    var stat1 = InlineArray[Float32, n](fill=Float32(0.0))
-    var stat2 = InlineArray[Float32, n](fill=Float32(0.0))
-    var qstat1 = InlineArray[Int32, n](fill=Int32(0))
-    var qstat2 = InlineArray[Int32, n](fill=Int32(0))
+    var stat1 = Array[Float32, n](fill=Float32(0.0))
+    var stat2 = Array[Float32, n](fill=Float32(0.0))
+    var qstat1 = Array[Int32, n](fill=Int32(0))
+    var qstat2 = Array[Int32, n](fill=Int32(0))
 
     @__parameter
     for k in range(n):
@@ -105,11 +105,11 @@ def hist2_add_points_7[
             qstat1[k] = q1[k]
             qstat2[k] = q2[k]
 
-    var val1 = InlineArray[Float32, n](fill=Float32(0.0))
-    var val2 = InlineArray[Float32, n](fill=Float32(0.0))
-    var qval1 = InlineArray[Int32, n](fill=Int32(0))
-    var qval2 = InlineArray[Int32, n](fill=Int32(0))
-    var offset = InlineArray[Int, n](fill=0)
+    var val1 = Array[Float32, n](fill=Float32(0.0))
+    var val2 = Array[Float32, n](fill=Float32(0.0))
+    var qval1 = Array[Int32, n](fill=Int32(0))
+    var qval2 = Array[Int32, n](fill=Int32(0))
+    var offset = Array[Int, n](fill=0)
 
     @__parameter
     for i in range(4):

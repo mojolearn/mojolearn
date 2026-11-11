@@ -210,7 +210,7 @@ def compute_bins_and_add_four_kernel(
     once per block, and each row performs the same ordered float32 additions.
     No tree or level is reordered and no reduction is introduced.
     """
-    var depths = InlineArray[Int, 4](fill=0)
+    var depths = Array[Int, 4](fill=0)
     depths[0] = Int(depth0_in)
     depths[1] = Int(depth1_in)
     depths[2] = Int(depth2_in)

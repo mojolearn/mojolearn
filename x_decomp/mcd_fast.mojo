@@ -695,7 +695,7 @@ def mf_dist_kernel(
             var g = c // Int(per)
             var row = _row_of(rows, ident, g, rr, i) * dd
             var pr = Int(fin.unsafe_load(c)) if use_fin != 0 else Int(par)
-            var xc = InlineArray[Float32, MF_DMAX](fill=Float32(0))
+            var xc = Array[Float32, MF_DMAX](fill=Float32(0))
             for k in range(dd):
                 var m = loc1.unsafe_load(c * dd + k) if pr == 1 else loc0.unsafe_load(c * dd + k)
                 xc[k] = sub(x.unsafe_load(row + k), m)
@@ -735,7 +735,7 @@ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32
     var shift = 28
     var first = True
     while shift >= 0:
-        var cnt = InlineArray[Int32, 16](fill=Int32(0))
+        var cnt = Array[Int32, 16](fill=Int32(0))
         var i = tid
         while i < rr:
             var im = _image(dist.unsafe_load(base + i))

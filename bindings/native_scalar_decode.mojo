@@ -49,7 +49,7 @@ def native_scalar_buffer(value: PythonObject) raises -> NativeScalarBuffer:
     return native_scalar_buffer_dtype(value, value.dtype)
 
 
-def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> InlineArray[UInt8, 32]:
+def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> Array[UInt8, 32]:
     """Copy one exact admitted scalar's public buffer into fixed private bytes.
 
     Numeric and temporal metadata share this UNPACK. No element protocol or
@@ -65,8 +65,8 @@ def native_scalar_buffer_bytes(value: PythonObject, width: Int) raises -> Inline
     # released on all error paths; fixed private bytes outlive both decodes.
     # Fixed-size stack storage (N197): ten Py_buffer words and at most 32
     # scalar bytes (width is checked above), so no heap List per decode.
-    var view = InlineArray[Int, 10](fill=0)
-    var bytes = InlineArray[UInt8, 32](fill=UInt8(0))
+    var view = Array[Int, 10](fill=0)
+    var bytes = Array[UInt8, 32](fill=UInt8(0))
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()

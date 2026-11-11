@@ -169,7 +169,7 @@ def _clamp(v: Float32, lo: Float32, hi: Float32) -> Float32:
 
 
 @always_inline
-def _put(mut arr: InlineArray[Float32, 12], i: Int, v: Float32) -> Bool:
+def _put(mut arr: Array[Float32, 12], i: Int, v: Float32) -> Bool:
     var old = bitcast[DType.uint32](arr[i])
     var w = ftz(v)
     arr[i] = w
@@ -177,7 +177,7 @@ def _put(mut arr: InlineArray[Float32, 12], i: Int, v: Float32) -> Bool:
 
 
 @always_inline
-def _putf(mut arr: InlineArray[Float32, 4], i: Int, v: Float32) -> Bool:
+def _putf(mut arr: Array[Float32, 4], i: Int, v: Float32) -> Bool:
     var old = bitcast[DType.uint32](arr[i])
     var w = ftz(v)
     arr[i] = w
@@ -185,28 +185,28 @@ def _putf(mut arr: InlineArray[Float32, 4], i: Int, v: Float32) -> Bool:
 
 
 @always_inline
-def _co(arr: InlineArray[Float32, 4], j: Int, k: Int) -> Float32:
+def _co(arr: Array[Float32, 4], j: Int, k: Int) -> Float32:
     return arr[j] if j < k else Float32(0.0)
 
 
 @always_inline
-def _row(S: InlineArray[Float32, 12], r: Int, j: Int, k: Int) -> Float32:
+def _row(S: Array[Float32, 12], r: Int, j: Int, k: Int) -> Float32:
     return S[r * k + j] if j < k else Float32(0.0)
 
 
 @always_inline
 def nm_spec(
-    ev: ThetaEv, mut x: InlineArray[Float32, 4], lo: InlineArray[Float32, 4], hi: InlineArray[Float32, 4],
+    ev: ThetaEv, mut x: Array[Float32, 4], lo: Array[Float32, 4], hi: Array[Float32, 4],
     k: Int, lane: Int, init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32, snap_on: Bool,
 ) -> Int:
     """`nelder_mead` (sequence/nm.mojo, k <= 3, no stall rule) with the
     candidates of each step evaluated across lanes; x receives the best
     vertex; returns the iteration count. Every lane calls it and every
     lane returns the same words."""
-    var S = InlineArray[Float32, 12](fill=Float32(0.0))
-    var F = InlineArray[Float32, 4](fill=Float32(0.0))
-    var SN = InlineArray[Float32, 12](fill=Float32(0.0))
-    var SNF = InlineArray[Float32, 4](fill=Float32(0.0))
+    var S = Array[Float32, 12](fill=Float32(0.0))
+    var F = Array[Float32, 4](fill=Float32(0.0))
+    var SN = Array[Float32, 12](fill=Float32(0.0))
+    var SNF = Array[Float32, 4](fill=Float32(0.0))
     # nm_start: the clamped start in every row, the diagonal perturbed
     for i in range(k + 1):
         for j in range(k):
@@ -228,12 +228,12 @@ def nm_spec(
     var gamma = add(Float32(1.0), ftz(identical_div(Float32(2.0), nf)))
     var rho = sub(Float32(0.75), ftz(identical_div(Float32(1.0), mul(Float32(2.0), nf))))
     var sigma = sub(Float32(1.0), ftz(identical_div(Float32(1.0), nf)))
-    var xo = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xr = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xe = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xc = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xi = InlineArray[Float32, 4](fill=Float32(0.0))
-    var order = InlineArray[Int, 4](fill=0)
+    var xo = Array[Float32, 4](fill=Float32(0.0))
+    var xr = Array[Float32, 4](fill=Float32(0.0))
+    var xe = Array[Float32, 4](fill=Float32(0.0))
+    var xc = Array[Float32, 4](fill=Float32(0.0))
+    var xi = Array[Float32, 4](fill=Float32(0.0))
+    var order = Array[Int, 4](fill=0)
     var changed = True
     var have_snap = False
     var snap_it = 0
@@ -441,9 +441,9 @@ def op_theta_spec(t: Int, lane: Int, a: Args):
         var a0 = Float32(0.5) if oa else a.f1
         var t0 = Float32(2.0) if ((fixed & 4) == 0 or model == STM or model == DSTM) else a.f2
         var ev = ThetaEv(yd, n, model == DSTM or model == DOTM, ol, oa, ot, l0, a0, t0, inv[0], inv[1], inv[2])
-        var x = InlineArray[Float32, 4](fill=Float32(0.0))
-        var lo = InlineArray[Float32, 4](fill=Float32(0.0))
-        var hi = InlineArray[Float32, 4](fill=Float32(0.0))
+        var x = Array[Float32, 4](fill=Float32(0.0))
+        var lo = Array[Float32, 4](fill=Float32(0.0))
+        var hi = Array[Float32, 4](fill=Float32(0.0))
         var k = 0
         if ol:
             x[k] = ftz(l0)

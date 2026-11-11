@@ -172,7 +172,7 @@ def _bit_has(lo: UInt32, hi: UInt32, t: Int32) -> Bool:
 
 @always_inline
 def _match(
-    sa: InlineArray[Int32, BPE_K], sb: InlineArray[Int32, BPE_K], nsel: Int, x: Int32, y: Int32
+    sa: Array[Int32, BPE_K], sb: Array[Int32, BPE_K], nsel: Int, x: Int32, y: Int32
 ) -> Int:
     """Which selected pair `(x, y)` is, or -1. Selected pairs share no token, so at most one."""
     for j in range(BPE_K):
@@ -228,8 +228,8 @@ def bpe_topk_part_kernel(keys: I32P, vals: I32P, occ: I32P, st: I32P, pc: I32P, 
     comptime assert BPE_RT * BPE_K * 8 <= 32768, "bpe_device: the top-K partial lists exceed 32 KiB of threadgroup memory"
     var sc = stack_allocation[BPE_RT * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sk = stack_allocation[BPE_RT * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var lc = InlineArray[Int32, BPE_K](fill=Int32(0))
-    var lk = InlineArray[Int32, BPE_K](fill=KEY_NONE)
+    var lc = Array[Int32, BPE_K](fill=Int32(0))
+    var lk = Array[Int32, BPE_K](fill=KEY_NONE)
     var live = min(Int(st[S_NOCC]), Int(occ_cap))
     if st[S_DONE] != Int32(0):
         live = 0
@@ -254,8 +254,8 @@ def bpe_topk_part_kernel(keys: I32P, vals: I32P, occ: I32P, st: I32P, pc: I32P, 
     var half = BPE_RT // 2
     while half > 0:
         if tid < half:
-            var oc = InlineArray[Int32, BPE_K](fill=Int32(0))
-            var ok = InlineArray[Int32, BPE_K](fill=KEY_NONE)
+            var oc = Array[Int32, BPE_K](fill=Int32(0))
+            var ok = Array[Int32, BPE_K](fill=KEY_NONE)
             var x = 0
             var y = 0
             var da = tid * BPE_K
@@ -294,8 +294,8 @@ def bpe_select_kernel(pc: I32P, pk: I32P, st: I32P, sel: I32P, mrg: I32P, vocab:
     var half = BPE_RB // 2
     while half > 0:
         if tid < half:
-            var oc = InlineArray[Int32, BPE_K](fill=Int32(0))
-            var ok = InlineArray[Int32, BPE_K](fill=KEY_NONE)
+            var oc = Array[Int32, BPE_K](fill=Int32(0))
+            var ok = Array[Int32, BPE_K](fill=KEY_NONE)
             var x = 0
             var y = 0
             var da = tid * BPE_K
@@ -383,8 +383,8 @@ def bpe_apply_kernel(
     var glen_g = Int(glen[g])
     if glen_g < 2:
         return
-    var sa = InlineArray[Int32, BPE_K](fill=Int32(-1))
-    var sb = InlineArray[Int32, BPE_K](fill=Int32(-1))
+    var sa = Array[Int32, BPE_K](fill=Int32(-1))
+    var sb = Array[Int32, BPE_K](fill=Int32(-1))
     for j in range(BPE_K):
         if j < nsel:
             sa[j] = sel[2 * j]

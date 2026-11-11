@@ -262,7 +262,7 @@ def fa_gram_tile_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in
     var tc = tid - tr * 16
     var sa = stack_allocation[FG_SLAB * FG_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var sb = stack_allocation[FG_SLAB * FG_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[Float32, 16](fill=Float32(0.0))
+    var acc = Array[Float32, 16](fill=Float32(0.0))
     var r = r0
     while r < r1:
         barrier()
@@ -443,8 +443,8 @@ def fa_gram_tile_df_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d
     var tc = tid - tr * 16
     var sa = stack_allocation[FG_SLAB * FG_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var sb = stack_allocation[FG_SLAB * FG_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var hi = InlineArray[Float32, 16](fill=Float32(0.0))
-    var lo = InlineArray[Float32, 16](fill=Float32(0.0))
+    var hi = Array[Float32, 16](fill=Float32(0.0))
+    var lo = Array[Float32, 16](fill=Float32(0.0))
     var r = r0
     while r < r1:
         barrier()
@@ -1164,7 +1164,7 @@ def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, dst: F32Ptr, n_in: 
     var row = Int(block_idx.x) * FA_TR_TPB + tid
     if row >= n:
         return
-    var acc = InlineArray[Float32, FA_TR_MAXK](fill=Float32(0.0))
+    var acc = Array[Float32, FA_TR_MAXK](fill=Float32(0.0))
     for j in range(d):
         var xj = x.unsafe_load(row * d + j) - sh[np + j]
         for kk in range(nc):

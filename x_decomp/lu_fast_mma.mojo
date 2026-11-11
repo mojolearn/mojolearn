@@ -132,7 +132,7 @@ def lfm_gemm_sub_kernel(
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
     # A_eff[i, p] = a[(r0 + i) * n + p0 + p]: outer = row (stride n), step stride 1.
     # B_eff[p, j] = a[(p0 + p) * n + c0 + j]: outer = column (stride 1), step stride n.
     var windows = (k + KB - 1) // KB
@@ -147,8 +147,8 @@ def lfm_gemm_sub_kernel(
             ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0 + k1, min(KB, k - k1), tid, False)
             rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0 + k1, min(KB, k - k1), tid, True)
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
-            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
+            var bf = Array[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _afn_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):

@@ -29,9 +29,9 @@ def _nc_capabilities(provider: PythonObject, driver: NcDriver) raises -> Int:
     for i in range(len(records[].providers)):  # metadata: connected compiled images
         if records[].providers[i] is provider:
             return records[].words[i]
-    var a: InlineArray[Int, 0] = []
-    var p: InlineArray[Int, 0] = []
-    var f: InlineArray[Float64, 0] = []
+    var a: Array[Int, 0] = []
+    var p: Array[Int, 0] = []
+    var f: Array[Float64, 0] = []
     var result = 0
     with GILReleased(Python()):
         result = driver.run("capabilities", a, p, f)

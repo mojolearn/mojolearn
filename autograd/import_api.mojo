@@ -40,7 +40,7 @@ blocked_fold_finish) add them in order (F) of autograd/rankn_fold_ops.mojo.
 
 Host loops here run over tensor axes (at most RN_MAX_RANK = 8) to build
 descriptors and over node inputs; none over rows or elements."""
-from std.collections import InlineArray
+from std.collections import Array
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
 from autograd.tape import Tape, Tensor, BackwardRules
@@ -69,8 +69,8 @@ comptime IMP_TAG_CUMSUM = 197
 
 
 # ---------------------------------------------------------------- shapes
-def _row_major(s: ShapeN) -> InlineArray[Int, RN_MAX_RANK]:
-    var r = InlineArray[Int, RN_MAX_RANK](fill=0)
+def _row_major(s: ShapeN) -> Array[Int, RN_MAX_RANK]:
+    var r = Array[Int, RN_MAX_RANK](fill=0)
     var acc = 1
     var k = s.ndim - 1
     while k >= 0:  # small-loop(ndim <= 8: tensor rank, shape metadata)
@@ -89,7 +89,7 @@ def _aligned_dim(s: ShapeN, so: ShapeN, j: Int) -> Int:
     return s.d[k]
 
 
-def _aligned_stride(s: ShapeN, strides: InlineArray[Int, RN_MAX_RANK], so: ShapeN, j: Int) -> Int:
+def _aligned_stride(s: ShapeN, strides: Array[Int, RN_MAX_RANK], so: ShapeN, j: Int) -> Int:
     """The stride that reads s (right-aligned) on output axis j: 0 on an
     axis s lacks or broadcasts."""
     var k = j - (so.ndim - s.ndim)
@@ -348,7 +348,7 @@ def imp_expand[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, dims: List[Int]) r
         return tape.view_nd(ex, x, so)
     var xo = tape.operand_nd(ex, x)
     var xs = xo[3].copy()
-    var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+    var st = Array[Int, RN_MAX_RANK](fill=0)
     for j in range(so.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
         st[j] = _aligned_stride(sx, xs, so, j)
     var words = List[Int]()

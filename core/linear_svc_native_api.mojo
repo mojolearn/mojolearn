@@ -204,9 +204,9 @@ struct LinearSvcDriver(Copyable, Movable):
         return QnNativeDriver(self.entry)
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def flags(self) raises -> Int:
@@ -214,9 +214,9 @@ struct LinearSvcDriver(Copyable, Movable):
 
     def fit(self, request: LinearSvcFitRequest, mut plan: LinearSvcFitPlan) raises:
         var o = request.options.copy()
-        var a: InlineArray[Int, 4] = [request.source, request.codes, request.weights, plan.address()]
-        var p: InlineArray[Int, 10] = [o.rows, o.features, o.first_class, o.fits,
+        var a: Array[Int, 4] = [request.source, request.codes, request.weights, plan.address()]
+        var p: Array[Int, 10] = [o.rows, o.features, o.first_class, o.fits,
             o.max_iter, o.linesearch_max_iter, o.memory, Int(o.intercept), Int(o.normalized), o.loss]
-        var f: InlineArray[Float64, 4] = [o.l1, o.l2, o.gradient_tolerance, o.change_tolerance]
+        var f: Array[Float64, 4] = [o.l1, o.l2, o.gradient_tolerance, o.change_tolerance]
         _ = native_descriptor_call_fixed(self.entry, LINEAR_SVC_OVR, a, p, f)
         _ = plan

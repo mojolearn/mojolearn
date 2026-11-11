@@ -242,7 +242,7 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 =================================================================
 """
 
-from std.collections import InlineArray
+from std.collections import Array
 from ensemble.tree_identical_ideas import T06, T14, T14_EXACT
 from ensemble.tree_moments import balanced_mse_gain
 from max.gpu import block_dim, thread_idx
@@ -755,7 +755,7 @@ struct ClassificationObjectiveFunction[
         len: Int64,
         nLeft: Int64,
         nRight: Int64,
-        parent_terms: InlineArray[Scalar[Self.dtype], 64],
+        parent_terms: Array[Scalar[Self.dtype], 64],
     ) -> Scalar[Self.dtype]:
         """`objectives.cuh:80-118`. See DEVIATION 113 for `raft::log` and
         DEVIATION 406 for the `_log_seam` routing."""
@@ -998,7 +998,7 @@ struct ClassificationObjectiveFunction[
         # Only exact integer class counts qualify. Weighted l+r may round and
         # therefore retains the original expressions rather than hoisting.
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var parent_terms = InlineArray[Scalar[Self.dtype],64](fill=Scalar[Self.dtype](0))
+        var parent_terms = Array[Scalar[Self.dtype],64](fill=Scalar[Self.dtype](0))
         var total_weight = self.WeightAt(shist,n_bins-1,n_bins)
         var inv_len = _ftz_seam(Scalar[Self.dtype](1)/total_weight.cast[Self.dtype]())
         for c in range(Int(self.nclasses)):

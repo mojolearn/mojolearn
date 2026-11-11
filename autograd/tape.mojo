@@ -1228,7 +1228,7 @@ struct Tape(Movable):
         return p
 
     def strided_view_args[E: Exec](
-        mut self, mut ex: E, source: FP, base: Int, shape: ShapeN, strides: InlineArray[Int, RN_MAX_RANK],
+        mut self, mut ex: E, source: FP, base: Int, shape: ShapeN, strides: Array[Int, RN_MAX_RANK],
     ) raises -> Args:
         """The saved Args of a pending strided view (autograd.rankn
         RN_VIEW_MARK): element c of the view is source[base + sum_k c_k *
@@ -1254,10 +1254,10 @@ struct Tape(Movable):
         a.i10 = RN_VIEW_MARK
         return a
 
-    def _view_strides(self, i: Int) -> InlineArray[Int, RN_MAX_RANK]:
+    def _view_strides(self, i: Int) -> Array[Int, RN_MAX_RANK]:
         """A pending strided view's strides (saved.i1 .. i8)."""
         var a = self._nodes[i].saved
-        var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var st = Array[Int, RN_MAX_RANK](fill=0)
         st[0] = a.i1
         st[1] = a.i2
         st[2] = a.i3
@@ -1270,7 +1270,7 @@ struct Tape(Movable):
 
     def operand_nd[E: Exec](
         self, mut ex: E, x: Tensor,
-    ) raises -> Tuple[FP, Int, ShapeN, InlineArray[Int, RN_MAX_RANK]]:
+    ) raises -> Tuple[FP, Int, ShapeN, Array[Int, RN_MAX_RANK]]:
         """x as a strided read, without a copy: (buffer, base offset, shape,
         element strides). Element c of x is buffer[base + sum_k c_k *
         strides[k]]. A dense tensor is (its values, 0, its shape, row-major
@@ -1282,7 +1282,7 @@ struct Tape(Movable):
         if self._pending(i):
             if self._nodes[i].op == TRANSPOSE:
                 # element (r, c) is the source's (c, r): strides (1, rows)
-                var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+                var st = Array[Int, RN_MAX_RANK](fill=0)
                 st[0] = 1
                 st[1] = self._nodes[i].rows
                 return (self._nodes[i].saved.p0, zero, s, st^)
@@ -1307,13 +1307,13 @@ struct Tape(Movable):
         var st = self._view_strides(i)
         if s.ndim < 1:
             return (True, zero, zero)
-        var lead_d = InlineArray[Int, RN_MAX_RANK](fill=1)
-        var lead_s = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var lead_d = Array[Int, RN_MAX_RANK](fill=1)
+        var lead_s = Array[Int, RN_MAX_RANK](fill=0)
         for k in range(s.ndim - 1):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             lead_d[k] = s.d[k]
             lead_s[k] = st[k]
         var lead = ShapeN(s.ndim - 1, lead_d^)
-        var ls = List[InlineArray[Int, RN_MAX_RANK]]()
+        var ls = List[Array[Int, RN_MAX_RANK]]()
         ls.append(lead_s^)
         rn_collapse(lead, ls)
         if lead.ndim != 1:
@@ -1350,8 +1350,8 @@ struct Tape(Movable):
         var s = self._shapes[xi]
         if len(axes) != s.ndim:
             raise Error("permute: axes must name every axis of the tensor once")
-        var perm = InlineArray[Int, RN_MAX_RANK](fill=0)
-        var seen = InlineArray[Bool, RN_MAX_RANK](fill=False)
+        var perm = Array[Int, RN_MAX_RANK](fill=0)
+        var seen = Array[Bool, RN_MAX_RANK](fill=False)
         var identity = True
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             var k = rn_normalize_axis(axes[j], s.ndim)
@@ -1366,8 +1366,8 @@ struct Tape(Movable):
         # the source as x is read (a view of a view composes its strides)
         var src = self.operand_nd(ex, x)
         var src_strides = src[3].copy()
-        var od = InlineArray[Int, RN_MAX_RANK](fill=1)
-        var fs = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var od = Array[Int, RN_MAX_RANK](fill=1)
+        var fs = Array[Int, RN_MAX_RANK](fill=0)
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             od[j] = s.d[perm[j]]
             fs[j] = src_strides[perm[j]]
@@ -1377,7 +1377,7 @@ struct Tape(Movable):
         # reads the upstream (dense, o's shape) at sum_k c_k * so[inv[k]],
         # inv[perm[j]] = j
         var so = o.strides()
-        var vs = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var vs = Array[Int, RN_MAX_RANK](fill=0)
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             vs[perm[j]] = so[j]
         var vjp_words = List[Int]()

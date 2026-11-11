@@ -1014,11 +1014,11 @@ def knn_sq_tiled2_kernel(
     var j0 = 0
     while j0 < m:
         var rows = min(KNN2_TY, m - j0)
-        var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        var acc = Array[Float32, KNN2_R * KNN2_R](fill=Float32(0))
         # XN_KNN_PRUNE: this thread's four rows' k-th distances for this y
         # tile (written before the barrier that ended the last tile), and
         # whether all 16 of its pairs are out
-        var wv = InlineArray[Float32, KNN2_R](fill=inf)
+        var wv = Array[Float32, KNN2_R](fill=inf)
         var dead = False
         comptime if XN_KNN_PRUNE:
             comptime for i in range(KNN2_R):
@@ -1036,8 +1036,8 @@ def knn_sq_tiled2_kernel(
             barrier()
             if not dead:
                 for f in range(fc):
-                    var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                    var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    var xv = Array[Float32, KNN2_R](fill=Float32(0))
+                    var yv = Array[Float32, KNN2_R](fill=Float32(0))
                     comptime for i in range(KNN2_R):
                         xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
                         yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
@@ -1460,7 +1460,7 @@ def knn_impute_split_kernel(
         var bd = best_d + t * k
         var bi = best_i + t * k
         var total = 0
-        var head = InlineArray[Int, IMPS_SPLIT](fill=0)
+        var head = Array[Int, IMPS_SPLIT](fill=0)
         for u in range(IMPS_SPLIT):
             total += Int(pn[tid + u])
         for s in range(k):
@@ -1609,8 +1609,8 @@ def knn_impute_rows_kernel(
     var j0 = 0
     while j0 < m:
         var rows = min(IMR_JT, m - j0)
-        var acc = InlineArray[Float32, IMR_R * IMR_R](fill=Float32(0))
-        var pres = InlineArray[Int, IMR_R * IMR_R](fill=0)
+        var acc = Array[Float32, IMR_R * IMR_R](fill=Float32(0))
+        var pres = Array[Int, IMR_R * IMR_R](fill=0)
         var f0 = 0
         while f0 < d:
             var fc = min(IMR_FC, d - f0)
@@ -1628,8 +1628,8 @@ def knn_impute_rows_kernel(
                 q += IMR_TPB
             barrier()
             for f in range(fc):
-                var xv = InlineArray[Float32, IMR_R](fill=Float32(0))
-                var yv = InlineArray[Float32, IMR_R](fill=Float32(0))
+                var xv = Array[Float32, IMR_R](fill=Float32(0))
+                var yv = Array[Float32, IMR_R](fill=Float32(0))
                 comptime for i in range(IMR_R):
                     xv[i] = xs[(ta + 16 * i) * IMR_XS + f]
                     yv[i] = fs[(tb + 16 * i) * IMR_XS + f]
@@ -2079,7 +2079,7 @@ def _c54_svgp_predict_kernel(q: FP,z: FP,dst: FP,rows: Int32,m: Int32,d: Int32,g
     var first = (tile%per_row)*4
     if row >= Int(rows):
         return
-    var sums = InlineArray[Float32,4](fill=Float32(0))
+    var sums = Array[Float32,4](fill=Float32(0))
     for feature in range(Int(d)):
         var qv=q.unsafe_load(row*Int(d)+feature)
         comptime for lane in range(4):

@@ -241,7 +241,7 @@ def shap_ev_fold_unit(j: Int, n_trees: Int, k: Int, part: F32P, ev: F32P):
 
 
 @always_inline
-def _unwound_sum[W: Int](pz: InlineArray[Float32, W], po: InlineArray[Float32, W], pw: InlineArray[Float32, W],
+def _unwound_sum[W: Int](pz: Array[Float32, W], po: Array[Float32, W], pw: Array[Float32, W],
                          dd: Int, pi: Int) -> Float32:
     """`unwound_path_sum` of path element pi on the path 0 .. dd."""
     comptime if SHAP_T45_LINEAR_UNWIND:
@@ -300,13 +300,13 @@ def shap_tree_unit[W: Int](
     var hi = Int(offsets[unsafe_offset=t + 1])
     var sc = ftz(tscale[unsafe_offset=t])
     var xr = r * d
-    var pf = InlineArray[Int32, W](fill=Int32(-1))
-    var pz = InlineArray[Float32, W](fill=Float32(0.0))
-    var po = InlineArray[Float32, W](fill=Float32(0.0))
-    var pw = InlineArray[Float32, W](fill=Float32(0.0))
-    var mf = InlineArray[Int32, W](fill=Int32(-1))
-    var mz = InlineArray[Float32, W](fill=Float32(0.0))
-    var mo = InlineArray[Float32, W](fill=Float32(0.0))
+    var pf = Array[Int32, W](fill=Int32(-1))
+    var pz = Array[Float32, W](fill=Float32(0.0))
+    var po = Array[Float32, W](fill=Float32(0.0))
+    var pw = Array[Float32, W](fill=Float32(0.0))
+    var mf = Array[Int32, W](fill=Int32(-1))
+    var mz = Array[Float32, W](fill=Float32(0.0))
+    var mo = Array[Float32, W](fill=Float32(0.0))
     for g in range(lo, hi):
         if left[unsafe_offset=g] != -1:
             continue
@@ -431,13 +431,13 @@ def shap_table_unit[W: Int](
     var t = _tree_of(offsets, n_trees, g)
     var lo = Int(offsets[unsafe_offset=t])
     var sc = ftz(tscale[unsafe_offset=t])
-    var pf = InlineArray[Int32, W](fill=Int32(-1))
-    var pz = InlineArray[Float32, W](fill=Float32(0.0))
-    var po = InlineArray[Float32, W](fill=Float32(0.0))
-    var pw = InlineArray[Float32, W](fill=Float32(0.0))
-    var mf = InlineArray[Int32, W](fill=Int32(-1))
-    var mz = InlineArray[Float32, W](fill=Float32(0.0))
-    var mo = InlineArray[Float32, W](fill=Float32(0.0))
+    var pf = Array[Int32, W](fill=Int32(-1))
+    var pz = Array[Float32, W](fill=Float32(0.0))
+    var po = Array[Float32, W](fill=Float32(0.0))
+    var pw = Array[Float32, W](fill=Float32(0.0))
+    var mf = Array[Int32, W](fill=Int32(-1))
+    var mz = Array[Float32, W](fill=Float32(0.0))
+    var mo = Array[Float32, W](fill=Float32(0.0))
     var n = 0
     var c = g - lo
     var p = Int(parent[unsafe_offset=g])
@@ -513,7 +513,7 @@ def shap_table_row_unit[ACC: Int](
     var lo = Int(offsets[unsafe_offset=t])
     var hi = Int(offsets[unsafe_offset=t + 1])
     var xr = r * d
-    var acc = InlineArray[Float32, max(ACC, 1)](fill=Float32(0.0))
+    var acc = Array[Float32, max(ACC, 1)](fill=Float32(0.0))
     comptime if ACC == 0:
         for s in range(slots):
             for j in range(k):

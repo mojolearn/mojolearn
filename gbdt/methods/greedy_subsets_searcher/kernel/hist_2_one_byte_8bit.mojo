@@ -505,9 +505,9 @@ def hist2_8bit_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var lb = InlineArray[UInt32, H8_POINTS](fill=0)
-        var lq1 = InlineArray[Int32, H8_POINTS](fill=0)
-        var lq2 = InlineArray[Int32, H8_POINTS](fill=0)
+        var lb = Array[UInt32, H8_POINTS](fill=0)
+        var lq1 = Array[Int32, H8_POINTS](fill=0)
+        var lq2 = Array[Int32, H8_POINTS](fill=0)
 
         @__parameter
         for k in range(H8_UNROLL):
@@ -757,9 +757,9 @@ def hist2_8bit_gather_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var lb = InlineArray[UInt32, H8_POINTS](fill=0)
-        var lq1 = InlineArray[Int32, H8_POINTS](fill=0)
-        var lq2 = InlineArray[Int32, H8_POINTS](fill=0)
+        var lb = Array[UInt32, H8_POINTS](fill=0)
+        var lq1 = Array[Int32, H8_POINTS](fill=0)
+        var lq2 = Array[Int32, H8_POINTS](fill=0)
 
         @__parameter
         for k in range(H8_UNROLL):

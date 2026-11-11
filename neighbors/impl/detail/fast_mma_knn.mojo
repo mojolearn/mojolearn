@@ -221,7 +221,7 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
 
     # Query fragments: element (frow, fcol + e) of block (a, kk) is
     # query q0 + 8a + frow, feature 8kk + fcol + e (zero padded).
-    var qf = InlineArray[_M64, A * KS](fill=_M64(0))
+    var qf = Array[_M64, A * KS](fill=_M64(0))
     comptime for a in range(A):
         var q = q0 + 8 * a + frow
         comptime for kk in range(KS):
@@ -278,7 +278,7 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
                 v = index[unsafe_offset = (nb + r) * d + c]
             pf[u] = v
         for cb in range(MQ_T // RB):
-            var xf = InlineArray[_M64, B * KS](fill=_M64(0))
+            var xf = Array[_M64, B * KS](fill=_M64(0))
             comptime for b in range(B):
                 comptime for kk in range(KS):
                     xf[b * KS + kk] = _sg_load_t(
@@ -461,7 +461,7 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
     var base = lo
     while base < hi:
         var rows = min(MQ_T, hi - base)
-        var acc = InlineArray[_M64, A * NB](fill=_M64(0))
+        var acc = Array[_M64, A * NB](fill=_M64(0))
         var c0 = 0
         while c0 < d:
             barrier()
@@ -476,7 +476,7 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
             if c0 == 0 and tid < MQ_T:
                 tnorm[tid] = inorm[unsafe_offset = base + tid] if tid < rows else MQ_PAD
             barrier()
-            var qf = InlineArray[_M64, A * KC](fill=_M64(0))
+            var qf = Array[_M64, A * KC](fill=_M64(0))
             comptime for a in range(A):
                 var q = q0 + 8 * a + frow
                 comptime for kk in range(KC):

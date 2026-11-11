@@ -1177,7 +1177,7 @@ def _bwd_attention_chains(
             # head_dim 64: every lane of the head in flight in one pass over
             # the keys (lane neural-pass10); each lane's chain unchanged.
             if vec_hd == 64:
-                var accs = InlineArray[F32V, V64](fill=F32V(0.0))
+                var accs = Array[F32V, V64](fill=F32V(0.0))
                 for j in range(jlo, jhi + 1):
                     var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
                     var row = vbase + j * hd

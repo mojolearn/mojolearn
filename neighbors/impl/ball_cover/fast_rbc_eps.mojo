@@ -45,7 +45,7 @@ comptime FR_MASK_DT = DType.uint32
 
 @always_inline
 def _fr_dist[D: Int](
-    q: InlineArray[Float32, D], b: MutPointer[Float32, MutAnyOrigin], off: Int
+    q: Array[Float32, D], b: MutPointer[Float32, MutAnyOrigin], off: Int
 ) -> Float32:
     var s = Float32(0.0)
     comptime for c in range(D):
@@ -91,7 +91,7 @@ def fast_rbc_eps_csr_kernel[D: Int](
         if offset == Int(adj_ia[query_id + 1]):
             return
         ja_pos = offset
-    var q = InlineArray[Float32, D](fill=0.0)
+    var q = Array[Float32, D](fill=0.0)
     comptime for c in range(D):
         q[c] = ftz(x[D * query_id + c])
     var eps_cmp = eps * eps

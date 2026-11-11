@@ -32,7 +32,7 @@ a bound on host memory (8 KiB), not a shape rule."""
 
 
 struct RecordsDeathRing(Defaultable, Movable):
-    var keys: InlineArray[Int, RECORDS_DEAD_RING]
+    var keys: Array[Int, RECORDS_DEAD_RING]
     # Releases posted so far; the release numbered s (1-based) sits at
     # keys[(s - 1) % RECORDS_DEAD_RING].
     var seq: Int
@@ -41,7 +41,7 @@ struct RecordsDeathRing(Defaultable, Movable):
     var lock: List[Int64]
 
     def __init__(out self):
-        self.keys = InlineArray[Int, RECORDS_DEAD_RING](fill=0)
+        self.keys = Array[Int, RECORDS_DEAD_RING](fill=0)
         self.seq = 0
         self.lock = List[Int64](length=1, fill=Int64(0))
 

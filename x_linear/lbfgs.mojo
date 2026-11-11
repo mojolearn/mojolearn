@@ -66,7 +66,7 @@ def lb_direction(
     for j in range(v.tid, p, v.nt):
         st(w, dr + j, ld(w, g + j))
     v.sync()
-    var al = InlineArray[Float32, LBFGS_M](fill=Float32(0))
+    var al = Array[Float32, LBFGS_M](fill=Float32(0))
     for kk in range(count):
         var k = (head - 1 - kk + 2 * LBFGS_M) % LBFGS_M
         var a = fm(ld(w, rho + k), vdot(v, w, sS + k * p, w, dr, p, parts))

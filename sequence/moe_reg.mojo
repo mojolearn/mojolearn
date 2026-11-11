@@ -125,13 +125,13 @@ def moe_hidden_reg_kernel(
     var gs = stack_allocation[RK * RNP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var us = stack_allocation[RK * RNP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     # the rows this thread stages: pair rows tr + RS l (their tokens), feature rows tr + RS l
-    var ltok = InlineArray[Int, RC](fill=-1)
+    var ltok = Array[Int, RC](fill=-1)
     comptime for l in range(RC):
         var rp = p0 + tr + RS * l
         if rp < p1:
             ltok[l] = Int(order.unsafe_load(rp)) // k
-    var g = InlineArray[Float32, RC * RC](fill=Float32(0.0))
-    var u = InlineArray[Float32, RC * RC](fill=Float32(0.0))
+    var g = Array[Float32, RC * RC](fill=Float32(0.0))
+    var u = Array[Float32, RC * RC](fill=Float32(0.0))
     var d0 = 0
     while d0 < D:
         var cnt = min(RK, D - d0)
@@ -151,9 +151,9 @@ def moe_hidden_reg_kernel(
         barrier()
         if cnt == RK:
             comptime for i in range(RK):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var gb = InlineArray[Float32, RC](fill=Float32(0.0))
-                var ub = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var gb = Array[Float32, RC](fill=Float32(0.0))
+                var ub = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = xs[i * RMP + tr + RS * c]
                     gb[c] = gs[i * RNP + tc + RS * c]
@@ -164,9 +164,9 @@ def moe_hidden_reg_kernel(
                         u[a * RC + b] = fma3(av[a], ub[b], u[a * RC + b])
         else:
             for i in range(cnt):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var gb = InlineArray[Float32, RC](fill=Float32(0.0))
-                var ub = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var gb = Array[Float32, RC](fill=Float32(0.0))
+                var ub = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = xs[i * RMP + tr + RS * c]
                     gb[c] = gs[i * RNP + tc + RS * c]
@@ -211,12 +211,12 @@ def moe_out_reg_kernel(
     var tc = tid - tr * RS
     var hs = stack_allocation[RK * RMP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var ws = stack_allocation[RK * RNP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var lpair = InlineArray[Int, RC](fill=-1)
+    var lpair = Array[Int, RC](fill=-1)
     comptime for l in range(RC):
         var rp = p0 + tr + RS * l
         if rp < p1:
             lpair[l] = Int(order.unsafe_load(rp))
-    var acc = InlineArray[Float32, RC * RC](fill=Float32(0.0))
+    var acc = Array[Float32, RC * RC](fill=Float32(0.0))
     var f0 = 0
     while f0 < F:
         var cnt = min(RK, F - f0)
@@ -233,8 +233,8 @@ def moe_out_reg_kernel(
         barrier()
         if cnt == RK:
             comptime for i in range(RK):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var bv = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var bv = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = hs[i * RMP + tr + RS * c]
                     bv[c] = ws[i * RNP + tc + RS * c]
@@ -243,8 +243,8 @@ def moe_out_reg_kernel(
                         acc[a * RC + b] = fma3(av[a], bv[b], acc[a * RC + b])
         else:
             for i in range(cnt):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var bv = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var bv = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = hs[i * RMP + tr + RS * c]
                     bv[c] = ws[i * RNP + tc + RS * c]

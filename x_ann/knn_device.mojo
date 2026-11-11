@@ -70,7 +70,7 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
     var i = Int(block_idx.x) * KTB + t
     var tile = stack_allocation[KTJ * MAXD, Scalar[DType.float32], alignment=16, address_space=AddressSpace.SHARED]()
     var live = i < nr
-    var xi = InlineArray[Float32, MAXD](fill=Float32(0.0))
+    var xi = Array[Float32, MAXD](fill=Float32(0.0))
     if live:
         comptime for c in range(MAXD):
             if c < dd:
@@ -155,7 +155,7 @@ def knn_tiled_bigd_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn
     var filled = 0
     var ld = Float32(0.0)
     var li = 0
-    var acc = InlineArray[Float32, KBJ](fill=Float32(0.0))
+    var acc = Array[Float32, KBJ](fill=Float32(0.0))
     var j0 = 0
     while j0 < nr:
         var jn = KBJ if nr - j0 > KBJ else nr - j0
@@ -239,7 +239,7 @@ def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I3
     var li = 0
     var j0 = 0
     while j0 < nr:
-        var acc = InlineArray[Float32, KW_RI * KW_RJ](fill=Float32(0.0))
+        var acc = Array[Float32, KW_RI * KW_RJ](fill=Float32(0.0))
         var k0 = 0
         while k0 < dd:
             comptime for q in range(KW_KC * KW_TI // KW_TPB):
@@ -265,8 +265,8 @@ def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I3
             if kmax > KW_KC:
                 kmax = KW_KC
             for kk in range(kmax):
-                var av = InlineArray[Float32, KW_RI](fill=Float32(0.0))
-                var bv = InlineArray[Float32, KW_RJ](fill=Float32(0.0))
+                var av = Array[Float32, KW_RI](fill=Float32(0.0))
+                var bv = Array[Float32, KW_RJ](fill=Float32(0.0))
                 comptime for r in range(KW_RI):
                     av[r] = a_s[kk * KW_TI + ty + r * KW_TY]
                 comptime for c in range(KW_RJ):
@@ -409,7 +409,7 @@ def knn_wide_select_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, n
         rfull_s[tid] = Int32(0)
     var j0 = 0
     while j0 < nr:
-        var acc = InlineArray[Float32, KW_RI * KW_RJ](fill=Float32(0.0))
+        var acc = Array[Float32, KW_RI * KW_RJ](fill=Float32(0.0))
         var k0 = 0
         while k0 < dd:
             comptime for q in range(KW_KC * KW_TI // KW_TPB):
@@ -435,8 +435,8 @@ def knn_wide_select_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, n
             if kmax > KW_KC:
                 kmax = KW_KC
             for kk in range(kmax):
-                var av = InlineArray[Float32, KW_RI](fill=Float32(0.0))
-                var bv = InlineArray[Float32, KW_RJ](fill=Float32(0.0))
+                var av = Array[Float32, KW_RI](fill=Float32(0.0))
+                var bv = Array[Float32, KW_RJ](fill=Float32(0.0))
                 comptime for r in range(KW_RI):
                     av[r] = a_s[kk * KW_TI + ty + r * KW_TY]
                 comptime for c in range(KW_RJ):

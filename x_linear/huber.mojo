@@ -30,8 +30,8 @@ def _fold_inliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Float32:
     var i = 0
     while i < n:
         var m = min(HUBER_U, n - i)
-        var rv = InlineArray[Float32, HUBER_U](fill=Float32(0))
-        var wv = InlineArray[Float32, HUBER_U](fill=Float32(0))
+        var rv = Array[Float32, HUBER_U](fill=Float32(0))
+        var wv = Array[Float32, HUBER_U](fill=Float32(0))
         comptime for u in range(HUBER_U):
             if u < m:
                 rv[u] = ld(rr, i + u)
@@ -58,8 +58,8 @@ def _fold_outliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Tuple[Float
     var i = 0
     while i < n:
         var m = min(HUBER_U, n - i)
-        var rv = InlineArray[Float32, HUBER_U](fill=Float32(0))
-        var wv = InlineArray[Float32, HUBER_U](fill=Float32(0))
+        var rv = Array[Float32, HUBER_U](fill=Float32(0))
+        var wv = Array[Float32, HUBER_U](fill=Float32(0))
         comptime for u in range(HUBER_U):
             if u < m:
                 rv[u] = ld(rr, i + u)

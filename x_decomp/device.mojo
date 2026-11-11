@@ -993,7 +993,7 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
     if tid < width:
         acts[tid] = act.unsafe_load(kk0 + tid)
     barrier()
-    var acc = InlineArray[Float32, LU_RB * LU_RB](fill=Float32(0))
+    var acc = Array[Float32, LU_RB * LU_RB](fill=Float32(0))
     comptime for r in range(LU_RB):
         comptime for c in range(LU_RB):
             var i = i0 + ty + LU_TILE * r
@@ -1002,8 +1002,8 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
                 acc[r * LU_RB + c] = ftz(a.unsafe_load(i * nn + j))
     for kp in range(width):
         if acts[kp] != Float32(0):
-            var lv = InlineArray[Float32, LU_RB](fill=Float32(0))
-            var uv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            var lv = Array[Float32, LU_RB](fill=Float32(0))
+            var uv = Array[Float32, LU_RB](fill=Float32(0))
             comptime for r in range(LU_RB):
                 lv[r] = ls[kp * LU_RB_TILE + ty + LU_TILE * r]
             comptime for c in range(LU_RB):

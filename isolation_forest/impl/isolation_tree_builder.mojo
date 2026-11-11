@@ -575,7 +575,7 @@ def _block_select_smallest(
     var k_rem = k
     for p in range(8):
         var shift = UInt32(28 - 4 * p)
-        var local = InlineArray[UInt32, IF_KEY_BUCKETS](fill=UInt32(0))
+        var local = Array[UInt32, IF_KEY_BUCKETS](fill=UInt32(0))
         var r = tid
         while r < n:
             var key = if_row_key(base, r)

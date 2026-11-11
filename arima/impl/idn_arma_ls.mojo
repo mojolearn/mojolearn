@@ -23,8 +23,8 @@ def _ils_merge_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
     sh: MutPointer[Float32, so, address_space = AddressSpace.SHARED],
     tid: Int,
     n: Int,
-    mut r: InlineArray[Float32, ILS_R2],
-    mut qb: InlineArray[Float32, ILS_MAX_COLS],
+    mut r: Array[Float32, ILS_R2],
+    mut qb: Array[Float32, ILS_MAX_COLS],
     x_out: MutPointer[Float32, xo, address_space = AddressSpace.SHARED],
     info_out: MutPointer[Int32, io, address_space = AddressSpace.SHARED],
 ):
@@ -37,7 +37,7 @@ def _ils_merge_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
     for t in range(ILS_MAX_COLS):
         sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
     barrier()
-    var a = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+    var a = Array[Float32, ILS_MAX_COLS](fill=Float32(0.0))
     var stride = 1
     while stride < ILS_TPB:
         if tid % (2 * stride) == 0:
@@ -53,7 +53,7 @@ def _ils_merge_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
         barrier()
         stride *= 2
     if tid == 0:
-        var x = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+        var x = Array[Float32, ILS_MAX_COLS](fill=Float32(0.0))
         var info = ils_solve(r, qb, n, x)
         # the at most ILS_MAX_COLS unknowns (zeros past n)
         comptime for j in range(ILS_MAX_COLS):
@@ -107,9 +107,9 @@ def idn_arma_ls_kernel(
     var sinfo = stack_allocation[
         1, Scalar[DType.int32], address_space=AddressSpace.SHARED
     ]()
-    var r = InlineArray[Float32, ILS_R2](fill=Float32(0.0))
-    var qb = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-    var a = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+    var r = Array[Float32, ILS_R2](fill=Float32(0.0))
+    var qb = Array[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+    var a = Array[Float32, ILS_MAX_COLS](fill=Float32(0.0))
 
     # -- 1. the AR(p_ar) pre-fit whose residual stands in for the MA lags
     if q != 0:

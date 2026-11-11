@@ -273,7 +273,7 @@ def fast_trsm_panel_kernel(
         return
     var lane = Int(lane_id())
     var r = j0 + nb + gw
-    var y = InlineArray[Float32, FTP_REGS](fill=0.0)
+    var y = Array[Float32, FTP_REGS](fill=0.0)
     for c in range(nb):
         var jc = j0 + c
         var p = Float32(0)

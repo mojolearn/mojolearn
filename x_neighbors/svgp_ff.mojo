@@ -558,7 +558,7 @@ def svgp_ff_fin_item(w: FP, info: FP, nbn: Int, nbm: Int, nf: Float32, noise: Fl
     if svgp_ff_failed(w, info):
         return
     comptime if SVGP_TREE_ON:
-        var sl = InlineArray[SV8, SVGP_TREE](fill=SV8(0))
+        var sl = Array[SV8, SVGP_TREE](fill=SV8(0))
         for s in range(SVGP_TREE):
             sl[s] = svgp_ff_tree_slot(w, s, nbn, nbm)
         var h = SVGP_TREE // 2

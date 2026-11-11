@@ -85,7 +85,7 @@ def _dt_tile[
     barrier. Padded features stage as 0 (a product of zeros adds nothing).
     EXACTD (IVFG_EXACTD): the difference form sum (q - x)^2 instead, rows
     staged raw, no norms: no cancellation on wide-range features."""
-    var acc = InlineArray[Float32, DT_RI * DT_RJ](fill=Float32(0.0))
+    var acc = Array[Float32, DT_RI * DT_RJ](fill=Float32(0.0))
     var k0 = 0
     while k0 < d:
         comptime for qq in range(DT_KC * DT_TI // DT_TPB):
@@ -114,8 +114,8 @@ def _dt_tile[
             b_s[kk * DT_TJ + jj] = v
         barrier()
         comptime for kk in range(DT_KC):
-            var av = InlineArray[Float32, DT_RI](fill=Float32(0.0))
-            var bv = InlineArray[Float32, DT_RJ](fill=Float32(0.0))
+            var av = Array[Float32, DT_RI](fill=Float32(0.0))
+            var bv = Array[Float32, DT_RJ](fill=Float32(0.0))
             comptime for r in range(DT_RI):
                 av[r] = a_s[kk * DT_TI + ty + r * DT_TY]
             comptime for c in range(DT_RJ):

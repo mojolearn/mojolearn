@@ -198,8 +198,8 @@ def test_invparams(
     READ THE BANNER BEFORE TOUCHING THE INNER LINE. `coef * a * x` is
     `(coef*a) * x`, `coef` is an exact +-1, the surviving product feeds the
     add: ONE rounding. This is NOT `invtransform`'s `sign * (a * x)`."""
-    var new_params = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
-    var tmp = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
+    var new_params = Array[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
+    var tmp = Array[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
     for i in range(pq):  # small-loop(pq: AR or MA order, at most JONES_MAX_PARAMS = 8): per-thread device helper inside a kernel
         var v = ftz(params.unsafe_load(base + i))
         tmp[i] = v

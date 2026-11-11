@@ -87,23 +87,23 @@ struct PCSNativeDriver(Copyable, Movable):
     var native: XnDriver
 
     def require_draw(self) raises:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         if (self.native.run("capabilities", a, p, f) & 8) == 0:
             raise Error("NotImplementedError: mojolearn PolynomialCountSketch: this binary lacks "
                 + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
 
     def draw(self, request: PCSDrawRequest) raises:
-        var a: InlineArray[Int, 2] = [request.indices, request.signs]
-        var p: InlineArray[Int, 3] = [request.seed, request.components, request.total]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 2] = [request.indices, request.signs]
+        var p: Array[Int, 3] = [request.seed, request.components, request.total]
+        var f: Array[Float64, 0] = []
         _ = self.native.run("pcs_draw", a, p, f)
 
     def query(self, request: PCSQueryRequest) raises:
-        var a: InlineArray[Int, 4] = [request.source, request.indices, request.signs, request.dst]
-        var p: InlineArray[Int, 5] = [request.rows, request.features, request.augmented,
+        var a: Array[Int, 4] = [request.source, request.indices, request.signs, request.dst]
+        var p: Array[Int, 5] = [request.rows, request.features, request.augmented,
             request.components, request.degree]
-        var f: InlineArray[Float64, 2] = [Float64(request.gamma), Float64(request.coef0)]
+        var f: Array[Float64, 2] = [Float64(request.gamma), Float64(request.coef0)]
         var name = String("pcs") if request.old_items else String("pcs_resident")
         _ = self.native.run(name, a, p, f)

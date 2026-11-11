@@ -72,31 +72,31 @@ struct LofPlan(Movable):
 
     def select(mut self, driver: XnDriver, query: Int, reference: Int) raises -> Int:
         var status = List[Int32](length=1, fill=0)
-        var f: InlineArray[Float64, 0] = []
+        var f: Array[Float64, 0] = []
         if self.unfused:
             var matrix = List[Float32](length=lof_matrix_count(self.rows, self.reference_rows), fill=0)
-            var a: InlineArray[Int, 3] = [query, reference, lof_f32_address(matrix)]
-            var p: InlineArray[Int, 4] = [self.rows, self.reference_rows, self.features, Int(status.unsafe_ptr())]
+            var a: Array[Int, 3] = [query, reference, lof_f32_address(matrix)]
+            var p: Array[Int, 4] = [self.rows, self.reference_rows, self.features, Int(status.unsafe_ptr())]
             _ = driver.run("sqdist", a, p, f)
             self.squared = List[Float32](length=lof_matrix_count(self.rows, self.neighbors), fill=0)
             self.indices = List[Int32](length=self.rows * self.neighbors, fill=0)
-            var aa: InlineArray[Int, 3] = [lof_f32_address(matrix), lof_f32_address(self.squared), lof_i32_address(self.indices)]
-            var pp: InlineArray[Int, 4] = [self.rows, self.reference_rows, self.neighbors, Int(self.exclude_self)]
+            var aa: Array[Int, 3] = [lof_f32_address(matrix), lof_f32_address(self.squared), lof_i32_address(self.indices)]
+            var pp: Array[Int, 4] = [self.rows, self.reference_rows, self.neighbors, Int(self.exclude_self)]
             _ = driver.run("knn_select", aa, pp, f)
             _ = matrix^
         else:
             self.squared = List[Float32](length=lof_matrix_count(self.rows, self.neighbors), fill=0)
             self.indices = List[Int32](length=self.rows * self.neighbors, fill=0)
-            var a: InlineArray[Int, 4] = [query, reference, lof_f32_address(self.squared), lof_i32_address(self.indices)]
-            var p: InlineArray[Int, 6] = [self.rows, self.reference_rows, self.features,
+            var a: Array[Int, 4] = [query, reference, lof_f32_address(self.squared), lof_i32_address(self.indices)]
+            var p: Array[Int, 6] = [self.rows, self.reference_rows, self.features,
                 self.neighbors, Int(self.exclude_self), Int(status.unsafe_ptr())]
             _ = driver.run("knn_sq" if self.old_items else "knn_sq_tiled", a, p, f)
         return Int(status[0])
 
     def roots(mut self, driver: XnDriver, dst: Int) raises:
-        var a: InlineArray[Int, 2] = [lof_f32_address(self.squared), dst]
-        var p: InlineArray[Int, 2] = [self.rows * self.neighbors, 2]
-        var f: InlineArray[Float64, 2] = [1.0, 0.0]
+        var a: Array[Int, 2] = [lof_f32_address(self.squared), dst]
+        var p: Array[Int, 2] = [self.rows * self.neighbors, 2]
+        var f: Array[Float64, 2] = [1.0, 0.0]
         _ = driver.run("unary", a, p, f)
         self.squared = List[Float32]()
 
@@ -108,15 +108,15 @@ struct LofPlan(Movable):
         return status
 
     def density(self, driver: XnDriver, distances: Int, fit_distances: Int, dst: Int, fit_rows: Int) raises:
-        var a: InlineArray[Int, 4] = [distances, lof_i32_address(self.indices), fit_distances, dst]
-        var p: InlineArray[Int, 3] = [self.neighbors, self.rows, fit_rows]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 4] = [distances, lof_i32_address(self.indices), fit_distances, dst]
+        var p: Array[Int, 3] = [self.neighbors, self.rows, fit_rows]
+        var f: Array[Float64, 0] = []
         _ = driver.run("lof_lrd", a, p, f)
 
     def score(self, driver: XnDriver, fit_densities: Int, densities: Int, dst: Int, fit_rows: Int) raises:
-        var a: InlineArray[Int, 4] = [lof_i32_address(self.indices), fit_densities, densities, dst]
-        var p: InlineArray[Int, 3] = [self.neighbors, self.rows, fit_rows]
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 4] = [lof_i32_address(self.indices), fit_densities, densities, dst]
+        var p: Array[Int, 3] = [self.neighbors, self.rows, fit_rows]
+        var f: Array[Float64, 0] = []
         _ = driver.run("lof_score", a, p, f)
 
     def query_density(mut self, driver: XnDriver, fit_distances: Int, fit_rows: Int) raises:
@@ -128,9 +128,9 @@ struct LofPlan(Movable):
         self.score(driver, fit_densities, lof_f32_address(self.densities), lof_f32_address(self.scores), fit_rows)
 
     def decision(self, driver: XnDriver, dst: Int, shift: Float64) raises:
-        var a: InlineArray[Int, 2] = [lof_f32_address(self.scores), dst]
-        var p: InlineArray[Int, 2] = [self.rows, 6]
-        var f: InlineArray[Float64, 2] = [1.0, shift]
+        var a: Array[Int, 2] = [lof_f32_address(self.scores), dst]
+        var p: Array[Int, 2] = [self.rows, 6]
+        var f: Array[Float64, 2] = [1.0, shift]
         _ = driver.run("unary", a, p, f)
 
     def query_decision(mut self, driver: XnDriver, shift: Float64) raises:
@@ -145,10 +145,10 @@ def lof_percentile(driver: XnDriver, score: Int, count: Int, q: Float64) raises 
     var sorted_columns = List[Int32](length=count, fill=0)
     var sorted_scores = List[Float32](length=count, fill=0)
     var network = lof_power_steps(count)
-    var a: InlineArray[Int, 5] = [Int(offsets.unsafe_ptr()), lof_i32_address(columns), score,
+    var a: Array[Int, 5] = [Int(offsets.unsafe_ptr()), lof_i32_address(columns), score,
         lof_i32_address(sorted_columns), lof_f32_address(sorted_scores)]
-    var p: InlineArray[Int, 4] = [1, count, network[0], network[1]]
-    var f: InlineArray[Float64, 0] = []
+    var p: Array[Int, 4] = [1, count, network[0], network[1]]
+    var f: Array[Float64, 0] = []
     _ = driver.run("p2m_row_sort", a, p, f)
     _ = offsets^
     _ = columns^
@@ -179,9 +179,9 @@ struct LofLabelsPlan(Movable):
     def classify(mut self, driver: XnDriver, score: Int, mode: Int, threshold: Float64) raises:
         if len(self.labels) == 0:
             return
-        var a: InlineArray[Int, 2] = [score, lof_i32_address(self.labels)]
-        var p: InlineArray[Int, 2] = [len(self.labels), mode]
-        var f: InlineArray[Float64, 1] = [threshold]
+        var a: Array[Int, 2] = [score, lof_i32_address(self.labels)]
+        var p: Array[Int, 2] = [len(self.labels), mode]
+        var f: Array[Float64, 1] = [threshold]
         _ = driver.run("p2m_sign_label", a, p, f)
 
     def write_i64(self, dst: Int) raises:

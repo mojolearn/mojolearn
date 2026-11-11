@@ -166,28 +166,28 @@ struct HdbscanFitDriver(Copyable, Movable):
     var entry: NativeDescriptorCall
 
     def metadata(self, operation: Int) raises -> Int:
-        var a: InlineArray[Int, 0] = []
-        var p: InlineArray[Int, 0] = []
-        var f: InlineArray[Float64, 0] = []
+        var a: Array[Int, 0] = []
+        var p: Array[Int, 0] = []
+        var f: Array[Float64, 0] = []
         return native_descriptor_call_fixed(self.entry, operation, a, p, f)
 
     def fit(self, r: HdbscanFitRequest, mut plan: HdbscanFitPlan) raises -> Int:
         var o = r.options.copy()
-        var a: InlineArray[Int, 5] = [r.source.address, r.labels.address,
+        var a: Array[Int, 5] = [r.source.address, r.labels.address,
             r.core_distances.address, r.probabilities.address, plan.address()]
-        var p: InlineArray[Int, 10] = [r.source.count, o.rows, o.features, o.min_samples,
+        var p: Array[Int, 10] = [r.source.count, o.rows, o.features, o.min_samples,
             o.min_cluster_size, o.max_cluster_size, Int(o.allow_single), o.method,
             o.metric, Int(o.prediction_data)]
-        var f: InlineArray[Float64, 2] = [o.alpha, o.epsilon]
+        var f: Array[Float64, 2] = [o.alpha, o.epsilon]
         var answer = native_descriptor_call_fixed(self.entry, HDBSCAN_FIT_RUN, a, p, f)
         _ = plan
         return answer
 
     def prediction(self, r: HdbscanPredictionRequest, mut plan: HdbscanPredictionPlan) raises -> Int:
-        var a: InlineArray[Int, 5] = [plan.address(), r.deaths.address,
+        var a: Array[Int, 5] = [plan.address(), r.deaths.address,
             r.selected.address, r.offsets.address, r.index_into.address]
-        var p: InlineArray[Int, 4] = [r.rows, r.edges, r.condensed, r.clusters]
-        var f: InlineArray[Float64, 0] = []
+        var p: Array[Int, 4] = [r.rows, r.edges, r.condensed, r.clusters]
+        var f: Array[Float64, 0] = []
         var answer = native_descriptor_call_fixed(self.entry, HDBSCAN_FIT_PREDICTION, a, p, f)
         _ = plan
         return answer

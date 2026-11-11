@@ -165,8 +165,8 @@ def binarize_float_feature_kernel(
         shared_borders[tid] = borders.unsafe_load(tid + 1)
     barrier()
 
-    var index = InlineArray[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
-    var feature_values = InlineArray[Float32, BINARIZE_DOCS_PER_THREAD](
+    var index = Array[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
+    var feature_values = Array[Float32, BINARIZE_DOCS_PER_THREAD](
         fill=Float32(0.0)
     )
 
@@ -288,7 +288,7 @@ def pack_cindex_words_kernel(
             j += PACK_BLOCK
     barrier()
     var i = Int(block_idx.x) * PACK_BLOCK * PACK_DOCS + tid
-    var word = InlineArray[UInt32, PACK_DOCS](fill=0)
+    var word = Array[UInt32, PACK_DOCS](fill=0)
     for e in range(ne):
         var cnt = Int(sh_meta[e])
         var off = Int(sh_meta[PACK_MAX_ENTRIES + e])
@@ -296,8 +296,8 @@ def pack_cindex_words_kernel(
         var shift = sh_meta[3 * PACK_MAX_ENTRIES + e]
         var mask = sh_meta[4 * PACK_MAX_ENTRIES + e]
         var sub = sh_sub[e]
-        var vals = InlineArray[Float32, PACK_DOCS](fill=Float32(0.0))
-        var bins = InlineArray[UInt32, PACK_DOCS](fill=0)
+        var vals = Array[Float32, PACK_DOCS](fill=Float32(0.0))
+        var bins = Array[UInt32, PACK_DOCS](fill=0)
 
         @__parameter
         for j in range(PACK_DOCS):
