@@ -7,6 +7,7 @@ Public fitted buffers remain writable; each operation reconciles their
 admitted descriptors before taking its immutable native snapshot.
 """
 from std.python import PythonObject
+from std.memory import ArcPointer
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
@@ -72,33 +73,33 @@ def linear_state_clear(model: PythonObject) raises:
     records_drop(RECORDS_PREPARED, model, _LINEAR_STATE_SLOT)
 
 
-def linear_state_snapshot(owner: PythonObject) raises -> LinearModelState:
-    var native = owner.downcast_value_ptr[LinearStateOwner]()
-    var lease = LINEAR_STATES.acquire(native[].handle)
-    var result = lease[].copy()
-    _ = lease
-    _ = owner
-    return result^
+@fieldwise_init
+struct LinearStateCall(Movable):
+    var owner: PythonObject
+    var lease: ArcPointer[LinearModelState]
 
 
 def linear_state_refresh(model: PythonObject, var owner: PythonObject,
-    state: LinearModelState, coefficients: PythonObject) raises -> PythonObject:
-    # Public coefficient replacement and writable-buffer semantics remain at
-    # UNPACK. Active calls retain their own admitted coefficient pin; their
-    # immutable native lease is independent of a concurrent refresh/refit.
+    state: LinearModelState, coefficients: PythonObject,
+    prior: Optional[ArcPointer[LinearModelState]]) raises -> LinearStateCall:
+    # UNPACK passes its already acquired snapshot. Unchanged public weights
+    # need one registry acquisition, not repeated lock/lookups of that state.
     if owner is None:
         owner = PythonObject(alloc=LinearStateOwner(state, coefficients, PythonObject(None)))
         _ = records_put(RECORDS_PREPARED, model, _LINEAR_STATE_SLOT, owner)
-        return owner
+        var handle = owner.downcast_value_ptr[LinearStateOwner]()[].handle.copy()
+        return LinearStateCall(owner, LINEAR_STATES.acquire(handle))
+    if not prior:
+        raise Error("native linear state: missing admitted snapshot")
     var native = owner.downcast_value_ptr[LinearStateOwner]()
-    var prior = LINEAR_STATES.acquire(native[].handle)
-    if (prior[].coef != state.coef or prior[].coef_count != state.coef_count
-            or prior[].features != state.features or prior[].intercept != state.intercept
-            or prior[].has_coef != state.has_coef):
+    var lease = prior.value().copy()
+    if (lease[].coef != state.coef or lease[].coef_count != state.coef_count
+            or lease[].features != state.features or lease[].intercept != state.intercept
+            or lease[].has_coef != state.has_coef):
         LINEAR_STATES.replace(native[].handle, state.copy())
+        lease = LINEAR_STATES.acquire(native[].handle)
     native[].coefficients = coefficients
-    _ = prior
-    return owner
+    return LinearStateCall(owner, lease^)
 
 
 def linear_state_owner_pins(value: Int, index: Int) abi("C") -> Int:
