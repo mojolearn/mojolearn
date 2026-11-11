@@ -168,7 +168,7 @@ def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: Pytho
     # constructor parameter the fit already admitted), not a third admission.
     var xtrees = _table(context["lr_x_trees"], _host_mode(model, fields) if host is not None
                         else _mode(fields, context))
-    var cw = labels_class_weight_rows[True](class_weight, labels, xtrees, context)
+    var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if cw is None:  # every class weight is 1
         return sw^
     var out = admitted_storage_native([n], "<f4", context, as_array=True)
