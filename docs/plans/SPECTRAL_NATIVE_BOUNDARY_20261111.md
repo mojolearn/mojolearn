@@ -175,3 +175,23 @@ build closure is the existing x_decomp descriptor already imported by the
 family runtime, not a new provider export. Source evidence:
 `E/spectral-native-owner/rbf-source-audit.json`. COO and precomputed-kNN
 preparation, shared public metadata/admission and routed tuples remain staged.
+
+## Additive COO and precomputed-kNN API
+
+`core/spectral_preparation_api.mojo` exposes the independent five-operation ABI
+`mojolearn.spectral.preparation.v1`: F32 count0, F64 count1, F32 fill2, F64 fill3,
+kNN affinity4. `SpectralCOOCountRequest(source,count,wide)` and
+`SpectralCOOFillRequest(source,row_output,column_output,value_output,rows,columns,
+capacity,wide)` preserve the two-pass count/fill path and dtype narrowing.
+`SpectralKNNRequest(dense,row_indices,column_indices,values,affinity,status,
+rows,neighbors,nonzeros,sparse)` carries the original address/options contract.
+`SpectralAffinityStatus.words` is native three-word heap storage.
+
+`SpectralPreparationDriver` offers count/fill/knn. Its entry is
+`spectral_preparation_native_v1[SpectralPreparationHost/Device]` with the backend
+imported from the corresponding `core.spectral_preparation_*` module. Each
+backend retains its original F64 helper and exact null/overflow error behavior;
+the device kNN uses the original core image's synchronized context slot and
+existing kernel. Existing F32 helpers are shared directly, unchanged. This is
+an additive API chunk; public callers switch in its following boundary chunk.
+No lane compile/test and no algorithm, defaults, work size or copy change.
