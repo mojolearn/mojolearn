@@ -523,6 +523,7 @@ def transformer_session_forward_binding(
 
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
 from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
+from transformer.neural_entry_device import publish_neural_transformer_device
 
 
 
@@ -1509,6 +1510,9 @@ def build__mojolearn_transformer() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_transformer")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_transformer_device()
         m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
         m.def_function[transformer_vendor_binding]("transformer_vendor")
