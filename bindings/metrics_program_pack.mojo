@@ -19,7 +19,6 @@ def metric_arena_array(arena: MetricArenaOwner, off: Int, words: Int, shape: Pyt
         unsafe_memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
                       src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=arena.base() + 4 * off), count=words)
         _ = result  # keep the Python object alive through the native copy above
-    _ = arena  # keep the arena store alive through the native copy above
     return result
 
 
@@ -31,5 +30,4 @@ def metric_f64_array(values: List[Float64], context: PythonObject) raises -> Pyt
                       src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(values.unsafe_ptr())),
                       count=len(values))
         _ = result  # keep the Python object alive through the native copy above
-    _ = values
     return result
