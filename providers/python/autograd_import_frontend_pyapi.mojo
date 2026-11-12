@@ -24,6 +24,7 @@ from sequence.neural_model_dispatch import PROGRAM_IMPORT
 
 
 from providers.python.autograd_import_metadata_pyapi import _fields, _shape_words, _unsupported, _status
+from bindings.py_optional import py_present
 
 
 def _initialize(program: PythonObject, session: PythonObject, info: PythonObject,
@@ -81,20 +82,22 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
     if py_type(entries) is b.str:
         raise Error(String(entries))
     var words = _shape_words(shapes, context)
-    var path = PythonObject(None)
-    var reader = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var path = Optional[PythonObject]()
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var reader = Optional[PythonObject]()
     var name = source
     if py_type(source) is context["graph"]:
         var graph = _fields(source, context["layouts"][context["graph"]])
-        reader = py_get(graph, "_native")
-        if reader is None:
+        reader = py_present(py_get(graph, "_native"))
+        if not reader:
             raise Error("TypeError: import_model requires a graph returned by the native ONNX reader")
         name = graph["source"]
         if py_type(name) is not b.str:
             raise Error("TypeError: graph source requires an exact string")
     else:
-        path = native_path(source)
-        name = path if label is None else label
+        path = py_present(native_path(source))
+        name = path.value() if label is None else label
     var session = native_storage_allocate(context["session"])
     _ = _fields(session, context["layouts"][context["session"]])
     _ = ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], context["backend"], context["program"])
@@ -103,8 +106,8 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         var lifetime = fields["_lifetime"]
         var owner = lifetime.downcast_value_ptr[NativeDescriptorResource]()
         var handle = 0
-        if reader is not None:
-            var stored = _fields(reader, context["layouts"][context["reader"]])
+        if Bool(reader):
+            var stored = _fields(reader.value(), context["layouts"][context["reader"]])
             if py_type(stored["h"]) is not b.int:
                 raise Error("TypeError: native graph handle requires an exact integer")
             var graph_owner = stored["_lifetime"].downcast_value_ptr[NativeDescriptorResource]()
@@ -124,8 +127,8 @@ def _import(source: PythonObject, label: PythonObject, shapes: PythonObject,
         # Stable initialized storage survives the native ABI call and owns the
         # returned graph metadata. No CPython call is used between native owners.
         var requests = List[NativeProgramImport]()
-        requests.append(NativeProgramImport(reader is not None, handle,
-            String("") if path is None else String(path), String(name), names^, dimensions^))
+        requests.append(NativeProgramImport(Bool(reader), handle,
+            String("") if not path else String(path.value()), String(name), names^, dimensions^))
         var scope = owner[].context.copy()
         scope.append(owner[].handle)
         _ = neural_descriptor_execute(owner[].provider, PROGRAM_IMPORT,

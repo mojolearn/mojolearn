@@ -8,6 +8,7 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_string_storage import sequence_string_class, sequence_string_admit
 from bindings.sequence_array_warnings import sequence_array_warn, sequence_array_category
 from bindings.optimizer_public_words import stash_python_error
+from bindings.py_optional import py_or_none, py_present
 
 
 def sequence_dtype_create(value: PythonObject, context: PythonObject, aligned: Bool,
@@ -369,7 +370,8 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
         if py_type(name) is not b.str:
             raise Error("TypeError: dtype field names require native strings")
         var format = PythonObject(None)
-        var offset = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var offset = Optional[PythonObject]()
         var title = PythonObject(None)
         if native_fields:
             var specs = value["formats"]
@@ -380,7 +382,7 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
                 var explicit_offsets = value["offsets"]
                 if py_type(explicit_offsets) is not b.list and py_type(explicit_offsets) is not b.tuple:
                     raise Error("TypeError: dtype offsets require a native sequence")
-                offset = explicit_offsets[i]
+                offset = py_present(explicit_offsets[i])
             if py_contains(value, "titles"):
                 var explicit_titles = value["titles"]
                 if py_type(explicit_titles) is not b.list and py_type(explicit_titles) is not b.tuple:
@@ -391,21 +393,21 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
             if py_type(spec) is not b.tuple or (len(spec) != 2 and len(spec) != 3):
                 raise Error("ValueError: dtype field requires a 2- or 3-tuple")
             format = spec[0]
-            offset = spec[1]
+            offset = py_present(spec[1])
             if len(spec) == 3:
                 title = spec[2]
         sequence_dtype_title(title)
         if not native_fields and title == name:
             continue
-        if offset is not None:
-            sequence_dtype_integer(offset, classes, context)
+        if Bool(offset):
+            sequence_dtype_integer(offset.value(), classes, context)
         var position = len(names)
         if not native_fields and py_get(value, PythonObject(-1)) is None:
-            while position > 0 and offset < offsets[position - 1]:  # driver-loop: stable field ordering by native offsets
+            while position > 0 and py_or_none(offset) < offsets[position - 1]:  # driver-loop: stable field ordering by native offsets
                 position -= 1
         py_call(names.insert, position, name)
         py_call(formats.insert, position, sequence_dtype_normalize(format, classes, context, depth + 1, alignment))
-        py_call(offsets.insert, position, offset)
+        py_call(offsets.insert, position, py_or_none(offset))
         py_call(titles.insert, position, title)
     py_setitem(result, "names", names)
     py_setitem(result, "formats", formats)

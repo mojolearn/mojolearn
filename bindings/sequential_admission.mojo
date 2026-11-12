@@ -10,6 +10,7 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_ge
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.native_identity_key import NativeIdentityKey
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_present
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -330,15 +331,16 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: St
         # depth, changed identity (fit, set_params, load). Arguments are
         # admitted on every call.
         var cache = prepared_get(mods, _SEQUENTIAL_ADMIT_SLOT, model)
-        var seen = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var seen = Optional[PythonObject]()
         if cache is not None:
             var admitted = cache.downcast_value_ptr[SequentialAdmissions]()
             if operation in admitted[].operations:
-                seen = admitted[].operations[operation]
+                seen = py_present(admitted[].operations[operation])
         var hit = False
-        if seen is not None:
+        if Bool(seen):
             try:
-                var retained = seen.downcast_value_ptr[NativeIdentityKey]()
+                var retained = seen.value().downcast_value_ptr[NativeIdentityKey]()
                 var offset = 0
                 hit = retained[].matches_identity(context, offset) and retained[].matches(names, offset)
                 for k in range(len(names)):  # driver-loop: over admitted model field identities

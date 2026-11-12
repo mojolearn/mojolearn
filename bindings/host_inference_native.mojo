@@ -25,6 +25,7 @@ from bindings.host_array_native import host_archive_typed
 from bindings.host_tree_native import host_tree_input, host_tree_scalar, host_tree_wide
 from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
+from bindings.py_optional import py_present
 
 
 
@@ -158,19 +159,20 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         host_inference_feature_names(model, fields, context)
     host_inference_finite(Int(py=classical_address(x)), rows * features)
     var metric = fields["metric"]
-    var code = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var code = Optional[PythonObject]()
     if py_type(metric) is b.str:
-        code = py_get(context["host_archive_kmeans_metrics"], metric)
-        if code is None:
+        code = py_present(py_get(context["host_archive_kmeans_metrics"], metric))
+        if not code:
             raise Error("unknown KMeans metric")
     else:
         host_tree_scalar(metric, context)
-        code = py_call(b.int, metric)
+        code = py_present(py_call(b.int, metric))
     var clusters = Int(py=centers.shape[0])
     var transform = operation == "host_infer_transform"
     var out = host_archive_typed(Python.tuple(rows, clusters) if transform else Python.tuple(rows), "<f4" if transform else "<i4", context["output_context"])
     _ = py_call(host_inference_entry("kmeans_transform" if transform else "kmeans_predict", context), classical_address(x), classical_address(centers), classical_address(out),
-        Python.list(rows, features, clusters, code))
+        Python.list(rows, features, clusters, code.value()))
     _ = centers^
     _ = x^
     return classical_input(out, context, "prediction") if public and py_get(context, "ndarray") is not None else out

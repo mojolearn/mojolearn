@@ -115,7 +115,8 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
     if features < 1 or count < 1 or count > 2147483647 // features:
         raise Error("KernelDensity fitted dimensions exceed native indexing")
     var weight = py_get(fields, "_w")
-    var weights = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var weights = Optional[PythonObject]()
     if weight is not None:
         weights = _kernel_buffer(weight, count, "<f4", context)
     # Derive the fixed native constructor from a C-created scalar. A patched
@@ -137,8 +138,8 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
     var result = PythonObject(None)
     try:
         result = py_call(entry, classical_address(train), classical_address(query),
-            classical_address(weights) if weights is not None else PythonObject(0), classical_address(out),
-            Python.list(count, rows, features, bandwidth, Int(weights is not None), Int(total)), kernel, metric)
+            classical_address(weights.value()) if Bool(weights) else PythonObject(0), classical_address(out),
+            Python.list(count, rows, features, bandwidth, Int(Bool(weights)), Int(total)), kernel, metric)
     except error:
         # The public validation wrapper normalizes only plain native
         # nonfinite errors; other CPU kernel failures remain builtin Exception.

@@ -135,6 +135,7 @@ from core.admitted_convert import admitted_convert
 from core.cast_in import CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
 from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_itemsize as _array_itemsize
 from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
+from bindings.py_optional import py_present
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
 
@@ -1327,12 +1328,13 @@ def admitted_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
     # allocator bytes. Accept its exact builtin class, with callback-free
     # missing-value/metadata owners, and use native scalar storage copying.
     var b = native_loaded_module("builtins")
-    var string_dtype = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var string_dtype = Optional[PythonObject]()
     try:
-        string_dtype = py_call(native_numpy_dtype(context), "T")
+        string_dtype = py_present(py_call(native_numpy_dtype(context), "T"))
     except:
         pass
-    if string_dtype is None or py_type(dtype) is not py_type(string_dtype):
+    if not string_dtype or py_type(dtype) is not py_type(string_dtype.value()):
         raise Error("TypeError: resample requires a native NumPy dtype")
     native_release_admit(py_call(b.getattr, dtype, "na_object", PythonObject(None)), context)
     var metadata = dtype.metadata

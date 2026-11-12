@@ -21,6 +21,7 @@ from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
 from core.scaler_fit_impl import scaler_refuse_infinite
+from bindings.py_optional import py_present
 
 
 def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject,
@@ -49,7 +50,8 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var maximum = PythonObject(None)
     var scale = PythonObject(None)
     var fused = False
-    var scaled = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var scaled = Optional[PythonObject]()
     if direct is not None:
         var output = classical_typed(Python.tuple(2*d),"<f4",context["output_context"])
         _ = py_call(direct,classical_address(values[1]),classical_address(output),Python.list(n,d))
@@ -96,7 +98,7 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
         if fused:
-            scaled = xprep_take(arena[0],dest,n,d,context["output_context"])
+            scaled = py_present(xprep_take(arena[0],dest,n,d,context["output_context"]))
         _ = arena^
     # scikit-learn refuses an infinite input (NaN alone is allowed); the
     # native column maxima of |X| are infinite exactly for those columns.
@@ -110,12 +112,14 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     py_setitem(fields,"_mojolearn_fitted",True)
     if py_contains(fields,"feature_names_in_"):
         _ = py_call(fields.pop,"feature_names_in_")
-    if project and scaled is None:
+    if project and not scaled:
         # fit_transform without the fused projection (the direct entry, or
         # n*d >= 2^27): the transform runs on the values prepared above.
         return _maxabs_apply(fields,values^,entries,context)
     _ = values^
-    return scaled if project else model
+    if project:
+        return scaled.value()
+    return model
 
 
 def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:

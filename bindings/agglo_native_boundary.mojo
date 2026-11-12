@@ -29,6 +29,7 @@ from core.agglo_native_api import (
 )
 from core.agglo_native_state import AggloReferenceKey, AggloReferenceState
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
+from bindings.py_optional import py_present
 
 
 @fieldwise_init
@@ -352,16 +353,17 @@ def agglo_reference_labels(fields: PythonObject, binding: PythonObject, refs: Py
     labels: PythonObject, query: PythonObject, refs_address: Int, labels_address: Int, query_address: Int,
     rows: Int, queries: Int, features: Int, context: PythonObject, resident: Bool = True) raises -> PythonObject:
     var connection = DBSCANConnection(binding)
-    var owner = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var owner = Optional[PythonObject]()
     if resident:
-        owner = agglo_reference_owner(fields, connection, refs, labels, refs_address, labels_address, rows, features, context)
+        owner = py_present(agglo_reference_owner(fields, connection, refs, labels, refs_address, labels_address, rows, features, context))
     var dst = agglo_array(List[Int](length=1, fill=queries), "<i4", context)
     var dst_address = Int(py=classical_address(dst))
     try:
-        if owner is not None:
-            var driver = owner.downcast_value_ptr[AggloReferenceOwner]()[].state.driver.copy()
+        if Bool(owner):
+            var driver = owner.value().downcast_value_ptr[AggloReferenceOwner]()[].state.driver.copy()
             var request = agglo_resident_query(query_address, dst_address,
-                owner.downcast_value_ptr[AggloReferenceOwner]()[].state.handle, queries, features)
+                owner.value().downcast_value_ptr[AggloReferenceOwner]()[].state.handle, queries, features)
             with GILReleased(Python()):
                 _ = driver.resident(request)
         else:

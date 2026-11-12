@@ -8,6 +8,7 @@ from bindings.py_balanced import py_type, py_get, py_setitem, py_contains
 from bindings.mode_metadata_native import _fields
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.native_owner_lifetime import native_release_admit
+from bindings.py_optional import py_present
 
 
 def cluster_initialize_py(model: PythonObject, values: PythonObject,
@@ -26,20 +27,21 @@ def cluster_initialize_py(model: PythonObject, values: PythonObject,
             var candidate = py_get(schemas, ancestry[i])
             if candidate is not None:
                 found_names = candidate
-    var names = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var names = Optional[PythonObject]()
     if found_names:
-        names = found_names.value()
-    if names is None or py_type(names) is not b.tuple:
+        names = py_present(found_names.value())
+    if not names or py_type(names.value()) is not b.tuple:
         raise Error("TypeError: cluster constructor requires its connected native class")
-    if len(values) != len(names):
+    if len(values) != len(names.value()):
         raise Error("TypeError: cluster constructor argument count differs from its parameter schema")
     classical_connect_numpy(context)
     var fields = _fields(model)
-    for i in range(len(names)):  # driver-loop: admit every released owner before changing constructor state
-        if py_type(names[i]) is not b.str:
+    for i in range(len(names.value())):  # driver-loop: admit every released owner before changing constructor state
+        if py_type(names.value()[i]) is not b.str:
             raise Error("TypeError: cluster constructor parameter names require exact strings")
-        if py_contains(fields, names[i]) and fields[names[i]] is not values[i]:
-            native_release_admit(fields[names[i]], context)
-    for i in range(len(names)):  # driver-loop: retain fully admitted constructor metadata, never numerical work
-        py_setitem(fields, names[i], values[i])
+        if py_contains(fields, names.value()[i]) and fields[names.value()[i]] is not values[i]:
+            native_release_admit(fields[names.value()[i]], context)
+    for i in range(len(names.value())):  # driver-loop: retain fully admitted constructor metadata, never numerical work
+        py_setitem(fields, names.value()[i], values[i])
     return PythonObject(None)

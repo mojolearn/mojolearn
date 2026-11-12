@@ -16,6 +16,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_kernel_inference_native import _kernel_entry
 from core.host_inference_impl import host_inference_raw_finite
 from core.host_sparse_impl import host_sparse_uint64_bound
+from bindings.py_optional import py_present
 
 
 def host_projection_admit_state(fields: PythonObject, pca: Bool, context: PythonObject) raises:
@@ -48,11 +49,12 @@ def _projection_buffer(value: PythonObject, rows: Int, columns: Int, matrix: Boo
 def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bool, inverse: Bool, source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
     var fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
     var format = host_sparse_format(source)
-    var x = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var x = Optional[PythonObject]()
     if format.byte_length() > 0:
         # Sparse inputs bypassed the old dense validation scan, then expanded
         # in their original dtype before the shared f32 preparation step.
-        x = host_sparse_dense(source, format, context)
+        x = py_present(host_sparse_dense(source, format, context))
     else:
         classical_admit_value(source, context)
         var prepared = native_torch_numpy(source) if _ordinary_torch(py_type(source), context) else source
@@ -73,17 +75,17 @@ def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bo
                     classical_is_array(raw, context) or Bool(py=raw.dtype.isnative))
             # Row N279: X was admitted and viewed above; cast that view
             # instead of admitting and viewing it again in host_tree_input.
-            x = host_tree_cast(raw, context)
+            x = py_present(host_tree_cast(raw, context))
             _ = raw^
-        if x is None:
-            x = host_tree_input(prepared, context)
+        if not x:
+            x = py_present(host_tree_input(prepared, context))
         _ = prepared^
-    var rows = Int(py=x.shape[0])
+    var rows = Int(py=x.value().shape[0])
     var features = Int(py=fields["n_features_in_"])
     var components = Int(py=fields["n_components_"])
     if features < 1 or components < 1 or components > 2147483647 // features or rows > 2147483647 // max(features, components):
         raise Error("projection dimensions must be positive and fit native indexing")
-    if Int(py=x.shape[1]) != (components if inverse else features):
+    if Int(py=x.value().shape[1]) != (components if inverse else features):
         raise Error("projection input width differs from fitted dimensions")
     if not fitting and not inverse:
         host_inference_feature_names(model, fields, context)
@@ -104,19 +106,19 @@ def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bo
             raise Error("PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
     var out = host_archive_typed(Python.tuple(rows, features if inverse else components), "<f4", context["output_context"])
     if whiten and inverse:
-        _ = py_call(_kernel_entry("pca_whiten_inverse_transform", context), classical_address(x), classical_address(basis),
+        _ = py_call(_kernel_entry("pca_whiten_inverse_transform", context), classical_address(x.value()), classical_address(basis),
             classical_address(singular), classical_address(mean), classical_address(out), Python.list(rows, features, components, samples))
     elif whiten:
-        _ = py_call(_kernel_entry("pca_whiten_transform", context), classical_address(x), classical_address(mean),
+        _ = py_call(_kernel_entry("pca_whiten_transform", context), classical_address(x.value()), classical_address(mean),
             classical_address(basis), classical_address(singular), classical_address(out), Python.list(rows, features, components, samples))
     elif inverse:
-        _ = py_call(_kernel_entry("inverse_transform", context), classical_address(x), classical_address(basis),
+        _ = py_call(_kernel_entry("inverse_transform", context), classical_address(x.value()), classical_address(basis),
             classical_address(mean), classical_address(out), Python.list(rows, features, components, Int(pca)))
     elif pca:
-        _ = py_call(_kernel_entry("pca_transform", context), classical_address(x), classical_address(mean),
+        _ = py_call(_kernel_entry("pca_transform", context), classical_address(x.value()), classical_address(mean),
             classical_address(basis), classical_address(out), Python.list(rows, features, components))
     else:
-        _ = py_call(_kernel_entry("tsvd_transform", context), classical_address(x), classical_address(basis),
+        _ = py_call(_kernel_entry("tsvd_transform", context), classical_address(x.value()), classical_address(basis),
             classical_address(out), Python.list(rows, features, components))
     _ = x^
     _ = basis^

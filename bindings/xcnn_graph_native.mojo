@@ -33,6 +33,7 @@ from bindings.xseq_native_common import XseqStream
 from bindings.xcnn_conv_native import _snapshot, _dimension, _relu_backward, xcnn_relu_forward
 from core.cast_in import cast_in_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_optional import py_present
 from bindings.xcnn_common import (
     xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
@@ -128,21 +129,22 @@ def _keys_equal(a: PythonObject, b: PythonObject) raises -> Bool:
 def _edge_view(source: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = xcnn_builtins()
     var cls = py_type(source)
-    var a = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var a = Optional[PythonObject]()
     if cls is b.tuple or cls is b.list:
         if len(source) == 2 and (py_type(source[0]) is b.list or py_type(source[0]) is b.tuple) and (py_type(source[1]) is b.list or py_type(source[1]) is b.tuple):
             if len(source[0]) == 0 and len(source[1]) == 0:
                 a = xcnn_host_i32([2, 0], context)
-    if a is None:
+    if not a:
         sequential_admit_value(source, context)
-        a = sequential_input(source, context)
+        a = py_present(sequential_input(source, context))
     # Retain one real buffer export and immutable layout words for the whole
     # public operation, including signed strides and non-native byte order.
-    var pin = native_buffer_view(a)
+    var pin = native_buffer_view(a.value())
     var borrowed = AdmittedBorrowedBuffer(pin)
     var layout = borrowed.layout.value().copy()
     graph_run_check_edge_layout(layout.shape)
-    var dtype = a.dtype
+    var dtype = a.value().dtype
     var item = layout.itemsize
     var kind = cast_in_kind(Int(py=dtype.num), item, "edge_index")
     return Python.tuple(pin, xcnn_tuple(layout.shape), xcnn_tuple(layout.strides), layout.address, item, kind,

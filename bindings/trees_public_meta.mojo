@@ -79,6 +79,7 @@ from bindings.base_helpers_released import (
 )
 from core.linear_entry_table import LinearEntryKey
 from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_col_sums, rm_means_finish, rm_center, rm_fit, rm_predict
+from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
@@ -1815,7 +1816,8 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         _ = xt_transpose_f64(glue, trees_address(S), trees_address(St), n, c)
         _ = St  # keep the Python object alive through the native call above
     var yj = admitted_vector(n, "<i4", context)
-    var y64 = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var y64 = Optional[PythonObject]()
     if not sigmoid:
         y64 = admitted_vector(n, "<f8", context)
     var cals = Python.list()
@@ -1824,7 +1826,7 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         var f = trees_address(St) + 8 * j * n
         _ = St  # keep the Python object alive through the native call above
         _ = xt_indicator_codes(glue, trees_address(codes), trees_address(yj),
-                               trees_address(y64) if y64 is not None else 0, n, cls)
+                               trees_address(y64.value()) if Bool(y64) else 0, n, cls)
         _ = yj  # keep the Python object alive through the native call above
         _ = y64  # keep the Python object alive through the native call above
         if sigmoid:
@@ -1838,7 +1840,7 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         else:
             var kx = admitted_vector(n, "<f8", context)
             var ky = admitted_vector(n, "<f8", context)
-            var m = xt_isotonic_fit(glue, f, trees_address(y64), trees_address(kx), trees_address(ky), n)
+            var m = xt_isotonic_fit(glue, f, trees_address(py_or_none(y64)), trees_address(kx), trees_address(ky), n)
             _ = ky  # keep the Python object alive through the native call above
             _ = kx  # keep the Python object alive through the native call above
             _ = y64  # keep the Python object alive through the native call above

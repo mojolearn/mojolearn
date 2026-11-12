@@ -14,6 +14,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_iforest_fit_native import _if_fit_options, _if_fit_number, _if_fit_truth, _if_fit_repr
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.optimizer_public_words import stash_python_error
+from bindings.py_optional import py_or_none, py_present
 
 
 def _density_save_plain(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> Bool:
@@ -118,16 +119,17 @@ def _density_save_mode(model: PythonObject, context: PythonObject) raises -> Pyt
     var mode = _density_save_attribute(model, "numeric_mode", context, True)
     if not _if_fit_truth(mode, context):
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var text = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var text = Optional[PythonObject]()
     try:
-        text = _density_save_text(mode, context)
+        text = py_present(_density_save_text(mode, context))
     except error:
         if not String(error).startswith("TypeError:"):
             raise error^
-    if text is not None and py_type(mode) is not context["archive_bytes_type"] and py_type(mode) is not context["archive_bytearray_type"]:
-        text = py_call(py_call(text.strip).lower)
-        if String(text) == "identical" or String(text) == "fast":
-            return text
+    if Bool(text) and py_type(mode) is not context["archive_bytes_type"] and py_type(mode) is not context["archive_bytearray_type"]:
+        text = py_present(py_call(py_call(text.value().strip).lower))
+        if String(text.value()) == "identical" or String(text.value()) == "fast":
+            return py_or_none(text)
     raise Error("mojolearn: cannot save invalid numeric_mode " + _density_save_repr(mode, context))
 
 

@@ -11,6 +11,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
+from bindings.py_optional import py_or_none
 from bindings.decomp_owner_common import (
     F32P, decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_set_mode,
 )
@@ -128,15 +129,17 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
     var d = Int(py=w.shape[1])
     var psi = admit_x(decomp_attr(model, fields, "noise_variance_"), 1, "noise_variance_", context)
     var mean = admit_x(decomp_attr(model, fields, "mean_"), 1, "mean_", context)
-    var x = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var x = Optional[PythonObject]()
     var n = 0
     if op == _TRANSFORM or op == _SCORE_SAMPLES or op == _SCORE:
         x = decomp_input(source, "FactorAnalysis", context)
-        n = Int(py=x.shape[0])
-        var width = Int(py=x.shape[1])
+        n = Int(py=x.value().shape[0])
+        var width = Int(py=x.value().shape[1])
         if width != d:
             raise Error("x_decomp: cannot broadcast 1x" + String(d) + " against " + String(n) + "x" + String(width))
-    var out = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var out = Optional[PythonObject]()
     if op == _TRANSFORM:
         out = decomp_f32(Python.tuple(n, nc), context)
     elif op == _COVARIANCE or op == _PRECISION:
@@ -146,8 +149,8 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
     var spare = classical_address(w)
     _ = w  # keep the Python object alive through the native call above
     var value = py_call_typed(entries["x_decomp_fa_query"], Python.list(
-        op, classical_address(x) if x is not None else spare, n, d, nc, classical_address(w), classical_address(psi),
-        classical_address(mean), classical_address(out) if out is not None else spare))
+        op, classical_address(x.value()) if Bool(x) else spare, n, d, nc, classical_address(w), classical_address(psi),
+        classical_address(mean), classical_address(out.value()) if Bool(out) else spare))
     _ = x  # keep the Python object alive through the native call above
     _ = psi  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -161,4 +164,4 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
         var _keep_ret_out = PythonObject(Float64(py=value))
         _ = out  # keep the Python object alive through the native call above
         return _keep_ret_out^
-    return out
+    return py_or_none(out)

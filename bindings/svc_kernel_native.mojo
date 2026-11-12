@@ -90,6 +90,7 @@ from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnap
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
+from bindings.py_optional import py_or_none
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_info,
 )
@@ -396,7 +397,8 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
         sw_owner = Python.tuple(weights.keep, weights.owner)
         sw_address = weights.source.addr
     var codes = PythonObject(None)
-    var cwa = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var cwa = Optional[PythonObject]()
     var n_classes = 0
     if class_weight is not None:
         if len(svc_shape_of(y, context)) != 1:
@@ -421,14 +423,14 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
             cwa = family_array(Python.tuple(PythonObject(n_classes)), "<f8", context)
             if n_classes > 0 and Int(py=family_call(svc_base("class_ratio_f64", context), classical_address(cnt),
                                                      PythonObject(n_classes), PythonObject(n_rows), PythonObject(0),
-                                                     classical_address(cwa))) != 0:
+                                                     classical_address(cwa.value()))) != 0:
                 svc_zero_division(False)
             _ = cnt  # keep the Python object alive through the native calls above
             _ = cwa  # keep the Python object alive through the native calls above
             _ = cnt^
         else:
             cwa = family_array(Python.tuple(PythonObject(n_classes)), "<f8", context)
-            var cp = FAMILY_F64P(unsafe_from_address=_addr(cwa))
+            var cp = FAMILY_F64P(unsafe_from_address=_addr(cwa.value()))
             _ = cwa  # keep the Python object alive through the native call above
             for i in range(n_classes):  # driver-loop: over the classes (the default weight 1.0)
                 cp[i] = 1.0
@@ -445,8 +447,8 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     if n_rows > 0:
         _ = svc_epilogue_execute(binding, native,
                         PythonObject(sw_address),
-                        PythonObject(0) if cwa is None else classical_address(codes),
-                        PythonObject(0) if cwa is None else classical_address(cwa),
+                        PythonObject(0) if not cwa else classical_address(codes),
+                        PythonObject(0) if not cwa else classical_address(cwa.value()),
                         classical_address(out),
                         Python.list(PythonObject(_GLUE_C_ROWS), PythonObject(n_rows), PythonObject(n_classes),
                                     PythonObject(c_value), PythonObject(0)))
@@ -544,7 +546,8 @@ def _pair_select(binding: PythonObject, codes: PythonObject, ci: Int, cj: Int, c
     var n = Int(py=codes.shape[0])
     var idx = family_array(Python.tuple(PythonObject(n)), "<i4", context)
     var lab = family_array(Python.tuple(PythonObject(n)), "<f4", context)
-    var cout = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var cout = Optional[PythonObject]()
     if c_rows is not None:
         cout = family_array(Python.tuple(PythonObject(n)), "<f4", context)
     var m = 0
@@ -553,11 +556,11 @@ def _pair_select(binding: PythonObject, codes: PythonObject, ci: Int, cj: Int, c
                                 PythonObject(0) if c_rows is None else classical_address(c_rows),
                                 classical_address(lab), classical_address(idx),
                                 Python.list(PythonObject(_GLUE_SELECT), PythonObject(n), PythonObject(ci), PythonObject(cj),
-                                            PythonObject(0) if cout is None else classical_address(cout))))
+                                            PythonObject(0) if not cout else classical_address(cout.value()))))
         _ = lab  # keep the Python object alive through the native call above
         _ = idx  # keep the Python object alive through the native call above
         _ = cout  # keep the Python object alive through the native call above
-    return Python.tuple(idx, lab, cout, PythonObject(m))
+    return Python.tuple(idx, lab, py_or_none(cout), PythonObject(m))
 
 
 # ---------------------------------------------------------------- the machines
@@ -901,13 +904,14 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
                 else:
                     sub = _gather(binding, x_meta.source.addr, x_rows, x_cols, rows_addr, nt, 0, x_cols, context, native)
                     _ = rows_held  # keep the Python object alive through the native call above
-                var sub_c = PythonObject(None)
+                # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+                var sub_c = Optional[PythonObject]()
                 if c_rows is not None:
                     sub_c = _gather(binding, _addr(c_rows), n_all, 1, rows_addr, nt, 0, 1, context, native)
                     _ = rows_held  # keep the Python object alive through the native call above
                 var cols = Int(py=sub.shape[1])
                 var solved = _solve(fields, binding, _addr(sub), nt, cols, _addr(lab), gamma,
-                                    0 if sub_c is None else _addr(sub_c), context, settings, native,
+                                    0 if not sub_c else _addr(sub_c.value()), context, settings, native,
                                     DoorRowsStore.none(), False, False)
                 _ = lab  # keep the Python object alive through the native call above
                 _ = sub_c  # keep the Python object alive through the native call above
@@ -1428,10 +1432,11 @@ def _epilogue(fields: PythonObject, binding: PythonObject, mode: Int, dec: Pytho
     """`SVC._epilogue`: the per-row epilogues in the binding."""
     var out = family_array(shape, typestr, context)
     if n_rows > 0:
-        var abuf = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var abuf = Optional[PythonObject]()
         if ab is not None and len(ab) > 0:
             abuf = family_array(Python.tuple(PythonObject(2 * len(ab))), "<f8", context)
-            var ap = FAMILY_F64P(unsafe_from_address=_addr(abuf))
+            var ap = FAMILY_F64P(unsafe_from_address=_addr(abuf.value()))
             _ = abuf  # keep the Python object alive through the native call above
             for i in range(len(ab)):  # driver-loop: over the class pairs (their sigmoid parameters)
                 ap[2 * i] = svc_float(ab[i][0])
@@ -1440,7 +1445,7 @@ def _epilogue(fields: PythonObject, binding: PythonObject, mode: Int, dec: Pytho
                 _ = abuf  # keep the Python object alive through the native call above
         _ = svc_epilogue_execute(binding, native, classical_address(dec),
                         classical_address(codes) if n_pairs > 0 else PythonObject(0),
-                        PythonObject(0) if abuf is None else classical_address(abuf), classical_address(out),
+                        PythonObject(0) if not abuf else classical_address(abuf.value()), classical_address(out),
                         Python.list(PythonObject(mode), PythonObject(n_rows), PythonObject(n_pairs),
                                     PythonObject(len(svc_field(fields, "classes_"))), PythonObject(label1)))
         _ = abuf  # keep the Python object alive through the native call above

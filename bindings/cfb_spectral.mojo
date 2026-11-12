@@ -62,6 +62,7 @@ from bindings.native_owner_lifetime import native_release_admit
 from providers.python.spectral_lifecycle_pyapi import spectral_admit, spectral_input
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
+from bindings.py_optional import py_present
 
 comptime _DENSE_EMPTY = -1
 comptime _DENSE_NONFINITE = -2
@@ -324,7 +325,8 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
     var triples = _sparse_triples(source, context)
     var n: Int
     var nnz = 0
-    var dense = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var dense = Optional[PythonObject]()
     var rows = PythonObject(None)
     var cols = PythonObject(None)
     var vals = PythonObject(None)
@@ -342,8 +344,8 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
         nnz = Int(py=vals.shape[0])
     else:
         dense = admit_family(_densified(source, context), 2, "X", context).array
-        n = Int(py=dense.shape[0])
-        if Int(py=dense.shape[1]) != n:
+        n = Int(py=dense.value().shape[0])
+        if Int(py=dense.value().shape[1]) != n:
             raise Error("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
     var k = (max(n // 10, 1) if automatic_neighbors else neighbors) if native_options else _resolved_neighbors(fields, n, clustering)
     var a = SpectralAffinityRoom(n, public_storage, context)
@@ -352,9 +354,9 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
             py_setitem(fields, "affinity_matrix_", a.public_array)
         return a^
     var status = SpectralAffinityStatus()
-    var sp = dense is None
+    var sp = not dense
     var connection = SpectralPreparationConnection(base, context)
-    var request = SpectralKNNRequest(0 if sp else Int(py=classical_address(dense)),
+    var request = SpectralKNNRequest(0 if sp else Int(py=classical_address(dense.value())),
         Int(py=classical_address(rows)) if sp and nnz else 0,
         Int(py=classical_address(cols)) if sp and nnz else 0,
         Int(py=classical_address(vals)) if sp and nnz else 0,
@@ -582,7 +584,8 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         use_dense = (connection.value().capabilities & SPECTRAL_CAP_DENSE) != 0
     # `dense` is the matrix the dense entry reads (an Array); `coo_source`
     # the input of the COO route.
-    var dense = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var dense = Optional[PythonObject]()
     var from_matrix = False
     var coo_source = source
     if affinity == "precomputed":
@@ -599,11 +602,11 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         var aff = _rbf_affinity(x, config.gamma, routes.decomp, context)
         py_setitem(fields, "affinity_matrix_", aff.public_array)
         py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
-        dense = aff.public_array
+        dense = py_present(aff.public_array)
         from_matrix = True
     elif affinity == "precomputed_nearest_neighbors":
         var affinity_room = _knn_affinity(fields, source, True, routes.base, context, True, config.fit.neighbors)
-        dense = affinity_room.public_array
+        dense = py_present(affinity_room.public_array)
         from_matrix = True
     var labels = PythonObject(None)
     var embedding = PythonObject(None)
@@ -611,16 +614,16 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
     var n_out: Int
     var n: Int
     var options = config.fit
-    if use_dense and dense is not None:
+    if use_dense and Bool(dense):
         # the dense matrix straight to the device entry
-        n = Int(py=dense.shape[0])
+        n = Int(py=dense.value().shape[0])
         _sc_check_shape(clusters, n, k)
         labels = family_array(Python.tuple(n), "<i4", context)
         embedding = family_array(Python.tuple(n, k), "<f4", context)
         if predicting:
             state.allocate(n, k, clusters, context)
         var request = SpectralFitRequest(
-            SpectralInput(Int(py=classical_address(dense)), 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
+            SpectralInput(Int(py=classical_address(dense.value())), 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
             Int(py=classical_address(labels)), Int(py=classical_address(embedding)), state.view(), options)
         n_out = spectral_fit_run(connection.value(), request)
         _ = state
@@ -633,7 +636,7 @@ def _sc_fit(model: PythonObject, routes: SpectralRoutePins, source: PythonObject
         # the dense entry (the CPU-only host binding)
         var coo: _Coo
         if from_matrix:
-            coo = _dense_coo(dense, "SpectralClustering", routes.base, context)
+            coo = _dense_coo(dense.value(), "SpectralClustering", routes.base, context)
         else:
             coo = _coo_triples(coo_source, "SpectralClustering", routes.base, context)
         n = coo.n
@@ -968,7 +971,8 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
         # its supported native input before any shape/property operation,
         # after the same option/route checks. Exact sparse inputs stay allowed.
         classical_admit_value(source, context)
-    var dense = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var dense = Optional[PythonObject]()
     var generated: Optional[SpectralAffinityRoom] = None
     var from_matrix = False
     if affinity == "precomputed_nearest_neighbors":
@@ -998,13 +1002,13 @@ def _se_execute(config: SpectralEmbeddingConfig, drop_first: Bool, norm_laplacia
     var seed = config.seed
     var embedding = PythonObject(None)
     var n_out: Int
-    if use_dense and (dense is not None or generated):
-        var n = generated.value().rows if generated else Int(py=dense.shape[0])
+    if use_dense and (Bool(dense) or generated):
+        var n = generated.value().rows if generated else Int(py=dense.value().shape[0])
         _se_check_shape(k, n, n_lanczos)
         if fields is not None:
             py_setitem(fields, "n_neighbors_", PythonObject(config.neighbors_for(n)))
         embedding = family_array(Python.tuple(n, k), "<f4", context)
-        var address = generated.value().address() if generated else Int(py=classical_address(dense))
+        var address = generated.value().address() if generated else Int(py=classical_address(dense.value()))
         var request = SpectralEmbeddingRequest(
             SpectralInput(address, 0, 0, 0, SPECTRAL_DENSE, n, 0, 0),
             Int(py=classical_address(embedding)), SpectralEmbeddingOptions(n_lanczos, k, 0,

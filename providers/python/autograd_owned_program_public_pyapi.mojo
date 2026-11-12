@@ -13,6 +13,7 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_adopt,
 )
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_or_none, py_present
 
 comptime OWNED_PROGRAM_ABI_NAME = "mojolearn.owned_program.public.v1"
 
@@ -214,15 +215,16 @@ def owned_program_initialize_py(owner: PythonObject, binding: PythonObject, hand
     var state = _OWNED_PROGRAMS.get_or_create_ptr()
     ref row = state[].rows[_connection(binding)]
     var previous = py_get(fields, "_lifetime")
-    var retained = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var retained = Optional[PythonObject]()
     if previous is not None:
         var held = previous.downcast_value_ptr[NativeDescriptorResource]()
         if (held[].provider is row.provider and held[].handle == Int(py=handle) and len(held[].context) == 2
                 and held[].context[0] == admitted[1] and held[].context[1] == row.executor
                 and held[].close_operation == 1):
-            retained = previous
-    _release_previous(fields, binding, admitted[1], retained)
-    if retained is not None:
+            retained = py_present(previous)
+    _release_previous(fields, binding, admitted[1], py_or_none(retained))
+    if Bool(retained):
         py_setitem(fields, "_b", binding)
         py_setitem(fields, "_id", handle)
         return PythonObject(None)

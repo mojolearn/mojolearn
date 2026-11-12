@@ -34,6 +34,7 @@ from bindings.kmeans_variants_boundary import (
 )
 from bindings.kmeans_variants_resident_boundary import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
 from bindings.native_buffer_address import native_buffer_address
+from bindings.py_optional import py_or_none
 from core.kmeans_variants_api import (
     VariantsSpan, VariantsResultSlot, VariantsQueryRequest, BisectPredictRequest, VARIANTS_CAP_RESIDENT,
 )
@@ -144,12 +145,13 @@ def _centers_query(model: PythonObject, binding: PythonObject, x: PythonObject,
     var result = VariantsResultSlot()
     if held:
         var k = Int(py=centers_field.shape[0])
-        var output = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var output = Optional[PythonObject]()
         if kind == _XC_RES_PREDICT:
             output = family_array(Python.tuple(n), "<i4", context)
         elif kind == _XC_RES_TRANSFORM:
             output = family_array(Python.tuple(n, k), "<f4", context)
-        var address = 0 if output is None else Int(py=classical_address(output))
+        var address = 0 if not output else Int(py=classical_address(output.value()))
         var source = variants_span(x)
         var total = Float64(0)
         try:
@@ -160,7 +162,7 @@ def _centers_query(model: PythonObject, binding: PythonObject, x: PythonObject,
             variants_resident_retire(held.take())
             _ = x
             _ = output
-        return PythonObject(-total) if kind == _XC_RES_SCORE else output
+        return PythonObject(-total) if kind == _XC_RES_SCORE else py_or_none(output)
     var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
     var k = Int(py=centers.shape[0])
     var connection = variants_connection(binding)

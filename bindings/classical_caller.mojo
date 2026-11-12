@@ -7,27 +7,29 @@
 from std.python import PythonObject
 from bindings.native_caller_frame import native_caller_globals
 from bindings.py_balanced import py_get, py_type
+from bindings.py_optional import py_present
 
 
 def classical_caller_outside(context: PythonObject) raises -> Bool:
     """True when the Python frame that called the public method belongs to
     code outside the package (the rule of _mode._caller_outside). Frame and
     globals metadata are read through CPython's native frame APIs only."""
-    var globs = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var globs = Optional[PythonObject]()
     try:
         # Depth 0 is the public method's own one-call frame. A door that
         # forwards to another compiled door (PyObject_Call of a C entry) adds
         # no Python frame, so the depth is the same in either owner.
-        globs = native_caller_globals(1)
+        globs = py_present(native_caller_globals(1))
     except:
         return True
-    if globs is None:
+    if not globs:
         return True
-    if py_get(globs, "__mojolearn_user_boundary__") is PythonObject(True):
+    if py_get(globs.value(), "__mojolearn_user_boundary__") is PythonObject(True):
         return True
-    if py_get(globs, "__mojolearn_internal__") is PythonObject(True):
+    if py_get(globs.value(), "__mojolearn_internal__") is PythonObject(True):
         return False
-    var name = py_get(globs, "__name__")
+    var name = py_get(globs.value(), "__name__")
     if py_type(name) is not py_type(PythonObject("")):
         return True
     var module = String(name)

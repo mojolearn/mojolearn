@@ -18,6 +18,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.trees_lifetime import trees_resident_new
 from bindings.trees_side_records import trees_side_get, trees_side_put
 from bindings.p3nc_fitted_freeze import fitted_is_freezable_any
+from bindings.py_optional import py_present
 
 comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
@@ -241,13 +242,14 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
         # keeps the per-call fit: every build then scores the edited values.
         resident = PythonObject(None)
     var held = 0
-    var record = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var record = Optional[PythonObject]()
     var same_train = False
     if resident is not None:
-        record = trees_side_get(_HOST_TOKEN_SLOT, model)
-        same_train = record is not None and record[1] is fields["_x"]
+        record = py_present(trees_side_get(_HOST_TOKEN_SLOT, model))
+        same_train = Bool(record) and record.value()[1] is fields["_x"]
         if same_train:
-            held = Int(py=record[0])
+            held = Int(py=record.value()[0])
         _ = py_call(params.append, PythonObject(held))
     var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", context["output_context"])
     try:
@@ -271,7 +273,7 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
             # which releases the old token; a reissued equal token keeps its
             # lifetime. A model without weak references keeps no record, so
             # its token is released at once.
-            var lifetime = record[2] if record is not None and token == Int(py=record[0]) else trees_resident_new(resident[0], token)
+            var lifetime = record.value()[2] if Bool(record) and token == Int(py=record.value()[0]) else trees_resident_new(resident[0], token)
             _ = trees_side_put(_HOST_TOKEN_SLOT, model, Python.list(PythonObject(token), fields["_x"], lifetime))
     _ = info^
     if want != 2 and public:

@@ -61,6 +61,7 @@ from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_present
 # RUN (typed, no Python): the checks, refusal wording, host scans and copies.
 from neighbors.neighbors_knn_run import (
     KNN_DIST_LP, KNN_DIST_JS, KNN_CODE_F32, KNN_CODE_F64, KNN_CODE_I64, KNN_REDUCE_MIN, KNN_REDUCE_MAX,
@@ -217,27 +218,28 @@ def _knn_lists_unchanged(fields: PythonObject, lists: PythonObject, stored: Pyth
 def _admit_knn_state(model: PythonObject, context: PythonObject) raises:
     classical_check_layout(model, context)
     var fields = py_fields(model)
-    var holder = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var holder = Optional[PythonObject]()
     if py_get(fields, "_resident_holder") is not None:
-        holder = _holder(fields)
+        holder = py_present(_holder(fields))
     # Class lists are mutable containers. Perf (perf3-nbr-msel-trees): they
     # are admitted once per state; the holder keeps the admitted list objects
     # and a tuple of their items, and a later call compares item identities
     # natively (O(classes) pointer reads, no per-item admission). Lists of
     # anything but exact str/int/float/bool are admitted on every call.
     var lists = Python.tuple("_classes_list", "_label_names")
-    if holder is None or not _knn_lists_unchanged(fields, lists, py_get(holder, "admitted_lists")):
+    if not holder or not _knn_lists_unchanged(fields, lists, py_get(holder.value(), "admitted_lists")):
         for i in range(len(lists)):  # small-loop(fixed neighbor class owners)
             var value = py_get(fields, lists[i])
             if value is not None:
                 classical_admit_value(value, context)
-        if holder is not None:
-            py_setitem(holder, "admitted_lists", _knn_lists_record(fields, lists))
+        if Bool(holder):
+            py_setitem(holder.value(), "admitted_lists", _knn_lists_record(fields, lists))
     var scalars = Python.tuple("algorithm", "metric", "p", "weights", "n_neighbors", "query_tile",
         "n_features_in_", "n_samples_fit_", "outputs_2d_")
     var buffers = Python.tuple("_index", "_y_cols")
     var stamp = knn_state_values(fields, scalars + buffers)
-    if holder is not None and knn_state_unchanged(py_get(holder, "admitted_predict"), stamp):
+    if Bool(holder) and knn_state_unchanged(py_get(holder.value(), "admitted_predict"), stamp):
         return
     for i in range(len(scalars)):  # small-loop(fixed neighbor parameter and fitted scalar schema)
         var value = py_get(fields, scalars[i])
@@ -247,8 +249,8 @@ def _admit_knn_state(model: PythonObject, context: PythonObject) raises:
         var value = py_get(fields, buffers[i])
         if value is not None:
             classical_admit_value(value, context)
-    if holder is not None:
-        py_setitem(holder, "admitted_predict", stamp)
+    if Bool(holder):
+        py_setitem(holder.value(), "admitted_predict", stamp)
 
 
 def _b() raises -> PythonObject:
@@ -434,25 +436,26 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     var fields = py_fields(model)
     var key = Python.tuple(classical_address(idx), family_call(b.tuple, idx.shape))
     var holder = py_get(fields, PythonObject("_resident_holder"), PythonObject(None))
-    var cached = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var cached = Optional[PythonObject]()
     if holder is not None:
-        cached = py_get(_holder(fields), PythonObject("index"), PythonObject(None))
-    if cached is not None:
-        if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
+        cached = py_present(py_get(_holder(fields), PythonObject("index"), PythonObject(None)))
+    if Bool(cached):
+        if py_type(cached.value()) is not b.tuple or len(cached.value()) != 3 or py_type(cached.value()[1]) is not b.int:
             raise Error("TypeError: neighbor resident state must retain its native handle and module")
-        var previous = cached[0]
+        var previous = cached.value()[0]
         if (py_type(previous) is not b.tuple or len(previous) != 2 or py_type(previous[0]) is not b.int
                 or py_type(previous[1]) is not b.tuple or len(previous[1]) != 2
                 or py_type(previous[1][0]) is not b.int or py_type(previous[1][1]) is not b.int):
             raise Error("TypeError: neighbor resident key must contain native address and shape words")
-        _ = knn_door(cached[2], "knn_index_release")
+        _ = knn_door(cached.value()[2], "knn_index_release")
     # Hazard H4 (lane pass2-cluster-nbr): `identical` and `fast` keep
     # separate handle registries, so a handle is reused only by the binding
     # that minted it; another binding releases it through its minter below
     # and prepares its own.
-    if cached is not None and cached[2] is binding and _eq(cached[0], key):
-        return cached[1]
-    if cached is not None:
+    if Bool(cached) and cached.value()[2] is binding and _eq(cached.value()[0], key):
+        return cached.value()[1]
+    if Bool(cached):
         knn_release(model)
     var status = List[Int32](length=1, fill=Int32(0))
     var prepare_params = Python.list(family_call(b.int, idx.shape[0]), family_call(b.int, idx.shape[1]))
@@ -989,9 +992,10 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     # it, every later call classifies against the device copy; a binding
     # without that entry takes the per-call path.
     var resident = knn_door(binding, "knn_classify_resident")
-    var handle = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var handle = Optional[PythonObject]()
     if resident is not None:
-        handle = _resident_handle(model, binding, idx)
+        handle = py_present(_resident_handle(model, binding, idx))
     # n_index, n_queries, n_features, k, query_tile, n_outputs, want_proba,
     # then n_classes per output (bindings/_mojolearn.mojo::knn_classify_binding).
     var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
@@ -1000,10 +1004,10 @@ def _classify_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq: In
     var used: PythonObject
     # Two words: the finite word, and for a fold the index-range word.
     var status = List[Int32](length=2, fill=Int32(0))
-    if handle is not None:
+    if Bool(handle):
         # The handle rides at the front of `params`: a binding takes at most
         # eight arguments and the classifier uses all eight.
-        var front = Python.list(handle)
+        var front = Python.list(handle.value())
         _ = py_call(front.extend, params)
         # Lane a7b: the queries are tested behind the entry's upload; lane
         # a8b-device-x-neighbors-rest: a fold is gathered and tested there.
@@ -1146,9 +1150,10 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     var idx = family_field(fields, "_index")
     # DEVIATION 3002: the regressor's resident door; see the classifier.
     var resident = knn_door(binding, "knn_regress_resident")
-    var handle = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var handle = Optional[PythonObject]()
     if resident is not None:
-        handle = _resident_handle(model, binding, idx)
+        handle = py_present(_resident_handle(model, binding, idx))
     # n_index, n_queries, n_features, k, query_tile, n_outputs
     # (bindings/_mojolearn.mojo::knn_regress_binding).
     var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
@@ -1156,12 +1161,12 @@ def _reg_predict_on(model: PythonObject, binding: PythonObject, q_addr: Int, nq:
     var used: PythonObject
     # Two words: the finite word, and for a fold the index-range word.
     var status = List[Int32](length=2, fill=Int32(0))
-    if handle is not None:
+    if Bool(handle):
         # Lane a7b: the queries are tested behind the entry's upload; lane
         # a8b-device-x-neighbors-rest: a fold is gathered and tested there.
         var words = _with_fold(dist, status, fold) if fold.active() else (
             dist if tested else knn_with_status(dist, status))
-        used = family_call(resident, handle, classical_address(idx), PythonObject(q_addr), classical_address(y_cols),
+        used = family_call(resident, handle.value(), classical_address(idx), PythonObject(q_addr), classical_address(y_cols),
                            classical_address(out), params, words)
     else:
         if fold.active():

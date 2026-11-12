@@ -50,6 +50,7 @@ from neighbors.neighbors_graph_run import (
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from bindings.py_optional import py_or_none, py_present
 
 # The typed checks, the operation requests (their word order and float32
 # rounding) and the info-word decoding are RUN in
@@ -291,8 +292,10 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
     of the input (`tocsr()`) is called (P1, audit A #3)."""
     var b = _b()
     var indptr = PythonObject(None)
-    var indices = PythonObject(None)
-    var vals = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var indices = Optional[PythonObject]()
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var vals = Optional[PythonObject]()
     var n = 0
     # An exact SciPy CSR container is read from its own stored buffers
     # (the instance dictionary, bindings/host_sparse_native.mojo
@@ -313,7 +316,7 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
                 raise Error("the adjacency matrix must be square")
             stored_csr = True
             indptr = fields["indptr"]
-            indices = fields["indices"]
+            indices = py_present(fields["indices"])
             n = Int(py=_int(stored_shape[0]))
             if graph:
                 vals = admit_family(fields["data"], 1, "data", context).array
@@ -321,7 +324,7 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
         pass
     elif family_isinstance(source, b.tuple) and Int(py=family_call(b.len, source)) == 3:
         indptr = source[0]
-        indices = source[1]
+        indices = py_present(source[1])
         n = Int(py=_int(source[2]))
     elif format.byte_length() > 0:
         # TOMBSTONE: P1_NEIGHBORS_GRAPH_TOCSR (removed: the caller's own tocsr(), SciPy Python code, inside the native graph call) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
@@ -347,8 +350,8 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
             n = Int(py=_int(shape[0]))
             grouped = _csr_of_dense(dense, n, graph, context)
         indptr = grouped[0]
-        indices = grouped[1]
-        vals = grouped[2]
+        indices = py_present(grouped[1])
+        vals = py_present(grouped[2])
     elif _duck_kind(source, context) != 0:
         # i2 correction: a sparse object that is not a SciPy container (it
         # used to reach its own `tocsr()`) is read from its CSR or COO arrays
@@ -362,8 +365,8 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
         n = Int(py=_int(shape[0]))
         if _duck_kind(source, context) == 1:
             indptr = _duck_attr(source, "indptr")
-            indices = _duck_attr(source, "indices")
-            if indices is None:
+            indices = py_present(_duck_attr(source, "indices"))
+            if not indices:
                 raise Error("TypeError: a CSR adjacency must expose indptr, indices and data arrays")
             if graph:
                 var data = _duck_attr(source, "data")
@@ -377,19 +380,19 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
             var grouped = _csr_of_triples(Python.tuple(_duck_attr(source, "row"), _duck_attr(source, "col"), data,
                                                        shape), n, graph, context)
             indptr = grouped[0]
-            indices = grouped[1]
-            vals = grouped[2]
+            indices = py_present(grouped[1])
+            vals = py_present(grouped[2])
     else:
         return _Csr(False, PythonObject(None), PythonObject(None), PythonObject(None), 0)
     var ip = _as_i32(indptr, "indptr", context)
-    var ix = _as_i32(indices, "indices", context)
+    var ix = _as_i32(py_or_none(indices), "indices", context)
     var indptr_count = Int(py=ip.shape[0])
     # indptr[n] is read only once indptr holds n + 1 entries.
     xn_graph_csr_check(indptr_count, n, graph, _addr(ip) if indptr_count == n + 1 and graph else 0,
                        Int(py=ix.shape[0]) if graph else 0,
-                       Int(py=vals.shape[0]) if graph and vals is not None else -1)
+                       Int(py=vals.value().shape[0]) if graph and Bool(vals) else -1)
     _ = ip  # keep the Python object alive through the read above
-    return _Csr(True, ip, ix, vals, n)
+    return _Csr(True, ip, ix, py_or_none(vals), n)
 
 
 # ---------------------------------------------------------------- PageRank
@@ -400,11 +403,12 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
     """`PageRank._unit(v, n, what)`: a caller's length-n non-negative vector
     divided by its sum on the device (`x_neighbors_unit_ff`)."""
     var b = _b()
-    var unit_fn = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var unit_fn = Optional[PythonObject]()
     var available = False
     if xn_is_module(binding):
-        unit_fn = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_unit_ff"), PythonObject(None))
-        available = unit_fn is not None
+        unit_fn = py_present(py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_unit_ff"), PythonObject(None)))
+        available = Bool(unit_fn)
     else:
         available = (xn_capabilities(binding) & 4) != 0
     if not available:
@@ -415,7 +419,7 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
     var uinfo = family_array(Python.tuple(2), "<i4", context)
     var request = xn_unit_request(_addr(wv), _addr(out), _addr(uinfo), n)
     if xn_is_module(binding):
-        _ = family_call(unit_fn, _py_ints(request.a), _py_ints(request.p), _py_floats(request.f))
+        _ = family_call(unit_fn.value(), _py_ints(request.a), _py_ints(request.p), _py_floats(request.f))
     else:
         _op(binding, request)
     _ = wv  # keep the Python object alive through the native call above

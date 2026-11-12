@@ -42,6 +42,7 @@ from bindings.prep_encode_native import (
 from bindings.prep_classify_prog import ClsProg, f32_array
 from bindings.prep_classify_common import cls_x2d, cls_mode, XIn
 from bindings.prep_classify_native import resident_enter_min, _resident_exit
+from bindings.py_optional import py_or_none, py_present
 from bindings.prep_native_estimator import (
     prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call, prep_estimator_attribute)
 
@@ -140,13 +141,14 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
     Returns the keys' offset."""
     var b = native_loaded_module("builtins")
     var auto = py_type(getter) is b.str and String(getter) == "auto"
-    var coef = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var coef = Optional[PythonObject]()
     if not auto:
-        coef = prep_estimator_attribute(est, getter, context)
+        coef = py_present(prep_estimator_attribute(est, getter, context))
     else:
-        coef = prep_estimator_attribute(est, PythonObject("coef_"), context)
+        coef = py_present(prep_estimator_attribute(est, PythonObject("coef_"), context))
     var key = pr.work(2 * m)
-    if coef is None and auto:
+    if not coef and auto:
         var imp = prep_estimator_attribute(est, PythonObject("feature_importances_"), context)
         if imp is None:
             raise Error("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
@@ -155,7 +157,7 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
         pr.stage(OP_C2_KEY64, m, wo, got[1], key)
         return key
     # `as_f32_c(coef, ndim=None)` then `rows, d = (1, len) if 1-D else shape`
-    var raw = classical_input(coef, cc, "coef_")
+    var raw = classical_input(py_or_none(coef), cc, "coef_")
     var nd = Int(py=raw.ndim)
     var rows = 1
     var d = 0
@@ -170,7 +172,7 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
         raise Error("too many values to unpack (expected 2)")
     if d != m:
         raise Error("mojolearn: RFE importances have " + String(d) + " columns, expected " + String(m))
-    var c = admit_x(coef, nd, "coef_", cc)
+    var c = admit_x(py_or_none(coef), nd, "coef_", cc)
     var out = pr.work(d)
     var co = pr.put(c)
     pr.stage(OP_SQSUM_COLS, d, co, rows, d, out)

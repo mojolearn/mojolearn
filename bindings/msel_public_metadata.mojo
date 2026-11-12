@@ -11,6 +11,7 @@ from bindings.msel_common import msel_admit, msel_is_bool, msel_is_integral, mse
 from bindings.msel_split import _splitter_fields, msel_flag_truth
 from bindings.msel_estimator_native import msel_estimator_plan
 from bindings.msel_scorer_native import msel_scorer_fields, msel_metric_plan
+from bindings.py_optional import py_or_none, py_present
 
 
 def _metadata_repr(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> String:
@@ -83,18 +84,19 @@ def msel_estimator_classes(model: PythonObject, context: PythonObject) raises ->
     var b = native_loaded_module("builtins")
     var plan = msel_estimator_plan(model, context)
     var fields = py_call(plan["fields_get"], model, py_type(model))
-    var result = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var result = Optional[PythonObject]()
     if String(py_get(plan, "classes_kind", "stored")) == "knn":
         if py_get(fields, "_y_cols") is None:
             raise Error("AttributeError: classes_ is set by fit")
-        result = py_get(fields, "_label_names")
-        if result is None:
-            result = native_instance_item(fields, PythonObject("_classes_list"))
-            msel_admit(result, context)
-            if py_type(result) is not b.list and py_type(result) is not b.tuple:
+        result = py_present(py_get(fields, "_label_names"))
+        if not result:
+            result = py_present(native_instance_item(fields, PythonObject("_classes_list")))
+            msel_admit(result.value(), context)
+            if py_type(result.value()) is not b.list and py_type(result.value()) is not b.tuple:
                 raise Error("TypeError: native neighbor classes require stored class lists")
             if not msel_flag_truth(native_instance_item(fields, PythonObject("outputs_2d_")), context):
-                result = result[0]
+                result = py_present(result.value()[0])
     else:
         # Every class namespace's classes_ identity is pinned in the estimator
         # plan. A new property cannot bypass the dictionary or invoke a getter.
@@ -111,8 +113,9 @@ def msel_estimator_classes(model: PythonObject, context: PythonObject) raises ->
                 break
         if not py_contains(fields, "classes_"):
             raise Error("AttributeError: fitted estimator has no classes_")
-        result = native_instance_item(fields, PythonObject("classes_"))
+        result = py_present(native_instance_item(fields, PythonObject("classes_")))
     classical_connect_numpy(context)
-    if py_type(result) is context["array_class"] and py_get(context, "ndarray") is not None:
-        return native_array_ndarray_view(result, context)
-    return result
+    var labels = py_or_none(result)
+    if py_type(labels) is context["array_class"] and py_get(context, "ndarray") is not None:
+        return native_array_ndarray_view(labels, context)
+    return labels

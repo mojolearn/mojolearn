@@ -38,6 +38,7 @@ from bindings.trees_public_inputs import (
     trees_cast, trees_decode_labels, trees_call,
 )
 from bindings.admitted_input import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
+from bindings.py_optional import py_present
 from gbdt.trees_gbdt_run import (
     gbdt_known_vendor, gbdt_remember_vendor, gbdt_known_mode, gbdt_mode_of_code, gbdt_mode_checked, gbdt_text_has_ctr,
 )
@@ -649,13 +650,14 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
         if letter != "i" and letter != "u":
             raise Error(bijection)
     else:
-        var view = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var view = Optional[PythonObject]()
         try:
-            view = py_call(b.memoryview, permutation)
+            view = py_present(py_call(b.memoryview, permutation))
         except:
-            view = PythonObject(None)
-        if view is not None:
-            var fmt = String(view.format)
+            view = Optional[PythonObject]()
+        if Bool(view):
+            var fmt = String(view.value().format)
             var code = String(fmt[byte=fmt.byte_length() - 1:fmt.byte_length()])
             if code == "?" or code == "f" or code == "d" or code == "e" or code == "O":
                 raise Error(bijection)

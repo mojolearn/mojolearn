@@ -51,6 +51,7 @@ from bindings.kmeans_variants_boundary import (
     variants_connection, variants_span, VariantsAuxiliaryPins, VariantsPackedResult,
 )
 from providers.python.estimator_binding_pyapi import _estimator_mode_word
+from bindings.py_optional import py_or_none, py_present
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
 # OPTICS metric codes (x_cluster/optics.mojo)
@@ -222,18 +223,19 @@ def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, s
     _rows(model, k, n)
     var weights = _weights(sample_weight, n, context)
     var init = _attr(model, "init")
-    var init_arr = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var init_arr = Optional[PythonObject]()
     var init_random = False
     if family_is_str(init):
         if not _one_of(init, "k-means++", "random"):
             raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
         init_random = _eq(init, PythonObject("random"))
     else:
-        init_arr = _init_array(model, source, init, k, d, context)
+        init_arr = py_present(_init_array(model, source, init, k, d, context))
     var n_init_field = _attr(model, "n_init")
     var n_init: Int
     if _eq(n_init_field, PythonObject("auto")):
-        n_init = 3 if (init_arr is None and init_random) else 1
+        n_init = 3 if (not init_arr and init_random) else 1
     else:
         n_init = Int(py=_int(n_init_field))
     if n_init < 1:
@@ -245,7 +247,7 @@ def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, s
     var init_size_field = _attr(model, "init_size")
     var init_size = PythonObject(0) if init_size_field is None else _int(init_size_field)
     var seed = _seed(_attr(model, "random_state"))
-    var parts: List[PythonObject] = [init_arr, weights]
+    var parts: List[PythonObject] = [py_or_none(init_arr), weights]
     var auxiliary = VariantsAuxiliaryPins(parts, context)
     var tolerance = _float(_attr(model, "tol"))
     var ratio = _float(_attr(model, "reassignment_ratio"))
@@ -253,7 +255,7 @@ def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, s
     # Preserve native-word narrowing after auxiliary and float admission.
     var request = MiniBatchFitRequest(source_span, auxiliary.plan.span(), n, d, k,
         Int(py=max_iter), Int(py=batch_size), Int(py=mni), Int(py=init_size), n_init,
-        init_arr is not None, seed, init_arr is None and init_random, weights is not None,
+        Bool(init_arr), seed, not init_arr and init_random, weights is not None,
         devscan, Float64(py=tolerance), Float64(py=ratio))
     var result = VariantsResultSlot()
     try:
@@ -460,12 +462,13 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
     var x = _f32(source, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var seeds = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var seeds = Optional[PythonObject]()
     var seeds_field = _attr(model, "seeds")
     if seeds_field is not None:
         seeds = _f32(seeds_field, "seeds", context)
-        if Int(py=seeds.shape[1]) != d:
-            raise Error("seeds have " + String(Int(py=seeds.shape[1])) + " features, X has " + String(d))
+        if Int(py=seeds.value().shape[1]) != d:
+            raise Error("seeds have " + String(Int(py=seeds.value().shape[1])) + " features, X has " + String(d))
     var bw = Float64(0.0)
     var bandwidth = _attr(model, "bandwidth")
     if bandwidth is not None:
@@ -475,13 +478,13 @@ def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObj
                         + String(py=py_call(b.format, PythonObject(bw), PythonObject("f"))))
     # ORDER MATCHES x_cluster/entries.mojo::meanshift_entry: n, d, n_seeds,
     # cluster_all, max_iter, bin_seeding, min_bin_freq.
-    var n_seeds = 0 if seeds is None else Int(py=seeds.shape[0])
+    var n_seeds = 0 if not seeds else Int(py=seeds.value().shape[0])
     var cluster_all = _truthy(_attr(model, "cluster_all"))
     var max_iter = _int(_attr(model, "max_iter"))
     var bin_seeding = _truthy(_attr(model, "bin_seeding"))
     var min_bin_freq = _int(_attr(model, "min_bin_freq"))
     var connection = centroid_fit_connection(binding)
-    var request = MeanShiftFitRequest(variants_span(x), variants_span(seeds), n, d, n_seeds,
+    var request = MeanShiftFitRequest(variants_span(x), variants_span(py_or_none(seeds)), n, d, n_seeds,
         cluster_all, Int(py=max_iter), bin_seeding, Int(py=min_bin_freq), bw)
     var result = CentroidFitResultSlot()
     try:

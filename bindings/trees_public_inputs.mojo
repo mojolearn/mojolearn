@@ -88,6 +88,7 @@ def trees_forest_x(source: PythonObject, name: String, context: PythonObject) ra
 from bindings.label_input_sources import labels_storage_source
 from bindings.perf3_label_doors_text import labels_all_exact_str
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_or_none, py_present
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -329,12 +330,13 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
     classes = classifier_label_list(classes, context)
     var slot = _decode_slot(owner, classes)
     var kind: String
-    var cached_table = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var cached_table = Optional[PythonObject]()
     if slot >= 0:
         var g = _DECODE.get_or_create_ptr()
         var code = g[].kinds[slot]
         kind = String("int") if code == 0 else (String("float") if code == 1 else String("object"))
-        cached_table = g[].tables[slot]
+        cached_table = py_present(g[].tables[slot])
     else:
         kind = trees_label_kind(classes, context)
     var n = Int(py=codes.size)
@@ -347,8 +349,8 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
     if slot < 0 and not ((kind == "int" or kind == "float") and k > 0):
         _decode_record(owner, classes, 2 if kind != "int" and kind != "float" else (0 if kind == "int" else 1),
                        PythonObject(None))
-    if (kind == "int" or kind == "float") and k > 0 and (slot < 0 or cached_table is not None):
-        var table = cached_table
+    if (kind == "int" or kind == "float") and k > 0 and (slot < 0 or Bool(cached_table)):
+        var table = py_or_none(cached_table)
         var fits = True
         if slot < 0:
             table = admitted_vector(k, "<i8" if kind == "int" else "<f8", context)

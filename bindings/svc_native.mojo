@@ -14,6 +14,7 @@ from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from bindings.gp_svm_gp_state import gp_x_mark, gp_x_release
 from bindings.host_sparse_native import host_sparse_format
+from bindings.py_optional import py_present
 
 
 def _svc_operation_route(model: PythonObject, operation: String, args: PythonObject,
@@ -46,11 +47,12 @@ def svc_operation(model: PythonObject, operation: String, args: PythonObject,
     # so bindings/svc_ocsvm_native.mojo does not snapshot it again. A sparse X
     # is not replaced and not registered; the registry also takes only an
     # exact ndarray or Array.
-    var marked = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var marked = Optional[PythonObject]()
     if operation.startswith("family_svc_ocsvm_") and lifecycle.replace:
         if host_sparse_format(args[1]).byte_length() == 0:
-            marked = call.args[1]
-            gp_x_mark(marked)
+            marked = py_present(call.args[1])
+            gp_x_mark(marked.value())
     var result = PythonObject(None)
     try:
         result = _svc_operation_route(model, operation, call.args, context)
@@ -58,7 +60,7 @@ def svc_operation(model: PythonObject, operation: String, args: PythonObject,
         var failure = neighbors_public_refusal(error, call, model)
         raise failure^
     finally:
-        if marked is not None:
-            gp_x_release(marked)
+        if Bool(marked):
+            gp_x_release(marked.value())
         neighbors_public_end(model, call)
     return family_lifecycle_finish(model, lifecycle, result, call, context)

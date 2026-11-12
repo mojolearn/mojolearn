@@ -29,6 +29,7 @@ from providers.python.autograd_device_provider_pyapi import imported_device_prov
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
 from bindings.cpython_table import cpython_table
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_present
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -223,20 +224,21 @@ def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:
     var sys = native_loaded_module("sys")
     var modules = sys.modules
     var g = TORCH_ARTIFACT_BASE.get_or_create_ptr()
-    var base = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var base = Optional[PythonObject]()
     if (g[].base is not None and modules is g[].modules and dict_keys_admitted(g[].modules)
             and dict_keys_admitted(g[].torch_namespace) and dict_keys_admitted(g[].native_namespace)):
-        base = g[].base
+        base = py_present(g[].base)
     else:
-        base = _torch_artifact_base(b, sys, modules)
-        g[].base = base
+        base = py_present(_torch_artifact_base(b, sys, modules))
+        g[].base = base.value()
         g[].modules = modules
-        g[].torch_namespace = base["torch_namespace"]
-        g[].native_namespace = base["native_namespace"]
+        g[].torch_namespace = base.value()["torch_namespace"]
+        g[].native_namespace = base.value()["native_namespace"]
         dict_keys_admit(modules)
         dict_keys_admit(g[].torch_namespace)
         dict_keys_admit(g[].native_namespace)
-    var context = py_call(b.dict, base)
+    var context = py_call(b.dict, base.value())
     var count = len(snapshot[2])
     var free = Python.list()
     for index in range(count):  # driver-loop: declared graph input positions

@@ -34,6 +34,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.hierarchy_settings_pyapi import AggloSettings
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.py_optional import py_present
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
@@ -149,17 +150,18 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     # Series is checked through its stored exact ndarray (same labels, same
     # order, 1-D) and returned unchanged, as the walk returns it.
     var column = not multioutput and len(shape) == 2 and shape[1] == 1
-    var stored = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var stored = Optional[PythonObject]()
     if len(shape) >= 1 and not column:
-        stored = labels_storage_source(source, context)
-    if stored is not None and labels_integer_storage(stored, context):
+        stored = py_present(labels_storage_source(source, context))
+    if Bool(stored) and labels_integer_storage(stored.value(), context):
         return source
     # An exact float32/float64 buffer holds only real floats: the walk reduces
     # to its finite (and, for a classifier, integral) test, judged at the
     # first refused element in C order with the same wording, in one native
     # pass (bindings/label_integer_storage.mojo).
-    if stored is not None:
-        var refusal = labels_float_storage(stored, context, classifier)
+    if Bool(stored):
+        var refusal = labels_float_storage(stored.value(), context, classifier)
         if refusal == LABELS_FLOAT_NONFINITE:
             raise Error(admitted_finite_wording(name, "y"))
         if refusal == LABELS_FLOAT_CONTINUOUS:
@@ -173,7 +175,7 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     # An exact '<U' ndarray lists exact str only, which the walk admits and
     # never tests as real; any shape but the flattened column is returned
     # unchanged by the walk.
-    if stored is not None and labels_text_storage(source, context):
+    if Bool(stored) and labels_text_storage(source, context):
         return source
     # p3-neighbors-cluster: an exact flat list / tuple of exact floats is
     # checked in one native pass (bindings/p3nc_label_lists.mojo) with the

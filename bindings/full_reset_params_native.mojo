@@ -21,6 +21,7 @@ from bindings.declared_params_native import _assign as _declared_set, _release a
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.native_model_records import bump_model_generation
+from bindings.py_optional import py_present
 
 
 def _plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -187,11 +188,12 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     var plan = _plan(model, fields, context)
     var values = _read(model, False, context["parameter_metadata"], Python.list())
     _merge(model, params, values, context, depth)
-    var replacement = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var replacement = Optional[PythonObject]()
     var fresh: PythonObject
     if py_contains(plan, "native_constructor"):
-        replacement = _replacement(model, values, plan, context)
-        fresh = _fields(replacement)
+        replacement = py_present(_replacement(model, values, plan, context))
+        fresh = _fields(replacement.value())
     else:
         fresh = _fresh_fields(model, values, plan, context)
     if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
@@ -205,7 +207,7 @@ def _reset(model: PythonObject, params: PythonObject, context: PythonObject, dep
     # All removed references are retained in previous until admission completes.
     _ = py_call(fields.clear)
     _ = py_call(fields.update, fresh)
-    if replacement is not None:
+    if Bool(replacement):
         # Move ownership into the live model before the temporary's native
         # finalizer runs; do not leave it aliases of transferred handles.
         _ = py_call(fresh.clear)

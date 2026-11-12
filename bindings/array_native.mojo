@@ -26,6 +26,7 @@ from bindings.native_buffer_owner import native_buffer_view, native_storage_allo
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
 from bindings.py_typed_call import py_call_typed
 from bindings.cpython_table import cpython_table
+from bindings.py_optional import py_present
 
 
 # ------------------------------------------------------------------ calls
@@ -587,7 +588,8 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
     # `_contiguous_block`: leading integer indices, at most one step-1
     # slice, then only whole axes is ONE run; `_block_store` copies a run of
     # at least 256 elements in one move.
-    var store = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var store = Optional[PythonObject]()
     var axis = 0
     var offset = 0
     while axis < ndim and not sliced[axis]:  # driver-loop: leading integer indices
@@ -605,24 +607,24 @@ def _getitem(a: PythonObject, key: PythonObject, context: PythonObject) raises -
             var raw = _call(_call(_attr(c._mv, "__getitem__"), _call(b.slice, PythonObject(run_start),
                                                                     PythonObject(run_start + run_length))).cast,
                             PythonObject("B"))
-            store = _same_dtype_store(raw, dtype, context)
-    if store is None:
+            store = py_present(_same_dtype_store(raw, dtype, context))
+    if not store:
         var total = _prod(out_shape)
-        store = _new_store(_code(dtype, context), total, context)
+        store = py_present(_new_store(_code(dtype, context), total, context))
         if total > 0:
-            _strided_copy(c._addr, _call(store.buffer_info)[0], Int(py=c.itemsize), out_shape,
+            _strided_copy(c._addr, _call(store.value().buffer_info)[0], Int(py=c.itemsize), out_shape,
                           out_strides, _c_strides(out_shape, 1), base, 0, context)
             if dtype == "<f4":
                 # A strided float32 selection is quieted like the block copy,
                 # so a copy's bits do not depend on the selection's layout.
                 var cast = py_get(context["helpers"], PythonObject("cast_elements"))
                 if cast is not None:
-                    var at = _call(store.buffer_info)[0]
+                    var at = _call(store.value().buffer_info)[0]
                     _ = _call(cast, at, PythonObject(0), at, PythonObject(0), PythonObject(total))
     # The strided copy read c's raw address: a C-order copy made by _as_c
     # must outlive it (Mojo ends a local at its last named use).
     _ = c^
-    return _owned(store, _tuple(out_shape), dtype, "C", context)
+    return _owned(store.value(), _tuple(out_shape), dtype, "C", context)
 
 
 # ------------------------------------------------------------ conversion

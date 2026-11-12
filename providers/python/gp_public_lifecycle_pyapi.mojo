@@ -40,6 +40,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi import _refusal
+from bindings.py_optional import py_present
 
 
 def _gp_admit_state(model: PythonObject, context: PythonObject, classifier: Bool, fitting: Bool) raises -> PythonObject:
@@ -294,7 +295,8 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var rows = 0
     var columns = 0
     var input_copied = False
-    var admitted_x = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var admitted_x = Optional[PythonObject]()
     var deferred = False
     if guarded:
         # Lane a7a: a predict / score defers the finite test of a borrowed
@@ -312,12 +314,12 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
             if not fx.store.active():
                 # (an active store: values[x_index] stays the DeviceRows and
                 # the owner resolves its store ids; no host words exist)
-                admitted_x = fx.array
+                admitted_x = py_present(fx.array)
                 deferred = True
                 values.set(x_index, fx.array)
         else:
             var ax = admit_x_unrecorded(source, name, context, defer_finite=query)
-            admitted_x = ax.array
+            admitted_x = py_present(ax.array)
             deferred = not ax.finite
             input_copied = not (ax.array is source)
             rows = ax.rows
@@ -352,12 +354,12 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
-    if admitted_x is not None:
+    if Bool(admitted_x):
         # The owner reuses this admitted C-order float32 X instead of
         # converting it a second time (bindings/gp_svm_records.mojo), and
         # tests it when its finite test was deferred and its entry returns
         # no status word.
-        gp_x_mark(admitted_x, deferred)
+        gp_x_mark(admitted_x.value(), deferred)
     try:
         if classifier:
             result = gp_classifier_operation(model, operation, prepared, context)
@@ -369,8 +371,8 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
             raise refused^
         raise error^
     finally:
-        if admitted_x is not None:
-            gp_x_release(admitted_x)
+        if Bool(admitted_x):
+            gp_x_release(admitted_x.value())
         if fitting:
             estimator_fit_end(model, depth)
     if fitting:

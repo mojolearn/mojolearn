@@ -14,6 +14,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.generation_buffers import generation_array_snapshot, generation_buffer_view
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from core.shared_slot import SharedSlot
+from bindings.py_optional import py_present
 
 
 struct CausalFieldNames(Defaultable, Movable):
@@ -130,10 +131,11 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
     neural_string_keys(mods, entries)
     var bi = mods.module("builtins")
     var types = mods.module("types")
-    var original = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var original = Optional[PythonObject]()
     if pinned is not None:
-        original = pinned.downcast_value_ptr[CausalExecutionEntries]()[].entries
-        if len(original) != len(entries):
+        original = py_present(pinned.downcast_value_ptr[CausalExecutionEntries]()[].entries)
+        if len(original.value()) != len(entries):
             raise Error("TypeError: CausalLM native execution registry changed after admission")
     elif py_get(entries, "parallel_call") is not None:
         ref cpy = Python().cpython()
@@ -154,7 +156,7 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
     for i in range(len(names)):  # driver-loop: over capture the admitted execution registry once
         var name = String(names[i])
         var item = entries[names[i]]
-        if original is not None and (not py_contains(original, names[i]) or item is not original[names[i]]):
+        if Bool(original) and (not py_contains(original.value(), names[i]) or item is not original.value()[names[i]]):
             raise Error("TypeError: CausalLM native execution entry changed after admission")
         if (name == "native_primitives" or name == "native_block_operations" or name == "native_mamba"
                 or name == "block_binding" or name == "native_session_provider"):
@@ -526,13 +528,14 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
                 raise Error("TypeError: CausalLM resident sessions require native owner slots")
             py_setitem(fields, "_resident_sessions", Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
         return captured_model
-    var key = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var key = Optional[PythonObject]()
     try:
-        key = _causal_model_key(mods, model, live, context)
+        key = py_present(_causal_model_key(mods, model, live, context))
     except:
-        key = PythonObject(None)
+        key = Optional[PythonObject]()
     var result = _causal_model_capture_full(mods, model, context)
-    if key is None:
+    if not key:
         return result
     var fields = causal_snapshot_fields(mods, result)
     var entries = fields["_native_entries"]
@@ -565,7 +568,7 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
         _ = py_call(derived.append, words)
     var unchanged = False
     try:
-        unchanged = _causal_model_matches(mods, key, model, live, context)
+        unchanged = _causal_model_matches(mods, key.value(), model, live, context)
     except:
         unchanged = False
     if not unchanged:
@@ -581,7 +584,7 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
         if Int(cls._obj_ptr) not in class_seen:
             class_seen[Int(cls._obj_ptr)] = True
             _ = py_call(classes.append, _causal_block_class_record(mods, cls))
-    prepared_put(mods, _CAUSAL_MODEL_SLOT, model, Python.list(key, template, derived, classes))
+    prepared_put(mods, _CAUSAL_MODEL_SLOT, model, Python.list(key.value(), template, derived, classes))
     return result
 
 

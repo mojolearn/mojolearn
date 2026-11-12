@@ -38,6 +38,7 @@ from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
 from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_rows_match_check
+from bindings.py_optional import py_present
 from neighbors.neighbors_semi_run import (
     xn_achi2_negative_check, xn_achi2_fit_negative, xn_achi2_width, xn_achi2_request, xn_achi2_csr_count,
     xn_achi2_csr_fill, xn_schi2_skew_check, xn_schi2_missing_fit, xn_schi2_log_request, xn_schi2_transform_request,
@@ -385,21 +386,23 @@ def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     if usable:
         flags = _semi_kfeat_flags(args[0], context)
     _ = py_call(fields.pop, PythonObject("_schi2_z"), PythonObject(None))
-    var fit_idn = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var fit_idn = Optional[PythonObject]()
     if usable:
         # Admission may return a native capability snapshot. Optional exports
         # belong to its retained module, not the snapshot object's attributes.
-        fit_idn = neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit_idn", False)
-    var entry = PythonObject(None)
-    if fit_idn is not None:
-        entry = fit_idn
+        fit_idn = py_present(neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit_idn", False))
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var entry = Optional[PythonObject]()
+    if Bool(fit_idn):
+        entry = py_present(fit_idn.value())
     elif (flags & 2) != 0:
-        entry = neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit")
-    if entry is not None:
+        entry = py_present(neural_descriptor_entry(xn_module(args[0]), "x_neighbors_kfeat_schi2_fit"))
+    if Bool(entry):
         var w = _semi_out(Python.tuple(d, nc), "<f4", context)
         var off = _semi_out(Python.tuple(nc), "<f4", context)
         var word = family_call(operator.and_, seed, PythonObject(0xFFFFFFFF))
-        _ = family_call(entry, Python.list(word, PythonObject(d), PythonObject(nc)), _semi_addr(w), _semi_addr(off))
+        _ = family_call(entry.value(), Python.list(word, PythonObject(d), PythonObject(nc)), _semi_addr(w), _semi_addr(off))
         _ = w  # keep the Python object alive through the native call above
         _ = off  # keep the Python object alive through the native call above
         _schi2_set_weights(fields, w)

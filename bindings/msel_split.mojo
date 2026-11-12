@@ -42,6 +42,7 @@ from bindings.family_common import (
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.label_input_sources import labels_series_values, labels_list_integer_storage
+from bindings.py_optional import py_present
 from bindings.msel_common import (
     MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_select_folds_plan, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
@@ -456,23 +457,24 @@ def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool
     if msel_cmp("gt", n_splits, PythonObject(n)):
         raise Error("cv cannot exceed the number of samples")
     var k = msel_int(n_splits)
-    var codes = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var codes = Optional[PythonObject]()
     var n_classes = 0
     if classifier:
         var got = msel_discrete_codes(y, context)
         if got is not None:
             n_classes = len(got[0])
-            codes = got[1]
+            codes = py_present(got[1])
     var fold_store = msel_new(n, "<i4", context)
     var fold_counts = msel_new(k, "<i8", context)
     var class_counts = msel_new(max(n_classes, 1), "<i8", context)
-    _ = msel_fold_ids(msel_helpers_key(context), 0 if codes is None else msel_addr(codes), n, n_classes, k,
+    _ = msel_fold_ids(msel_helpers_key(context), 0 if not codes else msel_addr(codes.value()), n, n_classes, k,
                       msel_addr(class_counts), msel_addr(fold_store), msel_addr(fold_counts))
     _ = codes  # keep the Python object alive through the native call above
     _ = class_counts  # keep the Python object alive through the native call above
     _ = fold_counts  # keep the Python object alive through the native call above
     _ = fold_store  # keep the Python object alive through the native call above
-    if codes is not None:
+    if Bool(codes):
         var cc = msel_p64(class_counts)
         _ = class_counts  # keep the Python object alive through the native call above
         var most = Int(cc[0]) if n_classes else 0
@@ -678,19 +680,20 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
     # the same assignment by `strat_fold_assign_i32`, then each fold's rows
     var n = Int(py=enc.size)
     var cnt = msel_i64_list(counts, context)
-    var perms = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var perms = Optional[PythonObject]()
     if shuffle:
         perms = msel_new(n, "<i8", context)
         var draws = rng.permutation_rows(counts, context)
         var at = 0
         for c in range(len(counts)):  # driver-loop: over classes (one draw each)
             if counts[c] > 0:
-                unsafe_memcpy(dest=msel_p64(perms) + at, src=msel_p64(draws[c]), count=counts[c])
+                unsafe_memcpy(dest=msel_p64(perms.value()) + at, src=msel_p64(draws[c]), count=counts[c])
                 _ = perms  # keep the Python object alive through the native call above
             at += counts[c]
     var folds = msel_new(n, "<i4", context)
     _ = msel_strat_fold_assign_i32(msel_helpers_key(context), msel_addr(enc), n, n_classes, k, msel_addr(alloc),
-                                   msel_addr(perms) if perms is not None and n > 0 else 0, msel_addr(cnt),
+                                   msel_addr(perms.value()) if Bool(perms) and n > 0 else 0, msel_addr(cnt),
                                    msel_addr(folds))
     _ = enc  # keep the Python object alive through the native call above
     _ = alloc  # keep the Python object alive through the native call above
@@ -717,15 +720,16 @@ def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffl
     if k > m:
         raise Error("Cannot have number of splits n_splits=" + String(k) + " greater than the "
                     + "number of groups: " + String(m) + ".")
-    var perm = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var perm = Optional[PythonObject]()
     if shuffle:
         var rng = MselRng(random_state, context)
         perm = rng.permutation_rows([m], context)[0]
     var to_fold = msel_new(m, "<i4", context)
     var sizes = msel_new(k, "<i8", context)
     var counts = msel_i64_list(gc.counts, context)
-    if perm is not None:
-        _ = msel_group_fold_perm_i32(msel_helpers_key(context), msel_addr(counts), m, k, msel_addr(perm),
+    if Bool(perm):
+        _ = msel_group_fold_perm_i32(msel_helpers_key(context), msel_addr(counts), m, k, msel_addr(perm.value()),
                                      msel_addr(to_fold), msel_addr(sizes))
         _ = counts  # keep the Python object alive through the native call above
         _ = to_fold  # keep the Python object alive through the native call above
@@ -760,7 +764,8 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
     if Int(py=yenc.size) != n:
         raise Error("y has " + String(Int(py=yenc.size)) + " labels for " + String(n) + " samples")
     var m = gc.m
-    var perm = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var perm = Optional[PythonObject]()
     if shuffle:
         var rng = MselRng(random_state, context)
         perm = rng.permutation_rows([m], context)[0]
@@ -773,7 +778,7 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
     _ = dist  # keep the Python object alive through the native call above
     # The group-level plan's host pass linked into this door (both base
     # bindings exported the same host function; no cross-module call).
-    var bad = strat_group_plan_i32(msel_addr(dist), msel_addr(perm) if perm is not None else 0,  # cpu-route: sequential greedy fold plan over groups, not rows
+    var bad = strat_group_plan_i32(msel_addr(dist), msel_addr(perm.value()) if Bool(perm) else 0,  # cpu-route: sequential greedy fold plan over groups, not rows
                                    msel_addr(to_fold), msel_addr(sizes), n_classes, m, k)
     _ = dist  # keep the Python object alive through the native call above
     _ = perm  # keep the Python object alive through the native call above

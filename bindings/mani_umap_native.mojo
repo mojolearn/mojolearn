@@ -39,6 +39,7 @@ from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_IN
 from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
 from bindings.label_list_words import label_list_store, label_store_address
 from core.label_words_impl import label_words_f64, label_words_i64, label_dense_codes, label_codes_i32_to_f32
+from bindings.py_optional import py_present
 from bindings.mani_kit import (
     MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
@@ -384,14 +385,15 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     umap_check_neighbors(Int(py=config[0]), n)
     var initial = _umap_initial(settings, x, n, nc, config[7], context)
     umap_check_spectral_samples(True if initial else False, n, nc)
-    var target = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var target = Optional[PythonObject]()
     if not (y is None):
-        target = _umap_target(settings, y, n, context)
+        target = py_present(_umap_target(settings, y, n, context))
     var embedding = family_array(Python.tuple(n, nc), "<f4", context)
     var embedding_address = Int(py=classical_address(embedding))
     var mode = _umap_mode(settings, context)
     _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode", context)
-    var legacy = umap_legacy_abi(True if initial else False, not (target is None), _umap_default_extras(extras), nc)
+    var legacy = umap_legacy_abi(True if initial else False, Bool(target), _umap_default_extras(extras), nc)
     var columns: PythonObject
     if legacy:
         # Preserve the legacy ABI for default controls and existing wheels.
@@ -407,15 +409,15 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var tarr = PythonObject(None)
         var tk = PythonObject(0)
         var tw = PythonObject(0.5)
-        if not (target is None):
-            tkind = target[0]
-            tdims = target[1]
-            tarr = target[2]
-            tk = target[3]
-            tw = target[4]
+        if Bool(target):
+            tkind = target.value()[0]
+            tdims = target.value()[1]
+            tarr = target.value()[2]
+            tk = target.value()[3]
+            tw = target.value()[4]
         var addrs = Python.list(PythonObject(x.source.addr), PythonObject(embedding_address),
                                 PythonObject(0) if not initial else PythonObject(initial.value().source.addr),
-                                PythonObject(0) if target is None else target[6])
+                                PythonObject(0) if not target else target.value()[6])
         _ = embedding  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
         _ = initial  # keep the Python object alive through the native call above

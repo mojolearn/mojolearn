@@ -65,13 +65,14 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
         fun_code = 2
     else:
         raise Error("fun must be 'logcosh', 'exp' or 'cube' (a callable is not carried)")
-    var winit = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var winit = Optional[PythonObject]()
     var seed = 0
     if fields["w_init"] is None:
         seed = decomp_seed(fields["random_state"])
     else:
         winit = decomp_input(fields["w_init"], "FastICA", context)
-        if Int(py=winit.shape[0]) != nc or Int(py=winit.shape[1]) != nc:
+        if Int(py=winit.value().shape[0]) != nc or Int(py=winit.value().shape[1]) != nc:
             raise Error("w_init has invalid shape -- should be (" + String(nc) + ", " + String(nc) + ")")
     var cols = d if code != 0 else nc
     var components = decomp_f32(Python.tuple(nc, cols), context)
@@ -82,7 +83,7 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     var spare = classical_address(components)
     _ = components  # keep the Python object alive through the native call above
     var params = Python.list(
-        classical_address(x), n, d, nc, code, classical_address(winit) if winit is not None else PythonObject(0), seed,
+        classical_address(x), n, d, nc, code, classical_address(winit.value()) if Bool(winit) else PythonObject(0), seed,
         0 if decomp_eq(algorithm, PythonObject("parallel")) else 1, fun_code, decomp_int(fields["max_iter"]),
         1 if project else 0, classical_address(components), classical_address(mixing),
         classical_address(whitening) if code != 0 else spare, classical_address(mean) if code != 0 else spare,

@@ -35,6 +35,7 @@ from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from bindings.py_optional import py_or_none, py_present
 from core.kmeans_native_api import (
     KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest,
     KMEANS_CAP_JOINT, KMEANS_CAP_RESIDENT, KMEANS_CAP_FOLD, KMEANS_CAP_HOST,
@@ -286,7 +287,8 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     _kmeans_conversion_scalar(seed, context)
     seed = family_call(b.int, seed)
     var n_init = family_field(fields, "n_init")
-    var distances = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var distances = Optional[PythonObject]()
     var joint = transform and not fold_fit and (capabilities & KMEANS_CAP_JOINT) != 0
     if joint:
         distances = family_array(Python.tuple(n, k), "<f4", context)
@@ -302,7 +304,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
     var request = KMeansFitRequest(x.address, Int(py=classical_address(centers)),
         Int(py=classical_address(labels)), 0 if fold_fit else Int(py=classical_address(weights)),
-        Int(py=classical_address(distances)) if joint else 0,
+        Int(py=classical_address(distances.value())) if joint else 0,
         n, d, native_clusters, n_weights, native_iterations, native_seed, native_restarts,
         init_code, metric_code, not x.finite, native_tolerance, native_oversampling, fold)
     var result = kmeans_run_fit(connection, request)
@@ -331,9 +333,9 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # uploads the new ones once (`_kmeans_resident`).
     _kmeans_release(model)
     if transform:
-        if distances is None:
+        if not distances:
             return _kmeans_inference(model, binding, source, True, context)
-        return distances
+        return py_or_none(distances)
     return labels
 
 
@@ -390,8 +392,10 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     if d != dc:
         raise Error("mojolearn: X has " + String(d) + " features, KMeans was fitted with " + String(dc))
     var k = Int(py=shape[0])
-    var c = PythonObject(None)
-    var resident = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var c = Optional[PythonObject]()
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var resident = Optional[PythonObject]()
     var resolved = False
     if _kmeans_centers_ready(centers, context):
         # Perf + correctness (lane pass2-cluster-nbr, hazard H3): the
@@ -402,20 +406,20 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         var held = _kmeans_held(model, fields, binding, centers, k, d, connection)
         if held is not None:
             # Minted only for this read-only Array (`_kmeans_resident`).
-            resident = held
+            resident = py_present(held)
             resolved = True
         elif (capabilities & KMEANS_CAP_RESIDENT) == 0:
             # Host column (no resident door): the admission of a ready
             # array is its finite scan; the same refusal as the cast's.
             if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))), k * d):
                 raise Error("Input cluster_centers_ contains NaN or infinity")
-            c = centers
+            c = py_present(centers)
             resolved = True
         _ = centers  # keep the Python object alive through the native passes above
     if not resolved:
         c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
-        k = Int(py=c.shape[0])
-        resident = _kmeans_resident(model, binding, centers, c, k, d, connection, context)
+        k = Int(py=c.value().shape[0])
+        resident = py_present(_kmeans_resident(model, binding, centers, c.value(), k, d, connection, context))
     var destination: PythonObject
     if transform:
         destination = family_array(Python.tuple(n, k), "<f4", context)
@@ -425,12 +429,12 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     if fold_query:
         # Fold kernels run on the store context and retain their existing
         # host-centroid upload, even when another context caches the centers.
-        if c is None:
+        if not c:
             c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
         fold = KMeansFoldStore(x.store.base_id, x.store.base_rows, x.store.index_id)
-    var handle = kmeans_owner_handle(resident) if resident is not None and not fold_query else -1
+    var handle = kmeans_owner_handle(resident.value()) if Bool(resident) and not fold_query else -1
     var request = KMeansQueryRequest(x.address,
-        Int(py=classical_address(c)) if c is not None else 0,
+        Int(py=classical_address(c.value())) if Bool(c) else 0,
         Int(py=classical_address(destination)), n, d, k, metric_code,
         not x.finite, transform, handle, fold)
     var result = kmeans_run_query(connection, request)
