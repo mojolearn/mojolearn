@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The GPU binding's GaussianMixture descriptor (`mixture_native_api_v1` of
-`_mojolearn_mixture`): the bodies `gmm_fit_binding` and the scoring
-bindings run (mixture/gmm_entries.mojo), reached with typed words."""
+`_mojolearn_mixture`): the fit and scoring bodies (mixture/gmm_entries.mojo)
+the deleted Python `gmm_*` entries ran, reached with typed words."""
 from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32

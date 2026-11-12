@@ -62,8 +62,7 @@ NAMES = {
         "kernel_methods_rows_parallel_available",
     ),
     "mixture": (
-        ("gmm_fit", "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-         "gmm_score_bic_aic", "mixture_vendor", "mixture_numeric_mode"),
+        ("mixture_native_api_v1", "gmm_sample", "mixture_vendor", "mixture_numeric_mode"),
         "gmm_parallel_available",
     ),
     "hdbscan": (

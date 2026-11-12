@@ -2674,10 +2674,10 @@ FAMILIES = (
         exports=(
             "mixture_host_numeric_mode", "mixture_host_vendor",
             "mixture_host_column", "mixture_host_sabotage",
-            "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
-            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic", "gmm_sample",
-            # the typed transport the mixture door calls (lane thin-unpack-mixture-cluster)
+            "mixture_vendor", "mixture_numeric_mode", "gmm_sample",
+            # the typed transport the mixture door calls for fit and scoring
+            # (lane thin-unpack-mixture-cluster; the Python gmm_fit and
+            # scoring entries were deleted by lane/round2-fixes)
             "mixture_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -2691,9 +2691,9 @@ FAMILIES = (
     ),
     dict(
         # The neighbors and density inference lane (2026-09-15): the
-        # INFERENCE-ONLY mixture binding a wheel ships. It registers the four
-        # scoring entries (bindings/mixture_host_scoring.mojo, the same
-        # functions the reference binding above registers) and no fit, so
+        # INFERENCE-ONLY mixture binding a wheel ships. It registers the typed
+        # scoring transport (mixture/host/gmm_native_infer_host.mojo, the
+        # reference binding's scoring body) and gmm_sample, and no fit, so
         # gmmh_fit and the starts are not compiled in; the neural family's
         # pattern. `routes` stays None (the reference binding keeps the
         # route); a saved model is served through `mojolearn.host_model`,
@@ -2711,6 +2711,7 @@ FAMILIES = (
         display="the Gaussian mixture's scores, probabilities, labels and samples",
         host_modules=(
             "bindings/mixture_host_scoring.mojo",
+            "mixture/host/gmm_native_infer_host.mojo",
             "mixture/host/gmm_host_oracle.mojo",
             "mixture/checks/sample.mojo",
             "gemm/host/gemm_oracle.mojo",
@@ -2718,9 +2719,9 @@ FAMILIES = (
         exports=(
             "mixture_infer_host_numeric_mode", "mixture_infer_host_vendor",
             "mixture_infer_host_column", "mixture_infer_host_sabotage",
-            "mixture_vendor", "mixture_numeric_mode",
-            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic", "gmm_sample",
+            "mixture_vendor", "mixture_numeric_mode", "gmm_sample",
+            # the typed transport the mixture door scores a saved model through
+            "mixture_native_api_v1",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(

@@ -30,7 +30,7 @@ comptime MIXTURE_CAP_FIT_PREDICT = 1
 @fieldwise_init
 struct GmmFitRequest(Copyable, Movable):
     """`gmm_fit` / `gmm_fit_predict`: addresses of x and the six caller-sized
-    outputs (bindings/_mojolearn_mixture.mojo::gmm_fit_binding order), the
+    outputs (the order of the deleted Python `gmm_fit` entry), the
     labels output (0: none) and the two option names."""
     var source: Int
     var weights: Int
