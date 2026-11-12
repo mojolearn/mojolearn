@@ -14,7 +14,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of, sequential_admit_value
 from bindings.sequential_inputs import _promote
 from bindings.x_prep_native_inputs import _rows_fields
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_slot_once, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_slot_once, array_shape_once, array_metadata_once
 from providers.python.prep_metadata_pyapi import _array_snapshot, _pandas_empty_shape, _description, prep_numeric_vector
 from providers.python.prep_category_pyapi import prep_ndarray_backed, prep_category_array
 from providers.python.preprocessing_input_pyapi import _frozen_values
@@ -67,12 +67,14 @@ def prep_finite(snapshot: ArrayMetadata, name: String) raises:
         raise Error(admitted_finite_wording(name, "X"))
 
 
-def _pandas_block(value: PythonObject, single: Bool, context: PythonObject) raises -> Tuple[ArrayMetadata, Bool]:
+def _pandas_block(value: PythonObject, single: Bool, context: PythonObject,
+                  mut pin: ArrayPin) raises -> Tuple[ArrayMetadata, Bool]:
+    # `pin` receives the door's pin of the returned view.
     if py_type(value) is context["ndarray"]:
-        return (_array_snapshot(value, context), False)
+        return (_array_snapshot(value, context, pin), False)
     var cls = py_type(value)
     if cls is _pd_class("pandas.core.arrays.categorical", "Categorical"):
-        return (prep_category_array(value, context), not single)
+        return (prep_category_array(value, context, pin), not single)
     var backed = prep_ndarray_backed(value)
     if backed is not value:
         var opaque = cls is _pd_class("pandas.core.arrays.period", "PeriodArray")
@@ -81,8 +83,8 @@ def _pandas_block(value: PythonObject, single: Bool, context: PythonObject) rais
             opaque = py_type(dtype) is _pd_class("pandas.core.dtypes.dtypes", "DatetimeTZDtype")
         if py_type(backed) is not context["ndarray"]:
             raise Error("TypeError: pandas extension requires native ndarray storage")
-        var data = _array_snapshot(backed, context)
-        data.owner = Python.tuple(value, data.owner)
+        var data = _array_snapshot(backed, context, pin)
+        pin.owner = Python.tuple(value, pin.owner)
         return (data^, opaque)
     if cls is not _pd_class("pandas.core.arrays.integer", "IntegerArray") and cls is not _pd_class("pandas.core.arrays.floating", "FloatingArray") and cls is not _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
         raise Error("TypeError: pandas input requires ordinary numeric storage without extension callbacks")
@@ -91,28 +93,34 @@ def _pandas_block(value: PythonObject, single: Bool, context: PythonObject) rais
     var mask_value = py_get(fields, "_mask")
     if py_type(data_value) is not context["ndarray"] or py_type(mask_value) is not context["ndarray"]:
         raise Error("TypeError: pandas nullable storage requires exact native arrays")
-    var data = _array_snapshot(data_value, context)
-    var mask = _array_snapshot(mask_value, context)
+    var data_pin = ArrayPin()
+    var mask_pin = ArrayPin()
+    var data = _array_snapshot(data_value, context, data_pin)
+    var mask = _array_snapshot(mask_value, context, mask_pin)
     if len(data.shape) != 1 or len(mask.shape) != 1 or data.count != mask.count or mask.dtype_number != 0 or mask.source.itemsize != 1 or not mask.castable:
         raise Error("TypeError: pandas nullable storage metadata differs")
     var missing = prep_mask_any(mask.source, mask.count)
-    data.owner = Python.tuple(data.owner, mask.keep, mask.owner, value)
+    data_pin.owner = Python.tuple(data_pin.owner, mask_pin.keep, mask_pin.owner, value)
     # A single extension block (also Series) exports its inferred native
     # numeric dtype. Mixed-block extension promotion remains object dtype.
     # pandas/core/arrays/_utils.py::to_numpy_dtype_inference is the source
     # contract: missing integers become float64, missing bool stays object.
     if not single or (missing and data.dtype_number == 0):
+        pin = data_pin^
         return (data^, True)
     if not missing:
+        pin = data_pin^
         return (data^, False)
     if not data.castable:
         raise Error("TypeError: pandas nullable storage requires a native numeric dtype")
     var number = 12 if data.dtype_number >= 1 and data.dtype_number <= 10 else data.dtype_number
     var width = 8 if number == 12 else data.source.itemsize
-    var output = prep_numeric_vector(data.count, number, width, Python.tuple(data.keep, data.owner), context)
+    var output = prep_numeric_vector(data.count, number, width, Python.tuple(data_pin.keep, data_pin.owner), context, pin)
     prep_mask_export(data.source, mask.source, data.count, data.native_byte_order, output.source, number)
     _ = mask^
+    _ = mask_pin
     _ = data^
+    _ = data_pin
     return (output^, False)
 
 
@@ -126,7 +134,7 @@ def _pandas_admit_block(block: PythonObject) raises:
 
 
 def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: Bool,
-                     context: PythonObject) raises -> ArrayMetadata:
+                     context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var b = native_loaded_module("builtins")
     var series = py_type(source) is _pd_class("pandas.core.series", "Series")
     var manager = py_get(_pd_fields(source), "_mgr")
@@ -145,8 +153,9 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
         var empty_shape = _pandas_empty_shape(manager, context)
         if validate:
             prep_shape(empty_shape, True, name)
-        return _description(source, empty_shape^, 12, Python.tuple(source, manager, blocks))
+        return _description(source, empty_shape^, 12, Python.tuple(source, manager, blocks), pin)
     var snapshots = List[ArrayMetadata]()
+    var block_pins = List[ArrayPin]()  # the door's pins of `snapshots`, held through the scatter
     var placements = List[PythonObject]()
     var original_owners = Python.list()
     var rows = -1
@@ -161,7 +170,9 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
     for k in range(len(blocks)):  # driver-loop: admitted pandas block owners and placement metadata
         var block = blocks[k]
         _pandas_admit_block(block)
-        var pair = _pandas_block(_pd_get("pandas._libs.internals", "Block", "values", block), len(blocks) == 1, context)
+        var block_pin = ArrayPin()
+        var pair = _pandas_block(_pd_get("pandas._libs.internals", "Block", "values", block), len(blocks) == 1, context,
+                                 block_pin)
         var data = pair[0].copy()
         var rank = len(data.shape)
         if rank != 1 and rank != 2:
@@ -186,8 +197,9 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
         if data.castable:
             var kind = String("b") if data.dtype_number == 0 else (String("f") if data.source.kind == CAST_KIND_FLOAT else (String("i") if data.source.kind == 1 else String("u")))
             _promote(common_kind, common_size, kind, data.source.itemsize)
-        _ = py_call(original_owners.append, Python.tuple(data.keep, data.owner))
+        _ = py_call(original_owners.append, Python.tuple(block_pin.keep, block_pin.owner))
         snapshots.append(data^)
+        block_pins.append(block_pin^)
     var shape = List[Int]()
     shape.append(rows)
     if not series:
@@ -204,7 +216,7 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
                 prep_finite(snapshots[k], name)
     if objects or long_width > 0 or len(shape) != 2 or rows < 1 or cols < 1 or rows > 2147483647 // cols:
         var description = _description(source, shape^, 17 if objects else (13 if long_width > 0 else 12),
-                                       Python.tuple(source, manager, blocks, original_owners))
+                                       Python.tuple(source, manager, blocks, original_owners), pin)
         if not objects and long_width > 0:
             description.source.itemsize = long_width
         return description^
@@ -228,12 +240,14 @@ def _pandas_snapshot(source: PythonObject, name: String, validate: Bool, scan: B
                 rows, cols, common_kind == "f" and common_size == 8, dest, True)
     var owner = Python.tuple(array_slot_once(output, "_store", context), PythonObject(None),
                             Python.tuple(source, manager, blocks, original_owners), array_slot_once(output, "_mv", context))
-    return ArrayMetadata(output, shape^, CastIn(address, CAST_KIND_FLOAT, 4, rows, 1 if series else cols,
+    _ = block_pins^  # the block storage stays pinned through the scatter above
+    pin = ArrayPin(output, owner)
+    return ArrayMetadata(shape^, CastIn(address, CAST_KIND_FLOAT, 4, rows, 1 if series else cols,
         4 if series else cols * 4, 0 if series else 4), rows * cols, 11, True, True, True,
-        owner, True)
+        True)
 
 
-def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+def _rows_snapshot(source: PythonObject, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     var b = native_loaded_module("builtins")
     var fields = _rows_fields(source, context)
     var dtype = fields["dtype"]
@@ -249,8 +263,10 @@ def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayM
     classical_admit_value(indices, context)
     if not classical_is_array(base, context) or not classical_is_array(indices, context):
         raise Error("TypeError: native row selection requires ordinary native Array storage")
-    var data = _array_snapshot(base, context)
-    var index = _array_snapshot(indices, context)
+    var data_pin = ArrayPin()
+    var index_pin = ArrayPin()
+    var data = _array_snapshot(base, context, data_pin)
+    var index = _array_snapshot(indices, context, index_pin)
     if len(index.shape) != 1 or index.source.kind != 1 or index.source.itemsize != 8 or not index.c_order or not index.castable:
         raise Error("TypeError: native row selection requires a contiguous int64 index buffer")
     if len(data.shape) != 2 or not data.castable:
@@ -269,18 +285,21 @@ def _rows_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayM
     shape.append(n)
     shape.append(d)
     var owner = Python.tuple(array_slot_once(output, "_store", context), PythonObject(None),
-                            Python.tuple(source, data.owner, index.owner), array_slot_once(output, "_mv", context))
-    var result = ArrayMetadata(output, shape^,
+                            Python.tuple(source, data_pin.owner, index_pin.owner), array_slot_once(output, "_mv", context))
+    pin = ArrayPin(output, owner)
+    var result = ArrayMetadata(shape^,
         CastIn(address, data.source.kind, data.source.itemsize, n, d, d * data.source.itemsize, data.source.itemsize),
         n * d, data.dtype_number, True, True, True,
-        owner, True)
+        True)
     _ = data^
+    _ = data_pin
     _ = index^
+    _ = index_pin
     return result^
 
 
 def _exact_array_snapshot(source: PythonObject, name: String, validate: Bool, scan: Bool,
-                          context: PythonObject) raises -> ArrayMetadata:
+                          context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     # An exact ndarray or exact mojolearn Array: the common stateless input.
     # The general path below reached the same snapshot through steps that
     # cannot match these two exact classes: the scipy.sparse class scan (7
@@ -298,9 +317,9 @@ def _exact_array_snapshot(source: PythonObject, name: String, validate: Bool, sc
     var mods = NativeModules()
     sequential_admit_value(mods, source, context)
     var shape = array_shape_once(source, context)
-    var snapshot = array_metadata_once(source, shape^, "input", context, allow_non_native=True, allow_unsupported=True)
+    var snapshot = array_metadata_once(source, shape^, "input", context, pin, allow_non_native=True, allow_unsupported=True)
     if snapshot.is_array:
-        var view = snapshot.owner[3]
+        var view = pin.owner[3]
         if py_type(view) is not mods.module("builtins").memoryview:
             raise Error("TypeError: preprocessing Array storage requires an exact native memoryview")
         sequential_admit_value(mods, view, context)
@@ -314,14 +333,14 @@ def _exact_array_snapshot(source: PythonObject, name: String, validate: Bool, sc
 
 
 def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
-                            scan: Bool, context: PythonObject,
+                            scan: Bool, context: PythonObject, mut pin: ArrayPin,
                             allow_sparse: Bool = False,
                             check_sparse: Bool = True) raises -> ArrayMetadata:
     var source_type = py_type(source)
     if source_type is context["maxabs_rows_class"]:
         # DeviceRows is a frame-like native handle in _sk_validate.describe;
         # it has width semantics but no outer float-buffer finite scan.
-        var snapshot = _rows_snapshot(source, context)
+        var snapshot = _rows_snapshot(source, context, pin)
         if validate:
             prep_shape(snapshot.shape, True, name)
         return snapshot^
@@ -329,7 +348,7 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
     # scalar input: identity tests only, then the one-admission snapshot.
     var ndarray = py_get(context, "ndarray")
     if (ndarray is not None and source_type is ndarray) or source_type is py_get(context, "array_class"):
-        return _exact_array_snapshot(source, name, validate, scan, context)
+        return _exact_array_snapshot(source, name, validate, scan, context, pin)
     var b = native_loaded_module("builtins")
     # Match loaded native sparse class identities before general admission.
     # Reading an unadmitted class's __module__ could invoke metaclass or
@@ -343,10 +362,10 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         var shape = List[Int]()
         shape.append(Int(py=raw[0]))
         shape.append(Int(py=raw[1]))
-        return _description(source, shape^, -101, Python.tuple(source, raw))
+        return _description(source, shape^, -101, Python.tuple(source, raw), pin)
     classical_admit_value(source, context)
     if native_pandas_exact(source):
-        return _pandas_snapshot(source, name, validate, scan, context)
+        return _pandas_snapshot(source, name, validate, scan, context, pin)
     var prepared = native_torch_numpy(source) if _ordinary_torch(py_type(source), context) else source
     var sequence = py_type(prepared) is b.list or py_type(prepared) is b.tuple
     var cls = py_type(prepared)
@@ -385,11 +404,11 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
         # after y validation and inside the old small-fit error context.
         if (sequence and not (validate and scan and scan_sequence)) or not described:
             var refused = _description(prepared, dimensions^, -103 if sequence and numeric_sequence else -102,
-                                       Python.tuple(source, prepared))
+                                       Python.tuple(source, prepared), pin)
             refused.dtype_name = String(error)
             return refused^
         raise error^
-    var snapshot = _array_snapshot(value, context)
+    var snapshot = _array_snapshot(value, context, pin)
     if snapshot.dtype_number == 14 or snapshot.dtype_number == 15 or snapshot.dtype_number == 16:
         raise Error("Complex data not supported: " + name + " got a complex X.")
     if validate and described:
@@ -399,7 +418,7 @@ def prep_transform_snapshot(source: PythonObject, name: String, validate: Bool,
     return snapshot^
 
 
-def prep_transform_values(mut snapshot: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+def prep_transform_values(mut snapshot: ArrayMetadata, mut pin: ArrayPin, context: PythonObject) raises -> PythonObject:
     if snapshot.dtype_number == -102 or snapshot.dtype_number == -103:
         raise Error(snapshot.dtype_name)
     if snapshot.dtype_number == -101:
@@ -416,7 +435,7 @@ def prep_transform_values(mut snapshot: ArrayMetadata, context: PythonObject) ra
         _ = cast_in_kind(snapshot.dtype_number, snapshot.source.itemsize, "input")
         raise Error("TypeError: preprocessing input cannot be cast")
     if snapshot.f32_c() and snapshot.native_byte_order:
-        var view = snapshot.owner[3] if snapshot.is_array else native_buffer_view(snapshot.keep)
+        var view = pin.owner[3] if snapshot.is_array else native_buffer_view(pin.keep)
         # One module view for the type test and the admission (no release
         # window between them).
         var mods = NativeModules()
@@ -424,7 +443,7 @@ def prep_transform_values(mut snapshot: ArrayMetadata, context: PythonObject) ra
             raise Error("TypeError: preprocessing input storage requires an exact native memoryview")
         sequential_admit_value(mods, view, context)
         view = py_call(py_call(view.cast, "B").cast, "f")
-        return _frozen_values(snapshot, view, context)
+        return _frozen_values(snapshot, pin, view, context)
     # Allocate a private packed view, so the transport cannot reread any
     # original mutable Array slot after the operation snapshot was captured.
     var output = classical_typed(Python.tuple(n, d), "<f4", context["output_context"])
@@ -432,5 +451,6 @@ def prep_transform_values(mut snapshot: ArrayMetadata, context: PythonObject) ra
     scaler_cast(snapshot.source.addr, snapshot.source.s0, snapshot.source.s1, n, d,
                 snapshot.source.itemsize, snapshot.source.kind, snapshot.native_byte_order,
                 F32P(unsafe_from_address=address))
-    snapshot.replace_f32(output, address)
+    snapshot.replace_f32(address)
+    pin.keep = output
     return output

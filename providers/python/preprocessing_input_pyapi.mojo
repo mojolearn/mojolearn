@@ -12,7 +12,7 @@ from bindings.classical_arrays import classical_input, classical_is_array, class
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, sequential_admit_value
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once, array_slot_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_slot_once
 from core.scaler_fit_impl import scaler_cast
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -54,15 +54,15 @@ def register_scaler_snapshot(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_ScalerInputSnapshot", existing)
 
 
-def _frozen_values(metadata: ArrayMetadata, view: PythonObject, context: PythonObject) raises -> PythonObject:
+def _frozen_values(metadata: ArrayMetadata, pin: ArrayPin, view: PythonObject, context: PythonObject) raises -> PythonObject:
     # This view owns its pinned storage independently of the caller's Array
     # slots. Its shape, dtype and address are supplied from the snapshot.
     var result = native_storage_allocate(context["array_class"])
     var n = metadata.source.rows
     var d = metadata.source.cols
     py_setattr(result, "_store", PythonObject(None))
-    py_setattr(result, "_base", metadata.keep)
-    py_setattr(result, "_pin", metadata.owner)
+    py_setattr(result, "_base", pin.keep)
+    py_setattr(result, "_pin", pin.owner)
     py_setattr(result, "_mv", view)
     py_setattr(result, "_addr", PythonObject(metadata.source.addr))
     py_setattr(result, "_readonly", PythonObject(metadata.readonly))
@@ -98,7 +98,8 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
             if classical_is_array(value, context) or String(value.dtype.kind) != "f" or Int(py=value.itemsize) != 4:
                 raise Error("TypeError: Scaler input must have dtype float32")
         raise Error("Scaler requires a nonempty two-dimensional input")
-    var metadata = array_metadata_once(value, shape^, "input", context, True,
+    var pin = ArrayPin()
+    var metadata = array_metadata_once(value, shape^, "input", context, pin, True,
         f32_error="" if sequence else "TypeError: Scaler input must have dtype float32")
     var n = metadata.source.rows
     var d = metadata.source.cols
@@ -106,7 +107,7 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
         raise Error("Scaler requires a nonempty two-dimensional input")
     if n > 2147483647 // d:
         raise Error("Scaler exceeds the native Int32 indexing bound")
-    var original_owners = metadata.owner
+    var original_owners = pin.owner
     var view = original_owners[3] if metadata.is_array else native_buffer_view(value)
     if py_type(view) is not b.memoryview:
         raise Error("TypeError: scaler input storage requires an exact native memoryview")
@@ -133,14 +134,15 @@ def scaler_input_snapshot(source: PythonObject, context: PythonObject) raises ->
         scaler_cast(metadata.source.addr, metadata.source.s0, metadata.source.s1, n, d,
                     metadata.source.itemsize, metadata.source.kind, metadata.native_byte_order,
                     F32P(unsafe_from_address=address))
-        metadata.replace_f32(output, address)
+        metadata.replace_f32(address)
+        pin.keep = output
         view = array_slot_once(output, "_mv", context)
     # C-order float32 bytes are a stable, one-dimensional native buffer view.
     view = py_call(py_call(view.cast, "B").cast, "f")
-    var values = _frozen_values(metadata, view, context)
+    var values = _frozen_values(metadata, pin, view, context)
     # Preserve converted/prepared storage as well as the immutable original
     # owner tuple; neither depends on mutable caller Array slots afterwards.
-    py_setattr(values, "_pin", Python.tuple(original_owners, metadata.owner, prepared))
+    py_setattr(values, "_pin", Python.tuple(original_owners, pin.owner, prepared))
     return PythonObject(alloc=ScalerInputSnapshot(source, metadata^, values, write_view))
 
 

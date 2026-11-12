@@ -6,7 +6,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_arrays import classical_address
 from bindings.classical_pandas import classical_admit_value, _pd_class, _pd_fields, _pd_get
 from bindings.sequential_admission import sequential_admit_value
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from core.cast_in import CastIn, cast_in_kind
 
 
@@ -14,12 +14,12 @@ from core.cast_in import CastIn, cast_in_kind
 # Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 
 
-def _array_snapshot(value: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+def _array_snapshot(value: PythonObject, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     classical_admit_value(value, context)
     var shape = array_shape_once(value, context)
-    var result = array_metadata_once(value, shape^, "input", context, allow_non_native=True, allow_unsupported=True)
+    var result = array_metadata_once(value, shape^, "input", context, pin, allow_non_native=True, allow_unsupported=True)
     if result.is_array:
-        var view = result.owner[3]
+        var view = pin.owner[3]
         if py_type(view) is not native_loaded_module("builtins").memoryview:
             raise Error("TypeError: preprocessing Array storage requires an exact native memoryview")
         sequential_admit_value(view, context)
@@ -53,18 +53,19 @@ def _pandas_empty_shape(manager: PythonObject, context: PythonObject) raises -> 
 
 
 def _description(source: PythonObject, var shape: List[Int], dtype: Int,
-                 owner: PythonObject) -> ArrayMetadata:
+                 owner: PythonObject, mut pin: ArrayPin) -> ArrayMetadata:
     # No executable pointer: this only carries the already captured public
     # description until target validation finishes and inner preparation
     # raises its original sparse/object/empty refusal.
     var rows = shape[0] if len(shape) > 0 else 1
     var cols = shape[1] if len(shape) > 1 else 1
-    return ArrayMetadata(source, shape^, CastIn(0, 0, 8, rows, cols, 0, 0),
-                         0, dtype, True, False, False, owner, False, castable=False)
+    pin = ArrayPin(source, owner)
+    return ArrayMetadata(shape^, CastIn(0, 0, 8, rows, cols, 0, 0),
+                         0, dtype, True, False, False, False, castable=False)
 
 
 def prep_numeric_vector(count: Int, number: Int, width: Int, owner: PythonObject,
-                        context: PythonObject) raises -> ArrayMetadata:
+                        context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
     # pandas is already loaded, so this exact ndarray constructor is the
     # existing provider allocation boundary. Its metadata is known, not read
     # back from mutable caller slots after allocation.
@@ -75,9 +76,10 @@ def prep_numeric_vector(count: Int, number: Int, width: Int, owner: PythonObject
     var output = py_call(context["ndarray"], Python.tuple(count), dtype=PythonObject(code))
     var shape = List[Int]()
     shape.append(count)
-    return ArrayMetadata(output, shape^,
+    pin = ArrayPin(output, Python.tuple(output, owner))
+    return ArrayMetadata(shape^,
         CastIn(Int(py=classical_address(output)), kind, width, count, 1, width, 0),
-        count, number, True, True, False, Python.tuple(output, owner), True,
+        count, number, True, True, False, True,
         dtype_name=code)
 
 

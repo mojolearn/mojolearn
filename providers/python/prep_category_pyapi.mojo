@@ -7,7 +7,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays import classical_input
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
-from providers.python.array_metadata_pyapi import ArrayMetadata
+from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.prep_metadata_pyapi import _array_snapshot, _description, prep_numeric_vector
 from core.prep_boundary_impl import prep_category_flags, prep_category_export
 
@@ -20,11 +20,12 @@ def prep_ndarray_backed(value: PythonObject) raises -> PythonObject:
     return _pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", value)
 
 
-def _category_capture(value: PythonObject, context: PythonObject) raises -> Tuple[ArrayMetadata, ArrayMetadata, Int, Int, Bool]:
+def _category_capture(value: PythonObject, context: PythonObject, mut codes_pin: ArrayPin,
+                      mut labels_pin: ArrayPin) raises -> Tuple[ArrayMetadata, ArrayMetadata, Int, Int, Bool]:
     var raw_codes = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", value)
     if py_type(raw_codes) is not context["ndarray"]:
         raise Error("TypeError: pandas categorical codes require native array storage")
-    var codes = _array_snapshot(raw_codes, context)
+    var codes = _array_snapshot(raw_codes, context, codes_pin)
     if len(codes.shape) != 1 or not codes.castable or codes.source.kind != 1:
         raise Error("TypeError: pandas categorical codes require a signed native vector")
     var dtype = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_dtype", value)
@@ -44,7 +45,7 @@ def _category_capture(value: PythonObject, context: PythonObject) raises -> Tupl
         raise Error("TypeError: pandas categories require native index storage")
     if py_type(raw) is not context["ndarray"]:
         raise Error("TypeError: pandas categories require native array storage")
-    var labels = _array_snapshot(raw, context)
+    var labels = _array_snapshot(raw, context, labels_pin)
     if len(labels.shape) != 1:
         raise Error("TypeError: pandas categories require a one-dimensional native buffer")
     var number = labels.dtype_number
@@ -69,30 +70,35 @@ def _category_capture(value: PythonObject, context: PythonObject) raises -> Tupl
     if cls is _pd_class("pandas.core.indexes.period", "PeriodIndex"):
         number = 17
         width = 8
-    codes.owner = Python.tuple(codes.owner, value, dtype, categories, labels.keep, labels.owner)
+    codes_pin.owner = Python.tuple(codes_pin.owner, value, dtype, categories, labels_pin.keep, labels_pin.owner)
     return (codes^, labels^, number, width, finite)
 
 
-def prep_category_target(value: PythonObject, context: PythonObject) raises -> Tuple[ArrayMetadata, Int, Int, Bool]:
-    var captured = _category_capture(value, context)
+def prep_category_target(value: PythonObject, context: PythonObject,
+                         mut pin: ArrayPin) raises -> Tuple[ArrayMetadata, Int, Int, Bool]:
+    # `pin` receives the codes' pin (its owner holds the labels too).
+    var labels_pin = ArrayPin()
+    var captured = _category_capture(value, context, pin, labels_pin)
     return (captured[0].copy(), captured[2], captured[3], captured[4])
 
 
-def prep_category_array(value: PythonObject, context: PythonObject) raises -> ArrayMetadata:
-    var captured = _category_capture(value, context)
+def prep_category_array(value: PythonObject, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    var codes_pin = ArrayPin()
+    var labels_pin = ArrayPin()
+    var captured = _category_capture(value, context, codes_pin, labels_pin)
     ref codes = captured[0]
     ref labels = captured[1]
     var number = captured[2]
     var width = captured[3]
-    var owners = Python.tuple(value, codes.keep, codes.owner, labels.keep, labels.owner)
+    var owners = Python.tuple(value, codes_pin.keep, codes_pin.owner, labels_pin.keep, labels_pin.owner)
     if number > 12 and number != 23:
-        var result = _description(value, codes.shape.copy(), number, owners)
+        var result = _description(value, codes.shape.copy(), number, owners, pin)
         result.source.itemsize = width
         result.dtype_name = labels.dtype_name
         return result^
     if not labels.castable:
         raise Error("TypeError: categorical numeric storage cannot be cast")
-    var result = prep_numeric_vector(codes.count, number, width, owners, context)
+    var result = prep_numeric_vector(codes.count, number, width, owners, context, pin)
     prep_category_export(codes.source, codes.count, codes.native_byte_order,
         labels.source, labels.count, labels.native_byte_order, result.source, number)
     return result^
