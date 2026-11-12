@@ -10,7 +10,7 @@
 # byte a kernel reads is unchanged.
 #
 # Derived from the tree owner's input and score steps (lane migrate-trees,
-# bindings/trees_public_inputs.mojo and trees_public_score.mojo) for the
+# bindings/trees_public_inputs_door.mojo and trees_public_score.mojo) for the
 # linear, discriminant and naive Bayes classifiers; fold the two copies into
 # one module once both lanes are on main.
 #
@@ -74,7 +74,7 @@ from bindings.labels_descriptor_boundary_door import (
 from bindings.label_input_sources_unpack import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
 from bindings.admitted_input_run import AdmittedXView
-from bindings.admitted_input import (
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admit_c_view,
     admitted_dtype,
 )
@@ -193,7 +193,7 @@ def labels_argmax_rows(context: PythonObject, wide: Bool, scores_addr: Int, rows
 
 # The array admission copy (lane consol-a0-admission merged the trees copy
 # into this one) is gone: X, targets and weights are admitted by
-# bindings/admitted_input.mojo (admit_x / admit_f32 / admit_weight_words /
+# bindings/admitted_input_unpack.mojo (admit_x / admit_f32 / admit_weight_words /
 # admit_c_view / admit_ids, admitted_array / admitted_vector), the one path.
 # TOMBSTONE: labels_empty / labels_vector / LabelsView / labels_view / labels_check_rank / labels_shape_repr / _view_of_array / _view_of_buffer / _any_contiguous_address / LabelsMatrix / labels_f32 / labels_f32_view / labels_forest_layout / labels_all_finite / labels_check_sample_weight / labels_prepare_weights (the second admission path, and its trees_* aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.

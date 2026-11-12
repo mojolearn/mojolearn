@@ -14,10 +14,10 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_address, classical_dtype_str, classical_c_order, classical_c_bytes, classical_wrap_array, classical_is_array
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.classical_validate_unpack import classical_view
 from bindings.x_prep_native_inputs_door import _rows_fields, _values
-from bindings.classical_labels import ClassicalLabels, classical_encode_labels
+from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
 from bindings.sequential_admission_door import _one_of
 from bindings.prep_entry_cache_unpack import prep_entry_word

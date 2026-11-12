@@ -86,7 +86,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # The compiled tree-ensemble owner, connected once at import: `fit`,
 # `predict` and `predict_proba` are one native call each
-# (bindings/trees_public_forest.mojo validates the parameters, encodes the
+# (bindings/trees_public_forest_door.mojo validates the parameters, encodes the
 # labels, checks the weights, picks the fit entry and inference engine,
 # launches the kernels and assigns the fitted state).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
@@ -876,7 +876,7 @@ class RandomForestRegressor(_RandomForestBase):
         return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 
-# The forests' native owner (bindings/trees_public_forest.mojo) reads these
+# The forests' native owner (bindings/trees_public_forest_door.mojo) reads these
 # fixed tables: the criterion names, the refusal texts and the deviance
 # criterion codes whose targets it checks.
 _RF_TABLES = dict(

@@ -92,7 +92,7 @@ from bindings.gp_classifier_native_door import (
 )
 from bindings.gp_common_native_unpack import gp_kernel_arrays_transport
 from bindings.gp_labels_native_door import gp_encode_labels_transport, gp_decode_labels
-from bindings.trees_public_forest import forest_shard_prepare, forest_shard_fit, forest_shard_publish
+from bindings.trees_public_forest_door import forest_shard_prepare, forest_shard_fit, forest_shard_publish
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 from core.shared_slot import SharedSlot

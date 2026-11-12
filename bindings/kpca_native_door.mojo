@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_address, classical_typed_native
-from bindings.admitted_input import AdmittedX, admit_f32
+from bindings.admitted_input_unpack import AdmittedX, admit_f32
 from bindings.decomp_inputs_unpack import decomp_admit
 from bindings.decomp_owner_common_unpack import F32P, decomp_attr
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_admit, decomp_scalar_repr

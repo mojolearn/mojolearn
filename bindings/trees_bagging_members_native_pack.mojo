@@ -6,10 +6,11 @@ from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
 from bindings.trees_boost_admission_unpack import boost_tree_admit
 from bindings.trees_boost_admission_pack import boost_admit
 from bindings.host_inference_scalars_door import host_inference_scalar
-from bindings.trees_public_boost import _seed, _sub_seed, _validated_clone
-from bindings.trees_public_forest import forest_get_params
-from bindings.trees_public_forest import forest_refresh, forest_capture_mode, forest_kind
-from bindings.trees_public_meta import _copy_block
+from bindings.trees_public_boost_door import _seed, _validated_clone
+from xtrees.trees_boost_run import _sub_seed
+from bindings.trees_public_forest_door import forest_get_params
+from bindings.trees_public_forest_door import forest_refresh, forest_capture_mode, forest_kind
+from bindings.trees_public_meta_door import _copy_block
 from bindings.trees_public_auxiliary_door import _model_buffers
 from bindings.native_array_storage_door import native_array_from_values
 from bindings.classical_arrays_door import classical_wrap_array

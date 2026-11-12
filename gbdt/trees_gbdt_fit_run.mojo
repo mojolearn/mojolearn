@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RUN of the GradientBoosting fit door (bindings/trees_public_gbdt_fit.mojo):
+"""RUN of the GradientBoosting fit door (bindings/trees_public_gbdt_fit_door.mojo):
 the parts of `GradientBoosting.fit` and its option checks that read only
 typed values. The door's UNPACK reads the estimator's Python fields and the
 connected option tables into `GbdtSearchFacts` / plain scalars; these

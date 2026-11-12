@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RUN of the forest door (bindings/trees_public_forest.mojo): the fit and
+"""RUN of the forest door (bindings/trees_public_forest_door.mojo): the fit and
 predict request values and the decisions that read only typed values (the
 export size checks, the verify verdict, the export selection, the fit
 notice bits). The door's UNPACK admits X, y and the estimator's fields;
@@ -78,7 +78,7 @@ def forest_fit_core(key: EntryRef, classifier: Bool, row_major: Bool, args: Fore
     (`ForestFitArgs`: X and y addresses, the params views, the row weights,
     the tree-ID start and the auxiliary outputs) launched in the image `key`
     names (XF_FIT). Returns the export handle the caller's PACK copies and
-    releases. The public forest door (bindings/trees_public_forest.mojo
+    releases. The public forest door (bindings/trees_public_forest_door.mojo
     `_launch`) and the tree-range shard worker (`forest_shard_fit`, called
     by bindings/parallel_shard_native.mojo) both call this; neither builds a
     model object for it. An image that scans X on the device reports a

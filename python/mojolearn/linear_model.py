@@ -287,7 +287,7 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
 
 # TOMBSTONE: `_ols_tsqr_centered` (the Python OLS one-entry TSQR solve on the decomp
 # kit) deleted 2026-11-11 by lane pyout-decomp-linalg: it had no caller (the native
-# linear owner, bindings/x_linear_native.mojo, runs the fit). Code recoverable at 6f82d0255d.
+# linear owner, bindings/x_linear_native_door.mojo, runs the fit). Code recoverable at 6f82d0255d.
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -1450,6 +1450,6 @@ _QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_inte
 
 # The compiled LogisticRegression owner, connected once at import: fit,
 # decision_function, predict, predict_proba, predict_log_proba and score are
-# one call each into it (bindings/logistic_native.mojo).
+# one call each into it (bindings/logistic_native_door.mojo).
 from ._native_logistic_bridge import connect as _connect_logistic  # noqa: E402
 _LR_CALL, _LR_CONTEXT = _connect_logistic()

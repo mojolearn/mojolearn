@@ -5,7 +5,7 @@ entry already holds its words (lane a5-admit-core-followup, 2026-11-08; plan
 docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 3;
 docs/plans/REGRESSIONS_0866_VS_0855.md row R1).
 
-`admit_x(..., defer_finite=True)` (bindings/admitted_input.mojo) borrows a
+`admit_x(..., defer_finite=True)` (bindings/admitted_input_unpack.mojo) borrows a
 float32 C-order X with NO host pass over it and returns `finite = False`:
 the finiteness test moves into the kernel entry that reads X anyway.
 

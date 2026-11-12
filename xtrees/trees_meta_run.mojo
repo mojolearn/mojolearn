@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RUN of the meta-estimator door (bindings/trees_public_meta.mojo): the
+"""RUN of the meta-estimator door (bindings/trees_public_meta_door.mojo): the
 calibrated-probability program `x_trees_calibrated_proba` reads
 (xtrees/calibrated_apply.mojo), built from typed values. The door's UNPACK
 calls each member's `decision_function` / `predict_proba` (a public Python

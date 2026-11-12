@@ -6,7 +6,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.classical_validate_unpack import classical_view
 from bindings.classical_arrays_door import classical_kind
-from bindings.classical_labels import labels_shape_of
+from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.cluster_fit_a_native_door import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING

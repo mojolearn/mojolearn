@@ -6,7 +6,7 @@ format. Counts, cast, ratios, Float32 planning and row gather are shared.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.admitted_input import admitted_storage_native
+from bindings.admitted_input_unpack import admitted_storage_native
 from bindings.class_weight_boundary_unpack import (
     CLASS_WEIGHT_CLASSICAL, CLASS_WEIGHT_SVC, CLASS_WEIGHT_TREES, class_weight_dictionary_values,
 )

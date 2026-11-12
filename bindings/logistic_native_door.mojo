@@ -8,7 +8,7 @@
 # arguments the Python shell passed, in the same order, so the same bits, and
 # stores the fitted attributes. score predicts and scores in the same call:
 # the decoded prediction is handed straight to the native accuracy program
-# (bindings/classical_labels.mojo `classical_accuracy`).
+# (bindings/classical_labels_door.mojo `classical_accuracy`).
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from std.python._cpython import PyObjectPtr
@@ -47,16 +47,16 @@ from bindings.logistic_admission_pack import logistic_initialize, logistic_get_p
 from bindings.prep_lda_admission_door import lda_native_context, lda_native_labels
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list
 from bindings.scaler_lifecycle_native_door import _public_result
-from bindings.classical_labels import _flatten_labels
+from bindings.classical_labels_door import _flatten_labels
 from bindings.classical_arrays_door import classical_address
-from bindings.admitted_input import admit_x, admit_x_unrecorded, admitted_finite_refuse
+from bindings.admitted_input_unpack import admit_x, admit_x_unrecorded, admitted_finite_refuse
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     ClassicalLabels, classical_encode_labels, classical_decode_labels, classical_accuracy,
     labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
     labels_address, labels_cast,
 )
-from bindings.admitted_input import AdmittedX, admit_weight_words, admitted_words, admitted_storage_native
+from bindings.admitted_input_unpack import AdmittedX, admit_weight_words, admitted_words, admitted_storage_native
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 

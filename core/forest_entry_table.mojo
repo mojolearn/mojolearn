@@ -8,7 +8,7 @@ and `FOREST_TABLE_ET` for `_mojolearn_trees` / `_mojolearn_trees_host`. The
 entry is the dispatch of `core/forest_entry.mojo` over the operations of
 `core/forest_fit_request.mojo` (fits, export transfer, sequential and
 resident predict, the host strict snapshot, capability words). The forest
-door (`bindings/trees_public_forest.mojo`) reads the slot of the image the
+door (`bindings/trees_public_forest_door.mojo`) reads the slot of the image the
 trees owner connected for the estimator's tier (the bridge records the key
 as `rf_native_key` / `trees_native_key`) and calls the pointer with plain
 spans. Modeled on `core/gbdt_entry_table.mojo`; separate slot names.

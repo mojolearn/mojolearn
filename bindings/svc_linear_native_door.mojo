@@ -35,7 +35,7 @@ from bindings.class_weight_rows_boundary_pack import class_weight_plan_admitted
 from bindings.label_weights_boundary_unpack import label_weights_run
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY, LABEL_WEIGHTS_ROWS
 from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
-from bindings.classical_labels import labels_type_name, classical_encode_labels
+from bindings.classical_labels_door import labels_type_name, classical_encode_labels
 from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_connection, linear_svc_run_fit, linear_svc_run_query, LinearSvrFitResult, linear_svr_run_fit, LinearSvcPrediction
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcFitPlan, LinearSvcWeightsState, linear_svc_pack
 from core.qn_single_fit import QnSingleFitPlan

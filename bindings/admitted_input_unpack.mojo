@@ -252,7 +252,7 @@ def admitted_array(shape: PythonObject, typestr: String, context: PythonObject, 
     # Lane a1b-doors-opt-in-trees-linear: labels_empty / labels_vector (and
     # their trees_empty alias) moved here word for word: one zero store
     # (native_array_zeros), the same zero bytes as before.
-    # TOMBSTONE: labels_empty / labels_vector / trees_empty (bindings/classical_labels.mojo) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+    # TOMBSTONE: labels_empty / labels_vector / trees_empty (bindings/classical_labels_door.mojo) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
     # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
     var layout = NativeArrayLayout(native_shape_unpack(shape), _array_itemsize(typestr), order)
     return classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
@@ -422,7 +422,7 @@ def admit_f32(source: PythonObject, ndim: Int, name: String, context: PythonObje
     inputs that are not a public X (a target, a fitted array, a published
     prediction); a public X goes through admit_x_unrecorded / admit_x."""
     # Lane a1b-doors-opt-in-trees-linear: the former labels_f32 /
-    # trees_f32 (bindings/classical_labels.mojo, a second cast path with its
+    # trees_f32 (bindings/classical_labels_door.mojo, a second cast path with its
     # own view struct) is this call.
     var array = admit_x(source, ndim, name, context, False, admitted, defer_finite, order, as_array,
                         finite)

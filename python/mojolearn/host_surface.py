@@ -3615,8 +3615,8 @@ FAMILIES = (
         classes=(),
         display="native quasi-Newton, logistic regression and linear expansion estimators",
         host_modules=("bindings/qn_native_door.mojo",
-                      "bindings/logistic_native.mojo",
-                      "bindings/x_linear_native.mojo",),
+                      "bindings/logistic_native_door.mojo",
+                      "bindings/x_linear_native_door.mojo",),
         exports=(
             "qn_native_call",
             "logistic_native_call",

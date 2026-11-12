@@ -5,7 +5,7 @@
 # (python/mojolearn/_expansion_trees.py). This is the Python orchestration
 # those methods ran, step for step: the parameter checks with their wording,
 # the member draws, the member trees assembled with their constructors'
-# stored state and fitted by the forest owner (bindings/trees_public_forest.mojo:
+# stored state and fitted by the forest owner (bindings/trees_public_forest_door.mojo:
 # the same fit entries, sessions and exports the members' own Python
 # methods launched), the x_trees glue kernels in the same order with the
 # same arguments, and the fitted state. Every kernel and its arguments are
@@ -34,13 +34,25 @@ from bindings.trees_staged_input_door import trees_stage_members, trees_stage_ro
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.trees_side_records_unpack import trees_side_get, trees_side_put, trees_side_drop, trees_key_same
 from bindings.classical_arrays_door import classical_wrap_array, _store_code
-from bindings.trees_public_inputs import (
-    TREES_NONFINITE, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
-    trees_helper, trees_env, trees_reshape, trees_address,
-    trees_encode_labels, trees_decode_labels, trees_cast,
-    trees_weighted_rows, trees_call, trees_class_rows_only,
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_table,
+    trees_entry,
+    trees_need,
+    trees_helper,
+    trees_env,
+    trees_reshape,
+    trees_address,
+    trees_encode_labels,
+    trees_decode_labels,
+    trees_cast,
+    trees_weighted_rows,
+    trees_call,
+    trees_class_rows_only,
 )
-from bindings.admitted_input import (
+from bindings.trees_public_inputs_run import TREES_NONFINITE
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
 )
 from bindings.admitted_input_run import AdmittedXView
@@ -52,11 +64,35 @@ from xtrees.trees_boost_run import (
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
     boost_count_fraction_ok, boost_count_check, boost_weight_flags_check, boost_dart_cap_check,
 )
-from bindings.trees_public_forest import (
-    forest_fit, forest_predict, forest_predict_proba, forest_predict_codes, forest_get_params, forest_refresh,
-    forest_capture_mode, forest_effective_mode, forest_export, forest_fit_dart_member, forest_kind,
-    _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
-    _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
+from bindings.trees_public_forest_door import (
+    forest_fit,
+    forest_predict,
+    forest_predict_proba,
+    forest_predict_codes,
+    forest_get_params,
+    forest_refresh,
+    forest_capture_mode,
+    forest_effective_mode,
+    forest_export,
+    forest_fit_dart_member,
+    forest_kind,
+    _check_mode,
+    _rf_params,
+    _store_model,
+    _int,
+    _float,
+    _repr,
+    _str,
+    _truthy,
+    _is_bool,
+    _is_integral,
+    _launch,
+    _dt_tier_bins,
+)
+from xtrees.trees_forest_run import (
+    _refuse,
+    _classifier,
+    _y_rows_check,
 )
 from bindings.trees_resident_table import (
     TREES_RESIDENT_DART, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_watch,

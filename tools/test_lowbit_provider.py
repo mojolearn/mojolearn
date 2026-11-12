@@ -33,7 +33,7 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
 
 
 def test_once_captured_foreign_metadata_retains_zero_copy_owner():
-    source=(ROOT/'bindings/admitted_input.mojo').read_text()
+    source=(ROOT/'bindings/admitted_input_unpack.mojo').read_text()
     section=source[source.index('struct AdmittedTypedPin'):]
     assert section.count('AdmittedBorrowedBuffer(value)')==1
     assert 'classical_admit_value(value, context)' in section

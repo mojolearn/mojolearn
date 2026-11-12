@@ -8,7 +8,7 @@
 # outside the package. An owner calls `lifecycle_begin` before its algorithm,
 # `lifecycle_end` in a `finally`, then `lifecycle_complete` and
 # `lifecycle_result` (same order as `_xl_public_operation` in
-# bindings/x_linear_native.mojo, the pattern this generalizes).
+# bindings/x_linear_native_door.mojo, the pattern this generalizes).
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
 from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit

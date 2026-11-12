@@ -28,13 +28,20 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_wrap_array, _store_code
 from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
-from bindings.trees_public_inputs import (
-    TreesLabels, trees_builtins, trees_table,
-    trees_reshape, trees_address, trees_itemsize,
-    trees_encode_labels, trees_decode_labels, trees_cast, trees_finite_f32,
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_table,
+    trees_reshape,
+    trees_address,
+    trees_itemsize,
+    trees_encode_labels,
+    trees_decode_labels,
+    trees_cast,
 )
+from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.admitted_input_run import AdmittedXView
-from bindings.admitted_input import (
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype,
 )
@@ -43,20 +50,30 @@ from bindings.classical_arrays_door import classical_address
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_meta_run import CalibratedProgram, meta_binary_column_check
 from xtrees.trees_forest_run import trees_check_features
-from bindings.trees_public_forest import (
-    _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
+from bindings.trees_public_forest_door import (
+    _check_mode,
+    _repr,
+    _str,
+    _truthy,
+    _is_bool,
+    _is_integral,
+    forest_kind,
 )
-from bindings.trees_public_boost import (
+from xtrees.trees_forest_run import (
+    _refuse,
+    _classifier,
+)
+from bindings.trees_public_boost_door import (
     _mode, _xt, _xr, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
-from bindings.classical_labels import labels_accuracy, _classification_encoded as score_classification_encoded
+from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split,
 )
-from bindings.classical_labels import _label_list, classical_score_from_codes
+from bindings.classical_labels_door import _label_list, classical_score_from_codes
 from bindings.p3_labels_metrics_native_door import p3_interleave_columns
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.classifier_public_lifecycle_door import classifier_label_list
@@ -2369,7 +2386,7 @@ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: P
             return _regressor_score(model, prediction, y, sample_weight, context)
         # Scored in codes (lane ne2-b-members, N082): the predicted codes
         # and `classes_` go to the shared score from codes (y encoded once
-        # against `classes_`, bindings/classical_labels.mojo
+        # against `classes_`, bindings/classical_labels_door.mojo
         # `classical_score_from_codes`, lane ne1-h-labels) instead of a decode
         # to labels (a Python list of n objects for str classes) that the
         # accuracy then re-encoded. Same refusals, same match count and

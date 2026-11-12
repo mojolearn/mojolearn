@@ -238,7 +238,7 @@ def _(ml, X, yc, yr, Xh=None):
     # partly outside the fitted range, so the out-of-bounds NaN word is hashed
     m = ml.IsotonicRegression(y_min=-2.0).fit(X[:3000, 3], yr[:3000])
     # increasing='auto' picks the direction from the sign of Spearman's rho
-    # (bindings/x_linear_native.mojo _xl_isotonic_fit -> x_linear_spearman_sign)
+    # (bindings/x_linear_native_door.mojo _xl_isotonic_fit -> x_linear_spearman_sign)
     ma = ml.IsotonicRegression(increasing="auto").fit(X[:3000, 3], yr[:3000])
     return _fit(dict(xt=_h(m.X_thresholds_), yt=_h(m.y_thresholds_), predict=_h(m.predict(X[:256, 3])),
                      auto=_h(np.asarray([int(bool(ma.increasing_))], dtype=np.int64), ma.y_thresholds_,

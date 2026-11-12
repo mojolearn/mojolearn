@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RUN of the boosting door (bindings/trees_public_boost.mojo): AdaBoost,
+"""RUN of the boosting door (bindings/trees_public_boost_door.mojo): AdaBoost,
 Bagging and DART checks and choices that read only typed values. The door's
 UNPACK reads the estimator's Python fields into plain values (in the order
 the checks read them, so the first refusal is unchanged); these functions

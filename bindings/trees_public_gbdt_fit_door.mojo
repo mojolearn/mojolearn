@@ -28,12 +28,20 @@ from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.host_archive_native_door import host_archive_gbdt_state
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_buffer_owner_pack import native_buffer_view
-from bindings.trees_public_inputs import (
-    TreesLabels, trees_builtins, trees_entry, trees_need, trees_helper, trees_address,
-    trees_forest_x, trees_finite_f32, trees_call, trees_encode_labels,
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_entry,
+    trees_need,
+    trees_helper,
+    trees_address,
+    trees_forest_x,
+    trees_call,
+    trees_encode_labels,
 )
+from bindings.trees_public_inputs_run import trees_finite_f32
 from bindings.admitted_input_run import AdmittedXView
-from bindings.admitted_input import (
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admitted_vector, admitted_array, classical_view, admitted_dtype,
 )
 from bindings.classical_arrays_door import classical_address, classical_c_order

@@ -3,7 +3,7 @@
 # (python/mojolearn/_expansion_linear.py and the coordinate-descent pair in
 # python/mojolearn/_solver_impl.py). Each public method is one call into
 # x_linear_c, which validates the arguments with the Python wording, encodes
-# labels (bindings/classical_labels.mojo), assembles the same int and float
+# labels (bindings/classical_labels_door.mojo), assembles the same int and float
 # parameter lists, makes the same fit / decision / class-prep calls through
 # the native x_linear operations table (core/linear_entry_table_ext.mojo, no
 # CPython between the two modules) and the `cd_fit` / `cd_predict` calls
@@ -65,18 +65,37 @@ from bindings.classical_warnings_unpack import classical_warning
 from bindings.prep_native_estimator_door import prep_native_context, prep_native_split
 from bindings.msel_inputs_unpack import msel_admit
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
-from bindings.admitted_input import (
-    AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    classical_view, admit_ids, admitted_finite_entry_refuse,
+from bindings.admitted_input_unpack import (
+    AdmittedX,
+    admit_x_unrecorded,
+    admit_f32,
+    admit_weight_words,
+    admitted_words,
+    admitted_array,
+    admitted_vector,
+    classical_view,
+    admit_ids,
 )
+from bindings.admitted_input_run import admitted_finite_entry_refuse
 from bindings.admitted_input_run import AdmittedXView
 from bindings.classical_arrays_door import classical_dtype_str, classical_c_order, classical_is_f32
 from bindings.py_optional import py_or_none, py_present
-from bindings.classical_labels import (
-    ClassicalLabels, labels_full_f32, labels_address, labels_cast, labels_reshape,
-    labels_shape_of, labels_env, classical_encode_labels, classical_decode_labels, classical_accuracy, labels_r2,
-    labels_type_name, labels_real_type, labels_integral_type,
+from bindings.classical_labels_door import (
+    ClassicalLabels,
+    labels_full_f32,
+    labels_address,
+    labels_cast,
+    labels_reshape,
+    labels_shape_of,
+    classical_encode_labels,
+    classical_decode_labels,
+    classical_accuracy,
+    labels_r2,
+    labels_type_name,
+    labels_real_type,
+    labels_integral_type,
 )
+from bindings.classical_labels_run import labels_env
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -296,7 +315,7 @@ def _xl_floats(values: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def _xl_matrix(source: PythonObject, est: String, context: PythonObject) raises -> AdmittedX:
-    """`_matrix(X)`: X through the one admission (bindings/admitted_input.mojo
+    """`_matrix(X)`: X through the one admission (bindings/admitted_input_unpack.mojo
     admit_x_unrecorded) with scikit-learn's refusals: the caller's float32
     C-order words as they are, anything else one parallel cast."""
     # Lane a1b-doors-opt-in-trees-linear: X was labels_f32 (a second cast
@@ -1678,7 +1697,7 @@ def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) rai
     if cls is b.list or cls is b.tuple or cls is b.range:
         var store = py_call(context["array_type"], PythonObject("q"), values)
         return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
-    # The one integer admission (bindings/admitted_input.mojo admit_ids):
+    # The one integer admission (bindings/admitted_input_unpack.mojo admit_ids):
     # one parallel read of the exporter's strides into fresh int64 words.
     return admit_ids(values, name, context)
 

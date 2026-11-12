@@ -10,7 +10,7 @@ keeps both readings the former body made of it: an integer where
 for a reading that failed, so the body's read of that slot refuses as it
 did. `gbdt_fit_outcome_py` packs the outcome as the former result list.
 Used by both gbdt bindings' Python entries and by the GBDT door
-(bindings/trees_public_gbdt_fit.mojo), which then calls the fit natively.
+(bindings/trees_public_gbdt_fit_door.mojo), which then calls the fit natively.
 """
 from std.python import Python, PythonObject
 from bindings.py_lists import py_list_f64

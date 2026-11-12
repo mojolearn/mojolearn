@@ -32,12 +32,21 @@ from bindings.trees_lifetime_door import trees_resident_new
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from core.trees_gbdt_metadata import gbdt_tree_metadata
-from bindings.trees_public_inputs import (
-    trees_builtins, trees_table, trees_entry, trees_need, trees_helper,
-    trees_reshape, trees_address, trees_forest_x, trees_finite_f32,
-    trees_cast, trees_decode_labels, trees_call,
+from bindings.trees_public_inputs_door import (
+    trees_builtins,
+    trees_table,
+    trees_entry,
+    trees_need,
+    trees_helper,
+    trees_reshape,
+    trees_address,
+    trees_forest_x,
+    trees_cast,
+    trees_decode_labels,
+    trees_call,
 )
-from bindings.admitted_input import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
+from bindings.trees_public_inputs_run import trees_finite_f32
+from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
 from bindings.py_optional import py_present
 from gbdt.trees_gbdt_run import (
     gbdt_known_vendor, gbdt_remember_vendor, gbdt_known_mode, gbdt_mode_of_code, gbdt_mode_checked, gbdt_text_has_ctr,

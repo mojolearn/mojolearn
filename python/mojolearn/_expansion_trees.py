@@ -45,7 +45,7 @@ from . import _native_archive_bridge, _native_trees_bridge
 # is one native call.
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled tree-ensemble owner: a DecisionTree*'s `fit`, `predict` and
-# `predict_proba` are one native call each (bindings/trees_public_forest.mojo;
+# `predict_proba` are one native call each (bindings/trees_public_forest_door.mojo;
 # splitter='random' grows one extra-trees tree there).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 # Lane ne1-h-labels: operations pass as integer codes from the one native
@@ -448,7 +448,7 @@ _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 #   MOJOLEARN_TE_NATIVE_SPLITS  the cv fold bookkeeping of Stacking /
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
 #     label columns leave their Python row loops (`_trees_native_folds`;
-#     the native meta-estimator owner, bindings/trees_public_meta.mojo);
+#     the native meta-estimator owner, bindings/trees_public_meta_door.mojo);
 #   MOJOLEARN_TE_ADA_SESSION_SHARE  the AdaBoost members' data session (every
 #     build opens it) lets later members reuse the first member's quantile
 #     tables (may move bits: a quality gate, not a digest).
@@ -1548,7 +1548,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         """Fit on ``X``, then return ``transform(X)``."""
         return _TREES(self, _OP.trees_public_boost_fit_transform, (X, y), _TREES_CONTEXT)
 
-# The bagged and boosted ensembles' native owner (bindings/trees_public_boost.mojo):
+# The bagged and boosted ensembles' native owner (bindings/trees_public_boost_door.mojo):
 # each class's schema, the member classes it assembles and their fixed tables.
 _BOOST_MEMBERS = dict(trees_dt_classifier=DecisionTreeClassifier, trees_dt_regressor=DecisionTreeRegressor,
                       trees_rf_classifier=RandomForestClassifier, trees_rf_regressor=RandomForestRegressor,
@@ -1640,7 +1640,7 @@ class _MetaRegressorScore:
 
 class _TreesWrapperBase(_TreesEnsembleBase):
     """The meta-estimators' base: each public method is one call into
-    bindings/trees_public_meta.mojo (operations `trees_meta_*`), which
+    bindings/trees_public_meta_door.mojo (operations `trees_meta_*`), which
     fits and queries the members through their own public methods."""
 
 
@@ -2413,7 +2413,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
 #: The x_prep one-program CalibratedClassifierCV(GaussianNB) fit
 #: (MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple) was assembled by the prep
 #: family's Python program builder; the native owner takes the reference
-#: route (bindings/trees_public_meta.mojo, header note).
+#: route (bindings/trees_public_meta_door.mojo, header note).
 
 class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
     """Calibrate a classifier's probabilities with cross-validation.
@@ -2528,7 +2528,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
-# The meta-estimators' native owner (bindings/trees_public_meta.mojo): each
+# The meta-estimators' native owner (bindings/trees_public_meta_door.mojo): each
 # class's schema.
 _native_trees_bridge.register_meta(VotingClassifier, "voting_classifier")
 _native_trees_bridge.register_meta(VotingRegressor, "voting_regressor")

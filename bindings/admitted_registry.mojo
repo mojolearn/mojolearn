@@ -31,7 +31,7 @@
 #   admitted_held_address / _rows / _cols(index)
 #                     the held matrix's words and shape
 #
-# `_admitted_x` (bindings/admitted_input.mojo) returns a held matrix as it is
+# `_admitted_x` (bindings/admitted_input_unpack.mojo) returns a held matrix as it is
 # (borrowed, finite: no view, no check, no scan) for a C-order float32
 # request; every door that reads X through admit_x gets the hook. This file
 # imports nothing of the admission path, so admitted_input.mojo and any

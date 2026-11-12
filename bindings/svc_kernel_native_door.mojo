@@ -45,7 +45,7 @@ from bindings.mode_metadata_native_door import _class_fields
 from bindings.gp_svm_records_door import gpsvm_no_fit_callbacks
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classical_arrays_door import classical_typed
-from bindings.classical_labels import labels_cast, labels_real_type, classical_encode_labels
+from bindings.classical_labels_door import labels_cast, labels_real_type, classical_encode_labels
 from bindings.native_array_view_pack import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.family_common_unpack import (
@@ -95,7 +95,7 @@ comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 63
 from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.device_rows_door_run import DoorRowsStore
-from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
+from bindings.admitted_input_unpack import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from core.host_finite_scan import host_all_finite_f32_strided
 from providers.python.svc_descriptor_pyapi_door import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
@@ -1933,7 +1933,7 @@ def _svc_kernel_operation(model: PythonObject, operation: String, args: PythonOb
     if operation == "family_svc_svc_score":
         # N382: accuracy on codes. y is encoded once against classes_ and
         # compared with the predicted codes in the x_metrics COUNT program
-        # (classical_score_from_codes, bindings/classical_labels.mojo); the
+        # (classical_score_from_codes, bindings/classical_labels_door.mojo); the
         # prediction is never decoded to label objects and re-encoded. The
         # same matched count over the same row count: no bit change.
         var codes = _svc_predict_codes(model, fields, args[0], args[1], context, native)

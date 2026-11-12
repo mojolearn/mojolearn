@@ -3,7 +3,7 @@
 # returning to Python between the two.
 #
 # Accuracy is the one shared `labels_accuracy` / `classical_score_from_codes`
-# (bindings/classical_labels.mojo); `trees_class_codes` maps labels to a
+# (bindings/classical_labels_door.mojo); `trees_class_codes` maps labels to a
 # fitted class table for the adapter and meta scores.
 #
 # `trees_r2` is `_metrics_impl.r2_score`'s default 1-D path: `_pair_1d` over
@@ -21,20 +21,20 @@ from bindings.labels_stat_boundary_pack import labels_stat_pack
 from bindings.base_helpers_released_unpack import base_reduce_stat
 from bindings.py_balanced import py_call, py_type, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
-from bindings.trees_public_inputs import trees_builtins, trees_table, trees_entry, trees_address
-from bindings.classical_labels import ScoreLabels, LABELS_GATHER_I32
+from bindings.trees_public_inputs_door import trees_builtins, trees_table, trees_entry, trees_address
+from bindings.classical_labels_door import ScoreLabels, LABELS_GATHER_I32
 from bindings.labels_descriptor_boundary_door import labels_gather
 from bindings.labels_score_boundary_door import score_keys_index
 from core.labels_score_keys import score_key_codes
 from std.python._cpython import GILReleased
-from bindings.admitted_input import AdmittedX, admit_f32, admitted_vector
+from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_vector
 # TOMBSTONE: trees_f32 / trees_all_finite / TreesView / TreesMatrix / trees_vector / _view_of_array / _view_of_buffer uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas_door import native_pandas_exact, native_pandas_f32
-from bindings.trees_public_forest import (
+from bindings.trees_public_forest_door import (
     forest_predict, forest_predict_codes, forest_public_predict, forest_effective_mode, forest_kind,
 )
-from bindings.classical_labels import classical_score_from_codes
+from bindings.classical_labels_door import classical_score_from_codes
 from xtrees.trees_score_run import score_shape_text
 
 # ------------------------------------------------------------ shapes
@@ -239,7 +239,7 @@ def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyth
 # _arena_address, trees_accuracy, trees_accuracy_labels, _accuracy_encoded,
 # _owned_f32 and the xtrees/trees_score_run.mojo COUNT program words) is
 # deleted: its callers use the one shared accuracy and label encoder in
-# bindings/classical_labels.mojo (`labels_accuracy`, `_classification_encoded`),
+# bindings/classical_labels_door.mojo (`labels_accuracy`, `_classification_encoded`),
 # which already reads labels by class pointer and runs the same COUNT program
 # with the same stage words (no bit change: the hit count and the weight sums
 # do not depend on label numbering). The per-row CPython loops of the copy
@@ -345,7 +345,7 @@ def _score_codes(model: PythonObject, pair: PythonObject, y: PythonObject, sampl
                  n: Int, context: PythonObject) raises -> PythonObject:
     """A classifier's accuracy from its `(classes_, codes)` prediction.
     Lane ne1-h-labels (plan section H, N435): the one shared score from
-    codes (bindings/classical_labels.mojo `classical_score_from_codes`): y
+    codes (bindings/classical_labels_door.mojo `classical_score_from_codes`): y
     is encoded once against `classes_` and the predicted codes go to the
     COUNT program as they are, for str and integer classes alike (lane
     perf-trees-owed scored str classes in codes through a private copy,

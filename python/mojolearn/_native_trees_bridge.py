@@ -379,7 +379,7 @@ def _connect_public_forest(cls, context):
 
 def register_boost(cls, kind, **tables):
     """Connect one bagged or boosted tree ensemble class at its definition:
-    `kind` names its schema in bindings/trees_public_boost.mojo
+    `kind` names its schema in bindings/trees_public_boost_door.mojo
     ("bagging_classifier", "ada_regressor", "dart_classifier", "rte", ...);
     `tables` are its fixed lookup tables and the member classes it builds."""
     _, context = connect()
@@ -392,7 +392,7 @@ def register_boost(cls, kind, **tables):
 
 def register_meta(cls, kind):
     """Connect one meta-estimator class at its definition: `kind` names its
-    schema in bindings/trees_public_meta.mojo ("voting_classifier",
+    schema in bindings/trees_public_meta_door.mojo ("voting_classifier",
     "stacking_regressor", "multioutput_classifier", "ovr", "calibrated", ...)."""
     _, context = connect()
     if "trees_unavailable" in context:

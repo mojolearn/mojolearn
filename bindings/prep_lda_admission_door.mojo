@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_attributes_door import classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.classical_pandas_door import classical_admit_value
-from bindings.classical_labels import _flatten_labels, labels_shape_of
+from bindings.classical_labels_door import _flatten_labels, labels_shape_of
 from bindings.classical_exceptions_door import classical_not_fitted_class
 from providers.python.linear_metadata_boundary_door import classical_is_fitted
 from bindings.optimizer_public_words_unpack import stash_python_error

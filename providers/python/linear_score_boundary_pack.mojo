@@ -4,7 +4,7 @@
 # the UNPACK half is `providers/python/linear_score_boundary_unpack.mojo`.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.admitted_input import admit_x
+from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_validate_unpack import classical_check_x_snapshot, classical_estimator_name
 from bindings.native_loaded_module_door import native_loaded_module

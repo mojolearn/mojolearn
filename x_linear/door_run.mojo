@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""RUN pieces of the linear expansion door (bindings/x_linear_native.mojo):
+"""RUN pieces of the linear expansion door (bindings/x_linear_native_door.mojo):
 the typed calls of the x_linear operations entry, the fit request words,
 and the byte copies that assemble and slice its float32 words. Typed Mojo
 values and addresses only, no Python import (tools/python_free_dirs.sh).

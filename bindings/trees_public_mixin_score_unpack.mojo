@@ -2,7 +2,7 @@
 # `score` of the tree ensembles that inherit scikit-learn's mixin answer
 # (`_mode.ClassifierScoreMixin.score`: the accuracy of `predict(X)`;
 # `_mode.RegressorScoreMixin.score`: the float32 R^2 of `predict(X)`), in one
-# native call: the estimator's native predict (bindings/trees_public_boost.mojo)
+# native call: the estimator's native predict (bindings/trees_public_boost_door.mojo)
 # and the native accuracy / R^2 (bindings/trees_public_score.mojo), with no
 # Python between the prediction and the metric. The metric kernels and their
 # order are the ones the mixins called, so the score keeps its bits.
@@ -12,20 +12,20 @@ from bindings.base_helpers_released_unpack import base_reduce_stat_int
 from bindings.py_balanced import py_call, py_get, py_fields, py_contains
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.py_typed_call import py_call_typed
-from bindings.trees_public_inputs import (
+from bindings.trees_public_inputs_door import (
     trees_builtins, trees_table, trees_entry,
     trees_address, trees_cast, trees_decode_labels,
 )
-from bindings.admitted_input import admit_f32, admitted_vector
+from bindings.admitted_input_unpack import admit_f32, admitted_vector
 from core.host_finite_scan import host_all_finite_f32
 # TOMBSTONE: trees_f32 / trees_all_finite / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_score_door import (
     trees_r2, trees_shape_of, trees_sample_weight_f32, _metrics_mode, trees_class_codes,
 )
-from bindings.classical_labels import classical_score_from_codes, _classification_encoded as labels_classification_encoded
+from bindings.classical_labels_door import classical_score_from_codes, _classification_encoded as labels_classification_encoded
 from bindings.trees_public_gbdt_door import _adapter_fitted, adapter_codes, adapter_decision_function
-from bindings.trees_public_boost import boost_operation, boost_kind, boost_predict_codes
+from bindings.trees_public_boost_door import boost_operation, boost_kind, boost_predict_codes
 
 
 def _metrics_table(mode: PythonObject, context: PythonObject) raises -> PythonObject:

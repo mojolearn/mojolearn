@@ -893,7 +893,7 @@ class GradientBoosting(NumericModeMixin):
         numeric_mode=None,
     ):
         # The constructor's checks and its stored state are the native
-        # owner's (bindings/trees_public_gbdt_fit.mojo `gbdt_initialize`),
+        # owner's (bindings/trees_public_gbdt_fit_door.mojo `gbdt_initialize`),
         # shared with the scikit-learn adapters' learner.
         _TREES(self, "trees_gbdt_init", (
             loss, n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, random_state, loss_alpha,
@@ -1162,7 +1162,7 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("f8", "bias", (("float", "bias_"),)),
 ), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
 
-# The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit.mojo).
+# The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit_door.mojo).
 _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(
     multi_output_losses=MULTI_OUTPUT_LOSSES, multi_regression_losses=MULTI_REGRESSION_LOSSES,
     querywise_losses=_QUERYWISE_LOSSES, od_types=OD_TYPES, border_types=BORDER_TYPES,
@@ -1206,7 +1206,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None
     ):
         # The GradientBoosting constructor and the sources checks are the
-        # native owner's (bindings/trees_public_gbdt_fit.mojo
+        # native owner's (bindings/trees_public_gbdt_fit_door.mojo
         # `gbdt_feature_freq_construct`).
         _TREES(self, "trees_gbdt_feature_freq_init",
                (sources, learning_rate, l2_leaf_reg, random_state, numeric_mode), _TREES_CONTEXT)
@@ -1259,7 +1259,7 @@ class OrderedRMSE(GradientBoosting):
         l2_leaf_reg=3.0, border_count=128, *, numeric_mode=None,
     ):
         # The ordered settings' checks and the GradientBoosting constructor
-        # are the native owner's (bindings/trees_public_gbdt_fit.mojo
+        # are the native owner's (bindings/trees_public_gbdt_fit_door.mojo
         # `gbdt_ordered_construct`).
         _TREES(self, "trees_gbdt_ordered_init",
                (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, numeric_mode), _TREES_CONTEXT)

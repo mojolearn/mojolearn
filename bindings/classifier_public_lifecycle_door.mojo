@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from bindings.py_cpython_table import cpython_table
 from bindings.classical_pandas_door import _pd_class, _pd_fields, _pd_get
-from bindings.classical_labels import _flatten_labels
+from bindings.classical_labels_door import _flatten_labels
 from bindings.native_buffer_owner_pack import native_buffer_view
 from core.classical_pandas_impl import pd_raw_at
 from bindings.label_admission_native_unpack import _labels_class as native_labels_class

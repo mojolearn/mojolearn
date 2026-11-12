@@ -18,7 +18,7 @@ from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
 from bindings.admitted_family_door import admit_family, admit_family_f64, admit_family_input
 from providers.python.array_metadata_pyapi_door import ArrayPin
-from bindings.admitted_input import admit_typed
+from bindings.admitted_input_unpack import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
 from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
@@ -124,7 +124,7 @@ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises ->
     value outside int32 refused), split across the host's cores."""
     # TOMBSTONE: the family_view + float64 widen + serial cfb_f64_to_i32 cast (core/cfb_impl.mojo) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
     # Restore: experiments/removed/A6_FAMILY_VIEW.patch. The multi-dtype
-    # admission (bindings/admitted_input.mojo admit_typed) casts once in parallel.
+    # admission (bindings/admitted_input_unpack.mojo admit_typed) casts once in parallel.
     return admit_typed(source, "<i4", 1, name, context).keep
 
 

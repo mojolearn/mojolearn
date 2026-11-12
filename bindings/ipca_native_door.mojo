@@ -11,7 +11,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_address, classical_typed_native
-from bindings.admitted_input import AdmittedX, admit_f32
+from bindings.admitted_input_unpack import AdmittedX, admit_f32
 from bindings.decomp_inputs_unpack import decomp_admit
 from bindings.decomp_scalar_admission_unpack import decomp_scalar_admit
 from bindings.decomp_truth_boundary_unpack import decomp_truth as _truth

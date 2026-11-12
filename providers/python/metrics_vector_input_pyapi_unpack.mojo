@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays_door import classical_is_array
-from bindings.admitted_input import AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
+from bindings.admitted_input_unpack import AdmittedTypedPin, admitted_typed_once, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.tensor_view import base_format, TensorView
 from bindings.family_common_unpack import family_repr, FAMILY_F32P, FAMILY_I64P
 from core.host_finite_scan import host_all_finite_f32

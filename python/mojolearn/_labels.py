@@ -95,7 +95,7 @@ def flatten_labels(y):
     through it; nested lists and tuples are flattened, which is what
     `np.asarray(y).ravel()` did for a column vector.
 
-    One native call (bindings/classical_labels.mojo `_flatten_labels`):
+    One native call (bindings/classical_labels_door.mojo `_flatten_labels`):
     exact containers are read by pointer from their C storage, depth first."""
     from ._native_labels_bridge import labels_entry, LABELS_OP_FLATTEN
     entry, context = labels_entry()
@@ -105,7 +105,7 @@ def flatten_labels(y):
 # TOMBSTONE: _labels._plain_labels / _classes_and_codes / _sorted_plain_classes /
 # _kind_of_type / _first_true / _check_label_kinds (the Python ORDER RULE walk)
 # deleted 2026-11-09 by lane p2-labels-lists-arrays: `sorted_classes` is one
-# native call (bindings/classical_labels.mojo `_sorted_classes`); the oracle
+# native call (bindings/classical_labels_door.mojo `_sorted_classes`); the oracle
 # copies live in tests/test_hotpath_native.py.
 
 
@@ -230,7 +230,7 @@ def encode_labels(y):
     # Lane ne1-h-labels (plan NATIVE_ENTRY_POINTS_AFTER_0866 H, N413): ONE
     # native call reads y (buffer, Array, list, tuple, Series, str ndarray,
     # or any nested label sequence) and encodes it
-    # (bindings/classical_labels.mojo `classical_encode_labels`, the same
+    # (bindings/classical_labels_door.mojo `classical_encode_labels`, the same
     # classes, codes and refusals as the former shell steps here:
     # `_encode_labels_native`, `flatten_labels`, the list and str encoders,
     # then `sorted_classes`). The shell no longer walks or copies y.
@@ -292,7 +292,7 @@ def decode_labels(classes, codes):
     `Array`, real classes a float64 `Array`; str or bool classes give a
     Python list of the label objects, since no `Array` dtype holds them
     (DEVIATION 2340: an ndarray of labels used to come back)."""
-    # ONE native call (bindings/classical_labels.mojo `labels_decode_labels`):
+    # ONE native call (bindings/classical_labels_door.mojo `labels_decode_labels`):
     # the class kind, the gathers and, for str / bool / object classes, one
     # list filled in C. Codes that are not a 1-D int32 / int64 Array are
     # first made one by the native Array operations (lane

@@ -34,18 +34,18 @@ from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_inputs_door import sequential_sequence
 from bindings.classifier_public_lifecycle_door import classifier_label_list
 from bindings.metrics_native_support_door import metric_is_bool, metric_is_integral, metric_is_real
-from bindings.classical_labels import ClassicalLabels, classical_encode_labels
+from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.class_weight_boundary_unpack import CLASS_WEIGHT_TREES
 from bindings.class_weight_rows_boundary_pack import class_weight_rows_admitted
 from bindings.label_weights_boundary_unpack import label_weights_run
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
 # The array admission helpers (lane consol-a0-admission, 2026-11-08): this
-# file kept a near-verbatim copy of bindings/classical_labels.mojo's block;
+# file kept a near-verbatim copy of bindings/classical_labels_door.mojo's block;
 # the one merged copy lives there and is imported here under the trees_*
 # names its callers use.
 # TOMBSTONE: trees_public_inputs array helpers copy (duplicate of classical_labels) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch.
-from bindings.classical_labels import (
+from bindings.classical_labels_door import (
     labels_full_f32 as trees_full_f32,
     labels_reshape as trees_reshape,
     labels_freeze as trees_freeze,
@@ -53,11 +53,11 @@ from bindings.classical_labels import (
     _pandas_values,
     labels_cast as trees_cast,
 )
-# The X / weight / view admission is the one path (bindings/admitted_input.mojo).
+# The X / weight / view admission is the one path (bindings/admitted_input_unpack.mojo).
 # TOMBSTONE: trees_empty / trees_vector / TreesView / trees_view / trees_check_rank / trees_shape_repr / TreesMatrix / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_prepare_weights aliases, and the trees label encoder copy (_native_labels, _label_list, _flatten_labels, _flatten_into, _label_kind, _sorted_classes, _numeric_label_view, _list_labels) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.admitted_input_run import admitted_width as trees_itemsize
-from bindings.admitted_input import (
+from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_x_unrecorded, admit_weight_words, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype, classical_view,
 )
@@ -160,7 +160,7 @@ struct TreesLabels(Copyable, Movable):
 
 def trees_encode_labels(y: PythonObject, context: PythonObject) raises -> TreesLabels:
     """`_labels.encode_labels(y)`: THE one label encoder
-    (bindings/classical_labels.mojo classical_encode_labels; the trees
+    (bindings/classical_labels_door.mojo classical_encode_labels; the trees
     context carries the label helpers through label_context())."""
     # Lane a1b-doors-opt-in-trees-linear: this was a second encoder (its own
     # numeric view, flatten, ORDER RULE and list paths, then the classical

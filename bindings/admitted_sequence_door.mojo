@@ -4,7 +4,7 @@
 # neural doors (TSA, forecast, embedding, xcnn, xseq_neural, the byte-LM
 # trainers). Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section
 # 3.3 row A4 (lane a4-admit-sequence-tsa-neural, 2026-11-08); the rank 0-2
-# X / y / sample_weight doors are bindings/admitted_input.mojo (lane A0).
+# X / y / sample_weight doors are bindings/admitted_input_unpack.mojo (lane A0).
 #
 #   admitted_ndarray_f32(shape, count, context) -> ndarray
 #                     the uninitialised float32 ndarray a cast fills

@@ -19,7 +19,7 @@ from bindings.sequential_admission_door import _ordinary_torch
 from bindings.cluster_fit_a_native_door import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING
 from bindings.classical_arrays_door import classical_address
-from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.classical_labels_door import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage_unpack import labels_integer_storage, labels_float_storage
 from bindings.label_input_sources_unpack import labels_storage_source, labels_list_integer_storage, labels_text_storage, labels_list_scalar_kind, LABELS_LIST_FLOAT
 from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE

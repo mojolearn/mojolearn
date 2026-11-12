@@ -10,18 +10,19 @@ from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
-from bindings.admitted_input import admit_x_unrecorded, admitted_finite_entry_refuse
-from bindings.classical_labels import labels_shape_of, _flatten_labels
+from bindings.admitted_input_unpack import admit_x_unrecorded
+from bindings.admitted_input_run import admitted_finite_entry_refuse
+from bindings.classical_labels_door import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, _feature_names
 from bindings.prep_lda_admission_door import lda_native_labels
 from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside as _outside, estimator_feature_check as _feature_check
 from bindings.sequential_inputs_door import sequential_input
-from bindings.trees_public_forest import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
+from bindings.trees_public_forest_door import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
 from bindings.trees_public_score_door import forest_score_public
-from bindings.trees_public_inputs import trees_address, trees_cast
-from bindings.admitted_input import admitted_array
+from bindings.trees_public_inputs_door import trees_address, trees_cast
+from bindings.admitted_input_unpack import admitted_array
 from bindings.trees_public_auxiliary_door import forest_auxiliary, forest_shape
 from bindings.trees_public_state_pack import forest_restore_state, tree_is_fitted
 from bindings.trees_side_records_unpack import trees_admit_parameters, trees_finite_mark, trees_finite_clear
@@ -86,7 +87,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
     # `args` (X among them) was admitted just above: the X check reuses that
     # admission instead of walking X again (perf3-nbr-msel-trees).
-    # The one admission of X (bindings/admitted_input.mojo): refused with
+    # The one admission of X (bindings/admitted_input_unpack.mojo): refused with
     # scikit-learn's wording and borrowed when it already is C-order float32
     # (one parallel finiteness scan, no cast), otherwise one parallel cast;
     # a matrix the running meta-estimator holds is taken as it is

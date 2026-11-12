@@ -3,7 +3,7 @@
 2026-11-11): the coordinate-descent entries of `_mojolearn_solver` (device)
 and `_mojolearn_solver_host` (CPU) as one `NativeDescriptorCall` per image,
 dispatching on its operation id. The linear owner
-(bindings/x_linear_native.mojo, ElasticNet / Lasso) calls it with plain
+(bindings/x_linear_native_door.mojo, ElasticNet / Lasso) calls it with plain
 values instead of the binding's Python `cd_fit` / `cd_predict` exports.
 
 Modeled on core/trees_entry_table.mojo: the same core/entry_table.mojo
