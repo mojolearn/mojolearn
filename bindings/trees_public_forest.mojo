@@ -1211,14 +1211,17 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
     model, its generation, the arrays, dimensions, mode and aggregation are
     the same. Returns its handle, or 0 when nothing could be kept (the
     snapshot was released again)."""
-    var use = _resident_with(model, fields, native, mode, _engine(fields, mode), _ordered_export(native), context)
+    var engine = _engine(fields, mode)
+    var key = forest_key(native)
+    var ordered_export = (xf_caps(key) & XF_CAP_ORDERED_RESIDENT) != 0
+    var use = _resident_with(model, fields, native, key, mode, engine, ordered_export, context)
     var handle = use.handle if use.kept else 0
     forest_handle_done(use)
     return handle
 
 
-def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObject, mode: String, engine: String,
-                   ordered_export: Bool, context: PythonObject) raises -> ForestHandle:
+def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObject, key: EntryRef, mode: String,
+                   engine: String, ordered_export: Bool, context: PythonObject) raises -> ForestHandle:
     """`_resident` with the engine and the ordered export its caller already
     resolved (ForestInput: read once per predict). The returned handle is
     pinned (or owned by the call); the caller ends it with
@@ -1236,7 +1239,8 @@ def _resident_with(model: PythonObject, fields: PythonObject, native: PythonObje
         raise Error("resident forest preparation requires parallel_groves")
     if not py_contains(fields, "_offsets"):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var key = forest_key(native)
+    # perf-audit-3: the caller's entry (ForestInput.key, resolved once per
+    # predict) is passed in, not resolved again here.
     var features = Int(py=_int(fields["n_features_in_"]))
     var trees = Int(py=_int(fields["_n_trees"]))
     var outputs = Int(py=_int(fields["_num_outputs"]))
@@ -1441,7 +1445,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
         _ = views^
         _ = arrays^
     else:
-        var use = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
+        var use = _resident_with(model, fields, staged.native, staged.key, staged.mode, engine, staged.ordered_export, context)
         try:
             wrote = xf_resident_predict(staged.key, use.handle, staged.x.address, trees_address(out), rows,
                                         staged.x.cols, outputs)
@@ -1475,7 +1479,7 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
         return PythonObject(None)
     var rows = staged.x.rows
     var out = admitted_vector(rows, "<i4", context)
-    var use = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
+    var use = _resident_with(model, fields, staged.native, staged.key, staged.mode, engine, staged.ordered_export, context)
     var wrote = 0
     try:
         wrote = xf_resident_labels(staged.key, use.handle, staged.x.address, trees_address(out), rows, staged.x.cols,
