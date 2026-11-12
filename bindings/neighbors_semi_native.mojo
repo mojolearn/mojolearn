@@ -107,15 +107,17 @@ def _semi_at(value: PythonObject) raises -> Int:
 
 def _semi_py_ints(values: List[Int]) raises -> PythonObject:
     var result = Python.list()
+    var append = result.append  # resolved once, not per word
     for value in values:  # driver-loop: over (named operation's fixed integer schema)
-        _ = py_call(result.append, PythonObject(value))
+        _ = py_call(append, PythonObject(value))
     return result
 
 
 def _semi_py_floats(values: List[Float64]) raises -> PythonObject:
     var result = Python.list()
+    var append = result.append  # resolved once, not per word
     for value in values:  # driver-loop: over (named operation's fixed scalar schema)
-        _ = py_call(result.append, PythonObject(value))
+        _ = py_call(append, PythonObject(value))
     return result
 
 
