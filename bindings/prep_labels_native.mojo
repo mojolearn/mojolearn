@@ -31,7 +31,7 @@ from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
 from bindings.str_labels_native import str_lookup, StrTable, _is_str, str_unique_into, str_classes, str_find
 from bindings.boundary_read import text_buffer_view, read_text_rows_into, read_str_points, pack_ucs4_str, admitted_buffer_view
-from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT
+from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
 from bindings.classical_pandas import classical_admit_value
 from bindings.label_admission_native import LabelTypeKinds
 from core.host_parallel import host_parallelize
@@ -735,10 +735,11 @@ def _code_buffer(y: PythonObject, context: PythonObject, mut codes: List[Int]) r
     if view.kind == BOUNDARY_KIND_UINT and view.itemsize == 8:
         return False
     var n = view.count()
-    var source = I64P(unsafe_from_address=view.as_i64_c())
-    codes = List[Int](length=n, fill=0)
-    if n > 0:
-        unsafe_memcpy(dest=I64P(unsafe_from_address=Int(codes.unsafe_ptr())), src=source, count=n)
+    # PERF FIX (perf-audit-3, 2026-11-11): gathered straight into `codes`
+    # (one memcpy for C-order int64, one widening pass otherwise), not
+    # `as_i64_c` + a zero-filled list + memcpy (up to three data passes).
+    codes = List[Int](unsafe_uninit_length=n)
+    gather_i64(view.layout, view.kind, Int(codes.unsafe_ptr()))
     view.release()
     return True
 
