@@ -83,21 +83,23 @@ def sequence_device_finalize(owner: PythonObject, values: PythonObject,
         return PythonObject(None)
     if py_type(handle) is not types[2]:
         raise Error("TypeError: sequence tensor cleanup requires its native integer handle")
-    var entries = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var connected = Optional[PythonObject]()
     var bindings = context["sequence_bindings"]
     for name in ["identical", "fast"]:  # driver-loop: over two retained compiled numeric-mode owners
         var candidate = bindings[PythonObject(name)]
         if py_type(candidate) is types[1] and binding is candidate["module"]:
-            entries = candidate
+            connected = candidate
             break
-    if entries is None:
+    if not connected:
         var extra = py_get(context, "sequence_extra_bindings", Python.tuple())
         for i in range(len(extra)):  # driver-loop: fixed import-connected buffer owners
             if py_type(extra[i]) is types[1] and binding is extra[i]["module"]:
-                entries = extra[i]
+                connected = extra[i]
                 break
-    if entries is None:
+    if not connected:
         raise Error("TypeError: sequence device/state requires its connected native binding")
+    var entries = connected.value()
     var release = py_get(entries, "seq_tensor_free")
     if py_type(release) is not types[3]:
         raise Error("TypeError: sequence tensor cleanup requires its compiled release entry")
