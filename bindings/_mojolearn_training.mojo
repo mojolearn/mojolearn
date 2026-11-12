@@ -85,7 +85,7 @@ from core.samba_entry_table_training import publish_samba_training_primitives
 from max.gpu.host import DeviceContext, HostBuffer
 
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
-from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
+from training.optimizer_public import per_call_step
 from bindings.optimizer_public_door import entry_zero
 from bindings.optimizer_public_pyapi import (
     optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
@@ -140,16 +140,12 @@ from providers.python.training_samba_afn_pyapi import (
 # -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
 # shell can ask (training/samba_resident.mojo).
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
-from training.samba_resident import (
-    SambaResidentSession,
-    samba_resident_train_step,
-    samba_resident_accumulated_step,
-)
 from core.philox_neural import neural_rng_host
 # lane x6-samba-on-executor (2026-11-09): the Samba stack program, the one
 # device path of SambaStack.forward / step and SambaDecodeSession
-# (training/samba_program.mojo).
-from training.samba_program import SambaStackProgram, SAMBA_PROGRAM_ON
+# (training/samba_program.mojo), is reached through the Samba program table
+# (training/samba_program_entry.mojo, published by
+# publish_samba_training_primitives); no Python entry here.
 from training.causal_entry_device import publish_causal_training_device
 
 
@@ -755,9 +751,11 @@ def samba_head_loss_binding(
 # THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
 # 2026-10-07; IDENTICAL default since 2026-10-08 (lane grid-act-4, grid
 # ge123e6f9); -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route).
-# One `_SambaResidentSession` per Python `SambaStack` (samba_resident_open),
-# then one call per optimizer step (the forward runs SambaStackProgram since lane x6)
-# (samba_resident_step): the registry, the gradient, the activations and the
+# One SambaResidentSession per SambaStack (the primitive entry's op 12; the
+# Python entries samba_resident_open/step/accumulated_step and
+# samba_resident_native_handle_v1 were deleted by lane samba-sessions-native,
+# 2026-11-12), then one call per optimizer step (ops 17/18; the forward runs
+# SambaStackProgram since lane x6): the registry, the gradient, the activations and the
 # block stages stay on the device; the Python side keeps no per-layer loop.
 # The optimizer's moments are the Python optimizer's resident pair (an
 # `optimizer_resident_open` handle). Same kernels, operands and order as the
@@ -765,167 +763,13 @@ def samba_head_loss_binding(
 # ===========================================================================
 
 
-def samba_resident_native_handle_binding(session: PythonObject) raises -> PythonObject:
-    # Checked ownership admission for sessions created by the public binding.
-    return PythonObject(Int(session.downcast_value_ptr[SambaResidentSession]()))
-
-
 def samba_resident_enabled_binding() raises -> PythonObject:
     """Whether this build carries the resident Samba entries."""
     return PythonObject(IDN_SAMBA_RESIDENT_STEP)
 
 
-def samba_resident_open_binding(
-    layers: PythonObject, params: PythonObject, param_addr: PythonObject
-) raises -> PythonObject:
-    """Open a stack's residency. `layers` = one code per layer in stack order
-    (0 mamba3, 1 attention); `params` = [vocab, d_model, n_heads, n_kv_heads,
-    head_dim, intermediate, tie_embeddings (0/1), norm_eps (float), n_total]
-    (the attention shape slots are 0 when the stack has no attention layer);
-    `param_addr` = the flat float32 registry (n_total floats, read once here).
-    Returns the session object; pass it to the two entries below."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_open: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        _params(params, 9, "samba_resident_open")
-        var kinds = List[Int]()
-        for i in range(len(layers)):  # driver-loop: over layers; small-loop(layers: one kind code per layer): reads codes, not data
-            kinds.append(Int(py=layers[i]))
-        var vocab = Int(py=params[0])
-        var dm = Int(py=params[1])
-        var nh = Int(py=params[2])
-        var nkv = Int(py=params[3])
-        var hd = Int(py=params[4])
-        var it = Int(py=params[5])
-        var tie = Int(py=params[6]) != 0
-        var eps = Float32(Float64(py=params[7]))
-        var n_total = Int(py=params[8])
-        var pp = _f32_ptr(Int(py=param_addr))
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var session = SambaResidentSession(
-            ctx, kinds, vocab, dm, nh, nkv, hd, it, tie, eps, n_total, pp
-        )
-        return PythonObject(alloc=session^)
-
-
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_forward_binding (the resident forward entry; SambaStack.forward runs SambaStackProgram) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
-
-
-def samba_resident_step_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject,
-    handle: PythonObject,
-) raises -> PythonObject:
-    """`SambaStack.train_step` at accumulation_steps 1, resident.
-    addresses = [params (n_total f32, read and WRITTEN IN PLACE), ids (b*l
-    i32), targets (b*l i32), offsets (J+1 i32), buf_initialized (J i32,
-    written), info (3 f32, written: clip_ran, total_norm, coef), loss (1 f32,
-    written)]; params = [b, l] + the `optimizer_step` params list (its 12 or
-    13 slots, word for word); `handle` = the optimizer's resident moments
-    (`optimizer_resident_open`, n_total floats). Returns `count`, the number
-    of targets that are not the ignore index."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        var owner = session.downcast_value_ptr[SambaResidentSession]()
-        var a = _addrs(addresses, 7, "samba_resident_step")
-        if len(params) != 14 and len(params) != 15:
-            raise Error(
-                "samba_resident_step: params must contain 14 or 15 values, got "
-                + String(len(params))
-            )
-        var b = Int(py=params[0])
-        var l = Int(py=params[1])
-        var n_tensors = Int(py=params[2])
-        var kind = Int(py=params[3])
-        var t = Int(py=params[4])
-        var nesterov = Int(py=params[5])
-        var lr = Float32(Float64(py=params[6]))
-        var beta1 = Float32(Float64(py=params[7]))
-        var beta2 = Float32(Float64(py=params[8]))
-        var eps = Float32(Float64(py=params[9]))
-        var weight_decay = Float32(Float64(py=params[10]))
-        var momentum = Float32(Float64(py=params[11]))
-        var dampening = Float32(Float64(py=params[12]))
-        var max_norm = Float32(Float64(py=params[13]))
-        if len(params) == 15 and Int(py=params[14]) != 0:
-            raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
-        var h = opt_pool_handle(Int(py=handle), owner[].n_total)
-        if owner[].busy:
-            raise Error("samba_resident_step: session busy")
-        owner[].busy = True
-        var count = 0
-        try:
-            with GILReleased(Python()):
-                var pool = OPT_POOL.get_or_create_ptr()
-                count = samba_resident_train_step(
-                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
-                    pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
-                    _i32_ptr(a[3]), _i32_ptr(a[4]), _f32_ptr(a[5]),
-                    b, l, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
-                    weight_decay, momentum, dampening, max_norm,
-                )
-        except error:
-            owner[].busy = False
-            raise error
-        owner[].busy = False
-        return PythonObject(count)
-
-
-def samba_resident_accumulated_step_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject,
-    handle: PythonObject,
-) raises -> PythonObject:
-    """`SambaStack.train_step` at accumulation_steps a > 1 (no dropout), one
-    resident program (training/samba_resident.mojo
-    samba_resident_accumulated_step). addresses as `samba_resident_step`;
-    params = [b, l, a, total target count] + the `optimizer_step` params
-    list (its 12 or 13 slots). Returns the target count."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_accumulated_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        var owner = session.downcast_value_ptr[SambaResidentSession]()
-        var a = _addrs(addresses, 7, "samba_resident_accumulated_step")
-        if len(params) != 16 and len(params) != 17:
-            raise Error("samba_resident_accumulated_step: params must contain 16 or 17 values, got " + String(len(params)))
-        var b = Int(py=params[0])
-        var l = Int(py=params[1])
-        var steps = Int(py=params[2])
-        var total = Int(py=params[3])
-        var n_tensors = Int(py=params[4])
-        var kind = Int(py=params[5])
-        var t = Int(py=params[6])
-        var nesterov = Int(py=params[7])
-        var lr = Float32(Float64(py=params[8]))
-        var beta1 = Float32(Float64(py=params[9]))
-        var beta2 = Float32(Float64(py=params[10]))
-        var eps = Float32(Float64(py=params[11]))
-        var weight_decay = Float32(Float64(py=params[12]))
-        var momentum = Float32(Float64(py=params[13]))
-        var dampening = Float32(Float64(py=params[14]))
-        var max_norm = Float32(Float64(py=params[15]))
-        if len(params) == 17 and Int(py=params[16]) != 0:
-            raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
-        var h = opt_pool_handle(Int(py=handle), owner[].n_total)
-        if owner[].busy:
-            raise Error("samba_resident_step: session busy")
-        owner[].busy = True
-        var count = 0
-        try:
-            with GILReleased(Python()):
-                var pool = OPT_POOL.get_or_create_ptr()
-                count = samba_resident_accumulated_step(
-                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
-                    pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
-                    _i32_ptr(a[3]), _i32_ptr(a[4]), _f32_ptr(a[5]),
-                    b, l, steps, total, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
-                    weight_decay, momentum, dampening, max_norm,
-                )
-        except error:
-            owner[].busy = False
-            raise error
-        owner[].busy = False
-        return PythonObject(count)
 
 
 # ===========================================================================
@@ -944,265 +788,12 @@ def samba_resident_accumulated_step_binding(
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 # ===========================================================================
 
-
-def _int_words(values: PythonObject, name: String) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(len(values)):  # driver-loop: over argument words (fixed count, not data); small-loop(values: state addresses or cursor words of one program call): argument words, not data
-        out.append(Int(py=values[i]))
-    return out^
-
-
-def _nonnull_words(values: PythonObject, name: String) raises -> List[Int]:
-    var out = _int_words(values, name)
-    for i in range(len(out)):  # small-loop(out: state addresses of one program call): argument words, not data
-        if out[i] == 0:
-            raise Error(name + ": null state address at slot " + String(i))
-    return out^
-
-
-def _py_words(words: List[Int]) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(words)):  # driver-loop: over layers (two cursor words each); small-loop(words: two cursor words per layer): result words, not data
-        _ = out.append(PythonObject(words[i]))
-    return out
-
-
-def samba_program_enabled_binding() raises -> PythonObject:
-    """Whether this build carries the Samba stack program (device builds)."""
-    return PythonObject(SAMBA_PROGRAM_ON)
-
-
-def _samba_program_new(layers: PythonObject, params: PythonObject, param_addr: PythonObject,
-                       name: String) raises -> SambaStackProgram:
-    _params(params, 11, name)
-    var kinds = List[Int]()
-    for i in range(len(layers)):  # driver-loop: over layers; small-loop(layers: one kind code per layer): reads codes, not data
-        kinds.append(Int(py=layers[i]))
-    var pa = Int(py=param_addr)
-    if pa == 0:
-        raise Error(name + ": null registry address")
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    return SambaStackProgram(
-        ctx, kinds, Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), Int(py=params[3]),
-        Int(py=params[4]), Int(py=params[5]), Int(py=params[6]) != 0, Float32(Float64(py=params[7])),
-        Int(py=params[8]), Int(py=params[9]), Int(py=params[10]), _f32_ptr(pa),
-    )
-
-
-def samba_program_open_binding(
-    layers: PythonObject, params: PythonObject, param_addr: PythonObject
-) raises -> PythonObject:
-    """Open a stack program. `layers` = one code per layer (0 mamba3, 1
-    attention); `params` = [vocab, d_model, n_heads, n_kv_heads, head_dim,
-    intermediate, tie_embeddings (0/1), norm_eps (float), n_total,
-    batch_size, max_tokens]; `param_addr` = the flat float32 registry.
-    Returns the program object, zero state."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_program_open: a host build has no device program")
-    else:
-        var program = _samba_program_new(layers, params, param_addr, "samba_program_open")
-        return PythonObject(alloc=program^)
-
-
-def samba_program_shape_binding(program: PythonObject) raises -> PythonObject:
-    """(batch_size, max_tokens, usable) of an open program."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_program_shape: a host build has no device program")
-    else:
-        var owner = program.downcast_value_ptr[SambaStackProgram]()
-        return Python.tuple(owner[].b, owner[].smax, owner[].usable)
-
-
-def samba_program_forward_binding(
-    program: PythonObject, addresses: PythonObject, params: PythonObject,
-    pieces: PythonObject, cursors: PythonObject,
-) raises -> PythonObject:
-    """One per-call Samba run. addresses = [registry (n_total f32, read),
-    ids (b * l i32, read), logits (b * l * vocab f32, written)], optionally
-    followed by the Mamba-3 layers' report arrays (four f32 addresses per
-    Mamba-3 layer in layer order: h_last, k_last, v_last, theta_last;
-    written); params =
-    [b, l]. The registry is reloaded only when the program's weight key is
-    stale (training/samba_program.mojo refresh_weights). With no state
-    addresses the run starts from a zero state and the
-    state is discarded (`SambaStack.forward`); otherwise `pieces` / `cursors`
-    are the caller's state (as `samba_decode_load` takes them), loaded before
-    the run and written back after it, and the post-call cursors are
-    returned. One wait. A failed call marks the program unusable."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_program_forward: a host build has no device program")
-    else:
-        var owner = program.downcast_value_ptr[SambaStackProgram]()
-        # [registry, ids, logits] then, optionally, the Mamba-3 layers' four
-        # report addresses each (h_last, k_last, v_last, theta_last).
-        var head = Python.list(addresses[0], addresses[1], addresses[2]) if len(addresses) > 3 else addresses
-        var a = _addrs(head, 3, "samba_program_forward")
-        var reports = List[Int]()
-        for i in range(3, len(addresses)):  # driver-loop: over the Mamba-3 layers' report addresses
-            reports.append(Int(py=addresses[i]))
-        _params(params, 2, "samba_program_forward")
-        var b = Int(py=params[0])
-        var l = Int(py=params[1])
-        if b != owner[].b:
-            raise Error("samba_program_forward: the program holds " + String(owner[].b) + " rows, the call has "
-                        + String(b))
-        var stateful = len(pieces) > 0
-        var sp = _nonnull_words(pieces, "samba_program_forward") if stateful else List[Int]()
-        var sc = _int_words(cursors, "samba_program_forward") if stateful else List[Int]()
-        if owner[].busy:
-            raise Error("samba_program_forward: program busy")
-        if not owner[].usable:
-            raise Error("samba_program_forward: the program was lost after a failed call")
-        owner[].busy = True
-        var out = List[Int]()
-        try:
-            with GILReleased(Python()):
-                owner[].refresh_weights(_f32_ptr(a[0]))
-                if stateful:
-                    owner[].load_state(sp, sc)
-                else:
-                    owner[].zero_state()
-                owner[].run(_i32_ptr(a[1]), _f32_ptr(a[2]), l)
-                if len(reports) > 0:
-                    owner[].enqueue_reports(reports)
-                if stateful:
-                    out = owner[].enqueue_export(sp)
-                owner[].finish()
-        except error:
-            owner[].busy = False
-            owner[].usable = False
-            raise error
-        owner[].busy = False
-        if not stateful:
-            return PythonObject(None)
-        return _py_words(out)
-
-
-def samba_decode_open_binding(
-    layers: PythonObject, params: PythonObject, param_addr: PythonObject,
-    pieces: PythonObject, cursors: PythonObject,
-) raises -> PythonObject:
-    """Open a decode session's program: `samba_program_open`'s arguments,
-    the registry read once here, then `pieces` / `cursors` (the state, as
-    `samba_decode_load` takes them) loaded. Returns the program object."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_decode_open: a host build has no device program")
-    else:
-        var a = _nonnull_words(pieces, "samba_decode_open")
-        var c = _int_words(cursors, "samba_decode_open")
-        var program = _samba_program_new(layers, params, param_addr, "samba_decode_open")
-        with GILReleased(Python()):
-            program.load_state(a, c)
-            program.finish()
-        return PythonObject(alloc=program^)
-
-
-def _decode_run(session: PythonObject, addresses: PythonObject, params: PythonObject, n_params: Int,
-                name: String) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[SambaStackProgram]()
-    var a = _addrs(addresses, 2, name)
-    _params(params, n_params, name)
-    if Int(py=params[0]) != owner[].b:
-        raise Error(name + ": the session holds " + String(owner[].b) + " rows, the call has "
-                    + String(Int(py=params[0])))
-    var n = Int(py=params[1]) if n_params == 2 else 1
-    if owner[].busy:
-        raise Error(name + ": session busy")
-    if not owner[].usable:
-        raise Error(name + ": the session was lost after a failed call; close it and open a new one")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            if n_params == 2:
-                owner[].decode(_i32_ptr(a[0]), _f32_ptr(a[1]), n)
-            else:
-                owner[].run(_i32_ptr(a[0]), _f32_ptr(a[1]), 1)
-                owner[].finish()
-    except error:
-        owner[].busy = False
-        owner[].usable = False
-        raise error
-    owner[].busy = False
-    return PythonObject(owner[].first_position())
-
-
-def samba_decode_step_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """One token per row. addresses = [ids (b i32, read), logits (b * vocab
-    f32, written)]; params = [b], refused unless it is the session's batch.
-    Returns the first attention layer's cached tokens after the step. A
-    failed step marks the session lost."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_decode_step: a host build has no device program")
-    else:
-        return _decode_run(session, addresses, params, 1, "samba_decode_step")
-
-
-def samba_decode_tokens_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """N tokens per row in one call (decode plan D2). addresses = [ids
-    (b * n i32 in (B, N) order, read), logits (b * n * vocab f32 in
-    (B, N, vocab) order, written)]; params = [b, n]. Bytes equal n
-    `samba_decode_step` calls. A failed call marks the session lost."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_decode_tokens: a host build has no device program")
-    else:
-        return _decode_run(session, addresses, params, 2, "samba_decode_tokens")
-
-
-def samba_decode_export_binding(session: PythonObject, pieces: PythonObject) raises -> PythonObject:
-    """The session's state into the caller's arrays (`samba_decode_load`'s
-    addresses); returns the cursor words as a list of ints."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_decode_export: a host build has no device program")
-    else:
-        var owner = session.downcast_value_ptr[SambaStackProgram]()
-        var a = _nonnull_words(pieces, "samba_decode_export")
-        if owner[].busy:
-            raise Error("samba_decode_export: session busy")
-        owner[].busy = True
-        var cursors = List[Int]()
-        try:
-            with GILReleased(Python()):
-                cursors = owner[].export_state(a)
-        except error:
-            owner[].busy = False
-            raise error
-        owner[].busy = False
-        return _py_words(cursors)
-
-
-def samba_decode_load_binding(
-    session: PythonObject, pieces: PythonObject, cursors: PythonObject
-) raises -> PythonObject:
-    """The caller's state arrays into the session (after the caller edited
-    them). pieces = per layer in stack order, ten Mamba-3 piece addresses
-    (theta, h, buffer_qrot, buffer_krot, buffer_v, buffer_dt, buffer_sig,
-    buffer_adt, pending_k, pending_v) or two attention addresses (k_cache,
-    v_cache); cursors = per layer two words (buffered_tokens, pending) or
-    (cached_tokens, 0). A successful load makes a lost session usable."""
-    comptime if not SAMBA_PROGRAM_ON:
-        raise Error("samba_decode_load: a host build has no device program")
-    else:
-        var owner = session.downcast_value_ptr[SambaStackProgram]()
-        var a = _nonnull_words(pieces, "samba_decode_load")
-        var c = _int_words(cursors, "samba_decode_load")
-        if owner[].busy:
-            raise Error("samba_decode_load: session busy")
-        owner[].busy = True
-        try:
-            with GILReleased(Python()):
-                owner[].load_state(a, c)
-                owner[].finish()
-        except error:
-            owner[].busy = False
-            owner[].usable = False
-            raise error
-        owner[].busy = False
-        owner[].usable = True
-        return PythonObject(None)
+# Lane samba-sessions-native (2026-11-12): the program and decode-session
+# entries (`samba_program_enabled/open/shape/forward`, `samba_decode_open/
+# step/tokens/export/load`) and their Python program objects moved behind
+# native registry handles: training/samba_program_entry.mojo (the same
+# SambaStackProgram calls, in the same order), published in the Samba
+# program table (core/samba_entry_table_programs.mojo) at module init.
 
 
 def accumulate_binding(
@@ -1405,7 +996,6 @@ def build__mojolearn_training() -> PythonObject:
         # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         m.def_function[optimizer_native_api_binding]("optimizer_native_api_v1")
-        m.def_function[samba_resident_native_handle_binding]("samba_resident_native_handle_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
@@ -1419,24 +1009,6 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[linear_backward_binding]("linear_backward")
         m.def_function[samba_head_loss_binding]("samba_head_loss")
         m.def_function[samba_resident_enabled_binding]("samba_resident_enabled")
-        comptime if IDN_SAMBA_RESIDENT_STEP:
-            # lane S1 samba-resident: IDENTICAL only, behind its define
-            _ = m.add_type[SambaResidentSession]("_SambaResidentSession")
-            m.def_function[samba_resident_open_binding]("samba_resident_open")
-            m.def_function[samba_resident_step_binding]("samba_resident_step")
-            m.def_function[samba_resident_accumulated_step_binding]("samba_resident_accumulated_step")
-        m.def_function[samba_program_enabled_binding]("samba_program_enabled")
-        comptime if SAMBA_PROGRAM_ON:
-            # lane x6-samba-on-executor: the Samba stack program (device builds)
-            _ = m.add_type[SambaStackProgram]("_SambaStackProgram")
-            m.def_function[samba_program_open_binding]("samba_program_open")
-            m.def_function[samba_program_shape_binding]("samba_program_shape")
-            m.def_function[samba_program_forward_binding]("samba_program_forward")
-            m.def_function[samba_decode_open_binding]("samba_decode_open")
-            m.def_function[samba_decode_step_binding]("samba_decode_step")
-            m.def_function[samba_decode_tokens_binding]("samba_decode_tokens")
-            m.def_function[samba_decode_export_binding]("samba_decode_export")
-            m.def_function[samba_decode_load_binding]("samba_decode_load")
         comptime if AFN_SAMBA_FUSE:
             m.def_function[samba_afn_tail_train_binding]("samba_afn_tail_train")
             m.def_function[samba_afn_embedding_backward_tied_binding]("samba_afn_embedding_backward_tied")
