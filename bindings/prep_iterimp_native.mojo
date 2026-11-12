@@ -690,10 +690,10 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         var xt = xf
         var seq = Python.list()
         var done = 0
-        for r in range(len(orders)):  # api-bound-loop: over the imputation rounds of the user's estimator (public type: any estimator); one clone and one fit per feature each
+        for r in range(len(orders)):  # api-bound-loop: over the imputation rounds of the user-supplied estimator object (public type: a Mojolearn estimator); one clone and one fit of its native plan per feature each, through the Python object
             var check = not posterior and len(orders[r]) > 0
             var prev = xt
-            for i in range(len(orders[r])):  # api-bound-loop: over the round's features; one clone and one fit of the user's estimator each
+            for i in range(len(orders[r])):  # api-bound-loop: over the round's features; one clone and one fit of the user-supplied estimator object's native plan each
                 var j = orders[r][i]
                 var nbl = draws.next(rng) if draws.on else _others(dk, j)
                 var est = prep_estimator_clone(estimator, context)
@@ -833,7 +833,7 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     if fields["estimator"] is not None:
         var mask = _mask_arr(values, keep, fields["missing_values"], context)
         var xt = xf
-        for s in range(len(sequence)):  # api-bound-loop: over the fitted imputation steps; one predict of the user's fitted estimator each
+        for s in range(len(sequence)):  # api-bound-loop: over the fitted imputation steps; one predict of the user-supplied fitted estimator object's native plan each
             var step = sequence[s]
             var j = Int(py=step[0])
             var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), mode, False, context)
