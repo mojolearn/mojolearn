@@ -50,11 +50,6 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
-from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
-from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
-from core.linear_boundary_types import LINEAR_PREDICT_ABI
-from glm.host.linear_fit_native import linear_fit_host_v1
-from glm.host.linear_predict_native import linear_predict_host_v1
 from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
@@ -64,8 +59,11 @@ from core.logistic_native_api import (
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
     QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
 )
-from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API, qn_host_native_v1
-from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, ESTIMATORS_TABLE_QN
+from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
+from core.mojolearn_estimators_host_run import (
+    _pp_load, _pp_out, tsvd_transform_host_words, inverse_transform_host_words,
+    _publish_linear_entry_table, _publish_estimators_qn_table,
+)
 from glm.host.linear_svc_native_host import LINEAR_SVC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
@@ -106,11 +104,9 @@ from core.neighbors_entry_table import NeighborsEntryKey
 from bindings.py_balanced import py_setattr
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
-    host_inverse_transform_into,
     host_pca_transform_into,
     host_pca_whiten_inverse_transform_into,
     host_pca_whiten_transform_into,
-    host_tsvd_transform_into,
 )
 from core.labeled_reference_host_predict import (
     LABELED_PREDICT_HOST_SABOTAGE,
@@ -1044,17 +1040,7 @@ def tsvd_transform_binding(
     var test = len(params) == 4 and _index(params[3]) != 0
     var status = 0
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        _positive(nc, "n_components")
-        if test:
-            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
-            status = Int(host_finite_status(x_address, nr * nf))
-        if status == 0:
-            host_tsvd_transform_into(
-                f32_ptr(x_address), f32_ptr(c_address), op, nr, nf, nc,
-                host_predict_task_count(nr),
-            )
+        status = tsvd_transform_host_words(x_address, c_address, op, nr, nf, nc, test)
     return PythonObject(status)
 
 
@@ -1120,15 +1106,7 @@ def inverse_transform_binding(
     var nc = _index(params[2])
     var add_mean = _index(params[3]) != 0
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        _positive(nc, "n_components")
-        var components = read_f32(c_address, nc * nf)
-        var mu = read_f32(m_address, nf) if add_mean else List[Float32]()
-        host_inverse_transform_into(
-            f32_ptr(z_address), components, mu, op, nr, nf, nc, add_mean,
-            host_predict_task_count(nr),
-        )
+        inverse_transform_host_words(z_address, c_address, m_address, op, nr, nf, nc, add_mean)
     return PythonObject(0)
 
 
@@ -1352,18 +1330,6 @@ def qn_sigmoid_binding(
 # ===========================================================================
 
 
-def _pp_load(addr: Int, n: Int) raises -> List[Float32]:
-    if addr == 0:
-        raise Error("preprocessing: null Float32 pointer")
-    return read_f32(addr, max(0, n))
-
-
-def _pp_out(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("preprocessing: null Float32 pointer")
-    return f32_ptr(addr)
-
-
 def standard_transform_binding(
     x_addr: PythonObject, mean_addr: PythonObject, scale_addr: PythonObject,
     out_addr: PythonObject, params: PythonObject,
@@ -1575,22 +1541,6 @@ def rbf_sampler_transform_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 
-def _publish_linear_entry_table() raises:
-    # Native publication only; the existing capsule ABI remains for clients
-    # not yet converted. The original descriptor owner has image lifetime.
-    var api = LINEAR_FIT_HOST_API.get_or_create_ptr()
-    var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
-    linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
-        Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_host_v1, linear_predict_host_v1])
-
-def _publish_estimators_qn_table() raises:
-    # The CPU column of the estimators QN table
-    # (core/estimators_entry_table.mojo): QNRegressor's owner calls it
-    # instead of the `qn_fit` / `qn_decision_function` Python exports, which
-    # remain for the other doors and the Python tests.
-    var api = LOGISTIC_HOST_API.get_or_create_ptr()
-    estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
-        Int(api[].entries.unsafe_ptr()), qn_host_native_v1)
 
 def _publish_decomp_pca_ops(module: PythonObject) raises:
     # The CPU column of the PCA owned-fit table
