@@ -493,6 +493,8 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
     var w = bi.dict()
     var keys = py_call(bi.list, weights)
     var format = "float32"
+    # The route's (tier, vendor) table key, read once for every tensor.
+    var table_key = causal_entry_key(bindings)
     for i in range(len(keys)):  # driver-loop: over the layer's named tensors
         var v = weights[keys[i]]
         var tag = "bfloat16" if py_type(v) is context["bf16_class"] else ("int8" if py_type(v) is context["int8_class"] else "float32")
@@ -500,7 +502,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             if format != "float32" and format != tag:
                 raise Error("CausalLM: mixed packed weight formats")
             format = tag
-        py_setitem(w, keys[i], _model_unpack(mods, v, causal_entry_key(bindings), context, String(keys[i])))
+        py_setitem(w, keys[i], _model_unpack(mods, v, table_key, context, String(keys[i])))
     _causal_array_guard()
     py_setitem(fields, "weight_format", PythonObject(format))
     py_setitem(fields, "_native_kind", plan["kind"])
@@ -681,8 +683,9 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
     py_setitem(fields, "_int15", PythonObject(None))
     if String(profile) == "fixed15_v1":
         var planes = bi.list()
+        var quantize_key = causal_entry_key(bindings)
         for i in range(2, 9):  # driver-loop: over the seven transformer projections
-            _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], causal_entry_key(bindings)))
+            _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], quantize_key))
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
@@ -984,6 +987,8 @@ def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject
     if plan["head_name"] is not None:
         py_setitem(out, "head", checkpoint_read_binding(mods, checkpoint, plan["head_name"], PythonObject("widen"), ck))
     var bindings = _model_bindings(mods, route, String(plan["kind"]), context)
+    # The route's (tier, vendor) table key, read once for every packed tensor.
+    var pack_key = causal_entry_key(bindings)
     var projections = context["projections"][plan["kind"]]
     var layers = bi.list()
     for i in range(Int(py=plan["n_layers"])):  # driver-loop: over checkpoint layers
@@ -1021,7 +1026,7 @@ def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject
                     _ = sliced  # keep the Python object alive through the native call above
                 _ = whole^  # read by address above
                 value = sliced
-            py_setitem(weights, key, _model_pack(mods, value, String(format), causal_entry_key(bindings), context) if packed else value)
+            py_setitem(weights, key, _model_pack(mods, value, String(format), pack_key, context) if packed else value)
         _ = py_call(layers.append, weights)
     py_setitem(out, "layers", layers)
     var unused = bi.list()
