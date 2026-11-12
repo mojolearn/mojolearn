@@ -574,6 +574,14 @@ def _et_fit_native[CLASSIFIER: Bool, ROWMAJOR: Bool](args: ForestFitArgs) raises
         return _et_regressor_fit[ROWMAJOR](args)
 
 
+def _kept_forest_out(handle: Int) raises -> PythonObject:
+    # The kept fit's diagnostic lists. A helper of its own so the Dict
+    # lookup (DictKeyError) and the list build (Error) both raise Error to
+    # the caller's try/finally, which cannot mix the two error types.
+    var registry = ET_EXPORTS.get_or_create_ptr()
+    return _forest_out(registry[].entries[handle].model)
+
+
 def _et_handle_py(handle: Int, export: Bool) raises -> PythonObject:
     """PACK of a kept fit for the Python entries: the export descriptor
     (`*_export`), or the diagnostic lists of the kept fit, released (the
@@ -587,7 +595,7 @@ def _et_handle_py(handle: Int, export: Bool) raises -> PythonObject:
             raise error^
     var out = PythonObject(None)
     try:
-        out = _forest_out(registry[].entries[handle].model)
+        out = _kept_forest_out(handle)
     finally:
         registry[].release(handle)
     return out

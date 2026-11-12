@@ -312,15 +312,15 @@ def _model_bindings(mut mods: NativeModules, route: PythonObject, kind: String, 
     # The CausalLM entry table key of this route (core/causal_lm_entry_table.mojo):
     # every linalg, primitive, block and Mamba call of the model reads its
     # image's entry by these two words.
-    var key = CausalEntryKey(mode_code, causal_entry_vendor(vendor))
-    py_setitem(entries, "entry_mode", PythonObject(key.mode))
-    py_setitem(entries, "entry_vendor", PythonObject(key.vendor))
+    var entry_key = CausalEntryKey(mode_code, causal_entry_vendor(vendor))
+    py_setitem(entries, "entry_mode", PythonObject(entry_key.mode))
+    py_setitem(entries, "entry_vendor", PythonObject(entry_key.vendor))
     var arithmetic = entries["linalg"]
     if py_type(arithmetic) is not mods.module("builtins").str:
         # A linalg publication under the model's (tier, vendor) key is the
         # vendor/mode agreement the former two Python metadata calls checked.
         try:
-            _ = causal_table_entry[CAUSAL_TABLE_LINALG](key)
+            _ = causal_table_entry[CAUSAL_TABLE_LINALG](entry_key)
         except problem:
             raise Error("CausalLM: packed weight binding vendor or mode differs from model (" + String(problem) + ")")
     return entries

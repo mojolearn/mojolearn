@@ -723,6 +723,15 @@ def _rf_fit_native[CLASSIFIER: Bool, ROWMAJOR: Bool](args: ForestFitArgs) raises
         return _rf_regressor_fit[ROWMAJOR](args)
 
 
+def _kept_forest_out(handle: Int) raises -> PythonObject:
+    # The kept fit's diagnostic lists. A helper of its own so the Dict
+    # lookup (DictKeyError) and the list build (Error) both raise Error to
+    # the caller's try/finally, which cannot mix the two error types.
+    var registry = RF_EXPORTS.get_or_create_ptr()
+    ref entry = registry[].entries[handle]
+    return _forest_out_trees(entry.model, Int(entry.meta[2]))
+
+
 def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:
     """PACK of a kept fit for the Python entries: the export descriptor
     (`*_export`), or the diagnostic lists of the kept fit, released (the
@@ -736,8 +745,7 @@ def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:
             raise error^
     var out = PythonObject(None)
     try:
-        ref entry = registry[].entries[handle]
-        out = _forest_out_trees(entry.model, Int(entry.meta[2]))
+        out = _kept_forest_out(handle)
     finally:
         registry[].release(handle)
     return out

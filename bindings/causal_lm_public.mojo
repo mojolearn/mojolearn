@@ -2337,11 +2337,11 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
     var family = Int(py=entries["program_read"])
     var owner = py_get(fields, "_decode_program") if persist else PythonObject(None)
     var held = 0 if owner is None else owner.downcast_value_ptr[CausalSessionHandles]()[].primary
-    var capacity = 5 + 2 * len(blocks)
-    var reply = List[Int](length=capacity, fill=0)
+    var reply_words = 5 + 2 * len(blocks)
+    var reply = List[Int](length=reply_words, fill=0)
     var ret = List[Int]()
     try:
-        var read_words: List[Int] = [held, Int(reply.unsafe_ptr()), capacity]
+        var read_words: List[Int] = [held, Int(reply.unsafe_ptr()), reply_words]
         for i in range(len(p)):  # driver-loop: over descriptor words (argument packing)
             read_words.append(p[i])
         var served = _session_call(entries, family, CAUSAL_SESSION_PROGRAM_READ, a, read_words, f)
