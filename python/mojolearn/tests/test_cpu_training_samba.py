@@ -118,15 +118,14 @@ def test_every_entry_samba_reaches_is_on_the_host():
                 # NI48's retained tape: the host's `mamba3_forward_tape_enabled`
                 # reads False, so `_forward_with_tape` never calls these there
                 | {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape"},
-            "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
-                | {"transformer_decode_session_" + name for name in
+            "transformer": {"transformer_decode_session_" + name for name in
                    ("create", "open", "open_step_op", "step", "forward", "decode", "export_state",
                     "load_state", "close")}
                 # numeric_profile="fixed15_v1": the GPU sessions' profile entries
                 # (lane/lowbit-blocks, lane/lowbit-default); the host route takes
                 # `transformer_forward_int15`, and a host session under the
                 # profile is refused by name
-                | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"}
+                | {"transformer_decode_session_open_int15"}
                 # the session's fresh forward and backward, each taken only
                 # behind an `_exports` check
                 | {"transformer_session_forward_fresh", "transformer_session_backward"},

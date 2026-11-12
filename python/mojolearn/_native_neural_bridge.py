@@ -14,9 +14,7 @@ def connect_training(backend, vendor, inference_bindings):
     families = {
         "transformer": ("_mojolearn_transformer", (
             "transformer_vendor", "transformer_numeric_mode", "transformer_backward",
-            "transformer_block_api_v1", "transformer_native_session_handle_v1",
-            "transformer_session_create", "transformer_session_close",
-            "transformer_session_backward",
+            "transformer_block_api_v1", "transformer_session_backward",
             "transformer_arithmetic_profile", "transformer_arithmetic_profile_changed")),
         "mamba": ("_mojolearn_mamba", (
             "mamba_vendor", "mamba_numeric_mode", "mamba_state_api_v1", "mamba_block_api_v1",

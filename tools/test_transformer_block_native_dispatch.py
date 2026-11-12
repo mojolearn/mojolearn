@@ -56,7 +56,7 @@ def test_public_fresh_session_ephemeral_and_backward_are_hooked():
 
 def test_connection_carries_named_factory_and_checked_session_admission():
     bridge = (ROOT / 'python/mojolearn/_native_neural_bridge.py').read_text()
-    assert '"transformer_block_api_v1", "transformer_native_session_handle_v1"' in bridge
+    assert '"transformer_block_api_v1",' in bridge and '"transformer_native_session_handle_v1"' not in bridge
     shell = (ROOT / 'bindings/_mojolearn_transformer.mojo').read_text()
     assert 'm.def_function[transformer_block_api_binding]("transformer_block_api_v1")' in shell
     assert 'NATIVE_TRANSFORMER_BLOCK_API.get_or_create_ptr()' in shell

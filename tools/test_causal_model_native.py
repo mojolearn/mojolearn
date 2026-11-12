@@ -105,7 +105,7 @@ def test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings(
     assert 'entries["parallel_call"] is not connected["parallel_causal_call"]' in registry
     assert 'causal_pin_entries(mods, _standalone_record_fields(mods, model), entries)' in PUBLIC
     run = PUBLIC.split("def _causal_layer_run_prepared", 1)[1].split("def causal_model_embedding", 1)[0]
-    assert 'e["transformer_native_session_handle_v1"]' in run
+    assert 'transformer_block_session_run(session,' in run
     assert '_native_function(e["block_binding"]' not in run
 
 
