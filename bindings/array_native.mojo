@@ -1228,6 +1228,11 @@ def _as_order(a: PythonObject, order: String, context: PythonObject) raises -> P
 
 def _admit_class(cls: PythonObject, what: String, context: PythonObject) raises:
     """A classmethod constructor's `cls`: the connected Array class or a subclass."""
+    # PERF FIX (perf-audit-3, 2026-11-11): the exact connected class (every
+    # library-built Array) is admitted by identity, as `_admit` does, before
+    # the builtins lookup and the `issubclass` call; a subclass keeps them.
+    if cls is context["array_class"]:
+        return
     var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type or not _truth(_call(b.issubclass, cls, context["array_class"])):
         raise Error("TypeError: " + what + " builds a mojolearn Array class")
