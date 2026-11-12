@@ -1730,7 +1730,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             if not self.dry and not self.readonly and git_at(p, "rev-parse", "HEAD") != c:
                 raise StepFailed(f"--source-checkout {p} is not at the source commit {c}")
             return p
-        if self.head_of(ROOT) == c:
+        if self.head_of(ROOT) == c and self._source_problem(ROOT, c) is None:
+            # a lean (sparse) ROOT is not a complete source tree: fall through to the dedicated worktree
             return ROOT
         p = self.base / "source" / c[:12]
         if self.dry or self.readonly or not create:
@@ -1776,6 +1777,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             patterns = git_at(p, "sparse-checkout", "list") or ""
             if patterns.strip() and patterns.strip() != "/*":
                 return "it is a sparse checkout (" + patterns.strip().splitlines()[-1] + ")"
+        if not (Path(p) / "bench/results/identity_break").is_dir():
+            return "it lacks bench/results/identity_break (the verification CTR models the pack stages)"
         return None
 
     def _verify_source(self, p, c):
@@ -1795,12 +1798,12 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # The new worktree inherits ROOT's sparse-checkout patterns when ROOT is a lean worktree; the source
         # tree must be the whole commit (bench/results holds the verification CTR models the pack stages).
         # The patterns are per worktree (extensions.worktreeConfig), so widening them touches no other tree.
-        if git_at(tmp, "config", "--get", "core.sparseCheckout") == "true":
-            sparse_file = git_at(tmp, "rev-parse", "--git-path", "info/sparse-checkout")
-            if sparse_file:
-                Path(sparse_file).write_text("/*\n")
-                subprocess.run(["git", "-C", str(tmp), "sparse-checkout", "reapply"],
-                               capture_output=True, text=True)
+        # `sparse-checkout disable` is per worktree here (extensions.worktreeConfig) and idempotent on a full
+        # tree; the first form of this fix (rewriting the pattern file) left the 1a1ec7a07aae source sparse.
+        rc = subprocess.run(["git", "-C", str(tmp), "sparse-checkout", "disable"], capture_output=True, text=True)
+        if rc.returncode != 0:
+            self._drop_worktree(tmp)
+            raise StepFailed(f"could not widen the sparse worktree of {c} at {tmp}: {rc.stderr.strip()}")
         why = self._source_problem(tmp, c)
         if why:
             self._drop_worktree(tmp)
