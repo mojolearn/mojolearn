@@ -38,12 +38,7 @@ from core.host_helpers_impl import (
     gather_i64,
     gather_rows_bytes,
 )
-
-
-def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int64 buffer address")
-    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
+from bindings.host_helpers_run import _i64_ptr
 
 
 def all_finite_f32_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
