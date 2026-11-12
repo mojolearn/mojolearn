@@ -21,7 +21,8 @@ from core.base_entry_table import (
     BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32,
 )
 from core.hotpath_impl import HpStat
-from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_ref_unresolved
+from core.shared_slot import SharedSlot
 
 
 def base_helpers_ref(key: BaseEntryKey) raises -> EntryRef:
@@ -112,3 +113,41 @@ def base_mark_split_roles_f32(entry: EntryRef, idx: Int, m: Int, n: Int, split: 
     var addrs: Array[Int, 2] = [idx, roles]
     var ints: Array[Int, 4] = [m, n, split, role]
     return base_helper(entry, BH_MARK_SPLIT_ROLES_F32, addrs, ints)
+
+
+struct _BaseHelpersHeld(Defaultable, Movable):
+    """The base helper entry of the process's one base binary, resolved once
+    (round2-fixes-2): the key it was resolved for and the ref."""
+    var ready: Bool
+    var mode: Int
+    var vendor: Int
+    var entry: EntryRef
+
+    def __init__(out self):
+        self.ready = False
+        self.mode = -1
+        self.vendor = -1
+        self.entry = entry_ref_unresolved()
+
+
+comptime _BASE_HELPERS_HELD = SharedSlot[_BaseHelpersHeld, "MojolearnBaseHelpersHeldV1"]
+
+
+def base_helpers_held(key: BaseEntryKey) raises -> EntryRef:
+    """`base_helpers_ref(key)` resolved once per process and held: every
+    bridge records the same key (`python/mojolearn/_buffer.py::base_native_key`,
+    the one base binary), so the first door call resolves and admits the
+    table (publication, key, ABI schema) and later calls take the held ref.
+    The caller holds the GIL (it has just read the key from its helper dict),
+    which serializes the first fill. A refusal is not held: the next call
+    refuses again with the same text. perf audit 3: each public operation
+    re-resolved the table (a slot read, a schema String built and compared)."""
+    var held = _BASE_HELPERS_HELD.get_or_create_ptr()
+    if held[].ready and held[].mode == key.mode and held[].vendor == key.vendor:
+        return held[].entry
+    var entry = base_helpers_ref(key)
+    held[].entry = entry
+    held[].mode = key.mode
+    held[].vendor = key.vendor
+    held[].ready = True
+    return entry

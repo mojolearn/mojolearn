@@ -10,17 +10,18 @@ touches Python or the table."""
 from std.python import PythonObject
 from bindings.py_balanced import py_get, py_type
 from core.base_entry_table import BaseEntryKey
-from core.base_helpers_calls import base_helpers_ref
+from core.base_helpers_calls import base_helpers_held
 from core.entry_table import EntryRef
 
 
 def base_helpers_key(helpers: PythonObject) raises -> EntryRef:
     """The base helper entry of the table key recorded in `helpers` (a
-    bridge's helper dict), resolved once; refused with the recorded "<Class>: <message>" when the base
+    bridge's helper dict), resolved once per process and held
+    (`base_helpers_held`); refused with the recorded "<Class>: <message>" when the base
     binding had none."""
     var key = py_get(helpers, PythonObject("base_native_key"))
     if key is None:
         raise Error("ImportError: mojolearn: the base binding has no native helper table key")
     if py_type(key) is py_type(PythonObject("")):
         raise Error(String(py=key))
-    return base_helpers_ref(BaseEntryKey(Int(py=key[0]), Int(py=key[1])))
+    return base_helpers_held(BaseEntryKey(Int(py=key[0]), Int(py=key[1])))
