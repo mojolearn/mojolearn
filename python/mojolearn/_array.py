@@ -298,6 +298,11 @@ class Array:
     def _has_order(self, order):
         """True when the block is laid out as `order`, or when at most one
         dimension is larger than 1 so either label is free (native)."""
+        # PERF FIX (perf-audit-3, 2026-11-11): the label compare the Python
+        # method answered on before the native move, kept ahead of the
+        # binding crossing (the common case of every public call).
+        if self.order == order:  # glue: one attribute compare, no data
+            return True
         return _ARRAY_NATIVE("has_order", self, _ARRAY_CONTEXT, order)
 
     def __array__(self, dtype=None, copy=None):
@@ -339,11 +344,17 @@ class Array:
     def _as_c(self):
         """Self if C-order, a relabeled view when both layouts coincide,
         else a C-order copy (native)."""
+        # PERF FIX (perf-audit-3): self on the label compare, no crossing.
+        if self.order == "C":  # glue: one attribute compare, no data
+            return self
         return _ARRAY_NATIVE("as_c", self, _ARRAY_CONTEXT)
 
     def _as_order(self, order):
         """Self when already laid out as `order`, a relabeled view when
         both layouts coincide, else a copy in `order` (native)."""
+        # PERF FIX (perf-audit-3): self on the label compare, no crossing.
+        if order == self.order:  # glue: one attribute compare, no data
+            return self
         return _ARRAY_NATIVE("as_order", self, _ARRAY_CONTEXT, order)
 
     def tolist(self):
