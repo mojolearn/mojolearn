@@ -36,26 +36,29 @@ def test_native_tsne_resolves_both_optional_binding_slots():
 
 
 def test_manifold_kit_refuses_proxies_before_looking_up_cells():
+    # lane entangled-mkit: the kit is typed RUN (bindings/mani_kit_run.mojo);
+    # its UNPACK admits the exact module and connects the table provider once.
     source = _source("bindings/mani_kit.mojo")
-    kit = source.split("struct MKit(", 1)[1].split("    def res(", 1)[0]
-    assert 'raise Error("TypeError: manifold kit requires an exact native module")' in kit
-    assert "object.__getattribute__" not in kit
-    assert ".getattr" not in kit
-    assert 'return spectral_umap_entry(self.b, name, self.ctx)' in kit
-    assert 'spectral_umap_optional_entry(self.raw, name, self.ctx)' in kit
+    image = source.split("def mk_image(", 1)[1].split("\ndef ", 1)[0]
+    assert 'raise Error("TypeError: manifold kit requires an exact native module")' in image
+    assert image.index("raise Error") < image.index("kit_connect(")
+    assert "object.__getattribute__" not in image
+    assert ".getattr" not in image
+    run = _source("bindings/mani_kit_run.mojo")
+    assert "PythonObject" not in run and "std.python" not in run
+    assert '"x_decomp_' not in run
 
 
 def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
-    source = _source("bindings/mani_kit.mojo")
-    capture = source.split("def mk_from_input(", 1)[1]
-    assert capture.count("admit_family_meta(") == 1
-    assert "mk_from_snapshot(snapshot, name, ctx)" in capture
-    assert "_ = source" in capture
-    copy = source.split("def mk_from_snapshot(", 1)[1].split("def mk_from_input(", 1)[0]
-    for forbidden in (".shape[", ".ndim", "classical_address(value)"):
+    door = _source("bindings/mani_decomp_native.mojo")
+    mds = door.split("def _mds_fit(", 1)[1].split("\ndef ", 1)[0]
+    assert mds.count("admit_family_meta(") == 1
+    assert "_ = init_meta^" in mds
+    run = _source("bindings/mani_kit_run.mojo")
+    copy = run.split("    def host_snapshot(", 1)[1].split("    def from_snapshot(", 1)[0]
+    for forbidden in (".shape[", ".ndim", "classical_address("):
         assert forbidden not in copy
-    assert "value.source.addr" in copy
-    assert "host_all_finite_f32(src, r * c)" in copy
+    assert "host_all_finite_f32(src, rows * cols)" in copy
 
 
 def test_tsne_pca_and_optimizer_share_one_x_snapshot():

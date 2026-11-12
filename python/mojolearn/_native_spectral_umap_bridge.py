@@ -15,16 +15,12 @@ _SYMBOLS = {
         "spectral_predict_prepare", "spectral_predict_release", "spectral_predict_resident",
     )),
     "decomp": ("_mojolearn_x_decomp", (
-        "x_decomp_dev_alloc", "x_decomp_dev_free", "x_decomp_dev_upload", "x_decomp_dev_download",
-        "x_decomp_dev_ew", "x_decomp_dev_sqdist", "x_decomp_ew", "x_decomp_sqdist",
-        # The random/PCA UMAP initializer uses the same native MKit cells.
-        "x_decomp_rand", "x_decomp_dev_rand", "x_decomp_gemm", "x_decomp_dev_gemm",
-        "x_decomp_colsum", "x_decomp_dev_colsum", "x_decomp_svd", "x_decomp_dev_svd",
-        "x_decomp_move", "x_decomp_dev_move", "x_decomp_absmax_sign", "x_decomp_dev_absmax",
-        "x_decomp_order_f", "x_decomp_dev_order_f", "x_decomp_reduce", "x_decomp_dev_reduce",
-        "x_decomp_argmin_all", "x_decomp_dev_argmin_all",
-        # The kernel-call provider the manifold kit connects once
-        # (bindings/mani_kit.mojo `xd`, x_decomp/descriptor_schema.mojo).
+        # The kernel-call provider the typed manifold kit (UMAP's random/PCA
+        # start, bindings/mani_kit.mojo `mk_image`) and the spectral affinity
+        # connect once; every kit primitive is one of its table operations
+        # (x_decomp/descriptor_schema.mojo), so no other entry is read by name
+        # (lane entangled-mkit, 2026-11-12: the 26 named x_decomp_* cells
+        # this list carried for the Python-holding MKit are removed).
         "x_decomp_native_api_v1",
     )),
     "base": ("_mojolearn", (

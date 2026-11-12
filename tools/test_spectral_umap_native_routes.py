@@ -89,25 +89,17 @@ def test_modes_are_connected_once_and_missing_tier_is_retained(bridge, monkeypat
 
 def test_umap_initializer_retains_its_transitive_decomp_symbols(bridge):
     # Prevent losing a supported PCA/random initializer entry when connecting
-    # only the more visible spectral-affinity decomp cells.
+    # only the more visible spectral-affinity decomp cells. Lane entangled-mkit:
+    # the typed kit reads no entry by name; every primitive is an operation of
+    # the provider `x_decomp_native_api_v1`, which the decomp capture keeps.
     _, module = bridge
-    source = (ROOT / "bindings/mani_kit.mojo").read_text()
-    definitions = list(re.finditer(r"^    def (\w+)\(", source, re.M))
-    methods = {match[1]: source[match.start():definitions[i + 1].start() if i + 1 < len(definitions) else len(source)]
-               for i, match in enumerate(definitions)}
+    run = (ROOT / "bindings/mani_kit_run.mojo").read_text() + (ROOT / "bindings/mani_umap_init_run.mojo").read_text()
+    assert '"x_decomp_' not in run
+    assert '"x_decomp_native_api_v1"' in (ROOT / "bindings/mani_kit.mojo").read_text()
+    assert "x_decomp_native_api_v1" in set(module._SYMBOLS["decomp"][1])
     initializer = (ROOT / "bindings/mani_umap_native.mojo").read_text().split("def _umap_initial(", 1)[1].split("\ndef ", 1)[0]
     initializer = "\n".join(line.split("#", 1)[0] for line in initializer.splitlines())
-    pending = re.findall(r"\b(?:k|hk)\.(\w+)\(", initializer)
-    visited, symbols = set(), set()
-    while pending:
-        name = pending.pop()
-        if name in visited:
-            continue
-        visited.add(name)
-        body = methods[name]
-        symbols.update(re.findall(r'"(x_decomp_[^"]+)"', body))
-        pending.extend(re.findall(r"self\.(\w+)\(", body))
-    assert symbols <= set(module._SYMBOLS["decomp"][1])
+    assert "umap_random_start_run(" in initializer and "umap_pca_start_run(" in initializer
     assert "family_mani_binding" not in initializer
 
 
