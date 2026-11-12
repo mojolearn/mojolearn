@@ -29,6 +29,7 @@ from bindings.msel_helpers_released import (
 from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
 from x_metrics.epilogue import first_rows_i32
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.base_helpers_key import base_helpers_key
 from bindings.base_helpers_released import base_reduce_stat_int, base_bincount_i64, base_bincount2_i32
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
@@ -529,8 +530,14 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
             return PythonObject(None)
         var first = msel_new(gc.m, "<i8", context)
         # x_metrics' first-row pass linked into this door (a host pass in
-        # every binding that exported it; no cross-module call).
-        first_rows_i32(gc.codes_address, n, gc.m, msel_addr(first))
+        # every binding that exported it; no cross-module call). The O(n)
+        # pass reads and writes only raw buffers, so it runs with the GIL
+        # released as the GPU binding's former `x_metrics_first_rows` export did.
+        var codes_address = gc.codes_address
+        var classes_count = gc.m
+        var first_address = msel_addr(first)
+        with GILReleased(Python()):
+            first_rows_i32(codes_address, n, classes_count, first_address)
         _ = gc  # keep the code storage alive through the pass above
         _ = first  # keep the Python object alive through the native call above
         # pass 3 (rank 367): the classes ordered by their first row natively.
