@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native, bounded streaming for the existing Samba v2 checkpoint format."""
 from std.ffi import external_call
+from std.io import FileDescriptor
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_path_exists, native_json_parse
@@ -69,15 +70,12 @@ def _checkpoint_write(fd: Int, address: Int, count: Int, mut written: Sha256, mu
     var start = 0
     while start < count:  # driver-loop: over bounded file write chunks
         var size = min(SAMBA_TRANSFER_CHUNK, count - start)
-        var done = 0
-        while done < size:  # driver-loop: over partial writes of one chunk
-            # Same lowered signature as the std FileDescriptor.write_bytes
-            # declaration of libc `write` (Int fd, byte pointer, Int count,
-            # Int return): one C symbol admits one signature per binary.
-            var put = external_call["write", Int](fd, UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address + start + done), size - done)
-            if put <= 0:
-                raise Error("OSError: Samba checkpoint short write")
-            done += put
+        # The std FileDescriptor write (it retries partial writes itself). A raw
+        # `external_call["write"]` is refused under Mojo 1.2: one C symbol admits
+        # one signature per binary and the std already declares `write`
+        # (r5 build, 2026-11-11, "existing function with conflicting signature").
+        FileDescriptor(fd).write_bytes(
+            Span(unsafe_ptr=UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address + start), length=size))
         written.update(address + start, size)
         whole.update(address + start, size)
         start += size
