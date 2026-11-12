@@ -13,18 +13,7 @@ from autograd.program_io import ProgramInput
 from providers.python.autograd_program_pyapi import program_input, _integer
 from providers.python.autograd_pyapi import ops_load_weights_py
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
-
-
-def _dtype(dtype: String) raises -> Tuple[Int, Int]:
-    if dtype == "F16" or dtype == "torch.float16":
-        return (23, 2)
-    if dtype == "F32" or dtype == "torch.float32":
-        return (11, 4)
-    if dtype == "F64" or dtype == "torch.float64":
-        return (12, 8)
-    if dtype == "BF16" or dtype == "torch.bfloat16":
-        return (4096, 2)
-    raise Error("TypeError: a weight must be float16, bfloat16, float32 or float64; got " + dtype)
+from autograd.autograd_weight_frontend_run import _dtype
 
 
 def _file_header(path: PythonObject) raises -> PythonObject:
