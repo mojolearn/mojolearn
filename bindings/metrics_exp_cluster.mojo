@@ -12,7 +12,7 @@
 # each clustering into its own sorted classes are the encoder's codes
 # themselves (the Python `_codes(a, ca)` gathered the identity table). Same
 # kernels: the bits do not move.
-from std.math import sqrt
+from bindings.metrics_exp_cluster_run import _generalized_average
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call
@@ -188,19 +188,6 @@ def _average_method(method: PythonObject) raises -> Int:
         if m == "max":
             return 3
     raise Error("'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
-
-
-def _generalized_average(U: Float64, V: Float64, method: Int) raises -> Float64:
-    if method == 0:
-        return V if V < U else U
-    if method == 1:
-        var x = U * V
-        if x < 0.0:
-            raise Error("math domain error")
-        return sqrt(x)
-    if method == 2:
-        return (U + V) / 2
-    return V if V > U else U
 
 
 def _nmi(args: PythonObject, context: PythonObject) raises -> PythonObject:

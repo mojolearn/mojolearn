@@ -9,7 +9,7 @@ are independent and run across the native host worker pool.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from bindings.normal_dist_helpers import erfc64, normal_cdf64, normal_inv_cdf64
+from bindings.normal_dist_helpers_run import erfc64, normal_cdf64, normal_inv_cdf64
 
 comptime PORTABLE_MATH_CASES = 3
 

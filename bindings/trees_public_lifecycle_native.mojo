@@ -8,7 +8,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_y, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_entry_refuse
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions import classical_require_fitted

@@ -29,7 +29,8 @@ from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
-from bindings.str_labels_native import str_lookup, StrTable, _read, str_unique_into, str_classes, str_codes_into
+from bindings.str_labels_native import str_lookup, _read, str_unique_into, str_codes_into
+from bindings.str_labels_native_run import StrTable, str_classes
 from bindings.boundary_read import text_buffer_view, read_text_rows_into, pack_ucs4_str, admitted_buffer_view
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
 from bindings.classical_pandas import classical_admit_value

@@ -16,7 +16,8 @@ from bindings.classical_archive import classical_archive_save, classical_archive
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
-from bindings.native_operation_codes import operation_table, OP_ROUTE_TREES, OP_ROUTE_HOST_TREE
+from bindings.native_operation_codes import operation_table
+from bindings.classical_native_run import classical_coded_trees
 from bindings.classical_door_routes import (
     CLASSICAL_TREES_DOOR, CLASSICAL_FAMILY_DOOR, classical_trees_operation, classical_family_operation,
 )
@@ -116,16 +117,6 @@ def classical_door_call(context: PythonObject, key: String, entry: String, args_
         raise Error("ImportError: the compiled " + entry + " is not connected; build the complete host layout and start a fresh process")
     ref cpy = Python().cpython()
     return cpy.PyObject_Call(door._obj_ptr, args_ptr, PyObjectPtr())
-
-
-def classical_coded_trees(code: Int) raises -> Bool:
-    """Whether the operation with this integer code is the tree door's (else
-    the family door's)."""
-    var table = operation_table()
-    if code < 0 or code >= len(table[].names):
-        raise Error("TypeError: unknown native operation code")
-    var route = table[].routes[code]
-    return route == OP_ROUTE_TREES or route == OP_ROUTE_HOST_TREE
 
 
 def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

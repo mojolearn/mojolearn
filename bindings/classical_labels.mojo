@@ -52,7 +52,8 @@ from bindings.label_integer_storage import _ndarray_buffer_address
 from bindings.label_input_sources import (
     labels_list_scalar_kind, labels_series_values, labels_text_storage,
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
-from bindings.str_labels_native import StrTable, _read_source, str_unique_into
+from bindings.str_labels_native import _read_source, str_unique_into
+from bindings.str_labels_native_run import StrTable
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from bindings.cpython_table import cpython_table
 from bindings.class_weight_boundary import class_weight_admit_dictionary

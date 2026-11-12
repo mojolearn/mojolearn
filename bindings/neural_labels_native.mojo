@@ -15,7 +15,8 @@ from bindings.sequential_admission import sequential_admit_value, SequentialValu
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array
 from bindings.xseq_native_common import xseq_neural_provider
-from bindings.str_labels_native import StrTable, _read, str_unique_into
+from bindings.str_labels_native import _read, str_unique_into
+from bindings.str_labels_native_run import StrTable
 from bindings.native_buffer_address import native_buffer_address
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute

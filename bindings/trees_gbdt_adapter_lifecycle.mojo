@@ -10,7 +10,8 @@ from bindings.params_metadata_native import _read, _resolved
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_refuse_sparse, classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_refuse_sparse, classical_check_y, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list, _feature_names

@@ -10,7 +10,8 @@ from bindings.svc_linear_native import svc_linear_operation
 from bindings.svc_kernel_native import svc_kernel_operation
 from bindings.svc_ocsvm_native import svc_ocsvm_operation
 from providers.python.svc_public_state_pyapi import svc_public_state_operation
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from bindings.gp_svm_gp_state import gp_x_mark, gp_x_release
 from bindings.host_sparse_native import host_sparse_format

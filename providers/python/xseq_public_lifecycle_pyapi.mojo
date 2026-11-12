@@ -14,7 +14,8 @@ from bindings.mode_metadata_native import _fields
 from bindings.linear_constructor_native import _constructor_plan
 from bindings.params_metadata_native import _resolved
 from bindings.optimizer_admission import opt_schedule
-from bindings.classical_validate import classical_view, classical_refuse_sparse, classical_estimator_name, classical_check_width, RESHAPE_HINT
+from bindings.classical_validate import classical_view, classical_refuse_sparse, classical_estimator_name, RESHAPE_HINT
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_warnings import classical_warn_column
