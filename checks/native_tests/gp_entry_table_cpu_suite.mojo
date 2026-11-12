@@ -57,12 +57,14 @@ def run_checks() raises:
     require(conflict, "gp table: a second image in the same slot did not refuse")
     var failures = List[Int](length=GP_CLASSIFIER_CPU_FIXTURES, fill=0)
     var fp = failures.unsafe_ptr()
-    var host_call = host.call
-    var infer_call = infer.call
-    def task(unit: Int) {imm fp, imm host_call, imm infer_call}:
+    def task(unit: Int) {imm fp}:
         try:
-            var query = GPDriver(infer_call) if unit >= 2 else GPDriver(host_call)
-            classifier_fixture(GPDriver(host_call), query, unit, True)
+            # Each fixture resolves its own refs (a read-only acquire load).
+            var mode_word = Int(GLOBAL_NUMERIC_MODE)
+            var fit = gp_table_resolve(GPEntryKey(mode_word, 0, GP_COLUMN_HOST))
+            var inference = gp_table_resolve(GPEntryKey(mode_word, 0, GP_COLUMN_HOST_INFER))
+            var query = GPDriver(inference.call) if unit >= 2 else GPDriver(fit.call)
+            classifier_fixture(GPDriver(fit.call), query, unit, True)
         except error:
             fp.unsafe_store(unit, 1)
             print("FAIL gp_entry_table_cpu fixture", unit, String(error))
