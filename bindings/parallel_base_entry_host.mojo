@@ -19,7 +19,7 @@ from core.parallel_entry_table import (
 )
 from core.shared_slot import SharedSlot
 from core.array_helpers_run import shard_topk_merge_f32_host_run
-from bindings.msel_host import msel_rebase_offsets_i32_host_run
+from core.msel_host_run import msel_rebase_offsets_i32_host_run
 
 
 def parallel_base_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

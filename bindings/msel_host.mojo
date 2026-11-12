@@ -8,8 +8,7 @@ signatures and refusals, over `core/msel_host.mojo`."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from core.msel_host_impl import msel_rebase_check_parts
-from core.msel_host import host_rebase_offsets_i32, host_take_rows
+from core.msel_host import host_take_rows
 # lane calltable-msel: the store slot and the scatter, column, split-table
 # and group-fold bodies are the runs the model-selection helper table
 # publishes (core/msel_helpers_host.mojo); these exports unpack and call them.
@@ -102,18 +101,6 @@ def msel_proba_column_binding(
     with GILReleased(Python()):
         status = msel_proba_column_host_run(sa, c, nn, kk, cc, d)
     return PythonObject(status)
-
-
-def msel_rebase_offsets_i32_host_run(ra: Int, nr: Int, la: Int, p: Int, no: Int, d: Int) raises:
-    """The parallel forest's merged int32 tree offsets, on the host. The
-    core host image's parallel table entry (bindings/parallel_base_entry_host.mojo)
-    calls it; the Python door `msel_rebase_offsets_i32` had no caller left
-    (lane calltable-parallel-archive, 2026-11-11)."""
-    if p < 1 or nr < 1 or no < 1 or ra == 0 or la == 0 or d == 0:
-        raise Error("msel_rebase_offsets_i32: bad sizes")
-    msel_rebase_check_parts(la, p, nr, no)
-    if not host_rebase_offsets_i32(ra, nr, la, p, no, d):
-        raise Error("msel_rebase_offsets_i32: a merged offset leaves int32")
 
 
 def msel_split_table_i32_binding(
