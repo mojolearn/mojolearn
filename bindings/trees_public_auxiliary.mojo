@@ -97,15 +97,19 @@ def forest_shape(model: PythonObject, operation: String,
         classical_admit_value(requested, context)
         requested = _check_mode(requested)
     var mode = String(requested)
-    var entry = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var shape_entry = Optional[PythonObject]()
     try:
-        entry = py_get(trees_table(context, mode, "_mojolearn_x_trees"), "x_trees_tree_shape")
+        var got = py_get(trees_table(context, mode, "_mojolearn_x_trees"), "x_trees_tree_shape")
+        if got is not None:
+            shape_entry = got
     except error:
         # Preserve the absent host-export refusal of the old public helper.
         if not String(error).startswith("ImportError:"):
             raise error^
-    if entry is None:
+    if not shape_entry:
         raise Error("NotImplementedError: mojolearn: get_depth/get_n_leaves need the x_trees binding's x_trees_tree_shape (rebuild without -D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)")
+    var entry = shape_entry.value()
     var offsets_object = _field(fields, "_offsets")
     var left_object = _field(fields, "_left_child")
     classical_admit_value(offsets_object, context)
@@ -141,12 +145,14 @@ def embedding_apply(model: PythonObject, args: PythonObject,
     if py_type(cls) is not b.type:
         raise Error("TypeError: tree embedding requires ordinary class metadata")
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var kind = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var kind = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: passive class ancestry preserves inherited embedding interfaces
-        kind = py_get(context["trees_boost_classes"], ancestry[i])
-        if kind is not None:
+        var got = py_get(context["trees_boost_classes"], ancestry[i])
+        if got is not None:
+            kind = got
             break
-    if kind is None or String(kind) != "rte":
+    if not kind or String(kind.value()) != "rte":
         raise Error("TypeError: tree embedding requires its connected class")
     var fields = _fields(model)
     if not py_contains(fields, "forest_"):
