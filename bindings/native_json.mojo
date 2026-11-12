@@ -282,10 +282,10 @@ def native_path(value: PythonObject) raises -> PythonObject:
     # invoke that protocol from product execution, even through a C builtin.
     if cls is not paths[0] and cls is not paths[1]:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
-    var parts = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel: its presence is the old `found` flag (modular/modular#7546).
+    var stored = Optional[PythonObject]()
     var member_type = native_loaded_module("types").MemberDescriptorType
     var mro = py_call(bi.type.__getattribute__, cls, "__mro__")
-    var found = False
     # object.__getattribute__ still invokes a replaced property. Read only a
     # real native slot descriptor from the admitted path hierarchy instead.
     for storage in range(2):  # small-loop(the two path storage field names)
@@ -302,13 +302,13 @@ def native_path(value: PythonObject) raises -> PythonObject:
                 var descriptor = namespace[field]
                 if py_type(descriptor) is not member_type:
                     raise Error("TypeError: Python path storage descriptors are unsupported")
-                parts = py_call(descriptor.__get__, value, cls)
-                found = True
+                stored = py_call(descriptor.__get__, value, cls)
                 break
-        if found:
+        if stored:
             break
-    if not found:
+    if not stored:
         raise Error("TypeError: path requires native component storage")
+    var parts = stored.value()
     if py_type(parts) is not bi.list and py_type(parts) is not bi.tuple:
         raise Error("TypeError: path components require native storage")
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
