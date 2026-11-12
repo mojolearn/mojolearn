@@ -359,8 +359,9 @@ def _py_ints(values: List[Int]) raises -> PythonObject:
     """PACK: typed parameter or address words as the native list the packed
     export takes."""
     var result = Python.list()
+    var append = result.append  # resolved once, not per word
     for value in values:  # driver-loop: over a fixed export's parameter words
-        _ = py_call(result.append, value)
+        _ = py_call(append, value)
     return result
 
 
