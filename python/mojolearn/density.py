@@ -310,6 +310,11 @@ class DBSCAN(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
+# The metric spellings a DBSCAN archive may carry (the native door owns the codes;
+# `host_archive_native.mojo` only checks membership by name). The dict that held
+# the codes left with the DBSCAN migration (6af766f4d1) and this name stayed in use.
+_METRICS = ("euclidean", "l2", "manhattan", "l1", "cityblock", "cosine", "precomputed")
+
 _native_archive_bridge.register(DBSCAN, _DBSCAN_FORMAT, (
     _native_archive_bridge.fitted("labels_"),
     ("need_true", "prediction_data", "ValueError", _DBSCAN_UNSTORED),
