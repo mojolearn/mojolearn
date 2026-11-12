@@ -29,15 +29,8 @@ from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr
-from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE, hw_store_values
-from holtwinters.host.hw_predict import (
-    hw_forecast_from_state_ptr,
-    hw_predict_in_sample_ptr,
-)
-from holtwinters.impl.tsa.holtwinters_params import (
-    SEASONAL_ADDITIVE,
-    seasonal_from_name,
-)
+from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
+from bindings.holtwinters_host_predict_run import holtwinters_forecast_run, holtwinters_predict_run
 
 def _hw_index(value: PythonObject) raises -> Int:
     # An exact int is its own index: no class-name string, module lookup or
@@ -53,29 +46,6 @@ def _hw_index(value: PythonObject) raises -> Int:
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
     return Int(py=_balanced_call(operator_module.index, value))
-
-
-def _refuse_state(n: Int, batch_size: Int, frequency: Int, who: String) raises:
-    """`holtwinters_forecast_ptr`'s guards (`holtwinters/estimator.mojo`),
-    in its words and order, after `seasonal_from_name`."""
-    if n <= frequency:
-        raise Error(
-            "holtwinters "
-            + who
-            + ": n ("
-            + String(n)
-            + ") must exceed frequency ("
-            + String(frequency)
-            + "); there would be no fitted components"
-        )
-    if batch_size < 1:
-        raise Error(
-            "holtwinters "
-            + who
-            + ": batch_size must be >= 1 (batch_size="
-            + String(batch_size)
-            + ")"
-        )
 
 
 def holtwinters_forecast_binding(
@@ -114,22 +84,7 @@ def holtwinters_forecast_binding(
     var sname = String(py=seasonal)
     var written = 0
     with GILReleased(Python()):
-        var st = seasonal_from_name(sname)
-        _refuse_state(n, batch_size, frequency, "forecast")
-        if h <= 0:
-            raise Error("h must be > 0. Currently: " + String(h))
-        var components_len = (n - frequency) * batch_size
-        var fc = hw_forecast_from_state_ptr(
-            cp,
-            components_len,
-            n,
-            batch_size,
-            frequency,
-            st == SEASONAL_ADDITIVE,
-            h,
-        )
-        hw_store_values(op, fc, h * batch_size)
-        written = h * batch_size
+        written = holtwinters_forecast_run(cp, op, n, batch_size, frequency, h, sname)
     return PythonObject(written)
 
 
@@ -172,35 +127,5 @@ def holtwinters_predict_binding(
     var sname = String(py=seasonal)
     var written = 0
     with GILReleased(Python()):
-        var st = seasonal_from_name(sname)
-        _refuse_state(n, batch_size, frequency, "predict")
-        if start < 0 or end <= start:
-            raise Error(
-                "holtwinters predict: need 0 <= start < end (start="
-                + String(start)
-                + ", end="
-                + String(end)
-                + ")"
-            )
-        if end > n:
-            raise Error(
-                "holtwinters predict: the in-sample prediction ends at n (end="
-                + String(end)
-                + ", n="
-                + String(n)
-                + "); later times are the forecast's"
-            )
-        var components_len = (n - frequency) * batch_size
-        var out = hw_predict_in_sample_ptr(
-            cp,
-            components_len,
-            n,
-            batch_size,
-            frequency,
-            st == SEASONAL_ADDITIVE,
-            start,
-            end,
-        )
-        written = (end - start) * batch_size
-        hw_store_values(op, out, written)
+        written = holtwinters_predict_run(cp, op, n, batch_size, frequency, start, end, sname)
     return PythonObject(written)
