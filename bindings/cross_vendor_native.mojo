@@ -508,7 +508,10 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
         var row = bi.dict()
         py_setitem(row, "step", PythonObject(step + 1))
         py_setitem(row, "losses", all_losses)
-        py_setitem(row, "state", agreed.value() if agreed else PythonObject(None))
+        var agreed_state = PythonObject(None)
+        if agreed:
+            agreed_state = agreed.value()
+        py_setitem(row, "state", agreed_state)
         py_setitem(row, "workers", hashes)
         py_setitem(row, "vendors", vendors)
         py_setitem(row, "total_sha256", total_hash)
@@ -1179,7 +1182,10 @@ def cross_vendor_main(argv: PythonObject) raises -> PythonObject:
     _ = py_call(args.append, 2147483648)
     _ = py_call(args.append, chained)
     _ = py_call(args.append, c[].ready_cls)
-    _ = py_call(args.append, path.value() if path else PythonObject(None))
+    if path:
+        _ = py_call(args.append, path.value())
+    else:
+        _ = py_call(args.append, PythonObject(None))
     _ = cross_vendor_coordinator_init(args)
     var rows = cross_vendor_coordinator_run(owner)
     cross_vendor_console("AGREED on " + String(len(rows)) + " steps across " + String(workers.value()) + " workers")
