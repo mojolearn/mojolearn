@@ -1769,6 +1769,13 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return "git status failed in it"
         if dirty:
             return "it has tracked changes (a partial or edited checkout): " + dirty.splitlines()[0]
+        # A sparse worktree (lean_worktree.sh excludes bench/results) is clean by git status but lacks the
+        # checked-in verification CTR models that pack_wheel stages (2026-11-12: the wave-9 measurement build
+        # packed 56/56 bindings and then refused on the missing models).
+        if git_at(p, "config", "--get", "core.sparseCheckout") == "true":
+            patterns = git_at(p, "sparse-checkout", "list") or ""
+            if patterns.strip() and patterns.strip() != "/*":
+                return "it is a sparse checkout (" + patterns.strip().splitlines()[-1] + ")"
         return None
 
     def _verify_source(self, p, c):
@@ -1785,6 +1792,15 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if rc.returncode != 0:
             self._drop_worktree(tmp)
             raise StepFailed(f"could not add a worktree of {c} at {tmp}: {rc.stderr.strip()}")
+        # The new worktree inherits ROOT's sparse-checkout patterns when ROOT is a lean worktree; the source
+        # tree must be the whole commit (bench/results holds the verification CTR models the pack stages).
+        # The patterns are per worktree (extensions.worktreeConfig), so widening them touches no other tree.
+        if git_at(tmp, "config", "--get", "core.sparseCheckout") == "true":
+            sparse_file = git_at(tmp, "rev-parse", "--git-path", "info/sparse-checkout")
+            if sparse_file:
+                Path(sparse_file).write_text("/*\n")
+                subprocess.run(["git", "-C", str(tmp), "sparse-checkout", "reapply"],
+                               capture_output=True, text=True)
         why = self._source_problem(tmp, c)
         if why:
             self._drop_worktree(tmp)
