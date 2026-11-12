@@ -67,6 +67,56 @@ from std.sys._assembly import inlined_assembly
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 
 
+# NVIDIA rounding-mode PTX arithmetic, one place for every caller
+# (lane nvvm-intrinsics-ptx, 2026-11-12). The LLVM inside Mojo 1.2 no longer
+# knows `llvm.nvvm.mul.rn.{f,ftz.f,d}` ("could not find LLVM intrinsic"), so
+# these emit the same PTX instructions those intrinsics lowered to, as inline
+# assembly on f32 (`f`) / f64 (`d`) registers. Same instruction, same bits.
+# The `.rn` modifier is what keeps ptxas from fusing a product into a
+# neighbouring add (PTX ISA, `mul`/`fma`); the identity guards depend on it,
+# never on LLVM's fp-contraction setting. Call only in code compiled for an
+# NVIDIA GPU (every caller sits under an `is_nvidia_gpu()` or NVIDIA-only
+# comptime branch).
+@always_inline
+def nv_mul_rn_f32(a: Float32, b: Float32) -> Float32:
+    """PTX `mul.rn.f32`."""
+    return inlined_assembly[
+        "mul.rn.f32 $0, $1, $2;", Float32, constraints="=f,f,f", has_side_effect=False
+    ](a, b)
+
+
+@always_inline
+def nv_mul_rn_ftz_f32(a: Float32, b: Float32) -> Float32:
+    """PTX `mul.rn.ftz.f32`."""
+    return inlined_assembly[
+        "mul.rn.ftz.f32 $0, $1, $2;", Float32, constraints="=f,f,f", has_side_effect=False
+    ](a, b)
+
+
+@always_inline
+def nv_mul_rn_f64(a: Float64, b: Float64) -> Float64:
+    """PTX `mul.rn.f64`."""
+    return inlined_assembly[
+        "mul.rn.f64 $0, $1, $2;", Float64, constraints="=d,d,d", has_side_effect=False
+    ](a, b)
+
+
+@always_inline
+def nv_fma_rn_f32(a: Float32, b: Float32, c: Float32) -> Float32:
+    """PTX `fma.rn.f32` (`a*b + c`, one rounding)."""
+    return inlined_assembly[
+        "fma.rn.f32 $0, $1, $2, $3;", Float32, constraints="=f,f,f,f", has_side_effect=False
+    ](a, b, c)
+
+
+@always_inline
+def nv_fma_rn_ftz_f32(a: Float32, b: Float32, c: Float32) -> Float32:
+    """PTX `fma.rn.ftz.f32`."""
+    return inlined_assembly[
+        "fma.rn.ftz.f32 $0, $1, $2, $3;", Float32, constraints="=f,f,f,f", has_side_effect=False
+    ](a, b, c)
+
+
 def ftz(x: Float32) -> Float32:
     """IDENTITY_PATHS row 10's construction: the denormal policy.
 
@@ -128,7 +178,7 @@ def ftz(x: Float32) -> Float32:
     # The select keeps the input word for a NaN, so this spelling returns the
     # integer spelling's word for all 2^32 inputs.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
-        var y = llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](x, Float32(1.0))
+        var y = nv_mul_rn_ftz_f32(x, Float32(1.0))
         return x if y != y else y
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
@@ -185,7 +235,7 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 #   AMD GPU: the instruction itself, `v_mul_f32` / `v_mul_f64` as inline asm
 #     on VGPRs. The fence was the first spelling and gfx942 codegen refused it
 #     on a uniform value ("illegal VGPR to SGPR copy", a row-norm kernel).
-#   NVIDIA: `llvm.nvvm.mul.rn.{f,d}`, i.e. PTX `mul.rn`. A fenced `fmul`
+#   NVIDIA: PTX `mul.rn` (`nv_mul_rn_f32` / `nv_mul_rn_f64` above). A fenced `fmul`
 #     reaches PTX as a plain `mul.f32`, which ptxas may still fuse with an
 #     `add.f32`; the `.rn` modifier forbids that (PTX ISA, `mul`).
 #   Apple GPU: `llvm.fma(a, b, -0.0)` called WITHOUT fast-math flags; LLVM
@@ -196,7 +246,7 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
     """`a*b`, correctly rounded, never fused into a neighbor. See above."""
     comptime if is_nvidia_gpu():
-        return llvm_intrinsic["llvm.nvvm.mul.rn.f", Float32, has_side_effect=False](a, b)
+        return nv_mul_rn_f32(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
             "v_mul_f32 $0, $1, $2", Float32, constraints="=v,v,v", has_side_effect=False
@@ -215,7 +265,7 @@ def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
 def pinned_mul_f64(a: Float64, b: Float64) -> Float64:
     """`pinned_mul_f32`'s float64 twin (no Apple GPU arm: Metal has no float64)."""
     comptime if is_nvidia_gpu():
-        return llvm_intrinsic["llvm.nvvm.mul.rn.d", Float64, has_side_effect=False](a, b)
+        return nv_mul_rn_f64(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
             "v_mul_f64 $0, $1, $2", Float64, constraints="=v,v,v", has_side_effect=False

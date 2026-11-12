@@ -22,7 +22,7 @@ On a non-NVIDIA device it prints SKIP (both lanes are the integer spelling).
 from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from std.sys import llvm_intrinsic
+from checks.numerics import nv_mul_rn_ftz_f32
 from std.sys.info import is_nvidia_gpu
 
 comptime THREADS = 1 << 20
@@ -54,7 +54,7 @@ def probe_kernel(
         var soft = bitcast[DType.uint32](_ftz_int(x))
         var hard = soft
         comptime if is_nvidia_gpu():
-            hard = bitcast[DType.uint32](llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](x, Float32(1.0)))
+            hard = bitcast[DType.uint32](nv_mul_rn_ftz_f32(x, Float32(1.0)))
         if hard != soft:
             if (w & UInt32(0x7F800000)) == UInt32(0x7F800000) and (w & UInt32(0x007FFFFF)) != UInt32(0):
                 nan += Int32(1)

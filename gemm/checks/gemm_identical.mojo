@@ -155,7 +155,15 @@ from gemm.contract import (
     fold_level_width,
     fold_node_total,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, identical_mul_add_simd
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+    identical_mul_add_simd,
+    nv_fma_rn_f32,
+    nv_mul_rn_ftz_f32,
+)
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
@@ -1360,12 +1368,8 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     rounding at underflow boundaries remains a separate numerical audit.
     """
     comptime if TUNED_HW_FTZ_FMA:
-        var rounded = llvm_intrinsic[
-            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
-        ](a, b, acc)
-        return llvm_intrinsic[
-            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
-        ](rounded, Float32(1.0))
+        var rounded = nv_fma_rn_f32(a, b, acc)
+        return nv_mul_rn_ftz_f32(rounded, Float32(1.0))
     comptime if TUNED_CLASS_FLUSH:
         return _ftz_class(identical_mul_add(a, b, acc))
     # Apple (lane/apple-seam-repair): the native FMA flushes before rounding;
@@ -1502,7 +1506,7 @@ def _admit_warp_min(v: UInt32) -> UInt32:
 def _admit_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """The contract step on an ADMITTED window: `fma.rn`, the first of
     `_tuned_step`'s two instructions; its flush is proven the identity."""
-    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+    return nv_fma_rn_f32(a, b, acc)
 
 
 @always_inline
@@ -1809,9 +1813,7 @@ def _fold_flush[HW: Bool](x: Float32) -> Float32:
     spelling is six. Every other column, and every caller that does not ask,
     keeps the software `ftz`, so no bit can move anywhere."""
     comptime if HW and TUNED_HW_FTZ_FMA:
-        return llvm_intrinsic[
-            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
-        ](x, Float32(1.0))
+        return nv_mul_rn_ftz_f32(x, Float32(1.0))
     return ftz(x)
 
 
