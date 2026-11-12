@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native metric stage/layout preparation. No Python objects, callbacks or provider
 # imports: the boundary owns input references and supplies admitted opcode words.
+from std.memory import bitcast
 
 def metric_merge_pairs(var pairs: List[Int]) -> List[Int32]:
     # `_arena_io.output_ranges`: [lo, hi, -1, 1] quads of the sorted, merged
@@ -40,6 +41,11 @@ struct MetricProgramPlan(Movable):
     var skip: List[Int]
     var outputs: List[Int]
     var declared_outputs: Bool
+    # Per input record: the index of its program-owned constant words in
+    # `consts`, or -1 for a caller buffer the boundary keeps alive (lane
+    # entangled-programs: scalar words were a Python array each).
+    var input_consts: List[Int]
+    var consts: List[List[Int32]]
 
     def __init__(out self):
         self.size = 0
@@ -49,6 +55,8 @@ struct MetricProgramPlan(Movable):
         self.skip = List[Int]()
         self.outputs = List[Int]()
         self.declared_outputs = False
+        self.input_consts = List[Int]()
+        self.consts = List[List[Int32]]()
 
     def alloc(mut self, n: Int) raises -> Int:
         var off = self.size
@@ -60,9 +68,44 @@ struct MetricProgramPlan(Movable):
     def input(mut self, n: Int) raises -> Int:
         var off = self.alloc(n)
         self.input_offsets.append(off)
+        self.input_consts.append(-1)
         self.skip.append(off)
         self.skip.append(off + n)
         return off
+
+    def input_words(mut self, var words: List[Int32]) raises -> Int:
+        """An input of program-owned words (a scalar's float32 bits, a
+        binary64 as two Int32 words, low first), copied in as their bits."""
+        var off = self.input(len(words))
+        self.input_consts[len(self.input_consts) - 1] = len(self.consts)
+        self.consts.append(words^)
+        return off
+
+    def input_f32(mut self, value: Float64) raises -> Int:
+        """`Array.from_list([_f32(value)], "<f4")` as one constant input word."""
+        var words = List[Int32](length=1, fill=0)
+        words[0] = bitcast[DType.int32](Float32(value))
+        return self.input_words(words^)
+
+    def input_f64(mut self, value: Float64) raises -> Int:
+        """`_f64_words`: a binary64 scalar as two Int32 words, low first."""
+        var bits = bitcast[DType.uint64](value)
+        var words = List[Int32](length=2, fill=0)
+        words[0] = bitcast[DType.int32](UInt32(bits & 0xFFFFFFFF))
+        words[1] = bitcast[DType.int32](UInt32(bits >> 32))
+        return self.input_words(words^)
+
+    def buffer_inputs(self) -> Int:
+        """The number of caller-buffer inputs (the boundary's owners)."""
+        var count = 0
+        for k in range(len(self.input_consts)):  # driver-loop: over the program's input records
+            if self.input_consts[k] < 0:
+                count += 1
+        return count
+
+    def const_address(self, k: Int) -> Int:
+        """The address of input k's constant words (k must be a constant)."""
+        return Int(self.consts[self.input_consts[k]].unsafe_ptr())
 
     def scratch(mut self, n: Int) raises -> Int:
         var off = self.alloc(n)

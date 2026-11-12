@@ -260,10 +260,7 @@ struct MxProg(Movable):
 
     def f64_words(mut self, value: Float64, context: PythonObject) raises -> Int:
         """`_f64_words`: a binary64 scalar as two Int32 words (low first), an input."""
-        var words = family_array(Python.tuple(2), "<i4", context)
-        FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words)))[0] = value
-        _ = words  # keep the Python object alive through the native call above
-        return self.put_i32(words)
+        return self.plan.input_f64(value)
 
 
 struct MxArena(Copyable, Movable):

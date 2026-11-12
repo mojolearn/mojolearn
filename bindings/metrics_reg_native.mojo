@@ -96,12 +96,9 @@ struct _Prog(Movable):
         return self.plan.want(off, n, -1, 1)
 
 
-def _f32_scalar_array(value: Float64, context: PythonObject) raises -> PythonObject:
-    """`Array.from_list([_f32(value)], "<f4")`."""
-    var one = family_array(Python.tuple(1), "<f4", context)
-    FAMILY_F32P(unsafe_from_address=Int(py=classical_address(one)))[0] = Float32(value)
-    _ = one  # keep the Python object alive through the native call above
-    return one
+# TOMBSTONE: `_f32_scalar_array` (a one-word Python Array per program scalar) deleted 2026-11-12 by lane
+# entangled-programs: scalars are program-owned words (`MetricProgramPlan.input_f32`); code recoverable at
+# e561a66d6b.
 
 
 struct _Reg(Movable):
@@ -154,7 +151,7 @@ struct _Reg(Movable):
         the one-group key and the weight total."""
         self.y_off = self.prog.put(self.y)
         self.p_off = self.prog.put(self.p)
-        self.s_off = self.prog.put(_f32_scalar_array(scalar, context))
+        self.s_off = self.prog.plan.input_f32(scalar)
         if self.w is not None:
             self.w_off = self.prog.put(self.w)
         self.key = self.prog.scratch(self.n)
@@ -194,7 +191,7 @@ struct _Reg(Movable):
         var d = self.d
         var order = self.prog.scratch(n * d)
         self.prog.stage("col_sort", d, [v, n, d, order])
-        var r = self.prog.put(_f32_scalar_array(rank, context))
+        var r = self.prog.plan.input_f32(rank)
         var out = self.prog.scratch(d)
         var cdf = self.prog.scratch(n * d)
         self.prog.stage("wpercentile", d, [v, n, d, order, self.w_off, r, 1, out, cdf])
@@ -229,11 +226,12 @@ struct _Reg(Movable):
         elif self.mo == "custom":
             mode = _RE_CUSTOM
             # `_words64`: the binary64 weights as their Int32 word pairs, low first.
-            var words = family_array(Python.tuple(2 * d), "<i4", context)
-            unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
+            # (program-owned words; was a Python Array per call)
+            var words = List[Int32](length=2 * d, fill=0)
+            unsafe_memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(words.unsafe_ptr())),
                    src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(self.custom))), count=d)
-            _ = words  # keep the Python object alive through the native call above
-            w = self.prog.put_i32(words)
+            _ = self.custom  # keep the Python object alive through the native copy above
+            w = self.prog.plan.input_words(words^)
         var dst = self.prog.alloc(2)
         self.prog.stage("reg_epi", 1, [_RE_AVG, d, vals, mode, w, dst, 1 if nan_rule else 0])
         return self.prog.want(dst, 2)

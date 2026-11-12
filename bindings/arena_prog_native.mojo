@@ -443,13 +443,20 @@ def _metrics_run_plan(plan: MetricProgramPlan, inputs: List[PythonObject], mode:
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry
     var ranges = _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_metrics_run_ranges") is not None
     var output_ranges = py_get(entries, "x_metrics_run_out") is not None
-    if len(inputs) != len(plan.input_offsets):
+    if len(inputs) != plan.buffer_inputs():
         raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
     var held = List[PythonObject](capacity=len(inputs))
-    var records = List[MetricProgramInput](capacity=len(inputs))
+    var records = List[MetricProgramInput](capacity=len(plan.input_offsets))
     var scope_checked = False
-    for k in range(len(inputs)):  # driver-loop: over the program's input buffers
-        var value = inputs[k]
+    var next_buffer = 0
+    for k in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
+        if plan.input_consts[k] >= 0:
+            # a program-owned constant (native words, no Python owner)
+            records.append(MetricProgramInput(plan.input_offsets[k], plan.const_address(k),
+                                              len(plan.consts[plan.input_consts[k]])))
+            continue
+        var value = inputs[next_buffer]
+        next_buffer += 1
         var size_k = Int(py=value.size)
         if size_k == 0:
             continue
