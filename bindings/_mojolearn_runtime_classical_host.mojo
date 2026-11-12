@@ -11,7 +11,7 @@
 # _mojolearn_runtime_linear_host), each its own merged group. The Python types
 # their code allocates stay registered HERE, unchanged: import setup loads this
 # owner before them (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES order).
-from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -31,8 +31,8 @@ from bindings.classical_attributes import classical_attribute_c, classical_attri
 from bindings.host_archive_lifetime import host_archive_finalize_c
 from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
 from bindings.admitted_input import register_admitted_buffer_pin
-from providers.python.linear_entry_boundary import register_linear_entry_owner, linear_entry_connect
-from providers.python.linear_state_boundary import register_linear_state_owner
+from providers.python.linear_entry_boundary import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect
+from providers.python.linear_state_boundary import register_linear_state_owner, register_linear_state_owner_identity
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -70,10 +70,8 @@ def register_trees_resident(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[TreesResident].name())):
             raise error
         _ = module.add_type[TreesResident]("_TreesResident")
-        register_native_owner(lookup_py_type_object[TreesResident](), module.module, trees_resident_pins)
         return
     py_type_attach(module.module, "_TreesResident", existing)
-    register_native_owner(existing, module.module, trees_resident_pins)
 
 
 def register_trees_resident_death(mut module: PythonModuleBuilder) raises:
@@ -84,10 +82,8 @@ def register_trees_resident_death(mut module: PythonModuleBuilder) raises:
         if not py_type_absent(error, String(reflect[TreesResidentDeath].name())):
             raise error
         _ = module.add_type[TreesResidentDeath]("_TreesResidentDeath")
-        register_native_owner(lookup_py_type_object[TreesResidentDeath](), module.module, native_owner_no_pins)
         return
     py_type_attach(module.module, "_TreesResidentDeath", existing)
-    register_native_owner(existing, module.module, native_owner_no_pins)
 
 
 def register_tree_shap_owner(mut module: PythonModuleBuilder) raises:
@@ -143,6 +139,13 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")
         module.def_function[runtime_classical_host_column_binding]("runtime_classical_host_column")
         module.def_function[runtime_classical_host_sabotage_binding]("runtime_classical_host_sabotage")
-        return module.finalize()
+        # Owner identities need the finalized type objects (Mojo 1.2 creates
+        # them in finalize(); see bindings/native_owner_registry.mojo).
+        var published = module.finalize()
+        register_native_owner_type[TreesResident](published, trees_resident_pins)
+        register_native_owner_type[TreesResidentDeath](published, native_owner_no_pins)
+        register_linear_entry_owner_identity(published)
+        register_linear_state_owner_identity(published)
+        return published
     except error:
         abort(String("failed to create _mojolearn_runtime_classical_host: ", error))
