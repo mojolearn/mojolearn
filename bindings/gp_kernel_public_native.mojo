@@ -13,7 +13,7 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_instance_item import native_instance_item
 from bindings.gp_mapping_boundary import gp_mapping_snapshot, GPFieldUpdates
 from bindings.gp_argument_pins import GPArgumentPins
-from x_metrics.epilogue import portable_log_c
+from gaussian_process.gp_kernel_public_native_run import _kernel_log, GPKernelInput
 
 
 struct GPKernelSnapshot(Movable):
@@ -160,15 +160,6 @@ def gp_admit_kernel(kernel: PythonObject, context: PythonObject) raises:
     var snapshot = gp_kernel_snapshot(kernel, context)
     _ = snapshot^
 
-
-def _kernel_log(value: Float64) raises -> Float64:
-    if value <= 0.0:
-        raise Error("ValueError: math domain error")
-    if value != value or bitcast[DType.uint64](value) == UInt64(0x7FF0000000000000):
-        return value
-    return portable_log_c(value)
-
-
 def gp_kernel_operation(kernel: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     if operation == "family_gp_kernel_initialize":
@@ -226,16 +217,6 @@ from core.native_scalar_decode import native_scalar_real
 from bindings.sequential_admission import _one_of
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 from bindings.py_balanced import py_get, py_setitem
-
-
-struct GPKernelInput(Movable):
-    var shape: List[Int]
-    var values: List[Float64]
-
-    def __init__(out self):
-        self.shape = List[Int]()
-        self.values = List[Float64]()
-
 
 def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> GPKernelInput:
     if depth > 64:

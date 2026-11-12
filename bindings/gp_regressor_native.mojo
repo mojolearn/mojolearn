@@ -41,6 +41,7 @@ from bindings.gp_common_native import (
     gp_extension, gp_numeric_mode_used, gp_model_kernel, gp_kernel_arrays,
     gp_free, gp_n_dims, gp_with_free_values, gp_f32,
 )
+from gaussian_process.gp_regressor_native_run import GPRNormalization
 
 comptime _GPR = "mojolearn GaussianProcessRegressor"
 comptime _K_PROD = 5
@@ -370,14 +371,6 @@ def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject
         raise Error(String(_GPR) + ": X has " + String(q.cols) + " "
                     + "features, fit saw " + String(fitted))
     return q^
-
-
-@fieldwise_init
-struct GPRNormalization(Copyable, Movable):
-    var enabled: Bool
-    var stddev: Float64
-    var mean: Float64
-
 
 def _gpr_normalization(fields: PythonObject) raises -> GPRNormalization:
     var b = native_loaded_module("builtins")
