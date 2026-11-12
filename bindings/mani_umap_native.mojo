@@ -4,8 +4,9 @@
 # compiled entries in the requested or fitted mode; it validates parameters with
 # `_parameters` / `_extras` / `_target`'s refusals (same wording, same order),
 # builds a 'random' or 'pca' start with the decomp kit's cells exactly as
-# `_initial` did (bindings/mani_kit.mojo: the same x_decomp entries, operands
-# and order; the identical-mode kit, `_svd_flip_v` on the default-mode kit),
+# `_initial` did (the typed kit, bindings/mani_umap_init_run.mojo: the same
+# x_decomp operations, operands and order; the identical-mode image,
+# `_svd_flip_v` on the default-mode image),
 # encodes a categorical target, runs `umap_fit_transform` /
 # `umap_fit_transform_ex` / `umap_transform` with the argument lists they
 # always took and stores the fitted attributes the saved-model schema reads.
@@ -26,7 +27,7 @@ from bindings.classical_validate import classical_view
 from bindings.umap_parameters_native import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
 from x_ann.mani_umap_run import (
     umap_finite, umap_mode_code, umap_check_input, umap_check_neighbors, umap_check_spectral_samples,
-    umap_check_pca_components, umap_check_singular_values, umap_check_spread, umap_init_shape_matches,
+    umap_init_shape_matches,
     umap_init_shape_refusal, umap_check_init_finite, umap_check_target_weight, umap_target_neighbors,
     umap_label_dtype_codable, umap_continuous_target_dims, umap_legacy_abi, umap_check_embedding,
     umap_check_transform_state, umap_check_transform_input, umap_transform_reuses_fit, umap_check_transform_output,
@@ -45,10 +46,9 @@ from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_IN
 from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
 from bindings.label_list_words import label_list_store, label_store_address
 from core.label_words_impl import label_words_f64, label_words_i64, label_dense_codes, label_codes_i32_to_f32
-from bindings.mani_kit import (
-    MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
-    mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
-)
+from bindings.mani_kit import mk_image, mk_out2, mk_finish, mk_seed_word
+from bindings.mani_kit_run import MRun
+from bindings.mani_umap_init_run import umap_random_start_run, umap_pca_start_run
 
 comptime _F32_MAX = 3.4028234663852886e+38
 comptime _I64_MAX = 9223372036854775807
@@ -125,57 +125,33 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
     if family_is_str(init) and String(py=init) == "spectral":
         return Optional[ArrayMetadata]()
     if family_is_str(init):
-        # `_Kit("identical")`, and `_host_kit()` (the default mode) for the
-        # host moves and `_svd_flip_v`
-        var k = MKit("identical", spectral_umap_route(context, "decomp", PythonObject("identical")),
-                     context)
-        var hk = MKit(String(settings.default_mode),
-                      spectral_umap_route(context, "decomp", settings.default_mode), context)
-        if String(py=init) == "random":
-            var u = k.rand(n, nc, seed, 90, 0)
-            var scaled = k.ew1(OP_SCALE, u, 20.0)
-            return Optional(admit_family_meta(mk_out2(k.ew1(OP_ADDS, scaled, -10.0), context), 2, "init", context))
-        # 'pca'
-        var m = k.from_snapshot(x, "X")
-        umap_check_pca_components(nc, mk_r(m), mk_c(m))
-        # k.center(M, k.colmean(M))
-        var sums = k.colsum(m)
-        var mean = k.ew1(OP_SCALE, sums, 1.0 / Float64(mk_r(m)))
-        var xc = k.ew2(OP_SUB, m, mean)
-        var vt: PythonObject
-        if mk_r(m) >= mk_c(m):
-            var got = k.svd(xc, hk)
-            vt = got[1]
-        else:
-            # wide data: the SVD of Xc^T gives Xc's left vectors U (its Vt
-            # rows); Xc's right vectors are then U^T Xc / S
-            var xct = mk_t(xc, hk, context)
-            var got = k.svd(xct, hk)
-            var s = got[0]
-            var ut = got[1]
-            var store = mk_store(s, context)
-            umap_check_singular_values(Int(mk_store_ptr(store)), nc)
-            _ = store^  # keep the Python object alive through the native reads above
-            var head = mk_rows(ut, 0, nc, context)
-            vt = k.mm(head, xc, False, False)
-            var kept = mk_take_cols(s, mk_col_range(0, nc), context)
-            vt = k.ew2(OP_DIV, vt, mk_t(kept, hk, context))
-        # _svd_flip_v(Vt.rows(0, nc)) on the default-mode kit
-        var top = mk_rows(vt, 0, nc, context)
-        var signs = hk.absmax_signs(top, False)
-        vt = hk.ew2(OP_MUL, top, signs)
-        var coords = k.mm(xc, vt, False, True)
-        # max |coords| in Mojo: the positions of the minimum of -|coords|
-        var mag = k.ew1(OP_ABS, coords, 0.0)
-        var at = k.argmin_all(k.ew1(OP_SCALE, mag, -1.0))
-        var peak = 0.0
-        if mk_r(at) > 0:
-            var where = Int(mk_at(at, 0, context))
-            peak = mk_at(mag, where, context)
-        umap_check_spread(peak)
-        coords = k.ew1(OP_SCALE, coords, 10.0 / peak)
-        var noise = k.ew1(OP_SCALE, k.rand(n, nc, seed, 91, 1), 1e-4)
-        return Optional(admit_family_meta(mk_out2(k.ew2(OP_ADD, coords, noise), context), 2, "init", context))
+        # UNPACK `_Kit("identical")` and `_host_kit()` (the default mode, for
+        # the host moves and `_svd_flip_v`) as images of one typed kit; RUN
+        # the start with the GIL released (bindings/mani_umap_init_run.mojo);
+        # PACK it into the `init` Array (lane entangled-mkit, 2026-11-12).
+        var run = MRun()
+        try:
+            var k = mk_image(run, "identical", spectral_umap_route(context, "decomp", PythonObject("identical")),
+                             context)
+            var hk = mk_image(run, String(settings.default_mode),
+                              spectral_umap_route(context, "decomp", settings.default_mode), context)
+            var seed_word = mk_seed_word(seed)
+            var start = -1
+            if String(py=init) == "random":
+                with GILReleased(Python()):
+                    start = umap_random_start_run(run, k, n, nc, seed_word)
+            else:
+                # 'pca'
+                var address = x.source.addr
+                var rows = x.source.rows
+                var cols = x.source.cols
+                var ndim = len(x.shape)
+                with GILReleased(Python()):
+                    start = umap_pca_start_run(run, k, hk, address, rows, cols, ndim, n, nc, seed_word)
+                _ = x  # the admitted X stays alive through the RUN above
+            return Optional(admit_family_meta(mk_out2(run, start, context), 2, "init", context))
+        finally:
+            mk_finish(run, context)
     var a = admit_family_meta(init, 2, "init", context)
     if not umap_init_shape_matches(a.source.rows, a.source.cols, n, nc):
         var refusal = umap_init_shape_refusal(family_repr(a.python_shape()), n, nc)
