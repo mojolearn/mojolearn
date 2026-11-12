@@ -53,12 +53,14 @@ def kde_bandwidth_warning(message: String, category: PythonObject, context: Pyth
     _ = current^
     if not pointer:
         if cpython_table()[].PyErr_Occurred():
-            raise cpy.unsafe_get_error()
+            var failure = cpy.unsafe_get_error()
+            raise failure^
         raise Error("ValueError: call stack is not deep enough")
     var frame = PythonObject(from_owned=pointer)
     pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
     if not pointer:
-        raise cpy.unsafe_get_error()
+        var failure = cpy.unsafe_get_error()
+        raise failure^
     var code = PythonObject(from_owned=pointer)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
     var module = py_get(native_frame_globals(frame), "__name__", "")
@@ -111,7 +113,8 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
     ref cpy = Python().cpython()
     var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x118))
     if status != 0:
-        raise cpy.unsafe_get_error()
+        var failure = cpy.unsafe_get_error()
+        raise failure^
     try:
         # Exact NumPy temporal scalars expose their signed word as eight byte
         # elements; temporal ndarrays expose one eight-byte element. The
@@ -120,7 +123,8 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
             raise Error("TypeError: temporal scalar decoding requires one native element")
         status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(data, pointer, 8, Int8(67))
         if status != 0:
-            raise cpy.unsafe_get_error()
+            var failure = cpy.unsafe_get_error()
+            raise failure^
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
         # Keep the Py_buffer storage alive past the release on every path
