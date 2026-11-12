@@ -14,7 +14,7 @@ helpers only they used (`_state_buf`, `_batch_tokens`, `_f32_strict`,
 product code called them. `block_call` picks the driver by class and falls
 back to the block's own `_call` (the transformer block).
 """
-import os
+import ctypes
 
 from mojolearn import _buffer as _buffers
 from mojolearn._arrays import _addr, _addr_ro
@@ -268,64 +268,71 @@ def mamba2_call(self, x, state, step):
 
 
 def _mamba3_call_fresh(self, x, ext):
-    """Discard-only prefill: return all reports without a host cache."""
+    """Discard-only prefill: return all reports without a host cache.
+
+    The binding's `mamba3_forward_fresh` entry on the block's weights. A block
+    with an installed owned snapshot runs the same entry on that snapshot
+    (`export_owned_weights`): the owned session forward is the fresh
+    arithmetic on the snapshot's bytes. The prefill session itself is a
+    native registry handle of the image (lane mamba3-prefill-handle,
+    2026-11-12); its Python entries are gone, and the session's retained
+    weights never change the arithmetic, so the oracle needs none.
+    """
     if getattr(self, "_owned_restore_pending", False):
         self.install_owned_weights()
     b, l = int(x.shape[0]), int(x.shape[1])
     nh = self.nheads
     y = _buffers.empty((b, l, self.d_model), '<f4')
-    # lane/neural-net-experiment (2026-09-30): the session keeps the
-    # weights on the device across calls (reused only when their bytes
-    # are unchanged; the binding compares them). Same entry arithmetic.
-    session_forward = None
-    try:
-        session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
-    except (ImportError, AttributeError):
-        session_forward = None
-    owned = getattr(self, "_owned_generation", None) is not None
-    use_session = ((session_forward is not None or owned)
-                   and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1")
-    if owned and getattr(self, "_prefill_binding", None) is not ext:
-        raise RuntimeError("Mamba3 owned snapshot belongs to another binding; release or explicitly reinstall it")
-    if getattr(self, "_owned_generation", None) is not None and not use_session:
-        raise RuntimeError("Mamba3 owned weights require the installed prefill session; release it before changing binding/setup")
-    # lane/fam2-lm (2026-10-04): a block owned by a stack (SambaStack
-    # sets `_discard_reports`) reads no report, so where the binding
-    # admits it the four report downloads are not requested (address 0)
-    # and the `*_last_` attributes are None after the call.
-    skip_reports = False
-    if use_session and getattr(self, "_discard_reports", False):
-        optional = getattr(ext, "mamba3_prefill_session_reports_optional", None)
-        skip_reports = bool(optional()) if optional is not None else False
-    if skip_reports:
-        h_last = k_last = v_last = theta_last = None
-        report_addrs = [0, 0, 0, 0]
-    else:
-        h_last = _buffers.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), '<f4')
-        k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
-        v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')
-        theta_last = _buffers.empty((b, nh, _M3_NUM_ROPE_ANGLES), '<f4')
-        report_addrs = [_addr(h_last), _addr(k_last), _addr(v_last), _addr(theta_last)]
-    addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]  # glue: one address per weight tensor
+    weights = list(self._w)
+    if getattr(self, "_owned_generation", None) is not None:
+        snapshot = self.export_owned_weights()
+        weights = [snapshot[name] for name in self._W_NAMES]  # glue: the nine owned weights in slot order
+    h_last = _buffers.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), '<f4')
+    k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
+    v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')
+    theta_last = _buffers.empty((b, nh, _M3_NUM_ROPE_ANGLES), '<f4')
+    report_addrs = [_addr(h_last), _addr(k_last), _addr(v_last), _addr(theta_last)]
+    addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in weights]  # glue: one address per weight tensor
              + [_addr(y)] + report_addrs)
-    if use_session:
-        if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
-            self._prefill_session = ext.mamba3_prefill_session_create()
-            self._prefill_binding = ext
-        generation = getattr(self, "_owned_generation", None)
-        if generation is not None:
-            ext.mamba3_prefill_session_forward_owned(
-                self._prefill_session, [_addr_ro(x), _addr(y)] + report_addrs,
-                [b, l, self.d_model, generation])
-        else:
-            session_forward(self._prefill_session, addrs, [b, l, self.d_model])
-    else:
-        ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
+    ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
     self.h_last_ = h_last
     self.k_last_ = k_last
     self.v_last_ = v_last
     self.theta_last_ = theta_last
     return y
+
+
+# The carried-state Mamba-3 forward and decode step through the image's
+# `mamba_state_api_v1` descriptor (ops 4 and 5, MAMBA_STATE_ABI_NAME): the
+# Python entries `mamba3_forward` / `mamba3_decode_step` are gone (lane
+# mamba3-prefill-handle, 2026-11-12). A test-side ctypes call of the same
+# compiled entry with the same words; never product execution.
+_SINK = ctypes.CFUNCTYPE(None, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_ssize_t)
+_CALL = ctypes.CFUNCTYPE(ctypes.c_ssize_t, *([ctypes.c_ssize_t] * 9), _SINK)
+_MAMBA_STATE_ABI_NAME = b"mojolearn.mamba.state.v1"
+
+
+def _mamba3_state_call(ext, op, addrs, ints):
+    capsule = ext.mamba_state_api_v1()
+    get = ctypes.pythonapi.PyCapsule_GetPointer
+    get.restype = ctypes.c_void_p
+    get.argtypes = [ctypes.py_object, ctypes.c_char_p]
+    table = ctypes.cast(get(capsule, _MAMBA_STATE_ABI_NAME), ctypes.POINTER(ctypes.c_void_p))
+    entry = _CALL(table[0])
+    a = (ctypes.c_ssize_t * len(addrs))(*addrs)
+    p = (ctypes.c_ssize_t * len(ints))(*ints)
+    result = ctypes.c_ssize_t(0)
+    errors = []
+
+    def report(_context, data, count):
+        errors.append(ctypes.string_at(data, count).decode("utf-8", "replace"))
+
+    sink = _SINK(report)
+    status = entry(op, ctypes.addressof(a), len(addrs), ctypes.addressof(p), len(ints), 0, 0,
+                   ctypes.addressof(result), 0, sink)
+    if status != 0:
+        raise RuntimeError(errors[0] if errors else "Mamba state native ABI: call failed")
+    return result.value
 
 
 def mamba3_call(self, x, state, step):
@@ -374,8 +381,8 @@ def mamba3_call(self, x, state, step):
     w = self._w
     ext = fresh_ext if fresh_ext is not None else self._extension()
     addrs = (
-        # ORDER MATCHES bindings/_mojolearn_mamba.mojo::
-        # mamba3_forward_binding: x, block norm.weight,
+        # ORDER MATCHES the Mamba-3 state operation (mamba/native_state_dispatch.mojo,
+        # ops 4/5): x, block norm.weight,
         # in_proj.weight, dt_bias, B_norm.weight, C_norm.weight,
         # B_bias, C_bias, D, out_proj.weight, theta, h, buffer_qrot,
         # buffer_krot, buffer_v, buffer_dt, buffer_sig, buffer_adt,
@@ -394,14 +401,10 @@ def mamba3_call(self, x, state, step):
     )
     if step:
         # B, d_model, buf_len, pending.
-        new_len = ext.mamba3_decode_step(
-            addrs, [b, self.d_model, q0, pend]
-        )
+        new_len = _mamba3_state_call(ext, 5, addrs, [b, self.d_model, q0, pend])
     else:
         # B, L, d_model, buf_len, pending.
-        new_len = ext.mamba3_forward(
-            addrs, [b, l, self.d_model, q0, pend]
-        )
+        new_len = _mamba3_state_call(ext, 4, addrs, [b, l, self.d_model, q0, pend])
     state.buffered_tokens = int(new_len)
     # ALWAYS False after a call: the unarmed core consumes a pending
     # continuation and an armed build aborts at PyInit, so no return
