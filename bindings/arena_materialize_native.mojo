@@ -224,6 +224,7 @@ def _cast(array: PythonObject, dtype: String, context: PythonObject) raises -> P
     var target = _empty(metadata["shape"],dtype,context)
     var count = Int(py=metadata["size"])
     if count:
+        # call-table: base helper (cast_elements of the base binding; not yet in core/base_entry_table.mojo)
         var status = Int(py=_native_call(context["arena_cast"],Python.tuple(metadata["address"],_cast_code(String(metadata["dtype"])),_slot(target,"_addr",context),_cast_code(dtype),count)))
         _ = array  # raw source address is borrowed through the complete native cast
         _ = target
@@ -341,6 +342,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
             # connected chunked cast entry (codes 6 -> 4) instead of a serial
             # host loop. bool, int16 and uint64 have no source code there yet.
             if count:
+                # call-table: base helper (cast_elements of the base binding; not yet in core/base_entry_table.mojo)
                 _ = _native_call(context["arena_cast"],Python.tuple(address,6,output,4,count))
             _ = store^
             return out
@@ -360,6 +362,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
         return out
     if not Bool(py=view.contiguous) and Bool(py=value.dtype.isnative) and count:
         if dtype == "<f4":
+            # call-table: base helper (cast_elements of the base binding; not yet in core/base_entry_table.mojo)
             _ = _native_call(context["arena_cast"],Python.tuple(address,0,address,0,count))
         elif dtype == "<f2" and Bool(py=context["arena_half_copy_canonical"]):
             # The established strided half path round-trips through struct's

@@ -15,39 +15,57 @@ The same kernels in the same order, so the score keeps its bits.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
-from bindings.xseq_native_common import xseq_addr, xseq_f32p, xseq_reshape
+from std.python._cpython import GILReleased
+from core.metrics_entry_table import MetricsEntryKey, MR_R2, MR_R2_WEIGHTED
+from bindings.xseq_native_common import xseq_addr, xseq_reshape
 from bindings.xseq_neural_native import xseq_as_f32_c
 from core.xseq_marshal import xseq_min_max_f32
 from core.host_finite_scan import host_all_finite_f32
+from bindings.metrics_reg_native import metrics_reg_operation
+from bindings.metrics_cls_native import metrics_cls_operation
+from sequence.xseq_score_run import (
+    xseq_run_vector_rows, xseq_run_vector_finite, xseq_run_lengths_check, xseq_run_weights_check,
+    xseq_run_metrics_mode, xseq_run_r2,
+)
 
 
-def _shape_text(value: PythonObject) raises -> String:
-    return String(py=py_call(native_loaded_module("builtins").str, value.shape))
+def _shape_words(value: PythonObject) raises -> List[Int]:
+    """UNPACK: an ndarray's shape as words."""
+    var shape = value.shape
+    var words = List[Int]()
+    for i in range(len(shape)):  # driver-loop: over shape words
+        words.append(Int(py=shape[i]))
+    return words^
+
+
+def _lead_words(value: PythonObject, rank: Int, keep: Int) raises -> List[Int]:
+    """UNPACK: the shape words a check reads. Of a rank-`keep` (or lower)
+    array, its words; of any other rank, every word (a refusal's text).
+    The old helpers read ndim and the leading extent, not the whole shape
+    tuple (round2-fixes, perf audit 2 A pattern 9)."""
+    if rank > keep:
+        return _shape_words(value)
+    var words = List[Int]()
+    for i in range(rank):  # driver-loop: over at most `keep` shape words
+        words.append(Int(py=value.shape[i]))
+    return words^
 
 
 def _vector(value: PythonObject, name: String) raises -> PythonObject:
     """`_as_f32_1d` of an already float32 array: `_vector_shape`'s refusals,
     the column flattened, then the finiteness refusal."""
-    var rank = Int(py=value.ndim)
-    var column = rank == 2 and Int(py=value.shape[1]) == 1
-    if rank != 1 and not column:
-        raise Error("ValueError: mojolearn metrics: " + name + " must be 1-D, got shape " + _shape_text(value))
-    var n = Int(py=value.shape[0])
-    if n == 0:
-        raise Error("ValueError: mojolearn metrics: " + name + " is empty")
-    var out = xseq_reshape(value, Python.tuple(n)) if column else value
-    if not host_all_finite_f32(xseq_f32p(out), n):
-        raise Error("ValueError: mojolearn metrics: " + name + " contains NaN or infinity; refused "
-                    + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
-                    + "reach a kernel whose answer for it is a washed sentinel")
-    _ = out  # keep the Python object alive through the native calls above
+    var shape = _lead_words(value, Int(py=value.ndim), 2)
+    var n = xseq_run_vector_rows(shape, name)
+    var out = xseq_reshape(value, Python.tuple(n)) if len(shape) == 2 else value
+    xseq_run_vector_finite(Int(py=xseq_addr(out)), n, name)
+    _ = out  # keep the Python object alive through the native scan above
     return out
 
 
-def _metrics_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_metrics_impl._get_binding(model.numeric_mode)`: the metrics binding
-    of that mode (or the process default), checked against its compiled mode."""
+def _metrics_key(model: PythonObject, context: PythonObject) raises -> MetricsEntryKey:
+    """`_metrics_impl._get_binding(model.numeric_mode)`: the metrics image of
+    that mode (or the process default), as its native R^2 table key (the
+    bridge records it at import), checked against its compiled mode."""
     var b = native_loaded_module("builtins")
     var mode = py_get(py_fields(model), "numeric_mode")
     if mode is not None:
@@ -59,38 +77,31 @@ def _metrics_entries(model: PythonObject, context: PythonObject) raises -> Pytho
     var expected = context["backend_fields"]["_DEFAULT_MODE"] if mode is None else mode
     expected = py_call(py_call(expected.strip).lower)
     var table = context["xseq_metrics"]
-    var entries = table[expected]
-    if py_type(entries) is b.str:
-        raise Error("ImportError: " + String(py=entries))
-    if py_contains(entries, "metrics_numeric_mode"):
-        var actual = Int(py=py_call_typed(entries["metrics_numeric_mode"]))
-        var name = String("fast") if actual == 0 else String("identical")
-        if name != String(py=expected):
-            raise Error("RuntimeError: mojolearn metrics: requested " + String(py=expected) + ", binary reports "
-                        + name + "; rebuild it")
-    return entries
+    var record = table[expected]
+    if py_type(record) is b.str:
+        raise Error("ImportError: " + String(py=record))
+    # The compiled-mode word the bridge read once at import replaced the
+    # per-call `metrics_numeric_mode` Python call (lane calltable-xseq).
+    var actual = Int(py=record[0])
+    xseq_run_metrics_mode(String(py=expected), actual)
+    return MetricsEntryKey(actual, Int(py=record[1]))
+
+
+def _r2_native(key: MetricsEntryKey, operation: Int, var addresses: List[Int], n: Int) raises -> Float64:
+    """The RUN R^2 call (sequence/xseq_score_run.mojo) with the GIL
+    released. The caller keeps the addressed arrays alive."""
+    var result = 0.0
+    var py = Python()
+    with GILReleased(py):
+        result = xseq_run_r2(key, operation, addresses^, n)
+    return result
 
 
 def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`_sample_weight_f32(sample_weight, n, "r2_score")`."""
     var w = xseq_as_f32_c(source, 0, "sample_weight", context)
-    if Int(py=w.ndim) != 1:
-        raise Error("ValueError: mojolearn r2_score: sample_weight must be 1-D, got shape " + _shape_text(w))
-    if Int(py=w.shape[0]) != n:
-        raise Error("ValueError: mojolearn r2_score: sample_weight has " + String(Int(py=w.shape[0]))
-                    + " entries for " + String(n) + " samples")
-    var p = xseq_f32p(w)
-    _ = w  # keep the Python object alive through the native call above
-    if not host_all_finite_f32(p, n):
-        raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
-    # one min/max scan serves both refusals (it was run twice)
-    var bounds = xseq_min_max_f32(p, n)
-    _ = w  # keep the Python object alive through the native calls above
-    if bounds[0] < Float32(0.0):
-        raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
-    if not bounds[1] > Float32(0.0):
-        raise Error("ValueError: mojolearn r2_score: sample_weight must have positive total weight")
-    _ = w  # keep the Python object alive through the native calls above
+    xseq_run_weights_check(_lead_words(w, Int(py=w.ndim), 1), n, Int(py=xseq_addr(w)))
+    _ = w  # keep the Python object alive through the native scans above
     return w
 
 
@@ -108,32 +119,34 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
             raise Error("NotImplementedError: mojolearn: the multi-output score needs the native metrics owner "
                         + "(family_metric_r2_options); this install does not carry it")
         var mode = py_get(py_fields(model), "numeric_mode")
-        return py_call(options[0], PythonObject(None), "family_metric_r2_options",
-                       Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode), options[1])
+        # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of
+        # its family door); the operands are this call's own admitted arrays, which that owner admits in
+        # its UNPACK, and options[1] is the metrics family context the door would have received.
+        return metrics_reg_operation("family_metric_r2_options",
+                                     Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode),
+                                     options[1])
     var y = _vector(truth, "y_true")
     var yh = _vector(pred, "y_pred")
     var n = Int(py=y.shape[0])
-    if Int(py=yh.shape[0]) != n:
-        raise Error("ValueError: mojolearn metrics: y_true has " + String(n) + " entries and y_pred has "
-                    + String(Int(py=yh.shape[0])) + "; they must be the same length")
-    var entries = _metrics_entries(model, context)
+    xseq_run_lengths_check(n, Int(py=yh.shape[0]))
+    var key = _metrics_key(model, context)
     if sample_weight is not None:
         var w = _weights(sample_weight, n, context)
-        var weighted = py_call_typed(entries["r2_score_weighted"], xseq_addr(y), xseq_addr(yh), xseq_addr(w), Python.list(n))
+        var weighted = _r2_native(key, MR_R2_WEIGHTED, [Int(py=xseq_addr(y)), Int(py=xseq_addr(yh)), Int(py=xseq_addr(w))], n)
         _ = w  # keep the Python object alive through the native call above
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w^
-        var _keep_ret_y = PythonObject(Float64(py=weighted))
+        var _keep_ret_y = PythonObject(weighted)
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         return _keep_ret_y^
-    var r2 = py_call_typed(entries["r2_score"], xseq_addr(y), xseq_addr(yh), Python.list(n))
+    var r2 = _r2_native(key, MR_R2, [Int(py=xseq_addr(y)), Int(py=xseq_addr(yh))], n)
     _ = yh  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = y^
     _ = yh^
-    return PythonObject(Float64(py=r2))
+    return PythonObject(r2)
 
 
 def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: PythonObject,
@@ -150,5 +163,7 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
         raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "
                     + "(family_mcls_accuracy_fraction); this install does not carry it")
     var mode = py_get(py_fields(model), "numeric_mode")
-    return py_call(owner[0], PythonObject(None), "family_mcls_accuracy_fraction",
-                   Python.tuple(args[1], prediction, args[2], mode), owner[1])
+    # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of its
+    # family door); the labels are the caller's Python objects, admitted in that owner's UNPACK.
+    return metrics_cls_operation(PythonObject(None), "family_mcls_accuracy_fraction",
+                                 Python.tuple(args[1], prediction, args[2], mode), owner[1])

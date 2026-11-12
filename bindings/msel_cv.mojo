@@ -13,11 +13,18 @@
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from bindings.base_helpers_released import base_check_indices_i64
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.ffi import c_int, external_call
 from std.sys.compile import is_defined
 from bindings.cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
+from bindings.msel_helpers_key import msel_helpers_key
+from bindings.msel_helpers_released import (
+    msel_indices_overlap_i64, msel_store_alloc, msel_store_read, msel_store_free, msel_scatter_rows,
+    msel_store_free_bytes,
+)
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
     native_unit_gate, native_unit_gate_enter, native_unit_gate_leave, native_unit_device_workers,
@@ -95,8 +102,8 @@ def msel_indices(value: PythonObject, n: Int, name: String, context: PythonObjec
     if Int(py=v.ndim) != 1 or (kind != ord("i") and kind != ord("u")) or Int(py=v.size) == 0:
         raise Error(name + " must be a nonempty 1-D integer index array")
     var as_i64 = msel_index_i64(v, context)
-    var status = msel_int(family_call(msel_entry("check_indices_i64", context), PythonObject(msel_addr(as_i64)),
-                                      as_i64.size, PythonObject(n)))
+    var status = base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(as_i64),
+                                        Int(py=as_i64.size), n)
     _ = as_i64  # keep the Python object alive through the native call above
     if status == 1:
         raise Error(name + " contains an out-of-range index")
@@ -111,8 +118,11 @@ def msel_overlap(train: PythonObject, test: PythonObject, n: Int, context: Pytho
     """`_overlap`: whether two accepted index Arrays share a row."""
     if Int(py=train.size) == 0 or Int(py=test.size) == 0 or n <= 0:
         return False
-    return msel_truth(family_call(msel_entry("indices_overlap_i64", context), PythonObject(msel_addr(train)), train.size,
-                                  PythonObject(msel_addr(test)), test.size, PythonObject(n)))
+    var hit = msel_indices_overlap_i64(msel_helpers_key(context), msel_addr(train), Int(py=train.size),
+                                       msel_addr(test), Int(py=test.size), n)
+    _ = train  # keep the Python objects alive through the native call above
+    _ = test
+    return hit != 0
 
 
 def msel_splits_of(splitter: PythonObject, x: PythonObject, y: PythonObject, groups: PythonObject,
@@ -284,6 +294,7 @@ def _arena_rows_call(obj: PythonObject, op: String, args: PythonObject, context:
     var entry = context["family_msel_rows_entry"]
     if py_type(entry) is not py_type(msel_b().len):
         raise Error("ImportError: native cross-validation resident-row binding is unavailable")
+    # call-table: member DeviceRows (arena rows door over the Python owner) has no native entry yet
     return family_call(entry, obj, PythonObject(op), args, context["family_msel_rows_context"])
 
 
@@ -651,15 +662,12 @@ def msel_unit_workers(jobs: Int, units: Int, context: PythonObject) -> Int:
 
 def _msel_device_free(rows: MselFoldRows, context: PythonObject) -> Int:
     """Free bytes of the device the fold rows live on (the base binding's
-    `msel_free_bytes`), or -1 with no device rows or no entry."""
+    `msel_free_bytes`, through the native helper table), or -1 with no
+    device rows or no table."""
     if not rows.dev:
         return -1
     try:
-        var rc = context["family_msel_rows_context"]
-        var entry = py_get(rc, "arena_msel_free_bytes")
-        if entry is None:
-            return -1
-        return Int(py=family_call(entry))
+        return msel_store_free_bytes(msel_helpers_key(context))
     except:
         return -1
 
@@ -1122,7 +1130,8 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
         if rank == 0:
             raise Error("TypeError: iteration over a 0-d Array")
         width = py_slice_from(packed.shape, 1)
-        values = py_call(packed._mv.tolist)
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var grouped = Optional[PythonObject](py_call(packed._mv.tolist))
         for k in range(rank - 1):  # driver-loop: native rank metadata groups flat values into rows
             var axis = rank - 1 - k
             var step = Int(py=packed.shape[axis])
@@ -1131,9 +1140,10 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
                 count *= Int(py=packed.shape[a])
             var groups = Python.list()
             for r in range(count):  # driver-loop: native list slices preserve the Array.tolist nesting
-                var part = py_slice(values, r * step, (r + 1) * step)
+                var part = py_slice(grouped.value(), r * step, (r + 1) * step)
                 _ = py_call(groups.append, part)
-            values = groups
+            grouped = Optional[PythonObject](groups)
+        values = grouped.value()
         _ = packed  # retain the native buffer while reading its scalar values
     elif kind is py_get(context, "ndarray"):
         # Exact ndarray.tolist is its C extension implementation. Admit
@@ -1210,9 +1220,10 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
         for k in range(len(width)):  # driver-loop: over prediction shape metadata
             cols *= Int(py=width[k])
         if cols > 0 and n > 0:
-            var block = msel_int(family_call(msel_entry("msel_alloc", context), PythonObject(n * cols * 8)))
+            var key = msel_helpers_key(context)
+            var block = msel_store_alloc(key, n * cols * 8)
             try:
-                var scatter = msel_entry("msel_scatter_rows", context)
+                var dst_code = Int(py=codes[PythonObject(dtype)])
                 for f in range(count):  # driver-loop: over folds (one device scatter each)
                     var t = tests[f]
                     if Int(py=t.size) > 0:
@@ -1220,14 +1231,13 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
                         if not msel_has_c(src):
                             src = msel_materialize(src, "predictions", context)
                         var sid = resident_rows.resident_store(t, True, context)
-                        _ = family_call(scatter, PythonObject(block), PythonObject(n), codes[PythonObject(dtype)],
-                                        PythonObject(msel_addr(src)), codes[src.dtype], t.size, PythonObject(cols), PythonObject(sid))
+                        _ = msel_scatter_rows(key, block, n, dst_code, msel_addr(src), Int(py=codes[src.dtype]),
+                                              Int(py=t.size), cols, sid)
                         _ = src  # keep the Python object alive through the native call above
-                _ = family_call(msel_entry("msel_read", context), PythonObject(block), PythonObject(msel_addr(out)),
-                                PythonObject(n * cols * 8))
+                _ = msel_store_read(key, block, msel_addr(out), n * cols * 8)
                 _ = out  # keep the Python object alive through the native call above
             finally:
-                _ = family_call(msel_entry("msel_free", context), PythonObject(block))
+                _ = msel_store_free(key, block)
         return out
     # Label objects (str / mixed) use admitted native lists; numeric fallback
     # retains the public int64/float64 promotion without Array Python methods.
@@ -1304,8 +1314,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
             _ = held  # keep the Python object alive through the native call above
         at += size
         _ = py_call(tests.append, t)
-    if msel_int(family_call(msel_entry("check_indices_i64", context), PythonObject(msel_addr(held)), PythonObject(n),
-                            PythonObject(n))) != 0:
+    if base_check_indices_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(held), n, n) != 0:
         raise Error("cross_val_predict only works for partitions")
     _ = held  # keep the Python object alive through the native calls above
     var method = args[6]

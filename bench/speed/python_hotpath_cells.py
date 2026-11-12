@@ -127,12 +127,6 @@ def _(n, rng):
     return lambda: _labels.decode_labels(classes, codes)
 
 
-@cell("_labels.finite_integer_codes(float32 Array)")
-def _(n, rng):
-    y = arr(rng.integers(0, 7, n).astype(np.float32))
-    return lambda: _labels.finite_integer_codes(y)
-
-
 @cell("_labels.argmax_rows(F-order f32 [n,7], Python arm)")
 def _(n, rng):
     s = np.asfortranarray(rng.random((n, 7), dtype=np.float32))

@@ -83,12 +83,16 @@ def metric_warning_location(stacklevel: Int) raises -> PythonObject:
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyEval_GetFrame")()
     if not pointer:
         return PythonObject(None)
-    var frame = PythonObject(from_borrowed=pointer)
+    # Optional, not a PythonObject read and reassigned in the loop (the
+    # modular/modular#7546 pattern, suspected of a wrong reference drop under
+    # Mojo 1.2.0; runtime-fix-save-forest). Same frames, same order.
+    var walked = Optional[PythonObject](PythonObject(from_borrowed=pointer))
     for _ in range(max(0, stacklevel - 1)):  # driver-loop: requested warning attribution depth
-        pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(frame._obj_ptr)
+        pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(walked.value()._obj_ptr)
         if not pointer:
             break
-        frame = PythonObject(from_owned=pointer)
+        walked = Optional[PythonObject](PythonObject(from_owned=pointer))
+    var frame = walked.value()
     pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
     if not pointer:
         raise cpy.unsafe_get_error()

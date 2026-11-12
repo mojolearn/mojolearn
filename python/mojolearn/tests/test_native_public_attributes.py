@@ -280,7 +280,7 @@ def test_external_storage_view_survives_model_and_array_lifetime(order, dtype, r
 def test_array_row_offset_and_empty_storage_views():
     np = pytest.importorskip('numpy')
     value = Array.from_buffer(np.array([[1, 2], [3, 4]], dtype='f4'))
-    row = value._row_view(1, (2,), 2)
+    row = list(value)[1]  # row 1: the native zero-copy row view (iteration)
     model = object.__new__(KMeans)
     fields = object.__getattribute__(model, '__dict__')
     fields['payload_'] = row

@@ -61,13 +61,19 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     # context; a reconnection installs new entry dictionaries (or a new
     # vendor object), so the identities differ and the check runs again.
     var vendor = context["vendor"]
-    var connection_identity = linear_entry_identity(entries)
     var verdicts = py_get(context, "classical_entries_admitted")
     if verdicts is not None:
         var seen = py_get(verdicts, mode)
-        if seen is not None and len(seen) == 3 and seen[0] is entries and seen[1] is vendor and seen[2] is connection_identity:
+        # perf-audit-3 (pattern 1): the cached verdict compares the entry
+        # dictionary's connection owner by identity with one dictionary read;
+        # the owner stored with the verdict was admitted by
+        # `linear_entry_identity` (exact type, family) when it was recorded, so
+        # the full admission runs only on a miss (it ran on every call).
+        if (seen is not None and len(seen) == 3 and seen[0] is entries and seen[1] is vendor
+                and seen[2] is py_get(entries, "_native_entry_connection")):
             call.remember_binding("classical", mode_name, True, entries)
             return entries
+    var connection_identity = linear_entry_identity(entries)
     if linear_execution_word(entries, LF_VENDOR) != linear_vendor_code(String(vendor)):
         raise Error("RuntimeError: classical native vendor differs from selected execution")
     if linear_execution_word(entries, LF_MODE) != (1 if mode_name == "identical" else 0):

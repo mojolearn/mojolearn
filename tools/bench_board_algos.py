@@ -4037,6 +4037,37 @@ def feistel_order(n, seed, epoch, shuffle=True):
 # (sequence/mlp.mojo op_mlp_perm) feistel_order restates.
 
 
+class InitStream:
+    """The restatement of ours' seeded init stream (the native `XseqStream`,
+    bindings/xseq_native_common.mojo: the base binding's counter-based
+    `uniform_init_f32` draws plus a splitmix64 child seed), so an opponent
+    starts from the SAME initial weights. Moved here from the product's
+    `_buffer.InitStream` (lane pyout-runtime-boundary, 2026-11-11), which no
+    product path called once the fits drew natively."""
+
+    def __init__(self, seed=None):
+        if seed is None:
+            import secrets
+            seed = secrets.randbits(64)
+        self.seed = int(seed) & 0xFFFFFFFFFFFFFFFF
+        self.offset = 0
+
+    def fill_uniform(self, address, n, low, high):
+        from mojolearn._buffer import _native
+        n = int(n)
+        if n:
+            _native("uniform_init_f32")(int(address), n, float(low), float(high),
+                                        self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
+        self.offset += n
+
+    def child_seed(self):
+        z = (self.seed + (self.offset + 1) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+        self.offset += 1
+        return (z ^ (z >> 31)) >> 1
+
+
 def ours_initial_state(lane, D):
     """Under OUR interpreter: ({name: initial tensor}, orders (epochs, n) int64, meta) of ours'
     estimator for this lane, exactly as its fit starts. RNN/LSTM/GRU: names are its
@@ -4044,7 +4075,6 @@ def ours_initial_state(lane, D):
     conv<i>.bias per conv block and head.weight / head.bias."""
     np = _np()
     import mojolearn as ml
-    from mojolearn._buffer import InitStream
     s = LANES[lane]
     make, what, params = _est_factory(lane, "ours", D)
     est = make()

@@ -138,6 +138,7 @@ from bindings.apple_fast_bf16_public import (
     public_fast_to_bf16_binding,
     public_fast_from_bf16_binding,
 )
+from gemm.causal_entry_device import publish_causal_linalg_device
 
 
 
@@ -199,7 +200,7 @@ def gemm_binding(
     var native_a_addr = Int(py=a_addr)
     var native_b_addr = Int(py=b_addr)
     var native_params = List[Int]()
-    for i in range(4):  # small-loop(4 scalar descriptor words)
+    for i in range(4):  # driver-loop: over 4 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -268,7 +269,7 @@ def gemm_bf16_binding(
     var native_a_addr = Int(py=a_addr)
     var native_b_addr = Int(py=b_addr)
     var native_params = List[Int]()
-    for i in range(5):  # small-loop(5 scalar descriptor words)
+    for i in range(5):  # driver-loop: over 5 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -297,7 +298,7 @@ def gemm_int8_binding(
     var native_qb_addr = Int(py=qb_addr)
     var native_eb_addr = Int(py=eb_addr)
     var native_params = List[Int]()
-    for i in range(3):  # small-loop(3 scalar descriptor words)
+    for i in range(3):  # driver-loop: over 3 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -383,7 +384,7 @@ def quantize_int8_binding(
     var native_e_addr = Int(py=e_addr)
     var native_x_addr = Int(py=x_addr)
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -406,7 +407,7 @@ def dequantize_int8_binding(
     var native_q_addr = Int(py=q_addr)
     var native_e_addr = Int(py=e_addr)
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -451,10 +452,10 @@ def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> Pyth
     if len(addrs) != 7:
         raise Error("gemm_int15: expected 7 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(7):  # small-loop(7 buffer descriptor words)
+    for i in range(7):  # driver-loop: over 7 fixed buffer descriptor words (constant count, never data-sized)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(3):  # small-loop(3 scalar descriptor words)
+    for i in range(3):  # driver-loop: over 3 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -472,10 +473,10 @@ def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> 
     if len(addrs) != 4:
         raise Error("quantize_int15: expected 4 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(4):  # small-loop(4 buffer descriptor words)
+    for i in range(4):  # driver-loop: over 4 fixed buffer descriptor words (constant count, never data-sized)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -492,10 +493,10 @@ def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -
     if len(addrs) != 4:
         raise Error("dequantize_int15: expected 4 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(4):  # small-loop(4 buffer descriptor words)
+    for i in range(4):  # driver-loop: over 4 fixed buffer descriptor words (constant count, never data-sized)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -514,7 +515,7 @@ def to_bf16_binding(
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(1):  # small-loop(1 scalar descriptor words)
+    for i in range(1):  # driver-loop: over 1 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -533,7 +534,7 @@ def from_bf16_binding(
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(1):  # small-loop(1 scalar descriptor words)
+    for i in range(1):  # driver-loop: over 1 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -555,7 +556,7 @@ def from_f16_binding(
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(1):  # small-loop(1 scalar descriptor words)
+    for i in range(1):  # driver-loop: over 1 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -680,6 +681,9 @@ def build__mojolearn_linalg() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_linalg_device()
         m.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         m.def_function[linalg_vendor_binding]("linalg_vendor")
         m.def_function[device_plan_enter_binding]("device_plan_enter")

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native owner of the shared arena program runner: `_Prog.run` of the x_prep
-# family (_expansion_prep) and of the x_metrics family (_expansion_metrics).
+# family (_expansion_prep) and the x_metrics programs the native metrics owners build.
 #
 # Python builds a program (its arena layout, its input buffers and its stage
 # words) and makes ONE call here. This file owns everything the run does:
@@ -335,9 +335,10 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
     # state admission are read once, at the first input that needs them,
     # with the same checks and refusals `_resident` / `_cached_slot` ran per
     # input. Within one run only this runner inserts native keys.
-    var scope_read = False
-    var scope = PythonObject(None)
-    var cache_state = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # The scope's presence is the read-once flag (its value may itself be None).
+    var scope = Optional[PythonObject]()
+    var cache_state = Optional[PythonObject]()
     # In-out inputs a stage rewrites on the host (p3-array-arena, hazard D):
     # after the run their resident device copies (taken by an earlier run in
     # the same scope) are stale and are dropped.
@@ -365,14 +366,13 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
                 if src < 0:
                     value = _values(value, context, True)
             if src < 0 and ranges and not is_inout:
-                if not scope_read:
+                if not scope:
                     scope = _resident_scope(entries, context, "x_prep")
-                    scope_read = True
-                if scope is not None and size >= Int(py=scope[0]):
-                    if cache_state is None:
-                        var cache = _resident_cache(entries, scope[1], context, "x_prep")
+                if scope.value() is not None and size >= Int(py=scope.value()[0]):
+                    if not cache_state:
+                        var cache = _resident_cache(entries, scope.value()[1], context, "x_prep")
                         cache_state = _cache_state(cache, entries, context, "x_prep")
-                    src = _cached_slot_in(cache_state, value, entries, "x_prep")
+                    src = _cached_slot_in(cache_state.value(), value, entries, "x_prep")
                 elif direct_ok and size >= PREP_DIRECT_MIN_WORDS:
                     # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
                     # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
@@ -614,9 +614,10 @@ def _metrics_execute[native_plan: Bool](
     var ins = List[Int32]()
     var owned = List[Int](capacity=2 * input_count)
     # Resident scope and cache state admitted once per run (as in _prep_run).
-    var scope_read = False
-    var scope = PythonObject(None)
-    var cache_state = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # The scope's presence is the read-once flag (its value may itself be None).
+    var scope = Optional[PythonObject]()
+    var cache_state = Optional[PythonObject]()
     try:
         for k in range(input_count):  # driver-loop: over the program's input buffers
             var off = 0
@@ -642,14 +643,13 @@ def _metrics_execute[native_plan: Bool](
             if src < 0 and ranges:
                 # resident (lane py-shared): the device copies it from the
                 # store; the host arena's words stay zero and are never read
-                if not scope_read:
+                if not scope:
                     scope = _resident_scope(entries, context, "x_metrics")
-                    scope_read = True
-                if scope is not None and size_k >= Int(py=scope[0]):
-                    if cache_state is None:
-                        var cache = _resident_cache(entries, scope[1], context, "x_metrics")
+                if scope.value() is not None and size_k >= Int(py=scope.value()[0]):
+                    if not cache_state:
+                        var cache = _resident_cache(entries, scope.value()[1], context, "x_metrics")
                         cache_state = _cache_state(cache, entries, context, "x_metrics")
-                    src = _cached_slot_in(cache_state, value, entries, "x_metrics")
+                    src = _cached_slot_in(cache_state.value(), value, entries, "x_metrics")
             if src < 0:
                 unsafe_memcpy(dest=F32P(unsafe_from_address=base + 4 * off),
                        src=F32P(unsafe_from_address=Int(py=classical_address(value))), count=size_k)
@@ -706,8 +706,9 @@ def arena_prog_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var result = PythonObject(None)
         if operation == "x_prep_run":
             result = _prep_run(prog, args[0], context)
-        elif operation == "x_metrics_run":
-            result = _metrics_run(prog, args[0], context)
+        # TOMBSTONE: the "x_metrics_run" arm (Python `_expansion_metrics._Prog` programs; every x_metrics program
+        # is now built and run natively through `_metrics_run_plan`/`_metrics_run`, and x_metrics connects no
+        # Python program class) deleted 2026-11-11 by lane pyout-metrics-cnn; code recoverable at 6f82d0255d.
         else:
             raise Error("ValueError: unknown native arena program operation")
         return result.steal_data()

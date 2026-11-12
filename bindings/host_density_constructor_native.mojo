@@ -86,12 +86,18 @@ def host_density_initialize(model: PythonObject, args: PythonObject, context: Py
     var family = String(args[0])
     var mro = plan["mro"]
     var known = False
-    var setter = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_setter = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: connected constructor ancestry and native assignment slot
         var kind = py_get(context["host_inference_kinds"], mro[i])
         known = known or (kind is not None and String(kind) == family)
-        if setter is None:
-            setter = py_get(_pd_type_fields(mro[i]), "__setattr__")
+        if not found_setter:
+            var candidate = py_get(_pd_type_fields(mro[i]), "__setattr__")
+            if candidate is not None:
+                found_setter = candidate
+    var setter = PythonObject(None)
+    if found_setter:
+        setter = found_setter.value()
     if not known or (family != "kde" and family != "iforest"):
         raise Error("TypeError: density constructor requires its connected native host class")
     if setter is not context["host_density_object_setattr"]:

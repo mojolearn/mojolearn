@@ -75,16 +75,14 @@ FAMILIES = (
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "theta", "theta_forecast", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "prophet_predict_days", "moe_forward",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "prophet_days", "prophet_features",
-            "prophet_changepoints",
+            "rnn_fit", "rnn_predict", "optimizer_step", "mlp_fit", "mlp_predict", "layer_norm", "moe_forward",
+            # theta, croston, ets, garch, prophet_*, var_fit, var_forecast and stl left the Python surface
+            # (lane calltable-xseq, 2026-11-11): the sequence owner reaches them
+            # through the native table (core/xseq_entry_table.mojo).
             # the model-description trainer (autograd/model.mojo)
             "model_native_api_v1", "model_fit", "model_predict", "model_n_params", "model_labels", "model_gather_labels",
             "model_fit_labels", "model_predict_labels",
-            "moe_backward", "seq_adafactor_step", "seq_lamb_step",
-            "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
-            "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
+            "moe_backward",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
             "ops_session_create", "session_public_api_v1", "ops_session_public_connect",
             "ops_shape",

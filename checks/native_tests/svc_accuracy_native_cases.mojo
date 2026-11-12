@@ -9,10 +9,10 @@ from core.host_parallel import host_parallelize
 from core.labels_native_api import LabelsNativeDriver, LabelsPrepareRequest, LabelsGatherRequest
 from core.labels_score_keys import score_integer_keys, score_key_join, ScoreKeyIndex, score_key_codes
 from core.gp_native_accuracy import GPCAccuracyProgram
-from core.svc_score_codes import svc_score_codes_valid
+from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime SVC_ACCURACY_NATIVE_CASES = 5
+comptime SVC_ACCURACY_NATIVE_CASES = 7
 
 
 def require(ok: Bool, message: String) raises:
@@ -87,10 +87,62 @@ def fixture(labels: LabelsNativeDriver, metrics: NativeDescriptorCall, unit: Int
         require(svc_score_codes_valid(empty, 0), "empty code vector refused")
         var codes: List[Int64] = [-3, -1, 0, 2]
         require(svc_score_codes_valid(codes, 3), "existing Python negative indexing narrowed")
-    else:
+    elif unit == 4:
         var high: List[Int64] = [0, 3]
         var low: List[Int64] = [-4, 0]
         var no_classes: List[Int64] = [0]
         require(not svc_score_codes_valid(high, 3), "upper code bound accepted")
         require(not svc_score_codes_valid(low, 3), "lower code bound accepted")
         require(not svc_score_codes_valid(no_classes, 0), "code accepted without classes")
+    elif unit == 5:
+        used_classes()
+    else:
+        used_classes_large()
+
+
+def used_classes() raises:
+    # Rows use classes 3, 0 (also as -5) and 4 of five; class 1 and 2 never.
+    # First-appearance order is 3, 0, 4; slots index that order.
+    var codes: List[Int64] = [3, 0, -5, 4, 3, -1]
+    var used = svc_used_classes(codes, 5)
+    require(len(used.order) == 3, "used class count changed")
+    require(used.order[0] == 3 and used.order[1] == 0 and used.order[2] == 4,
+        "used classes not in first-appearance order")
+    var expected: List[Int32] = [0, 1, 1, 2, 0, 2]
+    for row in range(len(expected)):  # small-loop(six fixture rows)
+        require(used.slots[row] == expected[row], "row slot differs at " + String(row))
+    var class_words: List[UInt64] = [30, 0, 40]
+    var words = svc_gather_words(class_words, used.slots)
+    var gathered: List[UInt64] = [30, 0, 0, 40, 30, 40]
+    for row in range(len(gathered)):  # small-loop(six fixture rows)
+        require(words[row] == gathered[row], "gathered word differs at " + String(row))
+    var empty = List[Int64]()
+    var none = svc_used_classes(empty, 0)
+    require(len(none.order) == 0 and len(none.slots) == 0, "empty codes produced used classes")
+
+
+def used_classes_large() raises:
+    # Enough rows to split across the host pool: the first appearance of
+    # class 6 is late (row count - 1), so the cross-unit reduce must find it.
+    var count = 100003
+    var codes = List[Int64](length=count, fill=0)
+    var cp = codes.unsafe_ptr()
+    def fill(row: Int) {imm cp, imm count}:
+        cp[row] = Int64(6 if row == count - 1 else (row % 3) * 2)
+    host_parallelize(fill, count)
+    var used = svc_used_classes(codes, 7)
+    require(len(used.order) == 4, "large used class count changed")
+    require(used.order[0] == 0 and used.order[1] == 2 and used.order[2] == 4 and used.order[3] == 6,
+        "large first-appearance order changed")
+    var class_words: List[UInt64] = [10, 12, 14, 16]
+    var words = svc_gather_words(class_words, used.slots)
+    var bad = List[Int](length=1, fill=0)
+    var bp = bad.unsafe_ptr()
+    var wp = words.unsafe_ptr()
+    def check(row: Int) {imm cp, imm wp, imm bp}:
+        if wp[row] != UInt64(10 + 2 * (Int(cp[row]) // 2)):
+            bp[0] = 1
+    host_parallelize(check, count)
+    require(bad[0] == 0, "large gather differs from the class words")
+    _ = codes
+    _ = words

@@ -85,13 +85,17 @@ def backend_public_operation(operation: String, args: PythonObject, context: Pyt
     if operation == "vendor":
         if fields["_CPU_ONLY"] is not None:
             return PythonObject("cpu")
-        var said = PythonObject(None)
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var found_said = Optional[PythonObject]()
         var entries = context["plans"][mode]["vendors"]
         for i in range(len(entries)):  # driver-loop: native provider metadata readbacks in selector order
-            said = _read(entries[i], context, True)
-            if said is not None:
-                said = _text(said, "compiled vendor")
+            var read = _read(entries[i], context, True)
+            if read is not None:
+                found_said = _text(read, "compiled vendor")
                 break
+        var said = PythonObject(None)
+        if found_said:
+            said = found_said.value()
         var expected = _text(fields["_VENDOR_SELECTED"], "selected vendor", True)
         var layout = fields["_LAYOUT"]
         if py_type(layout) is not py_type(Python.tuple()) or len(layout) != 2:

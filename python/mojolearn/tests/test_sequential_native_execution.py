@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from mojolearn import Array, Sequential, _backend
-from mojolearn._cast_in import describe
+from mojolearn.tests._cast_in import describe
 from mojolearn._verify_native_runtime import audit_native_call
 
 

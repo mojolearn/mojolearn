@@ -1,11 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete Prophet fit/predict operation ownership: passive source snapshots,
 # native preparation, compiled numerical entries and staged state publication.
-from std.math import floor
+# UNPACK/PACK only (lane doorsplit-cnn-xseq, 2026-11-11): the checks, plan
+# words and glue calls run in sequence/xseq_prophet_run.mojo; this file
+# snapshots the fields, admits and owns the buffers, releases the GIL around
+# each glue call and publishes the fitted state.
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
-from bindings.xseq_native_common import xseq_entries, xseq_base, xseq_addr, xseq_column_i64, xseq_copy
+from bindings.xseq_native_common import xseq_key, xseq_base, xseq_addr, xseq_column_i64, xseq_copy
+from core.entry_table import EntryRef
+from sequence.xseq_prophet_run import (
+    ProphetFitRequest, ProphetPredictRequest, prophet_run_days, prophet_run_check_days, prophet_run_features,
+    prophet_run_auto_period, prophet_run_scale, prophet_run_check_y_rank, prophet_run_check_lengths,
+    prophet_run_check_finite, prophet_run_changepoint_plan, prophet_run_changepoint_count, prophet_run_changepoints,
+    prophet_run_check_changepoints, prophet_run_parameter_count, prophet_run_fit, prophet_run_check_stored_dtype,
+    prophet_run_check_ranks, prophet_run_check_holidays_given, prophet_run_check_order, prophet_run_check_schema,
+    prophet_run_check_info_shape, prophet_run_check_params_shape, prophet_run_check_holiday_columns,
+    prophet_run_predict,
+)
 from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_arrays import sequential_array
 from bindings.classical_pandas import classical_admit_value
@@ -80,23 +93,27 @@ def _contig(value: PythonObject, dtype: PythonObject, context: PythonObject) rai
     return prophet_contiguous(prophet_source(value, context), dtype is context["float64"], context)
 
 
-def _days(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _days(source: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
     """`_days(t, mode)`: (days float64 (N,), info [status, span, least
     spacing]), converted and checked by `prophet_days`."""
     var t = prophet_source(source, context)
     var src = PythonObject(None)
-    var kind = 0
+    var datetime = False
     if String(t.dtype.kind) == "M":
         src = prophet_nanoseconds(t, context)
-        kind = 1
+        datetime = True
     else:
         src = py_call(prophet_contiguous(t, True, context).reshape, -1)
     var n = Int(py=src.size)
     var days = sequential_array(Python.tuple(n), context["float64"], context)
     var info = sequential_array(Python.tuple(3), context["float64"], context)
     if n:
-        _ = py_call_typed(entries["prophet_days"], Python.list(xseq_addr(src), xseq_addr(days), xseq_addr(info)),
-                          Python.list(n, kind))
+        var src_addr = Int(py=xseq_addr(src))
+        var days_addr = Int(py=xseq_addr(days))
+        var info_addr = Int(py=xseq_addr(info))
+        var py = Python()
+        with GILReleased(py):
+            prophet_run_days(key, src_addr, days_addr, info_addr, n, datetime)
         _ = info  # keep the Python object alive through the native call above
         _ = days  # keep the Python object alive through the native call above
         _ = src  # keep the Python object alive through the native call above
@@ -118,7 +135,7 @@ def _periods(fields: PythonObject, context: PythonObject) raises -> PythonObject
     return _contig(periods, context["float64"], context)
 
 
-def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+def _features(fields: PythonObject, days: PythonObject, key: EntryRef, context: PythonObject) raises -> PythonObject:
     """`_features(days)`: (t scaled float32 (N,), frac float32 (N, max(ns, 1)))."""
     var rows = _seasonal_rows(fields)
     var periods_a = _periods(fields, context)
@@ -126,10 +143,16 @@ def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, c
     var n = len(days)
     var tsc = sequential_array(Python.tuple(n), context["float32"], context)
     var frac = sequential_array(Python.tuple(n, max(ns, 1)), context["float32"], context)
-    _ = py_call_typed(entries["prophet_features"],
-                      Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(tsc), xseq_addr(frac)),
-                      Python.list(n, ns),
-                      Python.list(py_call(_b().float, fields["start_"]), py_call(_b().float, fields["t_scale_"])))
+    var days_addr = Int(py=xseq_addr(days))
+    var periods_addr = Int(py=xseq_addr(periods_a))
+    var tsc_addr = Int(py=xseq_addr(tsc))
+    var frac_addr = Int(py=xseq_addr(frac))
+    var start = Float64(py=py_call(_b().float, fields["start_"]))
+    var t_scale = Float64(py=py_call(_b().float, fields["t_scale_"]))
+    var py = Python()
+    with GILReleased(py):
+        prophet_run_features(key, days_addr, periods_addr, tsc_addr, frac_addr, n, ns, start, t_scale)
+    _ = days  # keep the Python object alive through the native call above
     _ = frac  # keep the Python object alive through the native call above
     _ = tsc  # keep the Python object alive through the native call above
     _ = periods_a  # keep the Python object alive through the native call above
@@ -157,7 +180,7 @@ def _auto(fields: PythonObject, name: String, arg: PythonObject, default_order: 
         use = True
         order = Int(py=py_call(b.int, arg))
     if use:
-        var period = 365.25 if name == "yearly" else (7.0 if name == "weekly" else 1.0)
+        var period = prophet_run_auto_period(name)
         var spec = b.dict()
         py_setitem(spec, "period", period)
         py_setitem(spec, "fourier_order", order)
@@ -181,65 +204,65 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var b = _b()
     var original = prophet_fields(model, context)
     var fields = _state(original, context)
-    var entries = xseq_entries(fields, context)
-    var dd = _days(args[0], entries, context)
+    var key = xseq_key(fields, context)
+    var dd = _days(args[0], key, context)
     var days = dd[0]
     var info = dd[1]
     var status = Int(py=py_call(b.int, info[0]))
     var span = Float64(py=py_call(b.float, info[1]))
     var dmin = Float64(py=py_call(b.float, info[2]))
-    if status == 1:
-        raise Error("ValueError: " + _P + "t must not hold NaN")
-    if status == 2:
-        raise Error("ValueError: " + _P + "t must be sorted ascending")
+    prophet_run_check_days(status)
     var y = prophet_source(args[1], context)
     if Bool(py=y.dtype == context["float64"]):
         raise Error("TypeError: " + _P + "float64 y is refused; pass float32")
     var one = Int(py=y.ndim) == 1
-    if Int(py=y.ndim) != 1 and Int(py=y.ndim) != 2:
-        raise Error("ValueError: ProphetForecaster: y must be a series or a batch of series")
+    prophet_run_check_y_rank(Int(py=y.ndim))
     py_setitem(fields, "_one", one)
     var Y = prophet_contiguous(y, False, context)
     if one:
         Y = py_call(Y.reshape, 1, -1)
     var B = Int(py=Y.shape[0])
     var N = Int(py=Y.shape[1])
-    if N != len(days) or N < 2:
-        raise Error("ValueError: " + _P + "y and t lengths differ, or fewer than 2 points")
-    if Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) != 1:
-        raise Error("ValueError: " + _P + "y must be finite")
+    prophet_run_check_lengths(N, len(days))
+    # call-table: base helper
+    prophet_run_check_finite(Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) == 1)
     _ = Y  # keep the Python object alive through the native calls above
     _auto(fields, "yearly", fields["yearly_seasonality"], 10, span >= 730)
     _auto(fields, "weekly", fields["weekly_seasonality"], 3, span >= 14 and dmin < 7)
     _auto(fields, "daily", fields["daily_seasonality"], 4, span >= 2 and dmin < 1)
     py_setitem(fields, "start_", py_call(b.float, days[0]))
-    py_setitem(fields, "t_scale_", span if span > 0 else 1.0)
-    var ft = _features(fields, days, entries, context)
+    py_setitem(fields, "t_scale_", prophet_run_scale(span))
+    var ft = _features(fields, days, key, context)
     var user = PythonObject(None)
     var n_user: Int
     var hist: Int
     var n_cp: Int
     if fields["changepoints"] is not None:
-        user = _days(fields["changepoints"], entries, context)[0]
+        user = _days(fields["changepoints"], key, context)[0]
         n_user = len(user)
         hist = 0
         n_cp = 0
     else:
         user = sequential_array(Python.tuple(1), context["float64"], context)
         n_user = -1
-        # floor(N * changepoint_range): one IEEE product, floored exactly
-        hist = Int(floor(Float64(N) * Float64(py=fields["changepoint_range"])))
-        n_cp = max(min(Int(py=fields["n_changepoints"]), hist - 1), 0)
-    var cpt = sequential_array(Python.tuple(max(n_user, max(n_cp, 1))), context["float32"], context)
-    var S = Int(py=py_call_typed(entries["prophet_changepoints"],  # cpu-route: changepoint plan over a handful of changepoints
-                                 Python.list(xseq_addr(days), xseq_addr(user), xseq_addr(cpt)),
-                                 Python.list(N, n_user, hist, n_cp),
-                                 Python.list(fields["start_"], fields["t_scale_"])))
+        var plan = prophet_run_changepoint_plan(N, Float64(py=fields["changepoint_range"]),
+                                                Int(py=fields["n_changepoints"]))
+        hist = plan[0]
+        n_cp = plan[1]
+    var cpt = sequential_array(Python.tuple(prophet_run_changepoint_count(n_user, n_cp)), context["float32"], context)
+    var days_addr = Int(py=xseq_addr(days))
+    var user_addr = Int(py=xseq_addr(user))
+    var cpt_addr = Int(py=xseq_addr(cpt))
+    var cp_start = Float64(py=fields["start_"])
+    var cp_scale = Float64(py=fields["t_scale_"])
+    var S = 0
+    var py = Python()
+    with GILReleased(py):
+        S = prophet_run_changepoints(key, days_addr, user_addr, cpt_addr, N, n_user, hist, n_cp, cp_start, cp_scale)
     _ = cpt  # keep the Python object alive through the native call above
     _ = user  # keep the Python object alive through the native call above
     _ = days  # keep the Python object alive through the native call above
-    if S < 0:
-        raise Error("ValueError: Changepoints must fall within training data.")
+    prophet_run_check_changepoints(S)
     _ = cpt  # keep the Python object alive through the native calls above
     _ = user  # keep the Python object alive through the native calls above
     _ = days  # keep the Python object alive through the native calls above
@@ -269,15 +292,18 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         _ = py_call(sig.append, 1.0)
     var sig_a = _contig(sig, context["float32"], context)
     var S2 = len(cpts)
-    var P = 3 + S2 + K
+    var P = prophet_run_parameter_count(S2, K)
     var params = sequential_array(Python.tuple(B, P), context["float32"], context)
     var info_out = sequential_array(Python.tuple(B, 4), context["float32"], context)
-    var multiplicative = 1 if String(py=fields["seasonality_mode"]) == "multiplicative" else 0
-    _ = py_call_typed(entries["prophet_fit"],
-                      Python.list(xseq_addr(Y), xseq_addr(ft[0]), xseq_addr(ft[1]), xseq_addr(od[0]), xseq_addr(H),
-                                  xseq_addr(cpts), xseq_addr(sig_a), xseq_addr(params), xseq_addr(info_out)),
-                      Python.list(B, N, od[1], nh, K, S2, multiplicative, fields["max_iter"]),
-                      Python.list(fields["changepoint_prior_scale"]))
+    var multiplicative = String(py=fields["seasonality_mode"]) == "multiplicative"
+    var request = ProphetFitRequest(
+        Int(py=xseq_addr(Y)), Int(py=xseq_addr(ft[0])), Int(py=xseq_addr(ft[1])), Int(py=xseq_addr(od[0])),
+        Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)), Int(py=xseq_addr(sig_a)), Int(py=xseq_addr(params)),
+        Int(py=xseq_addr(info_out)), B, N, Int(py=od[1]), nh, K, S2, multiplicative, Int(py=fields["max_iter"]),
+        Float64(py=fields["changepoint_prior_scale"]))
+    var fit_py = Python()
+    with GILReleased(fit_py):
+        prophet_run_fit(key, request)
     # Raw addresses do not retain the arrays owned by these two tuples.
     # Both feature buffers and Fourier orders must survive the native call.
     _ = ft
@@ -311,13 +337,12 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     var stored = Python.tuple("params_", "info_", "changepoints_t_")
     for i in range(len(stored)):  # driver-loop: native fitted buffers captured once before numerical execution
         var value = prophet_source(fields[stored[i]], context)
-        if Int(py=value.dtype.num) != 11:
-            raise Error("TypeError: ProphetForecaster fitted buffers require float32 storage")
+        prophet_run_check_stored_dtype(Int(py=value.dtype.num))
         py_setitem(fields, stored[i], prophet_contiguous(value, False, context))
-    if Int(py=fields["params_"].ndim) != 2 or Int(py=fields["info_"].ndim) != 2 or Int(py=fields["changepoints_t_"].ndim) != 1:
-        raise Error("ValueError: ProphetForecaster fitted buffer ranks disagree")
-    var entries = xseq_entries(fields, context)
-    var days = _days(args[0], entries, context)[0]
+    prophet_run_check_ranks(Int(py=fields["params_"].ndim), Int(py=fields["info_"].ndim),
+                            Int(py=fields["changepoints_t_"].ndim))
+    var key = xseq_key(fields, context)
+    var days = _days(args[0], key, context)[0]
     var M = len(days)
     # lane ne1-a-decomp-tsa (N032): with `prophet_predict_days` the scaled
     # times and phases stay on the executor and the feature matrix is built
@@ -326,18 +351,19 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     # comes first as before; a non-positive seasonal period (refused by the
     # feature writer) is then met after the holiday and schema checks below
     # instead of before them.
-    var fused = M > 0 and py_get(entries, "prophet_predict_days") is not None
+    # Every image publishes `prophet_predict_days` in the sequence table, so
+    # the former "entry present" test is gone (lane calltable-xseq).
+    var fused = M > 0
     var ft = Python.tuple(PythonObject(None), PythonObject(None))
     var periods_a = PythonObject(None)
     if fused:
         periods_a = _periods(fields, context)
     else:
-        ft = _features(fields, days, entries, context)
+        ft = _features(fields, days, key, context)
     var nh = Int(py=fields["_nh"])
     var H = PythonObject(None)
     if nh:
-        if args[1] is None:
-            raise Error("ValueError: " + _P + "the model has holiday columns; pass them for t")
+        prophet_run_check_holidays_given(nh, args[1] is not None)
         H = py_call(_contig(args[1], context["float32"], context).reshape, M, -1)
     else:
         H = sequential_array(Python.tuple(M, 1), context["float32"], context)
@@ -346,36 +372,38 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
     var rows = _seasonal_rows(fields)
     for i in range(len(rows)):  # driver-loop: fitted feature-schema bounds before the native feature writer
         var order = Int(py=py_call(b.int, rows[i]["fourier_order"]))
-        if order < 0:
-            raise Error("ValueError: ProphetForecaster Fourier orders must be nonnegative")
+        prophet_run_check_order(order)
         feature_count += 2 * order
-    if nh < 0 or Int(py=fields["_K"]) < 0 or feature_count + nh != Int(py=fields["_K"]):
-        raise Error("ValueError: ProphetForecaster seasonalities changed after fit; fit the model again")
+    # `_K` is read only when `nh` is not negative, as the short-circuit
+    # check read it before the split.
+    prophet_run_check_schema(nh, Int(py=fields["_K"]) if nh >= 0 else 0, feature_count)
     var params = fields["params_"]
     var B = Int(py=params.shape[0])
-    if Int(py=fields["info_"].shape[0]) != B or Int(py=fields["info_"].shape[1]) != 4:
-        raise Error("ValueError: ProphetForecaster fitted diagnostics shape disagrees")
-    if Int(py=params.shape[1]) != 3 + len(fields["changepoints_t_"]) + Int(py=fields["_K"]):
-        raise Error("ValueError: ProphetForecaster fitted parameter shape disagrees")
-    if nh and Int(py=H.shape[1]) != nh:
-        raise Error("ValueError: ProphetForecaster holiday column count differs from fit")
+    prophet_run_check_info_shape(Int(py=fields["info_"].shape[0]), Int(py=fields["info_"].shape[1]), B)
+    prophet_run_check_params_shape(Int(py=params.shape[1]), len(fields["changepoints_t_"]), Int(py=fields["_K"]))
+    prophet_run_check_holiday_columns(nh, Int(py=H.shape[1]) if nh != 0 else 0)
     var yhat = sequential_array(Python.tuple(B, M), context["float32"], context)
     var trend = sequential_array(Python.tuple(B, M), context["float32"], context)
     var cpts = fields["changepoints_t_"]
-    var multiplicative = 1 if String(py=fields["seasonality_mode"]) == "multiplicative" else 0
-    if fused:
-        _ = py_call_typed(entries["prophet_predict_days"],
-                          Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(params), xseq_addr(fields["info_"]),
-                                      xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
-                          Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative),
-                          Python.list(py_call(b.float, fields["start_"]), py_call(b.float, fields["t_scale_"])))
-        _ = days  # keep the Python objects alive through the native call above
-        _ = periods_a
-    else:
-        _ = py_call_typed(entries["prophet_predict"],
-                          Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
-                                      xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
-                          Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
+    var multiplicative = String(py=fields["seasonality_mode"]) == "multiplicative"
+    # The feature words of the route not taken stay 0: the fused entry reads
+    # days, periods, start and scale; the plain one the feature call's
+    # scaled times and phases.
+    var days_addr = Int(py=xseq_addr(days)) if fused else 0
+    var periods_addr = Int(py=xseq_addr(periods_a)) if fused else 0
+    var tsc_addr = 0 if fused else Int(py=xseq_addr(ft[0]))
+    var frac_addr = 0 if fused else Int(py=xseq_addr(ft[1]))
+    var request = ProphetPredictRequest(
+        fused, days_addr, periods_addr, tsc_addr, frac_addr, Int(py=xseq_addr(params)),
+        Int(py=xseq_addr(fields["info_"])), Int(py=xseq_addr(od[0])), Int(py=xseq_addr(H)), Int(py=xseq_addr(cpts)),
+        Int(py=xseq_addr(yhat)), Int(py=xseq_addr(trend)), B, M, Int(py=od[1]), nh, Int(py=fields["_K"]), len(cpts),
+        multiplicative, Float64(py=py_call(b.float, fields["start_"])) if fused else 0.0,
+        Float64(py=py_call(b.float, fields["t_scale_"])) if fused else 0.0)
+    var py = Python()
+    with GILReleased(py):
+        prophet_run_predict(key, request)
+    _ = days  # keep the Python objects alive through the native call above
+    _ = periods_a
     # Prediction has independently allocated feature and order owners too.
     _ = ft
     _ = od

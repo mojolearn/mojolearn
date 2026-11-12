@@ -15,6 +15,11 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.os import getenv
+from std.python._cpython import GILReleased
+from core.entry_table import EntryRef, entry_ref_call
+from core.samba_entry_table import (
+    SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_OPTIMIZER_STEP,
+)
 from core.device_plan import DevicePlan
 from training.optimizer_device_plan import optimizer_device_plan
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_copy, py_ints
@@ -28,6 +33,30 @@ from bindings.samba_optimizer_boundary import samba_optimizer_transfer
 
 def samba_fields(value: PythonObject) raises -> PythonObject:
     return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")
+
+
+def samba_entry_key(context: PythonObject, mode: PythonObject) raises -> SambaEntryKey:
+    """UNPACK: the Samba table key (core/samba_entry_table.mojo) of the
+    stack's connected binding, from the mode and vendor words the bridge
+    admitted; `samba_entries` checks them against the binding's own."""
+    var selected = context["mode"] if mode is None else mode
+    var vendor = String("cpu") if context["vendor"] is None else String(context["vendor"])
+    var word = samba_vendor_word(vendor)
+    if word < 0:
+        raise Error("Samba: unsupported native vendor " + vendor)
+    return SambaEntryKey(1 if String(selected) == "identical" else 0, word)
+
+
+def samba_primitive(entry: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
+                    floats: List[Float64]) raises -> Int:
+    """One synchronous neural primitive call through the Samba entry the
+    caller resolved once (`samba_ref`), with the GIL released, as the former
+    Python entries ran it. The caller keeps every addressed buffer alive past
+    the call."""
+    var result = 0
+    with GILReleased(Python()):
+        result = entry_ref_call(entry, op, addresses, ints, floats)
+    return result
 
 
 def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObject:
@@ -494,19 +523,26 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
         unsafe_memcpy(dest=gp + offset, src=src, count=Int(py=item["size"]))
         _ = value^
     op[len(registry)] = Int32(n)
-    var plan = py_ints([len(registry), 2, step + 1, 0])
+    # The per-call AdamW step (primitive op 25, the former `optimizer_step`
+    # entry's words): ints [J, kind, t, nesterov, maximize], floats [lr, beta1,
+    # beta2, eps, weight_decay, momentum, dampening, max_norm].
+    var ints: List[Int] = [len(registry), 2, step + 1, 0, 0]
+    var floats = List[Float64]()
     for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # driver-loop: over optimizer scalar launch metadata
-        _ = py_call(plan.append, config[key])
-    _ = py_call(plan.append, 0.0)
-    _ = py_call(plan.append, 0.0)
-    _ = py_call(plan.append, max_norm)
-    _ = py_call(plan.append, 0)
+        floats.append(Float64(py=config[key]))
+    floats.append(0.0)
+    floats.append(0.0)
+    floats.append(max_norm)
     var info = generation_array([3])
-    var written = py_call(_native_function(entries, "optimizer_step"),
-        result["parameters"]._addr, flat_gradient._addr, result["exp_avg"]._addr,
-        result["exp_avg_sq"]._addr, offsets._addr, result["buf_initialized"]._addr,
-        info._addr, plan)
-    if Int(py=written) != n:
+    var addresses: List[Int] = [Int(py=result["parameters"]._addr), Int(py=flat_gradient._addr),
+        Int(py=result["exp_avg"]._addr), Int(py=result["exp_avg_sq"]._addr), Int(py=offsets._addr),
+        Int(py=result["buf_initialized"]._addr), Int(py=info._addr)]
+    var written = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, state["numeric_mode"])),
+        SAMBA_PRIM_OPTIMIZER_STEP, addresses, ints, floats)
+    _ = info  # keep the Python owner alive through the native call above
+    _ = flat_gradient
+    _ = offsets
+    if written != n:
         raise Error("RuntimeError: Samba optimizer returned an incomplete update")
     py_setitem(result, "optimizer", config)
     py_setitem(result, "t", PythonObject(step + 1))

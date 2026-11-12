@@ -37,7 +37,6 @@ from . import _numeric_profile
 from . import _ragged
 from . import _training_impl as T
 from ._mamba_impl import Mamba3Block
-from ._transformer_impl import TransformerBlock
 
 __all__ = ["SambaConfig", "SambaDecodeSession", "SambaStack", "SambaState"]
 
@@ -349,15 +348,6 @@ class SambaStack(object):
             "loss", (self, inputs, targets), _native_samba_bridge.CONTEXT)
 
     # -- backward -----------------------------------------------------------
-    def _refuse_no_backward(self):
-        for i, kind in enumerate(self.config.layers):  # glue: checks each layer kind
-            if kind == "attention" and not callable(getattr(TransformerBlock, "backward", None)):
-                raise NotImplementedError(
-                    "mojolearn.SambaStack: layer %d is an attention block and "
-                    "loaded TransformerBlock wrapper has no callable backward; "
-                    "install a matching wrapper and IDENTICAL transformer "
-                    "extension. The layer gradient cannot be skipped "
-                    "(python/mojolearn/_samba_impl.py)" % i)
 
     def loss_and_grads(self, inputs, targets, num_items=None,
                        dropout_stream=None, token_offset=0):
@@ -409,13 +399,6 @@ class SambaStack(object):
             "model_train_step", (self, inputs, targets), _native_samba_bridge.CONTEXT)
 
     # -- state ----------------------------------------------------------------
-    def _experiment_profile(self):
-        """Native numerical-contract metadata; no tensor work in this shell."""
-        try:
-            profile = getattr(T._load(self.numeric_mode), "training_experiment_profile", None)
-        except (ImportError, AttributeError):
-            profile = None
-        return str(profile()) if callable(profile) else "baseline"
 
     def state_dict(self, *, _copy_arrays=True):
         """The complete training state as a dict.
@@ -467,11 +450,6 @@ class SambaStack(object):
         """
         return _native_samba_bridge.RUNTIME.samba_native_call(
             "checkpoint_load", (cls, path, numeric_mode), _native_samba_bridge.CONTEXT)
-
-    @classmethod
-    def _read_legacy_checkpoint(cls, path):
-        return _native_samba_bridge.RUNTIME.samba_native_call(
-            "checkpoint_read", (path,), _native_samba_bridge.CONTEXT)
 
 
 class SambaDecodeSession(object):

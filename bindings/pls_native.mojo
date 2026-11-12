@@ -46,6 +46,7 @@ from bindings.decomp_kit_native import (
     DecompKit, decomp_int, decomp_float, decomp_entries, decomp_is_a,
     decomp_class_attr, XD_SUB, XD_ADD, XD_MUL, XD_DIV, XD_SCALE, XD_SQ, XD_SQRT, XD_SELECT, XD_RECIP,
 )
+from x_decomp.descriptor_schema import XD_PLS_FIT
 
 comptime PLS_F32_EPS = 1.1920928955078125e-07
 
@@ -362,22 +363,24 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
     # is ONE binding call writing six host blocks.
     var sizes = [p, q, n, n, p, q]
     var outs = List[Int]()
-    var addresses = Python.list()
+    # XD_PLS_FIT (was the Python entry x_decomp_pls_fit): a = [x, y, the six
+    # blocks, the int32 iteration counts, the int64 word nits comes back in].
+    var addresses: List[Int] = [kit.at(xs[0]), kit.at(ys[0])]
     for k in range(6):  # driver-loop: over the six fitted blocks
         var block = kit.zeros(sizes[k], nc)
         outs.append(block)
-        _ = py_call(addresses.append, kit.address(block))
-        _ = block  # keep the Python object alive through the native call above
+        addresses.append(kit.at(block))
     var its = native_array_zeros("i", nc)
     var iterations_address = Int(py=py_call(its.buffer_info)[0])
-    var ax = kit.address(xs[0])
-    var ay = kit.address(ys[0])
-    var result = py_call(kit.entries["x_decomp_pls_fit"], ax, ay, addresses, PythonObject(iterations_address),
-                         Python.list(n, p, q, nc, decomp_int(fields["max_iter"]), 1 if mode_b else 0,
-                                     Int(canonical), Int(canonical), Int(svd_algo)),
-                         Python.list(decomp_float(fields["tol"])))
-    var done = Int(py=result[0])
-    var nits = Int(py=result[1])
+    var written = List[Int](length=1, fill=0)
+    addresses.append(iterations_address)
+    addresses.append(Int(written.unsafe_ptr()))
+    var params: List[Int] = [n, p, q, nc, decomp_int(fields["max_iter"]), 1 if mode_b else 0, Int(canonical),
+                             Int(canonical), Int(svd_algo)]
+    var tol: List[Float64] = [decomp_float(fields["tol"])]
+    var done = kit.xd(XD_PLS_FIT, addresses, params, tol, True)
+    var nits = written[0]
+    _ = written^
     for k in range(6):  # driver-loop: over the six fitted blocks
         kit.wrote_host(outs[k])
     if done < nc:

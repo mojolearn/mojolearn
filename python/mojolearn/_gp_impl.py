@@ -72,13 +72,11 @@ exposure is a correctness claim, not a
 speed claim.
 """
 
-from . import _portable_math as math
 from . import _backend, _native_archive_bridge, _native_family_bridge
 
 #: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
 _OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
-from .linear_model import _flatten, _shape_of
 from .preprocessing import StandardScaler, _STANDARD_CONTEXT
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -98,51 +96,8 @@ _K_SUM = 4
 _K_PROD = 5
 
 
-def _as_length_scale(length_scale, what):
-    """A list of floats from a scalar or a sequence. CONVERSION ONLY, no
-    judgement: positivity, finiteness and the isotropic-or-ARD length rule
-    are `gp_kernel_rbf` / `gp_kernel_matern` / `gp_validate_kernel`'s
-    refusals (kernels.mojo), and a copy of them here would make the named
-    Mojo refusal unreachable from Python and therefore untestable."""
-    if not _shape_of(length_scale):
-        return [float(length_scale)]
-    ls = [float(v) for v in _flatten(length_scale)]  # glue: converts the length-scale argument
-    if len(ls) == 0:
-        raise ValueError(
-            f"mojolearn {what}: length_scale is an empty sequence; pass a "
-            "scalar (isotropic) or n_features values (ARD)"
-        )
-    return ls
-
-
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
 _DEFAULT_BOUNDS = (1e-5, 1e5)
-
-
-def _as_bounds(bounds, n, what):
-    """"fixed" or a list of `n` `(lo, hi)` float pairs. A single pair applies
-    to every entry of an ARD length scale, scikit-learn's rule. Each bound
-    must be finite and positive with `lo <= hi` (theta is its log;
-    DEVIATION 2880)."""
-    if isinstance(bounds, str):
-        if bounds != "fixed":
-            raise ValueError(f"mojolearn {what}: bounds must be a (low, high) pair or 'fixed', got {bounds!r}")
-        return "fixed"
-    shape = _shape_of(bounds)
-    if shape == (2,):
-        pairs = [tuple(float(v) for v in _flatten(bounds))] * n  # glue: converts the bounds argument
-    elif shape == (n, 2):
-        flat = [float(v) for v in _flatten(bounds)]  # glue: converts the bounds argument
-        pairs = list(zip(flat[0::2], flat[1::2]))
-    else:
-        raise ValueError(
-            f"mojolearn {what}: bounds must be 'fixed', a (low, high) pair, or {n} pairs; got shape {shape}")
-    for lo, hi in pairs:  # glue: validates each hyperparameter bound pair
-        if not (math.isfinite(lo) and math.isfinite(hi) and 0.0 < lo <= hi):
-            raise ValueError(
-                f"mojolearn {what}: every bound must be finite and positive with low <= high, got "
-                f"({lo!r}, {hi!r}); theta is the natural log of a hyperparameter (DEVIATION 2880)")
-    return pairs
 
 
 # Maintainer notes: the four classes build a postfix node list (`a b +` /
@@ -192,15 +147,6 @@ class Kernel:
 
     def _free_values(self):
         return [v for h in self._hyper() if h is not None for v in h[0]]  # glue: collects free kernel hyperparameters (n_dims entries)
-
-    def _free_bounds(self):
-        return [b for h in self._hyper() if h is not None for b in h[1]]  # glue: collects bounds of free kernel hyperparameters (n_dims entries)
-
-    def _with_free_values(self, values, theta=None):
-        out = self._replace(list(values))
-        if theta is not None:
-            out._theta_fit = [float(t) for t in theta]  # glue: copies the fitted theta, kernel hyperparameters (n_dims entries)
-        return out
 
     @property
     def n_dims(self):

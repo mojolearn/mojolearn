@@ -93,7 +93,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_type_module import native_type_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
-from bindings.admitted_finite_wording import admitted_finite_wording
+from bindings.admitted_finite_wording import admitted_finite_wording, admitted_finite_refuse
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
     classical_wrap_array, classical_wrap_layout, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
@@ -121,7 +121,6 @@ from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
 from core.admitted_rows_plan import admitted_rows_base, admitted_rows_indices, admitted_rows_shape, admitted_rows_store, admitted_rows_run
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from std.python._cpython import PyObjectPtr, GILReleased
-from std.reflection import reflect
 from std.sys.compile import is_defined
 from bindings.py_balanced import py_setattr, py_get, py_setitem
 from bindings.py_attr import py_attr
@@ -758,14 +757,6 @@ def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: 
     return x^
 
 
-def admitted_finite_refuse(status: Int, est: String, name: String = "X") raises:
-    """The refusal of a deferred finite test: `status` is the word the
-    kernel entry returned (core/admitted_finite_status.mojo; 0 = every word
-    finite). Raises scikit-learn's wording, as admit_x would have."""
-    if status != 0:
-        raise Error(admitted_finite_wording(est, name))
-
-
 def _entry_nonfinite(text: String, name: String) -> Bool:
     """True when `text` is a kernel entry's own refusal of a non-finite
     `name` ("X" or "y"): the x_linear fit's "mojolearn: X contains NaN or
@@ -1178,7 +1169,7 @@ def register_admitted_buffer_pin(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[AdmittedBufferPin[]]()
     except error:
-        if not py_type_absent(error, String(reflect[AdmittedBufferPin[]].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[AdmittedBufferPin[]]("_AdmittedBufferPin")
         return

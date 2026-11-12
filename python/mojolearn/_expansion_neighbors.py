@@ -250,21 +250,6 @@ class _XNeighbors(NumericModeMixin):
         self._op("knn_select", [(D, 0), (dist, 1), (idx, 1)], (n, m, k, 1 if exclude_self else 0))
         return dist, idx
 
-    def _rowsum(self, A):
-        out = _empty_out((A.shape[0],), "<f4")
-        self._op("rowsum", [(A, 0), (out, 1)], A.shape)
-        return out
-
-    def _colsum(self, A):
-        out = _empty_out((A.shape[1],), "<f4")
-        self._op("colsum", [(A, 0), (out, 1)], A.shape)
-        return out
-
-    def _scale_div(self, X, s):
-        out = empty(X.shape, "<f4")
-        self._op("scale_div", [(X, 0), (out, 1)], (X.size,), (s,))
-        return out
-
     def _take_rows(self, X, rows):
         rows = _i32(rows, "rows")
         out = _empty_out((len(rows), X.shape[1]), "<f4")
@@ -276,11 +261,6 @@ class _XNeighbors(NumericModeMixin):
         out = _empty_out((X.shape[0], len(cols)), "<f4")
         self._op("take_cols", [(X, 0), (cols, 0), (out, 1)], (X.shape[0], X.shape[1], len(cols)))
         return out
-
-    def _variance(self, X):
-        out = _empty_out((1,), "<f4")
-        self._op("variance", [(X, 0), (out, 1)], (X.size,))
-        return out.tolist()[0]
 
     def _knn_sq(self, Q, R, k, exclude_self):
         """(squared distances, indices) of the k nearest rows of R to each row
@@ -302,26 +282,6 @@ class _XNeighbors(NumericModeMixin):
         index)."""
         sq, idx = self._knn_sq(Q, R, k, exclude_self)
         return self._unary(sq, _U_SQRT), idx
-
-
-def _p2m_sort_rows(est, indptr, cols, dists, name=None):
-    """(cols, dists) of a CSR's rows each sorted ascending by distance, ties
-    in position order (Python's stable `sorted`), on the device
-    (`xn_p2m_row_sort`, a segmented bitonic sort). int32 / float32 Arrays."""
-    nq = indptr.shape[0] - 1
-    nnz = dists.shape[0]
-    p = 1
-    while p < nnz:
-        p *= 2
-    lg = p.bit_length() - 1
-    n_steps = lg * (lg + 1) // 2
-    oc = empty((nnz,), "<i4")
-    od = empty((nnz,), "<f4")
-    getattr(est._bind(name), "xn_p2m_row_sort")(
-        [addr_ro(indptr, name="xn_p2m_row_sort input"), addr_ro(cols, name="xn_p2m_row_sort input"),
-         addr_ro(dists, name="xn_p2m_row_sort input"), addr(oc, name="xn_p2m_row_sort output"),
-         addr(od, name="xn_p2m_row_sort output")], [nq, nnz, p, n_steps], [])
-    return oc, od
 
 
 # ====================================================================== LOF
@@ -447,10 +407,6 @@ class LocalOutlierFactor(_XNeighbors):
             -1 for outliers, 1 for inliers.
         """
         return _NATIVE(self, _OP.family_xn_loc_lof_fit_predict, (None, X, y), _NATIVE_CONTEXT)
-
-    def _novelty(self, what):
-        if not self.novelty:
-            raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
 
     @available_if(lambda self: self.novelty)
     @_native_local_method

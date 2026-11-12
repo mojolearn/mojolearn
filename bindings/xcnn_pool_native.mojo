@@ -14,33 +14,34 @@ moves. The layer state the Python `backward` methods read (`_xshape`,
 `_idx_dev`, `_idx_shape`, `_mask_dev`, `_layer`, `_dev`) is written under
 the same names.
 """
-from core.hotpath_impl import _cast_from, HP_I32
 from bindings.native_buffer_owner import native_buffer_view
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.sequential_inputs import sequential_input
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
-from bindings.py_typed_call import py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from x_cnn.shape_words import pool_params, PP_OH, PP_OW
 from bindings.xcnn_common import (
-    XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
-    xcnn_size, xcnn_tuple, xcnn_module_entries, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new, xcnn_reshape_t, xcnn_wrap,
-    xcnn_host_of, xcnn_host_f32, xcnn_host_i32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
+    XCNN_F_ADAPT, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn,
+    xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_module_entries, xcnn_is_t, xcnn_on_dev, xcnn_new,
+    xcnn_out_new, xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_host_i32, xcnn_f32, xcnn_reshape,
+    xcnn_addr, xcnn_dev_get,
 )
-
-
-def _int(value: PythonObject) raises -> Int:
-    return Int(py=value)
-
-
-def _pair(fields: PythonObject, name: String) raises -> List[Int]:
-    var v = fields[PythonObject(name)]
-    return [Int(py=v[0]), Int(py=v[1])]
+from x_cnn.door_run import xcnn_run_copy_f32
+from x_cnn.pool_run import (
+    PoolSettings, pool_run_words, pool_run_out_words, pool_run_flat_rest, pool_run_row_dims, pool_run_check_nchw,
+    pool_run_check_ncl, pool_run_check_backward_ncl, pool_run_check_saved, pool_run_check_adaptive_saved,
+    pool_run_check_shape, pool_run_check_dim, pool_run_check_divisor, pool_run_check_probability,
+    pool_run_check_count, pool_run_check_output, pool_run_cache_matches, pool_run_dropout_shape,
+    pool_run_dropout_words, pool_run_adaptive_divides, pool_run_adaptive_kernel, pool_run_adaptive_words,
+    pool_run_cast_indices, pool_run_max_forward, pool_run_max_forward_m, pool_run_avg_forward,
+    pool_run_avg_forward_m, pool_run_max_backward, pool_run_max_backward_m, pool_run_avg_backward,
+    pool_run_avg_backward_m, pool_run_dropout, pool_run_dropout_m, pool_run_adaptive, pool_run_adaptive_m,
+    pool_run_download, pool_run_mask_m, pool_run_mul,
+)
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -65,8 +66,8 @@ def _class_name(model: PythonObject) raises -> String:
 # ---------------------------------------------------------------- 2-D pools
 
 def _pool_words(fields: PythonObject, shape: List[Int], context: PythonObject) raises -> List[Int]:
-    """`_Pool2d._params(shape)` as native words (before `pool_params` fills
-    OH, OW)."""
+    """UNPACK the pool settings, then `_Pool2d._params(shape)` as native
+    words (`x_cnn/pool_run.mojo` `pool_run_words`)."""
     var k = _pool_pair(fields["kernel_size"], "kernel_size", False, context)
     var s = _pool_pair(fields["stride"], "stride", False, context)
     var p = _pool_pair(fields["padding"], "padding", False, context)
@@ -78,30 +79,9 @@ def _pool_words(fields: PythonObject, shape: List[Int], context: PythonObject) r
     if divisor is not None:
         dv = _pool_int(divisor, context)
     # `_pool_pair` returns a tuple of two exact Python ints.
-    return [shape[0], shape[1], shape[2], shape[3], Int(py=k[0]), Int(py=k[1]), Int(py=s[0]), Int(py=s[1]),
-            Int(py=p[0]), Int(py=p[1]), Int(py=d[0]), Int(py=d[1]), 0, 0, 1 if include_pad else 0, 0,
-            1 if ceil_mode else 0, dv]
-
-
-def _pool_list(w: List[Int]) raises -> PythonObject:
-    """The launch words as the entries' list argument."""
-    return Python.list(w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10], w[11], w[12], w[13],
-                       w[14], w[15], w[16], w[17])
-
-
-def _pool_params(fields: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
-    """`_Pool2d._params(shape)`."""
-    return _pool_list(_pool_words(fields, shape, context))
-
-
-def _pool_out_words(words: List[Int], shape: List[Int]) raises -> List[Int]:
-    """`_Pool2d._out_shape(shape)` from the launch words the caller already
-    built (the same words then serve the launch). N149 (ne3-c-cnn,
-    2026-11-07): the binding's `x_cnn_pool_shape` rule (`pool_params`,
-    x_cnn/shape_words.mojo, with the same refusals) imported natively: no
-    binding crossing per call."""
-    var prm = pool_params(words)
-    return [shape[0], shape[1], Int(prm[PP_OH]), Int(prm[PP_OW])]
+    var settings = PoolSettings(Int(py=k[0]), Int(py=k[1]), Int(py=s[0]), Int(py=s[1]), Int(py=p[0]), Int(py=p[1]),
+                                Int(py=d[0]), Int(py=d[1]), include_pad, ceil_mode, dv)
+    return pool_run_words(settings, shape)
 
 
 def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -111,16 +91,18 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         # x, the output and the winners resident
         var entries = xcnn_entries(fields, context)
         var xs = xcnn_shape(x)
-        if len(xs) != 4:
-            raise Error("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
+        pool_run_check_nchw(xs, "MaxPool2d")
         if not xcnn_on_dev(entries, x, context):
             return xcnn_wrap(entries, xcnn_maxpool_forward(model, xcnn_host_of(x, context), context), context)
-        var pw = _pool_words(fields, xs, context)
-        var prm = _pool_list(pw)
-        var shape = _pool_out_words(pw, xs)
+        var prm = _pool_words(fields, xs, context)
+        var shape = pool_run_out_words(prm, xs)
         var out = xcnn_out_new(entries, shape, context)   # the pool stores every word
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_forward_m"), Python.list(x.h, out.h, h), PythonObject(7), prm)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h), xcnn_word(h)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_max_forward_m(key, 7, addrs[0], addrs[1], addrs[2], prm)
         _set(fields, "_xshape", xcnn_tuple(xs))
         _set(fields, "_idx_host", PythonObject(None))
         _set(fields, "_idx_dev", h)
@@ -128,17 +110,18 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         return out
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
-    if len(xs) != 4:
-        raise Error("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
+    pool_run_check_nchw(xs, "MaxPool2d")
     var entries = xcnn_entries(fields, context)
-    var pw = _pool_words(fields, xs, context)
-    var prm = _pool_list(pw)
-    var shape = _pool_out_words(pw, xs)
+    var prm = _pool_words(fields, xs, context)
+    var shape = pool_run_out_words(prm, xs)
     var out = xcnn_host_f32(shape, context)
     if xcnn_mixed(entries):
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_forward_m"), Python.list(xcnn_addr(a), xcnn_addr(out), h),
-                          PythonObject(4), prm)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out), xcnn_word(h)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_max_forward_m(key, 4, addrs[0], addrs[1], addrs[2], prm)
         _ = out  # keep the Python object alive through the native call above
         _ = a  # keep the Python object alive through the native call above
         _set(fields, "_xshape", xcnn_tuple(xs))
@@ -147,7 +130,11 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         _set(fields, "_idx_shape", xcnn_tuple(shape))
         return out
     var idx = xcnn_host_i32(shape, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_forward"), xcnn_addr(a), xcnn_addr(out), xcnn_addr(idx), prm)
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out), xcnn_ptr(idx)]
+    var py = Python()
+    with GILReleased(py):
+        pool_run_max_forward(key, addrs[0], addrs[1], addrs[2], prm)
     _ = idx  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -165,25 +152,29 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         # x and the output resident
         var entries = xcnn_entries(fields, context)
         var xs = xcnn_shape(x)
-        if len(xs) != 4:
-            raise Error("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
+        pool_run_check_nchw(xs, "AvgPool2d")
         if not xcnn_on_dev(entries, x, context):
             return xcnn_wrap(entries, xcnn_avgpool_forward(model, xcnn_host_of(x, context), context), context)
-        var pw = _pool_words(fields, xs, context)
-        var prm = _pool_list(pw)
-        var out = xcnn_out_new(entries, _pool_out_words(pw, xs), context)   # the pool stores every word
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_avgpool2d_forward_m"), Python.list(x.h, out.h), PythonObject(3), prm)
+        var prm = _pool_words(fields, xs, context)
+        var out = xcnn_out_new(entries, pool_run_out_words(prm, xs), context)   # the pool stores every word
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(out.h)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_avg_forward_m(key, 3, addrs[0], addrs[1], prm)
         _set(fields, "_xshape", xcnn_tuple(xs))
         return out
     var a = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(a)
-    if len(xs) != 4:
-        raise Error("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
+    pool_run_check_nchw(xs, "AvgPool2d")
     var entries = xcnn_entries(fields, context)
-    var pw = _pool_words(fields, xs, context)
-    var prm = _pool_list(pw)
-    var out = xcnn_host_f32(_pool_out_words(pw, xs), context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_avgpool2d_forward"), xcnn_addr(a), xcnn_addr(out), prm)
+    var prm = _pool_words(fields, xs, context)
+    var out = xcnn_host_f32(pool_run_out_words(prm, xs), context)
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_ptr(a), xcnn_ptr(out)]
+    var py = Python()
+    with GILReleased(py):
+        pool_run_avg_forward(key, addrs[0], addrs[1], prm)
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
     _set(fields, "_xshape", xcnn_tuple(xs))
@@ -203,8 +194,7 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
     var name = _class_name(model)
     if xcnn_is_t(x, context):
         var s = xcnn_shape(x)
-        if len(s) != 3:
-            raise Error("mojolearn: " + name + ".forward takes (N, C, L)")
+        pool_run_check_ncl(s, name)
         var out = _pool2d_forward(model, xcnn_reshape_t(x, [s[0], s[1], 1, s[2]], context), context)
         var o = xcnn_shape(out)
         if xcnn_is_t(out, context):
@@ -212,8 +202,7 @@ def xcnn_pool_forward(model: PythonObject, x: PythonObject, context: PythonObjec
         return xcnn_reshape(out, [o[0], o[1], o[3]], context)
     var a = xcnn_f32(x, "x", context)
     var s = xcnn_shape(a)
-    if len(s) != 3:
-        raise Error("mojolearn: " + name + ".forward takes (N, C, L)")
+    pool_run_check_ncl(s, name)
     var out = _pool2d_forward(model, xcnn_reshape(a, [s[0], s[1], 1, s[2]], context), context)
     var o = xcnn_shape(out)
     return xcnn_reshape(out, [o[0], o[1], o[3]], context)
@@ -276,8 +265,7 @@ def _pool_shape_words(value: PythonObject, name: String, context: PythonObject) 
     var shape = List[Int]()
     for i in range(len(sequence)):  # driver-loop: finite native rank metadata
         var word = _pool_int(sequence[i], context)
-        if word < 0:
-            raise Error("mojolearn: negative pool shape")
+        pool_run_check_dim(word)
         shape.append(word)
     return shape^
 
@@ -294,8 +282,7 @@ def xcnn_pool_init(model: PythonObject, args: PythonObject, context: PythonObjec
     var divisor = args[6]
     if divisor is not None:
         var d = _pool_int(divisor, context)
-        if d <= 0:
-            raise Error("mojolearn: divisor must be not zero")
+        pool_run_check_divisor(d)
         divisor = PythonObject(d)
     var input_shape = args[7]
     if input_shape is not None:
@@ -315,54 +302,55 @@ def xcnn_pool_init(model: PythonObject, args: PythonObject, context: PythonObjec
     return PythonObject(None)
 
 
-def _pool_check_shape(actual: List[Int], expected: List[Int]) raises:
-    if len(actual) != len(expected):
-        raise Error("mojolearn: grad_out rank differs from the pool output")
-    for i in range(len(expected)):  # driver-loop: compare gradient dimensions before kernel access
-        if actual[i] != expected[i]:
-            raise Error("mojolearn: grad_out shape differs from the pool output")
-
-
 def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
     var saved = py_get(fields, "_xshape")
     if saved is None:
         raise Error("RuntimeError: pool backward requires forward first")
     var shape = _pool_shape_words(saved, "_xshape", context)
-    if len(shape) != 4:
-        raise Error("mojolearn: saved pool input must have four dimensions")
+    pool_run_check_saved(shape)
     var entries = xcnn_entries(fields, context)
-    var pw = _pool_words(fields, shape, context)   # one read of the settings serves the shape and every launch
-    var prm = _pool_list(pw)
-    var expected = _pool_out_words(pw, shape)
+    var prm = _pool_words(fields, shape, context)   # one read of the settings serves the shape and every launch
+    var expected = pool_run_out_words(prm, shape)
     var maxed = _is(model, "xcnn_maxpool_class", context)
     var h = py_get(fields, "_idx_dev")
     var dev = py_get(fields, "_dev")
     var resident_idx = h is not None and dev is not None and xcnn_mixed(entries)
     if resident_idx:
-        _pool_check_shape(_pool_shape_words(fields["_idx_shape"], "_idx_shape", context), expected)
+        pool_run_check_shape(_pool_shape_words(fields["_idx_shape"], "_idx_shape", context), expected)
         h = PythonObject(_pool_int(h, context))
         resident_idx = _fields(dev)["b"] is entries["module"]
     if xcnn_is_t(source, context):
-        _pool_check_shape(xcnn_shape(source), expected)
+        pool_run_check_shape(xcnn_shape(source), expected)
         if xcnn_on_dev(entries, source, context) and (not maxed or resident_idx):
             var out = xcnn_out_new(entries, shape, context)
-            if maxed:
-                _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_backward_m"), Python.list(source.h, h, out.h),
-                                  PythonObject(7), prm)
-            else:
-                _ = py_call_typed(xcnn_entry(entries, "x_cnn_avgpool2d_backward_m"), Python.list(source.h, out.h),
-                                  PythonObject(3), prm)
+            var key = xcnn_ref(entries)
+            var g_word = xcnn_word(source.h)
+            var out_word = xcnn_word(out.h)
+            var h_word = xcnn_word(h) if maxed else 0
+            var py = Python()
+            with GILReleased(py):
+                if maxed:
+                    pool_run_max_backward_m(key, 7, g_word, h_word, out_word, prm)
+                else:
+                    pool_run_avg_backward_m(key, 3, g_word, out_word, prm)
             return out
         return xcnn_wrap(entries, _pool_backward2d(model, xcnn_host_of(source, context), context), context)
     var g = xcnn_f32(source, "grad_out", context)
-    _pool_check_shape(xcnn_shape(g), expected)
+    pool_run_check_shape(xcnn_shape(g), expected)
     var out = xcnn_host_f32(shape, context)
     if not maxed:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_avgpool2d_backward"), xcnn_addr(g), xcnn_addr(out), prm)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(g), xcnn_ptr(out)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_avg_backward(key, addrs[0], addrs[1], prm)
     elif resident_idx:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_backward_m"), Python.list(xcnn_addr(g), h, xcnn_addr(out)),
-                          PythonObject(2), prm)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(g), xcnn_word(h), xcnn_ptr(out)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_max_backward_m(key, 2, addrs[0], addrs[1], addrs[2], prm)
     else:
         var held = _layer_indices(model, context)
         if held is None:
@@ -371,8 +359,12 @@ def _pool_backward2d(model: PythonObject, source: PythonObject, context: PythonO
         var idx = sequential_input(held, context)
         if Int(py=idx.dtype.num) != 5 or not Bool(py=idx.dtype.isnative) or not Bool(py=idx.flags.c_contiguous):
             raise Error("TypeError: pool indices must be contiguous native int32")
-        _pool_check_shape(xcnn_shape(idx), expected)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_backward"), xcnn_addr(g), xcnn_addr(idx), xcnn_addr(out), prm)
+        pool_run_check_shape(xcnn_shape(idx), expected)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(g), xcnn_ptr(idx), xcnn_ptr(out)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_max_backward(key, addrs[0], addrs[1], addrs[2], prm)
         _ = idx
     _ = g
     return out
@@ -384,8 +376,7 @@ def xcnn_pool_backward(model: PythonObject, source: PythonObject, context: Pytho
     var tensor = xcnn_is_t(source, context)
     var g = source if tensor else xcnn_f32(source, "grad_out", context)
     var shape = xcnn_shape(g)
-    if len(shape) != 3:
-        raise Error("mojolearn: one-dimensional pool backward takes (N, C, L)")
+    pool_run_check_backward_ncl(shape)
     var expanded = xcnn_reshape_t(g, [shape[0], shape[1], 1, shape[2]], context) if tensor else xcnn_reshape(g, [shape[0], shape[1], 1, shape[2]], context)
     var out = _pool_backward2d(model, expanded, context)
     var result_shape = xcnn_shape(out)
@@ -407,11 +398,7 @@ def xcnn_rows(model: PythonObject, source: PythonObject, required: Bool, context
             if required:
                 raise Error("mojolearn: row input needs input_shape=(C, H, W)")
             return a
-        var dims = List[Int]()
-        dims.append(s[0])
-        var given = _pool_shape_words(shape, "input_shape", context)
-        for i in range(len(given)):  # driver-loop: over the admitted sample shape words
-            dims.append(given[i])
+        var dims = pool_run_row_dims(s[0], _pool_shape_words(shape, "input_shape", context))
         return xcnn_reshape(a, dims, context)
     return a
 
@@ -419,9 +406,7 @@ def xcnn_rows(model: PythonObject, source: PythonObject, required: Bool, context
 def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObject:
     """`out.reshape(out.shape[0], -1)`."""
     var s = xcnn_shape(out_buf)
-    var rest = 1
-    for i in range(1, len(s)):  # driver-loop: over shape words
-        rest *= s[i]
+    var rest = pool_run_flat_rest(s)
     if xcnn_is_t(out_buf, context):
         return xcnn_reshape_t(out_buf, [s[0], rest], context)
     return xcnn_reshape(out_buf, [s[0], rest], context)
@@ -430,37 +415,27 @@ def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObj
 def xcnn_conv_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Conv2d.fit(X)`: the row input's sample size, recorded."""
     var rows = xcnn_rows(model, source, True, context)
-    var s = xcnn_shape(rows)
-    var n = 1
-    for i in range(1, len(s)):  # driver-loop: over shape words
-        n *= s[i]
+    var n = pool_run_flat_rest(xcnn_shape(rows))
     _set(_fields(model), "n_features_in_", PythonObject(n))
     return model
 
 
 # ---------------------------------------------------------------- Dropout2d
 
-def _dropout_words(fields: PythonObject, p: Float64, n: Int, c: Int, hw: Int, context: PythonObject) raises -> PythonObject:
+def _dropout_words(fields: PythonObject, p: Float64, n: Int, c: Int, hw: Int, context: PythonObject) raises -> List[Int]:
     """The mask words of one call (the threshold of p and the seed of
     (random_state, the call count)); advances `calls_`. `p` is the
-    probability the forward already admitted (`_dropout_probability`)."""
-    # Native round-to-even reproduces round(p * 2**32); only bounded integer
-    # metadata is handed to the existing dropout arithmetic entry.
-    var scaled = p * 4294967296.0
-    var threshold = Int(scaled)
-    var fraction = scaled - Float64(threshold)
-    if fraction > 0.5 or (fraction == 0.5 and (threshold & 1) != 0):
-        threshold += 1
+    probability the forward already admitted (`_dropout_probability`).
+    UNPACK reads the seed and the call count; the words are
+    `x_cnn/pool_run.mojo` `pool_run_dropout_words`."""
     var state = fields["random_state"]
     _pool_scalar(state, context)
     state = py_call(xcnn_builtins().int, state)
     ref cpy = Python().cpython()
     var seed = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLongMask")(state._obj_ptr)
     var calls = _pool_int(fields["calls_"], context)
-    var seed_lo = Int(seed & UInt64(2147483647))
-    var seed_hi = Int(((seed >> 31) * UInt64(1000003) + UInt64(calls)) & UInt64(2147483647))
     _set(fields, "calls_", PythonObject(calls + 1))
-    return Python.list(n, c, hw, seed_lo, seed_hi, threshold >> 16, threshold & 0xFFFF)
+    return pool_run_dropout_words(p, seed, calls, n, c, hw)
 
 
 def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -477,43 +452,37 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
                 _set(fields, "_mask_host", PythonObject(None))
                 _set(fields, "_mask_dev", PythonObject(None))
                 return xcnn_reshape_t(x, xs, context)
-            if len(xs) != 3 and len(xs) != 4:
-                raise Error("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
-            var n = 1 if len(xs) == 3 else xs[0]
-            var c = xs[0] if len(xs) == 3 else xs[1]
-            var hw = xs[len(xs) - 2] * xs[len(xs) - 1]
-            var prm = _dropout_words(fields, probability, n, c, hw, context)
-            _ = fields  # keep the Python object alive through the native call above
+            var s4 = pool_run_dropout_shape(xs)
+            var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
             var y = xcnn_new(bt, xs, True, context)   # every path stores each mask and y word
             var h = xcnn_dev_get(model, bt, "mask", xcnn_size(xs), context)
-            _ = py_call_typed(xcnn_entry(bt, "x_cnn_dropout2d_m"), Python.list(x.h, y.h, h), PythonObject(7), prm, fields["p"])
+            var key = xcnn_ref(bt)
+            var addrs: List[Int] = [xcnn_word(x.h), xcnn_word(y.h), xcnn_word(h)]
+            var py = Python()
+            with GILReleased(py):
+                pool_run_dropout_m(key, 7, addrs[0], addrs[1], addrs[2], prm, probability)
             _set(fields, "_mask_host", PythonObject(None))
             _set(fields, "_mask_dev", h)
             _set(fields, "_mask_shape", xcnn_tuple(xs))
             return y
     var a = xcnn_f32(x, "x", context)
-    var b = xcnn_builtins()
     if not training:
         _set(fields, "_mask_host", PythonObject(None))
         _set(fields, "_mask_dev", PythonObject(None))
         return _cnn_float_copy(a, context)
     var xs = xcnn_shape(a)
-    if len(xs) != 3 and len(xs) != 4:
-        raise Error("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
-    var s4 = List[Int]()
-    if len(xs) == 3:
-        s4.append(1)
-    for i in range(len(xs)):  # driver-loop: over shape words
-        s4.append(xs[i])
+    var s4 = pool_run_dropout_shape(xs)
     var prm = _dropout_words(fields, probability, s4[0], s4[1], s4[2] * s4[3], context)
-    _ = fields  # keep the Python object alive through the native call above
     var x4 = xcnn_reshape(a, s4, context)
     var y = xcnn_host_f32(s4, context)
     var entries = xcnn_entries(fields, context)
     if xcnn_mixed(entries):
         var h = xcnn_dev_get(model, entries, "mask", xcnn_size(s4), context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d_m"), Python.list(xcnn_addr(x4), xcnn_addr(y), h),
-                          PythonObject(4), prm, fields["p"])
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(x4), xcnn_ptr(y), xcnn_word(h)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_dropout_m(key, 4, addrs[0], addrs[1], addrs[2], prm, probability)
         _ = y  # keep the Python object alive through the native call above
         _ = x4  # keep the Python object alive through the native call above
         _set(fields, "_mask_host", PythonObject(None))
@@ -521,7 +490,11 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         _set(fields, "_mask_shape", xcnn_tuple(xs))
         return xcnn_reshape(y, xs, context)
     var mask = xcnn_host_f32(s4, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d"), xcnn_addr(x4), xcnn_addr(y), xcnn_addr(mask), prm, fields["p"])
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_ptr(x4), xcnn_ptr(y), xcnn_ptr(mask)]
+    var py = Python()
+    with GILReleased(py):
+        pool_run_dropout(key, addrs[0], addrs[1], addrs[2], prm, probability)
     _ = mask  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = x4  # keep the Python object alive through the native call above
@@ -546,9 +519,7 @@ def _pool_layer(model: PythonObject, entries: PythonObject, k: List[Int], maxed:
         if py_type(hit) is not b.tuple or len(hit) != 2:
             raise Error("TypeError: adaptive pool cache must contain native metadata")
         var cached_shape = _pool_shape_words(hit[0], "pool cache shape", context)
-        if len(cached_shape) != 2:
-            raise Error("TypeError: adaptive pool cache must contain two dimensions")
-        if cached_shape[0] == k[0] and cached_shape[1] == k[1] and py_type(hit[1]) is cls:
+        if pool_run_cache_matches(cached_shape, k) and py_type(hit[1]) is cls:
             # p3-cnn-sequence-tsa (hazard C): the inner pool resolves its
             # binding from its own numeric_mode, so a hit takes the adaptive
             # layer's current mode (a changed mode no longer runs the old one).
@@ -589,8 +560,12 @@ def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonO
                 owner = e
         if owner is None:
             raise Error("RuntimeError: a resident array of a binding this process did not connect")
-        var handle = PythonObject(_pool_int(d["_idx_dev"], context))
-        _ = py_call_typed(owner["symbols"]["x_cnn_res_download"], handle, xcnn_addr(idx), PythonObject(xcnn_size(shape)))
+        var handle = _pool_int(d["_idx_dev"], context)
+        var key = xcnn_ref(owner)
+        var dst = xcnn_ptr(idx)
+        var py = Python()
+        with GILReleased(py):
+            pool_run_download(key, handle, dst, xcnn_size(shape))
         _ = idx  # keep the Python object alive through the native call above
         py_setitem(d, "_idx_host", idx)
         return idx
@@ -614,14 +589,14 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     elif not xt:
         value = xcnn_f32(x, "x", context)
     var xs = xcnn_shape(value)
-    if len(xs) != 4:
-        raise Error("mojolearn: " + _class_name(model) + ".forward takes (N, C, H, W)")
+    if len(xs) != 4:   # the class name is read only for the refusal
+        pool_run_check_nchw(xs, _class_name(model))
     _set(fields, "_xshape", xcnn_tuple(xs))
     _set(fields, "_idx_host", PythonObject(None))
     _set(fields, "_idx_dev", PythonObject(None))
     var o = _adaptive_output(fields, context)
-    if xs[2] % o[0] == 0 and xs[3] % o[1] == 0:
-        var layer = _pool_layer(model, entries, [xs[2] // o[0], xs[3] // o[1]], maxed, context)
+    if pool_run_adaptive_divides(xs, o):
+        var layer = _pool_layer(model, entries, pool_run_adaptive_kernel(xs, o), maxed, context)
         _set(fields, "_layer", layer)
         var out = _pool2d_forward(layer, value, context)
         if maxed and not m:
@@ -629,14 +604,17 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
         return out
     _set(fields, "_layer", PythonObject(None))
     var oshape: List[Int] = [xs[0], xs[1], o[0], o[1]]
-    var prm = Python.list(xs[0], xs[1], xs[2], xs[3], o[0], o[1], 2 if maxed else 0)
+    var prm = pool_run_adaptive_words(xs, o, maxed, False)
     if m:
         var out = xcnn_out_new(entries, oshape, context) if xt else xcnn_host_f32(oshape, context)
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(oshape), context) if maxed else PythonObject(0)
         var bits = (3 if xt else 0) | (4 if maxed else 0)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_adaptive_pool_m"),
-                          Python.list(value.h if xt else xcnn_addr(value), out.h if xt else xcnn_addr(out), h),
-                          PythonObject(bits), prm)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_word(value.h) if xt else xcnn_ptr(value), xcnn_word(out.h) if xt else xcnn_ptr(out),
+                                xcnn_word(h)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_adaptive_m(key, bits, addrs[0], addrs[1], addrs[2], prm)
         _ = out  # keep the Python object alive through the native call above
         _ = value  # keep the Python object alive through the native call above
         if maxed:
@@ -645,7 +623,11 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
         return out
     var out = xcnn_host_f32(oshape, context)
     var idx = xcnn_host_i32(oshape, context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_adaptive_pool"), xcnn_addr(value), xcnn_addr(out), xcnn_addr(idx), prm)
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_ptr(value), xcnn_ptr(out), xcnn_ptr(idx)]
+    var py = Python()
+    with GILReleased(py):
+        pool_run_adaptive(key, addrs[0], addrs[1], addrs[2], prm)
     _ = idx  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = value  # keep the Python object alive through the native call above
@@ -658,8 +640,7 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
 def _cnn_float_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var shape = xcnn_shape(value)
     var out = xcnn_host_f32(shape, context)
-    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(out))),
-           src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(value))), count=xcnn_size(shape))
+    xcnn_run_copy_f32(Int(py=xcnn_addr(out)), Int(py=xcnn_addr(value)), xcnn_size(shape))
     _ = value
     return out
 
@@ -674,8 +655,7 @@ def _cnn_shape_mode(fields: PythonObject, input_shape: PythonObject, mode: Pytho
 def _dropout_probability(value: PythonObject, context: PythonObject) raises -> Float64:
     _pool_scalar(value, context)
     var p = Float64(py=value)
-    if not (p >= 0.0 and p <= 1.0):
-        raise Error("mojolearn: dropout probability has to be between 0 and 1")
+    pool_run_check_probability(p)
     return p
 
 
@@ -703,8 +683,13 @@ def xcnn_dropout_mask(model: PythonObject, context: PythonObject) raises -> Pyth
         var shape = _pool_shape_words(fields["_mask_shape"], "_mask_shape", context)
         mask = xcnn_host_f32(shape, context)
         var entries = xcnn_module_entries(_fields(fields["_dev"])["b"], context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_res_download"), PythonObject(_pool_int(handle, context)),
-                          xcnn_addr(mask), PythonObject(xcnn_size(shape)))
+        var key = xcnn_ref(entries)
+        var handle_word = _pool_int(handle, context)
+        var dst = xcnn_ptr(mask)
+        var py = Python()
+        with GILReleased(py):
+            pool_run_download(key, handle_word, dst, xcnn_size(shape))
+        _ = mask  # keep the Python object alive through the native call above
         _set(fields, "_mask_host", mask)
     return mask
 
@@ -721,11 +706,14 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
                 return xcnn_reshape_t(source, shape, context)
             var dev = py_get(fields, "_dev")
             if handle is not None and dev is not None and _fields(dev)["b"] is entries["module"]:
-                if xcnn_size(shape) != xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)):
-                    raise Error("mojolearn: grad_out does not match the forward's input")
+                pool_run_check_count(xcnn_size(shape),
+                                     xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)))
                 var out = xcnn_new(entries, shape, True, context)
-                _ = py_call_typed(xcnn_entry(entries, "x_cnn_map2_m"),
-                                  Python.list(source.h, _pool_int(handle, context), out.h), PythonObject(7), Python.list(3, xcnn_size(shape)))
+                var key = xcnn_ref(entries)
+                var addrs: List[Int] = [xcnn_word(source.h), _pool_int(handle, context), xcnn_word(out.h)]
+                var py = Python()
+                with GILReleased(py):
+                    pool_run_mask_m(key, 7, addrs[0], addrs[1], addrs[2], xcnn_size(shape))
                 return out
     var g = xcnn_f32(source, "grad_out", context)
     if host is None and handle is None:
@@ -736,15 +724,20 @@ def xcnn_dropout_backward(model: PythonObject, source: PythonObject, context: Py
     var entries = xcnn_entries(fields, context)
     var dev = py_get(fields, "_dev")
     if handle is not None and xcnn_mixed(entries) and dev is not None and _fields(dev)["b"] is entries["module"]:
-        if count != xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)):
-            raise Error("mojolearn: grad_out does not match the forward's input")
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(xcnn_addr(g), _pool_int(handle, context), xcnn_addr(out)),
-                          PythonObject(2), Python.list(3, count))
+        pool_run_check_count(count, xcnn_size(_pool_shape_words(fields["_mask_shape"], "_mask_shape", context)))
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(g), _pool_int(handle, context), xcnn_ptr(out)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_mask_m(key, 2, addrs[0], addrs[1], addrs[2], count)
     else:
         var mask = xcnn_f32(xcnn_dropout_mask(model, context), "mask_", context)
-        if xcnn_size(xcnn_shape(mask)) != count:
-            raise Error("mojolearn: grad_out does not match the forward's input")
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_mul"), xcnn_addr(g), xcnn_addr(mask), xcnn_addr(out), Python.list(count))
+        pool_run_check_count(xcnn_size(xcnn_shape(mask)), count)
+        var key = xcnn_ref(entries)
+        var addrs: List[Int] = [xcnn_ptr(g), xcnn_ptr(mask), xcnn_ptr(out)]
+        var py = Python()
+        with GILReleased(py):
+            pool_run_mul(key, addrs[0], addrs[1], addrs[2], count)
         _ = mask
     _ = g
     return out
@@ -779,8 +772,7 @@ def _adaptive_output(fields: PythonObject, context: PythonObject) raises -> List
     var pair = _pool_pair(fields["output_size"], "output_size", False, context)
     var h = Int(py=pair[0])
     var w = Int(py=pair[1])
-    if h <= 0 or w <= 0:
-        raise Error("mojolearn: adaptive output_size must be positive")
+    pool_run_check_output(h, w)
     return [h, w]
 
 
@@ -806,7 +798,7 @@ def xcnn_adaptive_indices(model: PythonObject, context: PythonObject) raises -> 
 def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: PythonObject) raises -> PythonObject:
     sequential_admit_value(value, context)
     var array = sequential_input(value, context)
-    _pool_check_shape(xcnn_shape(array), shape)
+    pool_run_check_shape(xcnn_shape(array), shape)
     if not Bool(py=array.dtype.isnative):
         raise Error("TypeError: adaptive pool indices require native byte order")
     var code = Int(py=array.dtype.num)
@@ -822,33 +814,7 @@ def _adaptive_host_indices(value: PythonObject, shape: List[Int], context: Pytho
     var dst = Int(py=xcnn_addr(out))
     var count = xcnn_size(shape)
     var item = Int(py=array.dtype.itemsize)
-    var refused = 0
-    if code == 0 or code == 2:
-        refused = _cast_from[DType.uint8](src, HP_I32, dst, count)
-    elif code == 1:
-        refused = _cast_from[DType.int8](src, HP_I32, dst, count)
-    elif code == 3:
-        refused = _cast_from[DType.int16](src, HP_I32, dst, count)
-    elif code == 4:
-        refused = _cast_from[DType.uint16](src, HP_I32, dst, count)
-    elif code == 5 or (code == 7 and item == 4):
-        refused = _cast_from[DType.int32](src, HP_I32, dst, count)
-    elif code == 6 or (code == 8 and item == 4):
-        refused = _cast_from[DType.uint32](src, HP_I32, dst, count)
-    elif code == 7 or code == 9:
-        refused = _cast_from[DType.int64](src, HP_I32, dst, count)
-    elif code == 8 or code == 10:
-        refused = _cast_from[DType.uint64](src, HP_I32, dst, count)
-    elif code == 11:
-        refused = _cast_from[DType.float32](src, HP_I32, dst, count)
-    elif code == 12:
-        refused = _cast_from[DType.float64](src, HP_I32, dst, count)
-    elif code == 23:
-        refused = _cast_from[DType.float16](src, HP_I32, dst, count)
-    else:
-        raise Error("TypeError: adaptive pool indices require a native numeric dtype")
-    if refused != 0:
-        raise Error("TypeError: adaptive pool indices do not fit int32")
+    pool_run_cast_indices(code, item, src, dst, count)
     _ = array
     return out
 
@@ -863,8 +829,7 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
         # Native composition: never invoke the Python layer.backward wrapper.
         return _pool_backward2d(layer, source, context)
     var shape = _pool_shape_words(saved, "_xshape", context)
-    if len(shape) != 4:
-        raise Error("mojolearn: saved adaptive pool input must have four dimensions")
+    pool_run_check_adaptive_saved(shape)
     var output = _adaptive_output(fields, context)
     var expected: List[Int] = [shape[0], shape[1], output[0], output[1]]
     var maxed = _adaptive_max(model, context)
@@ -875,8 +840,8 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
         return xcnn_wrap(entries, xcnn_adaptive_backward(model, xcnn_host_of(source, context), context), context)
     tensor = tensor and mixed
     var g = source if tensor else xcnn_f32(source, "grad_out", context)
-    _pool_check_shape(xcnn_shape(g), expected)
-    var prm = Python.list(shape[0], shape[1], shape[2], shape[3], output[0], output[1], 3 if maxed else 1)
+    pool_run_check_shape(xcnn_shape(g), expected)
+    var prm = pool_run_adaptive_words(shape, output, maxed, True)
     var out = xcnn_out_new(entries, shape, context) if tensor else xcnn_host_f32(shape, context)
     var handle = PythonObject(0)
     var hbit = 0
@@ -885,7 +850,7 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
         var held = py_get(fields, "_idx_dev")
         var dev = py_get(fields, "_dev")
         if mixed and held is not None and dev is not None and _fields(dev)["b"] is entries["module"]:
-            _pool_check_shape(_pool_shape_words(fields["_idx_shape"], "_idx_shape", context), expected)
+            pool_run_check_shape(_pool_shape_words(fields["_idx_shape"], "_idx_shape", context), expected)
             handle = PythonObject(_pool_int(held, context))
             hbit = 4
         else:
@@ -894,12 +859,16 @@ def xcnn_adaptive_backward(model: PythonObject, source: PythonObject, context: P
     elif not mixed:
         idx = xcnn_host_i32(expected, context)
         handle = xcnn_addr(idx)
-    if mixed:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_adaptive_pool_m"),
-                          Python.list(g.h if tensor else xcnn_addr(g), out.h if tensor else xcnn_addr(out), handle),
-                          PythonObject((3 if tensor else 0) | hbit), prm)
-    else:
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_adaptive_pool"), xcnn_addr(g), xcnn_addr(out), handle, prm)
+    var key = xcnn_ref(entries)
+    var addrs: List[Int] = [xcnn_word(g.h) if tensor else xcnn_ptr(g), xcnn_word(out.h) if tensor else xcnn_ptr(out),
+                            xcnn_word(handle)]
+    var py = Python()
+    with GILReleased(py):
+        if mixed:
+            pool_run_adaptive_m(key, (3 if tensor else 0) | hbit, addrs[0], addrs[1], addrs[2], prm)
+        else:
+            pool_run_adaptive(key, addrs[0], addrs[1], addrs[2], prm)
+    _ = out
     _ = idx
     _ = g
     return out

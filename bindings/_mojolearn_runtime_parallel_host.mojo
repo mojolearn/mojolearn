@@ -22,7 +22,6 @@ from bindings.parallel_mlp_native import parallel_mlp_c
 from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
 from std.python.bindings import lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 
 comptime RUNTIME_PARALLEL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -59,7 +58,7 @@ def register_remotestatelifetime(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[RemoteStateLifetime]()
     except error:
-        if not py_type_absent(error, String(reflect[RemoteStateLifetime].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         return

@@ -117,6 +117,8 @@ FAMILIES = (
             "x_metrics/epilogue.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "metrics_program_native_api_v1",
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
             "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_numeric_mode", "x_metrics_vendor",
             # lane metrics-apple3 (2026-09-28): integer label plumbing

@@ -7,7 +7,6 @@ float32; `bf16="bits"` retains uint16 bits and returns a `BF16Weight` for a
 matrix. Other storage types are refused by name. Files are mapped lazily and
 may be closed explicitly or used with a context manager.
 """
-import json
 import mmap
 import os
 
@@ -67,16 +66,6 @@ def widen_f16(bits):
     on a CPU-only one); the per-element Python loop is gone
     (pyglue-text-io, Oct 3). Exact, so every column has the same bits."""
     return _NATIVE.checkpoint_widen_f16(bits)
-
-
-def _parse_header(raw, path):
-    try:
-        header = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as exc:
-        raise ValueError(f"mojolearn.models.safetensors: {path}: the header is not JSON: {exc}") from None
-    if not isinstance(header, dict):
-        raise ValueError(f"mojolearn.models.safetensors: {path}: the header is not a JSON object")
-    return header
 
 
 class SafetensorsFile:

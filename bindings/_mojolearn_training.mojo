@@ -81,6 +81,7 @@ from training.optimizer_native_gpu import OPTIMIZER_NATIVE_GPU_API
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 from checks.vendor import COMPILED_VENDOR
+from core.samba_entry_table_training import publish_samba_training_primitives
 from max.gpu.host import DeviceContext, HostBuffer
 
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
@@ -149,6 +150,7 @@ from core.philox_neural import neural_rng_host
 # device path of SambaStack.forward / step and SambaDecodeSession
 # (training/samba_program.mojo).
 from training.samba_program import SambaStackProgram, SAMBA_PROGRAM_ON
+from training.causal_entry_device import publish_causal_training_device
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -330,7 +332,7 @@ def _handles(handles: PythonObject, want: Int, name: String) raises -> List[Int]
     if len(handles) != want:
         raise Error(name + ": handles must contain " + String(want) + " entries, got " + String(len(handles)))
     var out = List[Int]()
-    for i in range(want):  # small-loop(want: device array handles of one op call): reads handle list, not data
+    for i in range(want):  # driver-loop: over argument words (fixed count, not data); small-loop(want: device array handles of one op call): reads handle list, not data
         out.append(Int(py=handles[i]))
     return out^
 
@@ -554,7 +556,7 @@ def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]
             + String(len(addresses))
         )
     var out = List[Int]()
-    for i in range(want):  # small-loop(want: buffer addresses of one op call): reads pointer list, not data
+    for i in range(want):  # driver-loop: over argument words (fixed count, not data); small-loop(want: buffer addresses of one op call): reads pointer list, not data
         var a = Int(py=addresses[i])
         if a == 0:
             raise Error(name + ": null buffer address at slot " + String(i))
@@ -655,7 +657,7 @@ def mlp_sessions_rows_binding(shapes: PythonObject, width: PythonObject) raises 
     if n == 0:
         raise Error("MLP sessions require at least one (rows, width) input")
     var total = 0
-    for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+    for i in range(n):  # driver-loop: over sessions; small-loop(n: session shape tuples): reads caller metadata, not data
         var shape = shapes[i]
         if len(shape) != 2 or Int(py=shape[1]) != w or Int(py=shape[0]) < 0:
             raise Error("MLP sessions require at least one (rows, width) input")
@@ -675,7 +677,7 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
         raise Error("neural MLP sessions: metadata length mismatch")
     var inputs = List[Int]()
     var rows = List[Int]()
-    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
+    for i in range(n_sessions):  # driver-loop: over sessions; small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
         inputs.append(Int(py=input_addresses[i]))
         rows.append(Int(py=shapes[i][0]))
     var in_width = Int(py=dims[0])
@@ -787,7 +789,7 @@ def samba_resident_open_binding(
     else:
         _params(params, 9, "samba_resident_open")
         var kinds = List[Int]()
-        for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
+        for i in range(len(layers)):  # driver-loop: over layers; small-loop(layers: one kind code per layer): reads codes, not data
             kinds.append(Int(py=layers[i]))
         var vocab = Int(py=params[0])
         var dm = Int(py=params[1])
@@ -945,7 +947,7 @@ def samba_resident_accumulated_step_binding(
 
 def _int_words(values: PythonObject, name: String) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(values)):  # small-loop(values: state addresses or cursor words of one program call): argument words, not data
+    for i in range(len(values)):  # driver-loop: over argument words (fixed count, not data); small-loop(values: state addresses or cursor words of one program call): argument words, not data
         out.append(Int(py=values[i]))
     return out^
 
@@ -960,7 +962,7 @@ def _nonnull_words(values: PythonObject, name: String) raises -> List[Int]:
 
 def _py_words(words: List[Int]) raises -> PythonObject:
     var out = Python.list()
-    for i in range(len(words)):  # small-loop(words: two cursor words per layer): result words, not data
+    for i in range(len(words)):  # driver-loop: over layers (two cursor words each); small-loop(words: two cursor words per layer): result words, not data
         _ = out.append(PythonObject(words[i]))
     return out
 
@@ -974,7 +976,7 @@ def _samba_program_new(layers: PythonObject, params: PythonObject, param_addr: P
                        name: String) raises -> SambaStackProgram:
     _params(params, 11, name)
     var kinds = List[Int]()
-    for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
+    for i in range(len(layers)):  # driver-loop: over layers; small-loop(layers: one kind code per layer): reads codes, not data
         kinds.append(Int(py=layers[i]))
     var pa = Int(py=param_addr)
     if pa == 0:
@@ -1352,6 +1354,9 @@ def build__mojolearn_training() -> PythonObject:
     # promises quality, never bits.
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_training_device()
         m.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         m.def_function[sha256_hex_binding]("sha256_hex")
         m.def_function[training_vendor_binding]("training_vendor")
@@ -1442,6 +1447,9 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[chunked_lm_head_v2_train_binding]("chunked_lm_head_v2_train")
         m.def_function[training_chunked_lm_head_enabled_binding]("training_chunked_lm_head_enabled")
         m.def_function[training_experiment_profile_binding]("training_experiment_profile")
+        # Native Samba callers read this image's primitive entry from the
+        # table, not through the module (lane calltable-samba-mamba).
+        publish_samba_training_primitives()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_training: ", e))

@@ -79,6 +79,8 @@ FAMILIES = (
             "x_linear/isotonic.mojo", "x_linear/class_prep.mojo", "x_linear/spearman.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "ridge_fit_native_api_v1",
             "x_linear_host_numeric_mode", "x_linear_host_vendor", "x_linear_host_column", "x_linear_host_sabotage",
             "x_linear_fit", "x_linear_decision", "x_linear_decision_codes", "x_linear_numeric_mode", "x_linear_vendor",
             "x_linear_class_prep", "x_linear_spearman_sign", "x_linear_decision_rows",

@@ -147,10 +147,11 @@ def prepare(args):
 
 def _class_of(path):
     import mojolearn as ml
-    arrays = ml._serialize.read_npz(path, (
+    from mojolearn import _serialize as _npz  # the npz reader (a tool codec, not on a product path)
+    arrays = _npz.read_npz(path, (
         "mojolearn-randomforest-1-parallel-groves-1", "mojolearn-extratrees-1-parallel-groves-1",
         "mojolearn-randomforest-1", "mojolearn-extratrees-1"))
-    return getattr(ml, ml._serialize.scalar_str(arrays, "estimator"))
+    return getattr(ml, _npz.scalar_str(arrays, "estimator"))
 
 
 def time_path(args):

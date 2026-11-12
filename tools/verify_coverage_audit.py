@@ -1513,12 +1513,14 @@ ANNOTATIONS = {
     "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
                               "run by bindings/parallel_neighbor_worker.mojo reference_vote"),
     "fold_pair_f32": ("covered", ["cross-vendor-fold"],
-                      "mojolearn.cross_vendor hands it to the native fold at import "
-                      "(_buffer_native('fold_pair_f32')); every ordered_fold and fold_pair runs it"),
+                      "no Python door since lane calltable-parallel-archive: the native fold calls the base "
+                      "image's parallel table entry (core/parallel_entry_table.mojo PB_FOLD_PAIR_F32); "
+                      "every ordered_fold and fold_pair runs it"),
     "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker.mojo ivf_search"),
     "ivf_finalize_distances": ("covered", ["par-ivf"],
-                               "called by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
-                               "`ivf_search`) on a cosine index"),
+                               "run by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
+                               "`ivf_search`) on a cosine index through the IVF image's parallel table entry "
+                               "(PI_FINALIZE), the same body as this door"),
     "pca_fit": ("covered", ["pca", "pca-full-whiten", "pca-whiten"],
                 "the native PCA owner is handed it at connect (_native_pca_bridge.connect)"),
     "x_decomp_pca_mle_rank": ("covered", ["x-decomp-pca-randomized"],
@@ -1615,143 +1617,7 @@ ANNOTATIONS_BY_SRC = {
 # not execution, reference or fault-injection admission. Fixed import-time
 # symbol tables do not prove that a registered ABI wrapper is ever called.
 ANNOTATIONS_BY_SRC.update(
-    {('seq_optimizer_init', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                     ['sequence-rmsprop'],
-                                                                     'RMSprop.__init__ -> '
-                                                                     '_SEQ_NATIVE(seq_construct) -> '
-                                                                     'seq_construct -> verified '
-                                                                     'selected[seq_optimizer_init]; '
-                                                                     'source reach only, qualification '
-                                                                     'remains recorded separately'),
-     ('seq_optimizer_step', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                     ['sequence-rmsprop'],
-                                                                     'RMSprop.step -> '
-                                                                     '_SEQ_NATIVE(seq_step) -> seq_step '
-                                                                     '-> verified '
-                                                                     'entries[seq_optimizer_step]; '
-                                                                     'source reach only, qualification '
-                                                                     'remains recorded separately'),
-     ('seq_optimizer_state', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                      ['sequence-rmsprop'],
-                                                                      'opt.state in _sequence_opt_run -> '
-                                                                      '_SEQ_NATIVE(seq_state) -> '
-                                                                      'verified '
-                                                                      'entries[seq_optimizer_state]; '
-                                                                      'source reach only, qualification '
-                                                                      'remains recorded separately'),
-     ('seq_optimizer_close', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                      ['sequence-rmsprop'],
-                                                                      '_sequence_opt_run optimizer '
-                                                                      'finalization -> '
-                                                                      '_SEQ_NATIVE(seq_finalize) -> '
-                                                                      'verified '
-                                                                      'entries[seq_optimizer_close]; '
-                                                                      'source reach only, qualification '
-                                                                      'remains recorded separately'),
-     ('seq_optimizer_export', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                       ['sequence-optimizer-state'],
-                                                                       'NAdam/RMSprop.state_dict -> '
-                                                                       '_SEQ_NATIVE(seq_export) -> '
-                                                                       'verified '
-                                                                       'entries[seq_optimizer_export]; '
-                                                                       'source reach only, qualification '
-                                                                       'remains recorded separately'),
-     ('seq_optimizer_import', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                       ['sequence-optimizer-state'],
-                                                                       'NAdam/RMSprop.load_state_dict -> '
-                                                                       '_SEQ_NATIVE(seq_import) -> '
-                                                                       'verified '
-                                                                       'entries[seq_optimizer_import]; '
-                                                                       'source reach only, qualification '
-                                                                       'remains recorded separately'),
-     ('seq_adafactor_step', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                     ['sequence-adafactor'],
-                                                                     'Adafactor.step -> '
-                                                                     '_SEQ_NATIVE(seq_step), kind5 -> '
-                                                                     'verified '
-                                                                     'entries[seq_adafactor_step]; '
-                                                                     'source reach only, qualification '
-                                                                     'remains recorded separately'),
-     ('seq_lamb_step', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
-                                                                ['sequence-lamb'],
-                                                                'LAMB.step -> _SEQ_NATIVE(seq_step), '
-                                                                'kind6 -> verified '
-                                                                'entries[seq_lamb_step]; source reach '
-                                                                'only, qualification remains recorded '
-                                                                'separately'),
-     ('seq_optimizer_init', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                          ['sequence-rmsprop'],
-                                                                          'RMSprop.__init__ -> '
-                                                                          '_SEQ_NATIVE(seq_construct) -> '
-                                                                          'seq_construct -> verified '
-                                                                          'selected[seq_optimizer_init]; '
-                                                                          'source reach only, '
-                                                                          'qualification remains '
-                                                                          'recorded separately'),
-     ('seq_optimizer_step', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                          ['sequence-rmsprop'],
-                                                                          'RMSprop.step -> '
-                                                                          '_SEQ_NATIVE(seq_step) -> '
-                                                                          'seq_step -> verified '
-                                                                          'entries[seq_optimizer_step]; '
-                                                                          'source reach only, '
-                                                                          'qualification remains '
-                                                                          'recorded separately'),
-     ('seq_optimizer_state', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                           ['sequence-rmsprop'],
-                                                                           'opt.state in '
-                                                                           '_sequence_opt_run -> '
-                                                                           '_SEQ_NATIVE(seq_state) -> '
-                                                                           'verified '
-                                                                           'entries[seq_optimizer_state]; '
-                                                                           'source reach only, '
-                                                                           'qualification remains '
-                                                                           'recorded separately'),
-     ('seq_optimizer_close', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                           ['sequence-rmsprop'],
-                                                                           '_sequence_opt_run optimizer '
-                                                                           'finalization -> '
-                                                                           '_SEQ_NATIVE(seq_finalize) -> '
-                                                                           'verified '
-                                                                           'entries[seq_optimizer_close]; '
-                                                                           'source reach only, '
-                                                                           'qualification remains '
-                                                                           'recorded separately'),
-     ('seq_optimizer_export', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                            ['sequence-optimizer-state'],
-                                                                            'NAdam/RMSprop.state_dict -> '
-                                                                            '_SEQ_NATIVE(seq_export) -> '
-                                                                            'verified '
-                                                                            'entries[seq_optimizer_export]; '
-                                                                            'source reach only, '
-                                                                            'qualification remains '
-                                                                            'recorded separately'),
-     ('seq_optimizer_import', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                            ['sequence-optimizer-state'],
-                                                                            'NAdam/RMSprop.load_state_dict '
-                                                                            '-> _SEQ_NATIVE(seq_import) '
-                                                                            '-> verified '
-                                                                            'entries[seq_optimizer_import]; '
-                                                                            'source reach only, '
-                                                                            'qualification remains '
-                                                                            'recorded separately'),
-     ('seq_adafactor_step', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                          ['sequence-adafactor'],
-                                                                          'Adafactor.step -> '
-                                                                          '_SEQ_NATIVE(seq_step), kind5 '
-                                                                          '-> verified '
-                                                                          'entries[seq_adafactor_step]; '
-                                                                          'source reach only, '
-                                                                          'qualification remains '
-                                                                          'recorded separately'),
-     ('seq_lamb_step', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
-                                                                     ['sequence-lamb'],
-                                                                     'LAMB.step -> '
-                                                                     '_SEQ_NATIVE(seq_step), kind6 -> '
-                                                                     'verified entries[seq_lamb_step]; '
-                                                                     'source reach only, qualification '
-                                                                     'remains recorded separately'),
-     ('optimizer_resident_open', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+    {('optimizer_resident_open', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
                                                                           [],
                                                                           'Import-time native '
                                                                           'registration/admission probes '
@@ -2016,9 +1882,9 @@ ANNOTATIONS_BY_SRC.update({
 # class slot or a finalizer descriptor), so the Python graph cannot see the
 # call; each annotation names the public operation the lane runs and the
 # native call site that takes the entry.
-_HOST_TREE = ("the saved-model owner (bindings/host_tree_native.mojo) calls the forest binding's entry by "
-              "name from the table _native_host_archive_bridge.connect hands it at import "
-              "(`host_tree_entries`); ")
+_HOST_TREE = ("the saved-model owner (bindings/host_tree_native.mojo) runs the same body through the forest "
+              "binding's native entry in the host entry table (core/host_entry_table.mojo), keyed by the "
+              "`host_tree_native_key` _native_host_archive_bridge.connect records at import; ")
 _FOREST = "bindings/_mojolearn_forest_host.mojo"
 _TOK = "bindings/_mojolearn_tokenizer_host.mojo"
 ANNOTATIONS_BY_SRC.update({
@@ -2295,15 +2161,15 @@ ANNOTATIONS.update({
         "covered", ["par-forest", "par-forest-et", "par-forest-et-clf", "par-forest-reg"],
         "parallel_ensemble.fit_forest is one native call (bindings/parallel_shard_native.mojo "
         "fit_forest -> _fit_forest), which rebases the tree ranges' node offsets through "
-        "_rebase_offsets with the worker binding's msel_rebase_offsets_i32 "
-        "(_native_parallel_shard._WORKER_BINDINGS['_mojolearn'], the core host twin on a CPU install); "
+        "_rebase_offsets through the base image's parallel table entry (PB_REBASE_OFFSETS; no Python "
+        "door since lane calltable-parallel-archive; the core host twin on a CPU install); "
         "the four lanes fit 16 trees in four ranges and are held to the plain fit"),
     "shard_topk_merge_f32": (
         "covered", ["par-reference-knn", "par-reference-knn-reg"],
         "ReferenceShardedNeighbors.kneighbors/predict/predict_proba are one native call "
         "(bindings/parallel_shard_native.mojo reference_query -> _reference_query), which merges every "
-        "reference block's candidates with the reference_merge entry _native_parallel_shard._connect_merge "
-        "resolved (_buffer._native('shard_topk_merge_f32')); both lanes query four reference blocks and "
+        "reference block's candidates through the base image's parallel table entry (PB_TOPK_MERGE_F32; "
+        "no Python door since lane calltable-parallel-archive); both lanes query four reference blocks and "
         "are held to the plain estimator"),
     "linear_constructor_native_call": (
         "covered", ["public-set-params", "x-huber-outliers"],
@@ -2466,8 +2332,10 @@ _METADATA = "a metadata answer (a profile word, count or flag of the build or th
 SABOTAGE_NA_ENTRIES = {
     **{e: _LIFECYCLE for e in (
         "kmeans_centers_release", "kernel_ridge_resident_release", "knn_index_release", "kde_fit_release",
-        "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
+        "forest_release_gpu", "moe_weights_free",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
+        "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
+        "x_trees_tree_shap_cache_release",
         "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
         "rf_data_session_open", "rf_data_session_close")},
     **{e: _METADATA for e in (

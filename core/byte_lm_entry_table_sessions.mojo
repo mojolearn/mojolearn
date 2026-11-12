@@ -1,0 +1,251 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Resident byte LM trainer sessions as native registry handles (lane
+byte-lm-sessions-native, 2026-11-11).
+
+Family `BYTE_LM_TABLE_SESSIONS` of the byte LM tables
+(`core/byte_lm_entry_table.mojo` holds the trainer and sequence optimizer
+families). Each byte LM image publishes one session entry beside its trainer
+table: `_mojolearn_byte_lm` (vendor COMPILED_VENDOR, publisher
+`training/byte_lm_session_entry.mojo`) and `_mojolearn_byte_lm_host` (vendor
+cpu, `training/byte_lm_host_session_entry.mojo`).
+
+The entry owns the image's resident sessions in a `core/state_registry.mojo`
+registry (generation-checked handles, Arc leases). It replaces the Python
+session object of the resident trainer (`byte_lm_session_create`, the
+`byte_lm_native_session_handle_v1` handle factory and the provider object
+of `byte_lm_trainer_api_v1`): the trainer door holds a `StateHandle` only.
+
+Operations (the descriptor shape of `core/native_descriptor_abi.mojo`):
+- `BS_CREATE`: a = [out], writes out[0] = handle index, out[1] = handle
+  generation. A new session is closed and owns no device memory (creation is
+  lazy, as `byte_lm_session_create` was).
+- `BS_RUN`: one trainer operation on the session: p = [index, generation,
+  trainer operation, trainer words...], a = the trainer descriptors after
+  the session, f = the trainer scalars. The entry holds the session's lease
+  for the call, so a concurrent release cannot free it under the call.
+- `BS_CLOSE`: p = [index, generation]; releases the handle. The session's
+  native destructor (device teardown) runs when the last lease drops.
+A stale or foreign handle refuses ("state is not fitted or was released").
+
+Table names carry the tier and vendor as the trainer table's do. Extending
+the layout requires a new V suffix. Publication and lookup are small
+metadata operations with no independent numerical work to split.
+"""
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
+from std.sys import is_defined
+from std.sys.info import size_of
+from core.native_call_output import NativeCallOutput
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call_spans
+from core.state_registry import StateHandle
+from core.byte_lm_entry_table import ByteLmEntryKey
+
+comptime BYTE_LM_SESSIONS_ABI = "mojolearn.training.byte_lm.sessions.v1"
+comptime BS_CREATE = 0
+comptime BS_RUN = 1
+comptime BS_CLOSE = 2
+comptime BS_OP_COUNT = 3
+
+
+def _byte_lm_sessions_key_check(key: ByteLmEntryKey) raises:
+    if key.mode < 0 or key.mode > 1 or key.vendor < 0 or key.vendor > 3:
+        raise Error("native byte LM sessions: invalid tier/vendor key")
+
+
+def byte_lm_sessions_publish(key: ByteLmEntryKey, publisher: Int, entry: NativeDescriptorCall) raises:
+    _byte_lm_sessions_key_check(key)
+    var schemas: List[String] = [String(BYTE_LM_SESSIONS_ABI)]
+    var operations: List[Int] = [BS_OP_COUNT]
+    var entries = List[NativeDescriptorCall]()
+    entries.append(entry)
+    if key.vendor == 0 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalCPUV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 0 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastCPUV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 1 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalMetalV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 1 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastMetalV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 2 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalCUDAV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 2 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastCUDAV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 3 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalHIPV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    if key.vendor == 3 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastHIPV1"
+        entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
+        return
+    raise Error("native byte LM sessions: unsupported execution key")
+
+
+def byte_lm_sessions_entry(key: ByteLmEntryKey) raises -> NativeDescriptorCall:
+    _byte_lm_sessions_key_check(key)
+    comptime SCHEMA = BYTE_LM_SESSIONS_ABI
+    if key.vendor == 0 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalCPUV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 0 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastCPUV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 1 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalMetalV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 1 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastMetalV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 2 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalCUDAV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 2 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastCUDAV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 3 and key.mode == 1:
+        comptime NAME = "MojolearnEntriesByteLmSessionsIdenticalHIPV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    if key.vendor == 3 and key.mode == 0:
+        comptime NAME = "MojolearnEntriesByteLmSessionsFastHIPV1"
+        return entry_table_read[NAME](key.mode, key.vendor, 0, String(SCHEMA), BS_OP_COUNT)
+    raise Error("native byte LM sessions: unsupported execution key")
+
+
+def byte_lm_sessions_published(key: ByteLmEntryKey) -> Bool:
+    """True when the image of `key` publishes resident sessions: the trainer
+    door's resident/stateless choice (it replaced the probe of the six
+    Python session entry names)."""
+    try:
+        _ = byte_lm_sessions_entry(key)
+        return True
+    except:
+        return False
+
+
+# ---------------------------------------------------------------- caller side
+# The caller resolves the sessions entry once (`byte_lm_sessions_ref`, at its
+# session owner's construction; lane entry-table-zero-alloc) and passes the
+# `EntryRef`: every step is one indirect call, no table read.
+
+def byte_lm_sessions_ref(key: ByteLmEntryKey) raises -> EntryRef:
+    """The sessions entry of the image `key` names, resolved once; the table
+    refusals raise here."""
+    return EntryRef(byte_lm_sessions_entry(key), entry_ref_word(key.mode, key.vendor, BS_OP_COUNT))
+
+
+def byte_lm_resident_open(entry: EntryRef) raises -> StateHandle:
+    """A new closed resident session of the resolved image."""
+    var out = List[Int](length=2, fill=0)
+    var a: Array[Int, 1] = [Int(out.unsafe_ptr())]
+    var p: Array[Int, 0] = []
+    var f: Array[Float64, 0] = []
+    _ = entry_ref_call(entry, BS_CREATE, a, p, f)
+    var index = out[0]
+    var generation = out[1]
+    _ = out^  # keep the handle output alive past the synchronous call
+    if index < 0 or generation <= 0:
+        raise Error("native byte LM sessions: creation returned an invalid handle")
+    return StateHandle(index, UInt64(generation))
+
+
+def byte_lm_resident_run(entry: EntryRef, handle: StateHandle, operation: Int, addresses: List[Int],
+                         ints: List[Int], floats: List[Float64], mut words: List[Int]) raises -> Int:
+    """One trainer operation (the `byte_lm_trainer_api_v1` numbering) on the
+    resident session `handle`. `addresses` are the descriptors after the
+    session word. `words` is the request buffer the session owner holds
+    across steps: it is refilled in place (its capacity survives, so a
+    training step allocates no request words after the first; only argument
+    values are rewritten, never reused)."""
+    words.resize(3 + len(ints), 0)
+    words[0] = handle.index
+    words[1] = Int(handle.generation)
+    words[2] = operation
+    for i in range(len(ints)):  # small-loop(the trainer plan words)
+        words[3 + i] = ints[i]
+    return entry_ref_call(entry, BS_RUN, addresses, words, floats)
+
+
+def byte_lm_resident_close(entry: EntryRef, handle: StateHandle) raises:
+    """Release the handle; a stale handle refuses."""
+    var a: Array[Int, 0] = []
+    var p: Array[Int, 2] = [handle.index, Int(handle.generation)]
+    var f: Array[Float64, 0] = []
+    _ = entry_ref_call(entry, BS_CLOSE, a, p, f)
+
+
+# ---------------------------------------------------------------- publisher side
+
+def byte_lm_sessions_handle(p: List[Int]) raises -> StateHandle:
+    """The handle words p[0:2] of a run or close request."""
+    if len(p) < 2 or p[0] < 0 or p[1] <= 0:
+        raise Error("native byte LM sessions: invalid session handle")
+    return StateHandle(p[0], UInt64(p[1]))
+
+
+def byte_lm_sessions_check_create(a: List[Int]) raises:
+    """Checked before the session is inserted, so a refused create leaves
+    nothing in the registry."""
+    if len(a) != 1 or a[0] == 0:
+        raise Error("native byte LM sessions: create takes one handle output")
+
+
+def byte_lm_sessions_write_handle(a: List[Int], handle: StateHandle) raises -> Int:
+    byte_lm_sessions_check_create(a)
+    var out = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[0])
+    out[0] = handle.index
+    out[1] = Int(handle.generation)
+    return 0
+
+
+def byte_lm_sessions_run(entry: NativeDescriptorCall, session: Int, a: List[Int], p: List[Int],
+                         f: List[Float64]) raises -> Int:
+    """One run request on the image's trainer entry: the session address
+    first, then the caller's descriptors; the trainer words p[3:] and the
+    scalars pass as spans of the admitted request, not copied into new Lists
+    (perf-audit-3: the former `ByteLmSessionRequest` copied p[3:] per step)."""
+    if len(p) < 3 or session == 0:
+        raise Error("native byte LM sessions: invalid run request")
+    var addresses = List[Int](capacity=len(a) + 1)
+    addresses.append(session)
+    for i in range(len(a)):  # small-loop(the trainer descriptors of one call)
+        addresses.append(a[i])
+    var ints = Int(p.unsafe_ptr()) + 3 * size_of[Int]()
+    var result = 0
+    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
+        var held = List[NativeCallOutput]()
+        held.append(NativeCallOutput())
+        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
+            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), held[0])
+        _ = held
+    else:
+        var output = NativeCallOutput()
+        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
+            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), output)
+        _ = output
+    # Raw span addresses do not themselves retain their List owners.
+    _ = addresses
+    _ = p
+    _ = f
+    return result
+
+
+def byte_lm_sessions_floats(ff: Int, nf: Int) raises -> List[Float64]:
+    if nf < 0 or (nf > 0 and ff == 0):
+        raise Error("native byte LM sessions: null scalar span")
+    var f = List[Float64]()
+    var fp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
+    for i in range(nf):  # small-loop(the eight optimizer scalars)
+        f.append(fp[i])
+    return f^

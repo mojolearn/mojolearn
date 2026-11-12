@@ -124,13 +124,6 @@ def dtype_name(obj, pb):
     return _FORMAT_NAMES.get(code, repr(pb.format))
 
 
-def nelems(shape):
-    n = 1
-    for s in shape:  # glue: product of shape dimensions
-        n *= int(s)
-    return n
-
-
 def memcopy(dst_addr, src_addr, nbytes):
     """`memmove` on raw addresses. Both buffers must be alive and
     contiguous for `nbytes`; the caller holds the owning objects."""
@@ -172,13 +165,6 @@ def flat_view(obj, code):
     if mv.ndim == 1 and mv.format == code:
         return mv
     return mv.cast("B").cast(code)
-
-
-def ctypes_view(obj, ctype, count, *, name):
-    """A ctypes array over `obj`'s memory, for the rare exporter whose
-    memoryview cannot be cast (a non-native format string). Slicing with
-    a step yields a list; slice assignment accepts one."""
-    return (ctype * int(count)).from_address(addr_ro(obj, name=name))
 
 
 def strided_rows(src, offset, count, n_rows, row_len, dst):

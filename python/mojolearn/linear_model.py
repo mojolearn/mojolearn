@@ -18,7 +18,7 @@ import array
 import numbers
 from . import _portable_math as math
 
-from . import _backend, _mojolearn_estimators, _serialize
+from . import _backend, _mojolearn_estimators
 from ._array import Array
 from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
@@ -46,17 +46,6 @@ _LOGISTIC_FORMAT = "mojolearn-logistic-1"
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-
-def _saved_mode(est):
-    """The tier `predict` would run on now, persisted as GradientBoosting
-    persists it, so a loaded model never silently changes tier."""
-    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
-    if not isinstance(mode, str) or mode.strip().lower() not in (
-        "fast", "identical"
-    ):
-        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-    return mode.strip().lower()
 
 
 # ---------------------------------------------------------------------------
@@ -155,21 +144,9 @@ def _accuracy_host(pred, y):
     return accuracy_fraction(y, pred)
 
 
-def _r2_sums(pred, y):
-    """`(SS_res, SS_tot)` for scikit-learn's R^2 from float32 predictions
-    and the target cast once to float32: the x_metrics binding's grouped
-    sums (`_expansion_metrics`'s `reg_term` and pinned-sum stages, on the
-    device on a GPU install, the same words on the host column), the
-    target mean first, then both sums of squares, binary64 out. Lane
-    pyglue-sweep (Oct 3): these were sequential Python float64 loops over
-    the rows (DEVIATION 2365); the bits of `score()` move. Callers apply
-    their own convention for `SS_tot == 0`."""
-    from ._expansion_metrics import _Reg, _r2_sums_of
-    t, _ = as_f32_c(y, ndim=1, name="y")
-    p, _ = as_f32_c(pred, ndim=1, name="predictions")
-    r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
-    # lane cpu2-l7-metrics: one program, the y mean rounded on the device
-    return _r2_sums_of(r, None)
+# TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners
+# are core/linear_score_program.mojo and bindings/svc_common.mojo `svc_r2_sums`) deleted 2026-11-11 by lane
+# pyout-metrics-cnn; code recoverable at 6f82d0255d.
 
 
 # The centering of LinearRegression and Ridge (lane hr-small-passes,
@@ -304,50 +281,13 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     return check_sample_weight(sample_weight, n_rows)
 
 
-def _optional_export(b, name):
-    """`name` from binding `b`, or None when it does not export it. A host
-    binding's stand-in raises ImportError (by name) for a missing export
-    rather than AttributeError, so a plain getattr default never applies on a
-    CPU-only install, and LinearRegression.fit raised there."""
-    try:
-        return getattr(b, name, None)
-    except (ImportError, AttributeError):
-        return None
-
-
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
-def _ols_tsqr_centered(x, y, rows, cols, mode):
-    """`(coef_, column means, y mean)` of the unweighted fit with an
-    intercept in ONE binding entry (lane idn-dense-linalg,
-    `x_decomp_ols_tsqr_r`): X and y cross to the device once; the exact
-    column sums, the means, the centering and the blocked TSQR of
-    [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
-    on the small R. The same words as `_column_means` + `_center` +
-    `_ols_tsqr`, which crossed X four times. None when the binding does not
-    route here (an older binding or a FAST build): the caller keeps that
-    sequence. The IDENTICAL off arm (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF) was
-    deleted 2026-10-08 (grid ge123e6f9: 2.97x/1.74x istella, 6.17x/3.83x
-    taxi slower on NV/AMD); recoverable at main 42d1e42c6."""
-    from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
-    k = _Kit(_mode(mode))
-    flags = _optional_export(k._raw(), "x_decomp_idn_flags")
-    if flags is None or not int(flags()) & 1:
-        return None
-    n = cols + 1
-    Ra = _M.zeros(n, n)
-    mu = empty((cols,), "<f4")
-    ymean = empty((1,), "<f8")
-    # ORDER MATCHES x_decomp/api.mojo ols_tsqr_r_py: (a, b, r_out, mu, ymean), (m, d)
-    k.b.x_decomp_ols_tsqr_r(addr_ro(x, name="X"), addr_ro(y, name="y"), Ra.addr,
-                            addr(mu, name="column means"), addr(ymean, name="y mean"),
-                            [int(rows), int(cols)])
-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
-    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
-    return X.out((cols,)), mu, float(ymean.tolist()[0])
+# TOMBSTONE: `_ols_tsqr_centered` (the Python OLS one-entry TSQR solve on the decomp
+# kit) deleted 2026-11-11 by lane pyout-decomp-linalg: it had no caller (the native
+# linear owner, bindings/x_linear_native.mojo, runs the fit). Code recoverable at 6f82d0255d.
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):

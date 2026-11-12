@@ -59,6 +59,7 @@ run gradient-build 600 pixi run mojo build -j 2 --target-cpu x86-64-v3 \
     -o "$OUT/train-gradient-capture"
 run gradient-capture 180 env MOJOLEARN_TRAIN_CAPTURE_OUTPUT="$OUT/gradient-capture" \
     "$OUT/train-gradient-capture"
+run gradient-seal 60 "$PY" tools/transformer_training_gradient_oracle.py seal "$OUT/gradient-capture"
 run gradient-oracle 180 "$PY" tools/transformer_training_gradient_oracle.py \
     "$OUT/gradient-capture" --expected-vendor "$vendor" --output "$OUT/gradient-oracle.json"
 # A failed prerequisite stops here. Never broaden a run after a failed gate.

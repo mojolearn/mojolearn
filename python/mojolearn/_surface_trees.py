@@ -48,7 +48,7 @@ FAMILIES = (
             "trees-shap-kernel",
             "trees-shap-permutation",
             # lane verify-coverage-20261024: MultiOutputRegressor over Ridge,
-            # the fused multi-target ridge predict (ridge_predict_multi)
+            # the fused multi-target ridge predict (the ridge multi table's RM_PREDICT)
             "multioutput-ridge",
         ),
         inference_lanes=(),
@@ -79,6 +79,8 @@ FAMILIES = (
         host_modules=("xtrees/ops.mojo", "providers/python/xtrees_api_pyapi.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
                       "xtrees/dart_units.mojo", "xtrees/dart_host.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "label_weights_native_api_v1",
             "x_trees_host_numeric_mode", "x_trees_host_vendor", "x_trees_host_column", "x_trees_host_sabotage",
             "x_trees_numeric_mode", "x_trees_vendor",
             "x_trees_sample_indices", "x_trees_weighted_sample", "x_trees_gather_f32", "x_trees_gather_i32",
@@ -100,9 +102,8 @@ FAMILIES = (
             "x_trees_count_rows", "x_trees_count_equal", "x_trees_oob_r2", "x_trees_class_counts",
             "x_trees_remap_cols", "x_trees_positive_codes", "x_trees_spread_leaves", "x_trees_leaf_numbering",
             "x_trees_iota_i32", "x_trees_fill_class_major_f64", "x_trees_code_counts", "x_trees_class_rows",
-            # fam2-forests: IDN_DART_DEVICE host twin, native tree shape, SHAP device-model entries
-            "x_trees_dart_open", "x_trees_dart_step", "x_trees_dart_add", "x_trees_dart_close",
-            "x_trees_dart_predict",
+            # fam2-forests: native tree shape, SHAP device-model entries (the x_trees_dart_* round and
+            # predict entries left with lane calltable-gbdt-forest-dart: native DART table only)
             "x_trees_tree_shape",
             # perf lanes: the fused OneVsRest and calibrated-probability epilogues
             "x_trees_ovr_assemble", "x_trees_calibrated_proba",

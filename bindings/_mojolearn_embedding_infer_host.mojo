@@ -32,7 +32,14 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.embedding_host_forward import embedding_forward_binding
+from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_forward_words
+from core.shared_slot import SharedSlot
+from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
+from core.neural_entry_table import (
+    NeuralEntryKey, neural_table_publish, neural_entry_spans, neural_entry_result,
+    NEURAL_TABLE_EMBEDDING_INFER, EMB_OP_FORWARD,
+)
 from embedding.host.embedding_host import EMBEDDING_HOST_SABOTAGE
 
 
@@ -73,6 +80,46 @@ def embedding_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
+
+def embedding_infer_neural_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+        result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's Embedding descriptor entry (core/neural_entry_table.mojo
+    family NEURAL_TABLE_EMBEDDING_INFER): FORWARD, the same word functions the Python
+    entries run. Every other operation refuses."""
+    try:
+        var spans = neural_entry_spans(aa, na, pp, np, ff, nf, result, 0)
+        # perf-audit-3 (pattern 3): the two spans are read in place (no copy per call).
+        ref a = spans[0]
+        ref p = spans[1]
+        var value: Int
+        if op == EMB_OP_FORWARD:
+            value = embedding_host_forward_words(a, p)
+        else:
+            raise Error("embedding host entry: unavailable operation")
+        neural_entry_result(result, value)
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+struct EmbeddingInferNeuralAPI(Defaultable, Movable):
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(embedding_infer_neural_v1)
+
+
+comptime NATIVE_EMBEDDINGINFERNEURAL_API = SharedSlot[EmbeddingInferNeuralAPI, ("MojolearnEmbeddingInferNeuralAPIIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnEmbeddingInferNeuralAPIFastV1")]
+
+
+def publish_neural_embedding_infer_host() raises:
+    """Module init of `_mojolearn_embedding_infer_host`: publish under (tier, cpu)."""
+    var api = NATIVE_EMBEDDINGINFERNEURAL_API.get_or_create_ptr()
+    neural_table_publish[NEURAL_TABLE_EMBEDDING_INFER](NeuralEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api), api[].entries[0])
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_embedding_infer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -80,6 +127,9 @@ def build__mojolearn_embedding_infer_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_embedding_infer_host")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_embedding_infer_host()
         module.def_function[embedding_infer_host_numeric_mode_binding]("embedding_infer_host_numeric_mode")
         module.def_function[embedding_infer_host_vendor_binding]("embedding_infer_host_vendor")
         module.def_function[embedding_infer_host_column_binding]("embedding_infer_host_column")

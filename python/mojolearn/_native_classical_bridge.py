@@ -173,8 +173,10 @@ def _state_context():
     context.update(connect_warnings())
     context.update(_classical_doors(_binding))
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+    # CPython 3.14 builds builtin C types as heap types, so the former `__flags__ & 512`
+    # (heap-type) test no longer tells a subclass from the builtin (2026-11-12, MAX 26.7 pixi env).
     archive_mmap = context["owner_mmap_class"]
-    if (type(archive_mmap) is not type or archive_mmap.__flags__ & 512
+    if (type(archive_mmap) is not type
             or archive_mmap.__module__ != "mmap" or archive_mmap.__name__ != "mmap"
             or not isinstance(archive_mmap.__new__, BuiltinFunctionType)
             or not isinstance(archive_mmap.__init__, WrapperDescriptorType)):

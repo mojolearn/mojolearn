@@ -9,8 +9,7 @@ from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from glm.linear_fit_device import linear_fit_device_v1
 from glm.linear_predict_device import linear_predict_device_v1
-from std.python.bindings import lookup_py_type_object
-from bindings.native_owner_registry import register_native_owner, native_owner_no_pins
+from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
 from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
@@ -104,15 +103,17 @@ from glm.impl.gram_solve import linear_gram_fit_host
 from core.gram_multi_gpu import gram_plan_current
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
-from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
+from glm.impl.center_device import col_sums_pair_device, scale_rows_device
 from glm.impl.ols_prep_device import ols_prep_device
-from glm.impl.lm_finish import lm_intercept, lm_means_finish
+from glm.impl.lm_finish import lm_intercept
 from decomposition.impl.pca_owner import pca_randomized_owned
 from decomposition.pca_ops_entry_device import PCA_OPS_DEVICE_API, pca_ops_device_v1, pca_fit_owned_device_run
 from core.decomp_entry_table_pca import pca_ops_publish
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
 from bindings.py_balanced import py_setattr
-from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
+from core.linear_multi_device import (
+    lm_col_sums_run, lm_means_finish_run, lm_center_run, publish_ridge_multi,
+)
 from core.estimators_impl import (
     pca_whiten_overlap_check,
 )
@@ -747,8 +748,7 @@ def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: Py
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        col_sums_device(ctx, xa, oa, nr, nc)
+        lm_col_sums_run(xa, oa, nr, nc)
     return PythonObject(0)
 
 
@@ -769,8 +769,7 @@ def lm_means_finish_binding(
     var t = Float64(py=total)
     if nc <= 0:
         return PythonObject(0)
-    lm_means_finish(_f64_ptr(Int(py=sums_addr)), _f64_ptr(Int(py=mean64_addr)), _f32_ptr(Int(py=mean32_addr)),
-                    nc, nr, weighted, t)
+    lm_means_finish_run(Int(py=sums_addr), Int(py=mean64_addr), Int(py=mean32_addr), nc, nr, weighted, t)
     return PythonObject(0)
 
 
@@ -925,8 +924,7 @@ def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: Pyt
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        center_device(ctx, xa, ma, oa, nr, nc)
+        lm_center_run(xa, ma, oa, nr, nc)
     return PythonObject(0)
 
 
@@ -1134,71 +1132,9 @@ def ridge_fit_resident_binding(
     return PythonObject(0)
 
 
-def ridge_fit_multi_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    ymean_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
-    of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
-    n_features, ymean the n_targets column means. params: n_rows,
-    n_features, n_targets, alpha, center_y (1 subtracts the column means),
-    and optionally xmean_addr, icpt_addr: then icpt[j] = ymean[j] - xmean .
-    coef[j, :] (binary64 products and sum, ascending features; lane
-    pyglue-numeric: a Python fsum per target)."""
-    if len(params) != 5 and len(params) != 7:
-        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y"
-                    " (, xmean_addr, icpt_addr)")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var mp = _f32_ptr(Int(py=ymean_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nt = Int(py=params[2])
-    var alpha = Float32(Float64(py=params[3]))
-    var center = Int(py=params[4]) != 0
-    # The intercept addresses are read with the GIL held, before the one
-    # GIL-released device section that runs the fit and then the intercepts.
-    var want_icpt = len(params) == 7 and nt > 0 and nf > 0
-    var xm = _f32_ptr(Int(py=params[5])) if want_icpt else wp
-    var ic = _f32_ptr(Int(py=params[6])) if want_icpt else wp
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        # ne2-g-linear (N408): the intercepts in the same device session
-        # (`ridge_multi_icpt_kernel` on the device coef and ymean).
-        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center, want_icpt, xm, ic)
-        ctx.synchronize()
-        _ = ctx^
-    return PythonObject(0)
-
-
-def ridge_predict_multi_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    icpt_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): out (n_rows x
-    n_targets, row-major) = X coef^T + icpt. params: n_rows, n_features,
-    n_targets."""
-    if len(params) != 3:
-        raise Error("ridge_predict_multi: params must contain n_rows, n_features, n_targets")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var ip = _f32_ptr(Int(py=icpt_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nt = Int(py=params[2])
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        ridge_predict_multi_host(ctx, xp, cp, ip, op, nr, nf, nt)
-        ctx.synchronize()
-    return PythonObject(0)
+# TOMBSTONE: ridge_fit_multi / ridge_predict_multi Python exports (no live caller: MultiOutputRegressor's
+# one-program ridge reaches core/linear_multi_device.mojo through the ridge multi table) deleted
+# 2026-11-11 by lane calltable-base-helpers; code recoverable at 17b0a91b04.
 
 
 def qn_fit_binding(
@@ -1740,7 +1676,6 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[inverse_transform_binding]("inverse_transform")
         # Device-resident TruncatedSVD components (lane ne1-a-decomp-resident).
         _ = m.add_type[TsvdResidentLease]("_TsvdResidentLease")
-        register_native_owner(lookup_py_type_object[TsvdResidentLease](), m.module, native_owner_no_pins)
         m.def_function[tsvd_resident_lease_binding]("tsvd_resident_lease")
         m.def_function[tsvd_resident_stats_binding]("tsvd_resident_stats")
         m.def_function[tsvd_transform_resident_binding]("tsvd_transform_resident")
@@ -1776,9 +1711,8 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[ridge_resident_default_binding]("ridge_resident_default")
         m.def_function[linear_gram_fit_binding]("linear_gram_fit")
         m.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
-        comptime if MULTIOUT_RIDGE:
-            m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
-            m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
+        # TOMBSTONE: ridge_fit_multi / ridge_predict_multi registrations deleted 2026-11-11 by lane
+        # calltable-base-helpers (see above); code recoverable at 17b0a91b04.
         m.def_function[qn_fit_binding]("qn_fit")
         comptime if QN_OVR_ONE_UPLOAD:
             m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
@@ -1789,8 +1723,13 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         var published_module = m.finalize()
+        # The owner identity needs the finalized type object (Mojo 1.2 creates
+        # it in finalize(); see bindings/native_owner_registry.mojo).
+        register_native_owner_type[TsvdResidentLease](published_module, native_owner_no_pins)
         _publish_linear_entry_table()
         _publish_estimators_qn_table()
+        # The ridge multi table (core/linear_entry_table_multi.mojo).
+        publish_ridge_multi()
         _publish_decomp_pca_ops(published_module)
         return published_module
     except e:

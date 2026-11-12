@@ -81,6 +81,13 @@ def connect(tables, solver=None):
             helpers[name] = _native(name)
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
             helpers[name] = _refusal(error)
+    # glue: once at import, the base helper table key the native door reads
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        helpers["base_native_key"] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        helpers["base_native_key"] = _refusal(error)
     from ._labels import ClassLabels
     # The connected public class-label type native classifier fits publish.
     context.update(classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),

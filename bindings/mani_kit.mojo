@@ -272,7 +272,7 @@ def mk_freeze_fitted(fields: PythonObject, names: List[String]) raises:
     """Freeze the fitted matrices a fit stored under `names` (absent names
     are skipped). Called once when the fit returns, so each matrix keeps the
     side the fit left it on."""
-    for i in range(len(names)):  # small-loop(fitted: the fitted-matrix names of one estimator): bounded by the estimator
+    for i in range(len(names)):  # driver-loop: over (fitted: the fitted-matrix names of one estimator): bounded by the estimator
         var value = py_get(fields, PythonObject(names[i]))
         if value is not None:
             matrix_freeze(value)
@@ -399,7 +399,7 @@ def mk_rows(m: PythonObject, a: Int, b: Int, ctx: PythonObject) raises -> Python
     var c = mk_c(m)
     if mk_on_dev(m) and 0 <= a and a < b and b <= mk_r(m) and mk_res_moves(m, (b - a) * c):
         var idx = List[Int]()
-        for i in range(a, b):  # small-loop(rows: the requested row range): bounded by the caller
+        for i in range(a, b):  # native data loop (not a driver loop), no CPython call: (rows: the requested row range): bounded by the caller
             idx.append(i)
         return mk_dev_gather(m, MV_TAKE_ROWS, idx, ctx)
     var store = mk_store(m, ctx)
@@ -439,7 +439,7 @@ def mk_take_cols(m: PythonObject, idx: List[Int], ctx: PythonObject) raises -> P
 
 def mk_col_range(a: Int, b: Int) -> List[Int]:
     var idx = List[Int]()
-    for j in range(a, b):  # small-loop(columns: a column range): bounded by the caller
+    for j in range(a, b):  # native data loop (not a driver loop), no CPython call: (columns: a column range): bounded by the caller
         idx.append(j)
     return idx^
 
@@ -447,7 +447,7 @@ def mk_col_range(a: Int, b: Int) -> List[Int]:
 def mk_desc_range(start: Int, count: Int) -> List[Int]:
     """`list(range(start, start - count, -1))`."""
     var idx = List[Int]()
-    for t in range(count):  # small-loop(components: the selected positions): bounded by n_components
+    for t in range(count):  # driver-loop: native Mojo values, no CPython call: (components: the selected positions): bounded by n_components
         idx.append(start - t)
     return idx^
 
@@ -557,7 +557,7 @@ struct MKit(Movable):
         """`x_decomp_dev_move` on pool ids; words = [op, count, a1, a2, a3,
         ist, ioff, nsrc, ndst, nidx]."""
         var ints: List[Int] = [src, idx, dst]
-        for i in range(len(words)):  # small-loop(params: the ten move words): 10
+        for i in range(len(words)):  # driver-loop: native Mojo values, no CPython call: (params: the ten move words): 10
             ints.append(words[i])
         _ = self.dcall(XD_DEV_MOVE, ints)
 
@@ -629,13 +629,7 @@ struct MKit(Movable):
         except:
             return String("")
 
-    def w4_flags(mut self) -> Int:
-        """`w4_flags()`: 0 on a binding without the entry."""
-        try:
-            var f = mk_required(self.fn_opt("x_decomp_w4_flags"), "x_decomp_w4_flags")
-            return Int(py=py_call(native_loaded_module("builtins").int, py_call(f)))
-        except:
-            return 0
+    # TOMBSTONE: x_decomp_w4_flags probe (DecompKit.w4_flags) deleted with its entry by 292b1af4e0; no caller left.
 
     def enable_lle_precision(mut self) raises:
         """The Apple FAST binding's ordered GEMM and LU for LLE's near-null
@@ -1105,7 +1099,7 @@ struct MKit(Movable):
             _ = diag  # keep the Python object alive through the native call above
             _ = im  # keep the Python object alive through the native call above
         var stats = List[Float64]()
-        for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
+        for i in range(4):  # driver-loop: over (stats: the four lu_aux status words): 4
             stats.append(mk_at(st, i, self.ctx))
         return (stats^, diag, pm, im)
 
@@ -1293,7 +1287,7 @@ struct MKit(Movable):
         var out = self.dout(rows, c)
         var one = self.dev_one()
         var off = 0
-        for i in range(len(ms)):  # small-loop(ms: one Mojo move per stacked matrix): bounded by the caller
+        for i in range(len(ms)):  # driver-loop: over (ms: one Mojo move per stacked matrix): bounded by the caller
             var cnt = mk_n(ms[i])
             if cnt > 0:
                 var im = self.dix(ms[i])
@@ -1636,7 +1630,7 @@ def mk_take_rows_list(m: PythonObject, idx: List[Int], mut hk: MKit, ctx: Python
     if mk_r(m) >= F32_INDEX_MAX:
         raise Error("x_decomp: take_rows exceeds the float32 row-index bound (2^24 rows)")
     var values = List[Float64]()
-    for t in range(len(idx)):  # small-loop(idx: the taken row numbers): bounded by the caller's index list
+    for t in range(len(idx)):  # native data loop (not a driver loop), no CPython call: (idx: the taken row numbers): bounded by the caller's index list
         values.append(Float64(idx[t]))
     var im = mk_of(values, len(idx), 1, ctx)
     var count = len(idx)

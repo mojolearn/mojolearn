@@ -24,7 +24,6 @@
 # Python handlers.
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.memory import unsafe_memcpy
 from std.python import PythonObject
 from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
@@ -34,8 +33,13 @@ from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.decomp_scalar_compare import decomp_equal_admitted, decomp_name_admitted
 from bindings.decomp_scalar_admission import decomp_scalar_repr
 from bindings.decomp_truth_boundary import decomp_truth
-from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_RESIDENT, KDE_CAP_IMMUTABLE
-from core.kde_native_state import KDEFitKey
+from neighbors.neighbors_kde_run import (
+    KDE_DEFAULT_LEAF_SIZE, kde_refuse_bandwidth_name, kde_bandwidth_positive, kde_refuse_bandwidth,
+    kde_refuse_algorithm, kde_refuse_tree_knobs, kde_refuse_names, kde_check_metric_params_count,
+    kde_minkowski_supported, kde_refuse_minkowski, kde_refuse_unfitted, kde_refuse_features,
+    kde_resident_capable, kde_immutable_capable, kde_copy_f32, kde_copy_finite_f32, kde_query_finite_status,
+    kde_fit_key, kde_prepare_request, kde_query_request, kde_resident_query,
+)
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_get, py_contains, py_setitem, py_fields, py_type
 from bindings.classical_arrays import classical_address
@@ -43,14 +47,11 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_call, family_field, family_is_str,
+    family_repr, family_str, family_call, family_field, family_is_str,
 )
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
 # TOMBSTONE: _any_contiguous_address use (the labels admission copy's buffer address read) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from core.host_finite_scan import host_finite_status
-from core.admitted_input import admitted_cast_f32
-from core.cast_in import CAST_KIND_FLOAT
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.p3nc_fitted_freeze import fitted_freeze
@@ -151,8 +152,7 @@ def _kde_copy(value: PythonObject, context: PythonObject) raises -> PythonObject
     for axis in range(len(value.shape)):  # driver-loop: admitted array rank
         shape.append(Int(py=value.shape[axis]))
     var result = kde_array(shape, context)
-    unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
-           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
+    kde_copy_f32(Int(py=classical_address(result)), Int(py=classical_address(value)), Int(py=value.size))
     _ = result  # keep the Python object alive through the native call above
     _ = value  # keep the Python object alive through the native call above
     return result
@@ -170,9 +170,7 @@ def _kde_copy_finite(value: PythonObject, context: PythonObject) raises -> Pytho
     var result = kde_array(shape, context)
     var rows = Int(py=value.shape[0])
     var cols = Int(py=value.shape[1])
-    # parallel: the copy and the finiteness verdict over row tasks across host cores
-    var ok = admitted_cast_f32(Int(py=classical_address(value)), cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
-                               FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
+    var ok = kde_copy_finite_f32(Int(py=classical_address(value)), Int(py=classical_address(result)), rows, cols)
     _ = value  # keep the Python object alive through the native call above
     admitted_finite_refuse(0 if ok else 1, "KernelDensity")
     return result
@@ -192,52 +190,29 @@ def _kde_validate(fields: PythonObject, context: PythonObject) raises:
     var leaf_size = family_field(fields, "leaf_size")
     var metric_params = family_field(fields, "metric_params")
     if family_is_str(bandwidth):
-        raise Error("NotImplementedError: mojolearn KernelDensity: bandwidth='" + family_str(bandwidth)
-                    + "' is refused; compute "
-                    + "the rule on the host and pass the float (sklearn's scott is "
-                    + "n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))")
+        kde_refuse_bandwidth_name(family_str(bandwidth))
     var width = family_call(b.float, bandwidth)
-    var bw = Float64(py=width)
-    if not (bw > 0.0) or bw != bw:
-        raise Error("mojolearn KernelDensity: bandwidth must be positive, got " + family_repr(width))
+    if not kde_bandwidth_positive(Float64(py=width)):
+        kde_refuse_bandwidth(family_repr(width))
     if algorithm is not None and not decomp_name_admitted(algorithm, "auto"):
-        raise Error("mojolearn KernelDensity: algorithm=" + decomp_scalar_repr(algorithm, context) + " is refused; this is "
-                    + "cuML's brute-force KDE, there is no tree to choose")
+        kde_refuse_algorithm(decomp_scalar_repr(algorithm, context))
     var knobs = not decomp_equal_admitted(atol, PythonObject(0))
     if not knobs:
         knobs = not decomp_equal_admitted(rtol, PythonObject(0))
     if not knobs:
         knobs = not decomp_truth(breadth_first, context)
     if not knobs:
-        knobs = not decomp_equal_admitted(leaf_size, PythonObject(40))
+        knobs = not decomp_equal_admitted(leaf_size, PythonObject(KDE_DEFAULT_LEAF_SIZE))
     if knobs:
-        raise Error("mojolearn KernelDensity: atol/rtol/breadth_first/leaf_size "
-                    + "are tree-traversal knobs; this is brute force (refused)")
+        kde_refuse_tree_knobs()
     if not family_is_str(kernel) or not family_is_str(metric):
-        raise Error("mojolearn KernelDensity: kernel and metric are names")
-    # cuML's rule, `kernel_density.py:302-307`: at most ONE entry, and its
-    # VALUE is taken regardless of its key.
+        kde_refuse_names()
     if decomp_truth(metric_params, context):
-        if len(metric_params) != 1:
-            raise Error("mojolearn KernelDensity: only metrics with a single "
-                        + "argument are supported (cuML raises the same, "
-                        + "kernel_density.py:304-306)")
+        kde_check_metric_params_count(len(metric_params))
         var values = py_call(b.tuple, metric_params.values())
         var p = family_call(b.float, values[0])
-        if Float64(py=p) != 2.0:
-            raise Error("NotImplementedError: mojolearn KernelDensity: metric_params=" + _kde_params_repr(metric_params, context)
-                        + " asks for "
-                        + "Minkowski p=" + family_repr(p) + ". The KERNEL computes any finite "
-                        + "positive normal p (kde/impl/distance/distance.mojo, "
-                        + "DEVIATION 552) and kde/estimator.mojo takes it as "
-                        + "`metric_arg`; what is missing is a SLOT IN THE "
-                        + "BINDING -- kde_score_samples_binding length-checks "
-                        + "its params list at exactly 5 entries "
-                        + "(bindings/_mojolearn_estimators.mojo:647, and the same "
-                        + "check in bindings/_mojolearn_estimators_host.mojo:213). "
-                        + "Pass p=2, "
-                        + "or apply the two-line binding change in "
-                        + "kde/README.md's HAND-OFF.")
+        if not kde_minkowski_supported(Float64(py=p)):
+            kde_refuse_minkowski(_kde_params_repr(metric_params, context), family_repr(p))
 
 
 def _kde_params_repr(params: PythonObject, context: PythonObject) raises -> String:
@@ -279,7 +254,7 @@ struct KDEResidentLookup(Movable):
 
 def _kde_handle(model: PythonObject, fields: PythonObject, connection: KDEConnection,
                 context: PythonObject) raises -> KDEResidentLookup:
-    if (connection.capabilities & KDE_CAP_RESIDENT) == 0:
+    if not kde_resident_capable(connection.capabilities):
         return KDEResidentLookup(PythonObject(None), False)
     var b = native_loaded_module("builtins")
     var x = family_field(fields, "_x")
@@ -290,7 +265,7 @@ def _kde_handle(model: PythonObject, fields: PythonObject, connection: KDEConnec
     var bandwidth = family_field(fields, "bandwidth")
     if family_is_str(bandwidth):
         _kde_validate(fields, context)
-    var key = KDEFitKey(Int(py=classical_address(x)), Int(py=x.shape[0]), Int(py=x.shape[1]), w_address,
+    var key = kde_fit_key(Int(py=classical_address(x)), Int(py=x.shape[0]), Int(py=x.shape[1]), w_address,
                         _kde_text(kernel, context), _kde_text(metric, context), Float64(py=family_call(b.float, bandwidth)))
     var cached = py_get(fields, "_resident")
     kde_owner_admit(cached)
@@ -304,8 +279,7 @@ def _kde_handle(model: PythonObject, fields: PythonObject, connection: KDEConnec
     lifecycle_admit_fields(fields)
     # The fit's native finite-copy/cast already tested the training set. Keep
     # finite_tested=1 and the existing lazy, once-per-key device upload.
-    var request = KDEPrepareRequest(key.train, key.weights, key.rows, key.features, key.bandwidth,
-                                    w is not None, True, key.kernel.copy(), key.metric.copy())
+    var request = kde_prepare_request(key, w is not None)
     var owner = kde_owner_prepare(model, connection, key, request, x, w)
     lifecycle_admit_fields(fields)
     py_setitem(fields, "_resident", owner)
@@ -331,7 +305,7 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # Opt-in immutable snapshot: transport-only copy of caller bytes.
     # Residency never relies on external mutable pointer identity.
     var connection = KDEConnection(binding)
-    var immutable = (connection.capabilities & KDE_CAP_IMMUTABLE) != 0
+    var immutable = kde_immutable_capable(connection.capabilities)
     if not dense.copied:
         # p3-neighbors-cluster (caller-aliased inputs): the conversion handed
         # back the caller's own float32 buffer, and the resident fit handle
@@ -375,15 +349,14 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     lifecycle_admit_fields(fields)
     var binding = args[0]
     if not py_contains(fields, PythonObject("_x")):
-        raise Error("mojolearn KernelDensity: call fit() first")
+        kde_refuse_unfitted()
     var q = args[1]
     if host_sparse_format(q).byte_length() > 0:
         var dense = _kde_dense(q, context)
         q = dense.array
     var features = family_field(fields, "n_features_in_")
     if not decomp_equal_admitted(q.shape[1], features):
-        raise Error("mojolearn KernelDensity: X has " + family_str(q.shape[1]) + " features, "
-                    + "fit saw " + _kde_text(features, context))
+        kde_refuse_features(family_str(q.shape[1]), _kde_text(features, context))
     var rows = Int(py=q.shape[0])
     var dst = kde_array(List[Int](length=1, fill=rows), context)
     var w = family_field(fields, "_w")
@@ -403,7 +376,7 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
         var dst_address = Int(py=classical_address(dst))
         var d = Int(py=family_call(b.int, features))
         var width = Float64(py=family_call(b.float, family_field(fields, "bandwidth")))
-        var request = KDEResidentQuery(owner.downcast_value_ptr[KDEResidentOwner]()[].state.handle,
+        var request = kde_resident_query(owner.downcast_value_ptr[KDEResidentOwner]()[].state.handle,
             query_address, dst_address, Int(status.unsafe_ptr()), rows, d, width, want_total,
             _kde_text(family_field(fields, "kernel"), context), _kde_text(family_field(fields, "metric"), context))
         total = kde_run_resident(owner, request)
@@ -414,7 +387,7 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     else:
         # Preserve the host route's parallel query finite scan before the
         # provider's own bound/cosine checks and its existing weights copy.
-        admitted_finite_refuse(Int(host_finite_status(Int(py=classical_address(q)), Int(py=q.size))), "KernelDensity")
+        admitted_finite_refuse(kde_query_finite_status(Int(py=classical_address(q)), Int(py=q.size)), "KernelDensity")
         var x = family_field(fields, "_x")
         var weights_address = 0 if w is None else Int(py=classical_address(w))
         var train_address = Int(py=classical_address(x))
@@ -423,7 +396,7 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
         var train_rows = Int(py=x.shape[0])
         var d = Int(py=family_call(b.int, features))
         var width = Float64(py=family_call(b.float, family_field(fields, "bandwidth")))
-        var request = KDEQueryRequest(train_address, query_address, weights_address, dst_address,
+        var request = kde_query_request(train_address, query_address, weights_address, dst_address,
             train_rows, rows, d, width, w is not None, want_total,
             _kde_text(family_field(fields, "kernel"), context), _kde_text(family_field(fields, "metric"), context))
         total = kde_run_query(connection, request)

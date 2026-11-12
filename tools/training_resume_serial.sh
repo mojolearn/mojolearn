@@ -179,7 +179,8 @@ PY
     recipe "$stem.command.txt" env MOJOLEARN_TRAIN_EXPECT_VENDOR="$vendor" \
         MOJOLEARN_TRAIN_RESUME_ACTION="$action" MOJOLEARN_TRAIN_RESUME_INPUT="$input" \
         MOJOLEARN_TRAIN_RESUME_OUTPUT="$stem.ckptbin" \
-        python3 "$guard" --seconds "$(remaining_budget "$budget")" --rss-gib 12 -- pixi run "$out/resume-driver"
+        python3 "$guard" --seconds "$(remaining_budget "$budget")" --rss-gib 12 -- \
+        pixi run python3 "$helper" launch -- "$out/resume-driver"
     local rc=0
     if run_recipe "$stem.command.txt" "$stem.log" "$stem.shell-exit.txt"; then rc=0; else rc=$?; fi
     python3 "$helper" exit-record --exit-code "$rc" --run-command-file "$stem.command.txt" \

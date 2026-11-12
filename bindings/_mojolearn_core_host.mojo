@@ -79,6 +79,7 @@ comparison and one narrowing per kept value, no fold to sabotage.
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_host.mojo).
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from bindings.parallel_base_entry_host import publish_parallel_base_host
 from bindings.msel_host import (
     msel_put_binding,
     msel_alloc_binding,
@@ -89,10 +90,12 @@ from bindings.msel_host import (
     msel_free_bytes_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
-    msel_rebase_offsets_i32_binding,
     msel_split_table_i32_binding,
     msel_group_fold_perm_i32_binding,
 )
+# lane calltable-msel: the same model-selection helpers as one native entry
+# for the model-selection doors (core/msel_entry_table.mojo).
+from core.msel_helpers_host import publish_msel_helpers_host
 from std.os import abort
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -136,7 +139,6 @@ from bindings.hotpath_helpers import (
     count_mask_u8_binding,
     ic_running_min_f64_host_binding,
     ic_running_min_f32_host_binding,
-    fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
     assign_fold_i64_binding,
@@ -167,7 +169,6 @@ from bindings.array_helpers import (
     fsum_f64_binding,
     row_stds_f64_binding,
     class_ratio_f64_host_binding,
-    shard_topk_merge_f32_host_binding,
 )
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.host_finite_scan import host_all_finite_f32
@@ -191,6 +192,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
 from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
 from bindings.py_balanced import py_setattr
+from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
 from core.core_host_impl import (
@@ -1122,17 +1124,13 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_core_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
-comptime LABELS_HOST_NATIVE_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v2"], "MojolearnLabelsHostNativeV2"]
+# TOMBSTONE: LABELS_NATIVE_API_V1_V2 (DELETED: no reader; the label doors admit labels_native_api_v3 only) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+# Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
 comptime LABELS_HOST_NATIVE_V3_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v3"], "MojolearnLabelsHostNativeV3"]
 
 
 def labels_native_api_v3_binding() raises -> PythonObject:
     var api = LABELS_HOST_NATIVE_V3_API.get_or_create_ptr()
-    return neural_descriptor_capsule(api[].name, api[].entries)
-
-
-def labels_native_api_v2_binding() raises -> PythonObject:
-    var api = LABELS_HOST_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -1167,7 +1165,7 @@ def build__mojolearn_core_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
         module.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
-        module.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
+        # TOMBSTONE: LABELS_NATIVE_API_V1_V2 registrations deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b. Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
         module.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
         module.def_function[core_host_vendor_binding]("core_host_vendor")
@@ -1202,6 +1200,9 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[gather_f64_binding]("gather_f64")
         module.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        # lane calltable-msel: the model-selection helper table, for the
+        # native model-selection doors in another extension module.
+        publish_msel_helpers_host()
         module.def_function[msel_put_binding]("msel_put")
         module.def_function[msel_alloc_binding]("msel_alloc")
         module.def_function[msel_read_binding]("msel_read")
@@ -1211,7 +1212,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[msel_free_bytes_binding]("msel_free_bytes")
         module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         module.def_function[msel_proba_column_binding]("msel_proba_column")
-        module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
         module.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
         module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
@@ -1221,6 +1221,13 @@ def build__mojolearn_core_host() -> PythonObject:
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
         # base binding has carried since DEVIATION 2500, so a CPU-only
         # install stops encoding labels in a Python loop.
+        # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
+        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
+        # doors; their Python exports below remain for the Python package
+        # (`_buffer._native` users) and the doors not yet converted
+        # (bindings/trees_public_gbdt_fit.mojo, trees_public_forest.mojo and the
+        # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         module.def_function[cast_elements_binding]("cast_elements")
         module.def_function[reduce_stat_binding]("reduce_stat")
         module.def_function[equal_elements_binding]("equal_elements")
@@ -1243,7 +1250,6 @@ def build__mojolearn_core_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
-        module.def_function[fold_pair_f32_binding]("fold_pair_f32")
         module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         module.def_function[bincount_i64_binding]("bincount_i64")
         module.def_function[assign_fold_i64_binding]("assign_fold_i64")
@@ -1281,9 +1287,14 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
         module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
-        module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
         var published_module = module.finalize()
         _publish_neighbors_ops(published_module)
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_host()
+        # The parallel base table (core/parallel_entry_table.mojo): the
+        # parallel owners call its entry natively, not this module's doors.
+        publish_parallel_base_host()
         return published_module
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

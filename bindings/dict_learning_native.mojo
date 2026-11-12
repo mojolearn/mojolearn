@@ -31,6 +31,7 @@ from bindings.decomp_kit_native import (
     decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS,
     XD_SUB, XD_ADD, XD_MUL, XD_DIV, XD_MAXS, XD_MINS, XD_SCALE, XD_SOFT, XD_SQ, XD_SQRT, XD_SELECT,
 )
+from x_decomp.descriptor_schema import XD_DICT_LEARNING, XD_DICT_MINIBATCH
 
 
 def _name(model: PythonObject) raises -> String:
@@ -253,20 +254,20 @@ def _dict_learning(mut kit: DecompKit, x: Int, nc: Int, alpha: Float64, max_iter
     var iterations = decomp_int(max_iter)
     var slots = max(iterations, 1)
     var errors_store = classical_typed(Python.tuple(slots), "<f8", kit.context)
-    var params = Python.list(kit.nrows(x), kit.ncols(x), nc, method, iterations, decomp_int(method_max_iter),
-                             Int(positive_dict), Int(positive_code), decomp_seed_word(seed), -1, -1)
-    var floats = Python.list(alpha, decomp_float(tol))
-    var ax = kit.address(x)
-    var acode = kit.address(code)
-    var ad = kit.address(d)
-    var result = py_call(kit.entries["x_decomp_dict_learning"], ax, acode, ad, classical_address(errors_store),
-                         params, floats)
+    var params: List[Int] = [kit.nrows(x), kit.ncols(x), nc, method, iterations, decomp_int(method_max_iter),
+                             Int(positive_dict), Int(positive_code), decomp_seed_word(seed), -1, -1]
+    var floats: List[Float64] = [alpha, decomp_float(tol)]
+    # XD_DICT_LEARNING (was the Python entry x_decomp_dict_learning): ii is
+    # the result, the count of recorded errors comes back in `written`.
+    var written = List[Int](length=1, fill=0)
+    var addresses: List[Int] = [kit.at(x), kit.at(code), kit.at(d), Int(py=classical_address(errors_store)),
+                                Int(written.unsafe_ptr())]
+    var done = kit.xd(XD_DICT_LEARNING, addresses, params, floats, True)
     _ = errors_store  # keep the Python object alive through the native call above
     kit.wrote_host(code)
     kit.wrote_host(d)
-    var done = Int(py=result[0])
-    _ = errors_store  # keep the Python object alive through the native call above
-    var recorded = min(Int(py=result[1]), slots)
+    var recorded = min(written[0], slots)
+    _ = written^
     _ = errors_store  # keep the Python object alive through the native call above
     var errors = Python.list()
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(errors_store)))
@@ -308,16 +309,14 @@ def _minibatch_fit(mut kit: DecompKit, x: Int, nc: Int, dict_init: Int, p: Pytho
     # The step loop is ONE binding call on a host copy of the dictionary.
     d = kit.copy_host(d)
     var patience = p["max_no_improvement"]
-    var params = Python.list(n, m, nc, _fit_index(p["fit_algorithm"]), 0, decomp_int(p["transform_max_iter"]),
+    var params: List[Int] = [n, m, nc, _fit_index(p["fit_algorithm"]), 0, decomp_int(p["transform_max_iter"]),
                              Int(Bool(py=p["positive_dict"])), Int(Bool(py=p["positive_code"])),
-                             decomp_seed_word(seed), -1, -1 if patience is None else decomp_int(patience), batch)
-    _ = py_call(params.append, n_steps)
-    var floats = Python.list(decomp_float(p["alpha"]), decomp_float(p["tol"]))
-    var ax = kit.address(xt)
-    _ = xt  # keep the Python object alive through the native call above
-    var ad = kit.address(d)
-    var step = decomp_int(py_call(kit.entries["x_decomp_dict_minibatch"], ax, ad, params, floats)) - 1
-    _ = xt  # keep the Python object alive through the native call above
+                             decomp_seed_word(seed), -1, -1 if patience is None else decomp_int(patience), batch,
+                             Int(py=n_steps)]
+    var floats: List[Float64] = [decomp_float(p["alpha"]), decomp_float(p["tol"])]
+    # XD_DICT_MINIBATCH (was the Python entry x_decomp_dict_minibatch)
+    var addresses: List[Int] = [kit.at(xt), kit.at(d)]
+    var step = kit.xd(XD_DICT_MINIBATCH, addresses, params, floats, True) - 1
     kit.wrote_host(d)
     return (d, step + 1, per_pass)
 

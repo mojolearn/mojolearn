@@ -150,7 +150,9 @@
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import GILReleased, PyObjectPtr
+from core.archive_entry_table import archive_export_family, archive_ref, archive_resident_export
+from core.parallel_entry_table import ParallelEntryKey
 from bindings.native_loaded_module import native_loaded_module
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_attributes import _type_mro
@@ -297,10 +299,13 @@ def _schema_value(fields: PythonObject, path: PythonObject, name: String) raises
     var b = native_loaded_module("builtins")
     if py_type(path) is not b.tuple:
         return _schema_field(fields, path, name)
-    var value = _schema_field(fields, path[0], name)
+    # Optional, not a PythonObject read and reassigned in the loop (the
+    # modular/modular#7546 pattern, suspected of a wrong reference drop under
+    # Mojo 1.2.0; runtime-fix-save-forest). Same reads, same order.
+    var value = Optional[PythonObject](_schema_field(fields, path[0], name))
     for i in range(1, len(path)):  # driver-loop: over the fixed steps of one schema field path
-        value = _schema_index(value, path[i])
-    return value
+        value = Optional[PythonObject](_schema_index(value.value(), path[i]))
+    return value.value()
 
 
 def _schema_shown(fields: PythonObject, msg: PythonObject, shown: PythonObject, name: String) raises -> PythonObject:
@@ -724,12 +729,18 @@ def _schema_label_kind(label: PythonObject, integral: PythonObject, real: Python
 def _schema_label_store(values: PythonObject, code: String, dtype: String, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(values, dtype)` for a flat list of builtin numbers,
     with its refusal of a value the dtype cannot hold."""
-    var store = PythonObject(None)
+    var store = _schema_label_from_list(values, code, dtype, context)
+    return classical_wrap_array(store, Python.tuple(len(values)), dtype, "C", context)
+
+
+def _schema_label_from_list(values: PythonObject, code: String, dtype: String, context: PythonObject) raises -> PythonObject:
+    # Returned from inside try, not a PythonObject(None) reassigned inside it
+    # (suspected wrong reference drop under Mojo 1.2.0, the
+    # modular/modular#7546 family; runtime-fix-save-forest).
     try:
-        store = py_call(context["array_type"], code, values)
+        return py_call(context["array_type"], code, values)
     except error:
         raise Error("TypeError: mojolearn: cannot build a " + dtype + " Array from these values: " + String(error))
-    return classical_wrap_array(store, Python.tuple(len(values)), dtype, "C", context)
 
 
 def _schema_class_table(value: PythonObject, integral: PythonObject, real: PythonObject,
@@ -948,7 +959,21 @@ def _schema_device_array(fields: PythonObject, step: PythonObject, name: String,
     var export = py_call(b.getattr, held[2], step[4], PythonObject(None))
     if export is None or py_type(export) is not py_type(b.len):
         raise Error("TypeError: mojolearn " + name + ": the resident index has no compiled " + String(step[4]))
-    _ = py_call(export, held[1], py_call(store.buffer_info)[0], count)
+    # UNPACK: the image that minted the handle is the compiled entry's module;
+    # its (tier, vendor) key was recorded at load
+    # (python/mojolearn/_native_table_key.py). The copy runs through that
+    # image's archive export table (core/archive_entry_table.mojo), not its
+    # Python door.
+    var family = archive_export_family(String(step[4]))
+    var key = py_get(context["native_table_keys"], export.__self__)
+    if family < 0 or key is None:
+        raise Error("TypeError: mojolearn " + name + ": the resident index has no native export " + String(step[4]))
+    var export_entry = archive_ref(family, ParallelEntryKey(Int(py=key[0]), Int(py=key[1])))
+    var handle = Int(py=held[1])
+    var dst = Int(py=py_call(store.buffer_info)[0])
+    with GILReleased(Python()):
+        _ = archive_resident_export(export_entry, handle, dst, count)
+    _ = held  # keep the resident index's owner alive through the native copy above
     return classical_wrap_array(store, py_call(b.tuple, dims), dtype, "C", context)
 
 

@@ -15,11 +15,11 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.glue_runs import publish_x_trees_glue
+from xtrees.dart_runs_host import publish_x_trees_dart_host
 from providers.python.xtrees_api_pyapi import register, tree_shap_cache_create_args, tree_shap_cache_values_args
 from xtrees import shap_host as shap_cpu
 from xtrees.shap_host import shap_prepare, tree_shap_values
 from xtrees.ops import XTREES_HOST_SABOTAGE
-from xtrees.dart_host import DART_HOST, dart_open, dart_step, dart_add, dart_close, dart_predict
 
 
 def x_trees_host_numeric_mode_binding() raises -> PythonObject:
@@ -97,102 +97,12 @@ def tree_shap_binding(forest: PythonObject, tscale: PythonObject, cover: PythonO
     return PythonObject(p[0])
 
 
-# ---- DART's boosting round, host twin (lane fam2-forests, `IDN_DART_DEVICE`;
-# xtrees/dart_host.mojo). The GPU binding's four entries, same names, same
-# arguments, registered only under the same gate so the Python layer takes
-# the same loop on the host column as on an IDENTICAL GPU build.
-def _dart_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
-    if len(params) != n:
-        raise Error(who + ": params must hold " + String(n) + " values")
-    var out = List[Int]()
-    for i in range(n):  # small-loop(params words)
-        out.append(Int(py=params[i]))
-    return out^
-
-
-def dart_open_binding(x: PythonObject, y: PythonObject, inits: PythonObject, params: PythonObject) raises -> PythonObject:
-    """x float32 n x d row-major, y float32 n, inits float32 k; params =
-    [n, d, k, kind, n_iterations, node_cap]. Returns the session handle."""
-    var p = _dart_ints(params, 6, "x_trees_dart_open")
-    return PythonObject(dart_open(Int(py=x), Int(py=y), Int(py=inits), p[0], p[1], p[2], p[3], p[4], p[5]))
-
-
-def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObject, flags: PythonObject,
-                      bad: PythonObject, targets: PythonObject, params: PythonObject) raises -> PythonObject:
-    """coef float32 t * k, thr int64 t (in), flags int32 t and bad int32 1
-    (out), targets = [] (box-run-2-dart-host: the K fit targets stay in the
-    host session for `rf_regressor_fit_dart_export`, as on the device since
-    cpu4-forest); params = [t, drop_seed, iteration, skip_thr]."""
-    var p = _dart_ints(params, 4, "x_trees_dart_step")
-    var outs = List[Int]()
-    for i in range(len(targets)):  # small-loop(target address words)
-        outs.append(Int(py=targets[i]))
-    dart_step(Int(py=handle), Int(py=coef), Int(py=thr), Int(py=flags), Int(py=bad), outs, p[0], p[1], p[2], p[3])
-    return PythonObject(p[0])
-
-
-def dart_add_binding(handle: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
-                     values: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The new tree's forest arrays (int32 / float32 / int32, colid in X's
-    columns), values float32 n_nodes (out), rows int32 m (the round's bag
-    rows, ascending; any address when m is 0); params = [tree, class, lo,
-    n_nodes, shrink, factor, reg_lambda, reg_alpha, max_delta_step, m]
-    (m = 0: the leaf sums over every row)."""
-    if len(params) != 10:
-        raise Error("x_trees_dart_add: params must hold 10 values")
-    dart_add(Int(py=handle), Int(py=colid), Int(py=quesval), Int(py=left), Int(py=values), Int(py=params[0]),
-             Int(py=params[1]), Int(py=params[2]), Int(py=params[3]), Float64(py=params[4]), Float64(py=params[5]),
-             Float64(py=params[6]), Float64(py=params[7]), Float64(py=params[8]), Int(py=rows), Int(py=params[9]))
-    return PythonObject(Int(py=params[3]))
-
-
-def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> PythonObject:
-    """Writes the bad word (int32 1) and frees the session."""
-    dart_close(Int(py=handle), Int(py=bad))
-    return PythonObject(0)
-
-
-# TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
-# Restore: git apply experiments/removed/dead_entries_trees.patch
-
-
-def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
-    if len(v) != nt:
-        raise Error(who + ": one address per tree")
-    var out = List[Int]()
-    for j in range(nt):  # small-loop(one address word per tree)
-        out.append(Int(py=v[j]))
-    return out^
-
-
-def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObject, coefs: PythonObject,
-                         inits: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
-    """DART's raw score (lane cpu2-l5-trees, xtrees/dart_*.mojo
-    `dart_predict`): x float32 n x d row-major; forest = [colid addresses,
-    quesval addresses, left addresses, leaf value addresses], one per tree
-    (int32 / float32 / int32 / float32, each at the tree's first node);
-    sizes = the T node counts; coefs = the T float64 coefficients (tree j is
-    class j % k); inits = the k float64 class starts; dst float64 k * n
-    class-major (dst); params = [n, d, k]."""
-    var p = _dart_ints(params, 3, "x_trees_dart_predict")
-    if len(forest) != 4:
-        raise Error("x_trees_dart_predict: forest must hold 4 address lists")
-    var nt = len(sizes)
-    if len(coefs) != nt:
-        raise Error("x_trees_dart_predict: one coefficient per tree")
-    var sz = List[Int]()
-    var cf = List[Float64]()
-    for j in range(nt):  # small-loop(one size and one coefficient word per tree)
-        sz.append(Int(py=sizes[j]))
-        cf.append(Float64(py=coefs[j]))
-    var iv = List[Float64]()
-    for c in range(len(inits)):  # small-loop(one start word per class)
-        iv.append(Float64(py=inits[c]))
-    dart_predict(Int(py=x), _dart_addr_list(forest[0], nt, "x_trees_dart_predict"),
-                 _dart_addr_list(forest[1], nt, "x_trees_dart_predict"),
-                 _dart_addr_list(forest[2], nt, "x_trees_dart_predict"),
-                 _dart_addr_list(forest[3], nt, "x_trees_dart_predict"), sz, cf, iv, Int(py=dst), p[0], p[1], p[2])
-    return PythonObject(p[0])
+# ---- DART, host twin: no Python entries since lane calltable-gbdt-forest-dart
+# (2026-11-11). The round (under DART_HOST) and the predict run through this
+# image's native DART entry (xtrees/dart_runs_host.mojo, published at init
+# below; callers in bindings/trees_public_boost.mojo). Removed with them: the
+# x_trees_dart_{open,step,add,close,predict} Python entries and their
+# parameter-list unpacking.
 
 
 def tree_shap_cache_create_binding(forest: PythonObject, tscale: PythonObject,
@@ -241,15 +151,10 @@ def build__mojolearn_x_trees_host() -> PythonObject:
         m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")
-        # lane cpu2-l5-trees: DART predict, the device entry's host twin (every host build)
-        m.def_function[dart_predict_binding]("x_trees_dart_predict")
-        comptime if DART_HOST:
-            m.def_function[dart_open_binding]("x_trees_dart_open")
-            m.def_function[dart_step_binding]("x_trees_dart_step")
-            m.def_function[dart_add_binding]("x_trees_dart_add")
-            m.def_function[dart_close_binding]("x_trees_dart_close")
-            # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
-            # Restore: git apply experiments/removed/dead_entries_trees.patch
+        # The DART entry, the GPU binding's host twin (xtrees/dart_runs_host.mojo).
+        publish_x_trees_dart_host(0)
+        # TOMBSTONE: x_trees_dart_idn (dead native entry: a capability probe nothing reads; the DART owner probes x_trees_dart_open) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
+        # Restore: git apply experiments/removed/dead_entries_trees.patch
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_trees_host: ", e))

@@ -16,11 +16,14 @@ from std.python import PythonObject
 from bindings.py_balanced import py_setattr
 
 
-def py_type_absent(error: Error, type_name: String) -> Bool:
+def py_type_absent(error: Error) -> Bool:
     # Only the documented absent-registration answer authorizes creation.
-    # stdlib1.0 source: std/python/bindings.mojo, lookup_py_type_object.
-    var absent = String("No Python type object registered for Mojo type with name: ") + type_name
-    return String(error) == absent
+    # std/python/bindings.mojo lookup_py_type_object (Mojo 1.0 and 1.2) raises
+    # this text followed by the type's registry key. The caller looked up one
+    # type, so the prefix identifies it; matching the key as well depended on
+    # reflect[T].name() spelling the key exactly as the stdlib registry does,
+    # which a toolchain change can break and turn a first import into an abort.
+    return String(error).startswith("No Python type object registered for Mojo type with name: ")
 
 
 def py_type_attach(module: PythonObject, var name: String, existing: PythonObject) raises:

@@ -108,14 +108,6 @@ def _asks_for_card(args):
                 != _verify.REFERENCE_NAME)
 
 
-def _ships_card():
-    try:
-        _verify.read_reference()
-    except _verify._NoReference:
-        return False
-    return True
-
-
 QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
                        "`verify --quick` against the reference table instead "
                        "(`verify --all` is the full check)")

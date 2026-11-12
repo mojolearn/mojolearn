@@ -14,10 +14,10 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES, with the GPU binding's
 address and params contract word for word (`bindings/_mojolearn_mixture.mojo`,
 mirrored in `python/mojolearn/mixture.py`), so `GaussianMixture` runs
 unchanged on a CPU-only install through `_backend._HOST_MODULES`
-(`"_mojolearn_mixture": "_mojolearn_mixture_host"`): `gmm_fit` (7 addresses,
-9 params), `gmm_score_samples`, `gmm_predict_proba`, `gmm_predict` and
-`gmm_score_bic_aic` (7 addresses, 6 params each), `mixture_vendor` answering
-"cpu" and `mixture_numeric_mode`. ABSENT, and so refused BY NAME through
+(`"_mojolearn_mixture": "_mojolearn_mixture_host"`): the typed transport
+`mixture_native_api_v1` (fit and the four scores), `gmm_sample` (7
+addresses, 6 params, 3 sample params), `mixture_vendor` answering "cpu" and
+`mixture_numeric_mode`. ABSENT, and so refused BY NAME through
 `_HostBinding`: `gmm_parallel_available`, the multi-GPU driver's probe.
 
 The sabotage arm (`mixture_host_sabotage`) is
@@ -27,10 +27,10 @@ The sabotage arm (`mixture_host_sabotage`) is
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from mixture.host.gmm_native_host import GMM_NATIVE_HOST_API
 
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -38,20 +38,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
-from bindings.mixture_host_scoring import (
-    gmm_sample_binding,
-    gmm_predict_binding,
-    gmm_predict_proba_binding,
-    gmm_score_bic_aic_binding,
-    gmm_score_samples_binding,
-)
-from mixture.host.gmm_host_oracle import (
-    GmmHostParams,
-    gmmh_covariance_type_from_name,
-    gmmh_fit,
-    gmmh_init_params_from_name,
-)
-from mixture.host.gmm_host_entries import _gmm_fit_run
+from bindings.mixture_host_scoring import gmm_sample_binding
 
 
 def mixture_host_numeric_mode_binding() raises -> PythonObject:
@@ -85,52 +72,14 @@ def mixture_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-def gmm_fit_binding(
-    addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """`GaussianMixture(...).fit(X)` on the host. Returns `n_iter_`.
-    `addrs`: 0 x, 1 weights_out, 2 means_out, 3 covariances_out,
-    4 precisions_chol_out, 5 log_det_chol_out, 6 scalars_out (n_iter,
-    converged, lower_bound). `params`: 0 n, 1 d, 2 n_components,
-    3 covariance_type (a string), 4 tol, 5 reg_covar, 6 max_iter,
-    7 init_params (a string), 8 random_state."""
-    if len(addrs) != 7:
-        raise Error(
-            "gmm_fit: addrs must contain 7 addresses (x, weights_out,"
-            " means_out, covariances_out, precisions_chol_out,"
-            " log_det_chol_out, scalars_out), got "
-            + String(len(addrs))
-        )
-    if len(params) != 9:
-        raise Error(
-            "gmm_fit: params must contain 9 values (n, d, n_components,"
-            " covariance_type, tol, reg_covar, max_iter, init_params,"
-            " random_state), got "
-            + String(len(params))
-        )
-    var wp = f32_ptr(Int(py=addrs[1]))
-    var mp = f32_ptr(Int(py=addrs[2]))
-    var cp = f32_ptr(Int(py=addrs[3]))
-    var pp = f32_ptr(Int(py=addrs[4]))
-    var lp = f32_ptr(Int(py=addrs[5]))
-    var sp = f64_ptr(Int(py=addrs[6]))
-    var n = Int(py=params[0])
-    var d = Int(py=params[1])
-    var gp = GmmHostParams(
-        Int(py=params[2]),
-        gmmh_covariance_type_from_name(String(py=params[3])),
-        Float32(Float64(py=params[4])),
-        Float32(Float64(py=params[5])),
-        Int(py=params[6]),
-        gmmh_init_params_from_name(String(py=params[7])),
-        UInt64(Int(py=params[8])),
-    )
-    var x = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var n_iter = 0
-    with GILReleased(Python()):
-        n_iter = _gmm_fit_run(x, n, d, gp, wp, mp, cp, pp, lp, sp)
-    _ = x^
-    return PythonObject(n_iter)
+def mixture_native_api_v1_binding() raises -> PythonObject:
+    """The typed GaussianMixture transport (core/mixture_native_api.mojo)
+    the mixture door (bindings/mixture_native.mojo) calls for the fit and
+    every score. `gmm_sample` stays a Python entry: the sample door
+    (bindings/svm_mixture_native.mojo `_gmm_sample`) calls it and the typed
+    transport has no sample operation."""
+    var api = GMM_NATIVE_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mixture_host.mojo
@@ -146,12 +95,10 @@ def build__mojolearn_mixture_host() -> PythonObject:
         module.def_function[mixture_host_sabotage_binding]("mixture_host_sabotage")
         module.def_function[mixture_vendor_binding]("mixture_vendor")
         module.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
-        module.def_function[gmm_fit_binding]("gmm_fit")
-        module.def_function[gmm_score_samples_binding]("gmm_score_samples")
-        module.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
-        module.def_function[gmm_predict_binding]("gmm_predict")
-        module.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+        # TOMBSTONE: the GaussianMixture Python entries gmm_fit, gmm_score_samples, gmm_predict_proba, gmm_predict and gmm_score_bic_aic (dead: the mixture door calls mixture_native_api_v1) deleted 2026-11-11 by 04229c83d5; code recoverable at 04229c83d5^.
+        # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
         module.def_function[gmm_sample_binding]("gmm_sample")
+        module.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_mixture_host: ", e))

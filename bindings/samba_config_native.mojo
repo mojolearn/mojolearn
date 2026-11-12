@@ -138,19 +138,20 @@ def samba_registry(config: PythonObject) raises -> PythonObject:
     # on first use, preserving first-use failures and avoiding unused schemas.
     # Only immutable shape tuples escape into distinct per-layer records. A
     # later public call builds new schemas from its newly admitted config.
-    var mamba_shapes = PythonObject(None)
-    var attention_shapes = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var mamba_shapes = Optional[PythonObject]()
+    var attention_shapes = Optional[PythonObject]()
     for i in range(len(layers)):  # driver-loop: over configured model layers
         var kind = String(layers[i])
         var entries = PythonObject(None)
         if kind == "mamba3":
-            if mamba_shapes is None:
+            if not mamba_shapes:
                 mamba_shapes = _samba_block_shapes(config, kind, tuple_type)
-            entries = mamba_shapes
+            entries = mamba_shapes.value()
         else:
-            if attention_shapes is None:
+            if not attention_shapes:
                 attention_shapes = _samba_block_shapes(config, kind, tuple_type)
-            entries = attention_shapes
+            entries = attention_shapes.value()
         var prefix = "layers." + String(i) + "."
         for j in range(len(entries)):  # driver-loop: over per-layer tensor registry metadata
             var entry = entries[j]

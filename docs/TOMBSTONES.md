@@ -676,6 +676,9 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | define | area | deleted | restored | now | patch |
 |---|---|---|---|---|---|
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
+| [GaussianMixture Python entries gmm_fit, gmm_fit_predict and the four scoring entries (native entries)](#dead-native-entries-gaussianmixture-python-entries-2026-11-11) | Mixture (GPU, host and inference-only host bindings) | removed (dead native entries: no live caller) | 2026-11-11 | [dead_entries_gmm_python.patch](../experiments/removed/dead_entries_gmm_python.patch) |
+| [TREES_LEGACY_PYTHON_ENTRIES: 36 rf/et Python fit registrations (rowmajor, weighted, shard and shard-export forms) (native entries)](#dead-native-entries-trees-legacy-python-entries-2026-11-12) | Forests (rf, rf host, trees, trees host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [TREES_LEGACY_PYTHON_ENTRIES.patch](../experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch) |
+| [LABELS_NATIVE_API_V1_V2: the labels_native_api_v1 / v2 provider publications (native entries)](#dead-native-entries-labels-provider-v1-and-v2-2026-11-12) | Labels (base GPU and core host bindings) | removed (dead native entries: no live caller) | 2026-11-12 | [LABELS_NATIVE_API_V1_V2.patch](../experiments/removed/LABELS_NATIVE_API_V1_V2.patch) |
 
 ## Trees
 
@@ -5810,4 +5813,61 @@ replacement computes the same values in the same order (see the bit notes below)
   int / str `group_id` lists are coded from C storage.
 - **Restore**: `git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch` (the whole lane reversed, code files only;
   tests and tools keep their new form). Recoverable at `e68654a757`.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## Dead native entries: GaussianMixture Python entries (2026-11-11)
+
+- **What**: the Python entries `gmm_fit`, `gmm_fit_predict`, `gmm_score_samples`, `gmm_predict_proba`, `gmm_predict` and
+  `gmm_score_bic_aic` of `_mojolearn_mixture`, `_mojolearn_mixture_host` (fit and scoring) and
+  `_mojolearn_mixture_infer_host` (scoring), with their bodies `gmm_fit_binding`, `gmm_fit_predict_binding`,
+  `_gmm_fit_entry` and the scoring bindings in `bindings/_mojolearn_mixture.mojo`, `bindings/_mojolearn_mixture_host.mojo`
+  and `bindings/mixture_host_scoring.mojo` (`_Model`, `_rebuild_model`, `_model_load` there too).
+- **Why dead**: the mixture door (`bindings/mixture_native.mojo`) fits and scores through the typed transport
+  `mixture_native_api_v1`; no python/, tools/, tests or verify code calls the entries. `'gmm_fit'` in
+  `python/mojolearn/_native_parallel_public.py` is the parallel driver's label, not a call. Perf audit 2 A, pattern 14.
+- **Kept**: `gmm_sample` on all three bindings (the sample door calls it; the typed transport has no sample operation).
+- **Added with it**: `_mojolearn_mixture_infer_host` now publishes `mixture_native_api_v1`
+  (`mixture/host/gmm_native_infer_host.mojo`), without which the door refused every saved-model score.
+- **Deleted by**: `04229c83d5` (lane/round2-fixes); code recoverable at `04229c83d5^`.
+- **Restore**: `git apply experiments/removed/dead_entries_gmm_python.patch` (the three binding files; re-register the
+  four scoring names in `bindings/_mojolearn_mixture_infer_host.mojo` by hand if wanted).
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## Dead native entries: trees legacy Python entries (2026-11-12)
+
+- **What**: the Python registrations `et_classifier_fit_rowmajor_export`, `et_regressor_fit_rowmajor_export`,
+  `et_{classifier,regressor}_fit_weighted`, `_weighted_export`, `_weighted_rowmajor_export`, `_shard`, `_shard_export`
+  and `_weighted_shard` of `_mojolearn_trees` and `_mojolearn_trees_host` (28), and `rf_{classifier,regressor}_fit_rowmajor_export`
+  and `rf_{classifier,regressor}_fit_shard_export` of `_mojolearn_rf` and `_mojolearn_rf_host` (8), with the binding
+  bodies only they used (`et_*_rowmajor_binding`, `et_*_weighted_binding`, `et_*_shard*_binding`, `_et_weights`,
+  `rf_*_rowmajor_binding`, `rf_*_rowmajor_export_binding`, `rf_*_shard_export_binding`).
+- **Why dead**: the forest door (`bindings/trees_public_forest.mojo` `_launch`) fits through the forest entry table
+  (`xf_fit`, every weighted / rowmajor / shard form as request words), not by entry name. A grep of python/, tools/,
+  tests/, checks/ and bench/ found no caller; the only mentions were the `host_surface.py` export manifest, the
+  `tools/identity_lanes/coverage_declared.tsv` declarations (stale "covered" paths through the former
+  `ForestFit(name)` + `_export` form) and the rowmajor suffix of `test_cpu_training_e3.py` FIT_NAMES, all updated
+  with this deletion. No `_verif*` module names any of them. Perf audit 3 "left open".
+- **Kept (a caller exists)**: the plain and `_export` fits (`tools/identity_break.py`, `tools/identity_lanes/trees.py`,
+  `checks/extratrees_gpu_only_binding_smoke.py`, tests), `rf_classifier_fit_weighted(_export)` and
+  `rf_regressor_fit_weighted_export` (`_backend.py`, tests, identity lanes), `rf_*_fit_shard` (tests, lane select),
+  the `rf_host_*` / `trees_host_*` probes (`_backend.load_host_module` reads them by prefix), the ada / session / aux
+  entries (`bindings/trees_public_boost.mojo`), and `forest_resident_layout` / `trees_shared_counts_mask` (A/B arm
+  witnesses of defines still in the tree).
+- **Deleted by**: lane/round2-fixes-2 (item 6); code recoverable at `8c8e62f56b`.
+- **Restore**: `git apply experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch` (the four binding files), then restore the
+  manifest names, the coverage rows and the FIT_NAMES suffix by hand.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.
+
+## Dead native entries: labels provider v1 and v2 (2026-11-12)
+
+- **What**: `labels_native_api_v1` and `labels_native_api_v2` of `_mojolearn` (their slots
+  `MojolearnLabelsNativeTable{Identical,Fast}V2` / `V3` and factory bindings) and `labels_native_api_v2` of
+  `_mojolearn_core_host` (slot `MojolearnLabelsHostNativeV2`). Each published a second (third) capsule over the same
+  `labels_native_entry` beside the v3 table.
+- **Why dead**: the label doors admit only `labels_native_api_v3` (`core/labels_native_api.mojo` LABELS_NATIVE_FACTORY,
+  `python/mojolearn/_native_labels_bridge.py`); the only other reader was `test_labels_provider_version.py`, which used
+  v1/v2 as stale-capsule fixtures and now uses another compiled factory of the same extension. Perf audit 3 "left open".
+- **Deleted by**: lane/round2-fixes-2 (item 7); code recoverable at `8c8e62f56b`.
+- **Restore**: `git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch` (the two binding files), then re-add
+  `labels_native_api_v2` to the core host export list in `python/mojolearn/host_surface.py`.
 - **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.

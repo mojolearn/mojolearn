@@ -29,11 +29,14 @@ from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from bindings.parallel_ivf_entry_device import (
+    IVF_DEVCTX_SLOT, ivf_finalize_distances_device_run, ivf_flat_index_export_device_run, publish_parallel_ivf_device,
+)
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnIvfContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnIvfContextFastV3"
+#: Defined once beside the IVF table entries that share it.
+comptime _DEVCTX_SLOT = IVF_DEVCTX_SLOT
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -69,7 +72,6 @@ from ivf.resident import (
 from bindings.ivf_index_arrays import ivf_arrays_check_cells, ivf_arrays_extent
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IVF_BUILD_FROM_POINTER, IvfFlatBuildDevice
 from bindings.ivf_index_arrays import ivf_read_resident_filter, ivf_write_resident_result
-from core.shard_merge_device import device_ivf_merge_shards, device_ivf_shard_plan, device_root_f32
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -199,63 +201,16 @@ def ivf_flat_partial_search_binding(addrs: PythonObject, params: PythonObject) r
 
 def ivf_finalize_distances_binding(address: PythonObject, count: PythonObject, metric: PythonObject) raises -> PythonObject:
     """`postprocess_distances` over the merged distances, on the device
-    (lane cpu4-python: `ftz(identical_sqrt(d))` per word, the host
-    statement; the host walk stays the host bindings')."""
-    from ivf.impl.neighbors.ivf_common import postprocess_distances_is_identity
-    var n = Int(py=count)
-    if n < 0:
-        raise Error("distance count must be nonnegative")
-    if postprocess_distances_is_identity(Int(py=metric)) or n == 0:
-        return PythonObject(0)
-    if Int(py=address) == 0:
-        raise Error("ivf_finalize_distances: null buffer address")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    device_root_f32(ctx, Int(py=address), n)
+    (bindings/parallel_ivf_entry_device.mojo `ivf_finalize_distances_device_run`,
+    which the distributed IVF owner reaches natively)."""
+    ivf_finalize_distances_device_run(Int(py=address), Int(py=count), Int(py=metric))
     return PythonObject(0)
 
 
-def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`ivf_merge_shards` (bindings/ivf_index_arrays.mojo's contract) on the
-    device (lane cpu4-python, core/shard_merge_device.mojo): [status, row]."""
-    var shards = Int(py=params[0])
-    var m = Int(py=params[1])
-    var k = Int(py=params[2])
-    if shards < 1 or m < 0 or k < 1:
-        raise Error("ivf_merge_shards: need at least one shard and k >= 1")
-    if len(addrs) != 3 + 4 * shards or len(params) != 3 + shards:
-        raise Error("ivf_merge_shards: address or parameter count differs from the shard count")
-    var d_addrs = List[Int]()
-    var i_addrs = List[Int]()
-    var c_addrs = List[Int]()
-    var m_addrs = List[Int]()
-    var sizes = List[Int]()
-    for s in range(shards):  # small-loop(shards: one shard per device): reads the shard addresses, launch arguments only
-        d_addrs.append(Int(py=addrs[3 + 4 * s]))
-        i_addrs.append(Int(py=addrs[4 + 4 * s]))
-        c_addrs.append(Int(py=addrs[5 + 4 * s]))
-        m_addrs.append(Int(py=addrs[6 + 4 * s]))
-        sizes.append(Int(py=params[3 + s]))
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var r = device_ivf_merge_shards(ctx, m, k, d_addrs, i_addrs, c_addrs, m_addrs, sizes,
-                                    Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]))
-    var out = Python.list()
-    out.append(PythonObject(Int(r[0])))
-    out.append(PythonObject(Int(r[1])))
-    return out
-
-
-def ivf_shard_plan_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`ivf_shard_plan` (bindings/ivf_index_arrays.mojo's contract) on the
-    device (lane cpu4-python, core/shard_merge_device.mojo)."""
-    var n = Int(py=params[0])
-    var n_lists = Int(py=params[1])
-    var shards = Int(py=params[2])
-    if n < 0 or n_lists < 1 or shards < 1 or len(addrs) != 5:
-        raise Error("ivf_shard_plan: needs 5 addresses, n >= 0, n_lists >= 1 and shards >= 1")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    return PythonObject(device_ivf_shard_plan(
-        ctx, Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]),
-        n, n_lists, shards))
+# `ivf_merge_shards` and `ivf_shard_plan` have no Python door any more (lane
+# calltable-parallel-archive, 2026-11-11): their one caller, the distributed
+# IVF owner, reaches the device bodies through this image's parallel IVF
+# table entry (bindings/parallel_ivf_entry_device.mojo).
 
 
 # ===========================================================================
@@ -381,9 +336,10 @@ def ivf_flat_build_resident_binding(addrs: PythonObject, params: PythonObject) r
 
 
 def ivf_flat_index_export_binding(handle: PythonObject, address: PythonObject, count: PythonObject) raises -> PythonObject:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    ivf_resident_export_list_data(ctx, Int(py=handle), Int(py=address), Int(py=count))
-    _ = ctx^
+    # The archive writer reaches the same body through the archive export
+    # table (bindings/parallel_ivf_entry_device.mojo); this door stays for
+    # the Python and neighbor-query callers.
+    ivf_flat_index_export_device_run(Int(py=handle), Int(py=address), Int(py=count))
     return PythonObject(0)
 
 
@@ -493,9 +449,11 @@ def build__mojolearn_ivf() -> PythonObject:
         m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
         m.def_function[ivf_flat_build_resident_binding]("ivf_flat_build_resident")
         m.def_function[ivf_flat_index_export_binding]("ivf_flat_index_export")
-        m.def_function[ivf_merge_shards_binding]("ivf_merge_shards")
-        m.def_function[ivf_shard_plan_binding]("ivf_shard_plan")
-        return m.finalize()
+        var published_module = m.finalize()
+        # The parallel IVF and archive export tables: the distributed IVF
+        # owner and the archive writer call these entries natively.
+        publish_parallel_ivf_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))
 

@@ -63,13 +63,19 @@ def _density_save_array_layout(context: PythonObject) raises:
     if py_type(cls) is not native_type:
         raise Error("TypeError: density checkpoint storage requires its native Array class")
     var ancestry = py_call(native_type.__dict__["__mro__"].__get__, cls)
-    var setter = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_setter = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: fixed native Array class ancestry
         var fields = _pd_type_fields(ancestry[i])
         if py_contains(fields, "__del__"):
             raise Error("TypeError: density checkpoint storage cannot invoke Python finalizers")
-        if setter is None:
-            setter = py_get(fields, "__setattr__")
+        if not found_setter:
+            var candidate = py_get(fields, "__setattr__")
+            if candidate is not None:
+                found_setter = candidate
+    var setter = PythonObject(None)
+    if found_setter:
+        setter = found_setter.value()
     if setter is not context["host_density_object_setattr"]:
         raise Error("TypeError: density checkpoint storage cannot invoke Python assignment hooks")
     var fields = _pd_type_fields(cls)

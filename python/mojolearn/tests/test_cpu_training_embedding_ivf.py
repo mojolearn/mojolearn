@@ -282,9 +282,11 @@ def test_adapter_is_an_import_time_connection_only():
     text = _read(ADAPTER)
     imports = re.findall(r"^(?:from|import) (\S+)", text, re.M)
     assert set(imports) <= {".", "types"}, imports
-    for entry in ("byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1", "byte_lm_session_create",
-                  "byte_lm_trainer_step", "byte_lm_run_configured"):
+    for entry in ("byte_lm_trainer_step", "byte_lm_run_configured"):
         assert f'"{entry}"' in text, entry
+    # the resident session is a native table entry, not a name the adapter admits
+    for entry in ("byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1", "byte_lm_session_create"):
+        assert f'"{entry}"' not in text, entry
     assert "_backend.load_host_module(HOST_BASENAME)" in text
     impl = _read("python/mojolearn/_byte_lm_impl.py")
     # cpu-gpu-cleanup n-pyneural: the install decides the vendor set, so the

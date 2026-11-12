@@ -32,20 +32,13 @@ from pathlib import Path
 
 from . import _backend
 from . import _numeric_profile
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
-from ._bufcheck import flat_view, le_bytes
+from ._buffer import addr, addr_ro, as_f32_c
 from ._byte_lm_config import ByteLanguageModelConfig
 from . import _ragged
 
 _EXTENSION = '_mojolearn_byte_lm_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
 _IDENTICAL_CODE = 1
-
-
-def _parameters_sha256(parameters):
-    """SHA-256 of float32 parameters' little-endian bytes, by the Mojo SHA-256
-    (core/sha256.mojo) behind the CPU tokenizer binding's `sha256_hex`."""
-    return str(_backend.load_host_module('_mojolearn_tokenizer_host').sha256_hex(le_bytes(parameters, 'f')))
 
 
 # THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):
@@ -74,69 +67,6 @@ def _native_shape(shape):
 _MAX_THREADS = 1024
 #: torch's `ignore_index`, which the loss oracle skips as a target.
 _IGNORE_INDEX = -100
-
-
-def _refuse_ids(tokens, vocab, batch, width, target_column):
-    """ValueError unless every id is a byte value in [0, vocab). When
-    `target_column` is set, that column of each row feeds only the loss as a
-    target and may also hold `_IGNORE_INDEX`, exactly what the native loss
-    admits; every other position is a model input."""
-    # Native min/max (reduce_stat) admits the common case in one pass; the
-    # Python scan below runs only to name the first offending id (and to
-    # admit `_IGNORE_INDEX` in the target column).
-    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
-        return
-    flat = flat_view(tokens, 'i')
-    for r in range(batch):
-        base = r * width
-        for c in range(width):
-            v = flat[base + c]
-            if 0 <= v < vocab:
-                continue
-            if target_column is not None and c == target_column and v == _IGNORE_INDEX:
-                continue
-            raise ValueError(f'ids must be byte values in [0, {vocab}); got {v} at row {r}, position {c}')
-
-
-def _logits_ids(ids, shape):
-    """`(tokens, copied)` for a logits call, int32 ids `[batch, length]` with
-    `batch >= 1`, `1 <= length <= shape.length` and every id a byte value,
-    refused with ValueError otherwise. Shared with the trainer's GPU logits
-    (DEVIATION 2658) so both surfaces admit the same ids."""
-    tokens, copied = as_i32_c(ids, ndim=2, name='ids')
-    batch, length = tokens.shape
-    if batch <= 0 or not 0 < length <= shape.length:
-        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
-    _refuse_ids(tokens, shape.vocab_size, batch, length, None)
-    return tokens, copied
-
-
-def _greedy_next_bytes(logits):
-    """The greedy next byte after each row of float32 logits
-    `[batch, length, vocab]`, read at the last position; ties go to the
-    lowest byte value. Shared with the trainer's GPU logits (DEVIATION
-    2658), so equal logits bytes pick equal bytes."""
-    batch, length, vocab = logits.shape
-    flat = flat_view(logits, 'f')
-    if batch and vocab and hasattr(logits, '_addr'):
-        # The same scan in the base binding's `argmax_rows_f32` (DEVIATION
-        # 2500: strict `>` from index 0, so ties keep the lowest byte and a
-        # NaN never replaces); `_labels.argmax_rows` falls back to the loop
-        # below's rule when the helper is missing.
-        from ._labels import argmax_rows
-        last = b''.join(bytes(flat[((b * length) + length - 1) * vocab:((b * length) + length) * vocab])
-                        for b in range(batch))
-        rows = frombytes(last, '<f4', (batch, vocab))
-        return [int(i) for i in flat_view(argmax_rows(rows), 'q')]
-    result = []
-    for b in range(batch):
-        base = ((b * length) + length - 1) * vocab
-        best = 0
-        for v in range(1, vocab):
-            if flat[base + v] > flat[base + best]:
-                best = v
-        result.append(best)
-    return result
 
 
 def _thread_count(value):
@@ -370,16 +300,6 @@ class LanguageModelHostTrainer:
                  weight_decay=.01):
         return _HOST_TRAIN(self, "construct", (parameters, m, v, shape, completed_steps,
                                                lr, betas, eps, weight_decay), _HOST_TRAIN_CONTEXT)
-
-    def _moment(self, given, name, n):
-        if given is None:
-            return zeros((n,), '<f4')
-        array, _ = as_f32_c(given, ndim=1, name=name)
-        if array.size != n:
-            raise ValueError(f'{name} must hold {n} float32 values')
-        if not all_finite(array):
-            raise ValueError(f'{name} must be finite')
-        return frombytes(le_bytes(array, 'f'), '<f4', (n,))
 
     @classmethod
     def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):

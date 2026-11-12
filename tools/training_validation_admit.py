@@ -18,7 +18,7 @@ import struct
 
 JOBS = (
     'training-venv', 'training-dependencies', 'dependencies', 'dependency-freeze',
-    'guard-checks', 'gradient-build', 'gradient-capture', 'gradient-oracle',
+    'guard-checks', 'gradient-build', 'gradient-capture', 'gradient-seal', 'gradient-oracle',
     'training-build', 'linalg-build', 'mlp-surface-and-reference',
     'mlp-numerical-edges', 'mlp-continuous', 'mlp-head', 'mlp-resume', 'mlp-compare',
     'retain-training', 'retain-linalg',

@@ -110,6 +110,22 @@ def host_density_hash(model: PythonObject, args: PythonObject, context: PythonOb
         known = known or (kind is not None and String(kind) == family)
     if not known or (family != "kde" and family != "iforest"):
         raise Error("TypeError: density hash requires its connected native host class")
+    return _host_fields_hash(model, context)
+
+
+def host_bound_hash(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_HostBound.model_sha256` for every explicit host model without its own
+    digest: SHA-256 over the declared `_HOST_ARRAYS` fields in sorted name
+    order, a `None` field skipped, an Array's physical bytes and a NumPy
+    array's logical C-order bytes (the Python loop over `hashlib` it replaces,
+    lane pyout-runtime-boundary 2026-11-11)."""
+    classical_connect_numpy(context)
+    return _host_fields_hash(model, context)
+
+
+def _host_fields_hash(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The digest of the model's declared host fields (shared by the density
+    and the generic host digests)."""
     var declared = classical_getattribute(model, PythonObject("_HOST_ARRAYS"), context)
     if not _one_of(py_type(declared), context["host_hash_field_collection_types"]):
         if _one_of(py_type(declared), context["host_hash_noniterable_types"]):

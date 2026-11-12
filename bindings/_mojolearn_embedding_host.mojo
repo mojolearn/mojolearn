@@ -36,7 +36,14 @@ from embedding.checks.embedding_oracle import (
     emb_refuse_shape,
     refuse_nonfinite_at,
 )
-from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_config
+from bindings.embedding_host_forward import embedding_forward_binding, embedding_host_config, embedding_host_forward_words, embedding_host_words
+from core.shared_slot import SharedSlot
+from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
+from core.neural_entry_table import (
+    NeuralEntryKey, neural_table_publish, neural_entry_spans, neural_entry_result,
+    NEURAL_TABLE_EMBEDDING, EMB_OP_FORWARD, EMB_OP_BACKWARD,
+)
 from embedding.host.embedding_host import (
     EMBEDDING_HOST_SABOTAGE,
     HOST_PLAN_SCAN,
@@ -89,33 +96,31 @@ def embedding_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-def embedding_backward_binding(
-    addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
+def embedding_host_backward_words(a: List[Int], p: List[Int]) raises -> Int:
     """`dW`, the device fold restated. Returns `V * d`.
 
     `addrs` = [dy (T * d f32, read), ids (T i32, read), dw (V * d f32,
     WRITTEN; READ FIRST when accumulate is 1)]; `params` = [V, d, T,
     padding_idx (-1 for none), accumulate (0 or 1)[, plan (0 PLAN_SCAN, the
     default, or 1 PLAN_SORT)]]. The GPU binding's order."""
-    if len(addrs) != 3:
+    if len(a) != 3:
         raise Error(
             "embedding_backward: addrs must contain 3 addresses (dy, ids, dw),"
-            " got " + String(len(addrs))
+            " got " + String(len(a))
         )
-    if len(params) != 5 and len(params) != 6:
+    if len(p) != 5 and len(p) != 6:
         raise Error(
             "embedding_backward: params must contain 5 or 6 values (V, d, T,"
-            " padding_idx, accumulate[, plan]), got " + String(len(params))
+            " padding_idx, accumulate[, plan]), got " + String(len(p))
         )
-    var vocab = Int(py=params[0])
-    var width = Int(py=params[1])
-    var n_positions = Int(py=params[2])
-    var padding_idx = Int(py=params[3])
-    var acc_code = Int(py=params[4])
+    var vocab = p[0]
+    var width = p[1]
+    var n_positions = p[2]
+    var padding_idx = p[3]
+    var acc_code = p[4]
     var plan = HOST_PLAN_SCAN
-    if len(params) == 6:
-        var plan_code = Int(py=params[5])
+    if len(p) == 6:
+        var plan_code = p[5]
         if plan_code != HOST_PLAN_SCAN and plan_code != HOST_PLAN_SORT:
             raise Error(
                 String("embedding_backward: plan must be 0 (PLAN_SCAN) or 1")
@@ -134,18 +139,66 @@ def embedding_backward_binding(
     # and folded through the caller's buffers (no list copies, no store-back
     # walk); the refusals keep their words, their order and their first index
     # (`refuse_nonfinite_at`), and nothing is written before they pass.
-    var dyp = f32_ptr(Int(py=addrs[0]))
-    var ids = read_i32(Int(py=addrs[1]), n_positions)
+    var dyp = f32_ptr(a[0])
+    var ids = read_i32(a[1], n_positions)
     emb_refuse_ids(ids, cfg)
     refuse_nonfinite_at(String("dY"), dyp, n_positions * width)
-    var dwp = f32_ptr(Int(py=addrs[2]))
+    var dwp = f32_ptr(a[2])
     if cfg.accumulate:
         refuse_nonfinite_at(String("the carried dW"), dwp, vocab * width)
     var cells = vocab * width
     with GILReleased(Python()):
         if cells > 0:
             host_embedding_backward(dwp, dyp, ids, n_positions, cfg, plan)
-    return PythonObject(vocab * width)
+    return vocab * width
+
+
+def embedding_backward_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    return PythonObject(embedding_host_backward_words(embedding_host_words(addrs), embedding_host_words(params)))
+
+
+
+def embedding_host_neural_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+        result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's Embedding descriptor entry (core/neural_entry_table.mojo
+    family NEURAL_TABLE_EMBEDDING): FORWARD and BACKWARD, the same word functions the Python
+    entries run. Every other operation refuses."""
+    try:
+        var spans = neural_entry_spans(aa, na, pp, np, ff, nf, result, 0)
+        # perf-audit-3 (pattern 3): the two spans are read in place (no copy per call).
+        ref a = spans[0]
+        ref p = spans[1]
+        var value: Int
+        if op == EMB_OP_FORWARD:
+            value = embedding_host_forward_words(a, p)
+        elif op == EMB_OP_BACKWARD:
+            value = embedding_host_backward_words(a, p)
+        else:
+            raise Error("embedding host entry: unavailable operation")
+        neural_entry_result(result, value)
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+struct EmbeddingHostNeuralAPI(Defaultable, Movable):
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(embedding_host_neural_v1)
+
+
+comptime NATIVE_EMBEDDINGHOSTNEURAL_API = SharedSlot[EmbeddingHostNeuralAPI, ("MojolearnEmbeddingHostNeuralAPIIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnEmbeddingHostNeuralAPIFastV1")]
+
+
+def publish_neural_embedding_host() raises:
+    """Module init of `_mojolearn_embedding_host`: publish under (tier, cpu)."""
+    var api = NATIVE_EMBEDDINGHOSTNEURAL_API.get_or_create_ptr()
+    neural_table_publish[NEURAL_TABLE_EMBEDDING](NeuralEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api), api[].entries[0])
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_embedding_host.mojo
@@ -155,6 +208,9 @@ def build__mojolearn_embedding_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_embedding_host")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_embedding_host()
         m.def_function[embedding_host_numeric_mode_binding]("embedding_host_numeric_mode")
         m.def_function[embedding_host_vendor_binding]("embedding_host_vendor")
         m.def_function[embedding_host_column_binding]("embedding_host_column")

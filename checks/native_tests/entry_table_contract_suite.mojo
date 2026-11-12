@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native table/handle contracts; independent fixtures use the host pool."""
-from core.entry_table import entry_table_publish, entry_table_read
+from core.entry_table import (
+    entry_table_publish, entry_table_read, entry_table_resolve, entry_ref_call, entry_ref_same, entry_ref_unresolved,
+    entry_ref_vendor, entry_ref_mode, EntryRef,
+)
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_call
 from core.state_registry import StateRegistry, StateHandle
@@ -9,7 +12,7 @@ from core.linear_model_state import LinearModelState, linear_state_predict_reque
 from core.linear_boundary_run import linear_predict_run
 from glm.host.linear_predict_native import linear_predict_host_v1
 
-comptime ENTRY_TABLE_CONTRACT_CASES = 20
+comptime ENTRY_TABLE_CONTRACT_CASES = 21
 
 
 def require(ok: Bool, message: String) raises:
@@ -212,6 +215,49 @@ def borrowed_linear_case() raises:
         _ = lease
 
 
+def entry_ref_case() raises:
+    """Lane entry-table-zero-alloc: a table resolves once into an `EntryRef`
+    (pointer and layout word); a second resolution returns the same ref; a
+    call through the ref (List, span and inline Array forms) is the published
+    pointer; every mismatch refuses at resolution with the table's text, and
+    an unresolved ref refuses at its call without reading any slot."""
+    comptime NAME = "MojolearnTestEntriesRefIdenticalCPUV1"
+    entry_table_publish[NAME](1, 0, 17, [String("test.entry.v1")], [1], [table_probe])
+    var first = entry_table_resolve[NAME](1, 0, 0, String("test.entry.v1"), 1)
+    var second = entry_table_resolve[NAME](1, 0, 0, String("test.entry.v1"), 1)
+    require(entry_ref_same(first, second), "a second resolution returned another entry")
+    require(entry_ref_vendor(first) == 0 and entry_ref_mode(first) == 1, "the layout word lost the key")
+    var la = List[Int]()
+    var lp: List[Int] = [7, 3]
+    var lf = List[Float64]()
+    require(entry_ref_call(first, 0, la, lp, lf) == 703, "List call through the ref")
+    var a: Array[Int, 0] = []
+    var p: Array[Int, 2] = [4, 2]
+    var f: Array[Float64, 0] = []
+    require(entry_ref_call(first, 0, a, p, f) == 402, "inline Array call through the ref")
+    for round in range(3):  # small-loop(the same ref reused across calls)
+        require(entry_ref_call(first, 0, a, p, f) == 402, "reused ref call " + String(round))
+    var refused = 0
+    for unit in range(3):  # small-loop(three resolution-time mismatches)
+        try:
+            _ = entry_table_resolve[NAME](1, 0, 0, String("test.entry.v1"), 2 if unit == 0 else 1)
+            if unit == 1:
+                _ = entry_table_resolve[NAME](1, 0, 0, String("test.entry.v2"), 1)
+            if unit == 2:
+                _ = entry_table_resolve[NAME](0, 0, 0, String("test.entry.v1"), 1)
+        except problem:
+            var text = String(problem)
+            require(("ABI schema differs" in text) or ("execution key differs" in text), "unexpected refusal: " + text)
+            refused += 1
+    require(refused == 3, "a layout or key mismatch was accepted at resolution")
+    var none = entry_ref_unresolved()
+    try:
+        _ = entry_ref_call(none, 0, a, p, f)
+        raise Error("an unresolved ref ran")
+    except problem:
+        require("not resolved for this owner" in String(problem), "unexpected refusal: " + String(problem))
+
+
 def fixture(unit: Int) raises:
     if unit == 0:
         table_case[0]()
@@ -253,6 +299,8 @@ def fixture(unit: Int) raises:
         registry_case[7]()
     elif unit == 19:
         borrowed_linear_case()
+    elif unit == 20:
+        entry_ref_case()
 
 
 def run_checks() raises:

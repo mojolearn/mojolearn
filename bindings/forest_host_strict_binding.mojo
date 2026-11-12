@@ -61,25 +61,18 @@ comptime RF_STRICT_REGISTRY = SharedSlot[HostStrictRegistry, "MojolearnRFStrictF
 comptime ET_STRICT_REGISTRY = SharedSlot[HostStrictRegistry, "MojolearnETStrictForestHostV2"]
 
 
-def forest_strict_prepare_host_binding[RF_INPUT: Bool](
-    offsets_addr: PythonObject, colid_addr: PythonObject,
-    quesval_addr: PythonObject, left_child_addr: PythonObject,
-    leaves_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
+def forest_strict_prepare_host_native[RF_INPUT: Bool](model: List[Int], features: Int, trees: Int,
+                                                     outputs: Int) raises -> Int:
     """The trees of one fitted forest, rebuilt once (the same checks
-    `rf_host_trees` / `et_host_trees` make per call)."""
-    if len(params) != 3:
-        raise Error("forest_strict_prepare requires features, trees, outputs")
-    var features = Int(py=params[0])
-    var trees = Int(py=params[1])
-    var outputs = Int(py=params[2])
+    `rf_host_trees` / `et_host_trees` make per call; XF_STRICT_PREPARE, lane
+    calltable-forest). `model` holds the five array addresses."""
     if features < 1 or trees < 1 or trees >= 2147483647 or outputs < 1:
         raise Error("invalid strict forest dimensions")
-    var offsets_p = i32_ptr(Int(py=offsets_addr))
-    var colid_p = i32_ptr(Int(py=colid_addr))
-    var quesval_p = f32_ptr(Int(py=quesval_addr))
-    var left_p = i32_ptr(Int(py=left_child_addr))
-    var leaves_p = f32_ptr(Int(py=leaves_addr))
+    var offsets_p = i32_ptr(model[0])
+    var colid_p = i32_ptr(model[1])
+    var quesval_p = f32_ptr(model[2])
+    var left_p = i32_ptr(model[3])
+    var leaves_p = f32_ptr(model[4])
     var n_nodes = Int(offsets_p[trees])
     if Int(offsets_p[0]) != 0 or n_nodes < trees:
         raise Error("forest_strict_prepare: tree_offsets must start at 0 and hold at least one node per tree")
@@ -95,57 +88,77 @@ def forest_strict_prepare_host_binding[RF_INPUT: Bool](
     var id = state[].next_id
     state[].next_id += 1
     state[].entries[id] = HostStrictForest(rf^, et^, features, trees, outputs)
-    return PythonObject(id)
+    return id
+
+
+def forest_strict_prepare_host_binding[RF_INPUT: Bool](
+    offsets_addr: PythonObject, colid_addr: PythonObject,
+    quesval_addr: PythonObject, left_child_addr: PythonObject,
+    leaves_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`forest_strict_prepare` (UNPACK of `forest_strict_prepare_host_native`)."""
+    if len(params) != 3:
+        raise Error("forest_strict_prepare requires features, trees, outputs")
+    var model: List[Int] = [Int(py=offsets_addr), Int(py=colid_addr), Int(py=quesval_addr),
+                            Int(py=left_child_addr), Int(py=leaves_addr)]
+    return PythonObject(forest_strict_prepare_host_native[RF_INPUT](
+        model, Int(py=params[0]), Int(py=params[1]), Int(py=params[2])))
+
+
+def forest_strict_predict_host_native[RF_INPUT: Bool](
+    handle: Int, x_address: Int, out_addr: Int, rows: Int, features: Int, outputs: Int,
+) raises -> Int:
+    """The sequential vote over the kept trees (XF_STRICT_PREDICT):
+    `rows * outputs` float32 values into `out`, exactly what `rf_predict_*` /
+    `et_predict` write. The caller holds the GIL; the walk releases it."""
+    if rows < 0 or features < 1 or outputs < 1:
+        raise Error("invalid strict prediction dimensions")
+    var state = RF_STRICT_REGISTRY.get_or_create_ptr()
+    comptime if not RF_INPUT:
+        state = ET_STRICT_REGISTRY.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released strict forest handle")
+    if state[].entries[handle].features != features or state[].entries[handle].outputs != outputs:
+        raise Error("strict prediction dimensions do not match the snapshot")
+    if rows == 0:
+        return 0
+    var op = f32_ptr(out_addr)
+    var trees = state[].entries[handle].trees
+    with GILReleased(Python()):
+        var x = read_f32(x_address, rows * features)
+        var out = List[Float32](length=rows * outputs, fill=Float32(0.0))
+        comptime if RF_INPUT:
+            rf_host_predict(state[].entries[handle].rf, x, rows, features, trees, outputs, out)
+        else:
+            et_host_predict(state[].entries[handle].et, x, rows, features, trees, outputs, out)
+        for i in range(rows * outputs):  # small-loop(output copy): the same copy forest_host_vote_into makes
+            op[i] = out[i]
+    return rows
 
 
 def forest_strict_predict_host_binding[RF_INPUT: Bool](
     handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The sequential vote over the kept trees: `rows * outputs` float32
-    values into `out`, exactly what `rf_predict_*` / `et_predict` write."""
+    """`forest_strict_predict` (UNPACK)."""
     if len(params) != 3:
         raise Error("strict prediction requires rows, features, outputs")
-    var rows = Int(py=params[0])
-    var features = Int(py=params[1])
-    var outputs = Int(py=params[2])
-    if rows < 0 or features < 1 or outputs < 1:
-        raise Error("invalid strict prediction dimensions")
-    var id = Int(py=handle)
-    var state = RF_STRICT_REGISTRY.get_or_create_ptr()
-    comptime if not RF_INPUT:
-        state = ET_STRICT_REGISTRY.get_or_create_ptr()
-    if id not in state[].entries:
-        raise Error("unknown or released strict forest handle")
-    if state[].entries[id].features != features or state[].entries[id].outputs != outputs:
-        raise Error("strict prediction dimensions do not match the snapshot")
-    if rows == 0:
-        return PythonObject(0)
-    var x_address = Int(py=x_addr)
-    var op = f32_ptr(Int(py=out_addr))
-    var trees = state[].entries[id].trees
-    # The kept trees are read in place for the walk (the door's pin keeps
-    # the entry alive across it).
-    with GILReleased(Python()):
-        var x = read_f32(x_address, rows * features)
-        var out = List[Float32](length=rows * outputs, fill=Float32(0.0))
-        comptime if RF_INPUT:
-            rf_host_predict(state[].entries[id].rf, x, rows, features, trees, outputs, out)
-        else:
-            et_host_predict(state[].entries[id].et, x, rows, features, trees, outputs, out)
-        for i in range(rows * outputs):  # small-loop(output copy): the same copy forest_host_vote_into makes
-            op[i] = out[i]
-    return PythonObject(rows)
+    return PythonObject(forest_strict_predict_host_native[RF_INPUT](
+        Int(py=handle), Int(py=x_addr), Int(py=out_addr), Int(py=params[0]), Int(py=params[1]), Int(py=params[2])))
+
+
+def forest_strict_release_host_native[RF_INPUT: Bool](handle: Int) raises:
+    """XF_STRICT_RELEASE: an unknown handle is already released."""
+    comptime if RF_INPUT:
+        var state = RF_STRICT_REGISTRY.get_or_create_ptr()
+        if handle in state[].entries:
+            _ = state[].entries.pop(handle)
+    else:
+        var state = ET_STRICT_REGISTRY.get_or_create_ptr()
+        if handle in state[].entries:
+            _ = state[].entries.pop(handle)
 
 
 def forest_strict_release_host_binding[RF_INPUT: Bool](handle: PythonObject) raises -> PythonObject:
-    var id = Int(py=handle)
-    comptime if RF_INPUT:
-        var state = RF_STRICT_REGISTRY.get_or_create_ptr()
-        if id in state[].entries:
-            _ = state[].entries.pop(id)
-    else:
-        var state = ET_STRICT_REGISTRY.get_or_create_ptr()
-        if id in state[].entries:
-            _ = state[].entries.pop(id)
+    forest_strict_release_host_native[RF_INPUT](Int(py=handle))
     return PythonObject(None)

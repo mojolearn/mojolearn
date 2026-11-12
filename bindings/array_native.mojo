@@ -16,6 +16,9 @@
 # dtype argument. The library itself executes no Python here.
 from bindings.array_from_buffer_native import array_from_buffer
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from bindings.labels_stat_boundary import labels_stat_pack
+from bindings.base_helpers_released import base_reduce_stat, base_equal_elements
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module
@@ -878,7 +881,8 @@ def _reduce(a: PythonObject, what: Int, name: String, context: PythonObject) rai
     var code = py_get(context["native_codes"], a.dtype)
     var stat = _helper("reduce_stat", size, context)
     if code is not None and stat is not None:
-        return _call(stat, a._addr, code, PythonObject(size), PythonObject(what))
+        return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+                                                 size, what))
     if size == 0:
         raise Error("ValueError: mojolearn: " + name + " of an empty Array")
     raise _rebuild("reduce_stat")
@@ -896,9 +900,11 @@ def _sum(a: PythonObject, context: PythonObject) raises -> PythonObject:
     if stat is None or code is None:
         raise _rebuild("reduce_stat")
     if _is_float(dtype):
-        return _call(stat, a._addr, code, PythonObject(size), PythonObject(2))
+        return labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+                                                 size, 2))
     # The exact integer sum: (hi << 64) + (mid << 32) + low of a 128-bit total.
-    var parts = _call(stat, a._addr, code, PythonObject(size), PythonObject(5))
+    var parts = labels_stat_pack(base_reduce_stat(base_helpers_key(context["helpers"]), Int(py=a._addr), Int(py=code),
+                                                  size, 5))
     var operator = context["operator"]
     var b = native_loaded_module("builtins")
     var hi = _call(b.int, parts[0])
@@ -983,7 +989,9 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
             var x = _as_c(a, context)
             var y = _as_c(other, context)
             var store = _zero_flags(size, context)
-            _ = _call(equal, x._addr, y._addr, code, PythonObject(size), _call(store.buffer_info)[0])
+            _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=x._addr), Int(py=y._addr),
+                                    Int(py=code), size, Int(py=_call(store.buffer_info)[0]))
+            _ = store  # keep the flag store alive through the native call above
             # The helper reads raw addresses: a C-order copy made by _as_c
             # must outlive the call (Mojo ends a local at its last named use).
             _ = x^
@@ -999,8 +1007,9 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
                 var x = _as_c(a, context)
                 var fill = _call(_attr(_call(context["array_type"], _code(dtype, context), Python.list(v)), "__mul__"),
                                  PythonObject(size))
-                _ = _call(equal, x._addr, _call(fill.buffer_info)[0], code, PythonObject(size),
-                          _call(store.buffer_info)[0])
+                _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=x._addr),
+                                        Int(py=_call(fill.buffer_info)[0]), Int(py=code), size,
+                                        Int(py=_call(store.buffer_info)[0]))
                 # Keep the copy and the repeated scalar alive through the call.
                 _ = x^
                 _ = fill^
@@ -1032,7 +1041,8 @@ def _equal(a: PythonObject, other: PythonObject, context: PythonObject) raises -
         if String(floats.dtype) != "<f8":
             fa = _as_c(_astype(floats, PythonObject("<f8"), context), context)
         var store = _zero_flags(size, context)
-        _ = _call(equal, ia._addr, fa._addr, context["eq_i64_f64"], PythonObject(size), _call(store.buffer_info)[0])
+        _ = base_equal_elements(base_helpers_key(context["helpers"]), Int(py=ia._addr), Int(py=fa._addr),
+                                Int(py=context["eq_i64_f64"]), size, Int(py=_call(store.buffer_info)[0]))
         # The widened copies stay alive through the raw-address call.
         _ = ia^
         _ = fa^
@@ -1147,8 +1157,17 @@ def _set_state(a: PythonObject, state: PythonObject, context: PythonObject) rais
 
 def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array(shape, dtype)`: a zero-filled C-order block."""
-    var b = native_loaded_module("builtins")
     var dtype = _normalize(requested, context)
+    var checked = _checked_shape(shape)
+    var store = _new_store(_code(dtype, context), _prod(_ints(checked)), context)
+    _ = _init_owned(a, store, checked, dtype, "C", context)
+    return PythonObject(None)
+
+
+def _checked_shape(shape: PythonObject) raises -> PythonObject:
+    """`_check_shape`: an int or a sequence of ints as a tuple of ints, a
+    negative dimension refused."""
+    var b = native_loaded_module("builtins")
     var shape_arg = shape
     if _truth(_call(b.isinstance, shape, b.int)):
         shape_arg = Python.tuple(shape)
@@ -1157,9 +1176,66 @@ def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, c
     for i in range(len(dims)):  # driver-loop: over the requested rank
         if dims[i] < 0:
             raise Error("ValueError: mojolearn: negative dimension in shape " + _text(checked))
-    var store = _new_store(_code(dtype, context), _prod(dims), context)
-    _ = _init_owned(a, store, checked, dtype, "C", context)
-    return PythonObject(None)
+    return checked
+
+
+def _full(cls: PythonObject, shape: PythonObject, value: PythonObject, requested: PythonObject,
+          context: PythonObject) raises -> PythonObject:
+    """`_buffer.full`: a C-order block of `shape` holding `value` (one
+    conversion of `value`, the store repeated natively)."""
+    var dtype = _normalize(requested, context)
+    var one = _from_list(cls, Python.list(value), PythonObject(dtype), context)
+    var checked = _checked_shape(shape)
+    var size = _prod(_ints(checked))
+    var store = PythonObject(None)
+    if size > 0:
+        store = _call(_attr(one._store, "__mul__"), PythonObject(size))
+    else:
+        store = _call(context["array_type"], one._store.typecode)
+    _ = one  # the one-element store stays alive through the repeat
+    return _owned_as(cls, store, checked, dtype, "C", context)
+
+
+def _frombytes(cls: PythonObject, raw: PythonObject, requested: PythonObject, shape: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """`_buffer.frombytes`: an owned C-order block holding a copy of `raw`."""
+    var dtype = _normalize(requested, context)
+    var checked = _checked_shape(shape)
+    var need = _prod(_ints(checked)) * Int(py=py_get(context["itemsizes"], PythonObject(dtype)))
+    var given = len(raw)
+    if given != need:
+        raise Error("ValueError: mojolearn: " + String(given) + " bytes do not fill shape " + _text(checked)
+                    + " of " + dtype + " (" + String(need) + " bytes)")
+    var store = _call(context["array_type"], _code(dtype, context))
+    _ = _call(store.frombytes, raw)
+    return _owned_as(cls, store, checked, dtype, "C", context)
+
+
+def _as_order(a: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
+    """`Array._as_order`: self when already laid out as `order`, a relabeled
+    view when both layouts coincide, else a copy in `order`."""
+    if String(a.order) == order:
+        return a
+    if _both_orders(_ints(a.shape)):
+        return _view_of(a, a.shape, order, context)
+    if order == "C":
+        return _as_c(a, context)
+    var dtype = String(a.dtype)
+    var out = _new_store(_code(dtype, context), Int(py=a.size), context)
+    _reorder(a, "C", out, context)
+    return _owned(out, a.shape, dtype, "F", context)
+
+
+def _admit_class(cls: PythonObject, what: String, context: PythonObject) raises:
+    """A classmethod constructor's `cls`: the connected Array class or a subclass."""
+    # PERF FIX (perf-audit-3, 2026-11-11): the exact connected class (every
+    # library-built Array) is admitted by identity, as `_admit` does, before
+    # the builtins lookup and the `issubclass` call; a subclass keeps them.
+    if cls is context["array_class"]:
+        return
+    var b = native_loaded_module("builtins")
+    if py_type(cls) is not b.type or not _truth(_call(b.issubclass, cls, context["array_class"])):
+        raise Error("TypeError: " + what + " builds a mojolearn Array class")
 
 
 # ------------------------------------------------------------------ door
@@ -1174,11 +1250,34 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
         return array_from_buffer(a, args[3], context)
     if op == "from_list":
         # `a` is the class the classmethod was called on.
-        var b = native_loaded_module("builtins")
-        if py_type(a) is not b.type or not _truth(_call(b.issubclass, a, context["array_class"])):
-            raise Error("TypeError: Array.from_list builds a mojolearn Array class")
+        _admit_class(a, "Array.from_list", context)
         return _from_list(a, args[3], args[4], context)
+    # lane pyout-runtime-boundary (2026-11-11): the constructors whose shape,
+    # size and stride arithmetic ran in Python (`Array._owned`,
+    # `Array._from_flat`, `_buffer.full`, `_buffer.frombytes`); `a` is the class.
+    if op == "owned":
+        _admit_class(a, "Array._owned", context)
+        return _owned_as(a, args[3], args[4], String(args[5]), String(args[6]), context)
+    if op == "from_flat":
+        _admit_class(a, "Array._from_flat", context)
+        return _from_flat_as(a, args[3], args[4], String(args[5]), context)
+    if op == "full":
+        _admit_class(a, "full", context)
+        return _full(a, args[3], args[4], args[5], context)
+    if op == "frombytes":
+        _admit_class(a, "frombytes", context)
+        return _frombytes(a, args[3], args[4], args[5], context)
     _admit(a, context)
+    # lane pyout-runtime-boundary: the layout operations the Python methods
+    # `_view_of`, `_as_c`, `_as_order` and `_has_order` computed.
+    if op == "view_of":
+        return _view_of(a, args[3], String(args[4]), context)
+    if op == "as_c":
+        return _as_c(a, context)
+    if op == "as_order":
+        return _as_order(a, String(args[3]), context)
+    if op == "has_order":
+        return PythonObject(String(a.order) == String(args[3]) or _both_orders(_ints(a.shape)))
     # p3-array-arena: the per-row and per-element operations first.
     if op == "row":
         return _row(a, args[3], Int(py=args[4]), Int(py=args[5]), context)

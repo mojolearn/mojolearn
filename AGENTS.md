@@ -15,6 +15,27 @@ imports it and adds only what is specific to Claude sessions.
 - Code stays lower case: the package, module and command names (`pip install mojolearn`, `import mojolearn`,
   `python -m mojolearn verify`), paths, URLs and domains (mojolearn.org). Put them in backticks in prose.
 
+## The verify command is protected (Andrew, 2026-11-11)
+
+`python -m mojolearn verify` and everything it needs (the verification modules shipped in the wheel, their fixtures,
+records, ledger and the commands they run) is kept working at all times. Preserving verify trumps every other rule
+in this file: no Python removal, boundary migration, dead-code deletion, wheel slimming, test migration, refactor or
+cleanup may remove, move out of the wheel, weaken or break any part of it. Verification tooling is a testing tool,
+not product execution ("No Python in the runtime"), so its Python is never a violation of that rule. A change that
+touches anything verify imports says so in its report and states how verify was exercised afterwards.
+
+## No refactor adds cost on a hot path (Andrew, 2026-11-11)
+
+A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
+on the count it lowers. It never adds, anywhere a loop or a repeated call can reach: a slot or name lookup that the
+old code resolved once; a lock held where the old code released it (or released where the old code read Python
+objects); a heap allocation, string build or struct copy per call; a copy of a buffer the old path passed by
+pointer; a probe, refusal check or publication done twice; a default-route change; or a second path beside the old
+one. Resolve once at import or construction, call through a pointer, pass buffers by view. Every brief for such a
+change carries this rule and the lane's report lists, per converted site, the loop it sits in and what the old code
+did there. An orchestrator audits every wave against these patterns before the integration compile and fixes what it
+finds in the same round; a wave without that audit does not merge.
+
 ## Hard rules (Andrew)
 
 Copied verbatim, with their dates, from Andrew's own rules so that every agent has them. They override anything

@@ -105,9 +105,6 @@ class ParallelByteLanguageModelTrainer:
         in place and returned; nothing is allocated (same bytes)."""
         return _native_parallel_byte("export_gradients", (self, rank, into))
 
-    def _require_split_step(self, name):
-        return _native_parallel_byte("require_split", (self, name))
-
     def shard_gradient(self, ids):
         """One logical shard's gradient from the CURRENT state, with no
         update: `(loss, float32[n_total] Array)`. The worker half of a step

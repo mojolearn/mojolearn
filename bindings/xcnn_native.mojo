@@ -7,10 +7,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries
+from bindings.xcnn_common import xcnn_connect_numpy, xcnn_builtins, xcnn_dev_fields, xcnn_module_entries, xcnn_ref, xcnn_word
+from std.python._cpython import GILReleased
+from x_cnn.tensor_run import xcnn_tensor_run_free
 from bindings.native_loaded_module import native_interpreter_finalizing
 from bindings.py_balanced import py_type, py_call, py_setitem
-from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_tensor_native import xcnn_tensor_operation
 from bindings.xcnn_pool_native import xcnn_pool_layers
 from bindings.xcnn_bn_native import xcnn_bn_layers
@@ -40,11 +41,15 @@ def _xcnn_finalize(owner: PythonObject, operation: String, context: PythonObject
         if operation == "dev_finalize":
             var fields = xcnn_dev_fields(owner, context)
             var entries = xcnn_module_entries(fields["b"], context)
+            var key = xcnn_ref(entries)
             var table = fields["h"]
             var names = py_call(xcnn_builtins().list, table.keys())
             py_setitem(fields, "h", Python.dict())
             for i in range(len(names)):  # driver-loop: release the owner's native allocation handles
-                _ = py_call_typed(entries["symbols"]["x_cnn_res_free"], table[names[i]][0])
+                var word = xcnn_word(table[names[i]][0])
+                var py = Python()
+                with GILReleased(py):
+                    xcnn_tensor_run_free(key, word)
     except:
         pass  # partially initialized owner or interpreter shutdown
     return PythonObject(None)

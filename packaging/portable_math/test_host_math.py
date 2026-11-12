@@ -30,14 +30,6 @@ def test_exact_operations():
         assert owned.isinf(x) == math.isinf(x)
         assert owned.isfinite(x) == math.isfinite(x)
         assert bits(owned.copysign(x, -0.0)) == bits(math.copysign(x, -0.0))
-        e = rng.randrange(-2100, 2100)
-        try:
-            reference = math.ldexp(x, e)
-        except OverflowError:
-            with pytest.raises(OverflowError):
-                owned.ldexp(x, e)
-        else:
-            assert bits(owned.ldexp(x, e)) == bits(reference)
         if math.isfinite(x):
             assert owned.floor(x) == math.floor(x)
             assert owned.ceil(x) == math.ceil(x)
@@ -59,7 +51,6 @@ def test_domains_and_signed_zero():
     with pytest.raises(ValueError):
         owned.fsum([math.inf, -math.inf])
     assert bits(owned.sqrt(-0.0)) == bits(-0.0)
-    assert bits(owned.ldexp(-0.0, 20)) == bits(-0.0)
     assert owned.exp(-math.inf) == 0
     assert owned.exp(math.inf) == math.inf
     assert owned.exp(-709) == 0  # Existing portable_exp64 FTZ contract.

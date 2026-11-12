@@ -22,7 +22,6 @@ step-loop arm, the resident predict record and x_cnn_predict_r) is deleted.
 TOMBSTONE: the hand CNN classifier epoch and resident predict deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
 Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 """
-from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_f32, xcnn_addr, xcnn_readonly
@@ -45,10 +44,15 @@ from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN, SESSI
 from providers.python.neural_descriptor_pyapi import neural_descriptor_adopt, NativeDescriptorResource
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_identity_key import NativeIdentityKey
-
-#: rows per predict pass on the device (every op is per row, so the chunk
-#: never changes a word)
-comptime _PREDICT_ROWS = 2048
+from x_cnn.classifier_run import (
+    CnnClfPlan, CnnClfFitSettings, cnnclf_run_check_input_rank, cnnclf_run_check_input_dim,
+    cnnclf_run_check_channels, cnnclf_run_check_setting, cnnclf_run_check_optimizer, cnnclf_run_optimizer_word,
+    cnnclf_run_check_nesterov, cnnclf_run_block_plane, cnnclf_run_conv_seed, cnnclf_run_head_seed,
+    cnnclf_run_conv_fan_in, cnnclf_run_kaiming_bound, cnnclf_run_check_rows, cnnclf_run_images,
+    cnnclf_run_features, cnnclf_run_check_labels, cnnclf_run_fit_steps, cnnclf_run_fit_addresses,
+    cnnclf_run_fit_ints, cnnclf_run_fit_floats, cnnclf_run_open_addresses, cnnclf_run_open_ints,
+    cnnclf_run_check_session, cnnclf_run_predict_ints,
+)
 
 
 def _b() raises -> PythonObject:
@@ -174,21 +178,18 @@ def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonOb
     var fields = _fields(model)
     if py_type(args[0]) is not b.tuple and py_type(args[0]) is not b.list:
         raise Error("TypeError: input_shape requires a native tuple or list")
-    if len(args[0]) != 3:
-        raise Error("ValueError: input_shape must contain C, H and W")
+    cnnclf_run_check_input_rank(len(args[0]))
     if py_type(args[1]) is not b.tuple and py_type(args[1]) is not b.list:
         raise Error("TypeError: conv_channels requires a native tuple or list")
     var input_shape = Python.list()
     var channels = Python.list()
     for i in range(3):  # small-loop(the three declared image dimensions)
         var value = Int(py=args[0][i])
-        if value < 1:
-            raise Error("ValueError: input_shape dimensions must be positive")
+        cnnclf_run_check_input_dim(value)
         _ = py_call(input_shape.append, PythonObject(value))
     for i in range(len(args[1])):  # driver-loop: declared convolution layer widths
         var value = Int(py=args[1][i])
-        if value < 1:
-            raise Error("ValueError: convolution channels must be positive")
+        cnnclf_run_check_channels(value)
         _ = py_call(channels.append, PythonObject(value))
     py_setitem(fields, "input_shape", py_call(b.tuple, input_shape))
     py_setitem(fields, "conv_channels", py_call(b.tuple, channels))
@@ -196,8 +197,7 @@ def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonOb
     var positions: List[Int] = [2, 3, 7, 8]
     for i in range(4):  # small-loop(integer classifier settings)
         var value = Int(py=args[positions[i]])
-        if value < (0 if i == 3 else 1):
-            raise Error("ValueError: invalid classifier size or iteration setting")
+        cnnclf_run_check_setting(i, value)
         py_setitem(fields, integers[i], PythonObject(value))
     var floats = Python.tuple("learning_rate", "momentum", "weight_decay", "dampening", "eps")
     var indices: List[Int] = [4, 5, 6, 13, 16]
@@ -207,12 +207,11 @@ def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonOb
     py_setitem(fields, "random_state", args[10])
     py_setitem(fields, "numeric_mode", args[11])
     var optimizer = String(args[12])
-    if optimizer != "sgd" and optimizer != "adam" and optimizer != "adamw":
-        raise Error("ValueError: optimizer must be sgd, adam or adamw")
+    cnnclf_run_check_optimizer(optimizer)
     py_setitem(fields, "optimizer", PythonObject(optimizer))
     var nesterov = Bool(py=args[14])
-    if nesterov and (Float64(py=args[5]) <= 0 or Float64(py=args[13]) != 0):
-        raise Error("ValueError: Nesterov momentum requires a momentum and zero dampening")
+    if nesterov:  # the scalars are read only when they are checked (as before)
+        cnnclf_run_check_nesterov(nesterov, Float64(py=args[5]), Float64(py=args[13]))
     py_setitem(fields, "nesterov", PythonObject(nesterov))
     if (py_type(args[15]) is not b.tuple and py_type(args[15]) is not b.list) or len(args[15]) != 2:
         raise Error("ValueError: betas must contain two scalars")
@@ -235,7 +234,7 @@ def _kaiming(mut stream: XseqStream, shape: PythonObject, fan_in: Int, context: 
     """`_kaiming_uniform(rng, shape, fan_in)`: float32 U(-b, b) draws, b =
     1 / sqrt(fan_in) (correctly rounded), from the layer's stream."""
     var out = _empty(shape, "float32", context)
-    var bound = 1.0 / sqrt(Float64(fan_in))
+    var bound = cnnclf_run_kaiming_bound(fan_in)
     stream.fill_uniform(context, xcnn_addr(out), Int(py=out.size), -bound, bound)
     return out
 
@@ -260,7 +259,7 @@ def _conv_new(c: Int, oc: Int, k: Int, seed: Int, mode: PythonObject, context: P
     py_setitem(f, "random_state", seed)
     py_setitem(f, "input_shape", PythonObject(None))
     py_setitem(f, "numeric_mode", mode)
-    var fan_in = c * k * k
+    var fan_in = cnnclf_run_conv_fan_in(c, k)
     var stream = XseqStream(PythonObject(seed), context)
     py_setitem(f, "weight_", _kaiming(stream, Python.tuple(oc, c, k, k), fan_in, context))
     py_setitem(f, "bias_", _kaiming(stream, Python.tuple(oc), fan_in, context))
@@ -319,21 +318,21 @@ def _build(fields: PythonObject, k: Int, context: PythonObject) raises:
     var channels = fields["conv_channels"]
     for i in range(len(channels)):  # driver-loop: over the conv blocks (model structure)
         var oc = Int(py=channels[i])
-        var conv = _conv_new(c, oc, ks, seed + 101 * i, mode, context)
+        var conv = _conv_new(c, oc, ks, cnnclf_run_conv_seed(seed, i), mode, context)
         _ = py_call(layers.append, conv)
-        h = h + 2 * (ks // 2) - ks + 1
-        w = w + 2 * (ks // 2) - ks + 1
+        var plane = cnnclf_run_block_plane(h, w, ks, ps)
         _ = py_call(layers.append, _relu_new(mode, context))
         var pool = PythonObject(None)
-        if h >= ps and w >= ps and ps > 1:
+        if plane.pools:
             pool = _maxpool_new(ps, mode, context)
             _ = py_call(layers.append, pool)
-            h = h // ps
-            w = w // ps
+        h = plane.h
+        w = plane.w
         _ = py_call(blocks.append, Python.tuple(conv, pool))
         c = oc
-    py_setitem(fields, "_flat", c * h * w)
-    py_setitem(fields, "head_", _linear_new(c * h * w, k, seed + 997, mode, context))
+    var flat = cnnclf_run_features([c, h, w])
+    py_setitem(fields, "_flat", flat)
+    py_setitem(fields, "head_", _linear_new(flat, k, cnnclf_run_head_seed(seed), mode, context))
     py_setitem(fields, "layers_", layers)
     py_setitem(fields, "_blocks", blocks)
 
@@ -357,16 +356,10 @@ def _images(fields: PythonObject, source: PythonObject, context: PythonObject) r
     var x = xcnn_f32(source, "X", context)
     var shape = xcnn_shape(x)
     var given = fields["input_shape"]
-    if len(shape) < 1:
-        raise Error("ValueError: classifier images require a row dimension")
-    var full: List[Int] = [shape[0], Int(py=given[0]), Int(py=given[1]), Int(py=given[2])]
-    if len(shape) == 2:
-        return xcnn_reshape(x, full, context)
-    if len(shape) != 4:
-        raise Error("ValueError: classifier images must have rank two or four")
-    for i in range(1, 4):  # small-loop(image channel/height/width metadata)
-        if shape[i] != full[i]:
-            raise Error("ValueError: images do not match the model input_shape")
+    cnnclf_run_check_rows(shape)
+    var images = cnnclf_run_images(shape, [Int(py=given[0]), Int(py=given[1]), Int(py=given[2])])
+    if images.reshape:
+        return xcnn_reshape(x, images.full, context)
     return x
 
 
@@ -381,23 +374,28 @@ def _engine(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     return labels
 
 
-def _geometry(fields: PythonObject, n: Int, k: Int) raises -> List[Int]:
-    """[n, C, H, W, k, blocks, kernel_size, pool_size]: the head of a CNN_FIT /
-    CNN_PREDICT descriptor."""
-    var shape = fields["input_shape"]
-    var out: List[Int] = [n, Int(py=shape[0]), Int(py=shape[1]), Int(py=shape[2]), k, len(fields["_blocks"]),
-                          Int(py=fields["kernel_size"]), Int(py=fields["pool_size"])]
-    return out^
-
-
-def _block_words(fields: PythonObject, mut ints: List[Int]) raises:
-    """Append every block's width, then every block's pool flag (a block
+def _plan(fields: PythonObject, n: Int, k: Int) raises -> CnnClfPlan:
+    """UNPACK the descriptor head of CNN_FIT / CNN_OPEN: the input plane,
+    kernel and pool sizes, and every block's width and pool flag (a block
     pools when _build kept its MaxPool2d)."""
+    var shape = fields["input_shape"]
     var blocks = fields["_blocks"]
+    var widths = List[Int]()
+    var pools = List[Int]()
     for i in range(len(blocks)):  # driver-loop: over the conv blocks (model structure)
-        ints.append(Int(py=_fields(blocks[i][0])["out_channels"]))
+        widths.append(Int(py=_fields(blocks[i][0])["out_channels"]))
     for i in range(len(blocks)):  # driver-loop: over the conv blocks (model structure)
-        ints.append(0 if blocks[i][1] is None else 1)
+        pools.append(0 if blocks[i][1] is None else 1)
+    return CnnClfPlan(n, Int(py=shape[0]), Int(py=shape[1]), Int(py=shape[2]), k, Int(py=fields["kernel_size"]),
+                      Int(py=fields["pool_size"]), widths^, pools^)
+
+
+def _param_addresses(arrays: PythonObject) raises -> List[Int]:
+    """The address word of every learned array (descriptor order)."""
+    var out = List[Int]()
+    for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
+        out.append(Int(py=xcnn_addr(arrays[i])))
+    return out^
 
 
 def _param_arrays(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -425,8 +423,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     py_setitem(fields, "classes_", encoded[0])
     var yi = encoded[1]
     var n = Int(py=x.shape[0])
-    if Int(py=yi.size) != n:
-        raise Error("ValueError: X and y must contain the same number of rows")
+    cnnclf_run_check_labels(Int(py=yi.size), n)
     var k = len(encoded[0])
     # lane x8b: the refit publishes new weights; close the old resident
     # predict session now rather than at the next predict
@@ -440,29 +437,23 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var losses_all = b.list()
     var curve_out = b.list()
     if max_iter > 0:
-        var nsteps = (n + batch - 1) // batch
+        var nsteps = cnnclf_run_fit_steps(n, batch)
         var curve = _empty(Python.tuple(max_iter), "float32", context)
         var steps = _empty(Python.tuple(max_iter * nsteps), "float32", context)
         var arrays = _param_arrays(fields, context)
-        var addresses: List[Int] = [Int(py=xcnn_addr(x)), Int(py=xcnn_addr(yi)), Int(py=xcnn_addr(curve)),
-                                    Int(py=xcnn_addr(steps))]
-        for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
-            addresses.append(Int(py=xcnn_addr(arrays[i])))
-        var ints = _geometry(fields, n, k)
-        ints.append(batch)
-        ints.append(max_iter)
-        ints.append(1 if Bool(py=fields["shuffle"]) else 0)
-        ints.append(Int(seed64 & 0xFFFFFFFF))
-        ints.append(Int(seed64 >> 32))
-        ints.append(0 if optimizer == "sgd" else (1 if optimizer == "adam" else 2))
-        ints.append(1 if Bool(py=fields["nesterov"]) else 0)
-        _block_words(fields, ints)
+        var addresses = cnnclf_run_fit_addresses(Int(py=xcnn_addr(x)), Int(py=xcnn_addr(yi)),
+                                                 Int(py=xcnn_addr(curve)), Int(py=xcnn_addr(steps)),
+                                                 _param_addresses(arrays))
+        var plan = _plan(fields, n, k)
         var betas = fields["betas"]
-        var floats: List[Float64] = [
-            Float64(py=fields["learning_rate"]), Float64(py=fields["momentum"]), Float64(py=betas[0]),
-            Float64(py=betas[1]), Float64(py=fields["eps"]), Float64(py=fields["weight_decay"]),
+        var settings = CnnClfFitSettings(
+            batch, max_iter, Bool(py=fields["shuffle"]), seed64, cnnclf_run_optimizer_word(optimizer),
+            Bool(py=fields["nesterov"]), Float64(py=fields["learning_rate"]), Float64(py=fields["momentum"]),
+            Float64(py=betas[0]), Float64(py=betas[1]), Float64(py=fields["eps"]), Float64(py=fields["weight_decay"]),
             Float64(py=fields["dampening"]),
-        ]
+        )
+        var ints = cnnclf_run_fit_ints(plan, settings)
+        var floats = cnnclf_run_fit_floats(settings)
         _ = neural_descriptor_execute(xseq_neural_provider(labels), CNN_FIT, addresses, ints, floats)
         _ = x  # keep the Python objects alive through the native call above
         _ = yi
@@ -478,7 +469,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     py_setitem(fields, "losses_", losses_all)
     py_setitem(fields, "loss_curve_", curve_out)
     var ishape = fields["input_shape"]
-    py_setitem(fields, "n_features_in_", Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2]))
+    py_setitem(fields, "n_features_in_", cnnclf_run_features([Int(py=ishape[0]), Int(py=ishape[1]), Int(py=ishape[2])]))
     return model
 
 
@@ -570,11 +561,8 @@ def _open_resident(fields: PythonObject, provider: PythonObject, k: Int, context
     registry mutation keeps the GIL, as SESSION_OPEN does."""
     var arrays = _param_arrays(fields, context)
     var scope = List[Int](length=2, fill=0)
-    var addresses: List[Int] = [Int(scope.unsafe_ptr())]
-    for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
-        addresses.append(Int(py=xcnn_addr(arrays[i])))
-    var ints = _geometry(fields, 1, k)
-    _block_words(fields, ints)
+    var addresses = cnnclf_run_open_addresses(Int(scope.unsafe_ptr()), _param_addresses(arrays))
+    var ints = cnnclf_run_open_ints(_plan(fields, 1, k))
     var sid = neural_descriptor_execute(provider, CNN_OPEN, addresses, ints, List[Float64](), False)
     _ = arrays  # keep the Python objects alive through the native call above
     return neural_descriptor_adopt(provider, sid, SESSION_CLOSE, scope^)
@@ -610,11 +598,9 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
         keep = keep and not key.retains(model)
         record = Python.tuple(PythonObject(alloc=key^), lifetime)
     var resource = record[1].downcast_value_ptr[NativeDescriptorResource]()
-    if resource[].handle == 0 or len(resource[].context) != 2:
-        raise Error("RuntimeError: CNN resident session is closed")
+    cnnclf_run_check_session(resource[].handle, len(resource[].context))
     var addresses: List[Int] = [Int(py=xcnn_addr(x)), Int(py=xcnn_addr(out))]
-    var ints: List[Int] = [resource[].context[0], resource[].context[1], resource[].handle, n, 1 if codes else 0,
-                           _PREDICT_ROWS]
+    var ints = cnnclf_run_predict_ints(resource[].context[0], resource[].context[1], resource[].handle, n, codes)
     _ = neural_descriptor_execute(provider, CNN_PREDICT, addresses, ints, List[Float64]())
     _ = x  # keep the Python objects alive through the native call above
     # the session stays for the next predict while every weight is read-only;

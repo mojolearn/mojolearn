@@ -67,7 +67,7 @@ tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
 it; the `break_ties_high` flag in `dims` is the Python door's environment
 spelling of the same arm.
 """
-from bindings.native_owner_registry import register_native_owner
+from bindings.native_owner_registry import register_native_owner_type
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import unsafe_memcpy
 from std.os import abort
@@ -90,7 +90,7 @@ from bindings.native_identity_type import native_identity_type
 from bindings.neural_block_public import NativeBlockPlan
 from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
 from bindings.tokenizer_public_native import (
-    tokenizer_public_c, tokenizer_vocab_fingerprint,
+    tokenizer_public_c, tokenizer_vocab_fingerprint, _ids,
 )
 from providers.python.transformer_decode_pyapi import TransformerDecodeHandle
 from bindings.mamba_public_native import MambaDecodeHandle
@@ -102,7 +102,6 @@ from bindings.optimizer_lifecycle import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.optimizer_owner_boundary import OptimizerOwner
 from std.python.bindings import lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
@@ -529,7 +528,7 @@ def _table_from_spelled(
     var inv = codepoint_to_byte()
     var sv = SpelledVocab(n)
     var key_err = List[String](capacity=n)
-    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for k in range(n):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
         var key = items[k][0]
         var val = items[k][1]
         var is_int = String(py=val.__class__.__name__) == "int"
@@ -568,7 +567,7 @@ def _table_from_spelled(
         var m = Int(py=py_call(bi.len, merges))
         var sm = SpelledMerges(m)
         var errs = List[String](capacity=3 * m)
-        for k in range(m):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        for k in range(m):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
             var item = merges[k]
             var it = String(py=item.__class__.__name__)
             var kind = 2
@@ -643,26 +642,6 @@ def bpe_ranks_text_binding(handle: PythonObject) raises -> PythonObject:
     return PythonObject(ranks_text(owner[].tok.value().ranks))
 
 
-def _ids_from_seq(seq: PythonObject) raises -> List[Int]:
-    """The ids of a Python sequence, refused by type and position."""
-    var bi = native_loaded_module("builtins")
-    var operator_module = native_loaded_module("operator")
-    var n = Int(py=py_call(bi.len, seq))
-    var out = List[Int](capacity=n)
-    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        var v = seq[k]
-        var tn = String(py=v.__class__.__name__)
-        if tn == "bool":
-            raise Error("TypeError: ids must be int, not bool, at position " + String(k))
-        var iv = 0
-        try:
-            iv = Int(py=py_call(operator_module.index, v))
-        except:
-            raise Error("TypeError: ids must be int, got " + tn + " at position " + String(k))
-        out.append(iv)
-    return out^
-
-
 def bpe_decode_seq_binding(
     handle: PythonObject, seq: PythonObject, out_addr: PythonObject, out_cap: PythonObject
 ) raises -> PythonObject:
@@ -670,7 +649,10 @@ def bpe_decode_seq_binding(
     range checked by position, decoded, written at `out_addr`."""
     var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
-    var ids = _ids_from_seq(seq)
+    # One shared id reader (tokenizer_public_native `_ids`): exact list/tuple
+    # items through the C API (no Python-level `operator.index` call or
+    # class-name string per id), and one buffer read for an integer array.
+    var ids = _ids(seq)
     var nv = owner[].tok.value().n_vocab()
     bpe_check_ids(ids, nv)
     var cap = _index(out_cap)
@@ -697,7 +679,7 @@ def bpe_decode_batch_binding(
     var joined = List[UInt8]()
     var lens = List[Int](capacity=n)
     for s in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        bpe_decode_batch_append(owner[], _ids_from_seq(batch[s]), nv, joined, lens)
+        bpe_decode_batch_append(owner[], _ids(batch[s]), nv, joined, lens)
     bpe_decode_batch_fit(joined, cap)
     if n > 0:
         tokenizer_store_i64(_i64_ptr(_index(lengths_addr)), lens)
@@ -879,7 +861,7 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: Python
     py_setattr(tokenizer, "added", bi.dict() if options[1] is None else py_call(bi.dict, options[1]))
     py_setattr(tokenizer, "_added_by_id", bi.dict())
     var keys = py_call(bi.list, tokenizer.added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries, not input data)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries, not input data
         var content = keys[i]
         var id = tokenizer.added[content]
         if py_type(content) is not bi.str or len(content) == 0 or py_type(id) is not bi.int or Int(py=id) < 0:
@@ -890,10 +872,10 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: Python
     var bos = bi.list()
     var eos = bi.list()
     var input = py_call(bi.list, options[3])
-    for i in range(len(input)):  # small-loop(bos ids: configuration words)
+    for i in range(len(input)):  # driver-loop: over bos ids: configuration words
         _ = py_call(bos.append, py_call(bi.int, input[i]))
     input = py_call(bi.list, options[4])
-    for i in range(len(input)):  # small-loop(eos ids: configuration words)
+    for i in range(len(input)):  # driver-loop: over eos ids: configuration words
         _ = py_call(eos.append, py_call(bi.int, input[i]))
     py_setattr(tokenizer, "bos_ids", py_call(bi.tuple, bos))
     py_setattr(tokenizer, "eos_ids", py_call(bi.tuple, eos))
@@ -906,7 +888,7 @@ def _vocab_finish(tokenizer: PythonObject, var tok: VocabTokenizer) raises:
     var sp_lengths = List[Int]()
     var sp_ids = List[Int]()
     var keys = py_call(bi.list, tokenizer.added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries, not input data)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries, not input data
         var text = py_call(keys[i].encode, "utf-8")
         sp_lengths.append(len(text))
         sp_ids.append(Int(py=tokenizer.added[keys[i]]))
@@ -936,7 +918,7 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     var entries = py_call(bi.list, tokens)
     var arena = List[UInt8]()
     var lengths = List[Int]()
-    for i in range(len(entries)):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for i in range(len(entries)):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
         var bytes = _token_bytes(entries[i])
         lengths.append(len(bytes))
         tokenizer_append_bytes(arena, bytes)
@@ -950,7 +932,7 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     var rights = List[List[UInt8]](capacity=len(pairs))
     var refused = String("")
     var failed = False
-    for i in range(len(pairs)):  # cpu-route: Python objects marshaled one element at a time before the runtime
+    for i in range(len(pairs)):  # driver-loop: over vocabulary entries (the tokenizer model definition, read once at load; bounded by vocabulary size, not by input data)
         try:
             if len(pairs[i]) != 2:
                 raise Error("tokenizer: every merge must be a pair of bytes")
@@ -994,9 +976,10 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
         raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
     if kind != "Sequence":
         raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
-    var found = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found = Optional[PythonObject]()
     var steps = py_get(pre, "pretokenizers", bi.list())
-    for i in range(len(steps)):  # small-loop(pre_tokenizer steps: configuration structure)
+    for i in range(len(steps)):  # driver-loop: over pre_tokenizer steps: configuration structure
         var step = steps[i]
         var t = String(py_get(step, "type"))
         if t == "Split":
@@ -1009,21 +992,21 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
             var name = py_get(patterns, pat["Regex"])
             if name is None:
                 raise Error("tokenizer: pre_tokenizer regex " + String(pat["Regex"]) + " is not one of the known patterns; refused by name")
-            if found is not None and not Bool(py=found == name):
+            if found and not Bool(py=found.value() == name):
                 raise Error("tokenizer: two Split steps with different patterns")
             found = name
         elif t == "ByteLevel":
             if Bool(py=py_get(step, "use_regex", PythonObject(False))):
-                if found is not None and String(found) != "gpt2":
+                if found and String(found.value()) != "gpt2":
                     raise Error("tokenizer: Split followed by ByteLevel use_regex true cuts twice")
                 found = PythonObject("gpt2")
         elif t == "Metaspace":
             raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
         else:
             raise Error("tokenizer: pre_tokenizer step " + t + " is not a known cut")
-    if found is None:
+    if not found:
         raise Error("tokenizer: pre_tokenizer Sequence names no cut")
-    return found
+    return found.value()
 
 
 def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: PythonObject,
@@ -1074,7 +1057,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
         raise Error("tokenizer: model.vocab is not an object")
     var base = py_call(bi.dict, vocab)
     var keys = py_call(bi.list, added)
-    for i in range(len(keys)):  # small-loop(added tokens: configuration entries)
+    for i in range(len(keys)):  # driver-loop: over added tokens: configuration entries
         _ = py_call(base.pop, keys[i], PythonObject(None))
     var merges = py_get(model, "merges")
     if merges is None:
@@ -1090,7 +1073,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
             var single = py_get(post, "single", bi.list())
             var specials = py_get(post, "special_tokens", bi.dict())
             var seen = False
-            for i in range(len(single)):  # small-loop(post_processor template items: configuration structure)
+            for i in range(len(single)):  # driver-loop: over post_processor template items: configuration structure
                 var item = single[i]
                 if py_contains(item, "Sequence"):
                     seen = True
@@ -1099,7 +1082,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
                     var ids = py_get(py_get(specials, name, bi.dict()), "ids")
                     if ids is None or len(ids) == 0:
                         raise Error("tokenizer: post_processor special token has no ids")
-                    for j in range(len(ids)):  # small-loop(special token ids: configuration words)
+                    for j in range(len(ids)):  # driver-loop: over special token ids: configuration words
                         if seen:
                             _ = py_call(eos.append, py_call(bi.int, ids[j]))
                         else:
@@ -1130,7 +1113,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
     py_setattr(tokenizer, "bos_token_id", bos[0] if len(bos) != 0 else PythonObject(None))
     py_setattr(tokenizer, "eos_token_id", eos[len(eos) - 1] if len(eos) != 0 else PythonObject(None))
     if cfg is not None and py_type(cfg) is bi.dict:
-        for key in [String("bos_token"), String("eos_token")]:  # small-loop(the two special-token names)
+        for key in [String("bos_token"), String("eos_token")]:  # driver-loop: over the two special-token names
             var value = py_get(cfg, key)
             if py_type(value) is bi.dict:
                 value = py_get(value, "content")
@@ -1189,7 +1172,7 @@ def register_optimizer_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[OptimizerOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[OptimizerOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[OptimizerOwner]("_OptimizerOwner")
         return
@@ -1372,9 +1355,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         _ = module.add_type[GenerationNativeProvider]("_GenerationNativeProvider")
         _ = module.add_type[GenerationNativeSession]("_GenerationNativeSession")
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
-        register_native_owner(lookup_py_type_object[NeuralDescriptorProvider](), module.module, neural_descriptor_provider_pins)
         _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
-        register_native_owner(lookup_py_type_object[NativeDescriptorResource](), module.module, native_descriptor_resource_pins)
         _ = module.add_type[ProviderOperationLock]("_NativeOperationLockOwner")
         module.def_function[operation_lock_connect]("operation_lock_connect")
         module.def_py_c_function(operation_lock_c[0], "operation_lock_init")
@@ -1409,6 +1390,11 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_init")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_lm_repr")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_state_repr")
-        return module.finalize()
+        # Owner identities need the finalized type objects (Mojo 1.2 creates
+        # them in finalize(); see bindings/native_owner_registry.mojo).
+        var published = module.finalize()
+        register_native_owner_type[NeuralDescriptorProvider](published, neural_descriptor_provider_pins)
+        register_native_owner_type[NativeDescriptorResource](published, native_descriptor_resource_pins)
+        return published
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))

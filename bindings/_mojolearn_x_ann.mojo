@@ -23,6 +23,7 @@ from x_ann.cagra_device import cagra_build_device
 from x_ann.device_ctx import x_ann_ctx
 from providers.python.x_ann_resident_pyapi import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
 from providers.python.x_ann_resident_pyapi import x_ann_index_export_codes_binding
+from bindings.archive_x_ann_entry import publish_archive_x_ann
 from x_ann.resident import x_ann_register_pq_built
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_sq_build_device, refine_device, ivf_rabitq_build_device
 from x_ann.ops_entry_device import (
@@ -416,6 +417,10 @@ def build__mojolearn_x_ann() -> PythonObject:
         m.def_function[vendor_binding]("x_ann_vendor")
         var published_module = m.finalize()
         _publish_ann_ops(published_module)
+        comptime if IVF_PQ_RESIDENT_FIT:
+            # The archive export table: the archive writer saves a resident
+            # IVF-PQ index's codes through this entry natively.
+            publish_archive_x_ann()
         return published_module
     except e:
         abort(String("failed to create _mojolearn_x_ann: ", e))

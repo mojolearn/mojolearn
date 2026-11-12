@@ -128,9 +128,6 @@ class MoEBlock:
         """
         return _SEQ_NATIVE("seqmoe_to_device", self, (a,), None, _SEQ_CONTEXT)
 
-    def _routing_out(self, i):
-        return _SEQ_NATIVE("seqmoe_routing", self, (i,), None, _SEQ_CONTEXT)
-
     @property
     def router_logits_(self):
         """Router logits of the last forward, (n_tokens, num_experts)."""
@@ -149,14 +146,6 @@ class MoEBlock:
     def __setattr__(self, name, value):
         return _SEQ_NATIVE("seqmoe_setattr", self, (name, value), None, _SEQ_CONTEXT)
 
-    def _weights_handle(self, b):
-        """The device copies' handle on binding `b`, put again after any
-        weight assignment (the old copies freed)."""
-        return _SEQ_NATIVE("seqmoe_weights", self, (b,), None, _SEQ_CONTEXT)
-
-    def _free_weights(self):
-        return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
-
     def __del__(self):
         return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
 
@@ -172,10 +161,6 @@ class MoEBlock:
         Shapes must match the block's, otherwise `ValueError`.
         """
         return _SEQ_NATIVE("seqmoe_load", self, (sd,), None, _SEQ_CONTEXT)
-
-    def _check_weights(self):
-        # `want`, not `shape`: the caller's `shape` holds x's shape for the final reshape
-        return _SEQ_NATIVE("seqmoe_check_weights", self, (), None, _SEQ_CONTEXT)
 
     def forward(self, x):
         """Apply the block to `x` of shape (..., hidden_size); also callable as ``block(x)``.

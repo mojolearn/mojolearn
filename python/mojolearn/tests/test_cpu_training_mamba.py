@@ -93,10 +93,10 @@ def test_host_binding_registers_every_gpu_entry():
                    "mamba3_prefill_session_forward", "mamba3_prefill_session_backward",
                    # the tape's native provider handles (e1741fb6a1); the
                    # training bridge connects them only where present
-                   "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1",
-                   # the resident decode program's read door (X45c): CausalLM
-                   # connects it only on a GPU request (bindings/causal_lm_public.mojo)
-                   "causal_lm_program_read_v1"}
+                   "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1"}
+    # The decode program's former Python door `causal_lm_program_read_v1` is
+    # gone: CausalLM reaches it through the native session table.
+    assert "causal_lm_program_read_v1" not in gpu
     assert device_only <= gpu and not device_only & host
     assert "mamba3_forward_tape_enabled" in host
     resident |= device_only

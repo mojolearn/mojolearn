@@ -3,12 +3,12 @@
 """LogisticRegression's probability links against a host oracle
 (DEVIATION 549, IDENTITY_PATHS row 36).
 
-`predict_proba` runs on the host in Float64 through `identical_exp64` on
-BOTH paths: the GPU binding calls `glm/estimator.mojo::qn_sigmoid_host` /
-`qn_softmax_host`, the CPU binding `core/classical_host_predict.mojo::
-host_qn_sigmoid_into` / `host_qn_softmax_into`. Two spellings of one
-formula are two chances to drift. This check holds both to the oracle
-below, written from the definition and nothing else:
+`predict_proba` runs on the host in Float64 through `identical_exp64`:
+both bindings call `core/classical_host_predict.mojo::host_qn_sigmoid_into`
+/ `host_qn_softmax_into` (the GPU binding's own spelling,
+`glm/estimator.mojo::qn_sigmoid_host` / `qn_softmax_host`, was deleted as
+dead in 1deadcc8c7). This check holds the one shipped spelling to the
+oracle below, written from the definition and nothing else:
 
     sigmoid   p1 = 1 / (1 + exp(-z)),  p0 = 1 - p1
     softmax   m = first max under a strict `>`; s = serial ascending sum of
@@ -22,9 +22,9 @@ oracle bit for bit at every cell.
     tools/with_identical_mode.sh pixi run mojo run -I . glm/checks/link_seams_check.mojo
 
 Sabotage arms (tools/identity_lanes/linear.checks):
-glm/checks/sabotage/seam_549_sigmoid_ratio.patch (the GPU path's sigmoid
-spelled `e / (1 + e)`), seam_549_softmax_host_desc.patch (the CPU path's
-softmax sum descending).
+glm/checks/sabotage/seam_549_sigmoid_ratio.patch (the host sigmoid spelled
+`e / (1 + e)`), seam_549_softmax_host_desc.patch (the host softmax sum
+descending).
 """
 from std.memory import bitcast
 
@@ -32,13 +32,10 @@ from checks.fixture_rng import u01_row
 from checks.numerics import identical_exp64
 from core.classical_host_predict import host_qn_sigmoid_into, host_qn_softmax_into
 from core.host_predict_threads import HostF64Ptr, host_list_ptr
-from glm.estimator import qn_sigmoid_host, qn_softmax_host
 
 
 comptime N_ROWS = 4099
 comptime N_CLASSES = 5
-comptime F32Ptr = MutPointer[Float32, MutUntrackedOrigin]
-comptime F64Ptr = MutPointer[Float64, MutUntrackedOrigin]
 
 
 def _scores(n: Int, salt: Int) -> List[Float32]:
@@ -121,13 +118,9 @@ def check_sigmoid() raises:
     if separated == 0:
         raise Error("check_sigmoid: VACUOUS, no row separates 1/(1+exp(-z)) from e/(1+e)")
     print("check_sigmoid: the fixture separates the spellings on", separated, "of", N_ROWS, "rows")
-    var gpu_path = List[Float64](length=2 * N_ROWS, fill=0.0)
-    qn_sigmoid_host(F32Ptr(unsafe_from_address=Int(z.unsafe_ptr())),
-                    F64Ptr(unsafe_from_address=Int(gpu_path.unsafe_ptr())), N_ROWS)
-    _compare("check_sigmoid (GPU binding's qn_sigmoid_host)", gpu_path, want)
     var cpu_path = List[Float64](length=2 * N_ROWS, fill=0.0)
     host_qn_sigmoid_into(host_list_ptr(z), rebind[HostF64Ptr](cpu_path.unsafe_ptr()), N_ROWS, 3)
-    _compare("check_sigmoid (CPU binding's host_qn_sigmoid_into)", cpu_path, want)
+    _compare("check_sigmoid (host_qn_sigmoid_into)", cpu_path, want)
     _ = z^  # the raw pointers above borrow z's storage: keep it alive past them
 
 
@@ -149,13 +142,9 @@ def check_softmax() raises:
     if separated == 0:
         raise Error("check_softmax: VACUOUS, no row separates the ascending sum from the descending one")
     print("check_softmax: the fixture separates the sum orders on", separated, "of", N_ROWS, "rows")
-    var gpu_path = List[Float64](length=n, fill=0.0)
-    qn_softmax_host(F32Ptr(unsafe_from_address=Int(z.unsafe_ptr())),
-                    F64Ptr(unsafe_from_address=Int(gpu_path.unsafe_ptr())), N_ROWS, N_CLASSES)
-    _compare("check_softmax (GPU binding's qn_softmax_host)", gpu_path, want)
     var cpu_path = List[Float64](length=n, fill=0.0)
     host_qn_softmax_into(host_list_ptr(z), rebind[HostF64Ptr](cpu_path.unsafe_ptr()), N_ROWS, N_CLASSES, 3)
-    _compare("check_softmax (CPU binding's host_qn_softmax_into)", cpu_path, want)
+    _compare("check_softmax (host_qn_softmax_into)", cpu_path, want)
     _ = z^  # the raw pointers above borrow z's storage: keep it alive past them
 
 

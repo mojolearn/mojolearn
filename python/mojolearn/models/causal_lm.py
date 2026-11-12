@@ -11,7 +11,6 @@ and output.
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
 import array as _pyarray
-import inspect
 import os
 
 from .. import _backend
@@ -19,9 +18,8 @@ from .. import _numeric_profile
 from .. import lowbit as _lowbit
 from .._array import Array
 from .._buffer import _native, addr, addr_ro, all_finite, empty
-from .._bufcheck import is_integer, memcopy, probe
-from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
-                     UnsupportedModel, plan_for)
+from .._bufcheck import is_integer, probe
+from .config import POSITION_CEILING, HFConfig, plan_for
 from .safetensors import Checkpoint
 
 __all__ = ["CausalLM", "CausalLMState", "GenerationStream"]
@@ -34,51 +32,6 @@ _PROJECTIONS = {
     "mamba1": ("in_proj.weight", "x_proj.weight", "dt_proj.weight", "out_proj.weight"),
     "mamba2": ("in_proj.weight", "out_proj.weight"),
 }
-
-#: Interface option -> the config field it came from, for the refusals.
-_OPTION_FIELD = {
-    "n_kv_heads": "num_key_value_heads", "head_dim": "head_dim", "window": "sliding_window",
-    "rope_theta": "rope_theta", "rope_scaling": "rope_scaling", "rope_dim": "partial_rotary_factor",
-    "max_positions": "max_position_embeddings", "qkv_bias": "attention_bias", "o_bias": "attention_bias",
-    "norm": "(the family's norm)", "norm_eps": "rms_norm_eps", "norm_bias": "(the family's norm)",
-    "mlp": "hidden_act", "mlp_bias": "mlp_bias", "qk_norm": "(qwen3 q_norm/k_norm)",
-    "attn_softcap": "attn_logit_softcapping",
-}
-
-
-def _accepted_options(cls):
-    """The keyword names the live block constructor accepts, read off its
-    signature (`NumericModeMixin` wraps `__init__` with `functools.wraps`,
-    and `inspect.signature` follows `__wrapped__`). `None` means the
-    constructor takes `**kwargs` and every option must be tried."""
-    sig = inspect.signature(cls.__init__)
-    names = set()
-    for p in sig.parameters.values():  # glue: walks the block constructor signature parameters
-        if p.kind is inspect.Parameter.VAR_KEYWORD:
-            return None
-        names.add(p.name)
-    return names - {"self", "weights"}
-
-
-def _block_kwargs(plan, cls):
-    """The keywords to pass to `cls` for `plan`, or `UnsupportedModel` by
-    name for an option the live block cannot honor at the plan's value."""
-    accepted = _accepted_options(cls)
-    kwargs = {}
-    for opt, value in plan.block_options.items():  # glue: copies block keyword options
-        default = INTERFACE_DEFAULTS[opt]
-        if accepted is None or opt in accepted:
-            if value != default:
-                kwargs[opt] = value
-            continue
-        fixed = FIXED_TODAY.get(opt, default)
-        if value != fixed:
-            raise UnsupportedModel(
-                f"mojolearn.models: model_type {plan.model_type!r}: option {opt}={value!r} "
-                f"(config field {_OPTION_FIELD.get(opt, opt)}) is not accepted by {cls.__name__} on this "
-                f"build, which fixes {opt}={fixed!r}; the accepted options are {sorted(accepted)}")
-    return kwargs
-
 
 def _route(device):
     if device == "auto":
@@ -194,7 +147,7 @@ def _float_weight(a, name):
 def _argmax_last(logits, b, l, v):
     """The argmax of row `b`'s LAST position, ties to the lowest index, as an
     int32 `(b,)` Array: a sequential scan with a strict `>`
-    (`_greedy_next_bytes`'s rule). The base binding's `argmax_last_rows_f32`
+    (the byte LM's greedy rule). The base binding's `argmax_last_rows_f32`
     reads position `l - 1` of each row on the device (the `argmax_rows_f32`
     rule, DEVIATION 2500: strict `>` from index 0, so a NaN never replaces
     and a NaN at index 0 stays); lane cpu4-python: the host row gather
@@ -203,28 +156,6 @@ def _argmax_last(logits, b, l, v):
     if b:
         _native("argmax_last_rows_f32")(addr_ro(logits, name="logits"), [b, l, v], addr(out, name="next ids"))
     return out.astype("<i4")
-
-
-def _prompt_then_new(prompt, b, l, n_new, new_addr, new_step_major):
-    """`(b, l + n_new)` int32: each prompt row followed by its new ids, with
-    no Python loop over rows or tokens. The ids are assembled step-major
-    (`[l + n_new, b]`) by the base binding's `transpose_f32` (a pure 4-byte
-    move, every bit pattern unchanged, so int32 ids pass through it) and
-    transposed back to C order. `new_addr` holds the new ids as int32,
-    step-major `[n_new, b]` when `new_step_major`, else C-order
-    `[b, n_new]`."""
-    total = l + n_new
-    move = _native("transpose_f32")
-    steps = empty((total, b), "<i4")
-    at = addr(steps, name="ids")
-    move(addr_ro(prompt, name="ids"), at, b, l)
-    if new_step_major:
-        memcopy(at + l * b * 4, new_addr, n_new * b * 4)
-    else:
-        move(new_addr, at + l * b * 4, b, n_new)
-    out = empty((b, total), "<i4")
-    move(at, addr(out, name="ids_out"), total, b)
-    return out
 
 
 class CausalLM:

@@ -46,13 +46,15 @@ from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
+# lane calltable-msel: the split plan's host body, published by the
+# model-selection helper table.
+from core.msel_helpers_host import select_folds_i64_host_run
 from core.hotpath_impl_rows import (
     assign_fold_i64,
     bincount2_i32,
     bincount_i64,
     count_fold_hits_i64,
     first_seen_i32,
-    fold_pair_f32,
     group_fold_assign_i32,
     mark_split_roles_f32,
     normal_init_f32,
@@ -318,19 +320,17 @@ def select_folds_i64_binding(
     words `test_addrs[f]` and `train_addrs[f]` (every address nonzero; an
     empty side may share one scratch array). Returns -1 when every fold's
     test count equals the int64 `sizes[f]`, else the first fold that
-    differs. The host column of the device split plan."""
+    differs. The host column of the device split plan
+    (`core/msel_helpers_host.mojo::select_folds_i64_host_run`)."""
     var rows = Int(py=n)
     var splits = Int(py=k)
     var fa = Int(py=fold_addr)
-    var sizes = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sizes_addr))
-    var tests = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=test_addrs_addr))
-    var trains = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=train_addrs_addr))
+    var sa = Int(py=sizes_addr)
+    var ta = Int(py=test_addrs_addr)
+    var ra = Int(py=train_addrs_addr)
     var bad = -1
     with GILReleased(Python()):
-        for f in range(splits):  # driver-loop: over folds of one split plan
-            var got = select_fold_i64(fa, rows, f, Int(tests.unsafe_load(f)), Int(trains.unsafe_load(f)))
-            if bad < 0 and got != Int(sizes.unsafe_load(f)):
-                bad = f
+        bad = select_folds_i64_host_run(fa, rows, splits, sa, ta, ra)
     return PythonObject(bad)
 
 
@@ -450,17 +450,11 @@ def ic_running_min_f64_host_binding(
 # ---------------------------------------------------------------------------
 
 
-def fold_pair_f32_binding(dst_addr: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """cross_vendor's coordinator fold (lane cgr4-py-compute, out of the
-    Python element loop): dst[i] = ftz(ftz(dst[i]) + ftz(src[i])), one
-    float32 rounding per add, elementwise (no element depends on another)."""
-    var count = Int(py=n)
-    var d = Int(py=dst_addr)
-    var s = Int(py=src_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = fold_pair_f32(d, s, count)
-    return PythonObject(r)
+# fold_pair_f32's Python door is gone (lane calltable-parallel-archive,
+# 2026-11-11): its one caller, cross_vendor's coordinator fold, reaches the
+# kernel through the parallel table entry of the base image
+# (core/parallel_entry_table.mojo; bindings/parallel_base_entry_host.mojo on
+# the CPU, bindings/hotpath_device.mojo fold_pair_f32_device_run on a GPU).
 
 
 def threshold_labels_i64_binding(

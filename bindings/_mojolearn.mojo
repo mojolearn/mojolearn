@@ -117,7 +117,6 @@ from bindings.array_helpers import (
     fsum_f64_binding,
     row_stds_f64_binding,
 )
-from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
 from core.ic_min_device import device_ic_running_min
 from bindings.hotpath_helpers import (
@@ -145,7 +144,6 @@ from bindings.hotpath_device import (
     mask_from_indices_u8_binding,
     select_mask_u8_i64_binding,
     count_mask_u8_binding,
-    fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
     bincount2_i32_binding,
@@ -187,10 +185,12 @@ from bindings.msel_device import (
     kmeans_transform_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
-    msel_rebase_offsets_i32_binding,
     msel_split_table_i32_binding,
     msel_group_fold_perm_i32_binding,
 )
+# lane calltable-msel: the same model-selection helpers as one native entry
+# for the model-selection doors (core/msel_entry_table.mojo).
+from core.msel_helpers_device import publish_msel_helpers_device
 from std.os import abort
 from std.math import isfinite
 from std.memory import unsafe_memcpy
@@ -209,14 +209,17 @@ from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_
 from checks.vendor import COMPILED_VENDOR
 from glm.logistic_fold_native import LOGISTIC_FOLD_API, logistic_fold_v1
 from core.estimators_entry_table import EstimatorsEntryKey, estimators_table_publish, estimators_vendor_word, ESTIMATORS_TABLE_QN_FOLD
+from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from bindings.parallel_base_entry_device import CORE_DEVCTX_SLOT, publish_parallel_base_device
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV3"
+#: Defined once beside the parallel base entry that shares it
+#: (bindings/parallel_base_entry_device.mojo).
+comptime _DEVCTX_SLOT = CORE_DEVCTX_SLOT
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
@@ -1782,33 +1785,6 @@ def argmax_rows_f64_binding(
     return _argmax_rows_device("argmax_rows_f64", True, scores_addr, n_rows, n_cols, dst_addr)
 
 
-def shard_topk_merge_f32_binding(
-    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
-    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
-) raises -> PythonObject:
-    """`shard_topk_merge_f32` (bindings/array_helpers.mojo's contract: 0, 1
-    a local id outside its shard, 2 fewer than k candidates) on the device
-    (lane cpu4-python, core/shard_merge_device.mojo); the host loop is the
-    host binding's column."""
-    var s_count = Int(py=n_shards)
-    var nq = Int(py=n_queries)
-    var kk = Int(py=k)
-    if s_count < 1 or nq < 0 or kk < 1:
-        raise Error("shard_topk_merge_f32: bad dimensions")
-    if nq == 0:
-        return PythonObject(0)
-    if Int(py=table_addr) == 0 or Int(py=out_dist_addr) == 0 or Int(py=out_idx_addr) == 0:
-        raise Error("shard_topk_merge_f32: null buffer address")
-    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
-    var od = Int(py=out_dist_addr)
-    var oi = Int(py=out_idx_addr)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var rc = 0
-    with GILReleased(Python()):
-        rc = device_shard_topk_merge_f32(ctx, tp, s_count, nq, kk, od, oi)
-    return PythonObject(rc)
-
-
 def _ic_running_min_device(
     name: String, wide: Bool, llf_addr: PythonObject, n: PythonObject, penalty: PythonObject,
     order: PythonObject, ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
@@ -2002,7 +1978,7 @@ def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: Pytho
 
 
 # ===========================================================================
-# labels_native_api_v2 (native-only execution; core/labels_native_api.mojo): the
+# labels_native_api_v3 (native-only execution; core/labels_native_api.mojo): the
 # label path's base-binding steps over THIS binding's device helpers, on the
 # kit_call descriptor ABI. Each operation calls the same entry the Python
 # callable table called (same validation, same kernels, same order), so no
@@ -2023,21 +1999,9 @@ struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
 
 # The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
 # IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
-comptime LABELS_LEGACY_NATIVE_TABLE = SharedSlot[LabelsNativeTable["mojolearn.labels.v1"], ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
-comptime LABELS_V2_NATIVE_TABLE = SharedSlot[LabelsNativeTable["mojolearn.labels.v2"], ("MojolearnLabelsNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV3")]
+# TOMBSTONE: LABELS_NATIVE_API_V1_V2 (DELETED: no reader; the label doors admit labels_native_api_v3 only) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+# Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
 comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable[LABELS_NATIVE_ABI_NAME], ("MojolearnLabelsNativeTableIdenticalV4" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV4")]
-
-
-def labels_native_api_v1_binding() raises -> PythonObject:
-    # Existing consumers keep the GIL. Retain their factory/name while sharing
-    # the same native operations; new callers require v2 before releasing it.
-    var table = LABELS_LEGACY_NATIVE_TABLE.get_or_create_ptr()
-    return neural_descriptor_capsule(table[].name, table[].entries)
-
-
-def labels_native_api_v2_binding() raises -> PythonObject:
-    var table = LABELS_V2_NATIVE_TABLE.get_or_create_ptr()
-    return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 def labels_native_api_v3_binding() raises -> PythonObject:
@@ -2100,8 +2064,7 @@ def build__mojolearn() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
-        m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
-        m.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
+        # TOMBSTONE: LABELS_NATIVE_API_V1_V2 registrations deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b. Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
         m.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
@@ -2150,6 +2113,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[all_finite_f64_binding]("all_finite_f64")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        # lane calltable-msel: the model-selection helper table, for the
+        # native model-selection doors in another extension module.
+        publish_msel_helpers_device()
         m.def_function[msel_put_binding]("msel_put")
         m.def_function[msel_alloc_binding]("msel_alloc")
         m.def_function[msel_read_binding]("msel_read")
@@ -2169,7 +2135,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
         m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         m.def_function[msel_proba_column_binding]("msel_proba_column")
-        m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
         m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
         m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
@@ -2177,6 +2142,13 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
         # bindings/hotpath_helpers.mojo that stand in for per-row Python.
+        # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
+        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
+        # doors; their Python exports below remain for the Python package
+        # (`_buffer._native` users) and the doors not yet converted
+        # (bindings/trees_public_gbdt_fit.mojo, trees_public_forest.mojo and the
+        # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         m.def_function[cast_elements_binding]("cast_elements")
         m.def_function[reduce_stat_binding]("reduce_stat")
         m.def_function[equal_elements_binding]("equal_elements")
@@ -2195,7 +2167,6 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
-        m.def_function[fold_pair_f32_binding]("fold_pair_f32")
         m.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         m.def_function[bincount_i64_binding]("bincount_i64")
         m.def_function[assign_fold_i64_binding]("assign_fold_i64")
@@ -2229,7 +2200,6 @@ def build__mojolearn() -> PythonObject:
         m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
         m.def_py_c_function(entry_init, "optimizer_door_init")
         m.def_function[class_ratio_f64_binding]("class_ratio_f64")
-        m.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
@@ -2240,6 +2210,12 @@ def build__mojolearn() -> PythonObject:
         var published_module = m.finalize()
         _publish_qn_fold_table()
         _publish_neighbors_ops(published_module)
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_device()
+        # The parallel base table (core/parallel_entry_table.mojo): the
+        # parallel owners call its entry natively, not this module's doors.
+        publish_parallel_base_device()
         return published_module
     except e:
         abort(String("failed to create _mojolearn module: ", e))

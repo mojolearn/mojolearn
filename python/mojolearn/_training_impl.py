@@ -106,12 +106,8 @@ from . import _numeric_profile
 from . import _native_samba_bridge
 from fractions import Fraction
 
-import array
 import ctypes
 import operator
-import os
-import numbers
-import struct
 from ._arrays import _addr, _addr_ro
 
 from . import _backend
@@ -828,10 +824,6 @@ def _lr_status(st):
         raise kind(msg)
 
 
-def _f32_bits(value):
-    return struct.unpack('<I', struct.pack('<f', _round_f32(value)))[0]
-
-
 # THE SCHEDULES' ONE NATIVE CALL (lane neural-optimizers, 2026-10-21). A
 # schedule's value at step t is DEFINED as the float32 nearest an exact
 # rational, and that definition does not change. `lr_at(t)` and
@@ -848,19 +840,9 @@ _LR_ONE_BASED = 4
 _LR_BEYOND = 5
 
 
-def _lr_table_wanted():
-    return (os.environ.get("MOJOLEARN_LR_TABLE") != "0"
-            and os.environ.get("MOJOLEARN_LR_EXACT_ONLY") != "1")
-
-
 def _lr_native(key):
     """A core-binding entry of the schedules (bindings/lr_table_helpers.mojo)."""
     return _buffers._native(key)
-
-
-def _lr_buffers(n):
-    """Two zeroed float64 buffers (values, error bounds) of n steps."""
-    return array.array("d", bytes(8 * n)), array.array("d", bytes(8 * n))
 
 
 # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
@@ -1173,24 +1155,6 @@ class Generator(object):
         microbatches. Raises `RuntimeError` when the 32-bit counter is exhausted.
         """
         return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
-
-    def _next_stream(self):
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
-
-    @staticmethod
-    def _shape(shape):
-        if isinstance(shape, numbers.Integral):
-            shape = (int(shape),)
-        else:
-            shape = tuple(int(d) for d in shape)  # glue: shape tuple of ints
-        n = 1
-        for d in shape:  # glue: validates each shape dimension
-            if d < 1:
-                raise ValueError(
-                    "mojolearn.Generator: shape must be positive, got %r"
-                    % (shape,))
-            n *= d
-        return shape, n
 
     def uniform(self, shape, low=0.0, high=1.0):
         """Draw float32 values uniform in [low, high).

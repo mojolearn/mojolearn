@@ -2,9 +2,8 @@
 """Canonical import-time connections, with Python image pins only at UNPACK."""
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_owner_registry import borrowed_native_owner, register_native_owner
+from bindings.native_owner_registry import borrowed_native_owner, register_native_owner_type
 from bindings.py_balanced import py_type, py_call
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.py_type_registry import py_type_absent, py_type_attach
@@ -54,13 +53,17 @@ def register_linear_entry_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[LinearEntryOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[LinearEntryOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[LinearEntryOwner]("_LinearEntryOwner")
-        register_native_owner(lookup_py_type_object[LinearEntryOwner](), module.module, linear_entry_owner_pins)
         return
     py_type_attach(module.module, "_LinearEntryOwner", existing)
-    register_native_owner(existing, module.module, linear_entry_owner_pins)
+
+
+def register_linear_entry_owner_identity(published: PythonObject) raises:
+    # After PythonModuleBuilder.finalize() only: Mojo 1.2 creates the type
+    # object in finalize() (bindings/native_owner_registry.mojo).
+    register_native_owner_type[LinearEntryOwner](published, linear_entry_owner_pins)
 
 
 def linear_entry_connect(family_source: PythonObject, mode_entry: PythonObject,

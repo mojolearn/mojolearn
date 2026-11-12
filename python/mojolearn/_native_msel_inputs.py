@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time entries and input metadata for the native model-selection owner."""
 
-_HELPERS = (
-    'arange_i64', 'bincount2_i32', 'bincount_i64', 'cast_elements', 'check_indices_i64',
-    'count_mask_u8', 'first_seen_i32', 'fold_ids', 'gather_i32', 'gather_i64',
-    'group_fold_assign_i32', 'indices_overlap_i64', 'leave_range_i64', 'mask_from_indices_u8',
-    'msel_alloc', 'msel_free', 'msel_group_fold_perm_i32', 'msel_proba_column', 'msel_read', 'msel_scatter_rows',
-    'msel_split_table_i32', 'reduce_stat', 'row_means_f64', 'row_stds_f64', 'select_fold_i64',
-    'select_folds_i64', 'select_mask_u8_i64', 'strat_alloc_i64', 'strat_fold_assign_i32', 'strat_group_plan_i32',
-)
+# The base binding exports the model-selection doors still look up by name:
+# the base helper table's operations (lane calltable-base-helpers). Every other
+# helper is called through the native model-selection helper table
+# (core/msel_entry_table.mojo, key `msel_native_key` below) or linked into the
+# door directly (lane calltable-msel).
+_HELPERS = ('bincount2_i32', 'bincount_i64', 'check_indices_i64', 'reduce_stat')
 
 _SPLITTER_FIELDS = ('_default_test_size', '_folds', '_pairs', 'cv', 'cvargs', 'gap', 'max_train_size',
                     'n_groups', 'n_repeats', 'n_splits', 'p', 'random_state', 'shuffle', 'test_fold', 'test_size', 'train_size')
@@ -21,7 +19,6 @@ def connect(context, resident_context):
     import operator  # noqa: F401 - glue: connect native scalar/index operators at import
     from types import BuiltinFunctionType, GetSetDescriptorType
     from ._buffer import _native
-    from ._expansion_metrics import _binding as _metrics_binding
     from ._native_labels_bridge import label_context, _refusal
     entries = {}
     for name in _HELPERS:  # glue: fixed native model-selection exports
@@ -32,15 +29,17 @@ def connect(context, resident_context):
             entries[name] = entry
         except Exception as error:
             entries[name] = _refusal(error)
+    # glue: once at import, the base helper table key the native doors read
+    # (lane calltable-base-helpers); a binary without one records the refusal.
+    # The model-selection helper table is published by the same binary under
+    # the same (mode, vendor) key, so the msel doors read this one record
+    # (lane perf-audit-20261111 folded the second, identical computation).
+    from ._buffer import base_native_key
     try:
-        # glue: first-seen stratification uses this existing metrics export;
-        # select its owner here, never through a Python loader during split.
-        entry = _metrics_binding(None).x_metrics_first_rows  # glue: retain the compiled entry at import; no first-rows work executes here
-        if type(entry) is not BuiltinFunctionType:
-            raise TypeError('model selection requires the compiled x_metrics_first_rows entry')
-        entries['x_metrics_first_rows'] = entry  # glue: retain fixed native entry identity for product calls
-    except Exception as error:
-        entries['x_metrics_first_rows'] = _refusal(error)  # glue: retain import failure metadata without running the operation
+        entries['base_native_key'] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        entries['base_native_key'] = _refusal(error)
+    entries['msel_native_key'] = entries['base_native_key']
     context.update(label_context())
     from ._native_owner_lifetime import connect_owner_context
     connect_owner_context(context)

@@ -83,20 +83,20 @@ def lin_call(binding: PythonObject, context: PythonObject, name: String, *args: 
         var parameters = List[Int]()
         if op < 11:
             var last = len(args) - 1
-            for i in range(len(args[last])):  # small-loop(admitted shape words)
+            for i in range(len(args[last])):  # driver-loop: over (admitted shape words)
                 parameters.append(Int(py=args[last][i]))
             if op >= 5 and op <= 7:
-                for i in range(len(args[0])):  # small-loop(int15 buffer descriptors)
+                for i in range(len(args[0])):  # driver-loop: over (int15 buffer descriptors)
                     addresses.append(Int(py=args[0][i]))
             else:
-                for i in range(last):  # small-loop(buffer descriptor addresses)
+                for i in range(last):  # driver-loop: over (buffer descriptor addresses)
                     addresses.append(Int(py=args[i]))
         return PythonObject(neural_descriptor_execute(provider, op, addresses, parameters, List[Float64]()))
     # Older/CPU bindings retain their existing door and remain unqualified by
     # the native-provider runtime gate until that binding gains this ABI.
     var entry = neural_descriptor_entry(binding, name)
     var arguments = Python.list()
-    for i in range(len(args)):  # small-loop(args: positional arguments of one call): bounded by the call site
+    for i in range(len(args)):  # driver-loop: over (args: positional arguments of one call): bounded by the call site
         _ = py_call(arguments.append, args[i])
     return _lin_apply(entry, arguments)
 
@@ -252,7 +252,7 @@ def lin_int15(binding: PythonObject, context: PythonObject) raises -> PythonObje
 def lin_ints(*values: Int) raises -> PythonObject:
     """A Python list of ints (a params list)."""
     var out = Python.list()
-    for i in range(len(values)):  # small-loop(params: words of one params list): bounded by the call site
+    for i in range(len(values)):  # driver-loop: over (params: words of one params list): bounded by the call site
         _ = py_call(out.append, PythonObject(values[i]))
     return out
 
@@ -729,16 +729,16 @@ def lin_lowbit_operation(operation: String, var args: PythonObject, context: Pyt
     # precedes their native truth slots, including object-dtype rejection.
     var controls = Python.dict()
     if operation == "family_lin_matmul":
-        for i in [3, 4, 6]:  # small-loop(transpose and identity controls)
+        for i in [3, 4, 6]:  # driver-loop: over (transpose and identity controls)
             host_inference_scalar(args[i], context, True)
             py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
     elif operation == "family_lin_matmul_bf16":
-        for i in [3, 4]:  # small-loop(transpose controls)
+        for i in [3, 4]:  # driver-loop: over (transpose controls)
             host_inference_scalar(args[i], context, True)
             py_setitem(controls, PythonObject(i), PythonObject(lin_truth(args[i])))
     var binding = lin_connected_binding(context)
     var admitted = Python.list(binding)
-    for i in range(1, len(args)):  # small-loop(public arguments admitted before input protocols)
+    for i in range(1, len(args)):  # driver-loop: over (public arguments admitted before input protocols)
         classical_admit_value(args[i], context)
         var value = py_get(controls, PythonObject(i), args[i])
         _ = py_call(admitted.append, value)

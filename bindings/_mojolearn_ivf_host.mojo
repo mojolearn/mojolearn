@@ -24,7 +24,7 @@ from std.python.bindings import PythonModuleBuilder
 from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_index_arrays import ivf_merge_shards_host_binding, ivf_shard_plan_host_binding
+from bindings.parallel_ivf_entry_host import publish_parallel_ivf_host
 from bindings.ivf_host_search import (
     ivf_flat_index_prepare_binding,
     ivf_flat_index_release_binding,
@@ -129,8 +129,10 @@ def build__mojolearn_ivf_host() -> PythonObject:
         m.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
         m.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
-        m.def_function[ivf_merge_shards_host_binding]("ivf_merge_shards")
-        m.def_function[ivf_shard_plan_host_binding]("ivf_shard_plan")
-        return m.finalize()
+        var published_module = m.finalize()
+        # The parallel IVF table: the distributed IVF owner calls this
+        # entry natively (the doors ivf_merge_shards / ivf_shard_plan are gone).
+        publish_parallel_ivf_host()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_ivf_host: ", e))

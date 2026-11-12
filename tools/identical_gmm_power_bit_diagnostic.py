@@ -45,13 +45,9 @@ def child(root, out, vendor, gate):
     else:
         from mojolearn._expansion_prep import PowerTransformer
         from mojolearn import _expansion_prep as prep
-        from collections import Counter
-        counts = Counter()
-        original_stage = prep._Prog.stage
-        def counted_stage(self, op, total, *params):
-            counts[op] += 1
-            return original_stage(self, op, total, *params)
-        prep._Prog.stage = counted_stage
+        # The PowerTransformer program is staged natively (bindings/prep_stateless_native.mojo); the
+        # Python `_Prog.stage` this diagnostic used to count left the package (lane pyout-small-families),
+        # so the staged operations are no longer observable from Python.
         flags = prep._idn_fam('identical')
         fast_flags = prep._ptimpute_flags('identical')
         assert prep._blocked() and flags & 1 and flags & 8
@@ -73,11 +69,8 @@ def child(root, out, vendor, gate):
                 save(prefix + '-transform', transformed)
                 save(prefix + '-inverse', estimator.inverse_transform(transformed))
                 assert estimator._pt_anchor is None and estimator._pt_anchor_kind is None
-        prep._Prog.stage = original_stage
-        for op in ('colb_part', 'colb_fold', 'colb_ss', 'colb_var', 'ptb_part1', 'ptb_mean', 'ptb_part2', 'ptb_fin'):
-            assert counts[op] > 0, 'missing route: ' + op
         routes.append({'shape': [n, d], 'idn_family_flags': flags,
-            'fast_flags': fast_flags, 'staged_operations': dict(counts),
+            'fast_flags': fast_flags, 'staged_operations': 'native (bindings/prep_stateless_native.mojo)',
             'anchor': 'merged argument slots present; FAST Apple-only anchor disabled in IDENTICAL',
             'block_rows': prep._XB, 'blocks': (n + prep._XB - 1) // prep._XB})
     input_info = {k: {'shape': list(v.shape), 'dtype': str(v.dtype),

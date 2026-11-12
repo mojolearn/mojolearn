@@ -5,7 +5,6 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.optimizer_container_boundary import OptimizerInputOwners
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
-from bindings.py_typed_call import py_call_typed
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.optimizer_admission import opt_exact, opt_scalar, opt_value, opt_schedule
@@ -19,6 +18,25 @@ from bindings.classical_arrays import classical_input, classical_typed, classica
 from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_optimizer_inputs import sequence_optimizer_cast
 from core.scaler_fit_impl import scaler_fill
+from core.byte_lm_entry_table import ByteLmEntryKey
+from core.entry_table import EntryRef
+from sequence.opt_entry_abi import (
+    seq_opt_ref, seq_opt_call, SO_INIT, SO_STEP, SO_LAMB_STEP, SO_ADAFACTOR_STEP, SO_STATE, SO_EXPORT, SO_IMPORT, SO_CLOSE,
+)
+
+
+def seq_key(entries: PythonObject) raises -> EntryRef:
+    """The optimizer entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the table key (core/byte_lm_entry_table.mojo) of the
+    x_sequence image these connected entries name: the bridge records it at
+    import as `native_key` (python/mojolearn/_native_optimizer_bridge.py).
+    The optimizer operations run through that image's published native
+    entry (sequence/opt_entry_abi.mojo), not through its Python entries
+    (lane calltable-byte-lm)."""
+    var key = py_get(entries, "native_key")
+    if key is None:
+        raise Error("ImportError: the sequence optimizer binding publishes no native entry table")
+    return seq_opt_ref(ByteLmEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def seq_class(owner: PythonObject, context: PythonObject) raises -> Int:
@@ -255,7 +273,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         opt_scalar(mode, context)
         var selected = seq_binding(mode, context, PythonObject(None))
         var device = False
-        var sizes = Python.list()
+        var sizes = List[Int]()
         var shapes = Python.list()
         for i in range(len(params)):  # driver-loop: over public parameter buffer owners
             var dev = seq_device(params[i], context)
@@ -276,7 +294,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
                 raise Error("TypeError: LAMB params must be nonempty")
             if kind == 5 and len(shape) != 1 and len(shape) != 2:
                 raise Error("NotImplementedError: Adafactor parameters must have one or two dimensions")
-            _ = py_call(sizes.append, n)
+            sizes.append(n)
             _ = py_call(shapes.append, native_shape_pack(shape))
         if device:
             var prefix = String("adafactor") if kind == 5 else (String("lamb") if kind == 6 else String("optimizer"))
@@ -290,7 +308,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         py_setitem(fields, "_dev_b", selected["module"] if device else PythonObject(None))
         py_setitem(fields, "_res_b", PythonObject(None))
         py_setitem(fields, "lr", _seq_real(values[1], "lr"))
-        var extra = Python.list()
+        var extra = List[Int]()
         var fp = Python.list(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         var flags = 0
         if kind < 5:
@@ -352,8 +370,8 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
                 py_setitem(fields, PythonObject(name), _seq_real(options[PythonObject(name)], String(name)))
             py_setitem(fields, "max_grad_norm", PythonObject(None) if options["max_grad_norm"] is None else _seq_real(options["max_grad_norm"], "max_grad_norm"))
             for name in ["trust_clip", "always_adapt", "grad_averaging", "bias_correction"]:  # driver-loop: over LAMB native flag words
-                _ = py_call(extra.append, Int(Bool(py=options[PythonObject(name)])))
-            _ = py_call(extra.append, Int(options["max_grad_norm"] is not None))
+                extra.append(Int(Bool(py=options[PythonObject(name)])))
+            extra.append(Int(options["max_grad_norm"] is not None))
         var words = seq_array(9, context, wide=True)
         var nh = len(params) if kind == 5 else 1
         var handles = seq_array(nh, context, wide=True)
@@ -362,10 +380,11 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             hp[i] = -1
         py_setitem(fields, "_words", words)
         py_setitem(fields, "_handles", handles)
-        var ip = Python.list(2 if kind == 5 else (1 if kind == 6 else 0), len(params))
-        _ = py_call(ip.extend, sizes)
-        _ = py_call(ip.extend, extra)
-        var n = Int(py=py_call_typed(selected["seq_optimizer_init"], classical_address(words), ip))
+        # p = [words, ip...] (seq_optimizer_init's words and ip)
+        var init: List[Int] = [Int(py=classical_address(words)), 2 if kind == 5 else (1 if kind == 6 else 0), len(params)]
+        init.extend(sizes^)
+        init.extend(extra^)
+        var n = seq_opt_call(seq_key(selected), SO_INIT, List[Int](), init, List[Float64]())
         if kind < 5 and n < 1:
             raise Error("ValueError: sequence optimizer has no parameters")
         py_setitem(fields, "n_total", PythonObject(n))
@@ -397,12 +416,17 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
         if len(grads) != len(params):
             raise Error("ValueError: sequence optimizer needs one gradient per parameter")
         var dev = py_get(fields, "_dev_b") is not None
-        var addrs = Python.list()
-        var ga = Python.list()
-        var kinds = Python.list()
-        var sizes = Python.list()
-        var rows = Python.list()
-        var cols = Python.list()
+        # Every request List is sized once for the step from the parameter
+        # count J (no growth reallocation per appended word): addrs holds the
+        # J parameters, J gradients and up to 2J + 1 slot words; ip holds the
+        # four head words, J kinds, J sizes and up to 2J shape words.
+        var count = len(params)
+        var addrs = List[Int](capacity=4 * count + 1)
+        var ga = List[Int](capacity=count)
+        var kinds = List[Int](capacity=count)
+        var sizes = List[Int](capacity=count)
+        var rows = List[Int](capacity=count if kind == 5 else 0)
+        var cols = List[Int](capacity=count if kind == 5 else 0)
         var keep = Python.list()
         var total = 0
         var input = context["input_context"]
@@ -415,26 +439,26 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
             if n > 9223372036854775807 - total:
                 raise Error("OverflowError: sequence parameter count exceeds native indexing")
             total += n
-            _ = py_call(sizes.append, n)
+            sizes.append(n)
             if kind == 5:
                 if len(shape) != 1 and len(shape) != 2:
                     raise Error("ValueError: Adafactor parameter rank changed")
-                _ = py_call(rows.append, shape[0])
-                _ = py_call(cols.append, shape[1] if len(shape) == 2 else 0)
+                rows.append(shape[0])
+                cols.append(shape[1] if len(shape) == 2 else 0)
             if parameter_device != dev:
                 raise Error("TypeError: sequence parameter host/device ownership changed")
             if dev:
                 if seq_device_get(parameter, "b", context) is not entries["module"]:
                     raise Error("TypeError: sequence parameter binding ownership changed")
-                _ = py_call(addrs.append, seq_device_get(parameter, "h", context))
+                addrs.append(Int(py=seq_device_get(parameter, "h", context)))
             else:
-                _ = py_call(addrs.append, seq_addr(parameter, n, context, buffer_pins))
+                addrs.append(seq_addr(parameter, n, context, buffer_pins))
             var grad = grads[i]
             if seq_device(grad, context):
                 if not dev or seq_device_get(grad, "b", context) is not entries["module"] or not same_shape(seq_shape_known(grad, True, context), shape):
                     raise Error("ValueError: device gradient must match its parameter shape and binding")
-                _ = py_call(ga.append, seq_device_get(grad, "h", context))
-                _ = py_call(kinds.append, 0)
+                ga.append(Int(py=seq_device_get(grad, "h", context)))
+                kinds.append(0)
                 _ = py_call(keep.append, grad)
             else:
                 opt_value(grad, context)
@@ -446,41 +470,61 @@ def seq_step(owner: PythonObject, fields: PythonObject, params: PythonObject, gr
                 if base_format(view.fmt) == "d" or (dev and base_format(view.fmt) != "f"):
                     raise Error("ValueError: Adafactor gradient must be float32 of its parameter shape" if kind == 5 and not dev else "TypeError: sequence gradients must be float32; float64 gradients are refused")
                 var prepared = source if base_format(view.fmt) == "f" and view.c_contig else seq_cast(source, context)
-                _ = py_call(ga.append, classical_address(prepared))
-                _ = py_call(kinds.append, 1 if dev else 0)
+                ga.append(Int(py=classical_address(prepared)))
+                kinds.append(1 if dev else 0)
                 _ = py_call(keep.append, prepared)
         if total != Int(py=fields["n_total"]):
             raise Error("ValueError: sequence parameter size changed after construction")
-        _ = py_call(addrs.extend, ga)
-        var ip = Python.list(len(params), Int(dev))
-        _ = py_call(ip.extend, kinds)
-        _ = py_call(ip.extend, sizes)
+        addrs.extend(ga^)
+        # p = [words, handles, ip...] with ip = [J, dev, kinds.., sizes.., (rows.., cols.. | kind, flags)]
+        var ip = List[Int](capacity=4 + 4 * count)
+        ip.append(words)
+        ip.append(handles)
+        ip.append(count)
+        ip.append(Int(dev))
+        ip.extend(kinds^)
+        ip.extend(sizes^)
         var slots = seq_slots(fields, kind, context, buffer_pins)
         if kind == 5:
             for i in range(len(params)):  # driver-loop: over Adafactor first moment slot addresses
-                _ = py_call(addrs.append, slots[i * 2])
+                addrs.append(Int(py=slots[i * 2]))
             for i in range(len(params)):  # driver-loop: over Adafactor second moment slot addresses
-                _ = py_call(addrs.append, slots[i * 2 + 1] if Int(py=slots[i * 2 + 1]) != 0 else slots[i * 2])
-            _ = py_call(ip.extend, rows)
-            _ = py_call(ip.extend, cols)
+                addrs.append(Int(py=slots[i * 2 + 1]) if Int(py=slots[i * 2 + 1]) != 0 else Int(py=slots[i * 2]))
+            ip.extend(rows^)
+            ip.extend(cols^)
         else:
-            _ = py_call(addrs.extend, slots)
-            _ = py_call(addrs.append, seq_addr(fields["_sc"], 2 if kind == 6 else 3, context, buffer_pins))
+            for i in range(len(slots)):  # driver-loop: over two or three optimizer state slot addresses
+                addrs.append(Int(py=slots[i]))
+            addrs.append(seq_addr(fields["_sc"], 2 if kind == 6 else 3, context, buffer_pins))
             if kind < 5:
-                _ = py_call(ip.extend, Python.tuple(fields["_kind"], fields["_flags"]))
+                ip.append(Int(py=fields["_kind"]))
+                ip.append(Int(py=fields["_flags"]))
         var schedule = py_get(fields, "lr_schedule")
         if schedule is not None:
             var t = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=words)[0]
             py_setitem(fields, "lr", schedule_operation("schedule_at", schedule, Python.tuple(Int(t) + 1), context))
-        var fp = Python.list(fields["lr"])
+        # fp: the same Float64 conversion of each value the Python entry made
+        var fp = List[Float64](capacity=7)  # lr and at most six optimizer scalars
+        fp.append(Float64(py=fields["lr"]))
         if kind < 5:
-            _ = py_call(fp.extend, fields["_fp"])
+            var stored = fields["_fp"]
+            for i in range(len(stored)):  # small-loop(the six element-wise optimizer scalars)
+                fp.append(Float64(py=stored[i]))
         elif kind == 5:
-            _ = py_call(fp.extend, Python.tuple(fields["beta2_decay"], fields["eps"][0], fields["eps"][1], fields["d"], fields["weight_decay"]))
+            fp.append(Float64(py=fields["beta2_decay"]))
+            fp.append(Float64(py=fields["eps"][0]))
+            fp.append(Float64(py=fields["eps"][1]))
+            fp.append(Float64(py=fields["d"]))
+            fp.append(Float64(py=fields["weight_decay"]))
         else:
-            _ = py_call(fp.extend, Python.tuple(fields["betas"][0], fields["betas"][1], fields["eps"], fields["weight_decay"], 1.0 if fields["max_grad_norm"] is None else fields["max_grad_norm"]))
+            fp.append(Float64(py=fields["betas"][0]))
+            fp.append(Float64(py=fields["betas"][1]))
+            fp.append(Float64(py=fields["eps"]))
+            fp.append(Float64(py=fields["weight_decay"]))
+            fp.append(Float64(1.0) if fields["max_grad_norm"] is None else Float64(py=fields["max_grad_norm"]))
         py_setitem(fields, "_res_b", entries["module"])
-        _ = py_call_typed(entries["seq_adafactor_step" if kind == 5 else ("seq_lamb_step" if kind == 6 else "seq_optimizer_step")], words, handles, addrs, ip, fp)
+        _ = seq_opt_call(seq_key(entries), SO_ADAFACTOR_STEP if kind == 5 else (SO_LAMB_STEP if kind == 6 else SO_STEP),
+                         addrs, ip, fp)
         _ = keep^
         return owner
     finally:
@@ -524,8 +568,6 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         var entries = seq_binding(fields["numeric_mode"], context, py_get(fields, "_res_b") if py_get(fields, "_res_b") is not None else py_get(fields, "_dev_b"))
         if operation == "seq_binding":
             return seq_binding(fields["numeric_mode"], context, py_get(fields, "_dev_b"))["module"]
-        if operation == "seq_state_binding":
-            return entries["module"]
         var params = seq_list(fields["params"], context)
         var nh = len(params) if kind == 5 else 1
         var words = seq_addr(fields["_words"], 9, context, buffer_pins, True)
@@ -542,23 +584,19 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             return PythonObject(w[index] != 0) if Bool(py=values[1]) else PythonObject(Int(w[index]))
         if operation == "seq_finalize":
             try:
-                _ = py_call_typed(entries["seq_optimizer_close"], words, handles, nh)
+                var close: List[Int] = [words, handles, nh]
+                _ = seq_opt_call(seq_key(entries), SO_CLOSE, List[Int](), close, List[Float64]())
             except:
                 return PythonObject(None)
             py_setitem(fields, "_res_b", PythonObject(None))
             return PythonObject(None)
         if operation == "seq_resident":
             return PythonObject(w[2] >= 0)
-        if operation == "seq_handle" or operation == "seq_handles":
+        if operation == "seq_handle":
             if w[2] < 0:
                 return PythonObject(None)
             var hp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=handles)
-            if operation == "seq_handle":
-                return PythonObject(Int(hp[0]))
-            var output = Python.list()
-            for i in range(nh):  # driver-loop: over returned resident handle words
-                _ = py_call(output.append, Int(hp[i]))
-            return output
+            return PythonObject(Int(hp[0]))
         if operation == "seq_state_set":
             opt_value(values[0], context)
             var proposed = py_call(b.dict, fields)
@@ -574,16 +612,13 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
             if w[2] >= 0 and selected["module"] is not entries["module"]:
                 raise Error("ValueError: resident optimizer state must keep its owning numeric-mode binding")
             return seq_step(owner, fields, params, values[0], kind, selected, words, handles, context)
-        if operation == "seq_lr":
-            var schedule = py_get(fields, "lr_schedule")
-            if schedule is not None:
-                py_setitem(fields, "lr", schedule_operation("schedule_at", schedule, Python.tuple(Int(w[0]) + 1), context))
-            return fields["lr"]
-        if operation == "seq_state" or operation == "seq_slot" or operation == "seq_slots":
+        if operation == "seq_state" or operation == "seq_slot":
             var slots = seq_slots(fields, kind, context, buffer_pins, True)
-            if operation == "seq_slots":
-                return slots
-            _ = py_call_typed(entries["seq_optimizer_state"], words, handles, slots)
+            var slot_words = List[Int]()
+            for i in range(len(slots)):  # driver-loop: over padded optimizer state slot addresses
+                slot_words.append(Int(py=slots[i]))
+            var state_words: List[Int] = [words, handles]
+            _ = seq_opt_call(seq_key(entries), SO_STATE, slot_words, state_words, List[Float64]())
             var state = fields["_af_state" if kind == 5 else "_state"]
             if operation == "seq_slot":
                 opt_scalar(values[0], context)
@@ -630,12 +665,18 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
                 else:
                     sc = fields["_sc"]
                 py_setitem(fields, "lr", py_call(b.float, state["lr"]))
-            var addrs = py_call(b.list, slots)
+            var addrs = List[Int]()
+            for i in range(len(slots)):  # driver-loop: over optimizer state slot addresses
+                addrs.append(Int(py=slots[i]))
             for i in range(len(out)):  # driver-loop: over state copy buffer addresses
-                _ = py_call(addrs.append, classical_address(out[i]))
-            _ = py_call(addrs.extend, Python.tuple(sc_addr, classical_address(sc)))
-            _ = py_call_typed(entries["seq_optimizer_export" if operation == "seq_export" else "seq_optimizer_import"], words, handles, addrs,
-                        Python.list(k, n, sc_len, len(out), t, Int(sc_given), sc_t))
+                addrs.append(Int(py=classical_address(out[i])))
+            addrs.append(sc_addr)
+            addrs.append(Int(py=classical_address(sc)))
+            var copy_words: List[Int] = [words, handles, k, n, sc_len, len(out), t, Int(sc_given), sc_t]
+            _ = seq_opt_call(seq_key(entries), SO_EXPORT if operation == "seq_export" else SO_IMPORT, addrs, copy_words,
+                             List[Float64]())
+            _ = out  # keep the copy buffers alive through the native call above
+            _ = sc
             if operation == "seq_import":
                 return owner
             return Python.dict(t=Int(w[0]), lr=fields["lr"], state=out, options=py_call(b.dict, py_get(fields, "options", Python.dict())), scalars=Python.tuple(Int(w[1]), sc))

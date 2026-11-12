@@ -18,9 +18,11 @@ class CrossVendorMismatch(RuntimeError):
 
 from ._backend import load_host_module as _load_host_module
 from ._array import Array as _Array
-from ._buffer import _native as _buffer_native
+from ._native_table_key import connected_key as _connected_key
 _native_cross_vendor = _load_host_module("_mojolearn_tokenizer_host").cross_vendor_call
-_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _buffer_native("fold_pair_f32")))
+# glue: once at import, the base image's native table key; the native fold
+# calls that image's fold_pair_f32 through its parallel table, not a door.
+_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key("_mojolearn", required=True)))
 
 
 # ------------------------------------------------------------ the fold
@@ -57,10 +59,6 @@ def _send(sock, header, payload=b""):
 
 def _recv(sock, max_payload):
     return _native_cross_vendor("receive", (sock, max_payload))
-
-
-def _recv_exact(sock, n):
-    return _native_cross_vendor("receive_exact", (sock, n))
 
 
 _cross_vendor_errors = {"mismatch": CrossVendorMismatch}

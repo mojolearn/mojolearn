@@ -11,7 +11,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_call,
+    FAMILY_F32P, family_repr, family_str,
     family_is_str,
 )
 from bindings.mode_metadata_native import _fields
@@ -29,22 +29,23 @@ from bindings.agglo_native_boundary import (
     agglo_hash_admitted, agglo_integer_admitted, agglo_float_admitted,
     agglo_fresh_holder, agglo_mint, agglo_reference_labels, agglo_holder_empty, agglo_release, agglo_holder_admit,
 )
-from core.agglo_native_api import (
-    AggloSolverRequest, AggloClusterRequest, AggloZeroRowsRequest,
-    AggloSolverScratch, AggloClusterScratch, AggloZeroRowsScratch,
-)
+from core.agglo_native_api import AggloSolverScratch, AggloClusterScratch, AggloZeroRowsScratch
 from core.agglo_native_state import (
-    AggloOptions, AGGLO_PAIRWISE_MAX_ROWS, AGGLO_FULL_AUTO, AGGLO_FULL_TRUE, AGGLO_FULL_FALSE,
-    agglo_metric_code, agglo_linkage_code, agglo_connectivity_code, agglo_predicts, agglo_tree_plan,
+    AggloOptions, AGGLO_PAIRWISE_MAX_ROWS, agglo_metric_code, agglo_linkage_code, agglo_predicts, agglo_tree_plan,
+)
+from cluster.cfb_agglo_run import (
+    AGGLO_METRIC_UNKNOWN, agglo_linkage_refusal, agglo_check_connectivity, agglo_metric_refusal,
+    agglo_ward_accepts, agglo_ward_refusal, agglo_check_cluster_choice, agglo_check_threshold_tree,
+    agglo_full_tree_mode, agglo_check_solver_rows, agglo_check_solver_clusters, agglo_solver_request,
+    agglo_check_tree_rows, agglo_check_precomputed, agglo_checks_zero_rows, agglo_check_zero_rows,
+    agglo_zero_rows_request, agglo_check_requested_clusters, agglo_cluster_request, agglo_warns_components,
+    agglo_publishes_distances, agglo_cut_counts, agglo_fitted_clusters, agglo_x_predicts, agglo_check_reference_width,
+    agglo_check_label_rank, agglo_check_label_words,
 )
 from bindings.decomp_scalar_compare import decomp_equal_admitted
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_loaded_module import native_loaded_module
-
-#: The dense connectivity matrix is `m * m` of cuVS's `int`.
-comptime _PAIRWISE_MAX_ROWS = AGGLO_PAIRWISE_MAX_ROWS
-
 
 def _truth(value: PythonObject) raises -> Bool:
     """Truth conversion of the already admitted exact public scalar."""
@@ -60,7 +61,6 @@ def _agglo_validate(settings: AggloSettings, context: PythonObject) raises -> Ag
     """`AgglomerativeClustering._validate_params`: the normalized
     connectivity and compute_distances go to `_connectivity` and
     `_compute_distances`."""
-    var b = native_loaded_module("builtins")
     var n_clusters = settings.n_clusters
     var metric = settings.metric
     var connectivity = settings.connectivity
@@ -72,37 +72,19 @@ def _agglo_validate(settings: AggloSettings, context: PythonObject) raises -> Ag
     agglo_hash_admitted(linkage)
     var linkage_code = agglo_linkage_code(String(linkage)) if family_is_str(linkage) else -1
     if linkage_code < 0:
-        raise Error("linkage must be one of ['average', 'complete', 'single', 'ward'], got " + agglo_scalar_repr(linkage, context))
+        raise agglo_linkage_refusal(agglo_scalar_repr(linkage, context))
     if connectivity is None:
         # scikit-learn's spelling of "no connectivity constraint": the full
         # dense graph, cuML's 'pairwise'.
         connectivity = PythonObject("pairwise")
     if family_is_str(connectivity):
-        if agglo_connectivity_code(String(connectivity)) < 0:
-            raise Error("'connectivity' can only be one of {'knn', 'pairwise'}, "
-                        + "a connectivity matrix or a callable")
-        if String(connectivity) == "knn":
-            raise Error("NotImplementedError: mojolearn AgglomerativeClustering: connectivity='knn' is "
-                        + "REFUSED BY NAME. The Linkage::KNN_GRAPH specialization "
-                        + "(connectivities.cuh:49), the cross-component fix-up its "
-                        + "forest MST needs (connect_knn_graph, mst.cuh:67 and :131) "
-                        + "and merge_msts are rung 2 and NOT IMPLEMENTED -- and their host "
-                        + "overload picks a RANDOM vertex per component from "
-                        + "std::mt19937(std::random_device()), which would have to be "
-                        + "pinned first. Use connectivity='pairwise' (cuML's C++ "
-                        + "default and scikit-learn's dense tree), or pass the k-NN "
-                        + "graph itself as a connectivity matrix (scikit-learn's "
-                        + "kneighbors_graph). See hierarchy/NOT_IMPLEMENTED.tsv")
+        agglo_check_connectivity(String(connectivity))
     agglo_hash_admitted(metric)
-    var metric_code = agglo_metric_code(String(metric)) if family_is_str(metric) else -2
-    if metric_code == -2:
-        raise Error("NotImplementedError: mojolearn AgglomerativeClustering: metric=" + agglo_scalar_repr(metric, context) + " is "
-                    + "refused by name; one of ['cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan', 'precomputed']. A callable "
-                    + "metric would compute the dissimilarities outside every "
-                    + "identity column. See x_cluster/NOT_IMPLEMENTED.tsv")
-    if linkage_code == 0 and metric_code != -1:
-        raise Error(family_str(metric) + " was provided as metric. Ward can only work with "
-                    + "euclidean distances (i.e. 'euclidean' and 'l2').")
+    var metric_code = agglo_metric_code(String(metric)) if family_is_str(metric) else AGGLO_METRIC_UNKNOWN
+    if metric_code == AGGLO_METRIC_UNKNOWN:
+        raise agglo_metric_refusal(agglo_scalar_repr(metric, context))
+    if not agglo_ward_accepts(linkage_code, metric_code):
+        raise agglo_ward_refusal(family_str(metric))
     if not _eq(c, PythonObject(15)):
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: c=" + agglo_scalar_repr(c, context) + " is refused. It "
                     + "tunes k = log(n) + c for the k-NN graph, cuML forwards it "
@@ -115,13 +97,15 @@ def _agglo_validate(settings: AggloSettings, context: PythonObject) raises -> Ag
                     + "is no host tree here")
     if not (_eq(compute_full_tree, PythonObject("auto")) or _eq(compute_full_tree, PythonObject(True)) or _eq(compute_full_tree, PythonObject(False))):
         raise Error("compute_full_tree must be 'auto', True or False, got " + agglo_scalar_repr(compute_full_tree, context))
-    if not ((n_clusters is None) != (distance_threshold is None)):
-        raise Error("Exactly one of n_clusters and distance_threshold has to be "
-                    + "set, and the other needs to be None.")
-    if distance_threshold is not None and not _truth(compute_full_tree):
-        raise Error("compute_full_tree must be True if distance_threshold is set.")
+    var has_threshold = distance_threshold is not None
+    agglo_check_cluster_choice(n_clusters is not None, has_threshold)
+    # compute_full_tree's truth is read only where the pre-split door read it:
+    # with a threshold set, and for a non-'auto' tree mode.
+    if has_threshold:
+        agglo_check_threshold_tree(True, _truth(compute_full_tree))
     var distances = _truth(settings.compute_distances)
-    var tree_mode = AGGLO_FULL_AUTO if family_is_str(compute_full_tree) and String(compute_full_tree) == "auto" else (AGGLO_FULL_TRUE if _truth(compute_full_tree) else AGGLO_FULL_FALSE)
+    var auto_tree = family_is_str(compute_full_tree) and String(compute_full_tree) == "auto"
+    var tree_mode = agglo_full_tree_mode(auto_tree, False if auto_tree else _truth(compute_full_tree))
     return AggloOptions(linkage_code, metric_code, not family_is_str(connectivity),
         distance_threshold is not None, distances, False, tree_mode)
 
@@ -139,24 +123,13 @@ def _fast_mst(n_cols: Int) raises -> Bool:
 
 def _agglo_legacy(fields: PythonObject, settings: AggloSettings, options: AggloOptions, bindings: AggloBindings, x_snapshot: ArrayMetadata, context: PythonObject) raises:
     """cuML's single-linkage Boruvka route (`_mojolearn_solver.linkage_fit`)."""
-    var b = native_loaded_module("builtins")
     var x = x_snapshot.keep
     var n_rows = x_snapshot.shape[0]
     var n_cols = x_snapshot.shape[1]
-    if n_rows < 2:
-        # scikit-learn's check_array wording (ensure_min_samples=2)
-        raise Error("Found array with " + String(n_rows) + " sample(s) (shape=(" + String(n_rows) + ", "
-                    + String(n_cols) + ")) while a minimum of 2 is required.")
-    if n_rows > _PAIRWISE_MAX_ROWS and not _fast_mst(n_cols):
-        raise Error("mojolearn AgglomerativeClustering: n_rows=" + String(n_rows) + " > "
-                    + String(_PAIRWISE_MAX_ROWS) + "; the dense connectivity matrix is "
-                    + "m * m of cuVS's int and overflows past that "
-                    + "(hierarchy/impl/cluster/detail/connectivities.mojo "
-                    + "refuses it by name too)")
+    # the platform rule reads the environment only past the dense bound
+    agglo_check_solver_rows(n_rows, n_cols, n_rows > AGGLO_PAIRWISE_MAX_ROWS and _fast_mst(n_cols))
     var k = agglo_integer_admitted(settings.n_clusters)
-    if k < 1 or k > n_rows:
-        raise Error("Expected 1 <= n_clusters <= n_rows (" + String(n_rows) + "), got "
-                    + "n_clusters=" + String(k))
+    agglo_check_solver_clusters(k, n_rows)
     var children_shape: List[Int] = [n_rows - 1, 2]
     var children = agglo_array(children_shape, "<i4", context)
     var labels = agglo_array(List[Int](length=1, fill=n_rows), "<i4", context)
@@ -165,9 +138,9 @@ def _agglo_legacy(fields: PythonObject, settings: AggloSettings, options: AggloO
     var children_address = Int(py=classical_address(children))
     var labels_address = Int(py=classical_address(labels))
     # The solver ABI uses cuML's sqrt-Euclidean code 1; the reference ABI
-    # uses code 0. Keep that existing distinction explicit in the request.
-    var request = AggloSolverRequest(x_snapshot.source.addr, children_address, labels_address,
-        info.address(), n_rows, n_cols, k, 1, False)
+    # uses code 0 (AGGLO_SOLVER_METRIC in the request builder).
+    var request = agglo_solver_request(x_snapshot.source.addr, children_address, labels_address,
+        info.address(), n_rows, n_cols, k)
     agglo_solver_run(solver, request)
     _ = solver^
     _ = labels
@@ -211,33 +184,26 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
     var x = x_snapshot.keep
     var n = x_snapshot.shape[0]
     var d = x_snapshot.shape[1]
-    if n < 2:
-        raise Error("mojolearn AgglomerativeClustering: n_rows=" + String(n) + " < 2; a tree "
-                    + "needs at least two points")
+    agglo_check_tree_rows(n)
     var metric = options.metric
-    if metric == 5 and n != d:
-        raise Error("Distance matrix should be square, got matrix of shape (" + String(n) + ", " + String(d) + ")")
-    if metric == 4:
+    agglo_check_precomputed(metric, n, d)
+    if agglo_checks_zero_rows(metric):
         # the zero-row test on the device (the x_neighbors binding's
         # `xn_row_all_zero`, one flag per row from the bit patterns).
-        if d == 0:
-            raise Error("Cosine affinity cannot be used when X contains zero vectors")
+        agglo_check_zero_rows(d == 0)
         var zrow = AggloZeroRowsScratch(n)
         var zero_connection = AggloZeroRowsConnection(bindings.neighbors)
-        var zero_request = AggloZeroRowsRequest(x_snapshot.source.addr, zrow.address(), n, d)
+        var zero_request = agglo_zero_rows_request(x_snapshot.source.addr, zrow.address(), n, d)
         agglo_zero_rows_run(zero_connection, zero_request)
         _ = zero_connection^
         _ = x
-        if zrow.any_zero():
-            raise Error("Cosine affinity cannot be used when X contains zero vectors")
+        agglo_check_zero_rows(zrow.any_zero())
         _ = zrow^
     var n_clusters = settings.n_clusters
     var requested_clusters = 0
     if n_clusters is not None:
         requested_clusters = agglo_integer_admitted(n_clusters)
-        if requested_clusters < 1 or requested_clusters > n:
-            raise Error("Cannot extract more clusters than samples: " + String(requested_clusters) + " clusters "
-                        + "were given for a tree with " + String(n) + " leaves.")
+        agglo_check_requested_clusters(requested_clusters, n)
     var connectivity = settings.connectivity
     var thr = settings.distance_threshold
     var constrained = options.constrained
@@ -258,10 +224,9 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
     var labels_address = Int(py=classical_address(labels))
     var distances_address = Int(py=classical_address(distances))
     var scalars = AggloClusterScratch()
-    var request = AggloClusterRequest(x_snapshot.source.addr, aux.address, children_address,
+    var request = agglo_cluster_request(x_snapshot.source.addr, aux.address, children_address,
         labels_address, distances_address, scalars.address(), x_snapshot.count, aux.count,
-        n, d, options.linkage, metric, aux.edges, plan.merges, aux.mode, plan.cut,
-        plan.use_threshold, 2.0, threshold)
+        n, d, options, aux.edges, plan, aux.mode, threshold)
     agglo_cluster_run(provider, request)
     _ = provider^
     _ = x_snapshot
@@ -270,20 +235,18 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
     agglo_publish(fields, "n_leaves_", PythonObject(n), context)
     var components = scalars.components()
     agglo_publish(fields, "n_connected_components_", PythonObject(components), context)
-    if constrained and components > 1:
+    if agglo_warns_components(constrained, components):
         metric_warn("the number of connected components of the connectivity matrix is " + String(components)
                     + " > 1. Completing it to avoid stopping the tree early.", b.UserWarning, context)
-    if options.has_threshold or options.compute_distances:
+    if agglo_publishes_distances(options):
         agglo_publish(fields, "distances_", distances, context)
     else:
         lifecycle_admit_fields(fields)
         native_release_admit(py_get(fields, "distances_"), context)
         _ = py_call(fields.pop, PythonObject("distances_"), PythonObject(None))
-    var clusters = PythonObject(None)
-    if options.has_threshold and plan.full:
-        clusters = PythonObject(scalars.clusters())
-    else:
-        clusters = PythonObject(requested_clusters)
+    # The cut's cluster word is read only when the fitted count is the cut's.
+    var cut_clusters = scalars.clusters() if agglo_cut_counts(options, plan) else 0
+    var clusters = PythonObject(agglo_fitted_clusters(options, plan, cut_clusters, requested_clusters))
     _ = scalars^
     _ = children^
     _ = distances^
@@ -292,7 +255,7 @@ def _agglo_x(fields: PythonObject, settings: AggloSettings, options: AggloOption
     agglo_publish(fields, "n_boruvka_rounds_", PythonObject(-1), context)
     agglo_publish(fields, "n_features_in_", PythonObject(d), context)
     var fit_x = PythonObject(None)
-    var predicting = options.prediction_data and agglo_predicts(options.linkage, options.metric)
+    var predicting = agglo_x_predicts(options)
     if predicting:
         fit_x = _fit_copy(x_snapshot, context)
     agglo_publish(fields, "_fit_X", fit_x, context)
@@ -338,15 +301,13 @@ def _agglo_predict(fields: PythonObject, settings: AggloSettings, binding: Pytho
     if refs_source is None:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not stored. Fit with AgglomerativeClustering(prediction_data=True)")
     var refs = admit_family_meta(refs_source, 2, "fitted reference rows", context)
-    if refs.shape[1] != query.shape[1]:
-        raise Error("mojolearn AgglomerativeClustering.predict: fitted reference width differs from X")
+    agglo_check_reference_width(refs.shape[1], query.shape[1])
     var labels = classical_view(fields["labels_"], context, "labels_")
     var labels_shape = array_shape_once(labels, context)
-    if len(labels_shape) != 1:
-        raise Error("TypeError: hierarchy fitted labels must be one-dimensional")
+    agglo_check_label_rank(len(labels_shape))
     var labels_snapshot = array_metadata_once(labels, labels_shape^, "labels_", context)
-    if labels_snapshot.source.kind != 1 or labels_snapshot.source.itemsize != 4 or not labels_snapshot.c_order or labels_snapshot.count != refs.shape[0]:
-        raise Error("TypeError: hierarchy fitted labels require one native contiguous int32 value per reference row")
+    agglo_check_label_words(labels_snapshot.source.kind, labels_snapshot.source.itemsize, labels_snapshot.c_order,
+                            labels_snapshot.count, refs.shape[0])
     # p3-neighbors-cluster: the resident record is keyed by the STORED field
     # objects (`_fit_X`, `labels_`), the ones fit minted it for; the per-call
     # snapshot and view objects were new every call, so it never hit.

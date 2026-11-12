@@ -43,7 +43,7 @@ import array
 import ctypes
 from functools import lru_cache
 
-from ._array import Array, _CODE, normalize_dtype
+from ._array import Array, _ARRAY_CONTEXT, _ARRAY_NATIVE, _CODE
 
 # ------------------------------------------------------------- Py_buffer
 
@@ -679,6 +679,12 @@ def _convert(a, dtype, order):
     missing symbol is a stale build and `_native` says so by name
     (fallback arms removed 2026-09-10).
     """
+    # PERF FIX (perf-audit-2-a, 2026-11-11): `_has_order` and `_as_order`
+    # became native calls (lane pyout-runtime-boundary); an input already in
+    # `dtype` and `order`, the common case of every public call, is returned
+    # on the label compare alone instead of crossing into the binding twice.
+    if a.dtype == dtype and a.order == order:
+        return a, False
     if a.dtype == dtype and a._has_order(order):
         # a (1, n) or (n, 1) block is both C- and F-contiguous; relabeling
         # it is free and is not a copy
@@ -701,7 +707,7 @@ def _native_to_f32(a, order):
     # A 2-D block whose layout must flip. An F-order [rows, cols] block IS
     # a C-order [cols, rows] matrix, so the same kernel serves both
     # directions with the dimensions swapped (DEVIATION 2471, 2472).
-    if a.ndim == 2 and not a._both_orders() and a.order != order:
+    if a.ndim == 2 and a.order != order and not a._has_order(order):
         rows, cols = a.shape
         if a.order == "F":
             rows, cols = cols, rows
@@ -851,7 +857,7 @@ def as_f32_forest_layout(obj, *, name):
     the native side stages the same column-major bytes."""
     a, _ = _materialize(obj, name)
     if (a.ndim == 2 and a.dtype == "<f4" and a.size
-            and a.order == "C" and not a._both_orders()):
+            and a.order == "C" and not a._has_order("F")):
         return a, True
     return as_f32_colmajor(a, name=name)[0], False
 
@@ -893,29 +899,13 @@ def zeros(shape, dtype):
 
 
 def full(shape, value, dtype):
-    dtype = normalize_dtype(dtype)
-    a = Array.from_list([value], dtype)  # one conversion of `value`
-    from ._array import _check_shape, _prod
-    shape = _check_shape(shape)
-    size = _prod(shape)
-    store = a._store * size if size else array.array(a._store.typecode)
-    return Array._owned(store, shape, dtype, "C")
+    """A new owned C-order Array of `shape` holding `value` (native)."""
+    return _ARRAY_NATIVE("full", Array, _ARRAY_CONTEXT, shape, value, dtype)
 
 
 def frombytes(raw, dtype, shape):
-    """An owned C-order Array holding a COPY of `raw`."""
-    dtype = normalize_dtype(dtype)
-    from ._array import _check_shape, _prod, _ITEMSIZE
-    shape = _check_shape(shape)
-    need = _prod(shape) * _ITEMSIZE[dtype]
-    if len(raw) != need:
-        raise ValueError(
-            f"mojolearn: {len(raw)} bytes do not fill shape {shape} of "
-            f"{dtype} ({need} bytes)"
-        )
-    store = array.array(_CODE[dtype])
-    store.frombytes(raw)
-    return Array._owned(store, shape, dtype, "C")
+    """An owned C-order Array holding a COPY of `raw` (native)."""
+    return _ARRAY_NATIVE("frombytes", Array, _ARRAY_CONTEXT, raw, dtype, shape)
 
 
 # --------------------------------------------------------------- scanning
@@ -1087,6 +1077,25 @@ def _host_native(key):
     return None
 
 
+#: The base helper table's vendor words (core/base_entry_table.mojo
+#: `base_entry_vendor`), the mapping the binaries apply at publication.
+_BASE_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def base_native_key():
+    """`(mode, vendor)`: the base helper table key of the binary `_native`
+    resolves (lane calltable-base-helpers), which the Mojo doors read
+    instead of calling the helpers through Python. Read once at import by
+    the bridges that hand the helpers to a door; raises like `_native` when
+    the binary has no probes."""
+    mode = int(_native("mojolearn_numeric_mode")())  # import-time: the binary's compiled tier
+    vendor = _BASE_NATIVE_VENDORS.get(str(_native("mojolearn_vendor")()), -1)  # import-time: its vendor
+    if mode not in (0, 1) or vendor < 0:
+        raise ImportError("mojolearn: the base binding publishes no native helper table "
+                          f"(mode {mode!r}, vendor {vendor!r})")
+    return (mode, vendor)
+
+
 def as_index_i64(values, *, name="indices"):
     """Row indices (an Array, any buffer or a list of ints) as a 1-D int64
     Array: the native cast of a numeric buffer; a list goes in through
@@ -1098,52 +1107,3 @@ def as_index_i64(values, *, name="indices"):
         values, _ = _materialize(values, name)
     values = values.reshape((values.size,))
     return values if values.dtype == "<i8" else values.astype("<i8")
-
-
-class InitStream:
-    """A seeded stream of uniform draws for weight initialisation, made in
-    Mojo (the base binding's counter-based `uniform_init_f32`; lane
-    cgr4-py-compute replaced numpy's Generator, which drew in Python). An
-    int seed gives the same bytes on every column; None draws a fresh seed
-    from the OS, as `numpy.random.default_rng(None)` does. Only the counter
-    (a scalar) lives here."""
-
-    def __init__(self, seed=None):
-        if seed is None:
-            import secrets
-            seed = secrets.randbits(64)
-        self.seed = int(seed) & 0xFFFFFFFFFFFFFFFF
-        self.offset = 0
-
-    def fill_uniform(self, address, n, low, high):
-        """n float32 values U(low, high) at `address`; advances the counter."""
-        n = int(n)
-        if n:
-            _native("uniform_init_f32")(int(address), n, float(low), float(high),
-                                        self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
-        self.offset += n
-
-    def fill_normal(self, address, n, mean, std):
-        """n float32 values N(mean, std**2) at `address` (the base binding's
-        counter-based Box-Muller `normal_init_f32`); advances the counter."""
-        n = int(n)
-        if n:
-            _native("normal_init_f32")(int(address), n, float(mean), float(std),
-                                       self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
-        self.offset += n
-
-    def uniform(self, low, high, size):
-        """A flat float32 Array of `size` draws."""
-        out = empty((int(size),), "<f4")
-        if out.size:
-            self.fill_uniform(out._addr, out.size, low, high)
-        return out
-
-    def child_seed(self):
-        """A derived 63-bit seed (splitmix64 of the seed and the counter,
-        scalar), advancing the counter by one."""
-        z = (self.seed + (self.offset + 1) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
-        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
-        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
-        self.offset += 1
-        return (z ^ (z >> 31)) >> 1

@@ -15,7 +15,7 @@
 # set are staged and handed to the fit entry in the same call (Python
 # returned between each conversion, scan and the launch); the output
 # dimension is read from the fitted text in the same call.
-from std.math import isfinite, floor, copysign
+from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -24,6 +24,8 @@ from bindings.params_metadata_native import _read, _resolved
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_public_state import _release_tree_values
 from bindings.py_typed_call import py_call_typed
+from bindings.boundary_read import read_int, read_float, exact_ndarray_view, view_kind_fits_i64, view_kind_real
+from bindings.cpython_borrowed import borrowed_type_word
 from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_buffer_view
@@ -37,16 +39,24 @@ from bindings.admitted_input import (
 from bindings.classical_arrays import classical_address, classical_c_order
 # TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.trees_public_gbdt import gbdt_table, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.gbdt_fit_boundary import gbdt_fit_params_py, gbdt_fit_strs_py
+from std.memory import unsafe_memcpy
+from core.trees_entry_table import TreesEntryKey
+from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
+from core.entry_table import EntryRef, entry_ref_vendor
+from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
 from bindings.trees_boost_constructor_native import tree_constructor_storage
-from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
 from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
 from bindings.label_list_words import label_list_store, label_store_address
 from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
+from gbdt.trees_gbdt_fit_run import (
+    GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
+    gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
+)
 
 comptime _UNSET = -1.0
-comptime _F32_MAX = 3.4028234663852886e+38
 
 
 def _b() raises -> PythonObject:
@@ -85,17 +95,6 @@ def _tables(context: PythonObject) raises -> PythonObject:
 # ------------------------------------------------------------ resolution
 
 
-def _c_round(number: Float64, precision: Int) -> Float64:
-    """`ensemble._c_round`: C `round` (halves away from zero) at
-    `precision` decimals."""
-    var multiplier = Float64(1.0)
-    for _ in range(precision):  # small-loop(precision): six decimal places
-        multiplier = multiplier * 10.0
-    var scaled = pinned_mul_f64(number, multiplier)
-    var rounded = floor(abs(scaled) + 0.5)
-    return copysign(rounded, scaled) / multiplier
-
-
 def gbdt_auto_learning_rate(loss: PythonObject, n_rows: Float64, iterations: Float64, use_best: Bool, bfa: Bool,
                             table: PythonObject, context: PythonObject) raises -> PythonObject:
     """`ensemble.catboost_auto_learning_rate`: CatBoost's GPU automatic
@@ -115,15 +114,7 @@ def gbdt_auto_learning_rate(loss: PythonObject, n_rows: Float64, iterations: Flo
     var bb = _float(coeffs[1])
     var c = _float(coeffs[2])
     var d = _float(coeffs[3])
-    if iterations <= 0.0 or n_rows <= 0.0:
-        raise Error("math domain error")
-    var custom = portable_exp64(pinned_mul_f64(c, portable_log64(iterations)) + d)
-    var default_iter = portable_exp64(pinned_mul_f64(c, portable_log64(1000.0)) + d)
-    var default_rate = portable_exp64(pinned_mul_f64(a, portable_log64(n_rows)) + bb)
-    if not isfinite(custom) or not isfinite(default_iter) or not isfinite(default_rate):
-        raise Error("OverflowError: math range error")
-    var rate = pinned_mul_f64(default_rate, custom) / default_iter
-    return PythonObject(_c_round(min(rate, 0.5), 6))
+    return PythonObject(gbdt_auto_rate(a, bb, c, d, n_rows, iterations))
 
 
 def catboost_auto_learning_rate_op(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -180,71 +171,61 @@ def _resolved_boosting_type(fields: PythonObject, model: PythonObject, n_rows: I
 
 
 def _check_ordered_options(boosting: String, fields: PythonObject, model: PythonObject, context: PythonObject) raises:
-    """`ensemble._check_ordered_options`."""
+    """`ensemble._check_ordered_options`: UNPACK of its facts (read only
+    for an Ordered fit, as before), then the RUN check
+    (gbdt/trees_gbdt_fit_run.mojo)."""
     if boosting != "Ordered":
         return
     var t = _tables(context)
     var loss = _field(fields, model, "loss")
-    if not _eq(_field(fields, model, "grow_policy"), "SymmetricTree"):
-        raise Error("mojolearn: Ordered boosting is not supported for nonsymmetric "
-                    + "trees. (catboost_options.cpp:757-759)")
-    if _in(loss, t["multi_output_losses"]):
-        raise Error("mojolearn: On GPU loss " + _str(loss) + " can't be used with ordered "
-                    + "boosting (catboost_options.cpp:949-967)")
-    if _in(loss, t["multi_regression_losses"]):
-        raise Error("NotImplementedError: mojolearn: boosting_type='Ordered' with loss=" + _repr(loss) + " is not "
-                    + "carried: the Ordered arm is one-dimensional; use "
-                    + "boosting_type='Plain'")
     var score = _field(fields, model, "score_function")
-    if not (_eq(score, "Cosine") or _eq(score, "NewtonCosine")):
-        raise Error("mojolearn: Score function " + _str(score) + " can't be used with "
-                    + "ordered boosting (catboost_options.cpp:972-978)")
-    if _eq(_field(fields, model, "leaf_estimation_method"), "Exact"):
-        raise Error("mojolearn: Exact leaf estimation method don't work with ordered "
-                    + "boosting on GPU (catboost_options.cpp:346-350)")
-    if _in(loss, t["querywise_losses"]):
-        raise Error("NotImplementedError: mojolearn: boosting_type='Ordered' with loss=" + _repr(loss) + " is not "
-                    + "implemented: their folds follow the query grouping "
-                    + "(dynamic_boosting.h:189-223); use boosting_type='Plain'")
-    if _truthy(_field(fields, model, "use_pointwise_searcher")):
-        raise Error("mojolearn: use_pointwise_searcher selects the doc-parallel Plain "
-                    + "searcher; an Ordered fit runs the feature-parallel fold searcher")
-    if Bool(py=py_get(fields, "feature_fraction", PythonObject(1.0)) < PythonObject(1.0)):
-        raise Error("NotImplementedError: mojolearn: boosting_type='Ordered' with feature_fraction < 1 is "
-                    + "not implemented")
+    var facts = GbdtOrderedFacts(
+        _eq(_field(fields, model, "grow_policy"), "SymmetricTree"),
+        _in(loss, t["multi_output_losses"]),
+        _in(loss, t["multi_regression_losses"]),
+        _in(loss, t["querywise_losses"]),
+        _eq(score, "Cosine") or _eq(score, "NewtonCosine"),
+        _eq(_field(fields, model, "leaf_estimation_method"), "Exact"),
+        _truthy(_field(fields, model, "use_pointwise_searcher")),
+        Bool(py=py_get(fields, "feature_fraction", PythonObject(1.0)) < PythonObject(1.0)),
+        _str(loss), _repr(loss), _str(score))
+    gbdt_check_ordered_options(boosting, facts)
 
 
 def _validate_search_options(fields: PythonObject, model: PythonObject, context: PythonObject) raises -> Float64:
-    """`ensemble._validate_search_options`: the strength the fit uses."""
+    """`ensemble._validate_search_options`: UNPACK of its facts, then the
+    RUN check (gbdt/trees_gbdt_fit_run.mojo) that returns the strength the
+    fit uses."""
     var t = _tables(context)
     var grow = _field(fields, model, "grow_policy")
     var score = _field(fields, model, "score_function")
-    if _truthy(_field(fields, model, "use_pointwise_searcher")) and not _eq(grow, "SymmetricTree"):
-        raise Error("mojolearn: use_pointwise_searcher=True is an OBLIVIOUS searcher; "
-                    + "grow_policy=" + _repr(grow) + " requires the greedy subsets searcher")
     var rs = _field(fields, model, "random_strength")
-    var l2_score = _eq(score, "L2") or _eq(score, "NewtonL2")
-    if rs is None:
-        if _eq(grow, "SymmetricTree") and not l2_score:
-            return _float(t["catboost_random_strength"])
-        return _float(t["legacy_random_strength"])
-    var strength = Float64(0)
-    var valid = not _is_bool(rs) and Bool(py=py_call(_b().isinstance, rs, context["trees_real_type"]))
-    var nan = bitcast[DType.float64](UInt64(0x7FF8000000000000))
-    strength = nan
-    if valid:
+    var strength = gbdt_nan()
+    var real = False
+    if rs is not None and not _is_bool(rs) and Bool(py=py_call(_b().isinstance, rs, context["trees_real_type"])):
+        real = True
         try:
             strength = _float(rs)
         except:
-            strength = nan
-    if not isfinite(strength) or not (strength >= 0 and strength <= _F32_MAX):
-        raise Error("mojolearn: random_strength must be finite, nonnegative and "
-                    + "<= Float32.MAX_FINITE")
-    if strength != 0.0 and l2_score:
-        raise Error("mojolearn: random_strength=" + _str(PythonObject(strength)) + " does nothing under "
-                    + "score_function=" + _repr(score) + "; use Cosine or NewtonCosine, "
-                    + "or random_strength=0.0")
-    return strength
+            strength = gbdt_nan()
+    # The texts (two reprs and one str) are only a refusal's: they are built
+    # when the check refuses, then the check runs again to raise its own
+    # sentence (round2-fixes; perf audit 2 A pattern 9: the door split built
+    # them on every fit, the old code only on the refusing branch).
+    var facts = GbdtSearchFacts(
+        _truthy(_field(fields, model, "use_pointwise_searcher")),
+        _eq(grow, "SymmetricTree"), String(""),
+        _eq(score, "L2") or _eq(score, "NewtonL2"), String(""),
+        rs is None, strength, String(""),
+        _float(t["catboost_random_strength"]), _float(t["legacy_random_strength"]))
+    try:
+        return gbdt_validate_search_options(facts)
+    except:
+        facts.grow_repr = _repr(grow)
+        facts.score_repr = _repr(score)
+        if real:
+            facts.strength_str = _str(PythonObject(strength))
+        return gbdt_validate_search_options(facts)
 
 
 def _f(value: PythonObject) raises -> PythonObject:
@@ -344,7 +325,7 @@ def _padded_tail(params: PythonObject) raises -> PythonObject:
     var out = py_call(b.list, params)
     var defaults = Python.list(PythonObject(-1.0), PythonObject(-1.0), PythonObject(1.0))
     var have = len(params) - fixed
-    for i in range(have, 3):  # small-loop(defaults): at most three tail defaults
+    for i in range(have, 3):  # driver-loop: over fixed call structure, small-loop(defaults): at most three tail defaults
         _ = py_call(out.append, defaults[i])
     return out
 
@@ -353,14 +334,15 @@ def _padded_tail(params: PythonObject) raises -> PythonObject:
 
 
 def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_labels.finite_integer_codes` of a float32 vector, as `(k, dense,
+    """The finite integer class codes of a float32 vector, as `(k, dense,
     top)`: the number of distinct values, whether they are exactly
-    0..k-1, and the largest; None where `finite_integer_codes` answers None
+    0..k-1, and the largest; None where a label is not a code
     (a value that is not a finite nonnegative integer)."""
     var classes = admitted_vector(n, "<f8", context)
     var codes = admitted_vector(n, "<i4", context)
     var k = 0
     try:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(addr), PythonObject(0),
                                 PythonObject(n), PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
@@ -378,6 +360,7 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
     _ = classes  # keep the Python object alive through the native call above
     if lo < 0 or not isfinite(hi):
         return PythonObject(None)
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
     var integral = Int(py=py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(trees_address(classes)),
                                        PythonObject(1), PythonObject(k), PythonObject(4)))
     _ = classes  # keep the Python object alive through the native call above
@@ -431,23 +414,6 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
     raise Error("TypeError: mojolearn: group_id, pairs and pairs_weight must be a list, tuple, array.array or NumPy array")
 
 
-def _id_code(typestr: String) -> Int:
-    """The id vector's element kind as one word, chosen once per vector."""
-    if typestr == "<i8":
-        return 0
-    if typestr == "<i4":
-        return 1
-    if typestr == "<u4":
-        return 2
-    if typestr == "<i2":
-        return 3
-    if typestr == "<u2":
-        return 4
-    if typestr == "|i1" or typestr == "<i1":
-        return 5
-    return 6
-
-
 # Lane i3-move-data-loops (2026-11-09): the id word reads (`id_word_coded`,
 # moved word for word), the run scan and the run-length store run in
 # core/label_words_impl.mojo; an exact int list is unpacked by one
@@ -473,17 +439,12 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
         t = admitted_dtype(view, context)
     except:
         return PythonObject(None)
-    if Int(py=view.ndim) != 1 or not classical_c_order(view, context) or not (t == "<i8" or t == "<i4" or t == "<u4" or t == "<i2"
-            or t == "<u2" or t == "|i1" or t == "<i1" or t == "|u1" or t == "<u1"):
+    if Int(py=view.ndim) != 1 or not classical_c_order(view, context) or not gbdt_id_typestr_supported(t):
         return PythonObject(None)
     var n = Int(py=view.size)
     var view_address = Int(py=classical_address(view))
-    if n != n_rows:
-        raise Error("mojolearn: Length of group_id=" + String(n) + " and length of "
-                    + "data=" + String(n_rows) + " are different.")
-    if n_rows > 0xFFFFFFFF:
-        raise Error("mojolearn: group_id needs at most 2**32 - 1 rows")
-    var words = id_words_coded(view_address, _id_code(t), n)
+    gbdt_check_group_rows(n, n_rows)
+    var words = id_words_coded(view_address, gbdt_id_code(t), n)
     _ = view  # keep the id buffer alive through the reads above
     return _group_runs(words, PythonObject(None), context)
 
@@ -545,18 +506,16 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
             raise Error("mojolearn: Invalid group_id type=" + _str(py_type(group_id)) + ": must be "
                         + "array like.")
         raise error^
-    if len(ids) != n_rows:
-        raise Error("mojolearn: Length of group_id=" + String(len(ids)) + " and length of "
-                    + "data=" + String(n_rows) + " are different.")
-    if n_rows > 0xFFFFFFFF:
-        raise Error("mojolearn: group_id needs at most 2**32 - 1 rows")
+    gbdt_check_group_rows(len(ids), n_rows)
     # Lane p2-labels-lists-arrays: exact int or str ids from C storage.
     var coded = _group_sizes_list(ids, n_rows, context)
     if coded is not None:
         return coded
     var sizes = List[Int]()
     var seen = py_call(b.set)
-    var last = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # Both are set at row 0 before any later row reads them.
+    var last = Optional[PythonObject]()
     # Keyed once per run, as 0.8.55's `itertools.groupby` keyed it (lane
     # perf2-trees, 2026-11-06): an id that is the previous id's object, or an
     # exact int/str/bytes equal to a previous id of the same exact type, has
@@ -564,7 +523,7 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     # these exact types) and was already admitted, so it extends the run
     # without the per-row isinstance checks, formatting and encoding. Any
     # other id is keyed and checked as before; same runs, same refusals.
-    var last_value = PythonObject(None)
+    var last_value = Optional[PythonObject]()
     var int_t = b.int
     var str_t = b.str
     var bytes_t = b.bytes
@@ -575,17 +534,18 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
         var value = ids[i]
         if i > 0:
-            var same = value is last_value
+            var previous = last_value.value()
+            var same = value is previous
             if not same:
                 var t = py_type(value)
-                same = (t is py_type(last_value) and (t is int_t or t is str_t or t is bytes_t)
-                        and Bool(py=value == last_value))
+                same = (t is py_type(previous) and (t is int_t or t is str_t or t is bytes_t)
+                        and Bool(py=value == previous))
             if same:
                 sizes[len(sizes) - 1] += 1
                 continue
         var key = _group_key(value, i, context)
         last_value = value
-        if i > 0 and Bool(py=key == last):
+        if i > 0 and Bool(py=key == last.value()):
             sizes[len(sizes) - 1] += 1
             continue
         if py_contains(seen, key):
@@ -601,71 +561,168 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     return out
 
 
+struct _PairAdmit(Movable):
+    """The builtins and connected number types the non-exact pair and weight
+    admissions call, read ONCE per `_pairs_arrays` call (as the per-pair
+    loop before lane loops-trees-ab hoisted them; perf audit 2-b: the helper
+    split re-read `trees_builtins()`, `context[...]` and four builtin
+    attributes per element on this branch)."""
+    var isinstance_: PythonObject
+    var integral_t: PythonObject
+    var real_t: PythonObject
+    var bool_t: PythonObject
+    var int_t: PythonObject
+    var float_t: PythonObject
+
+    def __init__(out self, context: PythonObject) raises:
+        var b = _b()
+        self.isinstance_ = b.isinstance
+        self.integral_t = context["trees_integral_type"]
+        self.real_t = context["trees_real_type"]
+        self.bool_t = b.bool
+        self.int_t = b.int
+        self.float_t = b.float
+
+
+def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word: Int,
+                      admit: _PairAdmit) raises -> Int:
+    """One end of `pairs[i]`: an exact Python int is read with one
+    PyLong_AsLongLong (it is Integral and not bool); any other object takes
+    the `isinstance(numbers.Integral)` / not-bool admission and `int()` of
+    `ensemble._pairs_arrays`, with its refusal text. Then the row range."""
+    var v: Int
+    if borrowed_type_word(index._obj_ptr) == int_word:
+        v = read_int(index)
+    else:
+        if (not Bool(py=py_call(admit.isinstance_, index, admit.integral_t))
+                or Bool(py=py_call(admit.isinstance_, index, admit.bool_t))):
+            raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
+                        + "type=" + _str(py_type(index)) + ": must be an integer.")
+        v = Int(py=py_call_typed(admit.int_t, index))
+    _pair_end_range(v, i, j, n_rows)
+    return v
+
+
+def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
+    if not (0 <= v and v < n_rows):
+        raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
+                    + String(n_rows) + " rows")
+
+
+def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, admit: _PairAdmit) raises -> Float32:
+    """One `pairs_weight[i]`: an exact Python float is read with one
+    PyFloat_AsDouble; any other object takes the `isinstance(numbers.Real)`
+    admission and `float()`. Finite and nonnegative, else the refusal."""
+    var ok: Bool
+    var f = Float64(0.0)
+    if borrowed_type_word(w._obj_ptr) == float_word:
+        ok = True
+        f = read_float(w)
+    else:
+        ok = Bool(py=py_call(admit.isinstance_, w, admit.real_t))
+        if ok:
+            f = Float64(py=py_call_typed(admit.float_t, w))
+    if ok:
+        ok = isfinite(f) and f >= 0
+    if not ok:
+        raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
+    return Float32(f)
+
+
 def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
                   context: PythonObject) raises -> PythonObject:
     """`ensemble._pairs_arrays`: (uint32 winner/loser pairs, float32 pair
-    weights) with its refusals."""
-    var b = _b()
-    var rows = _listed(pairs, context)
-    var m = len(rows)
+    weights) with its refusals, in the same order.
+
+    Lane loops-trees-ab (2026-11-11): an exact ndarray of integer pairs
+    (shape (m, 2)) and an exact ndarray of real weights are read through ONE
+    buffer view each (bindings/boundary_read.mojo `exact_ndarray_view`), not
+    `tolist()` plus an `isinstance` and an `int()`/`float()` call per value.
+    A Python list is read by exact-type slot reads (one C-API read per end,
+    no Python-level call); only a non-exact element takes the old
+    admission. Any other ndarray (bool, float or object pairs, other
+    shapes) keeps the `tolist()` route, so its refusal is unchanged."""
+    var ndarray = py_get(context, "ndarray")
+    var pair_view = exact_ndarray_view(pairs, ndarray)
+    var fast_pairs = False
+    if pair_view:
+        ref view = pair_view.value()
+        fast_pairs = view.ndim == 2 and view.shape[1] == 2 and view_kind_fits_i64(view)
+    var m: Int
+    var rows = PythonObject(None)
+    if fast_pairs:
+        m = pair_view.value().shape[0]
+    else:
+        pair_view = None  # release the export: the tolist() route reads it as Python values
+        rows = _listed(pairs, context)
+        m = len(rows)
     if m == 0:
         raise Error("mojolearn: pairs is empty")
     var flat = admitted_vector(2 * m, "<u4", context)
     var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(flat))
-    _ = flat  # keep the Python object alive through the native call above
-    # Builtins and the connected types read once, each index converted once
-    # (lane perf-sweep-trees, 2026-11-05: re-read and re-converted per pair).
-    var isinstance_ = b.isinstance
-    var integral_t = context["trees_integral_type"]
-    var bool_t = b.bool
-    var int_t = b.int
-    for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-        var pair = rows[i]
-        if len(pair) != 2:
-            raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
-        var ends = List[Int]()
-        for j in range(2):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-            var index = pair[j]
-            if not Bool(py=py_call(isinstance_, index, integral_t)) or Bool(py=py_call(isinstance_, index, bool_t)):
-                raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
-                            + "type=" + _str(py_type(index)) + ": must be an integer.")
-            var v = Int(py=py_call_typed(int_t, index))
-            if not (0 <= v and v < n_rows):
-                raise Error("mojolearn: pairs[" + String(i) + "][" + String(j) + "] = " + String(v) + " is outside the "
-                            + String(n_rows) + " rows")
-            ends.append(v)
-        var w0 = ends[0]
-        var w1 = ends[1]
-        if w0 == w1:
-            raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
-        fp[2 * i] = UInt32(w0)
-        _ = flat  # keep the Python object alive through the native call above
-        fp[2 * i + 1] = UInt32(w1)
-        _ = flat  # keep the Python object alive through the native call above
+    if fast_pairs:
+        var ends = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pair_view.value().as_i64_c())
+        for i in range(m):  # boundary-read: native int64 words of the one pairs view (no CPython call)
+            var w0 = Int(ends[2 * i])
+            _pair_end_range(w0, i, 0, n_rows)
+            var w1 = Int(ends[2 * i + 1])
+            _pair_end_range(w1, i, 1, n_rows)
+            if w0 == w1:
+                raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+        pair_view.value().release()
+    else:
+        var int_word = borrowed_type_word(PythonObject(1)._obj_ptr)
+        var admit = _PairAdmit(context)
+        for i in range(m):  # boundary-read: one exact-type slot read per pair end of a user list (no buffer to view)
+            var pair = rows[i]
+            if len(pair) != 2:
+                raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+            var w0 = _pair_end_checked(pair[0], i, 0, n_rows, int_word, admit)
+            var w1 = _pair_end_checked(pair[1], i, 1, n_rows, int_word, admit)
+            if w0 == w1:
+                raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+    _ = pair_view^
+    _ = flat  # keep the Python object alive through the native writes above
     var weights = admitted_vector(m, "<f4", context)
     var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=trees_address(weights))
-    _ = weights  # keep the Python object alive through the native call above
     if pairs_weight is None:
-        for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
+        for i in range(m):  # boundary-read: native fill of the weight Array (no CPython call)
             wp[i] = 1.0
-            _ = weights  # keep the Python object alive through the native call above
-    else:
-        var values = _listed(pairs_weight, context)
-        if len(values) != m:
-            raise Error("mojolearn: len(pairs_weight) = " + String(len(values)) + " is not equal to "
+        _ = weights  # keep the Python object alive through the native writes above
+        return Python.tuple(flat, weights)
+    var weight_view = exact_ndarray_view(pairs_weight, ndarray)
+    var fast_weights = False
+    if weight_view:
+        ref view = weight_view.value()
+        fast_weights = view.ndim == 1 and view_kind_real(view)
+    if fast_weights:
+        var count = weight_view.value().shape[0]
+        if count != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(count) + " is not equal to "
                         + "len(pairs) = " + String(m) + " ")
-        var real_t = context["trees_real_type"]
-        for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-            var w = values[i]
-            var ok = Bool(py=py_call(isinstance_, w, real_t))
-            var f = Float64(0.0)
-            if ok:
-                f = _float(w)
-                ok = isfinite(f) and f >= 0
-            if not ok:
+        var values = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=weight_view.value().as_f64_c())
+        for i in range(m):  # boundary-read: native float64 words of the one weight view (no CPython call)
+            var f = values[i]
+            if not (isfinite(f) and f >= 0):
                 raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
             wp[i] = Float32(f)
-            _ = weights  # keep the Python object alive through the native call above
+        weight_view.value().release()
+    else:
+        weight_view = None
+        var listed = _listed(pairs_weight, context)
+        if len(listed) != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(len(listed)) + " is not equal to "
+                        + "len(pairs) = " + String(m) + " ")
+        var float_word = borrowed_type_word(PythonObject(1.5)._obj_ptr)
+        var admit = _PairAdmit(context)
+        for i in range(m):  # boundary-read: one exact-type slot read per weight of a user list (no buffer to view)
+            wp[i] = _pair_weight_checked(listed[i], i, float_word, admit)
+    _ = weight_view^
+    _ = weights  # keep the Python object alive through the native writes above
     return Python.tuple(flat, weights)
 
 
@@ -685,7 +742,7 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
     _ = out  # keep the Python object alive through the native call above
     var lists = Python.tuple(cat, hot)
     var names: List[String] = ["cat_features", "one_hot_features"]
-    for which in range(2):  # small-loop(lists): the two feature-list arguments
+    for which in range(2):  # driver-loop: over fixed call structure, small-loop(lists): the two feature-list arguments
         var values = lists[which]
         if not _truthy(values):
             continue
@@ -754,6 +811,7 @@ def _has_nan(x: AdmittedX, context: PythonObject) raises -> Bool:
     var classes = admitted_vector(n, "<f8", context)
     var codes = admitted_vector(n, "<i4", context)
     try:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         _ = py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(x.address), PythonObject(0), PythonObject(n),
                           PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                           PythonObject(0), PythonObject(0), PythonObject(0))
@@ -766,50 +824,32 @@ def _has_nan(x: AdmittedX, context: PythonObject) raises -> Bool:
     return False
 
 
-def _bias_of(text: String) raises -> Float64:
-    """The `bias ...` line's float64 bits (0.0 without one)."""
-    var at = -1
-    if text.startswith("bias "):
-        at = 0
-    else:
-        var found = text.find("\nbias ")
-        if found >= 0:
-            at = found + 1
-    if at < 0:
-        return 0.0
-    var end = text.find("\n", at)
-    var line = String(text[byte=at:text.byte_length()]) if end < 0 else String(text[byte=at:end])
-    var words = line.split()
-    if len(words) < 2:
-        raise Error("IndexError: list index out of range")
-    var second = String(words[1])
-    var slash = second.find("/")
-    if slash < 0:
-        raise Error("IndexError: list index out of range")
-    var rest = String(second[byte=slash + 1:second.byte_length()])
-    var next = rest.find("/")
-    var hex = rest if next < 0 else String(rest[byte=0:next])
-    var bits = UInt64(0)
-    var digits = hex.as_bytes()
-    for i in range(len(digits)):  # small-loop(hex): at most sixteen hex digits of one word
-        var c = Int(digits[i])
-        var d = -1
-        if c >= 48 and c <= 57:
-            d = c - 48
-        elif c >= 97 and c <= 102:
-            d = c - 87
-        elif c >= 65 and c <= 70:
-            d = c - 55
-        if d < 0:
-            raise Error("invalid literal for int() with base 16: '" + hex + "'")
-        bits = (bits << 4) | UInt64(d)
-    return bitcast[DType.float64](bits)
-
-
 def _f64_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(values, "<f8")` of a binding's list of floats."""
     var store = py_call(context["array_type"], "d", values)
     return classical_wrap_array(store, Python.tuple(len(store)), "<f8", "C", context)
+
+
+def _f64_curve(values: List[Float64], context: PythonObject) raises -> PythonObject:
+    """`_f64_array` of a native curve (PACK): one array, one copy."""
+    if len(values) == 0:
+        return _f64_array(Python.list(), context)
+    var out = admitted_vector(len(values), "<f8", context)
+    unsafe_memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
+                  src=values.unsafe_ptr(), count=len(values))
+    return out
+
+
+def _gk(table: PythonObject) raises -> EntryRef:
+    """The gbdt entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the image this tier connected (the bridge
+    records it at import as `gbdt_native_key`): the fit, its probes and the
+    model dimension run through that image's published native entry
+    (gbdt/fit_calls.mojo), not through its Python entries."""
+    var key = py_get(table, PythonObject("gbdt_native_key"))
+    if key is None:
+        raise Error("ImportError: mojolearn: the gbdt binding publishes no native entry table")
+    return xg_ref(TreesEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 # -------------------------------------------------------------------- fit
@@ -835,13 +875,12 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var table = gbdt_table(fields, context)
     var cat = _field(fields, model, "cat_features")
     var hot = _field(fields, model, "one_hot_features")
+    var gkey = _gk(table)
     var row_major_ok = False
-    var probe = trees_entry(table, "gbdt_fit_row_major_available")
-    if probe is not None:
-        try:
-            row_major_ok = Int(py=py_call_typed(b.int, py_call_typed(probe))) != 0
-        except:
-            row_major_ok = False
+    try:
+        row_major_ok = xg_row_major(gkey)
+    except:
+        row_major_ok = False
     var x: AdmittedX
     if not _truthy(cat) and not _truthy(hot) and row_major_ok:
         x = trees_forest_x(X, "X", context)
@@ -933,6 +972,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         + "within the training class range")
     var eval_constant = False
     if n_eval_rows:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         var helper = trees_helper(context, "reduce_stat")
         var lo = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(0))
         var hi = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(1))
@@ -1013,33 +1053,38 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "boosting_type_", PythonObject(boosting))
     var ex_addr = x.address if held is None else Int(py=held[1])
     var ey_addr = ya.address if held is None else Int(py=held[3])
-    var name = String("gbdt_fit_rowmajor") if x.c_order else String("gbdt_fit")
-    var entry = trees_need(table, name, "mojolearn: this gbdt binding has no " + name, "AttributeError")
-    var call = Python.list(PythonObject(x.address), PythonObject(ya.address), PythonObject(w_addr),
-                           PythonObject(trees_address(flags_holder)), PythonObject(ex_addr), PythonObject(ey_addr),
-                           params, strs)
+    # UNPACK of the params and strs lists once; the fit runs natively in the
+    # connected gbdt image (gbdt/fit_calls.mojo), the row-major entry when X
+    # is C-order (refused by name by an image without it).
+    var p_ints = List[Int]()
+    var p_floats = List[Float64]()
+    var p_bad = List[UInt8]()
+    gbdt_fit_params_py(params, p_ints, p_floats, p_bad)
+    var fit_args = GbdtFitArgs(x.address, ya.address, w_addr, trees_address(flags_holder), ex_addr, ey_addr,
+                               p_ints^, p_floats^, p_bad^, gbdt_fit_strs_py(strs))
+    var outcome = xg_fit(gkey, x.c_order, fit_args)
+    _ = fit_args^
     _ = flags_holder  # keep the Python object alive through the native call above
     _ = group_holder  # keep the Python object alive through the native call above
-    var out = trees_call(entry, call)
-    _ = flags_holder  # keep the Python object alive through the native call above
     _ = weights^
     _ = held^
     _ = group_holder^
     _ = pair_holders^
-    var text = out[0]
+    # PACK of the native outcome
+    var text = PythonObject(outcome.text)
     py_setitem(fields, "model_", text)
-    py_setitem(fields, "bias_", PythonObject(_bias_of(String(py_call(b.str, text)))))
-    py_setitem(fields, "best_iteration_", py_call_typed(b.int, out[1]))
-    py_setitem(fields, "stopped_early_", PythonObject(_truthy(out[2])))
-    py_setitem(fields, "loss_curve_", _f64_array(out[3], context))
-    py_setitem(fields, "test_loss_curve_", _f64_array(out[4], context) if n_eval_rows else PythonObject(None))
+    py_setitem(fields, "bias_", PythonObject(gbdt_bias_of(outcome.text)))
+    py_setitem(fields, "best_iteration_", PythonObject(outcome.best_iteration))
+    py_setitem(fields, "stopped_early_", PythonObject(outcome.stopped_early))
+    py_setitem(fields, "loss_curve_", _f64_curve(outcome.learn, context))
+    py_setitem(fields, "test_loss_curve_", _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
     py_setitem(fields, "n_features_in_", PythonObject(n_features))
     var dim = PythonObject(None)
-    if gbdt_vendor(table) == "cpu" and gbdt_has_ctr(text):
-        dim = py_call_typed(b.int, host_archive_gbdt_state(py_call(b.str, text), context)["dim"])
+    if entry_ref_vendor(gkey) == 0 and gbdt_has_ctr(text):
+        # the host image (vendor word 0 is "cpu", core/gbdt_entry_table.mojo)
+        dim = py_call_typed(b.int, host_archive_gbdt_state(text, context)["dim"])
     else:
-        dim = py_call_typed(trees_need(table, "gbdt_model_dim", "mojolearn: this gbdt binding has no gbdt_model_dim",
-                                       "AttributeError"), text)
+        dim = PythonObject(xg_model_dim(gkey, outcome.text))
     py_setitem(fields, "approx_dim_", dim)
     if _eq(loss, "MultiClass"):
         py_setitem(fields, "n_classes_", dim + PythonObject(1))
@@ -1074,13 +1119,12 @@ def _real(value: PythonObject, context: PythonObject) raises -> Bool:
 def _parsed_real(value: PythonObject, context: PythonObject) raises -> Float64:
     """`float(value)` of a real non-bool, NaN for anything else or a
     refused conversion (the constructor's `parsed_*` pattern)."""
-    var nan = bitcast[DType.float64](UInt64(0x7FF8000000000000))
     if not _real(value, context):
-        return nan
+        return gbdt_nan()
     try:
         return _float(value)
     except:
-        return nan
+        return gbdt_nan()
 
 
 def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1211,7 +1255,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     var hessian = PythonObject(None)
     if hessian_obj is not None:
         var parsed = _parsed_real(hessian_obj, context)
-        if not isfinite(parsed) or not (parsed >= 0 and parsed <= _F32_MAX):
+        if not isfinite(parsed) or not (parsed >= 0 and parsed <= GBDT_F32_MAX):
             raise Error("mojolearn: min_child_hessian must be finite nonnegative and <= Float32.MAX_FINITE or None")
         if symmetric:
             raise Error("mojolearn: min_child_hessian requires Depthwise or Lossguide")
@@ -1287,7 +1331,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
                     + "read only by Ordered boosting (dynamic_boosting.h:115-223); "
                     + "with boosting_type='Plain' they would be accepted and ignored")
     var perm_names: List[String] = ["permutation_count", "ctr_estimation_permutation_id"]
-    for i in range(2):  # small-loop(perm_names): the two permutation arguments
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(perm_names): the two permutation arguments
         var value = kw[perm_names[i]]
         if value is None:
             continue
@@ -1354,14 +1398,18 @@ def _gbdt_base_args(model: PythonObject, overrides: PythonObject, context: Pytho
     var b = _b()
     var classes = context["trees_classes"]
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
-    var defaults = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
-        if defaults is None:
+        if not found:
             var kind = py_get(classes, ancestry[i])
             if kind is not None and String(kind) == "gbdt":
-                defaults = context["trees_defaults"][ancestry[i]]
-    if defaults is None:
+                var candidate = context["trees_defaults"][ancestry[i]]
+                if candidate is not None:
+                    found = candidate
+    if not found:
         raise Error("TypeError: native GBDT constructors require the connected GradientBoosting base")
+    var defaults = found.value()
     var names = _tables(context)["init_names"]
     var args = Python.list()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names
@@ -1561,6 +1609,7 @@ def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context
 def _codes_f32(labels: TreesLabels, context: PythonObject) raises -> PythonObject:
     """The class codes as float32 (`_label_map(...).astype('<f4')`)."""
     var out = admitted_vector(labels.n, "<f4", context)
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
     _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(labels.codes)), PythonObject(2),
                       PythonObject(trees_address(out)), PythonObject(0), PythonObject(labels.n))
     _ = out  # keep the Python object alive through the native call above
@@ -1606,8 +1655,7 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     var learner_fields = py_fields(learner)
     py_setitem(learner_fields, "numeric_mode", PythonObject(mode))
     var table = gbdt_table(learner_fields, context)
-    var code = Int(py=py_call_typed(trees_need(table, "gbdt_numeric_mode", "mojolearn: this gbdt binding has no gbdt_numeric_mode",
-                                               "AttributeError")))
+    var code = xg_numeric_mode(_gk(table))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
     _ = gbdt_fit(learner, Python.tuple(X, y, sample_weight, eval_set, PythonObject(None), PythonObject(None),
@@ -1617,7 +1665,7 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     py_setitem(fields, "n_features_in_", learner_fields["n_features_in_"])
     py_setitem(fields, "model_", learner_fields["model_"])
     var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
-    for i in range(len(copied)):  # small-loop(copied): the five learner attributes
+    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
         py_setitem(fields, copied[i], learner_fields[copied[i]])
     return model
 
@@ -1650,7 +1698,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
         _ = table  # keep the Python object alive through the native call above
         for i in range(len(eval_kind[1])):  # driver-loop: over the eval set's distinct labels
             var at = -1
-            for j in range(len(classes)):  # small-loop(classes): the two training classes
+            for j in range(len(classes)):  # driver-loop: over fixed call structure, small-loop(classes): the two training classes
                 if Bool(py=classes[j] == eval_kind[1][i]):
                     at = j
             if at < 0:
@@ -1658,12 +1706,14 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
             tp[i] = Int32(at)
             _ = table  # keep the Python object alive through the native call above
         var mapped = admitted_vector(eval_labels.n, "<i4", context)
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)),
                           PythonObject(len(eval_kind[1])), PythonObject(trees_address(eval_labels.codes)),
                           PythonObject(eval_labels.n), PythonObject(trees_address(mapped)))
         _ = table  # keep the Python object alive through the native call above
         _ = mapped  # keep the Python object alive through the native call above
         var eval_y = admitted_vector(eval_labels.n, "<f4", context)
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
         _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(mapped)), PythonObject(2),
                           PythonObject(trees_address(eval_y)), PythonObject(0), PythonObject(eval_labels.n))
         _ = mapped  # keep the Python object alive through the native call above

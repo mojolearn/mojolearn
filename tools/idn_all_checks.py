@@ -60,9 +60,9 @@ def _lu_child():
     import warnings
     import numpy as np
     import mojolearn as ml
-    from mojolearn import _expansion_decomp as la
+    from mojolearn import _backend
     warnings.simplefilter("ignore")
-    flags = int(la._Kit(la._mode(None))._raw().x_decomp_idn_flags())
+    flags = int(_backend.binding("_mojolearn_x_decomp", _backend.default_mode()).x_decomp_idn_flags())
     resident = bool(flags & 2)
     expected_resident = os.environ.get("MOJOLEARN_IDN_ALL_OFF") != "1"
     assert resident == expected_resident, 'compiled LU route does not match comparison arm'

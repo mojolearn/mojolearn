@@ -311,15 +311,17 @@ def native_path(value: PythonObject) raises -> PythonObject:
         raise Error("TypeError: path requires native component storage")
     if py_type(parts) is not bi.list and py_type(parts) is not bi.tuple:
         raise Error("TypeError: path components require native storage")
-    var result = PythonObject("")
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var joined = Optional[PythonObject](PythonObject(""))
     for i in range(len(parts)):  # driver-loop: over stored filesystem path components
         var part = parts[i]
         if py_type(part) is not bi.str:
             raise Error("TypeError: path components require native strings")
-        if Bool(py=py_call(part.startswith, "/")) or len(result) == 0:
-            result = part
+        if Bool(py=py_call(part.startswith, "/")) or len(joined.value()) == 0:
+            joined = part
         elif len(part) != 0:
-            result = py_call(result.rstrip, "/") + PythonObject("/") + part
+            joined = Optional[PythonObject](py_call(joined.value().rstrip, "/") + PythonObject("/") + part)
+    var result = joined.value()
     return result if len(result) != 0 else PythonObject(".")
 
 

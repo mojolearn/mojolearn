@@ -230,24 +230,37 @@ def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject, con
                 record = PythonObject(None)
             else:
                 return reused
-    var binding = PythonObject(None)
-    var bind = PythonObject(None)
-    var plan = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_binding = Optional[PythonObject]()
+    var found_bind = Optional[PythonObject]()
+    var found_plan = Optional[PythonObject]()
     var plan_row = -1
     for i in range(len(ancestry)):  # driver-loop: over class ancestry to resolve the native route
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: native metadata refuses Python metaclass protocols")
         var fields = _class_fields(mods, ancestry[i])
-        if binding is None and py_contains(fields, "_BINDING"):
-            binding = fields["_BINDING"]
-        if bind is None and py_contains(fields, "_bind"):
-            bind = fields["_bind"]
-        if plan is None:
-            plan = py_get(plans, ancestry[i])
-            if plan is not None:
+        if not found_binding and py_contains(fields, "_BINDING"):
+            var candidate = fields["_BINDING"]
+            if candidate is not None:
+                found_binding = candidate
+        if not found_bind and py_contains(fields, "_bind"):
+            var candidate = fields["_bind"]
+            if candidate is not None:
+                found_bind = candidate
+        if not found_plan:
+            var candidate = py_get(plans, ancestry[i])
+            if candidate is not None:
+                found_plan = candidate
                 plan_row = i
-    if plan is None:
+    if not found_plan:
         raise Error("RuntimeError: this estimator's native binary metadata route was not connected")
+    var plan = found_plan.value()
+    var binding = PythonObject(None)
+    if found_binding:
+        binding = found_binding.value()
+    var bind = PythonObject(None)
+    if found_bind:
+        bind = found_bind.value()
     if py_type(binding) is not b.str or binding != plan["binding"] or bind is not plan["bind"]:
         raise Error("TypeError: estimator binding metadata changed after native connection")
     if class_watch_ready():

@@ -21,24 +21,22 @@ if base is False:
 if isinstance(base, str):
     raise RuntimeError(base)
 
-v1 = base.labels_native_api_v1
-v2 = base.labels_native_api_v2
+# The v1 and v2 label factories were deleted (2026-11-12, no reader); another
+# exact compiled factory of the same extension (a different capsule name)
+# stands in for a stale provider.
+foreign = base.kmeans_native_api_v1
 v3 = base.labels_native_api_v3
 valid = ctypes.pythonapi.PyCapsule_IsValid
 valid.argtypes = (ctypes.py_object, ctypes.c_char_p)
 valid.restype = ctypes.c_int
-assert valid(v1(), b"mojolearn.labels.v1") == 1
-assert valid(v2(), b"mojolearn.labels.v2") == 1
 assert valid(v3(), b"mojolearn.labels.v3") == 1
+assert not hasattr(base, "labels_native_api_v1") and not hasattr(base, "labels_native_api_v2")
 
 variant = sys.argv[1]
-if variant == "old_v1":
+if variant == "foreign":
     # This remains an exact compiled factory of the same extension. Admission
-    # must reject its old capsule identity before any GIL-released operation.
-    base.labels_native_api_v3 = v1
-    expected = "neural native ABI: invalid capsule or version"
-elif variant == "old_v2":
-    base.labels_native_api_v3 = v2
+    # must reject its capsule identity before any GIL-released operation.
+    base.labels_native_api_v3 = foreign
     expected = "neural native ABI: invalid capsule or version"
 else:
     del base.labels_native_api_v3
@@ -56,7 +54,7 @@ print("PASS native label provider admission", variant)
 '''
 
 
-@pytest.mark.parametrize("variant", ["old_v1", "old_v2", "missing_v3"])
+@pytest.mark.parametrize("variant", ["foreign", "missing_v3"])
 def test_label_provider_requires_native_only_version_before_execution(variant):
     result = subprocess.run(
         [sys.executable, "-c", textwrap.dedent(_SCRIPT), variant],

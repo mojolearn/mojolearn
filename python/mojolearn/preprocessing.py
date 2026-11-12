@@ -15,7 +15,7 @@ from ._array import Array
 from ._buffer import materialize_f32_lists, all_finite, empty, zeros, full, as_f32_c
 from ._labels import is_bool
 
-from . import _backend, _serialize
+from . import _backend
 from ._arrays import _addr, _addr_ro
 from ._mode import PublicOutputsMixin, sklearn_tags as _sklearn_tags
 

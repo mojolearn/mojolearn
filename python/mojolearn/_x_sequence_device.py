@@ -34,11 +34,6 @@ def _size(shape):
     return _SEQ_NATIVE("seqdev_size_of", None, (shape,), None, _SEQ_CONTEXT)
 
 
-def resident_binding(b):
-    """Whether binding `b` has the resident tensor entries."""
-    return _SEQ_NATIVE("seqdev_resident", None, (b,), None, _SEQ_CONTEXT)
-
-
 class SequenceDeviceTensor:
     """A float32 tensor resident on the sequence binding's device context:
     a handle and a shape. Read it back with `.numpy()`; freed with the
@@ -100,11 +95,6 @@ def to_device(x, numeric_mode=None):
     """float32 array `x` as a `SequenceDeviceTensor` (uploaded once, here),
     or `x` itself as a float32 array on a binding without resident tensors."""
     return _SEQ_NATIVE("seqdev_to", None, (x,), numeric_mode, _SEQ_CONTEXT)
-
-
-def on_binding(b, *ts):
-    """Whether every one of `ts` is a resident tensor of binding `b`."""
-    return _SEQ_NATIVE("seqdev_on", None, (b, ts), None, _SEQ_CONTEXT)
 
 
 __all__ = ["SequenceDeviceTensor", "to_device"]

@@ -50,7 +50,7 @@ import ast
 import struct
 import zipfile
 
-from ._array import Array, normalize_dtype, _ITEMSIZE, _prod
+from ._array import Array, normalize_dtype, _ITEMSIZE
 from . import _buffer
 
 MAGIC = b"\x93NUMPY"
@@ -235,23 +235,31 @@ def decode_npy(data):
     bytes (`'|S'`) from complete npy bytes."""
     descr, fortran, shape, offset = _parse_header(data)
     itemsize = _itemsize_of(descr)
-    n = _prod(shape)
     # Keep the ZIP member's payload borrowed until `frombytes` makes the one
     # owned Array copy.  Slicing `bytes` here used to allocate and copy the
     # complete tensor once, only for `array.array.frombytes` to copy it again.
     # A memoryview slice carries the same exact byte range without that
     # transient model-sized allocation.
+    if descr in _TYPESTR_OF:
+        # The payload of an npy member is everything after its header; the
+        # native `frombytes` checks the shape and refuses a payload that does
+        # not fill it exactly. PERF FIX (perf-audit-2-a, 2026-11-11): the
+        # element count used to come from `Array(shape, "<u1").size`, which
+        # allocated and zero-filled a member-sized store per tensor on every
+        # model load only to read its size.
+        a = _buffer.frombytes(memoryview(data)[offset:], _TYPESTR_OF[descr], shape)
+        if fortran and a.ndim > 1:
+            a = Array._view_of(a, shape, "F")
+        return a
+    # The element count of a text member's shape, from the native shape
+    # check (an empty Array of that shape; string metadata only, tiny).
+    n = Array(shape, "<u1").size
     raw = memoryview(data)[offset:offset + n * itemsize]
     if len(raw) != n * itemsize:
         raise ValueError(
             f"mojolearn: npy member holds {len(raw)} data bytes, shape "
             f"{shape} of {descr!r} needs {n * itemsize}"
         )
-    if descr in _TYPESTR_OF:
-        a = _buffer.frombytes(raw, _TYPESTR_OF[descr], shape)
-        if fortran and a.ndim > 1:
-            a._set_meta(shape, a.dtype, "F")
-        return a
     # Text decoding below needs byte slices (`memoryview` has no `decode` or
     # `rstrip`). String metadata is tiny; numeric model tensors took the
     # borrowed, single-copy return above.
@@ -267,8 +275,7 @@ def decode_npy(data):
         # column-major text blocks never occur in model files; linearize
         # through an index map rather than mis-shape them
         idx = list(range(n))
-        tmp = Array.from_list(idx, "<i8")
-        tmp._set_meta(shape, "<i8", "F")
+        tmp = Array._view_of(Array.from_list(idx, "<i8"), shape, "F")
         items = [items[i] for i in tmp._as_c()._values()]
     if n == 1:
         return items[0]
@@ -286,10 +293,6 @@ def _nest_text(items, shape):
     for dim in shape[1:]:  # glue: row stride of a text metadata block
         step *= dim
     return [_nest_text(items[i * step:(i + 1) * step], shape[1:]) for i in range(shape[0])]  # glue: list structure of a text metadata block
-
-
-def read_npy(fp):
-    return decode_npy(fp.read())
 
 
 # --------------------------------------------------------------------- npz

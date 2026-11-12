@@ -24,6 +24,13 @@ from bindings.manifold_settings_native import ManifoldSettings
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.umap_parameters_native import umap_parameters_fields, umap_scalar as _umap_scalar, umap_integer as _umap_integer
+from x_ann.mani_umap_run import (
+    umap_finite, umap_mode_code, umap_check_input, umap_check_neighbors, umap_check_spectral_samples,
+    umap_check_pca_components, umap_check_singular_values, umap_check_spread, umap_init_shape_matches,
+    umap_init_shape_refusal, umap_check_init_finite, umap_check_target_weight, umap_target_neighbors,
+    umap_label_dtype_codable, umap_continuous_target_dims, umap_legacy_abi, umap_check_embedding,
+    umap_check_transform_state, umap_check_transform_input, umap_transform_reuses_fit, umap_check_transform_output,
+)
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_is_str, family_array, family_field,
 )
@@ -33,9 +40,7 @@ from core.neighbors_entry_table_umap import (
     UmapConfigWords, UmapTargetWords, umap_ops_entry, umap_fit_call, umap_fit_ex_call, umap_transform_call,
     UMAP_TAIL_LEGACY, UMAP_TAIL_RATES, UMAP_TAIL_EXTRAS,
 )
-from core.host_finite_scan import host_all_finite_f32
-from core.mani_impl import mani_same_words
-from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT
+from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
 from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
 from bindings.label_list_words import label_list_store, label_store_address
@@ -67,7 +72,8 @@ def _umap_check_mode(binding: PythonObject, mode: String, message: String) raise
     as its module attribute `umap_native_key` when it published, one exact
     dictionary read at UNPACK. Returns the key; the UMAP entries are then
     called natively."""
-    if mode != "fast" and mode != "identical":
+    var want = umap_mode_code(mode)
+    if want < 0:
         raise Error("KeyError: " + family_repr(PythonObject(mode)))
     var b = native_loaded_module("builtins")
     if py_type(binding) is not py_type(b):
@@ -76,7 +82,6 @@ def _umap_check_mode(binding: PythonObject, mode: String, message: String) raise
     if key is None or py_type(key) is not b.tuple or len(key) != 2:
         raise Error("ImportError: mojolearn: the UMAP binding publishes no native UMAP table; rebuild it")
     var native_key = NeighborsEntryKey(Int(py=key[0]), Int(py=key[1]))
-    var want = 0 if mode == "fast" else 1
     if native_key.mode != want:
         raise Error("RuntimeError: " + message)
     return native_key^
@@ -100,10 +105,6 @@ def _umap_copy(shape: PythonObject, address: Int, count: Int, context: PythonObj
         unsafe_memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(output))),
                src=FAMILY_F32P(unsafe_from_address=address), count=count)
     return output
-
-
-def _umap_finite(address: Int, count: Int) -> Bool:
-    return count == 0 or host_all_finite_f32(FAMILY_F32P(unsafe_from_address=address), count)
 
 
 def _umap_state(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
@@ -136,8 +137,7 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
             return Optional(admit_family_meta(mk_out2(k.ew1(OP_ADDS, scaled, -10.0), context), 2, "init", context))
         # 'pca'
         var m = k.from_snapshot(x, "X")
-        if nc > min(mk_r(m), mk_c(m)):
-            raise Error("UMAP init='pca' needs n_components <= min(n_samples, n_features)")
+        umap_check_pca_components(nc, mk_r(m), mk_c(m))
         # k.center(M, k.colmean(M))
         var sums = k.colsum(m)
         var mean = k.ew1(OP_SCALE, sums, 1.0 / Float64(mk_r(m)))
@@ -154,13 +154,8 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
             var s = got[0]
             var ut = got[1]
             var store = mk_store(s, context)
-            var sp = mk_store_ptr(store)
-            _ = store  # keep the Python object alive through the native call above
-            for j in range(nc):  # small-loop(components: the zero singular value check): bounded by n_components
-                if not (Float64(sp[j]) > 0):
-                    raise Error("UMAP init='pca' found a zero singular value")
-                _ = store  # keep the Python object alive through the native calls above
-            _ = store^
+            umap_check_singular_values(Int(mk_store_ptr(store)), nc)
+            _ = store^  # keep the Python object alive through the native reads above
             var head = mk_rows(ut, 0, nc, context)
             vt = k.mm(head, xc, False, False)
             var kept = mk_take_cols(s, mk_col_range(0, nc), context)
@@ -177,17 +172,15 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
         if mk_r(at) > 0:
             var where = Int(mk_at(at, 0, context))
             peak = mk_at(mag, where, context)
-        if not (peak > 0):
-            raise Error("UMAP init='pca' found a zero spread")
+        umap_check_spread(peak)
         coords = k.ew1(OP_SCALE, coords, 10.0 / peak)
         var noise = k.ew1(OP_SCALE, k.rand(n, nc, seed, 91, 1), 1e-4)
         return Optional(admit_family_meta(mk_out2(k.ew2(OP_ADD, coords, noise), context), 2, "init", context))
     var a = admit_family_meta(init, 2, "init", context)
-    if a.source.rows != n or a.source.cols != nc:
-        raise Error("UMAP init array has shape " + family_repr(a.python_shape()) + "; (" + String(n) + ", " + String(nc)
-                    + ") is needed")
-    if not _umap_finite(a.source.addr, a.count):
-        raise Error("UMAP init array must be finite")
+    if not umap_init_shape_matches(a.source.rows, a.source.cols, n, nc):
+        var refusal = umap_init_shape_refusal(family_repr(a.python_shape()), n, nc)
+        raise refusal^
+    umap_check_init_finite(a.source.addr, a.count)
     return Optional(a^)
 
 
@@ -214,12 +207,9 @@ def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises ->
     var item = meta.source.itemsize
     var stride = meta.source.s0
     var base = meta.source.addr
-    var is_float = kind == CAST_KIND_FLOAT
-    if is_float and item != 4 and item != 8:
+    if not umap_label_dtype_codable(kind, item):
         return PythonObject(None)
-    if not is_float and kind != CAST_KIND_SIGNED and kind != CAST_KIND_BOOL and not (kind == CAST_KIND_UNSIGNED and item < 8):
-        return PythonObject(None)
-    if is_float:
+    if kind == CAST_KIND_FLOAT:
         var words = List[Float64]()
         var ok = label_words_f64(base, stride, item, n, words)
         _ = meta.keep  # keep the source alive through the reads above
@@ -291,12 +281,9 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
     var fields = settings.values
     var tm = family_field(fields, "target_metric")
     var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight", context)
-    if not (w >= 0 and w <= 1):
-        raise Error("UMAP target_weight must be in [0, 1]")
+    umap_check_target_weight(w)
     var tk = _umap_integer(family_field(fields, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX, context)
-    if Bool(py=py_call(op.contains, Python.tuple(PythonObject(0), PythonObject(1)), tk)):
-        raise Error("UMAP target_n_neighbors must be -1 or >= 2")
-    var tk_kept = py_call(b.max, tk, PythonObject(0))
+    var tk_kept = PythonObject(umap_target_neighbors(Int(py=tk)))
     if Bool(py=py_call(b.bool, py_call(op.eq, tm, PythonObject("categorical")))):
         # A 1-D NumPy array or mojolearn Array of one numeric dtype: the codes
         # come from one native pass over its words (p3 rank 11). One dtype
@@ -364,10 +351,8 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
         return Python.tuple(PythonObject(1), PythonObject(1), t, tk_kept, PythonObject(w), t, PythonObject(Int(tp)))
     if Bool(py=py_call(op.contains, Python.tuple(PythonObject("l2"), PythonObject("euclidean")), tm)):
         var target = admit_family_meta(y, -1, "y", context)
-        var nd = len(target.shape)
-        var dims = 1 if nd == 1 else target.source.cols
-        if (nd != 1 and nd != 2) or target.source.rows != n or not _umap_finite(target.source.addr, target.count):
-            raise Error("UMAP continuous y must be finite with one row per sample")
+        var dims = umap_continuous_target_dims(len(target.shape), target.source.rows, target.source.cols, n,
+                                               target.source.addr, target.count)
         return Python.tuple(PythonObject(2), PythonObject(dims), target.keep, tk_kept, PythonObject(w),
                             target.owner, PythonObject(target.source.addr))
     raise Error("NotImplementedError: UMAP target_metric=" + family_repr(tm) + " is not implemented; "
@@ -394,16 +379,13 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         # not yet carry the original input_copied provenance in ArrayMetadata.
         # Preserve this public flag until the provider can capture it once.
         copied = pca_copied(source, context)
-    if not _umap_finite(x.source.addr, x.count):
-        raise Error("UMAP input coordinates must be finite")
+    umap_check_input(x.source.addr, x.count)
     var n = x.source.rows
     var d = x.source.cols
     var nc = Int(py=config[1])
-    if Bool(py=py_call(native_loaded_module("operator").gt, config[0], PythonObject(n))):
-        raise Error("UMAP n_neighbors exceeds n_samples")
+    umap_check_neighbors(Int(py=config[0]), n)
     var initial = _umap_initial(settings, x, n, nc, config[7], context)
-    if not initial and n < 2 * nc + 4:
-        raise Error("UMAP has too few samples for spectral initialization")
+    umap_check_spectral_samples(True if initial else False, n, nc)
     var target = PythonObject(None)
     if not (y is None):
         target = _umap_target(settings, y, n, context)
@@ -412,7 +394,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var mode = _umap_mode(settings, context)
     var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with requested mode")
     var cfg = _umap_config_words(config, extras)
-    var legacy = not initial and target is None and cfg.default_extras() and (nc == 2 or nc == 3)
+    var legacy = umap_legacy_abi(True if initial else False, not (target is None), cfg.default_extras(), nc)
     var entry = umap_ops_entry(key)
     var x_address = x.source.addr
     var columns = 0
@@ -439,8 +421,7 @@ def _umap_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         _ = x  # keep the Python object alive through the native call above
     _ = initial^
     _ = target^
-    if columns != nc or not _umap_finite(embedding_address, n * nc):
-        raise Error("RuntimeError: UMAP returned an invalid embedding")
+    umap_check_embedding(columns == nc, embedding_address, n * nc)
     # Prepare all retained state before publishing a successful fit. Copies
     # prevent caller edits of X or embedding_ from changing transform's model.
     var training = _umap_copy(x.python_shape(), x.source.addr, x.count, context)
@@ -488,17 +469,11 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     var d = x.source.cols
     var nt = training.source.rows
     var nc = Int(py=config[1])
-    if fitted_embedding.source.rows != nt or fitted_embedding.source.cols != nc:
-        raise Error("UMAP fitted embedding shape differs from fitted configuration")
-    if d != training.source.cols:
-        raise Error("UMAP transform feature count differs from fitted data")
-    if not _umap_finite(x.source.addr, x.count):
-        raise Error("UMAP transform input coordinates must be finite")
+    umap_check_transform_state(fitted_embedding.source.rows, fitted_embedding.source.cols, nt, nc, d,
+                               training.source.cols)
+    umap_check_transform_input(x.source.addr, x.count)
     # the C-order bytes compared (`x.tobytes() == training.tobytes()`)
-    if nq == nt and nq * d > 0:
-        if mani_same_words(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=x.source.addr), MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=training.source.addr), nq * d):
-            return _umap_copy(fitted_embedding.python_shape(), fitted_embedding.source.addr, fitted_embedding.count, context)
-    elif nq == nt:
+    if umap_transform_reuses_fit(x.source.addr, training.source.addr, nq, nt, d):
         return _umap_copy(fitted_embedding.python_shape(), fitted_embedding.source.addr, fitted_embedding.count, context)
     var key = _umap_check_mode(binding, mode, "UMAP binary numeric mode disagrees with fitted mode")
     var output = family_array(Python.tuple(nq, nc), "<f4", context)
@@ -522,8 +497,7 @@ def _umap_transform(model: PythonObject, settings: ManifoldSettings, args: Pytho
     _ = x^
     _ = training^
     _ = fitted_embedding^
-    if columns != nc or not _umap_finite(output_address, nq * nc):
-        raise Error("RuntimeError: UMAP transform returned an invalid embedding")
+    umap_check_transform_output(columns == nc, output_address, nq * nc)
     return output
 
 

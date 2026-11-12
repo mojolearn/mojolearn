@@ -106,12 +106,19 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.forest_host_predict import rf_host_predict, rf_host_trees
 from bindings.forest_host_strict_binding import (
     forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
+    forest_strict_prepare_host_native, forest_strict_predict_host_native, forest_strict_release_host_native,
 )
 from bindings.forest_host_groves_binding import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
     forest_release_host_binding,
+    forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
 )
+from bindings.forest_fit_boundary import forest_fit_args_py, forest_params_py
+from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, XF_CAP_DART, forest_export_verify_lists
+from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from core.forest_entry_table import FOREST_TABLE_RF
+from core.native_descriptor_abi import NativeDescriptorError
 from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
 from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 from core.host_finite_scan import host_all_finite_f32
@@ -226,23 +233,23 @@ def _check_criterion(who: String, criterion: Int, classification: Bool) raises:
     )
 
 
-def _params_from(params: PythonObject, criterion: Int) raises -> RfHostParams:
+def _params_from(params: ForestFitArgs, criterion: Int) raises -> RfHostParams:
     """`bindings/_mojolearn_rf.mojo::_rf_params_from`, slots 3-15, the same
     narrowings (`Int32(Int(...))`, `Float32(Float64(...))`)."""
     return RfHostParams(
-        n_trees=Int(Int32(_index(params[3]))),
-        max_depth=Int(Int32(_index(params[4]))),
-        max_leaves=Int(Int32(_index(params[5]))),
-        max_features=Float32(Float64(py=params[6])),
-        max_n_bins=Int(Int32(_index(params[7]))),
-        min_samples_leaf=Int(Int32(_index(params[8]))),
-        min_samples_split=Int(Int32(_index(params[9]))),
-        min_impurity_decrease=Float32(Float64(py=params[10])),
-        bootstrap=_index(params[11]) != 0,
-        max_samples=Float32(Float64(py=params[12])),
-        seed=UInt64(_index(params[13])),
-        n_streams=Int(Int32(_index(params[14]))),
-        max_batch_size=Int(Int32(_index(params[15]))),
+        n_trees=Int(Int32(params.i(3))),
+        max_depth=Int(Int32(params.i(4))),
+        max_leaves=Int(Int32(params.i(5))),
+        max_features=Float32(params.f(6)),
+        max_n_bins=Int(Int32(params.i(7))),
+        min_samples_leaf=Int(Int32(params.i(8))),
+        min_samples_split=Int(Int32(params.i(9))),
+        min_impurity_decrease=Float32(params.f(10)),
+        bootstrap=params.i(11) != 0,
+        max_samples=Float32(params.f(12)),
+        seed=UInt64(params.i(13)),
+        n_streams=Int(Int32(params.i(14))),
+        max_batch_size=Int(Int32(params.i(15))),
         criterion=criterion,
     )
 
@@ -281,7 +288,7 @@ def _forest_out(forest: RfHostForest) raises -> PythonObject:
     return out
 
 
-def _retain_rf_export(var forest: RfHostForest) raises -> PythonObject:
+def _retain_rf_handle(var forest: RfHostForest) raises -> Int:
     """`bindings/_mojolearn_rf.mojo::_retain_rf_export`: the fitted forest kept
     under a handle until `forest_export_release`."""
     var trees = forest.n_trees
@@ -292,23 +299,29 @@ def _retain_rf_export(var forest: RfHostForest) raises -> PythonObject:
     if len(forest.leaves) != nodes * outputs:
         raise Error("fitted RF leaf storage differs from export dimensions")
     var meta: List[Int64] = [Int64(trees), Int64(outputs), Int64(forest.notices)]
-    return RF_HOST_EXPORTS.get_or_create_ptr()[].insert(
+    return RF_HOST_EXPORTS.get_or_create_ptr()[].insert_native(
         forest^, trees, nodes, outputs, meta^
     )
 
 
-def _params_len_ok(params: PythonObject) raises -> Bool:
+def _retain_rf_export(var forest: RfHostForest) raises -> PythonObject:
+    """`_retain_rf_handle`, then the export descriptor (the session Python
+    entries)."""
+    return _rf_handle_py(_retain_rf_handle(forest^), True)
+
+
+def _params_len_ok(params: ForestFitArgs) raises -> Bool:
     """`bindings/_mojolearn_rf.mojo::_rf_params_len_ok`: 16 slots, or 17
     with the optional `min_weight_fraction_leaf`."""
     var n = len(params)
     return n == N_RF_FIT_PARAMS or n == N_RF_FIT_PARAMS + 1
 
 
-def _min_weight_fraction(params: PythonObject) raises -> Float64:
+def _min_weight_fraction(params: ForestFitArgs) raises -> Float64:
     """`bindings/_mojolearn_rf.mojo::_rf_min_weight_fraction`, its words."""
     if len(params) <= N_RF_FIT_PARAMS:
         return 0.0
-    var f = Float64(py=params[N_RF_FIT_PARAMS])
+    var f = params.f(N_RF_FIT_PARAMS)
     if not (f >= 0.0 and f <= 0.5):
         raise Error(
             "The 'min_weight_fraction_leaf' parameter must be a float in the"
@@ -381,36 +394,32 @@ def _host_drop_zero_weight_rows_reg(
     return len(rows)
 
 
-def _rf_fit[
-    CLASSIFIER: Bool, EXPORT: Bool, ROWMAJOR: Bool
-](
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    params: PythonObject,
-    criterion: PythonObject,
-    weights_addr: Int = 0,
-    tree_start: Int = 0,
-    oob_addr: Int = 0,
-    oob_score_addr: Int = 0,
-    importance_addr: Int = 0,
-    weight_max: Float64 = 0,
-) raises -> PythonObject:
+def _rf_fit[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
     """`_rf_classifier_fit` / `_rf_regressor_fit` of the GPU binding: the same
     slot checks in the same words, then the host fit. `weights_addr` is the
     weighted fit's Float32 row weights (0: none; the regressor's with
     `weight_max`, their largest, as `rf_regressor_fit_weighted`);
     `tree_start` the GPU binding's global tree ID offset (the shard fits
-    below)."""
+    below). Returns the export handle (lane calltable-forest: every fit is
+    kept in RF_HOST_EXPORTS; `_rf_handle_py` reads the diagnostic lists)."""
     comptime entry = "rf_classifier_fit" if CLASSIFIER else "rf_regressor_fit"
+    var weights_addr = params.weights
+    var tree_start = params.tree_start
+    var oob_addr = params.oob
+    var oob_score_addr = params.score
+    var importance_addr = params.importance
+    var weight_max = params.weight_max
+    if (oob_addr == 0) != (oob_score_addr == 0):
+        raise Error("RF OOB output and score must be requested together")
     if not _params_len_ok(params):
         raise Error(
             entry + ": params must hold " + String(N_RF_FIT_PARAMS)
             + " values (17 with min_weight_fraction_leaf), got "
             + String(len(params))
         )
-    var n_rows = _index(params[0])
-    var n_cols = _index(params[1])
-    var n_classes = _index(params[2])
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var n_classes = params.i(2)
     comptime if CLASSIFIER:
         if n_classes < 2:
             raise Error("rf_classifier_fit: n_classes must be >= 2")
@@ -419,7 +428,7 @@ def _rf_fit[
             raise Error("rf_regressor_fit: n_classes (slot 2) must be 0")
     if n_rows < 1 or n_cols < 1:
         raise Error(entry + ": n_rows and n_cols must be >= 1")
-    var crit = _index(criterion)
+    var crit = params.criterion
     _check_criterion(entry, crit, CLASSIFIER)
     var p = _params_from(params, crit)
     if oob_addr != 0 and (oob_score_addr == 0 or not p.bootstrap or tree_start != 0):
@@ -427,8 +436,8 @@ def _rf_fit[
     # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
     # words; all-unit weights fit unweighted.
     var weights = _read_weights(weights_addr, n_rows, String("class") if CLASSIFIER else String("sample"))
-    var x_address = _index(x_addr)
-    var y_address = _index(y_addr)
+    var x_address = params.x
+    var y_address = params.y
     # sk-weq-trees: a weighted classifier fit without bootstrap drops its
     # zero-weight rows (`_host_drop_zero_weight_rows`); n_fit is the kept count
     var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
@@ -462,10 +471,7 @@ def _rf_fit[
     _ = y_kept_f^
     if importance_addr != 0:
         rf_host_importance(forest,n_cols,importance_addr)
-    comptime if EXPORT:
-        return _retain_rf_export(forest^)
-    else:
-        return _forest_out(forest)
+    return _retain_rf_handle(forest^)
 
 
 def _rf_fit_colmajor[CLASSIFIER: Bool](
@@ -512,6 +518,50 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
     return forest^
 
 
+def _kept_forest_out(handle: Int) raises -> PythonObject:
+    # The kept fit's diagnostic lists. A helper of its own so the Dict
+    # lookup (DictKeyError) and the list build (Error) both raise Error to
+    # the caller's try/finally, which cannot mix the two error types.
+    var registry = RF_HOST_EXPORTS.get_or_create_ptr()
+    return _forest_out(registry[].entries[handle].model)
+
+
+def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:
+    """PACK of a kept fit for the Python entries: the export descriptor
+    (`*_export`), or the diagnostic lists of the kept fit, released (the
+    plain entries; the lists `_forest_out` built from the forest)."""
+    var registry = RF_HOST_EXPORTS.get_or_create_ptr()
+    if export:
+        try:
+            return registry[].descriptor_py(handle)
+        except error:
+            registry[].release(handle)
+            raise error^
+    var out = PythonObject(None)
+    try:
+        out = _kept_forest_out(handle)
+    finally:
+        registry[].release(handle)
+    return out
+
+
+def _rf_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject, criterion: PythonObject,
+    export: Bool, weights: Int = 0, tree_start: Int = 0, oob: Int = 0, score: Int = 0, importance: Int = 0,
+    weight_max: Float64 = 0,
+) raises -> PythonObject:
+    """The Python fit entries: UNPACK (`forest_fit_args_py`), the native
+    fit, PACK (`_rf_handle_py`)."""
+    var args = forest_fit_args_py(x_addr, y_addr, params, criterion)
+    args.weights = weights
+    args.tree_start = tree_start
+    args.oob = oob
+    args.score = score
+    args.importance = importance
+    args.weight_max = weight_max
+    return _rf_handle_py(_rf_fit[CLASSIFIER, ROWMAJOR](args), export)
+
+
 def rf_classifier_fit_aux_export_binding(
     x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
     criterion: PythonObject, weights_addr: PythonObject,
@@ -520,11 +570,8 @@ def rf_classifier_fit_aux_export_binding(
     """T15 host twin: optional native OOB+score and Float32 feature importance.
     NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     """
-    if (_index(oob_addr) == 0) != (_index(score_addr) == 0):
-        raise Error("RF OOB output and score must be requested together")
-    return _rf_fit[True,True,False](x_addr,y_addr,params,criterion,
-        weights_addr=_index(weights_addr),oob_addr=_index(oob_addr),
-        oob_score_addr=_index(score_addr),importance_addr=_index(importance_addr))
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True, weights=_index(weights_addr),
+                                   oob=_index(oob_addr), score=_index(score_addr), importance=_index(importance_addr))
 
 
 def rf_regressor_fit_aux_export_binding(
@@ -533,11 +580,8 @@ def rf_regressor_fit_aux_export_binding(
     importance_addr: PythonObject,
 ) raises -> PythonObject:
     """T15 host requested auxiliary outputs; same unqualified status."""
-    if (_index(oob_addr) == 0) != (_index(score_addr) == 0):
-        raise Error("RF OOB output and score must be requested together")
-    return _rf_fit[False,True,False](x_addr,y_addr,params,criterion,
-        oob_addr=_index(oob_addr),oob_score_addr=_index(score_addr),
-        importance_addr=_index(importance_addr))
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True, oob=_index(oob_addr),
+                                    score=_index(score_addr), importance=_index(importance_addr))
 
 
 # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -548,49 +592,42 @@ def rf_classifier_fit_export_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
-    return _rf_fit[True, True, False](x_addr, y_addr, params, criterion)
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, True)
 
 
-def rf_classifier_fit_rowmajor_export_binding(
+def _rf_classifier_fit_weighted(
     x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit[True, True, True](x_addr, y_addr, params, criterion)
-
-
-def _rf_classifier_fit_weighted[EXPORT: Bool](
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject, export: Bool,
 ) raises -> PythonObject:
     """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_weighted_binding`."""
     var address = _index(weights_addr)
     if address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
-    return _rf_fit[True, EXPORT, False](x_addr, y_addr, params, criterion, address)
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, export, weights=address)
 
 
 def rf_classifier_fit_weighted_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
 ) raises -> PythonObject:
-    return _rf_classifier_fit_weighted[False](x_addr, y_addr, params, criterion, weights_addr)
+    return _rf_classifier_fit_weighted(x_addr, y_addr, params, criterion, weights_addr, False)
 
 
 def rf_classifier_fit_weighted_export_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
 ) raises -> PythonObject:
-    return _rf_classifier_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr)
+    return _rf_classifier_fit_weighted(x_addr, y_addr, params, criterion, weights_addr, True)
 
 
 def rf_regressor_fit_export_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
-    return _rf_fit[False, True, False](x_addr, y_addr, params, criterion)
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True)
 
 
-def _rf_regressor_fit_weighted[EXPORT: Bool](
+def rf_regressor_fit_weighted_export_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
     weight_max: PythonObject,
@@ -602,24 +639,8 @@ def _rf_regressor_fit_weighted[EXPORT: Bool](
     var address = _index(weights_addr)
     if address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
-    return _rf_fit[False, EXPORT, False](
-        x_addr, y_addr, params, criterion, address, weight_max=Float64(py=weight_max)
-    )
-
-
-def rf_regressor_fit_weighted_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
-    weight_max: PythonObject,
-) raises -> PythonObject:
-    return _rf_regressor_fit_weighted[True](x_addr, y_addr, params, criterion, weights_addr, weight_max)
-
-
-def rf_regressor_fit_rowmajor_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    return _rf_fit[False, True, True](x_addr, y_addr, params, criterion)
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, True, weights=address,
+                                    weight_max=Float64(py=weight_max))
 
 
 def rf_classifier_fit_shard_binding(
@@ -632,9 +653,8 @@ def rf_classifier_fit_shard_binding(
     the whole forest, weighted when `weights_addr` is nonzero
     (`parallel_ensemble.fit_forest`'s shard; lane/cpu-training-par-wave2,
     2026-09-15)."""
-    return _rf_fit[True, False, False](
-        x_addr, y_addr, params, criterion, _index(weights_addr), _index(tree_start)
-    )
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, False, weights=_index(weights_addr),
+                                   tree_start=_index(tree_start))
 
 
 def rf_regressor_fit_shard_binding(
@@ -642,33 +662,7 @@ def rf_regressor_fit_shard_binding(
     params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
 ) raises -> PythonObject:
     """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_binding`."""
-    return _rf_fit[False, False, False](
-        x_addr, y_addr, params, criterion, 0, _index(tree_start)
-    )
-
-
-# The shard fits' owned-handle forms (N007, ne1-a-trees, 2026-11-06): the same
-# fit returned as the export descriptor the door copies through
-# `forest_export`, not one Python object per node. Same bytes.
-def rf_classifier_fit_shard_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
-    weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn_rf.mojo::rf_classifier_fit_shard_export_binding`."""
-    return _rf_fit[True, True, False](
-        x_addr, y_addr, params, criterion, _index(weights_addr), _index(tree_start)
-    )
-
-
-def rf_regressor_fit_shard_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_shard_export_binding`."""
-    return _rf_fit[False, True, False](
-        x_addr, y_addr, params, criterion, 0, _index(tree_start)
-    )
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, False, tree_start=_index(tree_start))
 
 
 # ---------------------------------------------------------------------------
@@ -687,18 +681,19 @@ comptime RF_HOST_SESSIONS = SharedSlot[RfHostSessionRegistry, "MojolearnRFDataSe
 
 
 def rf_data_session_open_binding(
-    x_addr: PythonObject, params: PythonObject
+    x_addr: PythonObject, params_py: PythonObject
 ) raises -> PythonObject:
     """`bindings/_mojolearn_rf.mojo::rf_data_session_open_binding`: `params`
     is [n_rows, n_cols, row_major, share_tables]; `x` is float32, ROW-major
     when `row_major` is 1 and COLUMN-major otherwise, borrowed through this
     call only. Returns the session handle."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
     if len(params) != 4:
         raise Error("rf_data_session_open: params must hold 4 values")
-    var n_rows = _index(params[0])
-    var n_cols = _index(params[1])
-    var row_major = _index(params[2]) != 0
-    var share_tables = _index(params[3]) != 0
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var row_major = params.i(2) != 0
+    var share_tables = params.i(3) != 0
     if n_rows <= 0 or n_cols <= 0:
         raise Error("rf_data_session_open: invalid shape")
     # A host binding is IDENTICAL only, and an IDENTICAL member draws its
@@ -733,7 +728,7 @@ def rf_data_session_close_binding(handle: PythonObject) raises -> PythonObject:
 
 
 def _session_params[CLASSIFIER: Bool](
-    entry: String, params: PythonObject, criterion: PythonObject
+    entry: String, params: ForestFitArgs
 ) raises -> RfHostParams:
     """The GPU session entries' slot checks, in their words."""
     if not _params_len_ok(params):
@@ -743,19 +738,19 @@ def _session_params[CLASSIFIER: Bool](
             + String(len(params))
         )
     comptime if CLASSIFIER:
-        if _index(params[2]) < 2:
+        if params.i(2) < 2:
             raise Error(entry + ": n_classes must be >= 2")
     else:
-        if _index(params[2]) != 0:
+        if params.i(2) != 0:
             raise Error(entry + ": n_classes (slot 2) must be 0")
-    var crit = _index(criterion)
+    var crit = params.criterion
     _check_criterion(entry, crit, CLASSIFIER)
     var p = _params_from(params, crit)
     comptime if not CLASSIFIER:
         # the regressor sessions fit unweighted: slot 16 is a count bound
         # (the weighted classifier session applies it with its weights)
         _ = _apply_min_weight_fraction(
-            p, _min_weight_fraction(params), List[Float32](), _index(params[0])
+            p, _min_weight_fraction(params), List[Float32](), params.i(0)
         )
     return p
 
@@ -777,16 +772,18 @@ def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises 
 
 def rf_regressor_fit_session_rows_binding(
     handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
+    params_py: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     """`rf_regressor_fit_export` on the rows `rows` (int32 row ids of the
     session's X, `params[0]` of them, repeats allowed), `y` their labels in
     that order: the column-major gather of those rows (the bytes the GPU
     binding's `launch_gather_rows_colmajor` writes), then the plain fit."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+    params.criterion = _index(criterion)
     comptime entry = "rf_regressor_fit_session_rows"
-    var p = _session_params[False](entry, params, criterion)
-    var n_rows = _index(params[0])
-    var n_cols = _index(params[1])
+    var p = _session_params[False](entry, params)
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
     if n_rows <= 0:
         raise Error(entry + ": no rows")
     var rp = i32_ptr(_index(rows_addr))
@@ -809,14 +806,16 @@ def rf_regressor_fit_session_rows_binding(
 
 def rf_classifier_fit_weighted_session_binding(
     handle: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    params_py: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
 ) raises -> PythonObject:
     """`rf_classifier_fit_weighted_export` on the session's X."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+    params.criterion = _index(criterion)
     comptime entry = "rf_classifier_fit_weighted_session"
-    var p = _session_params[True](entry, params, criterion)
-    var n_rows = _index(params[0])
-    var n_cols = _index(params[1])
-    var n_classes = _index(params[2])
+    var p = _session_params[True](entry, params)
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var n_classes = params.i(2)
     var w_address = _index(weights_addr)
     if w_address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
@@ -844,6 +843,15 @@ def rf_regressor_fit_dart_binding(
     dart_handle: PythonObject, cls: PythonObject, rows_addr: PythonObject,
     cols_addr: PythonObject, params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
+    """`rf_regressor_fit_dart_export` (UNPACK of `_rf_regressor_fit_dart`,
+    the forest entry's XF_FIT_DART)."""
+    var args = forest_fit_args_py(rows_addr, cols_addr, params, criterion)
+    args.session = _index(dart_handle)
+    args.cls = _index(cls)
+    return _rf_handle_py(_rf_regressor_fit_dart(args), True)
+
+
+def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_dart_binding` on the
     host column (box-run-2-dart-host, 2026-10-05). cpu4-forest moved the
     device DART member fit onto the DART session's buffers (X and the class
@@ -866,13 +874,13 @@ def rf_regressor_fit_dart_binding(
     Same params, checks and export descriptor as the device entry."""
     comptime entry = "rf_regressor_fit_dart"
     comptime if DART_HOST:
-        var p = _session_params[False](entry, params, criterion)
-        var n_rows = _index(params[0])
-        var n_cols = _index(params[1])
-        var hid = _index(dart_handle)
-        var c = _index(cls)
-        var rows_a = _index(rows_addr)
-        var cols_a = _index(cols_addr)
+        var p = _session_params[False](entry, params)
+        var n_rows = params.i(0)
+        var n_cols = params.i(1)
+        var hid = params.session
+        var c = params.cls
+        var rows_a = params.x
+        var cols_a = params.y
         var dreg = DART_HOST_SESSIONS.get_or_create_ptr()
         var di = dreg[].find(hid)
         var n = dreg[].sessions[di].n
@@ -905,12 +913,43 @@ def rf_regressor_fit_dart_binding(
             )
         # y is read through its address inside the fit: keep it alive past it
         _ = y^
-        return _retain_rf_export(forest^)
+        return _retain_rf_handle(forest^)
     else:
         raise Error(
             entry + ": built without the host DART round"
             " (MOJOLEARN_IDN_DART_DEVICE_OFF)"
         )
+
+
+def _rf_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
+    """XF_EXPORT_INTO: the retained forest into the caller's five arrays."""
+    var registry = RF_HOST_EXPORTS.get_or_create_ptr()
+    registry[].validate(id, trees, nodes, outputs)
+    validate_forest_export_destinations(dst[0], dst[1], dst[2], dst[3], dst[4])
+    var op = i32_ptr(dst[0])
+    var cp = i32_ptr(dst[1])
+    var tp = f32_ptr(dst[2])
+    var lp = i32_ptr(dst[3])
+    rf_host_export_into(registry[].entries[id].model, op, cp, tp, lp, dst[4])
+
+
+def _rf_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
+    """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
+    lists `forest_export_legacy` returns, against the exported arrays."""
+    var registry = RF_HOST_EXPORTS.get_or_create_ptr()
+    if id not in registry[].entries:
+        raise Error("unknown or released fitted forest export handle")
+    ref entry = registry[].entries[id]
+    if (len(entry.meta) != 3 or Int(entry.meta[0]) != entry.model.n_trees
+            or Int(entry.meta[1]) != entry.model.num_outputs or Int(entry.meta[2]) != entry.model.notices):
+        return -1
+    var offsets = List[Int64]()
+    var colid = List[Int64]()
+    var quesval = List[Float64]()
+    var left_child = List[Int64]()
+    var leaves = List[Float64]()
+    rf_host_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
+    return forest_export_verify_lists(offsets, colid, quesval, left_child, leaves, dst)
 
 
 def rf_forest_export_binding(
@@ -923,20 +962,11 @@ def rf_forest_export_binding(
     counts: PythonObject,
 ) raises -> PythonObject:
     """`bindings/_mojolearn_rf.mojo::rf_forest_export_binding`: the retained
-    forest into the caller's five arrays."""
+    forest into the caller's five arrays (UNPACK of `_rf_export_into_native`)."""
     if len(counts) != 3:
         raise Error("forest_export requires trees, nodes, outputs capacities")
-    var id = _index(handle)
-    var registry = RF_HOST_EXPORTS.get_or_create_ptr()
-    registry[].validate(id, _index(counts[0]), _index(counts[1]), _index(counts[2]))
-    validate_forest_export_destinations(
-        _index(offsets), _index(columns), _index(thresholds), _index(left), _index(leaves)
-    )
-    var op = i32_ptr(_index(offsets))
-    var cp = i32_ptr(_index(columns))
-    var tp = f32_ptr(_index(thresholds))
-    var lp = i32_ptr(_index(left))
-    rf_host_export_into(registry[].entries[id].model, op, cp, tp, lp, _index(leaves))
+    var dst: List[Int] = [_index(offsets), _index(columns), _index(thresholds), _index(left), _index(leaves)]
+    _rf_export_into_native(_index(handle), dst, _index(counts[0]), _index(counts[1]), _index(counts[2]))
     return PythonObject(None)
 
 
@@ -953,6 +983,41 @@ def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
     return PythonObject(None)
 
 
+def _rf_predict_native(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_cols: Int, n_trees: Int,
+                       num_outputs: Int, classifier: Bool) raises -> Int:
+    """`rf_predict_proba` / `rf_predict_reg`'s contract (XF_PREDICT): ROW-major
+    `x`, returns rows written. The walk is `core/forest_host_predict.mojo`'s,
+    which rebuilds the trees from the five arrays and refuses a malformed
+    node instead of reading past it; `n_nodes` is read off the offsets."""
+    var entry = String("rf_predict_proba") if classifier else String("rf_predict_reg")
+    if classifier:
+        if n_trees < 1 or num_outputs < 2:
+            raise Error("rf_predict_proba: n_trees must be >= 1 and num_outputs >= 2")
+    else:
+        if n_trees < 1 or num_outputs != 1:
+            raise Error("rf_predict_reg: n_trees must be >= 1 and num_outputs must be 1")
+    if n_rows < 0 or n_cols < 1:
+        raise Error(entry + ": n_rows must be >= 0 and n_cols >= 1")
+    var offsets_p = i32_ptr(model[0])
+    var colid_p = i32_ptr(model[1])
+    var quesval_p = f32_ptr(model[2])
+    var left_p = i32_ptr(model[3])
+    var leaves_p = f32_ptr(model[4])
+    var op = f32_ptr(out_addr)
+    var n_nodes = Int(offsets_p[n_trees])
+    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
+        raise Error(entry + ": tree_offsets must start at 0 and hold at least one node per tree")
+    if n_rows == 0:
+        return 0
+    with GILReleased(Python()):
+        var rows = read_f32(x_address, n_rows * n_cols)
+        forest_host_vote_into(
+            True, rows, offsets_p, colid_p, quesval_p, left_p,
+            leaves_p, op, n_rows, n_cols, n_trees, num_outputs, n_nodes,
+        )
+    return n_rows
+
+
 def _rf_predict(
     offsets_addr: PythonObject,
     colid_addr: PythonObject,
@@ -965,50 +1030,17 @@ def _rf_predict(
     entry: String,
     classifier: Bool,
 ) raises -> PythonObject:
-    """`rf_predict_proba` / `rf_predict_reg`'s contract
-    (`bindings/_mojolearn_rf.mojo:696-817`): ROW-major `x`, `params` is
-    `[n_rows, n_cols, n_trees, num_outputs]`, returns rows written. The
-    walk is `core/forest_host_predict.mojo`'s, which rebuilds the trees
-    from the five arrays and refuses a malformed node instead of reading
-    past it; `n_nodes` is read off the offsets."""
+    """UNPACK of `_rf_predict_native`: `params` is `[n_rows, n_cols,
+    n_trees, num_outputs]`."""
     if len(params) != 4:
         raise Error(
             entry + ": params must hold [n_rows, n_cols, n_trees,"
             " num_outputs], got " + String(len(params))
         )
-    var n_rows = _index(params[0])
-    var n_cols = _index(params[1])
-    var n_trees = _index(params[2])
-    var num_outputs = _index(params[3])
-    if classifier:
-        if n_trees < 1 or num_outputs < 2:
-            raise Error("rf_predict_proba: n_trees must be >= 1 and num_outputs >= 2")
-    else:
-        if n_trees < 1 or num_outputs != 1:
-            raise Error("rf_predict_reg: n_trees must be >= 1 and num_outputs must be 1")
-    if n_rows < 0 or n_cols < 1:
-        raise Error(entry + ": n_rows must be >= 0 and n_cols >= 1")
-    var offsets_p = i32_ptr(_index(offsets_addr))
-    var colid_p = i32_ptr(_index(colid_addr))
-    var quesval_p = f32_ptr(_index(quesval_addr))
-    var left_p = i32_ptr(_index(left_child_addr))
-    var leaves_p = f32_ptr(_index(leaves_addr))
-    var x_address = _index(x_addr)
-    var op = f32_ptr(_index(out_addr))
-    var n_nodes = Int(offsets_p[n_trees])
-    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
-        raise Error(entry + ": tree_offsets must start at 0 and hold at least one node per tree")
-    if n_rows == 0:
-        return PythonObject(0)
-    var wrote = 0
-    with GILReleased(Python()):
-        var rows = read_f32(x_address, n_rows * n_cols)
-        forest_host_vote_into(
-            True, rows, offsets_p, colid_p, quesval_p, left_p,
-            leaves_p, op, n_rows, n_cols, n_trees, num_outputs, n_nodes,
-        )
-        wrote = n_rows
-    return PythonObject(wrote)
+    var model: List[Int] = [_index(offsets_addr), _index(colid_addr), _index(quesval_addr),
+                            _index(left_child_addr), _index(leaves_addr)]
+    return PythonObject(_rf_predict_native(model, _index(x_addr), _index(out_addr), _index(params[0]),
+                                           _index(params[1]), _index(params[2]), _index(params[3]), classifier))
 
 
 def rf_predict_proba_binding(
@@ -1059,6 +1091,94 @@ def resident_release_binding(handle: PythonObject) raises -> PythonObject:
     return forest_release_host_binding[True](handle)
 
 
+struct RfHostForestImage(ForestImage):
+    """This image's forest entry operations (core/forest_entry.mojo; lane
+    calltable-forest): the bodies the Python entries above unpack into.
+    The host column scans X itself (no device scan), keeps its trees in the
+    strict snapshot and has no ordered resident word or resident labels."""
+
+    @staticmethod
+    def caps() -> Int:
+        comptime if DART_HOST:
+            return XF_CAP_STRICT | XF_CAP_DART
+        else:
+            return XF_CAP_STRICT
+
+    @staticmethod
+    def dt_default_bins() -> Int:
+        # this image exports no `rf_dt_default_bins`: the door's default
+        return 128
+
+    @staticmethod
+    def fit(classifier: Bool, row_major: Bool, args: ForestFitArgs) raises -> Int:
+        if classifier:
+            if row_major:
+                return _rf_fit[True, True](args)
+            return _rf_fit[True, False](args)
+        if row_major:
+            return _rf_fit[False, True](args)
+        return _rf_fit[False, False](args)
+
+    @staticmethod
+    def fit_dart(args: ForestFitArgs) raises -> Int:
+        return _rf_regressor_fit_dart(args)
+
+    @staticmethod
+    def export_sizes(handle: Int, out_addr: Int) raises:
+        RF_HOST_EXPORTS.get_or_create_ptr()[].sizes_into(handle, out_addr)
+
+    @staticmethod
+    def export_into(handle: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
+        _rf_export_into_native(handle, dst, trees, nodes, outputs)
+
+    @staticmethod
+    def export_verify(handle: Int, dst: List[Int]) raises -> Int:
+        return _rf_export_verify_native(handle, dst)
+
+    @staticmethod
+    def export_release(handle: Int) raises:
+        RF_HOST_EXPORTS.get_or_create_ptr()[].release(handle)
+
+    @staticmethod
+    def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
+                regression: Bool) raises -> Int:
+        return _rf_predict_native(model, x, out_addr, rows, cols, trees, outputs, not regression)
+
+    @staticmethod
+    def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
+        return forest_prepare_host_native[True](model, features, trees, outputs, ordered)
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_predict_resident_host_native[True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def resident_labels(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        raise Error("RuntimeError: this forest binding has no resident label prediction")
+
+    @staticmethod
+    def resident_release(handle: Int) raises:
+        forest_release_host_native[True](handle)
+
+    @staticmethod
+    def strict_prepare(model: List[Int], features: Int, trees: Int, outputs: Int) raises -> Int:
+        return forest_strict_prepare_host_native[True](model, features, trees, outputs)
+
+    @staticmethod
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_strict_predict_host_native[True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def strict_release(handle: Int) raises:
+        forest_strict_release_host_native[True](handle)
+
+
+def rf_host_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's published forest entry (core/forest_entry_table.mojo)."""
+    return forest_entry_dispatch[RfHostForestImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_rf_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1066,6 +1186,8 @@ def build__mojolearn_rf_host() -> PythonObject:
     comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_rf_host")
+        # The native forest entry (core/forest_entry_table.mojo) under the cpu key.
+        forest_entry_publish["MojolearnForestEntryOwnerRfHostV1"](FOREST_TABLE_RF, "cpu", rf_host_forest_entry_v1)
         module.def_function[rf_host_numeric_mode_binding]("rf_host_numeric_mode")
         module.def_function[rf_host_vendor_binding]("rf_host_vendor")
         module.def_function[rf_host_column_binding]("rf_host_column")
@@ -1079,17 +1201,15 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[rf_classifier_fit_rowmajor_export_binding]("rf_classifier_fit_rowmajor_export")
+        # TOMBSTONE: TREES_LEGACY_PYTHON_ENTRIES (DELETED: no caller; the door fits through the forest entry table) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+        # Restore: git apply experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         module.def_function[rf_regressor_fit_export_binding]("rf_regressor_fit_export")
         # TOMBSTONE: the legacy-arm rf/et fits and rf_regressor_fit_session_export (dead native entries: reached only by the deleted MOJOLEARN_FOREST_EXPORT=legacy arm / no caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        module.def_function[rf_regressor_fit_rowmajor_export_binding]("rf_regressor_fit_rowmajor_export")
         module.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         module.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
-        module.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")
-        module.def_function[rf_regressor_fit_shard_export_binding]("rf_regressor_fit_shard_export")
         module.def_function[rf_forest_export_binding]("forest_export")
         module.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         module.def_function[rf_forest_export_release_binding]("forest_export_release")

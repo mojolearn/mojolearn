@@ -132,6 +132,8 @@ def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
         fields = py_call(py_get(own, "__dict__").__get__, model)
     else:
         var row = -1
+        # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+        var found = Optional[PythonObject]()
         for i in range(len(mro)):  # driver-loop: exact class dictionaries and native instance storage
             var own = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
             if not _tsa_str_items(py_call(b.list, own), b):
@@ -139,9 +141,13 @@ def tsa_hw_fields(model: PythonObject, context: PythonObject) raises -> PythonOb
             if py_get(own, "__del__") is not None:
                 raise Error("TypeError: ExponentialSmoothing cannot invoke lifecycle callbacks")
             var descriptor = py_get(own, "__dict__")
-            if fields is None and descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
-                fields = py_call(descriptor.__get__, model)
+            if not found and descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
+                var read = py_call(descriptor.__get__, model)
                 row = i
+                if read is not None:
+                    found = read
+        if found:
+            fields = found.value()
         if row >= 0:
             class_admit(mods, _HW_LAYOUT_SLOT, cls, PythonObject(row))
     if py_type(fields) is not b.dict:

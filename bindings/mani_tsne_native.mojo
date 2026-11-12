@@ -17,7 +17,7 @@ from bindings.native_ops_key_ann import ann_ops_key, decomp_pca_ops_key
 from core.neighbors_entry_table_ann import ann_ops_entry, ann_tsne_fit_call
 from core.decomp_entry_table_pca import pca_ops_entry, pca_fit_owned_call
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_get, py_setitem
+from bindings.py_balanced import py_call, py_setitem
 from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
@@ -26,12 +26,17 @@ from bindings.manifold_scalar_native import manifold_number
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
+from x_ann.mani_tsne_run import (
+    TSNE_INIT_ARRAY, tsne_check_samples, tsne_perplexity_positive, tsne_perplexity_refusal,
+    tsne_perplexity_below_samples, tsne_perplexity_samples_refusal, tsne_auto_learning_rate,
+    tsne_post_factor_valid, tsne_post_factor_refusal, tsne_exploration_iterations, tsne_init_mode,
+    tsne_check_pca_components, tsne_init_shape_matches, tsne_init_shape_refusal, tsne_check_input_status,
+    tsne_fit_tests_input,
+)
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_array,
-    family_field, family_shape_repr, FAMILY_F32P,
+    family_field,
 )
-
-comptime _TSNE_EXPLORATION_MAX_ITER = 250
 
 
 def _tsne_int(name: String, value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -46,8 +51,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     """`PCA(n_components=k).fit_transform(x)` (svd_solver='auto', the
     covariance arm, no whitening) as the float32 start: `PCA._fit(x, True)`'s
     refusal and its one `pca_fit_owned` call."""
-    if k < 1 or k > d:
-        raise Error("mojolearn n_components must be in [1, " + String(d) + "], got " + String(k))
+    tsne_check_pca_components(k, d)
     var entry = pca_ops_entry(decomp_pca_ops_key(estimators))
     var components = family_array(Python.tuple(k, d), "<f4", context)
     var mean = family_array(Python.tuple(d), "<f4", context)
@@ -84,8 +88,7 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     var x_status = Int(status[0])
     _ = status^  # written through its address; keep it alive past the read
     _ = noise^
-    if x_status != 0:
-        raise Error("Input X contains NaN or infinity")
+    tsne_check_input_status(x_status)
     _ = components^
     _ = mean^
     _ = variance^
@@ -114,10 +117,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var x_address = snapshot.source.addr
     var n = snapshot.source.rows
     var d = snapshot.source.cols
-    if n < 2:
-        # scikit-learn's TSNE validates X with ensure_min_samples=2
-        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
-                    + ")) while a minimum of 2 is required by TSNE.")
+    tsne_check_samples(n, d)
     var components = family_field(fields, "n_components")
     if (_tsne_is_bool(components)
             or not Bool(py=py_call(op.contains, Python.tuple(PythonObject(1), PythonObject(2)), components))):
@@ -129,29 +129,25 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var perplexity = Float64(py=manifold_number(perplexity_param, False, context))
     # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
     # perplexity < n_samples (`_check_params_vs_input`), in its words
-    if not perplexity > 0.0:
-        raise Error("The 'perplexity' parameter of TSNE must be a float in the range (0.0, inf). Got "
-                    + family_repr(perplexity_param) + " instead.")
-    if perplexity >= Float64(n):
-        raise Error("perplexity (" + family_str(perplexity_param) + ") must be less than n_samples ("
-                    + String(n) + ")")
+    if not tsne_perplexity_positive(perplexity):
+        var refusal = tsne_perplexity_refusal(family_repr(perplexity_param))
+        raise refusal^
+    if not tsne_perplexity_below_samples(perplexity, n):
+        var refusal = tsne_perplexity_samples_refusal(family_str(perplexity_param), n)
+        raise refusal^
     var exag = Float64(py=manifold_number(family_field(fields, "early_exaggeration"), False, context))
     var rate = family_field(fields, "learning_rate")
     var lr: Float64
     if Bool(py=py_call(b.bool, py_call(op.eq, rate, PythonObject("auto")))):
-        # max(n / exag / 4.0, 50.0), Python's order (the first unless the second is larger)
-        var auto_rate = Float64(n) / exag / 4.0
-        lr = Float64(50.0) if 50.0 > auto_rate else auto_rate
+        lr = tsne_auto_learning_rate(n, exag)
     else:
         lr = Float64(py=manifold_number(rate, False, context))
     var post_param = family_field(fields, "post_exaggeration_learning_rate_factor")
     var post_factor = Float64(py=manifold_number(post_param, False, context))
-    # `0.0 < factor < inf`: positive, and not infinite or NaN (inf - inf is NaN)
-    if not (0.0 < post_factor and post_factor - post_factor == 0.0):
-        raise Error("mojolearn TSNE: post_exaggeration_learning_rate_factor must be positive and finite, got "
-                    + family_repr(post_param))
-    var iterations = Int(py=max_iter)
-    var exploration = min(_TSNE_EXPLORATION_MAX_ITER, iterations)
+    if not tsne_post_factor_valid(post_factor):
+        var refusal = tsne_post_factor_refusal(family_repr(post_param))
+        raise refusal^
+    var exploration = tsne_exploration_iterations(Int(py=max_iter))
     var init = family_field(fields, "init")
     var y0: PythonObject
     var y0_address = 0
@@ -159,16 +155,15 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var mode = 0
     var low = PythonObject(0)
     var high = PythonObject(0)
-    var builtin_start = family_is_str(init) and (String(py=init) == "random" or String(py=init) == "pca")
-    if builtin_start:
+    if family_is_str(init):
+        mode = tsne_init_mode(String(py=init))
+    if mode != TSNE_INIT_ARRAY:
         # the binding builds the start (x_ann/tsne_init.mojo): mode 1
         # random from random_state, mode 2 the PCA embedding scaled
-        if String(py=init) == "random":
+        if tsne_fit_tests_input(mode):
             y0 = family_array(Python.tuple(2), "<f4", context)
-            mode = 1
         else:
             y0 = _tsne_pca_start(estimators, x_address, n, d, k, context)
-            mode = 2
         var s64 = py_call(op.and_, seed, py_call(op.sub, py_call(op.lshift, PythonObject(1), PythonObject(64)),
                                                  PythonObject(1)))
         low = py_call(op.and_, s64, PythonObject(0xFFFFFFFF))
@@ -182,9 +177,9 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
         var shape = array_shape_once(view, context)
         var captured = array_metadata_once(view, shape^, "init", context,
                                            allow_non_native=True, allow_unsupported=True)
-        if len(captured.shape) != 2 or captured.shape[0] != n or captured.shape[1] != k:
-            raise Error("mojolearn TSNE: an init array must have shape (" + String(n) + ", " + String(k)
-                        + "), got " + family_repr(captured.python_shape()))
+        if not tsne_init_shape_matches(captured.shape, n, k):
+            var refusal = tsne_init_shape_refusal(family_repr(captured.python_shape()), n, k)
+            raise refusal^
         var prepared = _cast(captured^, "init", context)
         y0 = prepared.keep
         y0_address = prepared.source.addr
@@ -198,6 +193,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var iteration_words = Int(py=max_iter)
     var seed_low = Int(py=low)
     var seed_high = Int(py=high)
+    var finite_flag = 1 if tsne_fit_tests_input(mode) else 0
     var tested = 0
     # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, init mode,
     # random_state low, high, n_components, finite flag; perplexity,
@@ -205,10 +201,10 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     with GILReleased(Python()):
         tested = ann_tsne_fit_call(fit, x_address, y0_address, embedding_address, kl_address, n, d,
                                    iteration_words, exploration, perplexity, exag, lr, post_factor, mode,
-                                   seed_low, seed_high, k, 0 if mode == 2 else 1)
+                                   seed_low, seed_high, k, finite_flag)
     _ = embedding  # keep the Python object alive through the native call above
-    if mode != 2 and tested != 0:
-        raise Error("Input X contains NaN or infinity")
+    if tsne_fit_tests_input(mode):
+        tsne_check_input_status(tested)
     _ = x  # keep the Python object alive through the native call above
     _ = kl  # keep the Python object alive through the native call above
     _ = snapshot

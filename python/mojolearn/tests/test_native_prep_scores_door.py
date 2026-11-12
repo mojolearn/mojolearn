@@ -49,10 +49,11 @@ def P():
     # the compiled package; the oracle below reads the module's helpers as globals
     try:
         from mojolearn import _expansion_prep as module
+        from mojolearn.tests import _prep_prog_oracle as oracle
     except Exception as error:  # noqa: BLE001  (no bindings in a lane worktree)
         pytest.skip(f"compiled mojolearn unavailable: {error}")
     for name in _ORACLE_NAMES:  # glue: test oracle setup
-        globals()[name] = getattr(module, name)
+        globals()[name] = getattr(oracle, name)
     return module
 
 

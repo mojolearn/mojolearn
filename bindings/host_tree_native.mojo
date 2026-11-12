@@ -2,7 +2,7 @@
 # Whole-operation CPU tree inference: native input admission, saved-state
 # validation, buffer ownership, kernel calls and completed output publication.
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_value, trees_key_same
@@ -20,15 +20,22 @@ from bindings.native_numpy_metadata import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast
 from core.host_tree_impl import host_label_first_unconverted, host_label_gather_i64, host_label_gather_f64, host_tree_widen, host_tree_argmax, host_tree_column_copy
 from core.sha256 import Sha256
+from core.host_entry_table import HostEntryKey, FH_RF_PREDICT_PROBA, FH_RF_PREDICT_REG, FH_ET_PREDICT
+from core.entry_table import EntryRef
+from core.host_entry_table_calls import fh_ref, fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict, fh_gbdt_sigmoid_pair
 
 
-def host_tree_entry(context: PythonObject, name: String) raises -> PythonObject:
-    var entry = py_get(context["host_tree_entries"], name)
-    if entry is None:
-        raise Error("ImportError: the CPU tree binding does not export " + name)
-    if py_type(entry) is not context["host_tree_entry_type"]:
-        raise Error("TypeError: CPU tree inference requires a fixed native entry")
-    return entry
+def host_tree_key(context: PythonObject) raises -> EntryRef:
+    """The resolved host entry (lane entry-table-zero-alloc: resolved here
+    once per operation, the table refusals raise here) of the forest host
+    image connected at import
+    (the archive bridge records it as `host_tree_native_key`): the CPU tree
+    operations run through that image's published native entry
+    (core/host_entry_table_calls.mojo), not through its Python exports."""
+    var key = py_get(context, "host_tree_native_key")
+    if key is None:
+        raise Error("ImportError: the CPU tree binding publishes no native entry table")
+    return fh_ref(HostEntryKey(Int(py=key[0]), Int(py=key[1])))
 
 
 def host_tree_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -127,7 +134,7 @@ def host_tree_fields(model: PythonObject, context: PythonObject) raises -> Pytho
     return fields
 
 
-def host_tree_groves(fields: PythonObject, addresses: PythonObject, context: PythonObject) raises -> PythonObject:
+def host_tree_groves(fields: PythonObject, addresses: List[Int], context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var cached = fields["_groves"]
     if cached is not None:
@@ -135,8 +142,10 @@ def host_tree_groves(fields: PythonObject, addresses: PythonObject, context: Pyt
             raise Error("TypeError: CPU groves require a native lifetime handle")
         return cached[0]
     var family = 0 if String(fields["family"]) == "rf" else 1
-    var token = py_call(host_tree_entry(context, "forest_host_groves_prepare"), addresses,
-        Python.list(fields["_n_trees"], fields["n_features_in_"], fields["_num_outputs"], fields["_colid"].size), family)
+    # The grove operations hold the GIL: a handle is never released under a
+    # running prediction (the binding's contract).
+    var token = PythonObject(fh_groves_prepare(host_tree_key(context), addresses, Int(py=fields["_n_trees"]),
+        Int(py=fields["n_features_in_"]), Int(py=fields["_num_outputs"]), Int(py=fields["_colid"].size), family))
     py_setitem(fields, "_groves", Python.tuple(token, PythonObject(None)))
     return token
 
@@ -151,31 +160,37 @@ def host_tree_vote(fields: PythonObject, source: PythonObject, context: PythonOb
     var outputs = Int(py=fields["_num_outputs"])
     if outputs < 1:
         raise Error("stored forest output count must be positive")
-    var addresses = Python.list()
+    var key = host_tree_key(context)
+    var addresses = List[Int](capacity=7)
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     for i in range(5):  # driver-loop: the five fixed forest model buffers
         var array = host_tree_array(fields, String(names[i]), "<f4" if i == 2 or i == 4 else "<i4", context)
-        _ = py_call(addresses.append, classical_address(array))
+        addresses.append(Int(py=classical_address(array)))
     var out = host_archive_typed(Python.tuple(rows, outputs), "<f4", context["output_context"])
-    var wrote = PythonObject(0)
+    var x_addr = Int(py=classical_address(x))
+    var out_addr = Int(py=classical_address(out))
+    var family = 0 if String(fields["family"]) == "rf" else 1
+    var wrote = 0
     if String(fields["_inference_engine"]) == "parallel_groves":
-        var token = host_tree_groves(fields, addresses, context)
-        wrote = py_call(host_tree_entry(context, "forest_host_groves_predict"), token, classical_address(x), classical_address(out),
-            Python.list(rows, features, outputs), 0 if String(fields["family"]) == "rf" else 1)
+        var token = Int(py=host_tree_groves(fields, addresses, context))
+        wrote = fh_groves_predict(key, token, x_addr, out_addr, rows, features, outputs, family)
     else:
-        var entry = String("forest_host_et_predict")
-        if String(fields["family"]) == "rf":
-            entry = "forest_host_rf_predict_proba" if Bool(py=fields["is_classifier"]) else "forest_host_rf_predict_reg"
-        _ = py_call(addresses.append, classical_address(x))
-        _ = py_call(addresses.append, classical_address(out))
-        wrote = py_call(host_tree_entry(context, entry), addresses,
-            Python.list(rows, features, fields["_n_trees"], outputs, fields["_colid"].size))
+        var op = FH_ET_PREDICT
+        if family == 0:
+            op = FH_RF_PREDICT_PROBA if Bool(py=fields["is_classifier"]) else FH_RF_PREDICT_REG
+        var trees = Int(py=fields["_n_trees"])
+        var nodes = Int(py=fields["_colid"].size)
+        addresses.append(x_addr)
+        addresses.append(out_addr)
+        with GILReleased(Python()):
+            wrote = fh_vote(key, op, addresses, rows, features, trees, outputs, nodes)
     # Pointer lists do not retain the buffers they name. In particular, x
     # can be the sole owner of a native cast/copy, rather than a caller's
     # ndarray. Its lifetime must include the consuming native call.
     _ = x^
     _ = model_owner^
-    if Int(py=wrote) != rows:
+    _ = addresses^
+    if wrote != rows:
         raise Error("RuntimeError: forest prediction did not write every input row")
     return out
 
@@ -286,41 +301,54 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
         host_tree_column_copy(Int(py=classical_address(x)), rows, features, Int(py=classical_address(column)))
         _ = input_owner^
         var expanded = host_archive_typed(Python.tuple(rows * columns), "<f4", context["output_context"])
-        var addresses = Python.list(classical_address(column))
+        var addresses = List[Int](capacity=10)
+        addresses.append(Int(py=classical_address(column)))
         var names = Python.tuple("ctr_ints", "ctr_floats", "tensor_ints", "tensor_floats", "ctr_counts", "border_offsets", "borders", "one_hot")
         for i in range(len(names)):  # driver-loop: fixed native CTR expansion buffers
             var array = host_tree_array(a, String(names[i]), "<f4" if i == 1 or i == 3 or i == 6 else "<i4", context)
-            _ = py_call(addresses.append, classical_address(array))
-        _ = py_call(addresses.append, classical_address(expanded))
-        var wrote = py_call(host_tree_entry(context, "forest_host_gbdt_expand_ctr"), addresses,
-            Python.list(rows, features, columns, a["n_ctr_tables"], a["n_ctr_ints"], a["n_ctr_floats"],
-                a["n_tensor_tables"], a["n_tensor_ints"], a["n_tensor_floats"], a["n_ctr_counts"], a["n_borders"]))
-        # The address envelope owns only integers, not this transposed
+            addresses.append(Int(py=classical_address(array)))
+        addresses.append(Int(py=classical_address(expanded)))
+        var params: List[Int] = [rows, features, columns, Int(py=a["n_ctr_tables"]), Int(py=a["n_ctr_ints"]),
+            Int(py=a["n_ctr_floats"]), Int(py=a["n_tensor_tables"]), Int(py=a["n_tensor_ints"]),
+            Int(py=a["n_tensor_floats"]), Int(py=a["n_ctr_counts"]), Int(py=a["n_borders"])]
+        var key = host_tree_key(context)
+        var wrote = 0
+        with GILReleased(Python()):
+            wrote = fh_gbdt_expand_ctr(key, addresses, params)
+        # The address list owns only integers, not this transposed
         # allocation. Retain the column storage until expansion completes.
         _ = column^
-        if Int(py=wrote) != columns:
+        _ = addresses^
+        _ = params^
+        if wrote != columns:
             raise Error("RuntimeError: GBDT expansion did not write every model column")
         x = expanded
         features = columns
     var out = host_archive_typed(Python.tuple(rows) if dim == 1 else Python.tuple(rows, dim), "<f4", context["output_context"])
     var names = Python.tuple("border_offsets", "borders", "fold_counts", "one_hot", "nan_treatment", "tree_offsets",
         "split_feature", "split_bin", "split_take_bin", "node_left", "node_right", "leaf_offsets", "leaves")
-    var addresses = Python.list()
+    var addresses = List[Int](capacity=15)
     for i in range(len(names)):  # driver-loop: fixed native GBDT prediction buffers
         var array = host_tree_array(a, String(names[i]), "<f4" if i == 1 or i == 12 else "<i4", context)
-        _ = py_call(addresses.append, classical_address(array))
-    _ = py_call(addresses.append, classical_address(x))
-    _ = py_call(addresses.append, classical_address(out))
-    var wrote = py_call(host_tree_entry(context, "forest_host_gbdt_predict"), addresses,
-        Python.list(rows, features, a["n_trees"], dim, 1 if Bool(py=a["non_symmetric"]) else 0,
-            a["n_splits"], a["n_leaf_values"], a["n_borders"], 1 if row_major else 0), fields["bias_"])
+        addresses.append(Int(py=classical_address(array)))
+    addresses.append(Int(py=classical_address(x)))
+    addresses.append(Int(py=classical_address(out)))
+    var params: List[Int] = [rows, features, Int(py=a["n_trees"]), dim, 1 if Bool(py=a["non_symmetric"]) else 0,
+        Int(py=a["n_splits"]), Int(py=a["n_leaf_values"]), Int(py=a["n_borders"]), 1 if row_major else 0]
+    var bias = Float64(py=fields["bias_"])
+    var key = host_tree_key(context)
+    var wrote = 0
+    with GILReleased(Python()):
+        wrote = fh_gbdt_predict(key, addresses, params, bias)
+    _ = addresses^
+    _ = params^
     # Retain both the prepared/expanded input and the parsed model arrays
     # through the last native pointer consumer, including helper-created
     # models that have no reference held by the Python caller.
     _ = x^
     _ = a^
     _ = model_owner^
-    if Int(py=wrote) != rows:
+    if wrote != rows:
         raise Error("RuntimeError: GBDT prediction did not write every input row")
     return out
 
@@ -511,12 +539,14 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         _ = py_call(state.pop, "_binding", PythonObject(None))
         return state
     if operation == "host_tree_groves":
-        var addresses = Python.list()
+        var addresses = List[Int](capacity=5)
         var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
         for i in range(5):  # driver-loop: the five fixed forest model buffers
             var array = host_tree_array(fields, String(names[i]), "<f4" if i == 2 or i == 4 else "<i4", context)
-            _ = py_call(addresses.append, classical_address(array))
-        return host_tree_groves(fields, addresses, context)
+            addresses.append(Int(py=classical_address(array)))
+        var token = host_tree_groves(fields, addresses, context)
+        _ = addresses^
+        return token
     if operation == "host_tree_count":
         return fields["_arrays"]["n_trees"] if gbdt else fields["_n_trees"]
     if operation == "host_tree_engine":
@@ -545,9 +575,10 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         var wide = host_tree_wide(raw, context)
         var rows = Int(py=raw.shape[0])
         var out = host_archive_typed(Python.tuple(rows, 2), "<f8", context["output_context"])
-        var wrote = py_call(host_tree_entry(context, "forest_host_gbdt_sigmoid_pair"), classical_address(wide), classical_address(out), rows)
+        var wrote = fh_gbdt_sigmoid_pair(host_tree_key(context), Int(py=classical_address(wide)),
+            Int(py=classical_address(out)), rows)
         _ = wide^
-        if Int(py=wrote) != rows:
+        if wrote != rows:
             raise Error("RuntimeError: GBDT probability conversion did not write every row")
         return out
     if (probability or pair) and not Bool(py=fields["is_classifier"]):

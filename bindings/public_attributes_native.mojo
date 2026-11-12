@@ -35,8 +35,10 @@ def _outside() raises -> Bool:
     var pointer = table[].PyEval_GetFrame()
     if not pointer:
         return True
-    var frame = PythonObject(from_borrowed=pointer)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var walked = Optional[PythonObject](PythonObject(from_borrowed=pointer))
     while True:  # driver-loop: skip only the old public wrapper frames
+        var frame = walked.value()
         var fields = native_frame_globals(frame)
         # A module's globals keep their exact-string keys between reads: the
         # full key scan runs once per watched globals state (Python >= 3.12),
@@ -73,7 +75,7 @@ def _outside() raises -> Bool:
             if cpython_table()[].PyErr_Occurred():
                 raise cpy.unsafe_get_error()
             return True
-        frame = PythonObject(from_owned=pointer)
+        walked = Optional[PythonObject](PythonObject(from_owned=pointer))
 
 
 struct _AttributeAdmission(Movable):
@@ -145,9 +147,10 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
             admitted_rows.append(py_call(namespace_of, mro[i]))
         return _AttributeAdmission(reused[0], mro, admitted_rows^, Int(py=reused[4]), True)
     var rows = List[PythonObject](capacity=len(mro))
-    var plan = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_plan = Optional[PythonObject]()
     var plan_row = -1
-    var getter = context["missing"]
+    var found_getter = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: validate native slot and passive subclass ancestry
         if py_type(mro[i]) is not b.type:
             raise Error("TypeError: native attributes refuse Python metaclass protocols")
@@ -155,15 +158,21 @@ def _plan(mut mods: NativeModules, model: PythonObject, context: PythonObject) r
         rows.append(namespace)
         if py_contains(namespace, "__getattr__"):
             raise Error("TypeError: native attributes refuse Python __getattr__ hooks")
-        if getter is context["missing"] and py_contains(namespace, "__getattribute__"):
-            getter = namespace["__getattribute__"]
-        if plan is None:
-            plan = py_get(context["plans"], mro[i])
-            if plan is not None:
+        if not found_getter and py_contains(namespace, "__getattribute__"):
+            var candidate = namespace["__getattribute__"]
+            if candidate is not context["missing"]:
+                found_getter = candidate
+        if not found_plan:
+            var candidate = py_get(context["plans"], mro[i])
+            if candidate is not None:
+                found_plan = candidate
                 plan_row = i
-    if plan is None or getter is not context["descriptor"]:
+    var getter = context["missing"]
+    if found_getter:
+        getter = found_getter.value()
+    if not found_plan or getter is not context["descriptor"]:
         raise Error("TypeError: native attribute class has no connected slot")
-    return _AttributeAdmission(plan, mro, rows^, plan_row, False)
+    return _AttributeAdmission(found_plan.value(), mro, rows^, plan_row, False)
 
 
 def _plan_admit(mut mods: NativeModules, model: PythonObject, admission: _AttributeAdmission,

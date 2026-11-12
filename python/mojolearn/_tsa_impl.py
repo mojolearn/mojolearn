@@ -71,22 +71,9 @@ import os
 import sys
 
 from . import _native_archive_bridge
-from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._bufcheck import flat_view, probe, strided_rows
 
-
-def _one_series(src, index, n_series, steps, offset=0):
-    """Series `index` of the TIME-MAJOR float32 block `src[offset:]`
-    (`[s + i * n_series]`) as a `(steps,)` float32 Array:
-    `strided_rows(...)[index]`'s bytes."""
-    dst = empty((steps,), "<f4")
-    try:
-        flat_view(dst, "f")[:] = flat_view(src, "f")[offset + index:offset + steps * n_series:n_series]
-        return dst
-    except (TypeError, ValueError, NotImplementedError):
-        return strided_rows(src, offset, steps * n_series, n_series, steps,
-                            empty((n_series, steps), "<f4"))[index]
+# The one-series component read (`_one_series`, `_component`, `_named`) is
+# native: bindings/tsa_hw_native.mojo `hw_component` (lane pyout-small-families).
 
 # THE BINDING, RESOLVED LAZILY THROUGH `_backend.binding`, the one choke
 # point that refuses an identical-only lane by name under a lower tier,
@@ -534,51 +521,6 @@ class ExponentialSmoothing:
         from . import _backend
         return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
 
-    def _check_dims(self, ts_input):
-        """`holtwinters.pyx:230-262` for a numpy input, by name.
-
-        A 2-D array is `(ts_num, n)`: their `d1 = shape[1]` is `n` and
-        their `d2 = shape[0]` is the series count, and they `ravel()` in C
-        order, so each series is contiguous. A 1-D array is one series and
-        `ts_num` must be 1. DEVIATION 2420: read through the buffer
-        protocol (a nested list is materialized once as float32, as
-        `np.asarray` did) and converted by `_buffer.as_f32_c`.
-        """
-        try:
-            pb = probe(ts_input)
-        except TypeError:
-            try:
-                ts_input = Array.from_list(ts_input, "<f4")
-            except Exception:
-                raise ValueError(
-                    "mojolearn ExponentialSmoothing: data input must be a "
-                    "1-D or 2-D array or a nested list of numbers, got "
-                    f"{type(ts_input).__name__}"
-                ) from None
-            pb = probe(ts_input)
-        err = (
-            "mojolearn ExponentialSmoothing: initialized with "
-            f"{self.ts_num} time series, but data has dimension "
-        )
-        if pb.ndim == 1:
-            n = int(pb.shape[0])
-            if self.ts_num != 1:
-                raise ValueError(err + "1.")
-            arr, _copied = as_f32_c(ts_input, ndim=1, name="endog")
-            flat = arr.reshape((1, n))
-        elif pb.ndim == 2:
-            n = int(pb.shape[1])
-            d2 = int(pb.shape[0])
-            if self.ts_num != d2:
-                raise ValueError(err + str(d2) + ".")
-            flat, _copied = as_f32_c(ts_input, ndim=2, name="endog")
-        else:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: data input must have 1 or 2 "
-                f"dimensions, got {pb.ndim}"
-            )
-        return flat, n
-
     # Fit level, trend, season and SSE. Returns self.
     #
     # Every validation cuML does in `holtwinters.pyx` runs on the Mojo
@@ -608,56 +550,6 @@ class ExponentialSmoothing:
         # (bindings/tsa_hw_native.mojo); the constraints are the binding's.
         return _TSA(self, "hw_fit", (), _TSA_CONTEXT)
 
-    def _set_fitted(self, n, comps, sse, alpha, beta, gamma, n_iter, criterion):
-        """The fitted state from the packed components and the per-series
-        blocks, shared by `fit` and `load` so a loaded model answers every
-        attribute a fitted one does, from the same bytes."""
-        components_len = (n - self.seasonal_periods) * self.ts_num
-        self.n = n
-        self._components_len = components_len
-        self._comps = comps  # kept for forecast(), which re-uploads them
-        # comps LAYOUT -- the same words as in bindings/_mojolearn_tsa.mojo
-        # and holtwinters/estimator.mojo:
-        #   [0 * components_len, 1 * components_len)   level
-        #   [1 * components_len, 2 * components_len)   trend
-        #   [2 * components_len, 3 * components_len)   season
-        # Each block is TIME-MAJOR: series s at step i is [s + i * ts_num].
-        # `.reshape((ts_num, num_rows), order="F")` is cuML's own line
-        # (holtwinters.pyx:341-344) and undoes exactly that. DEVIATION
-        # 2421: the `Array` contract has C order only, so the un-interleave
-        # is done ONCE, on first use of `level_` / `trend_` / `season_`
-        # (lane py-sequence: no longer at every fit and load; one series
-        # through `get_level(index)` is its single strided slice), into a
-        # C-contiguous `(ts_num, num_rows)` Array per component, by one Mojo
-        # transpose (`_bufcheck.strided_rows` -> `transpose_f32`; no Python
-        # element loop). The same bytes land at the same [s, i]. The
-        # time-major blocks are ALSO kept, as C-order `(num_rows,
-        # ts_num)` views, because that shape IS cuML's `get_level()`
-        # transpose and costs nothing to hand back.
-        num_rows = components_len // self.ts_num
-        cl = components_len
-        b = self.ts_num
-        # lane py-sequence: the three series-major Arrays are built on FIRST
-        # USE (`__getattr__` below; `get_level(index)` slices one series),
-        # not at every fit and load: at a million series each was 0.17 s of
-        # strided copies that forecast() never reads. Same bytes when read.
-        for name in self._LAZY_COMPONENTS:  # glue: the named lazy component attributes
-            self.__dict__.pop(name, None)
-        self._comp_layout = (cl, b, num_rows)
-        self._time_major = {
-            "level": comps[0:cl].reshape((num_rows, b)),
-            "trend": comps[cl:2 * cl].reshape((num_rows, b)),
-            "season": comps[2 * cl:3 * cl].reshape((num_rows, b)),
-        }
-        self.sse_ = sse
-        self.alpha_ = alpha
-        self.beta_ = beta
-        self.gamma_ = gamma
-        self.n_iter_ = n_iter
-        self.criterion_ = criterion
-        self.fit_executed_flag = True
-        return self
-
     def forecast(self, h=1, index=None):
         """Forecast ``h`` points per series.
 
@@ -675,17 +567,6 @@ class ExponentialSmoothing:
             ``ts_num > 1``; ``(h,)`` when ``ts_num == 1`` or for a given ``index``.
         """
         return _TSA(self, "hw_forecast", (h, index), _TSA_CONTEXT)
-
-    def _shaped(self, out, steps, index):
-        """`forecast`'s three return shapes over a TIME-MAJOR flat buffer of
-        `steps * ts_num` values."""
-        if index is not None:
-            # ONE series: its one strided slice, not every series
-            # un-interleaved and then indexed (lane py-sequence)
-            return _one_series(out, index, self.ts_num, steps)
-        if self.ts_num == 1:
-            return out
-        return out.reshape((steps, self.ts_num))
 
     # The one-step predictions at times `[start, end)` (lane/inference-
     # holtwinters, 2026-09-15). OURS: cuML has no prediction entry.
@@ -792,40 +673,6 @@ class ExponentialSmoothing:
     def __getattr__(self, name):
         # only reached when normal lookup fails: a component not built yet
         return _TSA(self, "hw_attribute", (name,), _TSA_CONTEXT)
-
-    def _component(self, comp, index, who):
-        """cuML's return shapes for `get_level` / `get_trend` /
-        `get_season` (`holtwinters.pyx:479-490`): `index=None` gives the
-        transposed `(num_rows, ts_num)` block, or a 1-D array when
-        `ts_num == 1`; an integer `index` gives that series."""
-        if not self.fit_executed_flag:
-            raise ValueError(
-                f"mojolearn ExponentialSmoothing: fit() the model to get "
-                f"{who} values"
-            )
-        if index is None:
-            if self.ts_num == 1:
-                return comp.ravel()
-            # cuML's transpose `(num_rows, ts_num)` is the time-major
-            # block itself, read in C order (DEVIATION 2422).
-            return self._time_major[who]
-        if index < 0 or index >= self.ts_num:
-            raise IndexError(
-                f"mojolearn ExponentialSmoothing: index input: {index} outside "
-                f"of range [0, {self.ts_num})"
-            )
-        return comp[index]
-
-    def _named(self, name, index, who):
-        lay = self.__dict__.get("_comp_layout")
-        if (index is not None and name not in self.__dict__ and lay is not None
-                and self.fit_executed_flag and isinstance(index, int) and not isinstance(index, bool)
-                and 0 <= index < self.ts_num):
-            # one series: its strided slice, not all of them (lane py-sequence)
-            cl, b, rows = lay
-            return _one_series(self._comps, index, b, rows,
-                               offset=self._LAZY_COMPONENTS.index(name) * cl)
-        return self._component(getattr(self, name), index, who)
 
     def get_level(self, index=None):
         """Fitted level component.

@@ -46,8 +46,8 @@ from core.shared_slot import SharedSlot
 
 #: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
 #: name carries it too). V8: the layout word.
-comptime _CPYTHON_TABLE_LAYOUT = 12
-comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV12"
+comptime _CPYTHON_TABLE_LAYOUT = 13
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV13"
 
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
@@ -303,6 +303,19 @@ comptime _PyGILState_Ensure = ExternalFunction[
 comptime _PyGILState_Release = ExternalFunction[
     "PyGILState_Release", def(c_int) thin abi("C") -> NoneType]
 
+# Added by perf audit 2-b (2026-11-11) for bindings/boundary_read.mojo
+# `read_str_points`, which resolved these three by `get_function` (one dlsym
+# each) on every str it read (per fitted class, per archive string).
+# Py_ssize_t PyUnicode_GetLength(PyObject *unicode)
+comptime _PyUnicode_GetLength = ExternalFunction[
+    "PyUnicode_GetLength", def(PyObjectPtr) thin abi("C") -> Int]
+# Py_UCS4 *PyUnicode_AsUCS4Copy(PyObject *unicode)  (PyMem_Malloc'd; address word)
+comptime _PyUnicode_AsUCS4Copy = ExternalFunction[
+    "PyUnicode_AsUCS4Copy", def(PyObjectPtr) thin abi("C") -> Int]
+# void PyMem_Free(void *p)  (address word)
+comptime _PyMem_Free = ExternalFunction[
+    "PyMem_Free", def(Int) thin abi("C") -> NoneType]
+
 
 struct CPythonTable(Defaultable, Movable):
     var PyImport_GetModuleDict: _PyImport_GetModuleDict.type
@@ -379,6 +392,9 @@ struct CPythonTable(Defaultable, Movable):
     var PyCapsule_IsValid: _PyCapsule_IsValid.type
     var PyGILState_Ensure: _PyGILState_Ensure.type
     var PyGILState_Release: _PyGILState_Release.type
+    var PyUnicode_GetLength: _PyUnicode_GetLength.type
+    var PyUnicode_AsUCS4Copy: _PyUnicode_AsUCS4Copy.type
+    var PyMem_Free: _PyMem_Free.type
 
     def __init__(out self):
         # loads symbol addresses only: running twice is harmless (the
@@ -459,6 +475,9 @@ struct CPythonTable(Defaultable, Movable):
         self.PyCapsule_IsValid = _PyCapsule_IsValid.load(lib)
         self.PyGILState_Ensure = _PyGILState_Ensure.load(lib)
         self.PyGILState_Release = _PyGILState_Release.load(lib)
+        self.PyUnicode_GetLength = _PyUnicode_GetLength.load(lib)
+        self.PyUnicode_AsUCS4Copy = _PyUnicode_AsUCS4Copy.load(lib)
+        self.PyMem_Free = _PyMem_Free.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of

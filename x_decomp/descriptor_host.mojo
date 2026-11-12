@@ -9,7 +9,11 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_decomp.host import HostExec
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op
-from x_decomp.descriptor_schema import XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_VENDOR, xd_validate_call
+from x_decomp.descriptor_schema import (
+    XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_VENDOR, XD_S_FLAGS, XD_QFIX_FLAGS, xd_validate_call,
+)
+from x_decomp.descriptor_owner_ops import xd_is_owner_op
+from x_decomp.descriptor_owner_host import xd_owner_host_op
 from core.shared_slot import SharedSlot
 
 
@@ -27,8 +31,13 @@ def x_decomp_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             answer = 0
         elif operation == XD_CAPABILITIES:
             answer = XD_CAP_HOST
+        elif operation == XD_S_FLAGS or operation == XD_QFIX_FLAGS:
+            # The host binding exports neither route word; the kit read 0.
+            answer = 0
         elif xd_is_address_op(operation):
             answer = xd_address_op[HostExec](operation, a, p, ff)
+        elif xd_is_owner_op(operation):
+            answer = xd_owner_host_op(operation, a, p, ff)
         else:
             raise Error("x_decomp native ABI: the host binding has no device-resident operation "
                         + String(operation))

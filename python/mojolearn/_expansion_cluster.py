@@ -14,7 +14,6 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-import ctypes
 
 from . import _portable_math as math
 
@@ -39,51 +38,10 @@ __all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "Affinit
 _E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY, _E_BGMM, _E_BGMM_SCORE, _E_MINIBATCH_PARTIAL = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 
 
-def _f32(X, name="X", scan=True):
-    x, _ = _buffer.as_f32_c(X, ndim=2, name=name)
-    if x.shape[0] < 1 or x.shape[1] < 1:
-        raise ValueError(f"mojolearn: {name} must be a non-empty 2-D array, got shape {x.shape}")
-    # the base binding's native scan (`_buffer.all_finite`); scan=False only
-    # when the binding scans X itself (MiniBatchKMeans, MBK_FAST_DEVSCAN)
-    if scan and not _buffer.all_finite(x):
-        raise ValueError(f"mojolearn: {name} contains NaN or infinity")
-    return x
-
-
-def _aux(*parts):
-    """The parts (Arrays or array-likes, None skipped) end to end as one
-    float32 Array: byte copies, no Python pass over the values (lane
-    pyglue-numeric: the aux blocks were Python lists of every value)."""
-    arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]  # glue: aux parts as float32 blocks
-    total = sum(a.size for a in arrs)   # glue: the few part sizes
-    if not total:
-        return None
-    out = _buffer.empty((total,), "<f4")
-    off = 0
-    for a in arrs:                      # glue: one copy per part
-        if a.size:
-            ctypes.memmove(out._addr + 4 * off, _buffer.addr_ro(a, name="aux"), 4 * a.size)
-        off += a.size
-    return out
-
-
-def _weights(sample_weight, n):
-    """sample_weight as a float32 Array of n values (None stays None)."""
-    if sample_weight is None:
-        return None
-    # scikit-learn's _check_sample_weight (shape, finite, not all zero, its
-    # wording) before the kernels; read only, never written
-    from ._sample_weight import check_sample_weight
-    return check_sample_weight(sample_weight, n, allow_negative=True)
-
-
-def _seed(random_state):
-    if random_state is None:
-        return 0
-    if isinstance(random_state, bool) or not isinstance(random_state, int) or random_state < 0:
-        raise ValueError("mojolearn: random_state must be None or a non-negative int "
-                         "(the lane's seeded host stream; a RandomState object is not taken)")
-    return int(random_state) & ((1 << 63) - 1)
+# The input, aux-block, weight and seed admission and the shared call
+# (`_f32`, `_aux`, `_weights`, `_seed`, `_XCluster._call`) are native:
+# bindings/mixture_native.mojo and bindings/cluster_fit_a_native.mojo
+# (lane pyout-small-families deleted the uncalled Python copies).
 
 
 class _XCluster(NumericModeMixin):
@@ -92,25 +50,9 @@ class _XCluster(NumericModeMixin):
     _mojolearn_native_public = True
     _BINDING = "_mojolearn_x_cluster"
 
-    def _call(self, which, x, a, ip, fp=()):
-        b = self._bind()
-        xa = _buffer.addr_ro(x, name="X") if x is not None else 0
-        xn = x.size if x is not None else 0
-        aa = _buffer.addr_ro(a, name="aux") if a is not None and a.size else 0
-        an = a.size if a is not None else 0
-        f, i, s = b.x_cluster_call(which, xa, xn, aa, an, [int(v) for v in ip], [float(v) for v in fp])  # glue: integer and float binding params
-        return f, i, s
-
     def _check_fitted(self, attr):
         if getattr(self, attr, None) is None:
             raise RuntimeError(f"this {type(self).__name__} is not fitted yet")
-
-    def _input_like_fit(self, X):
-        x = _f32(X)
-        if x.shape[1] != self.n_features_in_:
-            raise ValueError(f"mojolearn: X has {x.shape[1]} features, {type(self).__name__} "
-                             f"was fitted with {self.n_features_in_}")
-        return x
 
 
 class _CentersMixin:

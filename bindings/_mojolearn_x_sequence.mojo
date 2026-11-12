@@ -27,24 +27,13 @@ from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, 
 from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from sequence.opt_entry_device import publish_seq_opt_entries
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
 from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
-from providers.python.sequence_fit_team_pyapi import garch_team_py, prophet_fit_team_py
-from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
-from providers.python.sequence_ets_team_pyapi import ets_team_applies, ets_team_py
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, theta_forecast_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, prophet_predict_days_py, moe_forward_py
+from sequence.xseq_glue_device import publish_x_sequence_device
+from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
-from providers.python.sequence_opt_public_pyapi import (
-    seq_optimizer_init_py,
-    seq_optimizer_step_py,
-    seq_lamb_step_py,
-    seq_adafactor_step_py,
-    seq_optimizer_state_py,
-    seq_optimizer_export_py,
-    seq_optimizer_import_py,
-    seq_optimizer_close_py,
-)
 from providers.python.sequence_opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_device_pyapi import ops_imported_run_device_py
@@ -94,10 +83,10 @@ from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 # TOMBSTONE: sched_exp_block (MOJOLEARN_SCHED_FAST_TABLE) (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/sched_exp_block.patch
-from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py, moe_forward_dev_alloc_py
 from core.shared_slot import SharedSlot
+from sequence.small_mlp_entry_device import publish_neural_small_mlp_device
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
@@ -205,23 +194,6 @@ def layer_norm_dev_binding(handles: PythonObject, addrs: PythonObject, ip: Pytho
 def layer_norm_dev_alloc_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
                                  fp: PythonObject, sizes: PythonObject) raises -> PythonObject:
     return layer_norm_dev_alloc_py(handles, addrs, ip, fp, sizes)
-def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return stl_py(ex, addrs, ip)
-
-
-def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (DROPPED-slower, var taxi-hourly +10.6%) deleted 2026-10-09 on
-    # lane/owed-deletions-D2; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
-    var r = var_fit_py(ex, addrs, ip)
-    return r
-
-
-def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    var r = var_forecast_py(ex, addrs, ip)
-    return r
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -655,82 +627,6 @@ def layer_norm_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) 
     return layer_norm_py(ex, addrs, ip, fp)
 
 
-def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return theta_py(ex, addrs, ip, fp)
-
-
-def theta_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """`theta`'s forecast from its own fitted info rows, no fit (lane
-    ne1-a-decomp-tsa, N031): addrs = [y, info, forecast out], ip = [B, n, h,
-    season_length]."""
-    var ex = DeviceExec()
-    return theta_forecast_py(ex, addrs, ip)
-
-
-def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return croston_py(ex, addrs, ip)
-
-
-def croston_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return croston_forecast_py(ex, addrs, ip)
-
-
-def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    comptime if ETS_TEAM or IDN_ETS_TEAM:
-        # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF), and IDENTICAL behind
-        # IDENTICAL by default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the host binding replays it in
-        # sequence/exec.mojo): ETS(A, A|Ad, N) one series per block
-        # (sequence/ets_team.mojo); every other model keeps ets_py
-        if ets_team_applies(ip):
-            return ets_team_py(ex, addrs, ip, fp)
-    return ets_py(ex, addrs, ip, fp)
-
-
-def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """GARCH on the device, one series per block (`sequence/fit_team.mojo`),
-    every batch size: the same statements per series as the host column's
-    `op_garch`."""
-    var ex = DeviceExec()
-    return garch_team_py(ex, addrs, ip)
-
-
-def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return prophet_days_py(addrs, ip)
-
-
-def prophet_features_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return prophet_features_py(ex, addrs, ip, fp)
-
-
-def prophet_changepoints_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return prophet_changepoints_py(addrs, ip, fp)
-
-
-def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Prophet fit on the device, one series per block
-    (`sequence/fit_team.mojo`), every batch size: the same statements per
-    series as the host column's `op_prophet_fit`."""
-    var ex = DeviceExec()
-    return prophet_fit_team_py(ex, addrs, ip, fp)
-
-
-def prophet_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return prophet_predict_py(ex, addrs, ip)
-
-
-def prophet_predict_days_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """`prophet_features` then `prophet_predict` in one call, the features
-    kept on the executor (lane ne1-a-decomp-tsa, N032)."""
-    var ex = DeviceExec()
-    return prophet_predict_days_py(ex, addrs, ip, fp)
-
-
 def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """ip = [T, D, F, E, k, renormalise] uploads the weights at addrs[1..3];
     a seventh entry > 0 is a `moe_weights_put` handle whose device copies
@@ -825,6 +721,13 @@ def build__mojolearn_x_sequence() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
+        # The forecaster operations, published in the
+        # sequence table (core/xseq_entry_table.mojo) for the sequence owner
+        # (bindings/xseq_*_native.mojo); their former Python entries are gone.
+        publish_x_sequence_device()
+        # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
+        # program; the Python entry remains for its other callers and the boundary tests.
+        publish_neural_small_mlp_device()
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")
         m.def_function[vendor_binding]("x_sequence_vendor")
         m.def_function[resident_release_binding]("x_sequence_resident_release")
@@ -832,11 +735,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[optimizer_step_binding]("optimizer_step")
-        m.def_function[stl_binding]("stl")
-        m.def_function[var_fit_binding]("var_fit")
         # TOMBSTONE: sched_exp_block (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/sched_exp_block.patch
-        m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
@@ -923,14 +823,6 @@ def build__mojolearn_x_sequence() -> PythonObject:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
         # the public optimizers' one native call per method (sequence/opt_public*.mojo)
-        m.def_function[seq_optimizer_init_py]("seq_optimizer_init")
-        m.def_function[seq_optimizer_step_py]("seq_optimizer_step")
-        m.def_function[seq_lamb_step_py]("seq_lamb_step")
-        m.def_function[seq_adafactor_step_py]("seq_adafactor_step")
-        m.def_function[seq_optimizer_state_py]("seq_optimizer_state")
-        m.def_function[seq_optimizer_export_py]("seq_optimizer_export")
-        m.def_function[seq_optimizer_import_py]("seq_optimizer_import")
-        m.def_function[seq_optimizer_close_py]("seq_optimizer_close")
         m.def_function[layer_norm_binding]("layer_norm")
         # lane gap-neural-io: resident tensors and the device-I/O entries
         # (the Python side uses them only when they exist; the host binding
@@ -946,18 +838,6 @@ def build__mojolearn_x_sequence() -> PythonObject:
             m.def_function[adafactor_resident_step_dev_binding]("adafactor_resident_step_dev")
         m.def_function[layer_norm_dev_binding]("layer_norm_dev")
         m.def_function[layer_norm_dev_alloc_binding]("layer_norm_dev_alloc")
-        m.def_function[theta_binding]("theta")
-        m.def_function[theta_forecast_binding]("theta_forecast")
-        m.def_function[croston_binding]("croston")
-        m.def_function[croston_forecast_binding]("croston_forecast")
-        m.def_function[ets_binding]("ets")
-        m.def_function[garch_binding]("garch")
-        m.def_function[prophet_days_binding]("prophet_days")
-        m.def_function[prophet_features_binding]("prophet_features")
-        m.def_function[prophet_changepoints_binding]("prophet_changepoints")
-        m.def_function[prophet_fit_binding]("prophet_fit")
-        m.def_function[prophet_predict_binding]("prophet_predict")
-        m.def_function[prophet_predict_days_binding]("prophet_predict_days")
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
         m.def_function[moe_weights_put_binding]("moe_weights_put")
@@ -976,6 +856,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
             m.def_function[moe_forward_dev_alloc_binding]("moe_forward_dev_alloc")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

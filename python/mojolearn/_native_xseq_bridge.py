@@ -11,9 +11,10 @@ _CONTEXT = None
 
 #: the compiled `_mojolearn_x_sequence` entries the owner runs
 _SEQUENCE_ENTRIES = ("x_sequence_vendor", "x_sequence_numeric_mode", "model_native_api_v1", "model_labels", "rnn_fit", "rnn_predict",
-                     "mlp_fit", "mlp_predict", "theta", "theta_forecast", "croston", "croston_forecast", "ets", "garch", "var_fit", "var_forecast",
-                     "stl", "prophet_days", "prophet_features", "prophet_changepoints", "prophet_fit",
-                     "prophet_predict", "prophet_predict_days")
+                     "mlp_fit", "mlp_predict")
+#: the sequence table's vendor words (core/xseq_entry_table.mojo
+#: `xseq_vendor_word`, the mapping the images apply at publication)
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
 #: the base-binding entries it runs (weight draws, row argmax, label thresholds, scans)
 _BASE_ENTRIES = ("uniform_init_f32", "argmax_rows_f32", "threshold_labels_i64", "reduce_stat", "all_finite_f32", "all_finite_f64")
 
@@ -54,6 +55,7 @@ def connect():
     from ._training_impl import _OPT_CONTEXT
     selected = _backend.default_mode()
     bindings = {}
+    keys = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_x_sequence", mode)
@@ -64,24 +66,37 @@ def connect():
                     raise TypeError(f"the sequence estimators require a compiled {name}")
                 symbols[name] = symbol
             bindings[mode] = symbols
+            # glue: once at import, the connected image's (tier, vendor) key of
+            # the sequence table (lane calltable-xseq); the native owner reads
+            # the image's published entries with it instead of its Python ones
+            vendor = _NATIVE_VENDORS.get(str(symbols["x_sequence_vendor"]()), -1)  # import-time: the image's vendor
+            keys[mode] = (int(symbols["x_sequence_numeric_mode"]()), vendor)  # import-time: the image's compiled tier
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
+            keys[mode] = bindings[mode]
     base = {}
     for name in _BASE_ENTRIES:  # glue: fixed compiled entry names
         symbol = _native(name)
         if not isinstance(symbol, BuiltinFunctionType):
             raise TypeError(f"the sequence estimators require a compiled {name}")
         base[name] = symbol
+    # glue: once at import, the base helper table key the native doors read
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        base["base_native_key"] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        base["base_native_key"] = type(error).__name__ + ": " + str(error)
     metrics = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
             module = _backend.binding("_mojolearn_metrics", mode)
-            symbols = {}
-            for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode"):  # glue: fixed compiled entry names
-                symbol = getattr(module, name, None)
-                if isinstance(symbol, BuiltinFunctionType):
-                    symbols[name] = symbol
-            metrics[mode] = symbols
+            # glue: once at import, the metrics image's (tier, vendor) key of its
+            # native R^2 table (core/metrics_entry_table.mojo, lane
+            # calltable-xseq); the sequence scores call that entry, not the
+            # image's Python r2_score entries. The module is kept to pin the image.
+            vendor = _NATIVE_VENDORS.get(str(module.metrics_vendor()), -1)  # import-time: the image's vendor
+            metrics[mode] = (int(module.metrics_numeric_mode()), vendor, module)  # import-time: the compiled tier
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError) as error:
             metrics[mode] = type(error).__name__ + ": " + str(error)
     r2_options = None
@@ -101,7 +116,7 @@ def connect():
     ownership = dict(lifecycle)
     connect_owner_context(ownership)
     context = dict(_SEQUENTIAL_CONTEXT)
-    context.update(xseq_bindings=bindings, xseq_base=base, optimizer_context=_OPT_CONTEXT,
+    context.update(xseq_bindings=bindings, xseq_native_keys=keys, xseq_base=base, optimizer_context=_OPT_CONTEXT,
                    os_urandom=os.urandom, np_asarray=np.asarray, xseq_linalg_error=np.linalg.LinAlgError,
                    # the exact ndarray type whose read-only flag guards the
                    # fitted-weight records (bindings/xseq_neural_native.mojo)

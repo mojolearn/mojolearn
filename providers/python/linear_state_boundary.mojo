@@ -9,9 +9,8 @@ admitted descriptors before taking its immutable native snapshot.
 from std.python import PythonObject
 from std.memory import ArcPointer
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from std.reflection import reflect
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.native_owner_registry import borrowed_native_owner, register_native_owner
+from bindings.native_owner_registry import borrowed_native_owner, register_native_owner_type
 from bindings.classical_arrays import classical_address
 from bindings.native_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from core.linear_model_state import LinearModelState
@@ -124,10 +123,14 @@ def register_linear_state_owner(mut module: PythonModuleBuilder) raises:
     try:
         existing = lookup_py_type_object[LinearStateOwner]()
     except error:
-        if not py_type_absent(error, String(reflect[LinearStateOwner].name())):
+        if not py_type_absent(error):
             raise error
         _ = module.add_type[LinearStateOwner]("_LinearStateOwner")
-        register_native_owner(lookup_py_type_object[LinearStateOwner](), module.module, linear_state_owner_pins)
         return
     py_type_attach(module.module, "_LinearStateOwner", existing)
-    register_native_owner(existing, module.module, linear_state_owner_pins)
+
+
+def register_linear_state_owner_identity(published: PythonObject) raises:
+    # After PythonModuleBuilder.finalize() only: Mojo 1.2 creates the type
+    # object in finalize() (bindings/native_owner_registry.mojo).
+    register_native_owner_type[LinearStateOwner](published, linear_state_owner_pins)

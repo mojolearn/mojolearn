@@ -45,6 +45,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from bindings.trees_side_records import trees_side_get, trees_side_put
 from core.shared_slot import SharedSlot
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call
 
 comptime TREES_RESIDENT_SLOTS = 64
 comptime TREES_RESIDENT_KEEP_BYTES = 1 << 30
@@ -63,6 +65,12 @@ struct TreesResidentEntry(Movable):
     var kind: Int
     var native: PythonObject
     var release: PythonObject
+    # A native release (lane calltable-gbdt-forest-dart, 2026-11-11): when
+    # `native_release` holds an entry, the snapshot is released by calling it
+    # with `release_op` and the params [handle] (the descriptor shape of
+    # core/native_descriptor_abi.mojo), not through `release`.
+    var native_release: List[NativeDescriptorCall]
+    var release_op: Int
     var handle: Int
     var words: List[Int]
     var mirrors: List[PythonObject]
@@ -72,13 +80,15 @@ struct TreesResidentEntry(Movable):
     var dead: Bool
 
     def __init__(out self, model_key: Int, generation: Int, kind: Int, native: PythonObject,
-                 release: PythonObject, handle: Int, var words: List[Int], var mirrors: List[PythonObject],
-                 bytes: Int, used: Int):
+                 release: PythonObject, var native_release: List[NativeDescriptorCall], release_op: Int,
+                 handle: Int, var words: List[Int], var mirrors: List[PythonObject], bytes: Int, used: Int):
         self.model_key = model_key
         self.generation = generation
         self.kind = kind
         self.native = native
         self.release = release
+        self.native_release = native_release^
+        self.release_op = release_op
         self.handle = handle
         self.words = words^
         self.mirrors = mirrors^
@@ -102,16 +112,22 @@ struct TreesResidentTable(Defaultable, Movable):
         self.uploads = 0
 
 
-comptime TREES_RESIDENT = SharedSlot[TreesResidentTable, "MojolearnTreesResidentTableV2"]
+comptime TREES_RESIDENT = SharedSlot[TreesResidentTable, "MojolearnTreesResidentTableV3"]
 
 
-def _release_now(release: PythonObject, handle: Int):
-    """The snapshot's compiled release entry; quiet, as the former
-    `TreesResident` lifetime: a binding torn down at interpreter exit has
-    nothing left to release."""
+def _release_now(release: PythonObject, native_release: List[NativeDescriptorCall], release_op: Int, handle: Int):
+    """The snapshot's compiled release entry (native when the entry holds
+    one); quiet, as the former `TreesResident` lifetime: a binding torn down
+    at interpreter exit has nothing left to release."""
     if handle < 1:
         return
     try:
+        if len(native_release):
+            var addrs = List[Int]()
+            var ints: List[Int] = [handle]
+            var floats: List[Float64] = [Float64(handle)]
+            _ = native_descriptor_call(native_release[0], release_op, addrs, ints, floats)
+            return
         _ = py_call(release, PythonObject(handle))
     except:
         pass
@@ -127,9 +143,11 @@ def _drop_at(i: Int) raises:
         table[].parked.append(entry^)
         return
     var release = entry.release
+    var natives = entry.native_release.copy()
+    var op = entry.release_op
     var handle = entry.handle
     _ = entry^
-    _release_now(release, handle)
+    _release_now(release, natives, op, handle)
 
 
 def _same_mirrors(held: List[PythonObject], mirrors: List[PythonObject]) -> Bool:
@@ -174,6 +192,24 @@ def trees_resident_put(model_key: Int, generation: Int, kind: Int, native: Pytho
                        handle: Int, var words: List[Int], var mirrors: List[PythonObject], bytes: Int) raises -> Bool:
     """Keep `handle` for the model. False when it is larger than the byte cap:
     then nothing is kept and the caller releases it after its call."""
+    return _put(model_key, generation, kind, native, release, List[NativeDescriptorCall](), 0, handle, words^,
+                mirrors^, bytes)
+
+
+def trees_resident_put_native(model_key: Int, generation: Int, kind: Int, native: PythonObject,
+                              release_entry: NativeDescriptorCall, release_op: Int, handle: Int, var words: List[Int],
+                              var mirrors: List[PythonObject], bytes: Int) raises -> Bool:
+    """`trees_resident_put` for a snapshot whose release is a native table
+    entry (`release_entry` called with `release_op` and [handle])."""
+    var natives = List[NativeDescriptorCall]()
+    natives.append(release_entry)
+    return _put(model_key, generation, kind, native, PythonObject(None), natives^, release_op, handle, words^,
+                mirrors^, bytes)
+
+
+def _put(model_key: Int, generation: Int, kind: Int, native: PythonObject, release: PythonObject,
+         var natives: List[NativeDescriptorCall], release_op: Int, handle: Int, var words: List[Int],
+         var mirrors: List[PythonObject], bytes: Int) raises -> Bool:
     if bytes > TREES_RESIDENT_KEEP_BYTES:
         return False
     var table = TREES_RESIDENT.get_or_create_ptr()
@@ -197,8 +233,8 @@ def trees_resident_put(model_key: Int, generation: Int, kind: Int, native: Pytho
         _drop_at(oldest)
     table[].tick += 1
     table[].uploads += 1
-    table[].entries.append(TreesResidentEntry(model_key, generation, kind, native, release, handle, words^, mirrors^,
-                                              bytes, table[].tick))
+    table[].entries.append(TreesResidentEntry(model_key, generation, kind, native, release, natives^, release_op,
+                                              handle, words^, mirrors^, bytes, table[].tick))
     return True
 
 
@@ -233,9 +269,11 @@ def _unpin(handle: Int) raises:
             if table[].parked[i].pins <= 0:
                 var entry = table[].parked.pop(i)
                 var release = entry.release
+                var natives = entry.native_release.copy()
+                var op = entry.release_op
                 var gone = entry.handle
                 _ = entry^
-                _release_now(release, gone)
+                _release_now(release, natives, op, gone)
             return
 
 

@@ -95,10 +95,16 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
     var plan = _plan(modules, model, attributes)
     var fields = _fields(model)
     var ancestry = _type_mro(py_type(model))
-    var parameters = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_parameters = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: passive subclasses share their connected native owner
-        if parameters is None:
-            parameters = py_get(context["cluster_public_parameters"], ancestry[i])
+        if not found_parameters:
+            var candidate = py_get(context["cluster_public_parameters"], ancestry[i])
+            if candidate is not None:
+                found_parameters = candidate
+    var parameters = PythonObject(None)
+    if found_parameters:
+        parameters = found_parameters.value()
     if parameters is None:
         raise Error("TypeError: cluster execution requires a connected native estimator class")
     var setter_seen = False
@@ -161,10 +167,16 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
 def _admit_replaced_state(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
     var b = native_loaded_module("builtins")
     var ancestry = _type_mro(py_type(model))
-    var names = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_names = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: use the connected owner's fit-state schema
-        if names is None:
-            names = py_get(context["cluster_public_replaced_fields"], ancestry[i])
+        if not found_names:
+            var candidate = py_get(context["cluster_public_replaced_fields"], ancestry[i])
+            if candidate is not None:
+                found_names = candidate
+    var names = PythonObject(None)
+    if found_names:
+        names = found_names.value()
     if py_type(names) is not b.tuple:
         raise Error("TypeError: cluster refit requires its native replaced-field schema")
     for i in range(len(names)):  # driver-loop: prior fitted owners before any numerical/state mutation

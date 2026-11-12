@@ -52,14 +52,10 @@ trainer's loss is computed from. They write no state on either path.
 tools/byte_lm_gpu_logits_sweep.py compares them byte for byte with the CPU
 reference path of DEVIATION 2610, `LanguageModelInference(threaded=False)`.
 """
-from . import _buffer as _buffers, _bufcheck as _checks
+from . import _bufcheck as _checks
 from ._array import Array as _Array
 import json
-from . import _portable_math as math
 from . import _numeric_profile
-import operator
-import os
-import time as _time
 
 
 class _LogitsPool:
@@ -94,7 +90,7 @@ class _LogitsPool:
 class _PooledLogits(_Array):
     """An owned logits Array whose storage returns to `_pool` when the
     last reference to the Array goes away. Every value in it is written by
-    the download that produced it (`_require_written`)."""
+    the native logits download that produced it."""
 
     def __del__(self):
         pool = getattr(self, "_pool", None)
@@ -102,14 +98,13 @@ class _PooledLogits(_Array):
         if pool is not None and store is not None:
             pool.give(store)
 from pathlib import Path
-import struct
 import tempfile
 import threading
 
 from . import _backend
 from ._arrays import _addr, _addr_ro
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, full, zeros
-from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
+from ._buffer import addr, addr_ro, empty, frombytes, full
+from ._bufcheck import flat_view, le_bytes
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 from . import _byte_lm_checkpoint
 from . import _ragged
@@ -121,29 +116,8 @@ PARAMETER_SHAPES = ByteLanguageModelConfig().parameter_shapes
 _OFFSETS = ByteLanguageModelConfig().offsets
 _N = ByteLanguageModelConfig().n_total
 _EXTENSION = '_mojolearn_byte_lm'
-_SCHEMA = 'mojolearn.small-byte-lm-state.v1'
 _CHECKPOINT_SCHEMA = 'mojolearn.small-byte-lm-json-checkpoint.v1'
 _CHECKPOINT_LIMIT = 2 * 1024 * 1024
-#: `numpy.finfo(numpy.float32).max`, as a Python float.
-_F32_MAX = 3.4028234663852886e+38
-#: DEVIATION 2514: the native entries a resident session needs. A binding
-#: missing any of them refuses with ImportError.
-#: The native refusal of an id outside [0, vocab) (training/byte_lm.mojo
-#: `byte_validate_tokens`), mapped back to the public ValueError.
-_TOKEN_REFUSAL = 'token ID outside configured vocabulary'
-
-_SESSION_ENTRIES = ('byte_lm_session_create', 'byte_lm_session_close', 'byte_lm_session_info',
-                    'byte_lm_trainer_step', 'byte_lm_trainer_export_state',
-                    'byte_lm_trainer_export_gradients')
-#: The stateless trainer step: `byte_lm_run_configured` plus the gradient
-#: split by name, in one call.
-_RUN_ENTRY = 'byte_lm_trainer_run'
-#: DEVIATION 2658 names the native logits entries and the limits they
-#: admit; `logits` refuses anything outside the limits here first.
-_LOGITS_ENTRY = 'byte_lm_logits'
-_SESSION_LOGITS_ENTRY = 'byte_lm_trainer_logits'
-#: cpu3-seq (2026-10-04): the resident greedy next byte, argmax on the device.
-_SESSION_NEXT_ENTRY = 'byte_lm_trainer_next_bytes'
 _LOGITS_MAX_BATCH = 1024
 _LOGITS_MAX_CELLS = 268435456
 
@@ -170,134 +144,10 @@ def _require_schedule_vocabulary(descriptor, shape):
                          f"{v['n_vocab']}, and this model's vocab_size is {shape.vocab_size}")
 
 
-def _schedule(value):
-    if not isinstance(value, dict) or not value:
-        raise ValueError('SmallByteLanguageModelTrainer data_schedule must be a nonempty JSON object')
-    budget = [256]
-    def check(item, depth=0):
-        budget[0] -= 1
-        if budget[0] < 0 or depth > 8:
-            raise ValueError('Byte-LM schedule is too complex')
-        if type(item) is dict:
-            if len(item) > 128 or any(type(key) is not str or len(key) > 2048 for key in item):  # glue: validates the schedule argument keys
-                raise ValueError('Byte-LM schedule keys/count exceed their bounds')
-            for child in item.values():  # glue: validates the schedule argument values
-                check(child, depth + 1)
-        elif type(item) is list:
-            if len(item) > 128:
-                raise ValueError('Byte-LM schedule list exceeds its bound')
-            for child in item:  # glue: validates the schedule argument items
-                check(child, depth + 1)
-        elif type(item) is str:
-            if len(item) > 2048:
-                raise ValueError('Byte-LM schedule string exceeds its bound')
-        elif type(item) is int:
-            if item.bit_length() > 4096:
-                raise ValueError('Byte-LM schedule integer exceeds its bound')
-        elif item is not None and type(item) not in (float, bool):
-            raise ValueError('Byte-LM schedule requires JSON values')
-    check(value)
-    try:
-        encoded = _canonical(value)
-    except (ValueError, OverflowError) as exc:
-        raise ValueError('Byte-LM schedule must be finite JSON') from exc
-    if len(encoded) > 16384:
-        raise ValueError('Byte-LM schedule exceeds 16384 bytes')
-    return json.loads(encoded)
-
-
 def _is_bool(value):
     # `bool` and NumPy's `bool_` (not a `bool` subclass), judged by name so
     # that numpy need not be importable here.
     return isinstance(value, bool) or type(value).__name__ == 'bool_'
-
-
-def _round_f32(value):
-    # DEVIATION 2428: `float(np.float32(value))` is one round-to-nearest-even
-    # to binary32 and back, which is exactly what `struct` does.
-    return struct.unpack('<f', struct.pack('<f', value))[0]
-
-
-def _float32(value, name):
-    if _is_bool(value):
-        raise ValueError('Byte-LM ' + name + ' must be a finite float32 scalar')
-    try:
-        result = float(value)
-    except (ValueError, TypeError, OverflowError) as exc:
-        raise ValueError('Byte-LM ' + name + ' must be a scalar') from exc
-    if not math.isfinite(result) or abs(result) > _F32_MAX:
-        raise ValueError('Byte-LM ' + name + ' must be finite float32')
-    return _round_f32(result)
-
-
-def _configuration(lr, betas, eps, weight_decay):
-    try:
-        beta1, beta2 = betas
-    except (ValueError, TypeError) as exc:
-        raise ValueError('Byte-LM betas must contain two scalars') from exc
-    values = {name: _float32(value, name) for name, value in  # glue: converts the configuration arguments
-              (('lr', lr), ('beta1', beta1), ('beta2', beta2),
-               ('eps', eps), ('weight_decay', weight_decay))}
-    if values['lr'] <= 0 or values['eps'] <= 0 or values['weight_decay'] < 0:
-        raise ValueError('Byte-LM requires lr > 0, eps > 0 and weight_decay >= 0')
-    if not 0 <= values['beta1'] < 1 or not 0 <= values['beta2'] < 1:
-        raise ValueError('Byte-LM betas must remain in [0, 1) in float32')
-    return dict(values, kind=2, momentum=0.0, dampening=0.0, nesterov=False, max_norm=0.0)
-
-
-def _array(value, shape, name, dtype='<f4'):
-    """An OWNED, C-contiguous, exactly-shaped, finite copy of `value` as a
-    `mojolearn.Array` (DEVIATION 2429). The dtype is judged from the
-    buffer's format and REFUSED rather than converted, as the NumPy
-    spelling refused a dtype mismatch; `_buffer.as_f32_c` / `as_i32_c`
-    then supply the layout, and a borrowed buffer is copied so that the
-    trainer never aliases caller memory."""
-    kind = 'float32' if dtype == '<f4' else 'int32'
-    try:
-        pb = probe(value)
-    except TypeError:
-        raise TypeError('Byte-LM ' + name + ' must be a ' + kind
-                        + ' array (a NumPy array, an array.array or a mojolearn Array)') from None
-    ok = is_native_f32(pb.format) if dtype == '<f4' else is_int32(pb.format, pb.itemsize)
-    if not ok:
-        raise TypeError('Byte-LM ' + name + ' must be a ' + kind
-                        + ' array (a NumPy array, an array.array or a mojolearn Array)')
-    if pb.shape != shape:
-        raise ValueError('Byte-LM ' + name + ' requires finite shape ' + repr(shape))
-    convert = as_f32_c if dtype == '<f4' else as_i32_c
-    arr, copied = convert(value, ndim=len(shape), name=name)
-    if not copied:
-        arr = arr.copy()
-    if dtype == '<f4' and not all_finite(arr):
-        raise ValueError('Byte-LM ' + name + ' requires finite shape ' + repr(shape))
-    return arr
-
-
-def _parameters(value, shape=None):
-    shape = require_shape(shape)
-    if isinstance(value, dict):
-        if set(value) != set(shape.parameter_names):
-            raise ValueError('Byte-LM named parameters must contain the exact configured tensor registry')
-        arrays = [_array(value[name], shape, name) for name, shape in zip(shape.parameter_names, shape.parameter_shapes)]  # glue: one array per named model parameter
-        flat = empty((shape.n_total,), '<f4')
-        at = 0
-        for value in arrays:  # glue: walks the named model parameter arrays
-            memcopy(addr(flat, name='parameters') + at, addr_ro(value, name='tensor'), value.nbytes)
-            at += value.nbytes
-        return flat
-    return _array(value, (shape.n_total,), 'parameters')
-
-
-def _step(value):
-    if _is_bool(value):
-        raise ValueError('Byte-LM completed_steps must be an integer')
-    try:
-        value = operator.index(value)
-    except TypeError as exc:
-        raise ValueError('Byte-LM completed_steps must be an integer') from exc
-    if not 0 <= value <= 999999:
-        raise ValueError('Byte-LM completed_steps must be in [0, 999999]')
-    return value
 
 
 #: The tiers the byte LM ships and the code its binding reads back
@@ -334,9 +184,14 @@ def _load(shape=None):
     # numeric mode and vendor still refuse a real mismatch. Before
     # 2026-10-10 the suffix carried only the neural part and grid arms
     # attn_softmax / ce_token_fold were refused here (bytelm-profile-harness).
-    arithmetic_suffix = str(binding.byte_lm_arithmetic_suffix())
+    # The device image no longer registers `byte_lm_arithmetic_suffix`
+    # (deleted by 1bdaa5e00f / 6890e9658f; the trainer door reads it from the
+    # trainer table's glue entry). The default profile is PROFILE followed by
+    # that same suffix, so the suffix is the profile's tail past PROFILE.
+    profile = str(binding.byte_lm_profile())
+    arithmetic_suffix = profile[len(PROFILE):]
     if (int(binding.byte_lm_numeric_mode()) != _NATIVE_MODE_CODE[mode]
-            or str(binding.byte_lm_profile()) != PROFILE + arithmetic_suffix
+            or not profile.startswith(PROFILE)
             or str(binding.byte_lm_vendor()) not in vendors):
         raise RuntimeError('Byte-LM requires the exact native profile, the selected IDENTICAL/FAST mode and CUDA/HIP/Metal vendor '
                            '(or, on a CPU-only install, the CPU byte LM binding)')
@@ -353,66 +208,8 @@ def _load(shape=None):
 def _runtime_profile(shape, mode=None):
     """Bind shape metadata to the arithmetic of the actual loaded binary."""
     binding = _backend.binding(_EXTENSION, mode or _mode())
-    return shape.profile + str(binding.byte_lm_arithmetic_suffix())
-
-
-def _snapshot(state, copy=True):
-    """The `state_dict()` shape. `copy=False` hands the arrays through as
-    they are, for a caller that already holds fresh owned copies (an
-    export, DEVIATION 2514) and would otherwise copy 3n floats twice."""
-    shape = state_shape(state)
-    state = dict(state)
-    if 'model_shape' in state:
-        state['model_shape'] = shape.to_dict()
-    arrays = {key: (state[key].copy() if copy else state[key]) for key in ('parameters', 'm', 'v', 'flags')}  # glue: four named state arrays of a snapshot
-    return dict(state, config=dict(state['config']), **arrays,
-                data_schedule=_schedule(state['data_schedule']),
-                parameter_names=list(shape.parameter_names),
-                parameter_shapes=[list(shape) for shape in shape.parameter_shapes],  # glue: lists the model parameter shapes
-                parameter_offsets=list(shape.offsets))
-
-
-def _validate_state(value):
-    keys = {'schema', 'profile', 'numeric_mode', 'parameter_names', 'parameter_shapes',
-            'parameter_offsets', 'parameters', 'm', 'v', 'flags', 'completed_steps',
-            'next_batch_index', 'config', 'data_schedule'}
-    if isinstance(value, dict) and 'model_shape' in value:
-        keys.add('model_shape')
-    if not isinstance(value, dict) or set(value) != keys:
-        raise ValueError('Byte-LM state has missing or unknown fields')
-    shape = state_shape(value)
-    if (value['schema'] != _SCHEMA or value['numeric_mode'] not in _NATIVE_MODE_CODE or value['profile'] != _runtime_profile(shape, value['numeric_mode'])
-            or value['parameter_names'] != list(shape.parameter_names)
-            or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]  # glue: compares the model parameter shapes
-            or value['parameter_offsets'] != list(shape.offsets)):
-        raise ValueError('Byte-LM state profile/registry/mode mismatch')
-    cfg = value['config']
-    if not isinstance(cfg, dict) or set(cfg) != set(_configuration(1, (.9, .999), 1e-8, .01)):
-        raise ValueError('Byte-LM state optimizer configuration mismatch')
-    config = _configuration(cfg['lr'], (cfg['beta1'], cfg['beta2']), cfg['eps'], cfg['weight_decay'])
-    if (type(cfg['kind']) is not int or cfg['kind'] != 2 or type(cfg['nesterov']) is not bool
-            or cfg['nesterov'] or any(_float32(cfg[key], key) != 0 for key in ('momentum', 'dampening', 'max_norm'))):  # glue: validates three optimizer config keys
-        raise ValueError('Byte-LM first profile supports AdamW without clipping or SGD options')
-    completed = _step(value['completed_steps'])
-    if _step(value['next_batch_index']) != completed:
-        raise ValueError('Byte-LM schedule cursor must match completed_steps')
-    parameters = _array(value['parameters'], (shape.n_total,), 'parameters')
-    m = _array(value['m'], (shape.n_total,), 'm')
-    v = _array(value['v'], (shape.n_total,), 'v')
-    flags = _array(value['flags'], (shape.n_tensors,), 'flags', '<i4')
-    # Native min/max (reduce_stat, DEVIATION 3101) over buffers `_array`
-    # already proved finite: `min < 0` is `any(x < 0)` exactly, and an int32
-    # flag vector is binary iff min >= 0 and max <= 1.
-    if v.min() < 0 or flags.min() < 0 or flags.max() > 1:
-        raise ValueError('Byte-LM requires nonnegative second moments and binary flags')
-    value = dict(value)
-    if 'model_shape' in value:
-        value['model_shape'] = shape.to_dict()
-    return dict(value, parameters=parameters, m=m, v=v, flags=flags,
-                completed_steps=completed, next_batch_index=completed, config=config,
-                data_schedule=_schedule(value['data_schedule']),
-                parameter_names=list(shape.parameter_names),
-                parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))  # glue: lists the model parameter shapes
+    # The suffix is the default profile's tail past PROFILE (see `_load`).
+    return shape.profile + str(binding.byte_lm_profile())[len(PROFILE):]
 
 
 def _sha256_hex(data):
@@ -422,147 +219,10 @@ def _sha256_hex(data):
     return str(_backend.binding(_EXTENSION, _mode()).sha256_hex(data))
 
 
-def _sha(binding, path):
-    """The SHA-256 of the file at `path`, streamed by the binding's Mojo
-    file digest (`byte_lm_file_sha256`); the file never passes through
-    Python."""
-    return str(binding.byte_lm_file_sha256(str(path)))  # cpu-route: file path str read once by byte_lm_file_sha256 (the file never enters Python)
-
-
-def _binding_metadata(binding, shape):
-    root = Path(__file__).resolve().parents[2]
-    names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
-             'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
-             'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py')
-    inventory = {name: _sha(binding, root / name) for name in names if (root / name).is_file()}  # glue: one native file digest per named source file
-    # Installed wheels may lack native sources; the Python source and exact
-    # loaded binding are still identified. Do not claim a full source audit.
-    inventory['loaded_python_wrapper'] = _sha(binding, __file__)
-    # DEVIATION 2534: the attention arm the native launchers run, the
-    # column's default and whether the binding is a trial build, so a run
-    # names its arm instead of an environment variable that may be unset.
-    # None for a binding built before the read-back existed.
-    attention = None
-    if hasattr(binding, 'byte_lm_attention_arm'):
-        arm, default, trial, resolved = binding.byte_lm_attention_arm()
-        attention = dict(arm=str(arm), default=str(default), trial_build=bool(int(trial)),
-                         resolved_hd64=str(resolved))
-        if hasattr(binding, 'byte_lm_attention_memory_profile'):
-            memory_profile, retained_bytes = binding.byte_lm_attention_memory_profile(list(shape.native_shape))
-            attention['memory_profile'] = str(memory_profile)
-            attention['retained_exp_bytes_per_layer'] = int(retained_bytes)
-    # DEVIATION 2648: the step glue arm the native step runs and whether the
-    # binding is a glue trial build. None for a binding without the read-back.
-    step_glue = None
-    if hasattr(binding, 'byte_lm_step_glue_arm'):
-        glue_arm, glue_trial = binding.byte_lm_step_glue_arm()
-        step_glue = dict(arm=str(glue_arm), trial_build=bool(int(glue_trial)))
-    return dict(binding_file=binding.__file__, binding_sha256=_sha(binding, binding.__file__),
-                native_profile=str(binding.byte_lm_profile()),
-                native_vendor=str(binding.byte_lm_vendor()),
-                native_numeric_mode=int(binding.byte_lm_numeric_mode()),
-                native_attention_arm=attention,
-                native_step_glue_arm=step_glue,
-                source_sha256=inventory,
-                source_scope='available direct source files; binding SHA identifies the compiled artifact')
-
-
-# THE IDS ADMISSION AND THE GREEDY PICK, shared by the GPU trainer's
-# `logits`/`next_bytes` and the CPU `LanguageModelInference` (DEVIATION
-# 2658), so both surfaces admit the same ids and equal logits bytes pick
-# equal bytes. They live here, in the GPU-path module, so this module does
-# not import the CPU-side `_byte_lm_host` (cpu-gpu-cleanup n-pyneural,
-# 2026-10-02); `_byte_lm_host` keeps the same spelling.
-
-
-def _logits_ids(ids, shape):
-    """`(tokens, copied)` for a logits call, int32 ids `[batch, length]` with
-    `batch >= 1`, `1 <= length <= shape.length` and every id a byte value in
-    `[0, vocab)`, refused with ValueError otherwise."""
-    tokens, copied = as_i32_c(ids, ndim=2, name='ids')
-    batch, length = tokens.shape
-    if batch <= 0 or not 0 < length <= shape.length:
-        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
-    vocab = shape.vocab_size
-    # Native min/max admits the common case in one pass. On a refusal the
-    # first offending id is located natively too (pyglue-text-io, Oct 3): two
-    # `threshold_labels_i64` masks (id < 0, id >= vocab) and a native
-    # first-max argmax of each; Python reads only the one offending value.
-    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
-        return tokens, copied
-    from ._labels import threshold_codes
-    flat = tokens.reshape((batch * length,))
-    first = batch * length
-    for mask in (threshold_codes(flat, -0.5, strict=True, below=1, above=0),  # glue: two native masks on the refusal path only
-                 threshold_codes(flat, vocab - 0.5, strict=True, below=0, above=1)):
-        if mask.max() == 1:
-            first = min(first, int(mask.argmax()))  # glue: native argmax on the refusal path only
-    r, c = divmod(first, length)
-    raise ValueError(f'ids must be byte values in [0, {vocab}); got {int(flat[first])} at row {r}, position {c}')
-
-
-def _argmax_last_positions(logits, batch, length, vocab):
-    """int64 `(batch,)`: the first-max argmax of each row's LAST position of
-    float32 logits `[batch, length, vocab]`, by the base binding's
-    `argmax_last_rows_f32` (the `argmax_rows_f32` rule; lane cpu4-python:
-    the last-position rows are read on the device, the host byte gather
-    `gather_rows_bytes` is gone)."""
-    out = empty((batch,), '<i8')
-    _buffers._native('argmax_last_rows_f32')(addr_ro(logits, name='logits'), [batch, length, vocab],
-                                             addr(out, name='next bytes'))
-    return out
-
-
-def _greedy_next_bytes(logits):
-    """The greedy next byte after each row of float32 logits
-    `[batch, length, vocab]`, read at the last position; ties go to the
-    lowest byte value (the base binding's `argmax_rows_f32`: strict `>` from
-    index 0, so ties keep the lowest byte and a NaN never replaces). The
-    last-position gather and the scan are both native (pyglue-text-io)."""
-    logits, _ = as_f32_c(logits, ndim=3, name='logits')
-    batch, length, vocab = logits.shape
-    if not batch:
-        return []
-    if not vocab:
-        return [0] * batch
-    return _argmax_last_positions(logits, batch, length, vocab).tolist()
-
-
-def _gpu_logits_ids(ids, shape):
-    """`(tokens, batch, length)` for `logits` (DEVIATION 2658). The CPU
-    class's admission (`_logits_ids` above) plus the native batch
-    and cell limits, returned as an owned copy so the trainer never aliases
-    caller memory. An empty 2-D buffer is refused by its reported shape
-    before any conversion."""
-    try:
-        pb = probe(ids)
-    except TypeError:
-        pb = None
-    if pb is not None and pb.ndim == 2 and 0 in pb.shape:
-        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
-    tokens, copied = _logits_ids(ids, shape)
-    batch, length = tokens.shape
-    if batch > _LOGITS_MAX_BATCH or batch * length * shape.vocab_size > _LOGITS_MAX_CELLS:
-        raise ValueError(f'Byte-LM logits require batch <= {_LOGITS_MAX_BATCH} and '
-                         f'batch * length * vocab <= {_LOGITS_MAX_CELLS}')
-    return (tokens if copied else tokens.copy()), batch, length
-
-
-def _gradient_outputs(shape, named):
-    """Fresh output arrays for a gradient the native call writes: the flat
-    vector and, with `named`, one array per parameter tensor (the native
-    call splits the gradient into them)."""
-    flat = empty((shape.n_total,), '<f4')
-    by_name = {}
-    if named:
-        for name, tensor_shape in zip(shape.parameter_names, shape.parameter_shapes):  # glue: one output array per model parameter tensor
-            by_name[name] = empty(tuple(tensor_shape), '<f4')
-    return flat, by_name
-
-
-def _require_written(written, expected):
-    if _is_bool(written) or not isinstance(written, int) or written != expected:
-        raise RuntimeError('Byte-LM native logits wrote an unexpected number of logits')
+# The ids admission, the greedy pick, the state and schedule admission and
+# the gradient outputs live in the native door (bindings/byte_lm_trainer_native.mojo:
+# `_gradient_outputs`, the logits ids refusals, `training_schedule_json`); the
+# unreached Python copies were deleted (pyout-neural-lm, 2026-11-11).
 
 
 # FP32 decoder language-model trainer with runtime dimensions.
@@ -760,15 +420,6 @@ class SmallByteLanguageModelTrainer:
         """The complete training state; same as :meth:`export_state`."""
         return _LM_TRAINER(self, "export_state", (), _LM_TRAINER_CONTEXT)
 
-    def _require_not_lost(self):
-        if self._lost_at is not None:
-            raise RuntimeError('Byte-LM session lost at step %d; last exported state is step %d'
-                               % self._lost_at)
-
-    def _mark_lost(self):
-        if self._lost_at is None:
-            self._lost_at = (self._state['completed_steps'], self._last_export_step)
-
     # The complete state as fresh `mojolearn.Array` copies plus metadata
     # (the `state_dict()` shape). On an open resident session: the device
     # state is re-scanned natively, downloaded once and validated here by
@@ -904,22 +555,6 @@ class SmallByteLanguageModelTrainer:
         self._last_export_step = completed
         return dict(self._state, parameters=out_p, m=out_m, v=out_v, flags=out_flags)
 
-    def _export_gradients_impl(self, step, named):
-        """ONE native call (`byte_lm_trainer_export_gradients`): the last
-        step's gradient, scanned on the device, into a fresh flat array and,
-        with `named`, also split into one fresh array per tensor."""
-        shape = state_shape(self._state)
-        flat, by_name = _gradient_outputs(shape, named)
-        addresses = [addr(flat, name='out_grad')] + [addr(by_name[name], name='out_grad') for name in by_name]  # glue: one address per model parameter tensor
-        returned = self._session_binding.byte_lm_trainer_export_gradients(
-            self._native_session, addresses, list(shape.native_shape), step)
-        if _is_bool(returned) or not isinstance(returned, int) or returned != step:
-            raise RuntimeError('Byte-LM gradient export returned a different step')
-        result = dict(flat_gradients=flat)
-        if named:
-            result['gradients'] = by_name
-        return result
-
     def close(self):
         """Copy the device state to the host and release the device.
 
@@ -928,99 +563,6 @@ class SmallByteLanguageModelTrainer:
         stays lost until :meth:`load_state_dict`.
         """
         return _LM_TRAINER(self, "close", (), _LM_TRAINER_CONTEXT)
-
-    def _suspend_session(self):
-        if self._session_open and self._lost_at is None:
-            try:
-                exported = self._export_state_impl(release=True)
-            except BaseException:
-                # The native export closed the session on its way out.
-                self._mark_lost()
-                self._forget_session()
-                raise
-            self._state = exported
-            self._forget_session()
-            return
-        self._release_session()
-
-    def _forget_session(self):
-        """Drop the Python references to a session the native side closed."""
-        self._native_session = None
-        self._session_binding = None
-        self._session_open = False
-        self._logits_pool = _LogitsPool()
-        self._grad_step = -1
-
-    def _release_session(self):
-        session, binding = self._native_session, self._session_binding
-        self._forget_session()
-        if session is not None:
-            binding.byte_lm_session_close(session)
-
-    def _session_entries(self, extra=()):
-        """Lock held. The binding, refused by name (ImportError) when it lacks
-        an entry the resident session needs; there is no fallback."""
-        binding = self._binding()
-        missing = [name for name in _SESSION_ENTRIES + tuple(extra)  # glue: checks the session binding entry names
-                   if not callable(getattr(binding, name, None))]
-        if missing:
-            raise ImportError('Byte-LM binding lacks owned sessions (%s); rebuild bindings/build_byte_lm.sh'
-                              % ', '.join(missing))
-        return binding
-
-    def _session_handle(self, binding):
-        """Lock held. The native session handle, created on first use (a
-        handle only: no device work until the first call admits the state)."""
-        if self._native_session is None:
-            self._native_session = binding.byte_lm_session_create()
-            self._session_binding = binding
-            self._session_open = False
-            self._grad_step = -1
-        return self._native_session
-
-    def _admission_addresses(self):
-        """The host state the native call admits and uploads when the session
-        is not open; zeros when it is (the device holds the only copy)."""
-        if self._session_open:
-            return [0, 0, 0]
-        return [addr_ro(self._state[key], name='state') for key in ('parameters', 'm', 'v')]  # glue: three named state arrays
-
-    def _adopt_open_session(self):
-        """After a native call admitted the host state: the device buffers are
-        now the only copy (DEVIATION 2514), so the host arrays are dropped."""
-        if not self._session_open:
-            self._session_open = True
-            self._grad_step = -1
-            self._last_export_step = self._state['completed_steps']
-            self._state = dict(self._state, parameters=None, m=None, v=None)
-
-    def _after_native_failure(self):
-        """The failure path of a resident call. The native call already
-        rolled the device back and judged the session (design 4.2 item 6,
-        `byte_owner_recover`); this reads its verdict back. A session the
-        call opened is adopted, and one that is no longer usable at the
-        committed step is lost. The last gradient is no longer exportable."""
-        self._grad_step = -1
-        session, binding = self._native_session, self._session_binding
-        if session is None or self._lost_at is not None:
-            return
-        try:
-            info = binding.byte_lm_session_info(session)
-            is_open, usable, completed = bool(info[3]), bool(info[2]), info[0]
-        except Exception:
-            is_open, usable, completed = self._session_open, False, None
-        if is_open:
-            self._adopt_open_session()
-        if self._session_open and (not usable or completed != self._state['completed_steps']):
-            self._mark_lost()
-
-    def _parameters(self, train):
-        """The twelve scalars every native step call reads: action, committed
-        step and the optimizer configuration."""
-        cfg = self._state['config']
-        return [int(train), self._state['completed_steps'], cfg['kind'], cfg['lr'],
-                cfg['beta1'], cfg['beta2'], cfg['eps'], cfg['weight_decay'],
-                cfg['momentum'], cfg['dampening'], int(cfg['nesterov']), cfg['max_norm']]
 
     def load_state_dict(self, state):
         """Replace the complete training state.
@@ -1037,32 +579,12 @@ class SmallByteLanguageModelTrainer:
         return _LM_TRAINER(self, "load_state", (state,), _LM_TRAINER_CONTEXT)
 
     def _binding(self):
-        binding = _load(state_shape(self._state))
-        if binding is not self._runtime_binding:
-            self._suspend_session()
-            self._runtime = None
-            self._runtime_binding = binding
-        if self._runtime is None:
-            # the run metadata of the binding in use; the native train_step
-            # resolves the binding without it and leaves it for this read
-            self._runtime = _binding_metadata(binding, state_shape(self._state))
-        return binding
-
-    def _is_resident(self):
-        """Lock held. Resolve AUTO (`resident=None`, cpu2-l11-neural): the
-        resident session when the binding carries every session entry, the
-        stateless path otherwise. An explicit bool is returned as given."""
-        # F03 M3 2026-10-06 confirms this already-enabled default: explicit
-        # resident vs stateless 12-step trajectories B/A=0.5125 and0.5565,
-        # vocab257/131, shape[2,7,24,3,1,8,40,2,V], seed738. Heldout loss
-        # and checkpoint resume error equal; failed-update recovery captured.
-        # One warmup+one scored trajectory; caller67d0efb29 and reused binary
-        # provenance: ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/
-        # results/F03/default. No compile/identity retest, no new API default.
-        if self._resident is None:
-            binding = self._binding()
-            self._resident = all(callable(getattr(binding, name, None)) for name in _SESSION_ENTRIES)  # glue: binding entry names
-        return self._resident
+        # glue: the loaded byte LM binding of the process tier, read only. Its
+        # remaining callers are tools/byte_lm_model_pool_check.py and
+        # tools/byte_lm_offload_check.py (fault-hook probes). The trainer door
+        # admits the binding, suspends a session on a change and computes the
+        # run metadata natively (bindings/byte_lm_trainer_native.mojo `_binding`).
+        return _load(state_shape(self._state))
 
     def run_metadata(self):
         """Profile, configuration, schedule and binary details of this run.
@@ -1075,110 +597,6 @@ class SmallByteLanguageModelTrainer:
         dict
         """
         return _LM_TRAINER(self, "run_metadata", (), _LM_TRAINER_CONTEXT)
-
-    def _run(self, ids, train):
-        """`train_step` / `evaluate`: the ids are checked and copied here, and
-        ONE native call does the rest (admission, step or evaluation,
-        gradient export, rollback on failure)."""
-        shape = state_shape(self._state)
-        tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', '<i4')
-        try:
-            if self._is_resident():
-                return self._run_resident(tokens, train, shape)
-            return self._run_stateless(tokens, train, shape)
-        except BaseException as exc:
-            if not isinstance(exc, ValueError) and _TOKEN_REFUSAL in str(exc):
-                raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})') from exc
-            raise
-
-    def _run_stateless(self, tokens, train, shape):
-        """ONE native call (`byte_lm_trainer_run`): the binding admits the
-        host state and the ids, builds and destroys one device context,
-        validates the new state on the device, requires an evaluation to
-        leave the state bit-identical and the inputs unchanged, and writes
-        the new state, the loss and the gradient (flat and by name). The
-        new state is committed only after the call returned."""
-        state = self._state
-        if train and state['completed_steps'] >= 999999:
-            raise ValueError('Byte-LM native call step counter is exhausted')
-        binding = self._binding()
-        if not callable(getattr(binding, _RUN_ENTRY, None)):
-            raise ImportError('Byte-LM binding lacks %s; rebuild bindings/build_byte_lm.sh' % _RUN_ENTRY)
-        out_p = empty((shape.n_total,), '<f4')
-        out_m = empty((shape.n_total,), '<f4')
-        out_v = empty((shape.n_total,), '<f4')
-        out_flags = empty((shape.n_tensors,), '<i4')
-        out_loss = empty((1,), '<f4')
-        flat, by_name = _gradient_outputs(shape, True) if train else (None, {})
-        addresses = [*(addr_ro(state[key], name='state') for key in ('parameters', 'm', 'v', 'flags')),  # glue: four named state arrays
-                     addr_ro(tokens, name='ids'), addr(out_p, name='out_p'), addr(out_m, name='out_m'),
-                     addr(out_v, name='out_v'), addr(flat, name='out_grad') if train else 0,
-                     addr(out_flags, name='out_flags'), addr(out_loss, name='out_loss')]
-        named = [addr(by_name[name], name='out_grad') for name in by_name]  # glue: one address per model parameter tensor
-        completed = getattr(binding, _RUN_ENTRY)(addresses, named, self._parameters(train),
-                                                 list(shape.native_shape))
-        expected = state['completed_steps'] + int(train)
-        if _is_bool(completed) or not isinstance(completed, int) or completed != expected:
-            raise RuntimeError('Byte-LM returned an invalid completed-step counter')
-        if not train:
-            return float(out_loss[0])
-        self._state = dict(state, parameters=out_p, m=out_m, v=out_v, flags=out_flags,
-                           completed_steps=expected, next_batch_index=expected)
-        return dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
-                    next_batch_index=expected, flat_gradients=flat, gradients=by_name)
-
-    def _run_resident(self, tokens, train, shape):
-        """The device-owned step (DEVIATION 2514) in ONE native call
-        (`byte_lm_trainer_step`, training/byte_lm_session_ops.mojo
-        `byte_owner_step`): the ids are admitted, the host state is admitted
-        and uploaded when no session is open, the step or evaluation runs,
-        and for 'full' the gradient is exported and split by name. Nothing
-        but the ids crosses inward once the session is open; the loss, the
-        flags and (for 'full') the gradient cross outward. A failure is
-        rolled back on the device before it propagates; the host counter
-        and flags commit only after the call returned."""
-        self._require_not_lost()
-        binding = self._session_entries()
-        completed = self._state['completed_steps']
-        if train and completed >= 999999:
-            raise ValueError('Byte-LM native call step counter is exhausted')
-        session = self._session_handle(binding)
-        full = train and self._step_result == 'full'
-        out_loss = empty((1,), '<f4')
-        out_flags = empty((shape.n_tensors,), '<i4') if train else None
-        flat, by_name = _gradient_outputs(shape, True) if full else (None, {})
-        addresses = [addr_ro(tokens, name='ids'), addr_ro(self._state['flags'], name='flags'),
-                     *self._admission_addresses(), addr(out_loss, name='out_loss'),
-                     addr(out_flags, name='out_flags') if train else 0,
-                     addr(flat, name='out_grad') if full else 0,
-                     *(addr(by_name[name], name='out_grad') for name in by_name)]  # glue: one address per model parameter tensor
-        if train:
-            self._grad_step = -1
-        try:
-            returned = binding.byte_lm_trainer_step(session, addresses, self._parameters(train),
-                                                    list(shape.native_shape))
-        except BaseException:
-            self._after_native_failure()
-            raise
-        self._adopt_open_session()
-        expected = completed + int(train)
-        if _is_bool(returned) or not isinstance(returned, int) or returned != expected:
-            self._mark_lost()
-            raise RuntimeError('Byte-LM returned an invalid completed-step counter')
-        _mode()
-        if not train:
-            return float(out_loss[0])
-        result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
-                      next_batch_index=expected)
-        if full:
-            result.update(flat_gradients=flat, gradients=by_name)
-        else:
-            result['flags'] = out_flags.copy()
-        self._state['flags'] = out_flags
-        self._state['completed_steps'] = expected
-        self._state['next_batch_index'] = expected
-        self._grad_step = expected
-        return result
 
     def train_step(self, ids):
         """Run one training step: mean cross-entropy loss and an AdamW update.
@@ -1340,73 +758,6 @@ class SmallByteLanguageModelTrainer:
         """
         return _LM_TRAINER(self, "next_bytes", (ids, lengths), _LM_TRAINER_CONTEXT)
 
-    def _logits_call(self, entry_name, tokens, out, batch, length, shape):
-        """Lock held, resident. ONE native call (`byte_lm_trainer_logits` or
-        `byte_lm_trainer_next_bytes`, training/byte_lm_session_ops.mojo
-        `byte_owner_logits`): the ids are admitted, the host state is
-        admitted and uploaded when no session is open, and the forward runs
-        on the session. No state is written, so a failure rolls nothing back;
-        the last gradient is no longer exportable, and a session that no
-        longer reports itself usable at the committed step is lost."""
-        self._require_not_lost()
-        binding = self._session_entries((entry_name,))
-        session = self._session_handle(binding)
-        addresses = [addr_ro(tokens, name='ids'), addr(out, name='out'),
-                     addr_ro(self._state['flags'], name='flags'), *self._admission_addresses()]
-        try:
-            written = getattr(binding, entry_name)(session, addresses, [batch, length],
-                                                   self._parameters(False), list(shape.native_shape))
-        except BaseException:
-            self._after_native_failure()
-            raise
-        self._adopt_open_session()
-        _require_written(written, batch if entry_name == _SESSION_NEXT_ENTRY else batch * length * shape.vocab_size)
-        _mode()
-        return out
-
-    def _next_bytes_resident(self, tokens, batch, length, shape):
-        out = zeros((batch,), '<i4')
-        return self._logits_call(_SESSION_NEXT_ENTRY, tokens, out, batch, length, shape).tolist()
-
-    def _logits_stateless(self, tokens, batch, length, shape):
-        """ONE native call (`byte_lm_logits`): the binding copies and admits
-        the parameters and the ids before any device work, builds and
-        destroys one device context and writes the logits."""
-        binding = self._binding()
-        entry = getattr(binding, _LOGITS_ENTRY, None)
-        if not callable(entry):
-            raise ImportError('Byte-LM binding lacks GPU logits (%s); rebuild bindings/build_byte_lm.sh'
-                              % _LOGITS_ENTRY)
-        out = zeros((batch, length, shape.vocab_size), '<f4')
-        written = entry([addr_ro(self._state['parameters'], name='parameters'), addr_ro(tokens, name='ids'),
-                         addr(out, name='logits')], [batch, length], list(shape.native_shape))
-        _require_written(written, batch * length * shape.vocab_size)
-        _mode()
-        return out
-
-    def _logits_resident(self, tokens, batch, length, shape):
-        timing = bool(os.environ.get('MOJOLEARN_TRANSFORMER_TIMING'))
-        t0 = _time.perf_counter() if timing else 0.0
-        pool = getattr(self, '_logits_pool', None)
-        if pool is None:
-            pool = self._logits_pool = _LogitsPool()
-        n_out = batch * length * shape.vocab_size
-        store = pool.take(n_out)
-        if store is None:
-            out = _PooledLogits((batch, length, shape.vocab_size), '<f4')
-            reused = 'fresh'
-        else:
-            out = _PooledLogits._owned(store, (batch, length, shape.vocab_size), '<f4', 'C')
-            reused = 'pooled'
-        out._pool = pool
-        if timing:
-            t1 = _time.perf_counter()
-            print('timing python.logits_out %.3f ms %s' % ((t1 - t0) * 1000.0, reused), flush=True)
-        self._logits_call(_SESSION_LOGITS_ENTRY, tokens, out, batch, length, shape)
-        if timing:
-            print('timing python.logits_binding %.3f ms' % ((_time.perf_counter() - t1) * 1000.0), flush=True)
-        return out
-
     def save_checkpoint(self, path):
         """Same as :meth:`export_checkpoint`."""
         return _LM_TRAINER(self, "export_checkpoint", (path,), _LM_TRAINER_CONTEXT)
@@ -1527,57 +878,6 @@ class SmallByteLanguageModelTrainer:
         return _LM_TRAINER(cls, "from_checkpoint_bytes", (encoded, resident), _LM_TRAINER_CONTEXT)
 
 
-def _decode_checkpoint(encoded):
-    """`(state, shape)` from checkpoint bytes, every schema, integrity,
-    tensor, optimizer and cursor check applied, no native call. Shared by
-    `from_checkpoint_bytes` and the CPU inference loader (DEVIATION 2610),
-    so there is one decoder."""
-    if type(encoded) is not bytes:
-        raise TypeError('Byte-LM checkpoint capture must be immutable bytes')
-    if len(encoded) > _CHECKPOINT_LIMIT:
-        raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
-    try:
-        envelope = json.loads(encoded, object_pairs_hook=_unique_object)
-    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise ValueError('Byte-LM checkpoint is not valid bounded JSON') from exc
-    if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'payload', 'payload_sha256'}
-            or envelope['schema'] != _CHECKPOINT_SCHEMA):
-        raise ValueError('Byte-LM checkpoint schema mismatch')
-    payload = envelope['payload']
-    if _sha256_hex(_canonical(payload)) != envelope['payload_sha256']:
-        raise ValueError('Byte-LM checkpoint integrity mismatch')
-    if not isinstance(payload, dict):
-        raise ValueError('Byte-LM checkpoint payload must be an object')
-    shape = state_shape(payload)
-    for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
-        value = payload.get(key)
-        cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
-        if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
-                or value['dtype'] != dtype or value['shape'] != [cells]
-                or not isinstance(value['hex'], str) or len(value['hex']) != cells * 8):
-            raise ValueError('Byte-LM checkpoint tensor descriptor mismatch')
-        try:
-            raw = bytes.fromhex(value['hex'])
-        except ValueError as exc:
-            raise ValueError('Byte-LM checkpoint tensor is not hexadecimal') from exc
-        if len(raw) != cells * 4:
-            raise ValueError('Byte-LM checkpoint tensor byte count mismatch')
-        # `np.frombuffer(raw, dtype).astype(native, copy=True)`:
-        # `_buffer.frombytes` reads the little-endian bytes into a
-        # fresh native Array (DEVIATION 2432).
-        payload[key] = frombytes(raw, dtype, (cells,))
-    return _validate_state(payload), shape
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:  # glue: walks the checkpoint key value pairs
-        if key in result:
-            raise ValueError('Duplicate byte-LM checkpoint key')
-        result[key] = value
-    return result
-
-
 def _connect_trainer():
     # glue: connect the GPU trainer's native step owner and its fixed
     # metadata once, at package import
@@ -1611,8 +911,7 @@ def _connect_trainer():
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context.update(byte_lm_bindings=bindings,
                    byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
-                   byte_lm_profile=PROFILE, byte_lm_session_entries=_SESSION_ENTRIES,
-                   byte_lm_run_entry=_RUN_ENTRY, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
+                   byte_lm_profile=PROFILE, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
     module = _tokenizer_binding()._module
     pooled_context = dict(context, array_class=_PooledLogits)
     context.update(byte_lm_pooled_class=_PooledLogits, byte_lm_pooled_context=pooled_context,

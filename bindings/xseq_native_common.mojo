@@ -16,6 +16,10 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.sequential_admission import _one_of
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
+from std.python._cpython import GILReleased
+from core.entry_table import EntryRef
+from core.xseq_entry_table import XseqEntryKey, xseq_glue_ref
+from sequence.xseq_door_run import xseq_run_glue
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
@@ -27,7 +31,6 @@ comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime XI64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime XU8P = MutPointer[UInt8, MutUntrackedOrigin]
-comptime _MODE_CHECKED = "_xseq_numeric_mode_checked"
 
 
 # ---------------------------------------------------------------- the route
@@ -55,26 +58,53 @@ def xseq_mode(fields: PythonObject, context: PythonObject) raises -> PythonObjec
     return mode
 
 
+def _xseq_key_of(mode: PythonObject, context: PythonObject) raises -> XseqEntryKey:
+    """The sequence-table key of the image connected for `mode` (recorded by
+    the bridge at import as `xseq_native_keys`), checked against the mode
+    asked for; the connection error of that mode otherwise."""
+    var key = context["xseq_native_keys"][mode]
+    if py_type(key) is native_loaded_module("builtins").str:
+        raise Error(String(py=key))
+    var code = Int(py=key[0])
+    if code != (1 if String(py=mode) == "identical" else 0):
+        raise Error("RuntimeError: mojolearn: _mojolearn_x_sequence was compiled for the other numeric mode; rebuild the "
+                    + String(py=mode) + " binding")
+    return XseqEntryKey(code, Int(py=key[1]))
+
+
+def xseq_key(fields: PythonObject, context: PythonObject) raises -> EntryRef:
+    """The glue entry of the model's mode, resolved once per operation (lane
+    entry-table-zero-alloc; the table refusals raise here): the forecaster
+    operations run through that image's published glue entry (`xseq_glue`),
+    not through Python entries."""
+    return xseq_glue_ref(_xseq_key_of(xseq_mode(fields, context), context))
+
+
+def xseq_glue(entry: EntryRef, operation: Int, addresses: List[Int], ints: List[Int],
+              floats: List[Float64]) raises -> Int:
+    """One synchronous call of the image's glue entry
+    (core/xseq_entry_table.mojo layouts) with the GIL released. The caller
+    keeps every addressed buffer alive."""
+    var result = 0
+    var py = Python()
+    with GILReleased(py):
+        result = xseq_run_glue(entry, operation, addresses, ints, floats)
+    return result
+
+
 def xseq_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     """The compiled `_mojolearn_x_sequence` entries of the model's mode,
-    connected at import; the connection error of that mode otherwise."""
+    connected at import (the recurrent/MLP doors' whole-model capsule); the
+    connection error of that mode otherwise."""
     var b = native_loaded_module("builtins")
     var mode = xseq_mode(fields, context)
     var entries = context["xseq_bindings"][mode]
-    if Bool(py=py_call(b.isinstance, entries, b.str)):
+    if py_type(entries) is b.str:
         raise Error(String(py=entries))
-    # perf3-seq-neural: the compiled mode word of a connected entry table
-    # never changes, so it is asked once per table and the answer is kept in
-    # the table next to the provider (`native_model_provider`), tied to the
-    # very entry function it came from: a replaced entry is asked again.
-    var query = entries["x_sequence_numeric_mode"]
-    if py_get(entries, _MODE_CHECKED) is query:
-        return entries
-    var actual = Int(py=py_call_typed(query))
-    if actual != (1 if String(py=mode) == "identical" else 0):
-        raise Error("RuntimeError: mojolearn: _mojolearn_x_sequence was compiled for the other numeric mode; rebuild the "
-                    + String(py=mode) + " binding")
-    py_setitem(entries, _MODE_CHECKED, query)
+    # The compiled-mode check reads the key the bridge recorded at import;
+    # it replaced the per-table `x_sequence_numeric_mode` Python call and the
+    # `_xseq_numeric_mode_checked` memo that cached it (lane calltable-xseq).
+    _ = _xseq_key_of(mode, context)
     return entries
 
 
@@ -296,6 +326,7 @@ struct XseqStream(Movable):
     def fill_uniform(mut self, context: PythonObject, address: PythonObject, n: Int, low: Float64, high: Float64) raises:
         """n float32 values U(low, high) at `address`; advances the counter."""
         if n:
+            # call-table: base helper (the base binding's `uniform_init_f32`; xcnn's caller)
             _ = py_call_typed(xseq_base(context, "uniform_init_f32"), address, PythonObject(n), PythonObject(low),
                               PythonObject(high), PythonObject(Int(self.seed & 0xFFFFFFFF)),
                               PythonObject(Int(self.seed >> 32)), PythonObject(self.offset))

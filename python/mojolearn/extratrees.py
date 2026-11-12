@@ -167,26 +167,6 @@ def _refuse_forest_knobs(n_jobs, verbose):
         )
 
 
-def _max_features_slots(max_features):
-    """sklearn's max_features forms into (spec, fraction)."""
-    if max_features is None:
-        return _MF_ALL, 0.0
-    if isinstance(max_features, str):
-        if max_features == "sqrt":
-            return _MF_SQRT, 0.0
-        if max_features == "log2":
-            return _MF_LOG2, 0.0
-        raise ValueError(
-            f"max_features={max_features!r} is not a recognised form; sklearn"
-            " accepts 'sqrt', 'log2', None, a float fraction or an int count"
-        )
-    if isinstance(max_features, numbers.Integral) and not is_bool(
-        max_features
-    ):
-        return int(max_features), 0.0
-    return 0, float(max_features)
-
-
 def _n_samples_bootstrap(n_rows, max_samples):
     """sklearn's `_get_n_samples_bootstrap` (`ensemble/_bootstrap.py:10-62`,
     unweighted branch), as the COUNT slot 18 carries: None -> 0 (meaning

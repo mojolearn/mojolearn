@@ -34,7 +34,7 @@ def native_array_slots(mut mods: NativeModules, context: PythonObject) raises ->
             raise Error("TypeError: neural Array storage descriptors changed")
         py_setitem(slots, names[i], slot)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    for i in range(len(mro)):  # small-loop(mro: Array ancestry): fixed native storage class hierarchy
+    for i in range(len(mro)):  # driver-loop: over the Array class ancestry (fixed native storage class hierarchy)
         var row = _class_fields(mods, mro[i])
         if py_contains(row, "__getattr__") or py_contains(row, "__del__"):
             raise Error("TypeError: neural Array metadata hooks are not supported")
@@ -62,7 +62,7 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     var slots = native_array_slots(mods, context)
     var values = Python.dict()
     var names = py_call(b.list, slots.keys())
-    for i in range(len(names)):  # small-loop(capture native Array metadata once)
+    for i in range(len(names)):  # driver-loop: over the native Array metadata names, captured once
         py_setitem(values, names[i], py_call(slots[names[i]].__get__, value, cls))
     for name in ["_addr", "ndim", "size", "nbytes", "itemsize"]:  # small-loop(native size and address words)
         if py_type(values[name]) is not b.int:
@@ -93,7 +93,7 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
             expected_itemsize = 2
     if code == "" or itemsize != expected_itemsize or len(shape) != len(strides) or Int(py=values["ndim"]) != len(shape):
         raise Error("TypeError: neural Array storage dtype or rank is inconsistent")
-    for i in range(len(shape)):  # small-loop(shape: tensor rank): validates dimension metadata not array elements
+    for i in range(len(shape)):  # driver-loop: over the tensor rank (dimension metadata, not elements)
         if py_type(shape[i]) is not b.int or py_type(strides[i]) is not b.int:
             raise Error("TypeError: neural Array shape/strides require native integers")
         var n = Int(py=shape[i])
@@ -106,7 +106,7 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     if order != "C" and order != "F":
         raise Error("neural Array requires contiguous C or F layout")
     var step = itemsize
-    for i in range(len(shape)):  # small-loop(verify the declared contiguous layout)
+    for i in range(len(shape)):  # driver-loop: over the tensor rank, verifying the declared contiguous layout
         var axis = len(shape) - i - 1 if order == "C" else i
         if count > 0 and Int(py=shape[axis]) > 1 and Int(py=strides[axis]) != step:
             raise Error("neural Array strides differ from its declared layout")
@@ -150,7 +150,7 @@ def native_array_snapshot(mut mods: NativeModules, value: PythonObject, context:
     var retained = py_call(b.memoryview, store)
     var retained_view = py_call(b.memoryview, original_view)
     var result = py_call(b.object.__new__, cls)
-    for i in range(len(names)):  # small-loop(publish passive captured metadata via native slot setters)
+    for i in range(len(names)):  # driver-loop: over the captured metadata names, published via native slot setters
         py_call(slots[names[i]].__set__, result, values[names[i]])
     py_call(slots["_store"].__set__, result, retained)
     py_call(slots["_mv"].__set__, result, retained_view)
@@ -210,12 +210,12 @@ struct NativeArrayAdmission(Copyable, Movable):
         var key = PyObjectPtr()
         var value = PyObjectPtr()
         var next_item = cpy.lib.get_function[Int32]("PyDict_Next")
-        for i in range(len(self.slots)):  # small-loop(slots: fixed Array descriptor schema): cold native capture
+        for i in range(len(self.slots)):  # driver-loop: over the fixed Array descriptor slots (cold native capture)
             if next_item(self.slots._obj_ptr, Pointer(to=position), Pointer(to=key), Pointer(to=value)) == 0:
                 raise Error("native Array descriptor schema changed during capture")
             self.slot_names.append(PythonObject(from_owned=cpy.Py_NewRef(key)))
             self.slot_values.append(PythonObject(from_owned=cpy.Py_NewRef(value)))
-        for i in range(len(self.mro)):  # small-loop(self.mro: Array ancestry): fixed native storage class hierarchy
+        for i in range(len(self.mro)):  # driver-loop: over the Array class ancestry (fixed native storage class hierarchy)
             # Py_TPFLAGS_IMMUTABLETYPE (1 << 8): attributes cannot be set.
             var flags = cpython_table()[].PyType_GetFlags(self.mro[i]._obj_ptr)
             if (flags & UInt64(1 << 8)) == 0:
@@ -228,7 +228,7 @@ struct NativeArrayAdmission(Copyable, Movable):
         if py_call(self.mro_get, cls) is not self.mro:
             return False
         ref cpy = Python().cpython()
-        for i in range(len(self.rows)):  # small-loop(self.rows: Array namespaces): fixed native storage class hierarchy
+        for i in range(len(self.rows)):  # driver-loop: over the Array class namespaces (fixed native storage class hierarchy
             var row = py_call(self.dict_get, self.rows[i])
             var iter_table = cpython_table()
             var raw_iterator = iter_table[].PyObject_GetIter(row._obj_ptr)
@@ -239,7 +239,7 @@ struct NativeArrayAdmission(Copyable, Movable):
             # after the last GIL window. Native iteration avoids constructing a
             # Python keys view and list on every check; exact strings still
             # prevent foreign hash/equality hooks during the later lookups.
-            for k in range(len(row)):  # small-loop(row: class namespace): validate every live metadata name first
+            for k in range(len(row)):  # driver-loop: over one class namespace's metadata names, validated first
                 var raw_key = iter_table[].PyIter_Next(iterator._obj_ptr)
                 if not raw_key:
                     if cpy.PyErr_Occurred():

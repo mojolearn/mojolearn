@@ -88,7 +88,7 @@ def _h9(c0: Float64, c1: Float64, c2: Float64, c3: Float64, c4: Float64, c5: Flo
 
 
 def erfc64(x: Float64) -> Float64:
-    """`_portable_math.erfc`: fdlibm's erfc in binary64 on the pinned exp."""
+    """fdlibm's erfc in binary64 on the pinned exp."""
     if x != x:
         return x
     var hx = Int((bitcast[DType.uint64](x) >> 32) & 0xFFFFFFFF)
@@ -147,12 +147,12 @@ def erfc64(x: Float64) -> Float64:
 
 
 def normal_cdf64(x: Float64) -> Float64:
-    """`_portable_math.normal_cdf`: 0.5 erfc((0 - x) / sqrt 2)."""
+    """0.5 erfc((0 - x) / sqrt 2)."""
     return _m(0.5, erfc64((0.0 - x) / _m(1.0, _SQRT2)))
 
 
 def normal_inv_cdf64(p: Float64) -> Float64:
-    """`_portable_math.normal_inv_cdf` (AS241) for 0 < p < 1."""
+    """The standard normal quantile (AS241) for 0 < p < 1."""
     var q = p - 0.5
     if abs(q) <= 0.425:
         var r = 0.180625 - _m(q, q)

@@ -53,17 +53,22 @@ def classical_family_admit(model: PythonObject) raises -> PythonObject:
         if py_get(layouts, known["mro"][0]) is known:
             return _family_instance_fields(b, model, cls, known)
     var ancestry = _type_mro(cls)
-    var plan = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel read and reassigned in the
+    # loop: the modular/modular#7546 pattern, suspected of a wrong reference
+    # drop under Mojo 1.2.0 (runtime-fix-save-forest). Same reads, same order.
+    var found = Optional[PythonObject]()
     var start = -1
     for i in range(len(ancestry)):  # driver-loop: locate a connected owner without invoking subclass protocols
         if py_type(ancestry[i]) is not b.type:
             raise Error("TypeError: native family operations refuse Python metaclass hooks")
-        if plan is None:
-            plan = py_get(layouts, ancestry[i])
-            if plan is not None:
+        if not found:
+            var candidate = py_get(layouts, ancestry[i])
+            if candidate is not None:
+                found = candidate
                 start = i
-    if plan is None:
+    if not found:
         raise Error("TypeError: native family operation requires a connected estimator class")
+    var plan = found.value()
     # Prepared class admission: the ancestry, storage-hook and descriptor
     # checks below depend only on the class rows; they run on first use and
     # again whenever any mutable row's namespace changed (identity stamp of

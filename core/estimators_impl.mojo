@@ -3,7 +3,7 @@
 """Typed device work of the `_mojolearn_estimators` binding.
 
 The Python door stays in `bindings/_mojolearn_estimators.mojo`: it unpacks
-PythonObject arguments, takes the binding's process context, calls one
+Python object arguments, takes the binding's process context, calls one
 function here and returns. The kernels, their launches and the whitening
 overlap refusal live here with no Python import, word for word as they were
 in the binding (lane thin-core, 2026-10-21: a pure move, no bit change).

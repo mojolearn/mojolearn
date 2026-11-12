@@ -316,16 +316,6 @@ def _finite_array(a):
     return all_finite(a)
 
 
-def _integral(obj):
-    """True when every value of a float label vector is a whole number. The
-    device `unique_inverse` (`_labels`) finds the k distinct values and the
-    core helper `reduce_stat` tests only those k, so no host pass runs over
-    the rows. A y that is not a float vector answers True (not tested)."""
-    from ._buffer import _materialize
-    a, _ = _materialize(obj, "y")
-    return _integral_array(a)
-
-
 def _integral_array(a):
     from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
     from ._buffer import _native, addr_ro

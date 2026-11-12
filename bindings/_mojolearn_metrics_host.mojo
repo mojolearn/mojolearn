@@ -72,6 +72,7 @@ from core.hostptr import f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import i32_ptr
+from metrics.host.r2_entry_host import _check_float_pair, _r2_value, _r2_weighted_value, publish_metrics_r2_host
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
     host_spectral_embedding_coo,
@@ -161,17 +162,6 @@ def _want(name: String, params: PythonObject, k: Int) raises:
         raise Error(
             name + ": params must contain " + String(k) + " values, got "
             + String(len(params))
-        )
-
-
-def _check_float_pair(a: List[Float32], b: List[Float32], n: Int) raises:
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    if len(a) < n or len(b) < n:
-        raise Error(
-            "metrics: the two float arrays hold " + String(len(a)) + " and "
-            + String(len(b)) + " entries, both must hold at least n = "
-            + String(n)
         )
 
 
@@ -351,12 +341,12 @@ def r2_score_weighted_binding(
     """Weighted R2 on the host (`force_finite=True`). `params`: `0 n`."""
     _want(String("r2_score_weighted"), params, 1)
     var n = _index(params[0])
-    var y = read_f32(_index(y_addr), n)
-    var yh = read_f32(_index(y_hat_addr), n)
-    var w = read_f32(_index(w_addr), n)
+    var y_word = _index(y_addr)
+    var yh_word = _index(y_hat_addr)
+    var w_word = _index(w_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        out = host_weighted_r2(y, yh, w, n)
+        out = _r2_weighted_value(y_word, yh_word, w_word, n)
     return PythonObject(Float64(out))
 
 
@@ -489,12 +479,11 @@ def r2_score_binding(
     (DEVIATIONS 653, 657). `params`: `0 n`."""
     _want(String("r2_score"), params, 1)
     var n = _index(params[0])
-    var y = read_f32(_index(y_true_addr), n)
-    var yh = read_f32(_index(y_pred_addr), n)
+    var y_word = _index(y_true_addr)
+    var yh_word = _index(y_pred_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        _check_float_pair(y, yh, n)
-        out = host_r2_score(y, yh, n)
+        out = _r2_value(y_word, yh_word, n)
     return PythonObject(Float64(out))
 
 
@@ -1306,6 +1295,9 @@ def build__mojolearn_metrics_host() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_metrics_host")
+        # R^2 for native callers in other modules (core/metrics_entry_table.mojo);
+        # the Python r2_score entries below stay for mojolearn.metrics.
+        publish_metrics_r2_host()
         module.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         module.def_function[metrics_host_numeric_mode_binding]("metrics_host_numeric_mode")
         module.def_function[metrics_host_vendor_binding]("metrics_host_vendor")

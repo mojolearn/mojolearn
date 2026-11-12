@@ -47,7 +47,9 @@ def test_both_columns_take_n_steps_through_operation_1():
 
 def test_binding_admits_once_and_runs_every_step_in_one_call():
     native = _read('bindings/byte_lm_trainer_native.mojo')
-    assert '"mojolearn.training.byte_lm.v1", 13)' in native
+    # lane byte-lm-sessions-native: the resident session runs through the
+    # image's native session entry (core/byte_lm_entry_table_sessions.mojo)
+    assert 'byte_lm_resident_run(key, handle, operation,' in native
     entry = native.split('def byte_lm_train_steps(')[1].split('def _logits_input(')[0]
     assert entry.count('py_call(lock.acquire)') == 1
     assert entry.count('byte_state_admit(') == 1 and entry.count('_admitted_shape(') == 1
@@ -62,7 +64,7 @@ def test_binding_admits_once_and_runs_every_step_in_one_call():
 def test_step_descriptors_are_native_words():
     native = _read('bindings/byte_lm_trainer_native.mojo')
     resident = native.split('def _run_resident(')[1].split('def _run_stateless(')[0]
-    assert '_native_execute_words(fields, binding, provider, 1, a,' in resident
+    assert '_native_execute(fields, 1, a,' in resident
     assert 'var a = List[Int]()' in resident
 
 
@@ -84,7 +86,9 @@ def test_ragged_next_bytes_picks_on_the_device_and_natively_on_the_host():
     assert 'owner[].next_rows(' in host
     native = _read('bindings/byte_lm_trainer_native.mojo')
     body = native.split('def byte_lm_logits(')[1].split('def _registry(')[0]
-    assert 'args[1] is None or provider is not None' in body
+    # every byte LM image carries the trainer table (lane calltable-byte-lm)
+    assert 'var direct_next = next_bytes and resident' in body
+    assert 'provider is None' not in body and 'py_call_typed' not in body
 
 
 def test_pool_and_offload_exports_write_into_the_caller():

@@ -4,7 +4,7 @@
 column).
 
 The Python door stays in `bindings/_mojolearn_estimators_host.mojo`: it
-unpacks PythonObject arguments, releases the GIL, calls one function here
+unpacks Python object arguments, releases the GIL, calls one function here
 and converts the result back. The validation, the oracle calls and every
 copy of a result into the caller's buffers live here with no Python import,
 word for word as they were in the binding (lane thin-core, 2026-10-21: a

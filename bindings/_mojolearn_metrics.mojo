@@ -57,6 +57,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 # ("MojolearnMetricsContext*V3", core/neural_context.mojo) is now named by
 # its users: umap/ops_entry_device.mojo, metrics/estimator.mojo and the
 # spectral modules.
+from metrics.r2_entry_device import _r2_value, _r2_weighted_value, publish_metrics_r2_device
 
 from std.memory import unsafe_memcpy
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
@@ -298,12 +299,12 @@ def r2_score_weighted_binding(
     """
     _want(String("r2_score_weighted"), params, 1)
     var n = Int(py=params[0])
-    var y = _load_f32(Int(py=y_addr), n)
-    var yh = _load_f32(Int(py=y_hat_addr), n)
-    var w = _load_f32(Int(py=w_addr), n)
+    var y_word = Int(py=y_addr)
+    var yh_word = Int(py=y_hat_addr)
+    var w_word = Int(py=w_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        out = r2_score_weighted_host(y, yh, w, n)
+        out = _r2_weighted_value(y_word, yh_word, w_word, n)
     return PythonObject(Float64(out))
 
 
@@ -458,11 +459,11 @@ def r2_score_binding(
     """
     _want(String("r2_score"), params, 1)
     var n = Int(py=params[0])
-    var y = _load_f32(Int(py=y_true_addr), n)
-    var yh = _load_f32(Int(py=y_pred_addr), n)
+    var y_word = Int(py=y_true_addr)
+    var yh_word = Int(py=y_pred_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        out = r2_score_host(y, yh, n)
+        out = _r2_value(y_word, yh_word, n)
     return PythonObject(Float64(out))
 
 
@@ -1458,6 +1459,9 @@ def build__mojolearn_metrics() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
+        # R^2 for native callers in other modules (core/metrics_entry_table.mojo);
+        # the Python r2_score entries below stay for mojolearn.metrics.
+        publish_metrics_r2_device()
         m.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch

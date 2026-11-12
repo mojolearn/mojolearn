@@ -6,15 +6,20 @@
 # Numerical exports still use the existing packed CPython extension ABI; a
 # descriptor-only ANN provider remains explicit migration work. No arithmetic
 # or vendor identity lane is introduced by these boundary repairs.
-from std.memory import unsafe_memcpy, MutPointer
 from std.python import Python, PythonObject
+from x_ann.neighbors_ann_run import (
+    ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_known, ivf_metric_refusal, ivf_check_n_lists, ivf_fit_plan,
+    pq_fit_plan, ann_check_n_lists, sq_check_train_per_list, rabitq_code_words, cagra_degrees,
+    cagra_copy_dataset, refine_metric_known, refine_metric_refusal, refine_metric_root, refine_check_features, refine_candidates_refusal,
+    refine_candidates_k0, refine_check_candidate_kind, refine_narrow_ids, refine_check_status,
+)
 from bindings.admitted_family import admit_family_meta
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_drop
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_setattr
-from bindings.classical_arrays import classical_address, classical_kind, classical_is_array
+from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_validate import classical_view, classical_refuse_sparse, classical_estimator_name
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding_mode
@@ -22,10 +27,9 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from bindings.family_common import (
-    FAMILY_I32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
+    family_repr, family_str, family_call, family_array,
     family_field, family_type_name,
 )
-from core.admitted_ids import admitted_ids_i32
 # TOMBSTONE: ann_candidates_i32 / _ann_item (core/neighbors_ann_impl.mojo, a two-pass serial byte walk, merged into admit_ids) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 from bindings.parallel_public_result import parallel_public_result
@@ -63,8 +67,7 @@ def _ann_param(fields: PythonObject, owner: String, name: String) raises -> Pyth
 def _ann_empty(count: Int, typestr: String, context: PythonObject) raises -> PythonObject:
     """`_buffer.empty((count,), typestr)`: a zero-filled C-order Array, with
     `Array`'s refusal of a negative dimension."""
-    if count < 0:
-        raise Error("mojolearn: negative dimension in shape (" + String(count) + ",)")
+    ann_check_dimension(count)
     return family_array(Python.tuple(count), typestr, context)
 
 
@@ -73,18 +76,14 @@ def _ann_view(other: PythonObject, shape: PythonObject, context: PythonObject) r
     same memory under a new shape, `other` kept alive through `_base`."""
     var b = native_loaded_module("builtins")
     var rank = len(shape)
-    var size = 1
+    var dims = List[Int](capacity=rank)
     for k in range(rank):  # driver-loop: over array rank metadata
-        size *= Int(py=shape[k])
+        dims.append(Int(py=shape[k]))
+    var size = ann_shape_size(dims)
     if size != Int(py=other.size):
         raise Error("mojolearn: cannot reshape size " + String(Int(py=other.size)) + " into " + family_repr(shape))
     var item = Int(py=other.itemsize)
-    var steps = List[Int](length=rank, fill=0)
-    var step = item
-    for k in range(rank):  # driver-loop: over array rank metadata
-        var axis = rank - 1 - k
-        steps[axis] = step
-        step *= Int(py=shape[axis])
+    var steps = ann_c_strides(dims, item)
     var strides = Python.list()
     for k in range(rank):  # driver-loop: over array rank metadata
         _ = py_call(strides.append, PythonObject(steps[k]))
@@ -202,9 +201,8 @@ def _ivf_metric(fields: PythonObject, context: PythonObject) raises -> PythonObj
     if py_type(metric) is not b.int and py_type(metric) is not b.float:
         raise Error("TypeError: mojolearn IVFIndex: metric must be an exact native name or code")
     var code = Float64(py=metric)
-    if code != 0.0 and code != 1.0:
-        raise Error("mojolearn IVFIndex: the metric codes are 0 (L2Expanded) and 1 (L2SqrtExpanded), got "
-                    + family_repr(metric))
+    if not ivf_metric_known(code):
+        raise ivf_metric_refusal(family_repr(metric))  # the repr is built only on refusal
     return PythonObject(Int(code))
 
 
@@ -257,12 +255,12 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var seed = _ann_param(fields, "IVFIndex", "random_state")
     var metric = _ivf_metric(fields, context)
     var n_lists = Int(py=n_lists_o)
-    if n_lists < 1:
-        raise Error("mojolearn IVFIndex: n_lists must be at least 1, got " + String(n_lists))
-    var centers = _ann_empty(n_lists * dim, "<f4", context)
-    var norms = _ann_empty(n_lists, "<f4", context)
-    var offsets = _ann_empty(n_lists + 1, "<i4", context)
-    var indices = _ann_empty(n, "<i4", context)
+    ivf_check_n_lists(n_lists)
+    var plan = ivf_fit_plan(n, dim, n_lists)
+    var centers = _ann_empty(plan.centers, "<f4", context)
+    var norms = _ann_empty(plan.norms, "<f4", context)
+    var offsets = _ann_empty(plan.offsets, "<i4", context)
+    var indices = _ann_empty(plan.indices, "<i4", context)
     _ivf_extension(fields, binding, context)
     var params = Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, metric, seed)
     var resident_build = neural_descriptor_entry(binding, "ivf_flat_build_resident", False)
@@ -305,7 +303,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = fitted_freeze(fields["list_offsets_"], context)
         _ = fitted_freeze(fields["list_indices_"], context)
         return model
-    var data = _ann_empty(n * dim, "<f4", context)
+    var data = _ann_empty(plan.data, "<f4", context)
     var build = neural_descriptor_entry(binding, "ivf_flat_build", False)
     if build is None:
         raise Error("ImportError: mojolearn IVFIndex: "
@@ -369,19 +367,13 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var n_lists = Int(py=n_lists_o)
     var pq_dim = Int(py=pq_dim_o)
     var pq_bits = Int(py=pq_bits_o)
-    if not (1 <= pq_dim and pq_dim <= dim):
-        raise Error("mojolearn IVFPQIndex: pq_dim must be in [1, " + String(dim) + "], got " + String(pq_dim))
-    if not (1 <= pq_bits and pq_bits <= 8):
-        raise Error("mojolearn IVFPQIndex: pq_bits must be in [1, 8], got " + String(pq_bits))
-    if not (1 <= n_lists and n_lists <= n):
-        raise Error("mojolearn IVFPQIndex: n_lists must be in [1, " + String(n) + "], got " + String(n_lists))
-    # `-(-dim // pq_dim)`: the ceiling of dim / pq_dim (both positive here).
-    var pq_len = (dim + pq_dim - 1) // pq_dim
-    var n_codes = 1 << pq_bits
-    var centers = _ann_empty(n_lists * dim, "<f4", context)
-    var offsets = _ann_empty(n_lists + 1, "<i4", context)
-    var indices = _ann_empty(n, "<i4", context)
-    var codebooks = _ann_empty(pq_dim * n_codes * pq_len, "<f4", context)
+    var plan = pq_fit_plan(n, dim, n_lists, pq_dim, pq_bits)
+    var pq_len = plan.pq_len
+    var n_codes = plan.n_codes
+    var centers = _ann_empty(plan.centers, "<f4", context)
+    var offsets = _ann_empty(plan.offsets, "<i4", context)
+    var indices = _ann_empty(plan.indices, "<i4", context)
+    var codebooks = _ann_empty(plan.codebooks, "<f4", context)
     var resident_build = neural_descriptor_entry(binding, "x_ann_ivf_pq_build_resident", False)
     if resident_build is not None:
         # x, centers, offsets, list_indices, codebooks (bindings/_mojolearn_x_ann.mojo);
@@ -423,7 +415,7 @@ def _pq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = fitted_freeze(fields["list_indices_"], context)
         _ = fitted_freeze(fields["codebooks_"], context)
         return model
-    var codes = _ann_empty(n * pq_dim, "<i4", context)
+    var codes = _ann_empty(plan.codes, "<i4", context)
     var build = _ann_entry(binding, "x_ann_ivf_pq_build")
     # x, centers, offsets, list_indices, codebooks, codes;
     # n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters.
@@ -479,14 +471,11 @@ def _sq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, owner, "n_lists")
     var n_lists = Int(py=n_lists_o)
-    if not (1 <= n_lists and n_lists <= n):
-        raise Error("mojolearn IVFSQIndex: n_lists must be in [1, " + String(n) + "], got " + String(n_lists))
+    ann_check_n_lists(owner, n, n_lists)
     var train_per_list = PythonObject(0)  # 0: the binding's default training rows
     if family_field(fields, "max_train_points_per_cluster") is not None:
         train_per_list = _ann_param(fields, owner, "max_train_points_per_cluster")
-        if Int(py=train_per_list) < 1:
-            raise Error("mojolearn IVFSQIndex: max_train_points_per_cluster must be positive or None, "
-                        + "got " + String(Int(py=train_per_list)))
+        sq_check_train_per_list(Int(py=train_per_list))
     var centers = _ann_empty(n_lists * dim, "<f4", context)
     var offsets = _ann_empty(n_lists + 1, "<i4", context)
     var indices = _ann_empty(n, "<i4", context)
@@ -547,12 +536,8 @@ def _rabitq_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, owner, "n_lists")
     var n_lists = Int(py=n_lists_o)
-    if not (1 <= n_lists and n_lists <= n):
-        raise Error("mojolearn IVFRaBitQIndex: n_lists must be in [1, " + String(n) + "], got " + String(n_lists))
-    var D = 1
-    while D < dim:  # small-loop(D: the power-of-two ceiling of the feature count, at most 63 doublings)
-        D *= 2
-    var words = (D + 31) // 32
+    ann_check_n_lists(owner, n, n_lists)
+    var words = rabitq_code_words(dim)
     var centers = _ann_empty(n_lists * dim, "<f4", context)
     var offsets = _ann_empty(n_lists + 1, "<i4", context)
     var indices = _ann_empty(n, "<i4", context)
@@ -613,8 +598,10 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var d = x_snapshot.shape[1]
     # `min(self._p("intermediate_graph_degree"), n - 1)`, then
     # `min(self._p("graph_degree"), kdeg)`
-    var kdeg = min(Int(py=_ann_param(fields, owner, "intermediate_graph_degree")), n - 1)
-    var deg = min(Int(py=_ann_param(fields, owner, "graph_degree")), kdeg)
+    var intermediate = Int(py=_ann_param(fields, owner, "intermediate_graph_degree"))
+    var degrees = cagra_degrees(n, intermediate, Int(py=_ann_param(fields, owner, "graph_degree")))
+    var kdeg = degrees[0]
+    var deg = degrees[1]
     var graph = _ann_empty(n * deg, "<i4", context)
     var build = _ann_entry(binding, "x_ann_cagra_build")
     # x, graph_out; n, d, intermediate_graph_degree, graph_degree
@@ -631,8 +618,7 @@ def _cagra_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         dataset = x_snapshot.keep
     else:
         var flat = _ann_empty(n * d, "<f4", context)
-        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flat))),
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_snapshot.source.addr), count=n * d)
+        cagra_copy_dataset(Int(py=classical_address(flat)), x_snapshot.source.addr, n * d)
         _ = x_snapshot  # the source storage stays alive through the copy above
         dataset = _ann_view(flat, Python.tuple(n, d), context)
     py_setitem(fields, "dataset_", dataset)
@@ -669,9 +655,10 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var metric = args[5]
     if py_type(metric) is not b.str:
         raise Error("TypeError: mojolearn refine: metric must be an exact native string")
-    if not py_contains(Python.tuple("sqeuclidean", "euclidean"), metric):
-        raise Error("mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
-                    + "(inner product is not implemented), got " + family_repr(metric))
+    var metric_name = String(metric)
+    if not refine_metric_known(metric_name):
+        raise refine_metric_refusal(family_repr(metric))  # the repr is built only on refusal
+    var root = refine_metric_root(metric_name)
     # Lane a8b-device-x-neighbors-rest: a NaN or an infinity in the dataset or
     # the queries is refused (they were not tested before): a cast by its own
     # verdict, borrowed float32 words by the entry's one status word (behind
@@ -684,39 +671,30 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var n = x.shape[0]
     var d = x.shape[1]
     var m = q.shape[0]
-    if q.shape[1] != d:
-        raise Error("mojolearn refine: queries have " + String(q.shape[1]) + " features, the dataset has " + String(d))
+    refine_check_features(q.shape[1], d)
     # Native admission precedes candidate rank/dtype reads; never invoke
     # NumPy.asarray or an arbitrary candidate object's array protocols.
     var candidate = classical_view(args[3], context, "candidates")
     var shape = array_shape_once(candidate, context)
-    if len(shape) != 2 or shape[0] != m:
-        raise Error("mojolearn refine: candidates must be an integer array of shape (" + String(m) + ", k0)")
-    var k0 = shape[1]
+    var k0 = refine_candidates_k0(shape, m)
     var c = array_metadata_once(candidate, shape^, "candidates", context, True)
-    if c.source.kind != CAST_KIND_SIGNED and c.source.kind != CAST_KIND_UNSIGNED:
-        raise Error("mojolearn refine: candidates must be an integer array of shape (" + String(m) + ", k0)")
+    refine_check_candidate_kind(c.source.kind == CAST_KIND_SIGNED or c.source.kind == CAST_KIND_UNSIGNED, m)
     # Without NumPy the native sequence owner represents a bool sequence as
     # int8. Retain asarray's boolean refusal while accepting real int8 buffers.
     if (py_type(args[3]) is b.list or py_type(args[3]) is b.tuple) and _ann_bool_sequence(args[3]):
-        raise Error("mojolearn refine: candidates must be an integer array of shape (" + String(m) + ", k0)")
+        raise Error(refine_candidates_refusal(m))
     var k_o = _ann_int("refine", "k", args[4])
     var k = Int(py=k_o)
     var native = estimator_binding_mode(args[6], "_mojolearn_x_ann", context) if args[0] is None else args[0]
     # The kernel skips every id outside [0, n) (refine_core.refine_cell); an
-    # id beyond int32 is refused here, then the ids are narrowed to int32.
+    # id beyond int32 is refused in RUN, then the ids are narrowed to int32.
     var c32 = _ann_empty(m * k0, "<i4", context)
-    if m * k0 > 0:
-        var fits = admitted_ids_i32(c.source.addr, c.source.s0, c.source.s1, m, k0,
-                                      c.source.itemsize, c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order,
-                                      FAMILY_I32P(unsafe_from_address=Int(py=classical_address(c32))))
-        _ = c
-        _ = c32
-        if not fits:
-            raise Error("mojolearn refine: a candidate index exceeds int32")
+    refine_narrow_ids(c.source.addr, c.source.s0, c.source.s1, m, k0, c.source.itemsize,
+                      c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order, Int(py=classical_address(c32)))
+    _ = c
+    _ = c32
     var dist = _ann_empty(m * k, "<f4", context)
     var idx = _ann_empty(m * k, "<i4", context)
-    var root = Bool(py=metric == PythonObject("euclidean"))
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(m), PythonObject(k0), k_o,
                              PythonObject(1 if root else 0))
     if not (x.copied and q.copied):
@@ -734,8 +712,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = dist  # keep the Python object alive through the native call above
     _ = idx  # keep the Python object alive through the native call above
     # The dataset's and queries' finite status word (one refusal for either).
-    if status[0] != 0:
-        raise Error("Input dataset or queries contains NaN or infinity (refine).")
+    refine_check_status(Int(status[0]))
     _ = status^
     return parallel_public_result(Python.tuple(_ann_view(dist, Python.tuple(m, k), context),
                                   _ann_view(idx, Python.tuple(m, k), context)),

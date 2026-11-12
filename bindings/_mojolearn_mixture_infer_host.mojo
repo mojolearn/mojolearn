@@ -6,9 +6,10 @@ sample
 on a CPU-only install (the neighbors and density inference lane,
 2026-09-15).
 
-This is the mixture binary a wheel ships. It registers the four scoring
-entries of `bindings/mixture_host_scoring.mojo`, the same functions the
-reference binding `bindings/_mojolearn_mixture_host.mojo` registers, and no
+This is the mixture binary a wheel ships. It registers the typed transport
+`mixture_native_api_v1` the mixture door scores through
+(mixture/host/gmm_native_infer_host.mojo, the reference binding's scoring
+body) and `gmm_sample` of `bindings/mixture_host_scoring.mojo`, and no
 fit: `gmmh_fit`, the EM loop, the k-means and random starts are not
 imported, so they are not compiled into this file. `mojolearn.host_model`
 loads a saved GaussianMixture into a host class that binds this file
@@ -25,13 +26,9 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.mixture_host_scoring import (
-    gmm_sample_binding,
-    gmm_predict_binding,
-    gmm_predict_proba_binding,
-    gmm_score_bic_aic_binding,
-    gmm_score_samples_binding,
-)
+from bindings.mixture_host_scoring import gmm_sample_binding
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from mixture.host.gmm_native_infer_host import GMM_NATIVE_INFER_HOST_API
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -72,6 +69,14 @@ def mixture_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
+def mixture_native_api_v1_binding() raises -> PythonObject:
+    """The typed GaussianMixture transport (core/mixture_native_api.mojo)
+    the mixture door (bindings/mixture_native.mojo) scores a saved model
+    through; its fit refuses (this binding compiles none)."""
+    var api = GMM_NATIVE_INFER_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mixture_infer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -85,11 +90,10 @@ def build__mojolearn_mixture_infer_host() -> PythonObject:
         module.def_function[mixture_infer_host_sabotage_binding]("mixture_infer_host_sabotage")
         module.def_function[mixture_vendor_binding]("mixture_vendor")
         module.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
-        module.def_function[gmm_score_samples_binding]("gmm_score_samples")
-        module.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
-        module.def_function[gmm_predict_binding]("gmm_predict")
-        module.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+        # TOMBSTONE: the GaussianMixture Python scoring entries gmm_score_samples, gmm_predict_proba, gmm_predict and gmm_score_bic_aic (dead: the mixture door scores through mixture_native_api_v1, registered below) deleted 2026-11-11 by 04229c83d5; code recoverable at 04229c83d5^.
+        # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
         module.def_function[gmm_sample_binding]("gmm_sample")
+        module.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_mixture_infer_host: ", e))

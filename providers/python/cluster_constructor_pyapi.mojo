@@ -19,10 +19,16 @@ def cluster_initialize_py(model: PythonObject, values: PythonObject,
     if py_type(schemas) is not b.dict:
         raise Error("TypeError: cluster constructor requires its connected parameter schema")
     var ancestry = _type_mro(py_type(model))
-    var names = PythonObject(None)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found_names = Optional[PythonObject]()
     for i in range(len(ancestry)):  # driver-loop: locate the connected constructor through passive ancestry
-        if names is None:
-            names = py_get(schemas, ancestry[i])
+        if not found_names:
+            var candidate = py_get(schemas, ancestry[i])
+            if candidate is not None:
+                found_names = candidate
+    var names = PythonObject(None)
+    if found_names:
+        names = found_names.value()
     if names is None or py_type(names) is not b.tuple:
         raise Error("TypeError: cluster constructor requires its connected native class")
     if len(values) != len(names):

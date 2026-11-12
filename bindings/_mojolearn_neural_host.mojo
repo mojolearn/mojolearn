@@ -87,6 +87,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.samba_entry_table_neural_host import publish_samba_neural_host_primitives
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
@@ -141,6 +142,8 @@ from transformer.block_options import (
     BLOCK_OPTION_PARAMS,
     BlockOptions,
 )
+from core.neural_entry_neural_host import publish_neural_block_neural_host
+from core.causal_entry_neural_host import publish_causal_neural_host
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -164,7 +167,7 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(addrs)) != n:
         raise Error(what + ": expected " + String(n) + " addresses, got " + String(Int(py=len(addrs))))
     var out = List[Int](capacity=n)
-    for i in range(n):  # small-loop(address argument words, a fixed count per entry point)
+    for i in range(n):  # driver-loop: over argument words (fixed count, not data); small-loop(address argument words, a fixed count per entry point)
         var a = _index(addrs[i])
         if a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -184,7 +187,7 @@ def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raise
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=n + BLOCK_OPTION_ADDRS)
-    for i in range(got):  # small-loop(address argument words plus the fixed options tail)
+    for i in range(got):  # driver-loop: over argument words (fixed count, not data); small-loop(address argument words plus the fixed options tail)
         var a = _index(addrs[i])
         if i < n and i != gate_slot and a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -203,7 +206,7 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=got)
-    for i in range(got):  # small-loop(scalar argument words plus the fixed options tail)
+    for i in range(got):  # driver-loop: over argument words (fixed count, not data); small-loop(scalar argument words plus the fixed options tail)
         out.append(_index(params[i]))
     return out^
 
@@ -299,12 +302,12 @@ def transformer_forward_fresh_binding(
     var opts = BlockOptions.from_params(p, 8)
     # Into `transformer_forward`'s 13 + 11 layout (slots 10 and 11 unused).
     var a = List[Int]()
-    for i in range(10):  # small-loop(fixed address-word layout)
+    for i in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
     a.append(0)
     a.append(0)
     a.append(a0[10])
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(fixed options-tail address words)
+    for i in range(BLOCK_OPTION_ADDRS):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed options-tail address words)
         a.append(a0[11 + i])
     var b = p[0]
     var l = p[1]
@@ -450,7 +453,7 @@ def _shape3(params: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(params)) != n:
         raise Error(what + ": expected " + String(n) + " parameters, got " + String(Int(py=len(params))))
     var out = List[Int](capacity=3)
-    for i in range(3):  # small-loop(the three shape argument words)
+    for i in range(3):  # driver-loop: over argument words (fixed count, not data); small-loop(the three shape argument words)
         out.append(_index(params[i]))
     if out[0] < 1 or out[1] < 1 or out[2] < 1:
         raise Error(what + ": B, L and d_model must be positive")
@@ -555,11 +558,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
         raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
     var a0 = _addrs(addrs, 15, String("mamba3_forward_fresh"))
     var a = List[Int]()
-    for i in range(10):  # small-loop(fixed address-word layout)
+    for i in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
-    for _ in range(10):  # small-loop(fixed address-word layout)
+    for _ in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(0)
-    for i in range(10, 15):  # small-loop(fixed address-word layout)
+    for i in range(10, 15):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
     var b = _index(params[0])
     var l = _index(params[1])
@@ -686,6 +689,12 @@ def build__mojolearn_neural_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_block_neural_host()
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_neural_host()
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         module.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")
@@ -715,6 +724,9 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[embedding_forward_binding]("embedding_forward")
         module.def_function[rms_norm_forward_binding]("rms_norm_forward")
         module.def_function[linear_forward_binding]("linear_forward")
+        # Native Samba callers read this image's primitive entry from the
+        # table, not through the module (lane calltable-samba-mamba).
+        publish_samba_neural_host_primitives()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_neural_host: ", error))

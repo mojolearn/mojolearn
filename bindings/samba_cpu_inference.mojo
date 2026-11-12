@@ -7,7 +7,7 @@ from bindings.samba_state_native import samba_fields, _samba_registry
 from bindings.samba_config_native import samba_config_from_dict, samba_block_shapes
 from bindings.samba_checkpoint_native import samba_checkpoint_read
 from bindings.causal_lm_construct import _model_bindings, _model_block, _model_unpack, _model_profile, _model_shape
-from bindings.causal_lm_public import _native_function
+from bindings.causal_lm_public import _native_function, causal_entry_key
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 
@@ -29,6 +29,8 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
         raise Error("SambaInference: weight dict mismatch: missing or unknown registry names")
     var arrays = bi.dict()
     var format = "float32"
+    # The route's (tier, vendor) key is read once, not once per parameter.
+    var entry_key = causal_entry_key(bindings)
     for i in range(len(registry)):  # driver-loop: over copied CPU inference parameter owners
         var item = registry[i]
         var name = item["name"]
@@ -38,7 +40,7 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
             if format != "float32" and format != tag:
                 raise Error("SambaInference: weights mix packed formats")
             format = tag
-        var unpacked = _model_unpack(value, bindings["linalg"], nc)
+        var unpacked = _model_unpack(value, entry_key, nc)
         var shape = List[Int]()
         for axis in range(len(item["shape"])):  # driver-loop: over tensor shape metadata
             shape.append(Int(py=item["shape"][axis]))

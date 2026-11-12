@@ -409,7 +409,6 @@ DEBT = {
     'bindings/trees_public_lifecycle_native.mojo': {'native_loaded_module': 2},
     'bindings/trees_public_meta.mojo': {'cpython': 1, 'native_loaded_module': 1},
     'bindings/trees_public_meta_lifecycle.mojo': {'native_loaded_module': 1},
-    'bindings/trees_public_score.mojo': {'native_loaded_module': 1},
     'bindings/trees_public_state.mojo': {'native_loaded_module': 2},
     'bindings/trees_staged_input.mojo': {'native_loaded_module': 1},
     'bindings/tsa_admission.mojo': {'cpython': 1, 'native_loaded_module': 6},

@@ -15,12 +15,12 @@
 # same bits). Import-time switches the Python module read once
 # (MOJOLEARN_XN_OLD_ITEMS, MOJOLEARN_XN_UNFUSED_KNN) are read from the
 # context, where the module put them at its import.
-from core.p3nc_scan import p3nc_dense_nnz_f32, p3nc_dense_to_csr_f32
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi import xn_capabilities
-from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, neural_descriptor_execute
+from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.pcs_rng_pyapi import pcs_seed, _pcs_connect
-from std.memory import bitcast
+from x_neighbors.descriptor_schema import xn_operation_id
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.admitted_input import admitted_finite_refuse
@@ -29,17 +29,30 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_is_int, family_is_str, family_isinstance, family_call,
-    family_call_kw, family_entry, family_array, family_field, family_min,
+    family_repr, family_is_int, family_is_str, family_isinstance, family_call, family_call_kw, family_array,
+    family_field, family_min,
 )
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from core.shared_slot import SharedSlot
+from neighbors.neighbors_graph_run import XnOpRequest, xn_f32_word, xn_rows_match_check
+from neighbors.neighbors_semi_run import (
+    xn_achi2_negative_check, xn_achi2_fit_negative, xn_achi2_width, xn_achi2_request, xn_achi2_csr_count,
+    xn_achi2_csr_fill, xn_schi2_skew_check, xn_schi2_missing_fit, xn_schi2_log_request, xn_schi2_transform_request,
+    xn_semi_knn_k, xn_semi_sqdist_request, xn_semi_knn_select_request, xn_semi_knn_sq_request,
+    xn_lp_knn_graph_request, xn_lp_knn_product_request, xn_semi_matmul_request, xn_semi_rbf_request,
+    xn_semi_row_normalize_request, xn_semi_row_argmax_request, xn_lp_laplacian_request, xn_lp_col_degree_request,
+    xn_lp_laplacian_deg_request, xn_lp_alpha_check, xn_lp_static_weight, xn_lp_labels_request,
+    xn_lp_clamp_request, xn_lp_mode, xn_lp_iterate_knn_request, xn_lp_iterate_request, xn_lp_iterations,
+    xn_lp_dense_proba_request,
+)
 
-#: `_expansion_neighbors._U_LOG`, the unary op code of `log(a * x + b)`.
-comptime _SEMI_U_LOG = 1
+# The typed checks, the operation requests (their word order and float32
+# rounding) and the info-word decoding are RUN in
+# neighbors/neighbors_semi_run.mojo; this file is UNPACK/PACK: Python reads,
+# admission, array allocation, publication and the binding calls.
 
 
 # ---------------------------------------------------------------- shared steps
@@ -69,15 +82,10 @@ def _semi_float(value: PythonObject) raises -> Float64:
     return Float64(py=family_call(_semi_b().float, value))
 
 
-def _semi_f32_scalar(value: Float64) -> Float64:
-    """`_f32_scalar`: a Python double rounded once to float32."""
-    return Float64(Float32(value))
-
-
 def _semi_out(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
     """`_buffer.empty(shape, typestr)` (and `_empty_out`): a zero-filled
     C-order Array, with `_check_shape`'s negative-dimension refusal."""
-    for k in range(len(shape)):  # small-loop(shape: array rank metadata): at most two dimensions
+    for k in range(len(shape)):  # driver-loop: over (shape: array rank metadata): at most two dimensions
         if Int(py=shape[k]) < 0:
             raise Error("mojolearn: negative dimension in shape " + family_repr(shape))
     return family_array(shape, typestr, context)
@@ -93,10 +101,38 @@ def _semi_addr(value: PythonObject) raises -> PythonObject:
     return classical_address(value)
 
 
-def _semi_op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,
-             context: PythonObject) raises:
-    """`_XNeighbors._op`: the binding's `xn_<name>(addrs, ints, floats)`."""
-    xn_execute(binding, name, addrs, ints, floats)
+def _semi_at(value: PythonObject) raises -> Int:
+    return Int(py=classical_address(value))
+
+
+def _semi_py_ints(values: List[Int]) raises -> PythonObject:
+    var result = Python.list()
+    var append = result.append  # resolved once, not per word
+    for value in values:  # driver-loop: over (named operation's fixed integer schema)
+        _ = py_call(append, PythonObject(value))
+    return result
+
+
+def _semi_py_floats(values: List[Float64]) raises -> PythonObject:
+    var result = Python.list()
+    var append = result.append  # resolved once, not per word
+    for value in values:  # driver-loop: over (named operation's fixed scalar schema)
+        _ = py_call(append, PythonObject(value))
+    return result
+
+
+def _semi_op(binding: PythonObject, request: XnOpRequest) raises:
+    """`_XNeighbors._op` of a RUN request. A compiled-binding snapshot's
+    native descriptor provider takes the typed words (the call `xn_execute`
+    makes for it, with its GIL release and call count); a loaded module's
+    `xn_<name>` export takes them as Python lists."""
+    if xn_is_module(binding):
+        xn_execute(binding, request.name, _semi_py_ints(request.a), _semi_py_ints(request.p),
+                   _semi_py_floats(request.f))
+        return
+    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
+    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id(request.name), request.a, request.p,
+                                  request.f)
 
 
 def _semi_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -234,15 +270,10 @@ def _achi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         var scan = family_call(b.getattr, args[0], PythonObject("x_neighbors_kfeat_first_negative"))
         first = _semi_int(family_call(scan, _semi_addr(x), PythonObject(size)))
         _ = x  # keep the Python object alive through the native call above
-    var neg = False
-    if first != -2:
-        neg = first >= 0
-    elif size != 0:
-        var lo = Float64(family_min(x))
-        if lo < 0.0:
-            neg = True
-    if neg:
-        raise Error("Negative values in data passed to AdditiveChi2Sampler")
+    var lo = Float64(0.0)
+    if first == -2 and size != 0:
+        lo = Float64(family_min(x))
+    xn_achi2_negative_check(xn_achi2_fit_negative(first, size, lo))
     _ = _achi2_interval(fields)
     py_setitem(fields, "n_features_in_", PythonObject(Int(py=x.shape[1])))
 
@@ -259,16 +290,12 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var steps = _semi_int(family_field(fields, "sample_steps"))
-    var width = d * (2 * steps - 1)
+    var width = xn_achi2_width(d, steps)
     var out = _semi_out(Python.tuple(n, width), "<f4", context)
     if Int(py=x.size) != 0:
-        var lo = Float64(family_min(x))
-        if lo < 0.0:
-            raise Error("Negative values in data passed to AdditiveChi2Sampler")
-    var interval = _semi_f32_scalar(_achi2_interval(fields))
-    _semi_op(args[0], "achi2", Python.list(_semi_addr(x), _semi_addr(out)),
-             Python.list(PythonObject(n), PythonObject(d), PythonObject(steps)), Python.list(PythonObject(interval)),
-             context)
+        xn_achi2_negative_check(Float64(family_min(x)) < 0.0)
+    var interval = _achi2_interval(fields)
+    _semi_op(args[0], xn_achi2_request(_semi_at(x), _semi_at(out), n, d, steps, interval))
     _ = x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     if sparse:
@@ -281,14 +308,12 @@ def _achi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
         if sp is None:
             _ = family_call(b.__import__, PythonObject("scipy.sparse"))
             sp = native_loaded_module("sys").modules["scipy.sparse"]
-        var dense = FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(out)))
-        var nnz = p3nc_dense_nnz_f32(dense, n * width)
+        var dense = _semi_at(out)
+        var nnz = xn_achi2_csr_count(dense, n * width)
         var data = _semi_out(Python.tuple(nnz), "<f4", context)
         var indices = _semi_out(Python.tuple(nnz), "<i4", context)
         var indptr = _semi_out(Python.tuple(n + 1), "<i4", context)
-        p3nc_dense_to_csr_f32(dense, n, width, FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(data))),
-                              MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=_semi_addr(indices))),
-                              MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=_semi_addr(indptr))))
+        xn_achi2_csr_fill(dense, n, width, _semi_at(data), _semi_at(indices), _semi_at(indptr))
         _ = out  # keep the Python object alive through the native passes above
         var keywords = Python.dict()
         py_setitem(keywords, "shape", Python.tuple(n, width))
@@ -381,10 +406,7 @@ def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         py_setitem(fields, "random_offset_", off)
         py_setitem(fields, "n_features_in_", PythonObject(d))
         return
-    if d < 1 or nc < 1:
-        raise Error("mojolearn SkewedChi2Sampler: X needs at least one feature and n_components >= 1")
-    raise Error("NotImplementedError: mojolearn SkewedChi2Sampler: this binary lacks x_neighbors_kfeat_schi2_fit_idn "
-                + "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+    xn_schi2_missing_fit(d, nc)
 
 
 def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -397,8 +419,7 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
     var d = Int(py=x.shape[1])
     if Int(py=x.size) != 0:
         var lo = Float64(family_min(x))
-        if lo <= -_semi_float(family_field(fields, "skewedness")):
-            raise Error("X may not contain entries smaller than -skewedness.")
+        xn_schi2_skew_check(lo, _semi_float(family_field(fields, "skewedness")))
     var nc = _semi_int(family_field(fields, "n_components"))
     var z = py_get(fields, PythonObject("_schi2_z"), PythonObject(None))
     var lazy = z is not None
@@ -417,7 +438,7 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
         var weights_in = w if z is None else z
         var weights_out = PythonObject(0) if z is None else _semi_addr(w)
         var offset = family_field(fields, "random_offset_")
-        var skew = _semi_f32_scalar(_semi_float(family_field(fields, "skewedness")))
+        var skew = xn_f32_word(_semi_float(family_field(fields, "skewedness")))
         _ = family_call(entry, Python.list(PythonObject(n), PythonObject(d), PythonObject(nc), PythonObject(pending)),
                         Python.list(_semi_addr(x), _semi_addr(weights_in), weights_out, _semi_addr(offset),
                                     _semi_addr(out)),
@@ -431,18 +452,14 @@ def _schi2_transform(model: PythonObject, args: PythonObject, context: PythonObj
             _schi2_set_weights(fields, w)
         return out
     # `_unary(X, _U_LOG, 1.0, skewedness)`, then the map.
-    var skew = _semi_f32_scalar(_semi_float(family_field(fields, "skewedness")))
+    var skew = _semi_float(family_field(fields, "skewedness"))
     var lx = _semi_out(py_call(b.tuple, x.shape), "<f4", context)
-    _semi_op(binding, "unary", Python.list(_semi_addr(x), _semi_addr(lx)),
-             Python.list(PythonObject(Int(py=x.size)), PythonObject(_SEMI_U_LOG)),
-             Python.list(PythonObject(1.0), PythonObject(skew)), context)
+    _semi_op(binding, xn_schi2_log_request(_semi_at(x), _semi_at(lx), Int(py=x.size), skew))
     _ = x  # keep the Python object alive through the native call above
     var out = _semi_out(Python.tuple(n, nc), "<f4", context)
     var w = _schi2_weights(fields, binding, context)
     var offset = family_field(fields, "random_offset_")
-    _semi_op(binding, "skew_transform",
-             Python.list(_semi_addr(lx), _semi_addr(w), _semi_addr(offset), _semi_addr(out)),
-             Python.list(PythonObject(n), PythonObject(d), PythonObject(nc)), Python.list(), context)
+    _semi_op(binding, xn_schi2_transform_request(_semi_at(lx), _semi_at(w), _semi_at(offset), _semi_at(out), n, d, nc))
     _ = lx  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
     _ = offset  # keep the Python object alive through the native call above
@@ -465,25 +482,20 @@ def _semi_knn_idx(binding: PythonObject, q: PythonObject, r: PythonObject, k: In
     var m = Int(py=r.shape[0])
     if _semi_truth(context["family_xn_semi_unfused_knn"]):
         var dmat = _semi_out(Python.tuple(n, m), "<f4", context)
-        _semi_op(binding, "sqdist", Python.list(_semi_addr(q), _semi_addr(r), _semi_addr(dmat)),
-                 Python.list(PythonObject(n), PythonObject(m), PythonObject(d), PythonObject(status)), Python.list(),
-                 context)
+        _semi_op(binding, xn_semi_sqdist_request(_semi_at(q), _semi_at(r), _semi_at(dmat), n, m, d, status))
         _ = q  # keep the Python object alive through the native call above
         _ = r  # keep the Python object alive through the native call above
         var dist = _semi_out(Python.tuple(n, k), "<f4", context)
         var idx = _semi_out(Python.tuple(n, k), "<i4", context)
-        _semi_op(binding, "knn_select", Python.list(_semi_addr(dmat), _semi_addr(dist), _semi_addr(idx)),
-                 Python.list(PythonObject(n), PythonObject(m), PythonObject(k), PythonObject(0)), Python.list(), context)
+        _semi_op(binding, xn_semi_knn_select_request(_semi_at(dmat), _semi_at(dist), _semi_at(idx), n, m, k))
         _ = dmat  # keep the Python object alive through the native call above
         _ = dist  # keep the Python object alive through the native call above
         return idx
     var dist = _semi_out(Python.tuple(n, k), "<f4", context)
     var idx = _semi_out(Python.tuple(n, k), "<i4", context)
-    var name = String("knn_sq") if _semi_truth(context["family_svc_xn_old_items"]) else String("knn_sq_tiled")
-    _semi_op(binding, name, Python.list(_semi_addr(q), _semi_addr(r), _semi_addr(dist), _semi_addr(idx)),
-             Python.list(PythonObject(n), PythonObject(m), PythonObject(d), PythonObject(k), PythonObject(0),
-                         PythonObject(status)),
-             Python.list(), context)
+    var old_items = _semi_truth(context["family_svc_xn_old_items"])
+    _semi_op(binding, xn_semi_knn_sq_request(old_items, _semi_at(q), _semi_at(r), _semi_at(dist), _semi_at(idx),
+                                             n, m, d, k, status))
     _ = q  # keep the Python object alive through the native call above
     _ = r  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
@@ -497,9 +509,8 @@ def _lp_compact(binding: PythonObject, idx: PythonObject, n_reference: Int, vari
     var k = Int(py=idx.shape[1])
     var cols = _semi_out(Python.tuple(n, k), "<i4", context)
     var vals = _semi_out(Python.tuple(n, k), "<f4", context)
-    _semi_op(binding, "lp_knn_graph", Python.list(_semi_addr(idx), _semi_addr(cols), _semi_addr(vals)),
-             Python.list(PythonObject(n), PythonObject(n_reference), PythonObject(k), PythonObject(variant)),
-             Python.list(), context)
+    _semi_op(binding, xn_lp_knn_graph_request(_semi_at(idx), _semi_at(cols), _semi_at(vals), n, n_reference, k,
+                                              variant))
     _ = idx  # keep the Python object alive through the native call above
     _ = cols  # keep the Python object alive through the native call above
     _ = vals  # keep the Python object alive through the native call above
@@ -515,9 +526,8 @@ def _lp_knn_product(binding: PythonObject, graph: PythonObject, m: Int, labels: 
     var k = Int(py=cols.shape[1])
     var c = Int(py=labels.shape[1])
     var out = _semi_out(Python.tuple(n, c), "<f4", context)
-    _semi_op(binding, "lp_knn_product",
-             Python.list(_semi_addr(cols), _semi_addr(vals), _semi_addr(labels), _semi_addr(out)),
-             Python.list(PythonObject(n), PythonObject(m), PythonObject(k), PythonObject(c)), Python.list(), context)
+    _semi_op(binding, xn_lp_knn_product_request(_semi_at(cols), _semi_at(vals), _semi_at(labels), _semi_at(out),
+                                                n, m, k, c))
     _ = cols  # keep the Python object alive through the native call above
     _ = vals  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
@@ -530,8 +540,7 @@ def _semi_matmul(binding: PythonObject, a: PythonObject, bm: PythonObject, conte
     var k = Int(py=a.shape[1])
     var m = Int(py=bm.shape[1])
     var out = _semi_out(Python.tuple(n, m), "<f4", context)
-    _semi_op(binding, "matmul", Python.list(_semi_addr(a), _semi_addr(bm), _semi_addr(out)),
-             Python.list(PythonObject(n), PythonObject(k), PythonObject(m)), Python.list(), context)
+    _semi_op(binding, xn_semi_matmul_request(_semi_at(a), _semi_at(bm), _semi_at(out), n, k, m))
     _ = a  # keep the Python object alive through the native call above
     _ = bm  # keep the Python object alive through the native call above
     return out
@@ -546,11 +555,9 @@ def _semi_rbf(binding: PythonObject, a: PythonObject, bq: PythonObject, gamma: P
     var m = Int(py=bq.shape[0])
     var out = _semi_out(Python.tuple(n, m), "<f4", context)
     var kind = context["family_svc_xn_kernels"]["rbf"]
-    var g = _semi_f32_scalar(_semi_float(gamma))
-    _semi_op(binding, "kernel", Python.list(_semi_addr(a), _semi_addr(bq), _semi_addr(out)),
-             Python.list(PythonObject(n), PythonObject(m), PythonObject(d), PythonObject(_semi_int(kind)), PythonObject(0),
-                         PythonObject(status)),
-             Python.list(PythonObject(g), PythonObject(_semi_f32_scalar(0.0))), context)
+    var g = _semi_float(gamma)
+    var kind_code = _semi_int(kind)
+    _semi_op(binding, xn_semi_rbf_request(_semi_at(a), _semi_at(bq), _semi_at(out), n, m, d, kind_code, status, g))
     _ = a  # keep the Python object alive through the native call above
     _ = bq  # keep the Python object alive through the native call above
     return out
@@ -560,8 +567,8 @@ def _semi_row_normalize(binding: PythonObject, p: PythonObject, context: PythonO
     """`row_normalize` of a 2-D float32 matrix into a new one."""
     var b = _semi_b()
     var out = _semi_out(py_call(b.tuple, p.shape), "<f4", context)
-    _semi_op(binding, "row_normalize", Python.list(_semi_addr(p), _semi_addr(out)),
-             Python.list(PythonObject(Int(py=p.shape[0])), PythonObject(Int(py=p.shape[1]))), Python.list(), context)
+    _semi_op(binding, xn_semi_row_normalize_request(_semi_at(p), _semi_at(out), Int(py=p.shape[0]),
+                                                    Int(py=p.shape[1])))
     _ = p  # keep the Python object alive through the native call above
     return out
 
@@ -596,24 +603,17 @@ def _semi_argmax_labels(binding: PythonObject, classes: PythonObject, m: PythonO
     var c = Int(py=m.shape[1])
     var codes = _semi_out(Python.tuple(n), "<i4", context)
     if n > 0:
-        _semi_op(binding, "row_argmax", Python.list(_semi_addr(m), _semi_addr(codes)),
-                 Python.list(PythonObject(n), PythonObject(c)), Python.list(), context)
+        _semi_op(binding, xn_semi_row_argmax_request(_semi_at(m), _semi_at(codes), n, c))
         _ = m  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
     return _semi_class_array(classes, codes, context)
-
-
-def _semi_tol_words(fields: PythonObject) raises -> Tuple[Int, Int]:
-    """`float(tol)` as its IEEE double bits, (high word, low word)."""
-    var bits = bitcast[DType.uint64](Float64(_semi_float(family_field(fields, "tol"))))
-    return (Int(bits >> 32), Int(bits & 0xFFFFFFFF))
 
 
 def _lp_alpha_f32(fields: PythonObject, spreading: Bool) raises -> Float64:
     """`_f32_scalar(self.alpha)` for spreading, 0.0 for propagation."""
     if not spreading:
         return 0.0
-    return _semi_f32_scalar(_semi_float(family_field(fields, "alpha")))
+    return xn_f32_word(_semi_float(family_field(fields, "alpha")))
 
 
 def _lp_build_graph(model: PythonObject, fields: PythonObject, binding: PythonObject, x: PythonObject,
@@ -642,14 +642,11 @@ def _lp_build_graph(model: PythonObject, fields: PythonObject, binding: PythonOb
     var n = Int(py=a.shape[0])
     var g = _semi_out(Python.tuple(n, n), "<f4", context)
     if _semi_truth(context["family_svc_xn_old_items"]):
-        _semi_op(binding, "ls_laplacian", Python.list(_semi_addr(a), _semi_addr(g)), Python.list(PythonObject(n)),
-                 Python.list(), context)
+        _semi_op(binding, xn_lp_laplacian_request(_semi_at(a), _semi_at(g), n))
     else:
         var deg = _semi_out(Python.tuple(n), "<f4", context)
-        _semi_op(binding, "col_degree", Python.list(_semi_addr(a), _semi_addr(deg)), Python.list(PythonObject(n)),
-                 Python.list(), context)
-        _semi_op(binding, "ls_laplacian_deg", Python.list(_semi_addr(a), _semi_addr(deg), _semi_addr(g)),
-                 Python.list(PythonObject(n)), Python.list(), context)
+        _semi_op(binding, xn_lp_col_degree_request(_semi_at(a), _semi_at(deg), n))
+        _semi_op(binding, xn_lp_laplacian_deg_request(_semi_at(a), _semi_at(deg), _semi_at(g), n))
         _ = deg  # keep the Python object alive through the native calls above
     _ = a  # keep the Python object alive through the native calls above
     return g
@@ -677,16 +674,13 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var variant = py_call(b.getattr, py_type(model), PythonObject("_variant"))
     var spreading = not _semi_eq(variant, PythonObject("propagation"))
     if spreading:
-        var alpha = _semi_float(family_field(fields, "alpha"))
-        if not (0.0 < alpha and alpha < 1.0):
-            raise Error("alpha must be in (0, 1)")
+        xn_lp_alpha_check(_semi_float(family_field(fields, "alpha")))
     var x = _semi_x(args[1], context)
     var n = Int(py=x.shape[0])
     var encoded = classical_encode_labels(args[2], context)
     var allc = encoded.classes
     var codes = encoded.codes
-    if Int(py=codes.size) != n:
-        raise Error("X and y have different numbers of rows")
+    xn_rows_match_check(Int(py=codes.size), n)
     var skip = -1
     for i in range(len(allc)):  # driver-loop: over the k class labels (the unlabeled marker)
         var c = allc[i]
@@ -703,13 +697,11 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var unlabeled = _semi_out(Python.tuple(n), "<i4", context)
     var a = Float64(1.0)
     if spreading:
-        a = _semi_f32_scalar(1.0 - _semi_float(family_field(fields, "alpha")))
+        a = xn_lp_static_weight(_semi_float(family_field(fields, "alpha")))
     if n != 0 and nc != 0:
         var marker = skip if skip >= 0 else len(allc)
-        _semi_op(binding, "p2m_lp_labels",
-                 Python.list(_semi_addr(codes), _semi_addr(ld), _semi_addr(ys), _semi_addr(unlabeled)),
-                 Python.list(PythonObject(n), PythonObject(nc), PythonObject(marker)), Python.list(PythonObject(a)),
-                 context)
+        _semi_op(binding, xn_lp_labels_request(_semi_at(codes), _semi_at(ld), _semi_at(ys), _semi_at(unlabeled), n, nc,
+                                               marker, a))
         _ = codes  # keep the Python object alive through the native call above
     var knn = _semi_eq(family_field(fields, "kernel"), PythonObject("knn"))
     var graph = PythonObject(None)
@@ -718,7 +710,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     # upload of the graph's first op (the public admission deferred it).
     var status = List[Int32](length=1, fill=Int32(0))
     if knn:
-        var k = min(_semi_int(family_field(fields, "n_neighbors")), n)
+        var k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
         var idx = _semi_knn_idx(binding, x, x, k, context, Int(status.unsafe_ptr()))
         admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
         graph = _lp_compact(binding, idx, n, 1 if spreading else 0, context)
@@ -729,9 +721,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     if not spreading:
         # propagation's static rows: `lp_clamp` with ld as both inputs.
         ystatic = _semi_out(Python.tuple(n, nc), "<f4", context)
-        _semi_op(binding, "lp_clamp",
-                 Python.list(_semi_addr(ld), _semi_addr(ld), _semi_addr(unlabeled), _semi_addr(ystatic)),
-                 Python.list(PythonObject(n), PythonObject(nc)), Python.list(), context)
+        _semi_op(binding, xn_lp_clamp_request(_semi_at(ld), _semi_at(unlabeled), _semi_at(ystatic), n, nc))
     if knn:
         # The kNN-graph loop as one resident op (`lp_iterate_knn`), on every
         # binding (lane n4-mds-labelprop-nmf-loops, 2026-11-09).
@@ -740,40 +730,33 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var cols = graph[0]
         var vals = graph[1]
         var info = _semi_out(Python.tuple(2), "<i4", context)
-        var words = _semi_tol_words(fields)
+        var tol = _semi_float(family_field(fields, "tol"))
         var max_iter = _semi_int(family_field(fields, "max_iter"))
         var alpha_f = _lp_alpha_f32(fields, spreading)
-        _semi_op(binding, "lp_iterate_knn",
-                 Python.list(_semi_addr(cols), _semi_addr(vals), _semi_addr(ld), _semi_addr(ystatic),
-                             _semi_addr(unlabeled), _semi_addr(info)),
-                 Python.list(PythonObject(n), PythonObject(Int(py=cols.shape[1])), PythonObject(nc), PythonObject(max_iter),
-                             PythonObject(1 if spreading else 0), PythonObject(words[0]), PythonObject(words[1])),
-                 Python.list(PythonObject(alpha_f)), context)
+        _semi_op(binding, xn_lp_iterate_knn_request(_semi_at(cols), _semi_at(vals), _semi_at(ld), _semi_at(ystatic),
+                                                    _semi_at(unlabeled), _semi_at(info), n, Int(py=cols.shape[1]),
+                                                    nc, max_iter, spreading, tol, alpha_f))
         _ = cols  # keep the Python object alive through the native call above
         _ = vals  # keep the Python object alive through the native call above
         _ = ystatic  # keep the Python object alive through the native call above
         _ = unlabeled  # keep the Python object alive through the native call above
-        var resident_iter = Int(FAMILY_I32P(unsafe_from_address=Int(py=_semi_addr(info)))[0])
+        var resident_iter = xn_lp_iterations(_semi_at(info))
         _ = info  # keep the Python object alive through the read above
         _lp_finish(fields, binding, x, classes, ld, resident_iter, context)
         return
     # The dense loop as one resident op (`lp_iterate`).
     var info = _semi_out(Python.tuple(2), "<i4", context)
-    var words = _semi_tol_words(fields)
+    var tol = _semi_float(family_field(fields, "tol"))
     var max_iter = _semi_int(family_field(fields, "max_iter"))
-    var mode = (1 if spreading else 0) + (2 if _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
-                                                                     PythonObject(False))) else 0)
+    var mode = xn_lp_mode(spreading, _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
+                                                        PythonObject(False))))
     var alpha_f = _lp_alpha_f32(fields, spreading)
-    _semi_op(binding, "lp_iterate",
-             Python.list(_semi_addr(dense), _semi_addr(ld), _semi_addr(ystatic), _semi_addr(unlabeled),
-                         _semi_addr(info)),
-             Python.list(PythonObject(n), PythonObject(nc), PythonObject(max_iter), PythonObject(mode),
-                         PythonObject(words[0]), PythonObject(words[1])),
-             Python.list(PythonObject(alpha_f)), context)
+    _semi_op(binding, xn_lp_iterate_request(_semi_at(dense), _semi_at(ld), _semi_at(ystatic), _semi_at(unlabeled),
+                                            _semi_at(info), n, nc, max_iter, mode, tol, alpha_f))
     _ = dense  # keep the Python object alive through the native call above
     _ = ystatic  # keep the Python object alive through the native call above
     _ = unlabeled  # keep the Python object alive through the native call above
-    var dense_iter = Int(FAMILY_I32P(unsafe_from_address=Int(py=_semi_addr(info)))[0])
+    var dense_iter = xn_lp_iterations(_semi_at(info))
     _ = info  # keep the Python object alive through the read above
     _lp_finish(fields, binding, x, classes, ld, dense_iter, context)
 
@@ -807,16 +790,15 @@ def _lp_dense_fused(model: PythonObject, binding: PythonObject, source: PythonOb
     var proba = _semi_out(Python.tuple(1 if want_codes else nq, 1 if want_codes else c), "<f4", context)
     var codes = _semi_out(Python.tuple(nq if want_codes else 1), "<i4", context)
     var kind = context["family_svc_xn_kernels"]["rbf"]
-    var g = _semi_f32_scalar(_semi_float(family_field(fields, "gamma")))
+    var g = _semi_float(family_field(fields, "gamma"))
     # Lane a8b-device-x-neighbors-rest: the queries' finite test behind the
     # session's upload (its status slot).
     var status = List[Int32](length=1, fill=Int32(0))
-    _semi_op(binding, "lp_dense_proba",
-             Python.list(_semi_addr(q), _semi_addr(xfit), _semi_addr(dist), _semi_addr(proba), _semi_addr(codes)),
-             Python.list(PythonObject(nq), PythonObject(n), PythonObject(Int(py=q.shape[1])), PythonObject(c),
-                         PythonObject(_semi_int(kind)), PythonObject(1 if want_codes else 0),
-                         PythonObject(Int(status.unsafe_ptr()))),
-             Python.list(PythonObject(g), PythonObject(_semi_f32_scalar(0.0))), context)
+    var d = Int(py=q.shape[1])
+    var kind_code = _semi_int(kind)
+    _semi_op(binding, xn_lp_dense_proba_request(_semi_at(q), _semi_at(xfit), _semi_at(dist), _semi_at(proba),
+                                                _semi_at(codes), nq, n, d, c, kind_code, want_codes,
+                                                Int(status.unsafe_ptr()), g))
     admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
     _ = status^
     _ = q  # keep the Python object alive through the native call above
@@ -843,7 +825,7 @@ def _lp_proba(model: PythonObject, binding: PythonObject, source: PythonObject,
     # first op's upload (its status slot).
     var status = List[Int32](length=1, fill=Int32(0))
     if knn:
-        var k = min(_semi_int(family_field(fields, "n_neighbors")), n)
+        var k = xn_semi_knn_k(_semi_int(family_field(fields, "n_neighbors")), n)
         var idx = _semi_knn_idx(binding, q, xfit, k, context, Int(status.unsafe_ptr()))
         admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
         var graph = _lp_compact(binding, idx, n, 2, context)

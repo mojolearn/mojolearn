@@ -13,7 +13,7 @@ from bindings.native_loaded_module import native_loaded_module, native_namespace
 from bindings.cpython_table import cpython_table
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call_spans
+from core.native_descriptor_call import native_descriptor_call_spans, native_descriptor_leased_call
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
 from core.shared_slot import SharedSlot
 
@@ -518,61 +518,10 @@ def neural_descriptor_handle(provider: PythonObject, factory: PythonObject, valu
     return handle
 
 
-struct NeuralValueHandles(Defaultable, Movable):
-    # Answers of the address-conversion handle factories, keyed by the value's
-    # object address: the value's exact type address, the factory address and
-    # the handle. Plain integers only; no Python reference is retained.
-    var types: Dict[Int, Int]
-    var factories: Dict[Int, Int]
-    var handles: Dict[Int, Int]
-
-    def __init__(out self):
-        self.types = Dict[Int, Int]()
-        self.factories = Dict[Int, Int]()
-        self.handles = Dict[Int, Int]()
-
-
-# Bump the name's version whenever NeuralValueHandles' layout changes.
-comptime NEURAL_VALUE_HANDLES = SharedSlot[NeuralValueHandles, "MojolearnNeuralValueHandlesV2"]
-
-# Bound on remembered values (memory only: a dropped answer is recomputed).
-comptime _NEURAL_VALUE_HANDLES_MAX = 4096
-
-
-def neural_descriptor_value_handle(provider: PythonObject, factory: PythonObject, value: PythonObject) raises -> Int:
-    """`neural_descriptor_handle` for the factories that only convert an
-    owner object to the address of its inline native value and check nothing
-    else: `transformer_decode_native_handle_v1` and
-    `causal_lm_native_handle_v1` (bindings/_mojolearn_transformer.mojo,
-    `Int(session.downcast_value_ptr[T]())`). Their answer is a pure function
-    of the object's address and exact type, so a remembered answer for the
-    same address, exact type and factory is the factory's answer, also for a
-    recycled address. The factory admission (exact compiled entry of this
-    provider's module) still runs on every call; only the CPython call into
-    the factory is skipped (N176, N186: once per layer per decode step).
-    Never use it for a factory that checks state, such as
-    `transformer_native_session_handle_v1` (busy or closed refusal)."""
-    _neural_descriptor_admit_entry(provider, factory)
-    var address = Int(value._obj_ptr)
-    var cls = Int(py_type(value)._obj_ptr)
-    var entry = Int(factory._obj_ptr)
-    var g = NEURAL_VALUE_HANDLES.get_or_create_ptr()
-    var held = g[].handles.get(address)
-    if held and g[].types.get(address, 0) == cls and g[].factories.get(address, 0) == entry:
-        return held.value()
-    var handle = Int(py=py_call(factory, value))
-    if handle == 0:
-        raise Error("native provider: state admission returned a null handle")
-    g = NEURAL_VALUE_HANDLES.get_or_create_ptr()
-    if len(g[].handles) >= _NEURAL_VALUE_HANDLES_MAX:
-        g[].types.clear()
-        g[].factories.clear()
-        g[].handles.clear()
-    g[].types[address] = cls
-    g[].factories[address] = entry
-    g[].handles[address] = handle
-    _ = value
-    return handle
+# Lane causal-lm-sessions-native (2026-11-11): `neural_descriptor_value_handle`
+# and its NeuralValueHandles cache served only the resident CausalLM session
+# provider arms; those sessions are native registry handles now
+# (core/causal_lm_entry_table_sessions.mojo), so both are deleted.
 
 
 def neural_descriptor_matches(provider: PythonObject, canonical: PythonObject) raises -> Bool:
@@ -588,28 +537,19 @@ def neural_descriptor_execute(
     if operation < 0 or operation >= len(owner[].calls):
         raise Error("neural native ABI: unknown operation")
     owner[].calls[operation] += 1
-    var loan = NativeCallWorkspaceLease(Int(owner[].workspace.unsafe_ptr()))
-    var scratch = loan.pointer()
+    var workspace = Int(owner[].workspace.unsafe_ptr())
     try:
         var result = 0
         if release_gil:
             with GILReleased(Python()):
-                result = native_descriptor_call_spans(owner[].entry, operation,
-                    Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-                    Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+                result = native_descriptor_leased_call(owner[].entry, workspace, operation, addresses, ints, floats)
         else:
             # Native resource registry admission/finalization whose ownership
             # requires the admission lock uses this branch; computation keeps True.
-            result = native_descriptor_call_spans(owner[].entry, operation,
-                Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-                Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+            result = native_descriptor_leased_call(owner[].entry, workspace, operation, addresses, ints, floats)
         return result
     finally:
-        loan.release()
-        # Span addresses and the workspace pointer do not retain these owners.
-        _ = addresses
-        _ = ints
-        _ = floats
+        # The workspace pointer does not retain the provider.
         _ = provider
 
 

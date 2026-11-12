@@ -83,7 +83,7 @@ def test_candidate_stays_opt_in_and_uses_native_vectors():
     assert "generation_native_forward(linked, a_words, p_words)" in branch
     assert "py_ints(" not in branch
     assert 'py_call(e["forward_session"]' not in branch
-    assert 'not py_contains(e, "causal_lm_session_run") or not _resident_norm_ok(model)' in public
+    assert 'not py_contains(e, "resident") or not _resident_norm_ok(model)' in public
     # No-final-norm admission is a separately compiled opt-in capability.
     # Its helper preserves the default refusal while supporting that flag.
     norm = public.split("def _resident_norm_ok(", 1)[1].split("\ndef ", 1)[0]

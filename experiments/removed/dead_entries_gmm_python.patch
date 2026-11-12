@@ -1,0 +1,582 @@
+diff --git a/bindings/_mojolearn_mixture.mojo b/bindings/_mojolearn_mixture.mojo
+index 8a24a3f8b1..72b4e0053f 100644
+--- a/bindings/_mojolearn_mixture.mojo
++++ b/bindings/_mojolearn_mixture.mojo
+@@ -17,9 +17,8 @@ written out here and mirrored in `python/mojolearn/mixture.py`.
+ 
+ THE MODEL CROSSES AS ITS ARRAYS. `GaussianMixtureModel` is a
+ `fieldwise_init` struct of host lists and scalars; fit writes every field
+-into caller-sized buffers and the sample entry rebuilds the struct from
+-the same buffers (fit and scoring cross through the typed transport,
+-`mixture_native_api_v1`). `n_iter`, `converged` and `lower_bound` cross too, because
++into caller-sized buffers and the scoring entries rebuild the struct from
++the same buffers. `n_iter`, `converged` and `lower_bound` cross too, because
+ the estimator's header says a model that does not carry them cannot be
+ compared with another model.
+ 
+@@ -30,7 +29,7 @@ THE GIL is released around every device call, and nothing inside a
+ from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
+ from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+ from std.os import abort
+-from core.hostptr import f32_ptr, i32_ptr, read_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+@@ -39,9 +38,29 @@ from mixture.gmm_native_device import GMM_NATIVE_DEVICE_API
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ # The typed bodies (lane thin-trees-metrics, 2026-10-21).
+-from mixture.gmm_entries import _gmm_sample_run
++from mixture.gmm_entries import (
++    _gmm_fit_run,
++    _gmm_predict_proba_run,
++    _gmm_predict_run,
++    _gmm_sample_run,
++    _gmm_score_bic_aic_run,
++    _gmm_score_samples_run,
++)
+ from checks.vendor import COMPILED_VENDOR
+-from mixture.estimator import GaussianMixtureModel
++from mixture.estimator import (
++    GaussianMixtureModel,
++    GmmParams,
++    covariance_type_from_name,
++    gaussian_mixture_aic,
++    gaussian_mixture_bic,
++    gaussian_mixture_fit,
++    gaussian_mixture_predict,
++    gaussian_mixture_predict_proba,
++    gaussian_mixture_sample,
++    gaussian_mixture_score,
++    gaussian_mixture_score_samples,
++    init_params_from_name,
++)
+ 
+ 
+ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+@@ -52,6 +71,10 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
+     return i32_ptr(addr)
+ 
+ 
++def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
++    return f64_ptr(addr)
++
++
+ def mixture_numeric_mode_binding() raises -> PythonObject:
+     """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL (the GP's shape, for its reason)."""
+     return PythonObject(GLOBAL_NUMERIC_MODE)
+@@ -66,6 +89,105 @@ def mixture_vendor_binding() raises -> PythonObject:
+ # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+ 
+ 
++def gmm_fit_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`GaussianMixture(...).fit(X)` (`gaussian_mixture_fit`). Returns
++    `n_iter_`. A collapsed component RAISES (DEVIATION 1723).
++
++    `addrs`, in this exact order:
++
++        0  x                      n * d float32, row-major, read
++        1  weights_out            k float32, WRITTEN
++        2  means_out              k * d float32, WRITTEN
++        3  covariances_out        k * d * d float32, WRITTEN (reg_covar on
++                                   the diagonal, as scikit-learn's)
++        4  precisions_chol_out    k * d * d float32, WRITTEN (upper
++                                   triangular per component)
++        5  log_det_chol_out       k float32, WRITTEN (DEVIATION 1726)
++        6  scalars_out            3 float64, WRITTEN: n_iter, converged
++                                   (0/1), lower_bound
++
++    `params`, in this exact order:
++
++        0  n
++        1  d
++        2  n_components           k
++        3  covariance_type        a STRING, decoded on the Mojo side
++        4  tol                    (float)
++        5  reg_covar              (float)
++        6  max_iter
++        7  init_params            a STRING, decoded on the Mojo side
++        8  random_state
++    """
++    return _gmm_fit_entry(addrs, params, False)
++
++
++def gmm_fit_predict_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`GaussianMixture(...).fit_predict(X)` in one crossing (row N401 of
++    docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md): `gmm_fit`'s seven
++    addresses followed by
++
++        7  labels_out             n int32, WRITTEN: predict(X) of the
++                                   fitted model, computed on the fit's own
++                                   device buffers (the bits fit(X).predict(X)
++                                   returns; mixture/estimator.mojo)
++
++    and `gmm_fit`'s nine params. Returns `n_iter_`."""
++    return _gmm_fit_entry(addrs, params, True)
++
++
++def _gmm_fit_entry(
++    addrs: PythonObject, params: PythonObject, labels: Bool
++) raises -> PythonObject:
++    var count = 8 if labels else 7
++    if len(addrs) != count:
++        raise Error(
++            (String("gmm_fit_predict") if labels else String("gmm_fit"))
++            + ": addrs must contain " + String(count) + " addresses (x, weights_out,"
++            " means_out, covariances_out, precisions_chol_out,"
++            " log_det_chol_out, scalars_out" + (String(", labels_out") if labels else String("")) + "), got "
++            + String(len(addrs))
++        )
++    if len(params) != 9:
++        raise Error(
++            "gmm_fit: params must contain 9 values (n, d, n_components,"
++            " covariance_type, tol, reg_covar, max_iter, init_params,"
++            " random_state), got "
++            + String(len(params))
++        )
++    var xp = _f32_ptr(Int(py=addrs[0]))
++    var wp = _f32_ptr(Int(py=addrs[1]))
++    var mp = _f32_ptr(Int(py=addrs[2]))
++    var cp = _f32_ptr(Int(py=addrs[3]))
++    var pp = _f32_ptr(Int(py=addrs[4]))
++    var lp = _f32_ptr(Int(py=addrs[5]))
++    var sp = _f64_ptr(Int(py=addrs[6]))
++    var n = Int(py=params[0])
++    var d = Int(py=params[1])
++    var gp = GmmParams.default()
++    gp.n_components = Int(py=params[2])
++    gp.covariance_type = covariance_type_from_name(String(py=params[3]))
++    gp.tol = Float32(Float64(py=params[4]))
++    gp.reg_covar = Float32(Float64(py=params[5]))
++    gp.max_iter = Int(py=params[6])
++    gp.init_params = init_params_from_name(String(py=params[7]))
++    gp.random_state = UInt64(Int(py=params[8]))
++    # The owned copy of X the fit takes is made with the GIL released (it
++    # was taken under the GIL; p3 rank 776). The fit's List signature
++    # (mixture/estimator.mojo) keeps the copy itself.
++    var x_address = Int(xp)
++    var labels_address = Int(py=addrs[7]) if labels else 0
++    var x = List[Float32]()
++    var n_iter = 0
++    with GILReleased(Python()):
++        x = read_f32(x_address, max(0, n * d))
++        n_iter = _gmm_fit_run(x, n, d, gp, wp, mp, cp, pp, lp, sp, labels_address)
++    return PythonObject(n_iter)
++
++
+ def _rebuild_model(
+     addrs: PythonObject, params: PythonObject, what: String
+ ) raises -> GaussianMixtureModel:
+@@ -117,6 +239,50 @@ def _rebuild_model(
+     )
+ 
+ 
++def gmm_score_samples_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`score_samples(X)`: one log likelihood per row. `addrs[5]` is x
++    (n * d, read), `addrs[6]` is out (n float32, WRITTEN); the prefix is
++    `_rebuild_model`'s. Returns 0."""
++    var model = _rebuild_model(addrs, params, String("gmm_score_samples"))
++    var n = Int(py=params[5])
++    var x = read_f32(Int(py=addrs[5]), max(0, n * model.n_features))
++    var op = _f32_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _gmm_score_samples_run(model, x, n, op)
++    return PythonObject(0)
++
++
++def gmm_predict_proba_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`predict_proba(X)`: `exp(log_resp)`, `n * k`. `addrs[5]` is x,
++    `addrs[6]` is out (n * k float32, WRITTEN). Returns 0."""
++    var model = _rebuild_model(addrs, params, String("gmm_predict_proba"))
++    var n = Int(py=params[5])
++    var x = read_f32(Int(py=addrs[5]), max(0, n * model.n_features))
++    var op = _f32_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _gmm_predict_proba_run(model, x, n, op)
++    return PythonObject(0)
++
++
++def gmm_predict_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`predict(X)`: argmax over the weighted log probabilities, ties to
++    the lowest component. `addrs[5]` is x, `addrs[6]` is out (n int32,
++    WRITTEN). Returns 0."""
++    var model = _rebuild_model(addrs, params, String("gmm_predict"))
++    var n = Int(py=params[5])
++    var x = read_f32(Int(py=addrs[5]), max(0, n * model.n_features))
++    var op = _i32_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _gmm_predict_run(model, x, n, op)
++    return PythonObject(0)
++
++
+ def gmm_sample_binding(
+     addrs: PythonObject, params: PythonObject, sample_params: PythonObject
+ ) raises -> PythonObject:
+@@ -143,12 +309,28 @@ def gmm_sample_binding(
+     return PythonObject(n)
+ 
+ 
++def gmm_score_bic_aic_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`score(X)`, `bic(X)` and `aic(X)` in one call: `addrs[5]` is x,
++    `addrs[6]` is out (3 float64, WRITTEN: score, bic, aic). Each is a
++    float32 on the Mojo side (the host ascending fold through `ftz` and
++    `identical_div`) widened exactly. Returns 0."""
++    var model = _rebuild_model(addrs, params, String("gmm_score_bic_aic"))
++    var n = Int(py=params[5])
++    var x = read_f32(Int(py=addrs[5]), max(0, n * model.n_features))
++    var sp = _f64_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _gmm_score_bic_aic_run(model, x, n, sp)
++    return PythonObject(0)
++
++
+ def mixture_native_api_v1_binding() raises -> PythonObject:
+     """The typed GaussianMixture transport (core/mixture_native_api.mojo)
+-    the mixture door (bindings/mixture_native.mojo) calls for fit,
+-    fit_predict and every score. `gmm_sample` stays a Python entry: the
+-    sample door (bindings/svm_mixture_native.mojo `_gmm_sample`) calls it
+-    and the typed transport has no sample operation."""
++    the mixture door (bindings/mixture_native.mojo) calls. The Python
++    `gmm_*` entries above stay for their remaining Python callers
++    (python/mojolearn/_native_parallel_public.py, the host_surface export
++    checks and the verify lanes) and are not called by the door."""
+     var api = GMM_NATIVE_DEVICE_API.get_or_create_ptr()
+     return neural_descriptor_capsule(api[].name, api[].entries)
+ 
+@@ -167,8 +349,12 @@ def build__mojolearn_mixture() -> PythonObject:
+         m.def_function[device_plan_log_binding]("device_plan_log")
+         m.def_function[mixture_vendor_binding]("mixture_vendor")
+         m.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
+-        # TOMBSTONE: the GaussianMixture Python entries gmm_fit, gmm_fit_predict, gmm_score_samples, gmm_predict_proba, gmm_predict and gmm_score_bic_aic (dead: the mixture door calls mixture_native_api_v1 and no Python, tool or verify code calls them) deleted 2026-11-11 by lane/round2-fixes; code recoverable at the deletion commit^.
+-        # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
++        m.def_function[gmm_fit_binding]("gmm_fit")
++        m.def_function[gmm_fit_predict_binding]("gmm_fit_predict")
++        m.def_function[gmm_score_samples_binding]("gmm_score_samples")
++        m.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
++        m.def_function[gmm_predict_binding]("gmm_predict")
++        m.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+         m.def_function[gmm_sample_binding]("gmm_sample")
+         m.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
+         return m.finalize()
+diff --git a/bindings/_mojolearn_mixture_host.mojo b/bindings/_mojolearn_mixture_host.mojo
+index c451ec95ab..97b6d56d29 100644
+--- a/bindings/_mojolearn_mixture_host.mojo
++++ b/bindings/_mojolearn_mixture_host.mojo
+@@ -14,10 +14,10 @@ THE EXPORTED NAMES ARE THE GPU BINDING'S NAMES, with the GPU binding's
+ address and params contract word for word (`bindings/_mojolearn_mixture.mojo`,
+ mirrored in `python/mojolearn/mixture.py`), so `GaussianMixture` runs
+ unchanged on a CPU-only install through `_backend._HOST_MODULES`
+-(`"_mojolearn_mixture": "_mojolearn_mixture_host"`): the typed transport
+-`mixture_native_api_v1` (fit and the four scores), `gmm_sample` (7
+-addresses, 6 params, 3 sample params), `mixture_vendor` answering "cpu" and
+-`mixture_numeric_mode`. ABSENT, and so refused BY NAME through
++(`"_mojolearn_mixture": "_mojolearn_mixture_host"`): `gmm_fit` (7 addresses,
++9 params), `gmm_score_samples`, `gmm_predict_proba`, `gmm_predict` and
++`gmm_score_bic_aic` (7 addresses, 6 params each), `mixture_vendor` answering
++"cpu" and `mixture_numeric_mode`. ABSENT, and so refused BY NAME through
+ `_HostBinding`: `gmm_parallel_available`, the multi-GPU driver's probe.
+ 
+ The sabotage arm (`mixture_host_sabotage`) is
+@@ -27,10 +27,12 @@ The sabotage arm (`mixture_host_sabotage`) is
+ from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
+ from std.os import abort
+ from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+ from mixture.host.gmm_native_host import GMM_NATIVE_HOST_API
+ 
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+ from checks.kernel_matrix import (
+     COLUMN_CPU,
+     TARGET_COLUMN,
+@@ -38,7 +40,20 @@ from checks.kernel_matrix import (
+ )
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
+-from bindings.mixture_host_scoring import gmm_sample_binding
++from bindings.mixture_host_scoring import (
++    gmm_sample_binding,
++    gmm_predict_binding,
++    gmm_predict_proba_binding,
++    gmm_score_bic_aic_binding,
++    gmm_score_samples_binding,
++)
++from mixture.host.gmm_host_oracle import (
++    GmmHostParams,
++    gmmh_covariance_type_from_name,
++    gmmh_fit,
++    gmmh_init_params_from_name,
++)
++from mixture.host.gmm_host_entries import _gmm_fit_run
+ 
+ 
+ def mixture_host_numeric_mode_binding() raises -> PythonObject:
+@@ -72,12 +87,60 @@ def mixture_numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(GLOBAL_NUMERIC_MODE)
+ 
+ 
++def gmm_fit_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`GaussianMixture(...).fit(X)` on the host. Returns `n_iter_`.
++    `addrs`: 0 x, 1 weights_out, 2 means_out, 3 covariances_out,
++    4 precisions_chol_out, 5 log_det_chol_out, 6 scalars_out (n_iter,
++    converged, lower_bound). `params`: 0 n, 1 d, 2 n_components,
++    3 covariance_type (a string), 4 tol, 5 reg_covar, 6 max_iter,
++    7 init_params (a string), 8 random_state."""
++    if len(addrs) != 7:
++        raise Error(
++            "gmm_fit: addrs must contain 7 addresses (x, weights_out,"
++            " means_out, covariances_out, precisions_chol_out,"
++            " log_det_chol_out, scalars_out), got "
++            + String(len(addrs))
++        )
++    if len(params) != 9:
++        raise Error(
++            "gmm_fit: params must contain 9 values (n, d, n_components,"
++            " covariance_type, tol, reg_covar, max_iter, init_params,"
++            " random_state), got "
++            + String(len(params))
++        )
++    var wp = f32_ptr(Int(py=addrs[1]))
++    var mp = f32_ptr(Int(py=addrs[2]))
++    var cp = f32_ptr(Int(py=addrs[3]))
++    var pp = f32_ptr(Int(py=addrs[4]))
++    var lp = f32_ptr(Int(py=addrs[5]))
++    var sp = f64_ptr(Int(py=addrs[6]))
++    var n = Int(py=params[0])
++    var d = Int(py=params[1])
++    var gp = GmmHostParams(
++        Int(py=params[2]),
++        gmmh_covariance_type_from_name(String(py=params[3])),
++        Float32(Float64(py=params[4])),
++        Float32(Float64(py=params[5])),
++        Int(py=params[6]),
++        gmmh_init_params_from_name(String(py=params[7])),
++        UInt64(Int(py=params[8])),
++    )
++    var x = read_f32(Int(py=addrs[0]), max(0, n * d))
++    var n_iter = 0
++    with GILReleased(Python()):
++        n_iter = _gmm_fit_run(x, n, d, gp, wp, mp, cp, pp, lp, sp)
++    _ = x^
++    return PythonObject(n_iter)
++
++
+ def mixture_native_api_v1_binding() raises -> PythonObject:
+     """The typed GaussianMixture transport (core/mixture_native_api.mojo)
+-    the mixture door (bindings/mixture_native.mojo) calls for the fit and
+-    every score. `gmm_sample` stays a Python entry: the sample door
+-    (bindings/svm_mixture_native.mojo `_gmm_sample`) calls it and the typed
+-    transport has no sample operation."""
++    the mixture door (bindings/mixture_native.mojo) calls. The Python
++    `gmm_*` entries above stay for their remaining Python callers
++    (python/mojolearn/_native_parallel_public.py, the host_surface export
++    checks and the verify lanes) and are not called by the door."""
+     var api = GMM_NATIVE_HOST_API.get_or_create_ptr()
+     return neural_descriptor_capsule(api[].name, api[].entries)
+ 
+@@ -95,8 +158,11 @@ def build__mojolearn_mixture_host() -> PythonObject:
+         module.def_function[mixture_host_sabotage_binding]("mixture_host_sabotage")
+         module.def_function[mixture_vendor_binding]("mixture_vendor")
+         module.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
+-        # TOMBSTONE: the GaussianMixture Python entries gmm_fit, gmm_score_samples, gmm_predict_proba, gmm_predict and gmm_score_bic_aic (dead: the mixture door calls mixture_native_api_v1) deleted 2026-11-11 by lane/round2-fixes; code recoverable at the deletion commit^.
+-        # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
++        module.def_function[gmm_fit_binding]("gmm_fit")
++        module.def_function[gmm_score_samples_binding]("gmm_score_samples")
++        module.def_function[gmm_predict_proba_binding]("gmm_predict_proba")
++        module.def_function[gmm_predict_binding]("gmm_predict")
++        module.def_function[gmm_score_bic_aic_binding]("gmm_score_bic_aic")
+         module.def_function[gmm_sample_binding]("gmm_sample")
+         module.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
+         return module.finalize()
+diff --git a/bindings/mixture_host_scoring.mojo b/bindings/mixture_host_scoring.mojo
+index 1cf1bea5b8..de5295b0ae 100644
+--- a/bindings/mixture_host_scoring.mojo
++++ b/bindings/mixture_host_scoring.mojo
+@@ -1,22 +1,160 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The GaussianMixture sample entry of the mixture host bindings, written
+-once (the neighbors and density inference lane, 2026-09-15).
+-
+-`bindings/_mojolearn_mixture_host.mojo` (the reference binding) and
+-`bindings/_mojolearn_mixture_infer_host.mojo` (the inference binding a
+-wheel ships) both register `gmm_sample` from here. The scoring entries that
+-lived here are deleted: the mixture door scores through each binding's
+-typed transport (mixture/host/gmm_native_host_score.mojo). The address and
+-params contract is the GPU binding's (`bindings/_mojolearn_mixture.mojo`).
++"""The GaussianMixture scoring and sampling entries of the mixture host bindings
++(score_samples, predict_proba, predict, score, bic, aic and sample),
++written once (the neighbors and density inference lane, 2026-09-15).
++
++`bindings/_mojolearn_mixture_host.mojo` (the reference binding: fit and
++scoring) and `bindings/_mojolearn_mixture_infer_host.mojo` (the inference
++binding a wheel ships: scoring only, no `gmmh_fit`) both register these
++functions, so the two binaries answer score_samples, predict_proba, predict,
++score, bic and aic through one source. The address and params contract is
++the GPU binding's (`bindings/_mojolearn_mixture.mojo`), word for word.
+ """
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ 
+-from core.hostptr import f32_ptr, i32_ptr, read_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+ # The sampling body (lane thin-trees-metrics, 2026-10-21) is the kernel
+-# module's.
++# module's; the output copies below are one memcpy each.
+ from mixture.host.gmm_host_entries import gmm_sample_into
++from std.memory import unsafe_memcpy
++from mixture.host.gmm_host_oracle import (
++    gmmh_predict,
++    gmmh_predict_proba,
++    gmmh_score_bic_aic,
++    gmmh_score_samples,
++)
++
++
++@fieldwise_init
++struct _Model(Movable):
++    var k: Int
++    var d: Int
++    var n: Int
++    var weights: List[Float32]
++    var means: List[Float32]
++    var precisions: List[Float32]
++    var log_det: List[Float32]
++    var x: List[Float32]
++    # The caller's addresses (weights, means, precisions_chol, log_det_chol,
++    # x): `_model_load` copies them with the GIL released (N346).
++    var addresses: List[Int]
++
++
++def _rebuild_model(
++    addrs: PythonObject, params: PythonObject, what: String
++) raises -> _Model:
++    """The scoring entries' shared prefix, the GPU binding's
++    `_rebuild_model`: `addrs[0..4]` weights, means, covariances,
++    precisions_chol, log_det_chol; `addrs[5]` x; `params` k, d, n_iter,
++    converged, lower_bound, n."""
++    if len(addrs) != 7:
++        raise Error(
++            what
++            + ": addrs must contain 7 addresses (weights, means,"
++            " covariances, precisions_chol, log_det_chol, x, out), got "
++            + String(len(addrs))
++        )
++    if len(params) != 6:
++        raise Error(
++            what
++            + ": params must contain 6 values (k, d, n_iter, converged,"
++            " lower_bound, n), got "
++            + String(len(params))
++        )
++    var k = Int(py=params[0])
++    var d = Int(py=params[1])
++    var n = Int(py=params[5])
++    var addresses = List[Int]()
++    addresses.append(Int(py=addrs[0]))
++    addresses.append(Int(py=addrs[1]))
++    addresses.append(Int(py=addrs[3]))
++    addresses.append(Int(py=addrs[4]))
++    addresses.append(Int(py=addrs[5]))
++    return _Model(k, d, n, List[Float32](), List[Float32](), List[Float32](), List[Float32](), List[Float32](),
++                  addresses^)
++
++
++def _model_load(mut m: _Model) raises:
++    """The host copies of the model blocks and X (the oracle bodies take
++    Lists), made inside the caller's GIL-released block (N346): the same
++    words as before, without holding the GIL through n * d copies."""
++    m.weights = read_f32(m.addresses[0], max(0, m.k))
++    m.means = read_f32(m.addresses[1], max(0, m.k * m.d))
++    m.precisions = read_f32(m.addresses[2], max(0, m.k * m.d * m.d))
++    m.log_det = read_f32(m.addresses[3], max(0, m.k))
++    m.x = read_f32(m.addresses[4], max(0, m.n * m.d))
++
++
++def gmm_score_samples_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`score_samples(X)`: `addrs[6]` is out (n float32). Returns 0."""
++    var m = _rebuild_model(addrs, params, String("gmm_score_samples"))
++    var op = f32_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _model_load(m)
++        var s = gmmh_score_samples(
++            m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
++        )
++        unsafe_memcpy(dest=op, src=s.unsafe_ptr(), count=max(0, m.n))
++        _ = s^
++    _ = m^
++    return PythonObject(0)
++
++
++def gmm_predict_proba_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`predict_proba(X)`: `addrs[6]` is out (n * k float32). Returns 0."""
++    var m = _rebuild_model(addrs, params, String("gmm_predict_proba"))
++    var op = f32_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _model_load(m)
++        var r = gmmh_predict_proba(
++            m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
++        )
++        unsafe_memcpy(dest=op, src=r.unsafe_ptr(), count=max(0, m.n * m.k))
++        _ = r^
++    _ = m^
++    return PythonObject(0)
++
++
++def gmm_predict_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`predict(X)`: `addrs[6]` is out (n int32). Returns 0."""
++    var m = _rebuild_model(addrs, params, String("gmm_predict"))
++    var op = i32_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _model_load(m)
++        var labels = gmmh_predict(
++            m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
++        )
++        unsafe_memcpy(dest=op, src=labels.unsafe_ptr(), count=max(0, m.n))
++        _ = labels^
++    _ = m^
++    return PythonObject(0)
++
++
++def gmm_score_bic_aic_binding(
++    addrs: PythonObject, params: PythonObject
++) raises -> PythonObject:
++    """`score(X)`, `bic(X)` and `aic(X)`: `addrs[6]` is out (3 float64).
++    Returns 0."""
++    var m = _rebuild_model(addrs, params, String("gmm_score_bic_aic"))
++    var sp = f64_ptr(Int(py=addrs[6]))
++    with GILReleased(Python()):
++        _model_load(m)
++        var r = gmmh_score_bic_aic(
++            m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
++        )
++        sp.unsafe_store(0, Float64(r.score))
++        sp.unsafe_store(1, Float64(r.bic))
++        sp.unsafe_store(2, Float64(r.aic))
++    _ = m^
++    return PythonObject(0)
+ 
+ 
+ def gmm_sample_binding(

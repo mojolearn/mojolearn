@@ -306,7 +306,8 @@ def connect(context, register, registry):
                 modes[mode] = type(error).__name__ + ': ' + str(error)
         modules[basename] = modes
     context['family_msel_bindings'] = modules
-    trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE, metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
+    # (family context, metrics bindings by mode): bindings/trees_public_meta.mojo calls the metrics owner natively
+    trees._TREES_CONTEXT['native_meta_metrics'] = (metrics._NATIVE_CONTEXT, modules['_mojolearn_metrics'])
     linear._XL_CONTEXT.update(native_estimator_entry=ms._NATIVE, native_estimator_context=context)
     _connect_device_rows(registry)
 

@@ -19,6 +19,9 @@
 # `gbdt_sigmoid_pair` without a Python `astype`; the adapters' margins go
 # from the predict entry to the binary output kernel without a Python step.
 from std.python import Python, PythonObject
+from bindings.base_helpers_key import base_helpers_key
+from bindings.labels_stat_boundary import labels_stat_pack
+from bindings.base_helpers_released import base_reduce_stat, base_check_indices_i64, base_bincount_i64
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native import _resolved
 from bindings.native_instance_item import native_instance_item
@@ -35,7 +38,9 @@ from bindings.trees_public_inputs import (
     trees_cast, trees_decode_labels, trees_call,
 )
 from bindings.admitted_input import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
-from core.shared_slot import SharedSlot
+from gbdt.trees_gbdt_run import (
+    gbdt_known_vendor, gbdt_remember_vendor, gbdt_known_mode, gbdt_mode_of_code, gbdt_mode_checked, gbdt_text_has_ctr,
+)
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / TreesMatrix / trees_view / trees_check_rank / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 
@@ -69,32 +74,11 @@ def gbdt_mode(fields: PythonObject, context: PythonObject) raises -> String:
             return exact
     if not Bool(py=py_call(b.isinstance, mode, b.str)):
         raise Error("numeric_mode must be fast, identical or None")
-    var clean = String(py_call(py_call(mode.strip).lower))
-    if clean != "fast" and clean != "identical":
-        raise Error("numeric_mode must be fast, identical or None")
-    return clean
+    return gbdt_mode_checked(String(py_call(py_call(mode.strip).lower)))
 
 
 def gbdt_table(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     return trees_table(context, gbdt_mode(fields, context), "_mojolearn_gbdt")
-
-
-struct _GbdtBinaryFacts(Defaultable, Movable):
-    """Compile-time answers of a loaded GBDT binary (its vendor and numeric
-    mode), keyed on the address of the compiled entry that gives them. The
-    entries are bound functions a connected binding table holds for the
-    life of the process (an extension module is never unloaded), so the
-    address names one binary. p3-trees: every predict called the compiled
-    entry (and str()) again for the same constant."""
-    var vendor: Dict[Int, String]
-    var mode: Dict[Int, String]
-
-    def __init__(out self):
-        self.vendor = Dict[Int, String]()
-        self.mode = Dict[Int, String]()
-
-
-comptime _GBDT_BINARY_FACTS = SharedSlot[_GbdtBinaryFacts, "MojolearnTreesGbdtBinaryFactsV1"]
 
 
 def gbdt_vendor(table: PythonObject) raises -> String:
@@ -103,11 +87,11 @@ def gbdt_vendor(table: PythonObject) raises -> String:
     if entry is None:
         return ""
     var key = Int(entry._obj_ptr)
-    var facts = _GBDT_BINARY_FACTS.get_or_create_ptr()
-    if key in facts[].vendor:
-        return facts[].vendor[key]
+    var known = gbdt_known_vendor(key)
+    if known:
+        return known.value()
     var answer = String(py_call(trees_builtins().str, py_call_typed(entry)))
-    facts[].vendor[key] = answer
+    gbdt_remember_vendor(key, answer)
     return answer
 
 
@@ -118,17 +102,13 @@ def gbdt_has_ctr(text: PythonObject) raises -> Bool:
     if py_type(text) is b.str:
         # Searched in place (lane perf-sweep-trees, 2026-11-05): the model
         # text can be megabytes, and every predict used to copy it whole.
-        for i in range(3):  # small-loop(names): the three fixed record names
+        for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three fixed record names
             if py_contains(text, PythonObject("\n" + names[i] + " ")):
                 return True
             if Bool(py=py_call(text.startswith, PythonObject(names[i] + " "))):
                 return True
         return False
-    var t = String(py_call(b.str, text))
-    for i in range(3):  # small-loop(names): the three fixed record names
-        if ("\n" + names[i] + " ") in t or t.startswith(names[i] + " "):
-            return True
-    return False
+    return gbdt_text_has_ctr(String(py_call(b.str, text)))
 
 
 def gbdt_host_tree_context(context: PythonObject) raises -> PythonObject:
@@ -346,19 +326,12 @@ def _numeric_mode_used(table: PythonObject) raises -> String:
     var getter = trees_entry(table, "gbdt_numeric_mode")
     if getter is None:
         raise Error("RuntimeError: mojolearn: _mojolearn_gbdt has no gbdt_numeric_mode")
-    # The binary's compiled mode, asked once per binary (see _GbdtBinaryFacts).
+    # The binary's compiled mode, asked once per binary (see gbdt/trees_gbdt_run.mojo GbdtBinaryFacts).
     var key = Int(getter._obj_ptr)
-    var facts = _GBDT_BINARY_FACTS.get_or_create_ptr()
-    if key in facts[].mode:
-        return facts[].mode[key]
-    var code = _int(py_call_typed(getter))
-    if code == 0:
-        facts[].mode[key] = "fast"
-        return "fast"
-    if code == 1:
-        facts[].mode[key] = "identical"
-        return "identical"
-    raise Error("RuntimeError: mojolearn: _mojolearn_gbdt returned unknown numeric mode " + String(code))
+    var known = gbdt_known_mode(key)
+    if known:
+        return known.value()
+    return gbdt_mode_of_code(key, _int(py_call_typed(getter)))
 
 
 def _argmax_rows(scores: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -540,7 +513,7 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
     var b = trees_builtins()
     var names: List[String] = ["n_estimators", "max_depth", "border_count"]
     var upper: List[Int] = [2147483647, 8, 255]
-    for i in range(3):  # small-loop(names): the three integer settings
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three integer settings
         var value = _field(fields, model, names[i])
         var ok = not _is_bool(value) and _isinstance(value, context["trees_integral_type"])
         if ok:
@@ -548,7 +521,7 @@ def _ordered_options(fields: PythonObject, model: PythonObject, context: PythonO
         if not ok:
             raise Error("mojolearn: " + names[i] + " must be an integer in 1.." + String(upper[i]))
     var reals: List[String] = ["learning_rate", "l2_leaf_reg"]
-    for i in range(2):  # small-loop(reals): the two real settings
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(reals): the two real settings
         var value = _field(fields, model, reals[i])
         var positive = i == 0
         var ok = not _is_bool(value) and _isinstance(value, context["trees_real_type"])
@@ -570,7 +543,7 @@ def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
     var b = trees_builtins()
     var names: List[String] = ["n_estimators", "max_depth", "border_count"]
     var upper: List[Int] = [2147483647, 8, 255]
-    for i in range(3):  # small-loop(names): the three integer settings
+    for i in range(3):  # driver-loop: over fixed call structure, small-loop(names): the three integer settings
         var value = settings[i]
         var ok = not _is_bool(value) and _isinstance(value, context["trees_integral_type"])
         if ok:
@@ -578,7 +551,7 @@ def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
         if not ok:
             raise Error("mojolearn: " + names[i] + " must be an integer in 1.." + String(upper[i]))
     var reals: List[String] = ["learning_rate", "l2_leaf_reg"]
-    for i in range(2):  # small-loop(reals): the two real settings
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(reals): the two real settings
         var value = settings[3 + i]
         var positive = i == 0
         var ok = not _is_bool(value) and _isinstance(value, context["trees_real_type"])
@@ -599,9 +572,9 @@ def _type_or_value(error: Error) -> Bool:
 
 
 def _reduce(addr: Int, code: Int, n: Int, what: Int, context: PythonObject) raises -> PythonObject:
-    """The core helper `reduce_stat` (0 min, 1 max, 4 integral)."""
-    return py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(addr), PythonObject(code),
-                         PythonObject(n), PythonObject(what))
+    """The core helper `reduce_stat` (0 min, 1 max, 4 integral), through the
+    base helper table; PACK of its answer as the Python number."""
+    return labels_stat_pack(base_reduce_stat(base_helpers_key(context["trees_helpers"]), addr, code, n, what))
 
 
 def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonObject) raises -> AdmittedX:
@@ -695,8 +668,8 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
             raise Error(bijection)
         raise error^
     var m = Int(py=order64.size)
-    if m != n or n < 1 or _int(py_call_typed(trees_helper(context, "check_indices_i64"),
-                                             PythonObject(trees_address(order64)), PythonObject(n), PythonObject(n))) != 0:
+    if m != n or n < 1 or base_check_indices_i64(base_helpers_key(context["trees_helpers"]),
+                                                 trees_address(order64), n, n) != 0:
         raise Error(bijection)
     _ = order64  # keep the Python object alive through the native calls above
     var order = admitted_vector(n, "<u4", context)
@@ -787,8 +760,8 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
             _ = codes  # keep the Python object alive through the native call above
             _ = x  # keep the Python object alive through the native call above
             var counts = admitted_vector(k, "<i8", context)
-            _ = py_call_typed(trees_helper(context, "bincount_i64"), PythonObject(trees_address(codes)), PythonObject(3),
-                              PythonObject(n), PythonObject(k), PythonObject(trees_address(counts)), PythonObject(0))
+            _ = base_bincount_i64(base_helpers_key(context["trees_helpers"]), trees_address(codes), 3, n, k,
+                                  trees_address(counts), False)
             _ = codes  # keep the Python object alive through the native call above
             _ = counts  # keep the Python object alive through the native call above
             dense = Bool(py=_reduce(trees_address(counts), 3, k, 0, context) > PythonObject(0))

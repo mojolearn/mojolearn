@@ -19,7 +19,19 @@ from std.os import getenv
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.msel_common import msel_signed32
+from bindings.msel_helpers_key import msel_helpers_key
+from bindings.msel_helpers_released import (
+    msel_fold_ids, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_group_fold_perm_i32, msel_leave_range_i64,
+    msel_select_fold_i64, msel_gather_i32, msel_split_table_i32,
+)
+# lane calltable-msel: the host-only passes both base bindings exported,
+# linked into this door instead of called through CPython.
+from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
+from x_metrics.epilogue import first_rows_i32
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.base_helpers_key import base_helpers_key
+from bindings.base_helpers_released import base_reduce_stat_int, base_bincount_i64, base_bincount2_i32
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_storage_allocate
@@ -31,7 +43,7 @@ from bindings.family_common import (
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base
 from bindings.label_input_sources import labels_series_values, labels_list_integer_storage
 from bindings.msel_common import (
-    MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_entry_ready, msel_select_folds_plan, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
+    MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_select_folds_plan, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
     msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
     msel_numeric_vector,
@@ -415,11 +427,12 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
     if have:
         var dtype = String(py=arr.dtype)
         if (dtype == "<f4" or dtype == "<f8") and Int(py=flat.size) > 0:
-            var integral = family_call(msel_entry("reduce_stat", context), PythonObject(msel_addr(flat)),
-                                       context["family_msel_native_code"][PythonObject(dtype)], flat.size,
-                                       context["family_msel_reduce_integral"])
+            var integral = base_reduce_stat_int(
+                base_helpers_key(context["family_msel_entries"]), msel_addr(flat),
+                Int(py=context["family_msel_native_code"][PythonObject(dtype)]), Int(py=flat.size),
+                Int(py=context["family_msel_reduce_integral"]))
             _ = flat  # keep the Python object alive through the native call above
-            if not msel_truth(integral):
+            if integral == 0:
                 return PythonObject(None)
             _ = flat  # keep the Python object alive through the native calls above
     return msel_encode(flat if have else y, context)
@@ -427,44 +440,11 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
 
 def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k: Int,
                   context: PythonObject) raises -> PythonObject:
-    """`_select_folds`: each fold's (train, test) by `select_fold_i64`, or
-    all of them in one split plan where `select_folds_i64` is connected."""
-    if msel_entry_ready("select_folds_i64", context):
-        return msel_select_folds_plan(fold_store, fold_counts, n, k, "fold_ids", context)
-    var select = msel_entry("select_fold_i64", context)
-    var out = Python.list()
-    var counts = msel_p64(fold_counts)
-    var store_address = PythonObject(msel_addr(fold_store))
-    var row_count = PythonObject(n)
-    # Ordinary folds have both outputs and need no throwaway storage. The
-    # exceptional empty side shares one private scratch allocation across
-    # folds; selection never consumes its previous contents.
-    var scratch = PythonObject(None)
-    var scratch_address = 0
-    for fold in range(k):  # driver-loop: over folds
-        var size = Int(counts[fold])
-        var test = msel_new(size, "<i8", context)
-        var train = msel_new(n - size, "<i8", context)
-        if size == 0 or n - size == 0:
-            if scratch is None:
-                scratch = msel_new(n, "<i8", context)
-                scratch_address = msel_addr(scratch)
-        var got = msel_int(family_call(select, store_address, row_count, PythonObject(fold),
-                                       PythonObject(msel_addr(test) if size else scratch_address),
-                                       PythonObject(msel_addr(train) if n - size else scratch_address)))
-        _ = test  # keep the Python object alive through the native call above
-        _ = scratch  # keep the Python object alive through the native call above
-        _ = train  # keep the Python object alive through the native call above
-        if got != size:
-            raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
-        _ = scratch  # keep the Python object alive through the native calls above
-        _ = train  # keep the Python object alive through the native calls above
-        _ = test  # keep the Python object alive through the native calls above
-        _ = py_call(out.append, Python.tuple(train, test))
-    _ = scratch
-    _ = fold_store
-    _ = fold_counts
-    return out
+    """`_select_folds`: every fold's (train, test) in one split plan
+    (`select_folds_i64` through the native helper table; the per-fold
+    `select_fold_i64` loop it replaced only served a base binding without
+    the plan, which the table always carries)."""
+    return msel_select_folds_plan(fold_store, fold_counts, n, k, "fold_ids", context)
 
 
 def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool,
@@ -486,9 +466,8 @@ def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool
     var fold_store = msel_new(n, "<i4", context)
     var fold_counts = msel_new(k, "<i8", context)
     var class_counts = msel_new(max(n_classes, 1), "<i8", context)
-    _ = family_call(msel_entry("fold_ids", context), PythonObject(0 if codes is None else msel_addr(codes)),
-                    PythonObject(n), PythonObject(n_classes), PythonObject(k), PythonObject(msel_addr(class_counts)),
-                    PythonObject(msel_addr(fold_store)), PythonObject(msel_addr(fold_counts)))
+    _ = msel_fold_ids(msel_helpers_key(context), 0 if codes is None else msel_addr(codes), n, n_classes, k,
+                      msel_addr(class_counts), msel_addr(fold_store), msel_addr(fold_counts))
     _ = codes  # keep the Python object alive through the native call above
     _ = class_counts  # keep the Python object alive through the native call above
     _ = fold_counts  # keep the Python object alive through the native call above
@@ -543,9 +522,6 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
         return PythonObject(None)
     var b = msel_b()
     var classes = Python.tuple(b.TypeError, b.ValueError, b.OverflowError)
-    # An unavailable/replaced helper is a binding refusal, not a label
-    # conversion miss eligible for the alternate encoding definition.
-    var first_entry = msel_entry("x_metrics_first_rows", context)
     var n = 0
     try:
         n = msel_n_samples(y, context)
@@ -553,9 +529,16 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
         if gc.m < 1:
             return PythonObject(None)
         var first = msel_new(gc.m, "<i8", context)
-        _ = family_call(first_entry,
-                        PythonObject(msel_addr(gc.codes)), PythonObject(n), PythonObject(gc.m),
-                        PythonObject(msel_addr(first)))
+        # x_metrics' first-row pass linked into this door (a host pass in
+        # every binding that exported it; no cross-module call). The O(n)
+        # pass reads and writes only raw buffers, so it runs with the GIL
+        # released as the GPU binding's former `x_metrics_first_rows` export did.
+        var codes_address = gc.codes_address
+        var classes_count = gc.m
+        var first_address = msel_addr(first)
+        with GILReleased(Python()):
+            first_rows_i32(codes_address, n, classes_count, first_address)
+        _ = gc  # keep the code storage alive through the pass above
         _ = first  # keep the Python object alive through the native call above
         # pass 3 (rank 367): the classes ordered by their first row natively.
         # Every class's first row is distinct, so sorting the first rows and
@@ -646,8 +629,8 @@ def _fold_plan(y: PythonObject, k: Int, context: PythonObject) raises -> PythonO
         var width = max(len(got[0]), 1)
         enc = msel_new(n, "<i4", context)
         var cnt = msel_new(width, "<i8", context)
-        n_classes = msel_int(family_call(msel_entry("first_seen_i32", context), PythonObject(msel_addr(codes)), PythonObject(n),
-                                         PythonObject(width), PythonObject(msel_addr(enc)), PythonObject(msel_addr(cnt))))
+        n_classes = msel_first_seen_i32(msel_helpers_key(context), msel_addr(codes), n, width, msel_addr(enc),
+                                        msel_addr(cnt))
         _ = codes  # keep the Python object alive through the native call above
         _ = cnt  # keep the Python object alive through the native call above
         _ = enc  # keep the Python object alive through the native call above
@@ -666,8 +649,9 @@ def _fold_plan(y: PythonObject, k: Int, context: PythonObject) raises -> PythonO
                   + "than n_splits=" + String(k) + ".", msel_b().UserWarning, context)
     var alloc = msel_new2(k, n_classes, "<i8", context)
     var cnt_arr = msel_i64_list(counts, context)
-    _ = family_call(msel_entry("strat_alloc_i64", context), PythonObject(msel_addr(cnt_arr)), PythonObject(n_classes),
-                    PythonObject(k), PythonObject(msel_addr(alloc)))
+    # The allocation table's host pass linked into this door (both base
+    # bindings exported the same host function; no cross-module call).
+    _ = strat_alloc_i64(msel_addr(cnt_arr), n_classes, k, msel_addr(alloc))
     _ = cnt_arr  # keep the Python object alive through the native call above
     _ = alloc  # keep the Python object alive through the native call above
     var counts_py = Python.list()
@@ -705,43 +689,23 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
                 _ = perms  # keep the Python object alive through the native call above
             at += counts[c]
     var folds = msel_new(n, "<i4", context)
-    _ = family_call(msel_entry("strat_fold_assign_i32", context), PythonObject(msel_addr(enc)), PythonObject(n),
-                    PythonObject(n_classes), PythonObject(k), PythonObject(msel_addr(alloc)),
-                    PythonObject(msel_addr(perms) if perms is not None and n > 0 else 0),
-                    PythonObject(msel_addr(cnt)), PythonObject(msel_addr(folds)))
+    _ = msel_strat_fold_assign_i32(msel_helpers_key(context), msel_addr(enc), n, n_classes, k, msel_addr(alloc),
+                                   msel_addr(perms) if perms is not None and n > 0 else 0, msel_addr(cnt),
+                                   msel_addr(folds))
     _ = enc  # keep the Python object alive through the native call above
     _ = alloc  # keep the Python object alive through the native call above
     _ = perms  # keep the Python object alive through the native call above
     _ = folds  # keep the Python object alive through the native call above
     _ = cnt  # keep the Python object alive through the native call above
     var sizes = msel_new(k, "<i8", context)
-    _ = family_call(msel_entry("bincount_i64", context), PythonObject(msel_addr(folds)), PythonObject(2), PythonObject(n),
-                    PythonObject(k), PythonObject(msel_addr(sizes)), PythonObject(0))
+    _ = base_bincount_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(folds), 2, n, k,
+                          msel_addr(sizes), False)
     _ = folds  # keep the Python object alive through the native call above
     _ = sizes  # keep the Python object alive through the native call above
-    if msel_entry_ready("select_folds_i64", context):
-        # One split plan for every fold (N051); the sizes are the folds' own
-        # bincount, so the plan's count check always holds.
-        return msel_select_folds_plan(folds, sizes, n, k, "fold_ids", context)
-    var select = msel_entry("select_fold_i64", context)
-    var sz = msel_p64(sizes)
-    _ = sizes  # keep the Python object alive through the native call above
-    var out = Python.list()
-    for f in range(k):  # driver-loop: over folds
-        var size = Int(sz[f])
-        _ = sizes  # keep the Python object alive through the native call above
-        var test = msel_new(size, "<i8", context)
-        var train = msel_new(n - size, "<i8", context)
-        var scratch = msel_new(n, "<i8", context)
-        _ = family_call(select, PythonObject(msel_addr(folds)), PythonObject(n), PythonObject(f),
-                        PythonObject(msel_addr(test) if size else msel_addr(scratch)),
-                        PythonObject(msel_addr(train) if n - size else msel_addr(scratch)))
-        _ = folds  # keep the Python object alive through the native call above
-        _ = test  # keep the Python object alive through the native call above
-        _ = scratch  # keep the Python object alive through the native call above
-        _ = train  # keep the Python object alive through the native call above
-        _ = py_call(out.append, Python.tuple(train, test))
-    return out
+    # One split plan for every fold (N051); the sizes are the folds' own
+    # bincount, so the plan's count check always holds. (The per-fold
+    # select_fold_i64 loop served only a base binding without the plan.)
+    return msel_select_folds_plan(folds, sizes, n, k, "fold_ids", context)
 
 
 def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffle: Bool,
@@ -761,16 +725,16 @@ def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffl
     var sizes = msel_new(k, "<i8", context)
     var counts = msel_i64_list(gc.counts, context)
     if perm is not None:
-        _ = family_call(msel_entry("msel_group_fold_perm_i32", context), PythonObject(msel_addr(counts)), PythonObject(m),
-                        PythonObject(k), PythonObject(msel_addr(perm)), PythonObject(msel_addr(to_fold)),
-                        PythonObject(msel_addr(sizes)))
+        _ = msel_group_fold_perm_i32(msel_helpers_key(context), msel_addr(counts), m, k, msel_addr(perm),
+                                     msel_addr(to_fold), msel_addr(sizes))
         _ = counts  # keep the Python object alive through the native call above
         _ = to_fold  # keep the Python object alive through the native call above
         _ = perm  # keep the Python object alive through the native call above
         _ = sizes  # keep the Python object alive through the native call above
     else:
-        _ = family_call(msel_entry("group_fold_assign_i32", context), PythonObject(msel_addr(counts)), PythonObject(m),  # cpu-route: sequential greedy fold plan over groups, not rows
-                        PythonObject(k), PythonObject(0), PythonObject(msel_addr(to_fold)), PythonObject(msel_addr(sizes)))
+        # The greedy plan's host pass linked into this door (both base
+        # bindings exported the same host function; no cross-module call).
+        _ = group_fold_assign_i32(msel_addr(counts), m, k, 0, msel_addr(to_fold), msel_addr(sizes))  # cpu-route: sequential greedy fold plan over groups, not rows
         _ = counts  # keep the Python object alive through the native call above
         _ = sizes  # keep the Python object alive through the native call above
         _ = to_fold  # keep the Python object alive through the native call above
@@ -803,15 +767,14 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
     var to_fold = msel_new(m, "<i4", context)
     var sizes = msel_new(k, "<i8", context)
     var dist = msel_new(m * n_classes, "<i8", context)
-    _ = family_call(msel_entry("bincount2_i32", context), PythonObject(msel_addr(yenc)), PythonObject(msel_addr(gc.codes)),
-                    py_call(msel_b().list, Python.tuple(n, n_classes, m)), PythonObject(msel_addr(dist)))
+    _ = base_bincount2_i32(base_helpers_key(context["family_msel_entries"]), msel_addr(yenc), msel_addr(gc.codes),
+                           n, n_classes, m, msel_addr(dist))
     _ = yenc  # keep the Python object alive through the native call above
     _ = dist  # keep the Python object alive through the native call above
-    var bad = msel_int(family_call(msel_entry("strat_group_plan_i32", context),  # cpu-route: sequential greedy fold plan over groups, not rows
-                                   py_call(msel_b().list, Python.tuple(msel_addr(dist),
-                                                                       msel_addr(perm) if perm is not None else 0,
-                                                                       msel_addr(to_fold), msel_addr(sizes))),
-                                   py_call(msel_b().list, Python.tuple(n_classes, m, k))))
+    # The group-level plan's host pass linked into this door (both base
+    # bindings exported the same host function; no cross-module call).
+    var bad = strat_group_plan_i32(msel_addr(dist), msel_addr(perm) if perm is not None else 0,  # cpu-route: sequential greedy fold plan over groups, not rows
+                                   msel_addr(to_fold), msel_addr(sizes), n_classes, m, k)
     _ = dist  # keep the Python object alive through the native call above
     _ = perm  # keep the Python object alive through the native call above
     _ = sizes  # keep the Python object alive through the native call above
@@ -878,8 +841,7 @@ def msel_loo_at(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var s = Int(py=args[1])
     var train = msel_new(n - 1, "<i8", context)
     var test = msel_new(1, "<i8", context)
-    _ = family_call(msel_entry("leave_range_i64", context), PythonObject(n), PythonObject(s), PythonObject(s + 1),
-                    PythonObject(msel_addr(train)), PythonObject(msel_addr(test)))
+    _ = msel_leave_range_i64(msel_helpers_key(context), n, s, s + 1, msel_addr(train), msel_addr(test))
     _ = test  # keep the Python object alive through the native call above
     _ = train  # keep the Python object alive through the native call above
     return Python.tuple(train, test)
@@ -932,8 +894,9 @@ def _state_rows(state: PythonObject, words: PythonObject, want: Int, size: Int,
     var n = Int(py=state[1])
     var test = msel_new(size, "<i8", context)
     var train = msel_new(n - size, "<i8", context)
-    var got = msel_int(family_call(msel_entry("select_fold_i64", context), PythonObject(msel_addr(words)), PythonObject(n),
-                                   PythonObject(want), PythonObject(msel_addr(test)), PythonObject(msel_addr(train))))
+    var got = msel_select_fold_i64(msel_helpers_key(context), msel_addr(words), n, want, msel_addr(test),
+                                   msel_addr(train))
+    _ = words  # keep the Python object alive through the native call above
     _ = train  # keep the Python object alive through the native call above
     _ = test  # keep the Python object alive through the native call above
     if got != size:
@@ -996,8 +959,9 @@ def msel_lpgo_at(args: PythonObject, context: PythonObject) raises -> PythonObje
         size += Int(py=counts[g])
     var n = Int(py=state[1])
     var words = msel_new(n, "<i4", context)
-    _ = family_call(msel_entry("gather_i32", context), PythonObject(msel_addr(table)), PythonObject(m),
-                    PythonObject(msel_addr(state[0])), PythonObject(n), PythonObject(msel_addr(words)))
+    var codes = state[0]
+    _ = msel_gather_i32(msel_helpers_key(context), msel_addr(table), m, msel_addr(codes), n, msel_addr(words))
+    _ = codes  # keep the Python object alive through the native call above
     _ = table  # keep the Python object alive through the native call above
     _ = words  # keep the Python object alive through the native call above
     return _state_rows(state, words, 1, size, context)
@@ -1039,10 +1003,11 @@ def msel_group_shuffle_split(x: PythonObject, groups: PythonObject, n_splits: In
     var out = Python.list()
     var sp = msel_p64(sums)
     _ = sums  # keep the Python object alive through the native call above
+    var key = msel_helpers_key(context)
     for s in range(len(want)):  # driver-loop: over splits
-        _ = family_call(msel_entry("msel_split_table_i32", context), PythonObject(msel_addr(perms[s])), PythonObject(m),
-                        PythonObject(n_test), PythonObject(n_train), PythonObject(msel_addr(counts)),
-                        PythonObject(msel_addr(table)), PythonObject(msel_addr(sums)))
+        _ = msel_split_table_i32(key, msel_addr(perms[s]), m, n_test, n_train, msel_addr(counts), msel_addr(table),
+                                 msel_addr(sums))
+        _ = perms  # keep the permutations alive through the native call above
         _ = counts  # keep the Python object alive through the native call above
         _ = sums  # keep the Python object alive through the native call above
         _ = table  # keep the Python object alive through the native call above
@@ -1398,12 +1363,14 @@ def msel_native_discrete(y: PythonObject, context: PythonObject) raises -> Pytho
     if not py_contains(context["family_msel_native_encode"], dtype):
         return PythonObject(None)
     var d = String(py=dtype)
-    var integral = msel_entry("reduce_stat", context)
+    var bkey = base_helpers_key(context["family_msel_entries"])
     if d != "<f4" and d != "<f8":
         return PythonObject(True)
     var c = msel_materialize(arr, "y", context)
-    var _keep_ret_c_r972 = PythonObject(msel_truth(family_call(integral, PythonObject(msel_addr(c)), context["family_msel_native_code"][dtype],
-                                               arr.size, context["family_msel_reduce_integral"])))
+    var _keep_ret_c_r972 = PythonObject(base_reduce_stat_int(bkey, msel_addr(c),
+                                                             Int(py=context["family_msel_native_code"][dtype]),
+                                                             Int(py=arr.size),
+                                                             Int(py=context["family_msel_reduce_integral"])) != 0)
     _ = c  # keep the Python object alive through the native call above
     var _keep_ret_c = _keep_ret_c_r972^
     _ = c  # keep the Python object alive through the native call above

@@ -86,18 +86,19 @@ def arima_buffer(value: PythonObject, name: String, context: PythonObject, packe
     if py_type(steps) is not py_type(Python.tuple()) or len(steps) != len(shape):
         raise Error("TypeError: ARIMA strides require an exact tuple matching rank")
     var strides = List[Int]()
-    var count = PythonObject(1)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var count = Optional[PythonObject](PythonObject(1))
     for axis in range(len(shape)):  # driver-loop: captured rank/stride metadata, at most three words
         if shape[axis] < 0 or py_type(steps[axis]) is not int_type:
             raise Error("TypeError: ARIMA shape and strides require native integers")
         strides.append(Int(py=steps[axis]))
-        count = count * shape[axis]
+        count = Optional[PythonObject](count.value() * shape[axis])
     var address = array_slot_once(prepared, "_addr", context) if array else classical_address(prepared)
     if py_type(address) is not int_type:
         raise Error("TypeError: ARIMA address must be a native integer")
     if packed and (not contiguous or item != 4 or number != NPY_FLOAT):
         raise Error("TypeError: ARIMA fitted buffers require contiguous float32 storage")
     var owner = array_owner_once(prepared, context)
-    var captured = ArimaBuffer(prepared, owner, shape^, strides^, Int(py=address), Int(py=count), item, kind, number, contiguous)
+    var captured = ArimaBuffer(prepared, owner, shape^, strides^, Int(py=address), Int(py=count.value()), item, kind, number, contiguous)
     captured.converted = pandas
     return captured^

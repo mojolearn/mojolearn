@@ -1,0 +1,15 @@
+# Binding files that must stay Python-free, read by tools/python_free_dirs.sh.
+# One path or glob per line, relative to the repository root; `*` matches
+# across directories. A listed file that imports Python (`from python ...`,
+# `from std.python ...`, `import python`, a `providers.python` module, or the
+# `PythonObject` type) fails the build and the push. A literal path (no glob)
+# that does not exist fails too, so the list follows renames.
+#
+# The doorsplit lanes add each RUN module here as it moves out of its
+# UNPACK/PACK binding. Every `*_run.mojo` file is checked whether listed or
+# not (the script adds that pattern itself).
+#
+# The native entry tables: typed Mojo calls between compiled modules.
+core/*_entry_table*.mojo
+# RUN modules (also built into the script).
+*_run.mojo

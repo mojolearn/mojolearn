@@ -51,8 +51,13 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
     mode=door.split('def _mode(')[1].split('def _has(')[0]
     assert 'backend["_DEFAULT_MODE"]' in mode
     assert 'py_call_typed' not in mode
-    assert 'neural_descriptor_handle(provider, factory, session)' in door
-    assert 'neural_descriptor_reuse' in door
+    # lane byte-lm-sessions-native: the resident session is a native registry
+    # handle owned by a thin native object; no Python provider or handle factory
+    assert 'neural_descriptor' not in door
+    assert 'byte_lm_session_owner_new(_key(fields))' in door
+    sessions=(ROOT/'core/byte_lm_entry_table_sessions.mojo').read_text()
+    for forbidden in ('PythonObject','std.python','bindings.','providers.'):
+        assert forbidden not in sessions
     table=(ROOT/'training/byte_lm_native_dispatch.mojo').read_text()
     for forbidden in ('PythonObject','std.python','bindings.','providers.'):
         assert forbidden not in table
@@ -117,9 +122,12 @@ def test_byte_lm_stateless_owner_and_locked_finalization_share_transport():
     assert 'byte_train_step(ctx,' not in owner
     door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
     stateless=door.split('def _run_stateless(')[1].split('def byte_lm_construct(')[0]
-    assert 'neural_descriptor_execute(provider, 8,' in stateless
-    assert 'neural_descriptor_execute(provider, 9,' in stateless
-    assert 'neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create"))' in stateless
+    # lane calltable-byte-lm: the stateless step runs on a call-scoped native
+    # session through the trainer table, with no Python session or provider.
+    assert '_table_execute(key, 8, descriptors,' in stateless
+    assert '_table_execute(key, 9, finalize,' in stateless
+    assert 'byte_lm_session_new(key)' in stateless and 'byte_lm_session_free(key, session)' in stateless
+    assert '_entry(binding' not in stateless and 'neural_descriptor' not in stateless
     common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
     assert 'release_gil: Bool = True' in common
     assert '_neural_descriptor_admit_entry(provider, factory)' in common

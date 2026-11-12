@@ -239,7 +239,7 @@ from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_oper
 from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
+from providers.python.causal_session_handles_pyapi import causal_session_handles_type
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -295,6 +295,8 @@ from mamba.impl.mamba_shell_impl import (
     _mamba2_backward_run,
     _mamba3_backward_run,
 )
+from mamba.neural_entry_device import publish_neural_mamba_device
+from mamba.causal_entry_device import publish_causal_mamba_device
 
 
 
@@ -337,7 +339,7 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba1 backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(23):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(23):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1 backward: null buffer address at slot " + String(i))
@@ -393,7 +395,7 @@ def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(count):  # small-loop(count: buffer addresses of one block call): reads the pointer list, not data
+    for i in range(count):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(count: buffer addresses of one block call): reads the pointer list, not data
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -514,7 +516,7 @@ def mamba1_session_open_binding(
         raise Error("mamba1 session: already open; close it first")
     var a = List[Int]()
     a.append(0)
-    for i in range(count):  # small-loop(count: session buffer addresses): reads the pointer list, not data
+    for i in range(count):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(count: session buffer addresses): reads the pointer list, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1_session_open: null buffer address at slot " + String(i))
@@ -663,7 +665,7 @@ def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(16):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(16):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -786,7 +788,7 @@ def mamba2_session_open_binding(session: PythonObject, addrs: PythonObject,
     if owner[].busy or owner[].is_open():
         raise Error("mamba2_session_open: session is busy or already open")
     var a = List[Int]()
-    for i in range(13):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(13):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0:
             raise Error("mamba2_session_open: null buffer address")
@@ -794,9 +796,15 @@ def mamba2_session_open_binding(session: PythonObject, addrs: PythonObject,
     owner[].busy = True
     owner[].usable = False
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111:
+        # they were converted inside the released block before).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
+        var p2 = Int(py=params[2])
+        var p3 = Float32(Float64(py=params[3]))
+        var p4 = Float32(Float64(py=params[4]))
         with GILReleased(Python()):
-            _m2_session_open_run(owner[], a, Int(py=params[0]), Int(py=params[1]),
-                Int(py=params[2]), Float32(Float64(py=params[3])), Float32(Float64(py=params[4])))
+            _m2_session_open_run(owner[], a, p0, p1, p2, p3, p4)
     except error:
         owner[].busy = False
         owner[].release()
@@ -857,7 +865,7 @@ def mamba2_session_export_state_binding(session: PythonObject, addrs: PythonObje
     if len(addrs) != 4:
         raise Error("mamba2_session_export_state: expected 4 addresses")
     var a = List[Int]()
-    for i in range(4):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(4):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba2_session_export_state: null buffer address")
         a.append(p)
@@ -878,7 +886,7 @@ def mamba2_session_load_state_binding(session: PythonObject, addrs: PythonObject
     if len(addrs) != 4 or len(params) != 1:
         raise Error("mamba2_session_load_state: expected 4 addresses and buf_len")
     var a = List[Int]()
-    for i in range(4):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(4):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba2_session_load_state: null buffer address")
         a.append(p)
@@ -910,7 +918,7 @@ def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(25):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(25):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -1016,11 +1024,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
     if len(addrs) != 15 or len(params) != 3:
         raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(0)
-    for i in range(10, 15):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10, 15):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
     var b = Int(py=params[0])
     var l = Int(py=params[1])
@@ -1121,7 +1129,7 @@ def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs:
     var dims = Mamba3Dims.of(native_d_model)
     var a = List[Int]()
     a.append(0)
-    for i in range(9):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(9):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba3 owned weights: null weight address")
@@ -1156,7 +1164,7 @@ def mamba3_prefill_session_forward_owned_binding(session: PythonObject, addrs: P
     a[20] = Int(py=addrs[1])
     if a[0] == 0 or a[20] == 0:
         raise Error("mamba3 owned forward: null input/output")
-    for i in range(4):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(4):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a[21 + i] = Int(py=addrs[2 + i])
         comptime if not IDN_MAMBA3_REPORTS_ON_REQUEST:
             if a[21 + i] == 0:
@@ -1190,7 +1198,7 @@ def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: 
         raise Error("mamba3 owned backward: invalid shape or configuration")
     var a = List[Int](length=21, fill=0)
     a[0] = Int(py=addrs[0])
-    for i in range(1, 12):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(1, 12):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a[9 + i] = Int(py=addrs[i])
         if a[9 + i] == 0:
             raise Error("mamba3 owned backward: null buffer address")
@@ -1224,7 +1232,7 @@ def mamba3_forward_tape_binding(addrs: PythonObject, params: PythonObject) raise
     if b < 1 or l < 1 or dm < 1:
         raise Error("mamba3 forward tape: positive B, L and d_model required")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0: raise Error("mamba3 forward tape: null input or weight")
         a.append(address)
@@ -1259,7 +1267,7 @@ def mamba3_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises
     if len(addrs) != 11:
         raise Error("mamba3 backward tape: expected 11 addresses")
     var a = List[Int]()
-    for i in range(11):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(11):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0: raise Error("mamba3 backward tape: null gradient buffer")
         a.append(address)
@@ -1313,13 +1321,13 @@ def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonO
     if owner[].busy: raise Error("mamba3 prefill session: busy")
     if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
         a.append(p)
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(0)
-    for i in range(10, 15):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10, 15):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0:
             # lane/fam2-lm: a null REPORT address (11..14) means "do not
@@ -1365,7 +1373,7 @@ def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: Python
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba3_prefill_session_backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(21):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba3_prefill_session_backward: null buffer address at slot " + String(i))
@@ -1426,16 +1434,20 @@ def mamba3_session_open_binding(session: PythonObject, addrs: PythonObject,
         raise Error("mamba3_session_open: B and d_model must be positive")
     if owner[].busy or owner[].is_open(): raise Error("mamba3 session: busy or open")
     var a = List[Int]()
-    for i in range(19):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(19):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_open: null buffer address")
         a.append(p)
     owner[].busy = True
     owner[].usable = False
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
+        var p2 = Int(py=params[2])
+        var p3 = Int(py=params[3])
         with GILReleased(Python()):
-            _m3_session_open_run(owner[], a, Int(py=params[0]), Int(py=params[1]),
-                                 Int(py=params[2]), Int(py=params[3]))
+            _m3_session_open_run(owner[], a, p0, p1, p2, p3)
     except error:
         owner[].busy = False; owner[].release(); raise error
     owner[].busy = False
@@ -1447,7 +1459,7 @@ def mamba3_session_step_binding(session: PythonObject, addrs: PythonObject) rais
     var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
     if len(addrs) != 6: raise Error("mamba3_session_step: expected 6 addresses")
     var a = List[Int]()
-    for i in range(6):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(6):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_step: null buffer address")
         a.append(p)
@@ -1469,7 +1481,7 @@ def mamba3_session_decode_binding(session: PythonObject, addrs: PythonObject, pa
     var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
     if len(addrs) != 6 or len(params) != 1: raise Error("mamba3_session_decode: expected 6 addresses and N")
     var a = List[Int]()
-    for i in range(6):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(6):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_decode: null buffer address")
         a.append(p)
@@ -1489,7 +1501,7 @@ def mamba3_session_export_state_binding(session: PythonObject, addrs: PythonObje
     var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
     if len(addrs) != 10: raise Error("mamba3_session_export_state: expected 10 addresses")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_export_state: null buffer address")
         a.append(p)
@@ -1513,15 +1525,18 @@ def mamba3_session_load_state_binding(session: PythonObject, addrs: PythonObject
     if len(addrs) != 10 or len(params) != 2:
         raise Error("mamba3_session_load_state: expected 10 addresses and 2 scalars")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_load_state: null buffer address")
         a.append(p)
     _m3_require_session_open(owner[])
     owner[].busy = True
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
         with GILReleased(Python()):
-            _m3_session_copy_in(owner[], a, Int(py=params[0]), Int(py=params[1]))
+            _m3_session_copy_in(owner[], a, p0, p1)
     except error:
         owner[].busy = False; owner[].usable = False; raise error
     owner[].busy = False
@@ -1544,7 +1559,7 @@ def mamba2_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba2 backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(21):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba2 backward: null buffer address at slot " + String(i))
@@ -1567,7 +1582,7 @@ def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba3 backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(21):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba3 backward: null buffer address at slot " + String(i))
@@ -1609,6 +1624,12 @@ def build__mojolearn_mamba() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_mamba_device()
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_mamba_device()
         m.def_function[mamba_vendor_binding]("mamba_vendor")
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
         m.def_function[mamba1_profile_binding]("mamba1_profile")
@@ -1680,8 +1701,12 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_session_load_state_binding]("mamba3_session_load_state")
         m.def_function[mamba3_session_close_binding]("mamba3_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
-        causal_program_owner_type(m)  # one Python type per interpreter (the mamba binding registers it too)
-        m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
+        # The CausalLM handle owner (core/causal_session_handles.mojo): one Python
+        # type per interpreter (the transformer and Mamba bindings both attach it).
+        # The decode program is reached through the CausalLM session table, so
+        # the former `causal_lm_program_read_v1` Python entry and its
+        # `_CausalProgramOwner` type are gone (lane causal-lm-sessions-native).
+        causal_session_handles_type(m)
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mamba: ", e))
@@ -1695,7 +1720,7 @@ def mamba3_prefill_session_export_weights_binding(session: PythonObject, addrs: 
     if len(addrs) != 9:
         raise Error("mamba3 owned export: expected nine writable buffers")
     var a = List[Int]()
-    for i in range(9):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(9):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba3 owned export: null output address")

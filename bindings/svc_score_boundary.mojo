@@ -2,7 +2,9 @@
 """SVM accuracy UNPACK and pins over the original label and COUNT providers.
 
 Native code/arena storage replaces private prediction and encoded Arrays.
-Exact scalar reads and reference ownership remain under the GIL. Label
+Exact scalar reads and reference ownership remain under the GIL, once per
+USED class: a decoded prediction keeps its rows as native int32 slots into
+the used class objects (SvcDecodedScore), so no CPython call runs per row. Label
 encoding and remapping retain labels_prepare_targets/labels_gather, which
 are distinct from the GP scorer's existing host-only label path.
 """
@@ -21,13 +23,12 @@ from bindings.classical_labels import (
 from bindings.label_admission_native import classifier_label_list, LabelTypeKinds
 from bindings.label_input_sources import LABELS_LIST_INT
 from bindings.gp_label_input_boundary import gp_label_input
-from bindings.gp_score_label_storage import GPDecodedScoreLabels
 from core.gp_native_label_table import GP_LABEL_OBJECT, GP_LABEL_I64, GP_LABEL_F64
 from bindings.svc_common import svc_builtins, svc_cached_class_table, svc_shape_of
 from bindings.labels_descriptor_boundary import labels_prepare_targets, labels_gather
 from bindings.labels_score_boundary import ScoreKeyOwner, score_keys_unpack, score_keys_union, score_keys_index
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
-from core.svc_score_codes import svc_score_codes_valid
+from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
 from core.gp_native_accuracy import GPCAccuracyProgram
 from bindings.arena_prog_native import _family_entries, _switch
 from bindings.x_prep_native_owner import _resident_scope
@@ -50,8 +51,27 @@ struct SvcScoreLabels(Movable):
         self.kind = kind
 
 
+struct SvcDecodedScore(Movable):
+    """A decoded prediction for SVC score. Numeric kinds hold one int64 or
+    float64 word per row. GP_LABEL_OBJECT holds the USED class objects once
+    each (`pins`, in first-appearance order) and one int32 slot per row into
+    them: the CPython work on object labels is per used class, never per row."""
+    var rows: Int
+    var kind: Int
+    var words: List[UInt64]
+    var pins: List[PythonObject]
+    var slots: List[Int32]
+
+    def __init__(out self, rows: Int, kind: Int):
+        self.rows = rows
+        self.kind = kind
+        self.words = List[UInt64]()
+        self.pins = List[PythonObject]()
+        self.slots = List[Int32]()
+
+
 def svc_decode_score(owner: PythonObject, var classes: PythonObject, codes: List[Int64],
-                     context: PythonObject) raises -> GPDecodedScoreLabels:
+                     context: PythonObject) raises -> SvcDecodedScore:
     # Preserve the public decoder's cache lookup/build and numeric gather
     # before any truth-shape admission. Mutable classes use the same key.
     classes = classifier_label_list(classes, context)
@@ -60,7 +80,8 @@ def svc_decode_score(owner: PythonObject, var classes: PythonObject, codes: List
     var table = built[1]
     var count = len(codes)
     if table is not None:
-        var result = GPDecodedScoreLabels(count, GP_LABEL_I64 if kind == 0 else GP_LABEL_F64)
+        var result = SvcDecodedScore(count, GP_LABEL_I64 if kind == 0 else GP_LABEL_F64)
+        result.words = List[UInt64](length=count, fill=0)
         if count > 0:
             labels_gather(context, 1 if kind == 0 else 2, Int(py=classical_address(table)), len(classes),
                 Int(codes.unsafe_ptr()), count, Int(result.words.unsafe_ptr()))
@@ -69,28 +90,34 @@ def svc_decode_score(owner: PythonObject, var classes: PythonObject, codes: List
         return result^
     if not svc_score_codes_valid(codes, len(classes)):
         raise Error("IndexError: list index out of range")
-    var result = GPDecodedScoreLabels(count, GP_LABEL_OBJECT)
+    # UNPACK per USED class (the rows only index them, in native code): the
+    # class objects a row-by-row decode would have referenced, once each.
+    # The row scan is data-sized native work over plain words: the GIL is
+    # released around it like the gathers below (lane perf-audit-2-a).
+    var n_classes = len(classes)
+    var used = SvcUsedClasses(0)
+    with GILReleased(Python()):
+        used = svc_used_classes(codes, n_classes)
+    var result = SvcDecodedScore(count, GP_LABEL_OBJECT)
     var tuple_input = py_type(classes) is svc_builtins().tuple
-    for row in range(count):  # UNPACK C reference ownership requires GIL; no Python iteration/protocol
-        var index = Int(codes[row])
-        if index < 0:
-            index += len(classes)
-        result.pins.append(PythonObject(from_borrowed=p3_item(classes, index, tuple_input)))
+    for i in range(len(used.order)):  # UNPACK one borrowed reference per used class (C slot, no protocol)
+        result.pins.append(PythonObject(from_borrowed=p3_item(classes, used.order[i], tuple_input)))
+    swap(result.slots, used.slots)
     _ = classes
     _ = codes
     if kind == 2:
         return result^
     # The original failed-table decoder attempted array('q'/'d', map(...))
-    # over selected labels. Retain selected-only overflow and normalization,
-    # with native words instead of a private Python list/store/Array.
-    var words = List[UInt64]()
+    # over selected labels. Retain selected-only overflow and normalization:
+    # one exact scalar conversion per used class, then a native gather.
+    var class_words = List[UInt64]()
     var overflow = List[Int32](length=1, fill=0)
     var api = cpython_table()
     ref cpy = Python().cpython()
     try:
-        words = List[UInt64](length=count, fill=0)
-        for row in range(count):  # UNPACK exact admitted numeric scalar C conversions under GIL
-            var raw = api[].PyNumber_Long(result.pins[row]._obj_ptr) if kind == 0 else api[].PyNumber_Float(result.pins[row]._obj_ptr)
+        class_words = List[UInt64](length=len(result.pins), fill=0)
+        for i in range(len(result.pins)):  # UNPACK exact admitted numeric scalar C conversions, one per used class
+            var raw = api[].PyNumber_Long(result.pins[i]._obj_ptr) if kind == 0 else api[].PyNumber_Float(result.pins[i]._obj_ptr)
             if not raw:
                 raise cpy.unsafe_get_error()
             var number = PythonObject(from_owned=raw)
@@ -101,19 +128,24 @@ def svc_decode_score(owner: PythonObject, var classes: PythonObject, codes: List
                     return result^
                 if value == -1 and api[].PyErr_Occurred():
                     raise cpy.unsafe_get_error()
-                words[row] = bitcast[DType.uint64](value)
+                class_words[i] = bitcast[DType.uint64](value)
             else:
                 var value = api[].PyFloat_AsDouble(raw)
                 if value == -1 and api[].PyErr_Occurred():
                     raise cpy.unsafe_get_error()
-                words[row] = bitcast[DType.uint64](value)
+                class_words[i] = bitcast[DType.uint64](value)
             _ = number
     except:
         return result^
     _ = overflow
+    var words = List[UInt64]()
+    with GILReleased(Python()):
+        words = svc_gather_words(class_words, result.slots)
+    _ = class_words
     swap(result.words, words)
     result.kind = GP_LABEL_I64 if kind == 0 else GP_LABEL_F64
     result.pins = List[PythonObject]()
+    result.slots = List[Int32]()
     return result^
 
 
@@ -144,7 +176,7 @@ def _svc_score_truth(values: PythonObject, context: PythonObject) raises -> SvcS
     return result^
 
 
-def _svc_score_prediction(prediction: GPDecodedScoreLabels, context: PythonObject) raises -> SvcScoreLabels:
+def _svc_score_prediction(prediction: SvcDecodedScore, context: PythonObject) raises -> SvcScoreLabels:
     if prediction.rows == 0:
         raise Error("y_pred must contain at least one label")
     if prediction.kind == GP_LABEL_I64:
@@ -153,24 +185,35 @@ def _svc_score_prediction(prediction: GPDecodedScoreLabels, context: PythonObjec
         return result^
     if prediction.kind == GP_LABEL_OBJECT:
         # Match _native_classification's exact-int list fast path, including
-        # its all-or-nothing int64 conversion before general scalar keys.
+        # its all-or-nothing int64 conversion before general scalar keys. The
+        # rows hold only the used classes, so admitting each once decides the
+        # same all-or-nothing outcome; the row words are a native gather.
         var words = gp_label_input(prediction.pins, LABELS_LIST_INT)
         if words:
-            var result = _svc_integer_score(words.value().address(), 3, prediction.rows, context)
+            var row_words = List[UInt64]()
+            with GILReleased(Python()):
+                row_words = svc_gather_words(words.value().values, prediction.slots)
+            var result = _svc_integer_score(Int(row_words.unsafe_ptr()), 3, prediction.rows, context)
+            _ = row_words
             _ = words
             _ = prediction
             return result^
         var all_str = True
         var all_int = True
         var kinds = LabelTypeKinds()
-        for row in range(len(prediction.pins)):  # UNPACK exact scalar identity under GIL
-            var kind = kinds.admit_raw(prediction.pins[row]._obj_ptr, context)
+        for i in range(len(prediction.pins)):  # UNPACK exact scalar identity under GIL, one per used class
+            var kind = kinds.admit_raw(prediction.pins[i]._obj_ptr, context)
             all_str = all_str and kind == 1
             all_int = all_int and (kind == 2 or kind == 3)
         _ = kinds^
         if all_str or all_int:
-            var result = SvcScoreLabels(prediction.rows, False, String("string") if all_str else String("integer"))
+            # Encoded form: one key per used class, one int32 slot per row
+            # (_svc_score_remap gathers the joined codes natively).
+            var result = SvcScoreLabels(0, False, String("string") if all_str else String("integer"))
             result.owner = score_keys_unpack(prediction.pins, all_str, context)
+            result.codes = prediction.slots.copy()
+            result.rows = prediction.rows
+            result.encoded = True
             return result^
     raise Error("TypeError: y_pred must contain only strings or only integers; "
         + "floating labels, missing labels and mixed types are unsupported")
@@ -193,15 +236,18 @@ def _svc_score_remap(labels: SvcScoreLabels, index: ScoreKeyIndex, context: Pyth
     return result^
 
 
-def svc_accuracy_native(truth: PythonObject, prediction: GPDecodedScoreLabels,
+def svc_accuracy_native(truth: PythonObject, prediction: SvcDecodedScore,
                         context: PythonObject) raises -> Float64:
     var shape = svc_shape_of(truth, context)
     if len(shape) != 1 or Int(py=shape[0]) != prediction.rows:
         raise Error("mojolearn: y must be 1-D with one entry per row of X")
     _refuse_multilabel(truth, "y_true", "accuracy_score", context)
     if prediction.kind == GP_LABEL_OBJECT:
-        for row in range(len(prediction.pins)):  # UNPACK same list element admission before truth encoding
-            classical_admit_value(prediction.pins[row], context, 1)
+        # The same element admission before truth encoding, once per used
+        # class in first-appearance order (the first failing row's class
+        # fails first, with the same refusal).
+        for i in range(len(prediction.pins)):  # UNPACK element admission, one per used class
+            classical_admit_value(prediction.pins[i], context, 1)
     var true_labels = _svc_score_truth(truth, context)
     var pred_labels = _svc_score_prediction(prediction, context)
     if true_labels.rows != pred_labels.rows:

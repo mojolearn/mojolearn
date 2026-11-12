@@ -43,6 +43,7 @@ from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
 from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
 from providers.python.byte_lm_host_compat_pyapi import register
+from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from training.byte_lm_host_io import (
     all_finite_f32_scan,
@@ -343,6 +344,8 @@ def build__mojolearn_byte_lm_host() -> PythonObject:
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
+        # The native trainer door's table (core/byte_lm_entry_table.mojo).
+        publish_byte_lm_host_entries()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm_host: ", error))

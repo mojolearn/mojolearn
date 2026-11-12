@@ -108,7 +108,29 @@ def _connect_mode(module):
     idn = int(symbols["x_cnn_idn_flags"]()) if mixed and "x_cnn_idn_flags" in symbols else 0
     idn2 = int(symbols["x_cnn_idn2_flags"]()) if "x_cnn_idn2_flags" in symbols else 0
     profile = str(symbols["x_cnn_numerical_profile"]()) if "x_cnn_numerical_profile" in symbols else None
-    return {"module": module, "symbols": symbols, "mixed": mixed, "idn": idn, "idn2": idn2, "profile": profile}
+    connected = {"module": module, "symbols": symbols, "mixed": mixed, "idn": idn, "idn2": idn2, "profile": profile}
+    _native_key(module, connected)
+    return connected
+
+
+#: The x_cnn entry table's vendor words (core/xcnn_entry_table.mojo), the
+#: mapping `xcnn_entry_vendor` applies at publication.
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def _native_key(module, connected):
+    # glue: once at import, the connected x_cnn image's (tier, vendor) key,
+    # which the CNN layer doors read to call its published native entry
+    # instead of its Python entries (lane calltable-xcnn). An image without
+    # one leaves the key absent and the doors refuse.
+    try:
+        probe = getattr(module, "x_cnn_numeric_mode", None) or getattr(module, "x_cnn_host_numeric_mode")
+        mode = int(probe())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(module.x_cnn_vendor()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        connected["native_key"] = (mode, vendor)
 
 
 def connect():

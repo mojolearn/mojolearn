@@ -18,13 +18,17 @@ from checks.numerics import (
 )
 from gemm.neural_dispatch import (
     PLAN_FLAT,
+    identical_gemm_with_plan,
+    identical_gemm_workspace_max_floats,
+)
+# The plan words and names live with the plans (gemm/checks/gemm_identical.mojo);
+# gemm/neural_dispatch.mojo no longer re-exports them.
+from gemm.checks.gemm_identical import (
     PLAN_SPLITK,
     PLAN_SPLITK_STAGED,
     PLAN_TILE_16_16_32,
     gemm_plan_name,
     gemm_sabotage_name,
-    identical_gemm_with_plan,
-    identical_gemm_workspace_max_floats,
 )
 from gemm.neural_backward import gemm_backward_sabotage_name
 from gemm.contract import OP_NN, contract_leaf_size

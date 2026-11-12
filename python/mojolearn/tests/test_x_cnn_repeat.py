@@ -94,7 +94,8 @@ def test_resident_entries_repeat_with_saved_arrays():
     b = conv._binding()
     x = _x((6, 3, 8, 8), 1)
     prm = conv._params(x.shape)
-    cshape = conv._out_shape(x.shape)
+    oh, ow = b.x_cnn_conv_shape(prm)   # zeros padding: the unpadded input shape is the conv's shape
+    cshape = (x.shape[0], conv.out_channels, int(oh), int(ow))
     pprm = pool._params(cshape)
     oshape = pool._out_shape(cshape)
     out = np.empty(oshape, np.float32)

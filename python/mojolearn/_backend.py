@@ -1326,6 +1326,9 @@ def _check_vendor(module, name, path):
     said = read_vendor(module)
     if said is None:
         return None
+    # The image's native entry-table key (python/mojolearn/_native_table_key.py).
+    from . import _native_table_key
+    _native_table_key.record(module, said)
     if said == "none":
         raise ImportError(
             f"mojolearn: {path} was compiled with NO accelerator target "
@@ -1826,6 +1829,9 @@ def load_host_module(basename):
         from ._host_import_aliases import connect
         connect(basename, module)
         _HOST_IMPORT_ALIAS_MODULES.add(module)
+    # The image's native entry-table key (python/mojolearn/_native_table_key.py).
+    from . import _native_table_key
+    _native_table_key.record(module, said)
     _HOST_ADMITTED[basename] = (module, sabotaged)
     return module
 

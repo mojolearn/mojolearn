@@ -101,18 +101,22 @@ def _xt_owned(var addrs: List[Int], params: PythonObject) raises -> XtOwned:
     glue ABI's two views (xtrees/glue_abi.mojo). A value with no integer (or
     float) conversion is flagged, and refused only where the run reads that
     view, as the former per-read `Int(py=)` / `Float64(py=)` did."""
-    var ints = List[Int]()
-    var floats = List[Float64]()
-    var bad = List[UInt8]()
-    for k in range(len(params)):  # small-loop(positional parameters of one glue call): Python unpack
+    var count = len(params)
+    var ints = List[Int](capacity=count)
+    var floats = List[Float64](capacity=count)
+    var bad = List[UInt8](capacity=count)
+    for k in range(count):  # driver-loop: over fixed call structure, small-loop(positional parameters of one glue call): Python unpack
         var flag = UInt8(0)
+        # perf-audit-3: the item is read once (one sequence read per
+        # parameter, not one per view).
+        var item = params[k]
         try:
-            ints.append(Int(py=params[k]))
+            ints.append(Int(py=item))
         except:
             ints.append(0)
             flag |= 1
         try:
-            floats.append(Float64(py=params[k]))
+            floats.append(Float64(py=item))
         except:
             floats.append(0.0)
             flag |= 2
@@ -144,7 +148,7 @@ def tree_shap_cache_create_args(forest: PythonObject, params: PythonObject) rais
         if len(forest) != 5:
             raise Error("TreeSHAP cache requires five forest addresses")
         var out = List[Int]()
-        for i in range(5):  # small-loop(the five forest address words)
+        for i in range(5):  # driver-loop: over fixed call structure, small-loop(the five forest address words)
             out.append(Int(py=forest[i]))
         var d = _i(params, 0)
         var trees = _i(params, 1)
@@ -187,7 +191,7 @@ def forest_auxiliary_binding(forest: PythonObject, x: PythonObject, leaf: Python
     if len(forest) != 5:
         raise Error("forest auxiliary requires five model addresses")
     var addresses = List[Int]()
-    for i in range(5):  # small-loop(the five forest address words)
+    for i in range(5):  # driver-loop: over fixed call structure, small-loop(the five forest address words)
         addresses.append(Int(py=forest[i]))
     var n = _count(_i(params, 0), "x_trees_forest_auxiliary")
     var d = _i(params, 1)
@@ -271,7 +275,7 @@ def accumulate_cols_many_binding(acc: PythonObject, members: PythonObject, param
     # (XT_ACCUMULATE_COLS_MANY): members = [(x_j, cols_j, ks_j, weight_j), ...].
     _need(params, 2, "x_trees_accumulate_cols_many")
     var owned = _xt_owned([Int(py=acc)], params)
-    for j in range(len(members)):  # small-loop(one descriptor per ensemble member): Python unpack
+    for j in range(len(members)):  # driver-loop: over fixed call structure, small-loop(one descriptor per ensemble member): Python unpack
         var entry = members[j]
         if len(entry) != 4:
             raise Error("x_trees_accumulate_cols_many: each member needs (x, cols, ks, weight)")
@@ -735,7 +739,7 @@ def calibrated_proba_binding(acc: PythonObject, pairs: PythonObject, params: Pyt
         owned.addrs.append(Int(py=row[0]))
         owned.addrs.append(Int(py=row[3]))
         var words: List[Int] = [Int(py=row[1]), Int(py=row[2]), Int(py=row[4]), len(cals)]
-        for w in range(4):  # small-loop(the four integer words of a pair)
+        for w in range(4):  # driver-loop: over fixed call structure, small-loop(the four integer words of a pair)
             owned.ints.append(words[w])
             owned.floats.append(Float64(words[w]))
             owned.bad.append(UInt8(0))
@@ -796,7 +800,7 @@ def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObjec
     # Unpack only; the body is xtrees/glue_runs.mojo::stack_w64_run (XT_STACK_W64):
     # addresses = [dst, column 0, column 1, ...].
     var addrs: List[Int] = [Int(py=dst)]
-    for j in range(len(cols)):  # small-loop(one address word per column): Python unpack
+    for j in range(len(cols)):  # driver-loop: over fixed call structure, small-loop(one address word per column): Python unpack
         addrs.append(Int(py=cols[j]))
     var owned = _xt_owned(addrs^, params)
     var result = stack_w64_run(owned.view())
@@ -854,7 +858,7 @@ def oob_r2_binding(bufs: PythonObject, params: PythonObject) raises -> PythonObj
     if len(bufs) != 6:
         raise Error("x_trees_oob_r2: bufs must hold 6 addresses")
     var addrs = List[Int]()
-    for j in range(6):  # small-loop(the six buffer address words): Python unpack
+    for j in range(6):  # driver-loop: over fixed call structure, small-loop(the six buffer address words): Python unpack
         addrs.append(Int(py=bufs[j]))
     var owned = _xt_owned(addrs^, params)
     var result = oob_r2_run(owned.view())
@@ -1064,7 +1068,7 @@ def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: Python
 def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     _need(params, n, who)
     var out = List[Int]()
-    for i in range(n):  # small-loop(params words)
+    for i in range(n):  # driver-loop: over fixed call structure, small-loop(params words)
         out.append(_i(params, i))
     return out^
 
@@ -1086,7 +1090,7 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
 
 
 def _kshap_check(p: List[Int], who: String) raises:
-    for i in range(9):  # small-loop(the nine params words)
+    for i in range(9):  # driver-loop: over fixed call structure, small-loop(the nine params words)
         if p[i] < 0:
             raise Error(who + ": negative count")
     if p[1] < 1 or p[2] < 1 or p[4] < p[3]:

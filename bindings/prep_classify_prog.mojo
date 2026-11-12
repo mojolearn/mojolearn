@@ -153,9 +153,9 @@ struct ClsProg(Movable):
         """`_Prog.stage`: op, total, the parameters, zero padding."""
         self.stages.append(op)
         self.stages.append(total)
-        for i in range(len(params)):  # small-loop(params: at most fourteen stage parameters)
+        for i in range(len(params)):  # driver-loop: over at most fourteen stage parameters
             self.stages.append(params[i])
-        for _ in range(PARAMS - len(params)):  # small-loop(params: pad the fixed fourteen-word stage ABI)
+        for _ in range(PARAMS - len(params)):  # driver-loop: over the padding of the fixed fourteen-word stage ABI
             self.stages.append(0)
 
     def run(mut self, mode: PythonObject, context: PythonObject) raises:
