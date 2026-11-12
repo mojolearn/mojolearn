@@ -57,14 +57,14 @@ from core.bgmm_native_api import (
 from core.kmeans_variants_api import VariantsSpan
 from core.mixture_native_api import (
     MIXTURE_NATIVE_ABI, MIXTURE_NATIVE_COUNT, MIXTURE_NATIVE_CAPABILITIES, MIXTURE_CAP_FIT_PREDICT,
-    MIXTURE_NATIVE_SCORE_SAMPLES, MIXTURE_NATIVE_PREDICT_PROBA, MIXTURE_NATIVE_PREDICT,
-    MIXTURE_NATIVE_SCORE_BIC_AIC, GmmDriver, GmmFitRequest, GmmScoreRequest,
+    GmmDriver, GmmFitRequest, GmmScoreRequest,
 )
 from bindings.kmeans_variants_boundary_door import variants_span
 from bindings.boundary_read import read_int_like, read_float_like, read_bool, pack_room
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi import _target, _refusal
 from bindings.py_optional import py_or_none
+from mixture.mixture_native_run import _gmm_operation
 
 comptime _GMM = "mojolearn GaussianMixture: "
 # The by-name refusals of the options `GmmParams` does not carry
@@ -380,20 +380,6 @@ def _gmm_connection(binding: PythonObject) raises -> _GmmConnection:
     var provider = neural_descriptor_connect_factory_once(factory, String(MIXTURE_NATIVE_ABI), MIXTURE_NATIVE_COUNT)
     var driver = GmmDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
     return _GmmConnection(provider, driver^)
-
-
-def _gmm_operation(name: String) raises -> Int:
-    """The scoring operation of the former Python entry `name`."""
-    if name == "gmm_score_samples":
-        return MIXTURE_NATIVE_SCORE_SAMPLES
-    if name == "gmm_predict_proba":
-        return MIXTURE_NATIVE_PREDICT_PROBA
-    if name == "gmm_predict":
-        return MIXTURE_NATIVE_PREDICT
-    if name == "gmm_score_bic_aic":
-        return MIXTURE_NATIVE_SCORE_BIC_AIC
-    raise Error("RuntimeError: unknown GaussianMixture scoring entry " + name)
-
 
 def _gmm_score_run(binding: PythonObject, operation: Int, request: GmmScoreRequest) raises:
     """One scoring entry on the typed transport, the GIL released around it

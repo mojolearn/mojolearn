@@ -36,6 +36,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
+from x_neighbors.neighbors_public_lifecycle_run import _method, _knn_fold_operation
 
 
 struct NeighborPublicCall(Movable):
@@ -60,16 +61,6 @@ struct NeighborPublicCall(Movable):
         self.depth = depth
         self.rows = rows
         self.columns = columns
-
-
-def _method(operation: String) raises -> String:
-    var names = ["fit_predict", "fit_transform", "predict_log_proba", "predict_proba", "score_samples",
-                 "decision_function", "transform", "predict", "score", "fit"]
-    for suffix in names:  # small-loop(public neighbor operation names)
-        if operation.endswith(suffix):
-            return suffix
-    raise Error("RuntimeError: unknown native neighbor lifecycle operation " + operation)
-
 
 def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, required: Bool,
             multioutput: Bool, context: PythonObject) raises -> PythonObject:
@@ -158,15 +149,6 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
         classical_warn_column(context)
         return flat
     return source
-
-
-def _knn_fold_operation(operation: String) -> Bool:
-    """The k-NN query operations model selection calls on a fold (the
-    classifier's and regressor's predict / predict_proba / score)."""
-    return (operation == "family_xn_knn_clf_predict" or operation == "family_xn_knn_clf_predict_proba"
-            or operation == "family_xn_knn_clf_score" or operation == "family_xn_knn_reg_predict"
-            or operation == "family_xn_knn_reg_score")
-
 
 def neighbors_public_begin(model: PythonObject, operation: String, args: PythonObject,
                            context: PythonObject) raises -> NeighborPublicCall:
