@@ -42,27 +42,32 @@ def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
 
 def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol():
     owner = (ROOT / "bindings/pls_native.mojo").read_text()
-    target = owner[owner.index("def _target("):owner.index("def _center_scale(")]
-    assert '_pls_input(source, "Y", context, -1)' in target
-    assert 'kit.input_snapshot(input, 1, input.shape[0])' in target
+    target = owner[owner.index("def _target("):owner.index("def _pls_store(")]
+    assert '_pls_input(source, "Y", context, pin, -1)' in target
+    assert 'decomp_door_snapshot(door, kit, input, pin, 1, input.shape[0])' in target
     assert 'return (kit.transpose(row), True)' in target
     code = '\n'.join(line.split('#', 1)[0] for line in target.splitlines())
     assert not any(token in code for token in ('py_call(', 'getattr', 'hasattr', 'source.shape', 'source.reshape'))
     # The operand admission is the one path (lane a1b: decomp_input_snapshot
     # deleted): admit_x_unrecorded / admit_f32, then the captured metadata.
     helper = owner[owner.index("def _pls_input("):owner.index("def _matrix(")]
-    assert 'admit_x_unrecorded(value, public_name, context)' in helper
+    assert 'admit_x_unrecorded(value, public_name, context, defer_finite=defer)' in helper
     assert 'admit_f32(view, nd, name, context, admitted=True)' in helper
-    assert 'array_metadata_once(array, array_shape_once(array, context), name, context)' in helper
-    assert 'snapshot.owner = Python.tuple(source, snapshot.owner)' in helper
+    assert 'array_metadata_once(array, array_shape_once(array, context), name, context, pin)' in helper
+    assert 'pin.owner = Python.tuple(source, pin.owner)' in helper
 
 
 def test_kit_retains_snapshot_owner_and_drops_address_when_device_writes():
-    kit = (ROOT / "bindings/decomp_kit_native.mojo").read_text()
-    assert 'self.input_owners.append(snapshot.owner)' in kit
-    assert 'self.matrices[index].host_address = snapshot.source.addr' in kit
+    # The door keeps the pin's owners for the call (lane entangled-decompkit:
+    # the typed kit holds addresses only); a device write drops the host words.
+    door = (ROOT / "bindings/decomp_kit_native.mojo").read_text()
+    snapshot = door[door.index("def decomp_door_snapshot("):door.index("def decomp_door_tested(")]
+    assert 'door.keep(pin.owner)' in snapshot
+    assert 'kit.borrow(snapshot.source.addr, rows, cols)' in snapshot
+    kit = (ROOT / "bindings/decomp_kit_run.mojo").read_text()
     invalidation = kit[kit.index('    def wrote_device('):kit.index('    def wrote_host(')]
-    assert 'self.matrices[a].host_address = -1' in invalidation
+    assert 'self.matrices[a].store = -1' in invalidation
+    assert 'self.matrices[a].borrowed = 0' in invalidation
 
 
 def test_public_lifecycle_replaces_decorators_only_for_pls_family():

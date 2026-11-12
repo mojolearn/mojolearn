@@ -28,8 +28,8 @@ class ResidentSourceContract(unittest.TestCase):
         kit = _read("bindings/decomp_kit_native.mojo")
         for token in ("def decomp_resident_find(", "def decomp_resident_hold(", "def decomp_resident_operand(",
                       "def decomp_resident_adopt(", "def decomp_resident_drop(", "model_generation",
-                      "fitted_freeze_any", "resident_capsule(free, handle)", "def resident_keep(",
-                      "def resident_derived("):
+                      "fitted_freeze_any", "resident_capsule(free, handle)", "def decomp_door_resident_keep(",
+                      "def decomp_door_resident_derived("):
             self.assertIn(token, kit)
         tail = kit.split("def decomp_resident_generation(", 1)[1]
         self.assertNotIn("py_setitem(fields", tail)  # never in the model's __dict__
@@ -37,9 +37,9 @@ class ResidentSourceContract(unittest.TestCase):
 
     def test_doors_use_the_shared_helpers(self):
         als = _read("bindings/als_native.mojo")
-        self.assertIn("kit.owner = model", als)
-        self.assertIn("kit.resident_derived(", als)
-        self.assertIn("kit.resident_keep(", als)
+        self.assertIn("door.owner = model", als)
+        self.assertIn("decomp_door_resident_derived(", als)
+        self.assertIn("decomp_door_resident_keep(", als)
         rp = _read("bindings/rp_native.mojo")
         self.assertIn("decomp_resident_operand(", rp)
         self.assertIn("decomp_resident_drop(model)", rp)
