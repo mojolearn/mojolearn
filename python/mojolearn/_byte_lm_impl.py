@@ -184,9 +184,14 @@ def _load(shape=None):
     # numeric mode and vendor still refuse a real mismatch. Before
     # 2026-10-10 the suffix carried only the neural part and grid arms
     # attn_softmax / ce_token_fold were refused here (bytelm-profile-harness).
-    arithmetic_suffix = str(binding.byte_lm_arithmetic_suffix())
+    # The device image no longer registers `byte_lm_arithmetic_suffix`
+    # (deleted by 1bdaa5e00f / 6890e9658f; the trainer door reads it from the
+    # trainer table's glue entry). The default profile is PROFILE followed by
+    # that same suffix, so the suffix is the profile's tail past PROFILE.
+    profile = str(binding.byte_lm_profile())
+    arithmetic_suffix = profile[len(PROFILE):]
     if (int(binding.byte_lm_numeric_mode()) != _NATIVE_MODE_CODE[mode]
-            or str(binding.byte_lm_profile()) != PROFILE + arithmetic_suffix
+            or not profile.startswith(PROFILE)
             or str(binding.byte_lm_vendor()) not in vendors):
         raise RuntimeError('Byte-LM requires the exact native profile, the selected IDENTICAL/FAST mode and CUDA/HIP/Metal vendor '
                            '(or, on a CPU-only install, the CPU byte LM binding)')
@@ -203,7 +208,8 @@ def _load(shape=None):
 def _runtime_profile(shape, mode=None):
     """Bind shape metadata to the arithmetic of the actual loaded binary."""
     binding = _backend.binding(_EXTENSION, mode or _mode())
-    return shape.profile + str(binding.byte_lm_arithmetic_suffix())
+    # The suffix is the default profile's tail past PROFILE (see `_load`).
+    return shape.profile + str(binding.byte_lm_profile())[len(PROFILE):]
 
 
 def _sha256_hex(data):

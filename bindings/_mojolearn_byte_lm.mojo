@@ -75,7 +75,7 @@ from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import download_f32, download_f32_into
-from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+from training.byte_lm_config import ByteConfig
 from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
 from training.byte_lm import (
     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
@@ -1610,14 +1610,6 @@ def byte_lm_schedule_create_binding(kind: PythonObject) raises -> PythonObject:
 def byte_lm_schedule_handle_binding(session: PythonObject) raises -> PythonObject:
     # Only the extension that minted this exact native value may unwrap it.
     return PythonObject(Int(session.downcast_value_ptr[ByteScheduleSession]()))
-
-
-def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
-    # The whole byte-LM arithmetic suffix that ByteConfig.profile() appends
-    # (neural + CE token-tree + GEMM leaf + attention tags), not only the
-    # neural part: the loader checks profile == PROFILE + this, so an A/B arm
-    # build (e.g. MOJOLEARN_IDN_GEMM_LEAF) loads (bytelm-profile-harness).
-    return PythonObject(byte_lm_arithmetic_suffix())
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_byte_lm.mojo
