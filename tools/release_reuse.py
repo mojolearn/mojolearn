@@ -589,8 +589,15 @@ def toolchain(tree, plat):
     if not lock.is_file():
         return None
     text = lock.read_text(errors="replace")
+    # Only the `default` environment's packages: since MAX 26.7 the lock pins one
+    # `max-<v>-3.<py>release` per Python version across environments, and the
+    # build box installs the default environment only (2026-11-12: every Linux
+    # leg of the first 1.2.0 measurement build failed the pin check on the
+    # 3.13 package of the other environment).
+    env = re.search(r"^  default:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|^[A-Za-z]|\Z)", text, re.S | re.M)
+    scope = env.group(1) if env else text
     pkgs = sorted(set(re.findall(
-        r"conda\.modular\.com/max/%s/((?:mojo|mojo-compiler|max|max-core)-[^/\s]+)\.conda" % re.escape(plat), text)))
+        r"conda\.modular\.com/max/%s/((?:mojo|mojo-compiler|max|max-core)-[^/\s]+)\.conda" % re.escape(plat), scope)))
     return dict(platform=plat, packages=pkgs, pixi_lock_sha256=sha256(lock))
 
 
