@@ -84,6 +84,8 @@ THE GIL is released around every device call, and nothing inside a
 
 from bindings.native_owner_registry import register_native_owner_type, native_owner_no_pins
 from core.gp_native_provider import GPProviderAPI
+from core.gp_entry_table import GPEntryKey, GP_COLUMN_DEVICE, gp_entry_vendor, gp_table_publish
+from bindings.py_balanced import py_setattr
 from core.gp_native_device import GPDeviceKernels
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -1471,9 +1473,27 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
 comptime GP_DEVICE_NATIVE_API = SharedSlot[GPProviderAPI[GPDeviceKernels], ("MojolearnGPDeviceKernelsV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnGPDeviceKernelsV1Fast")]
 
 
+# The capsule factory stays only for the Python import prerequisites that
+# name it (python/mojolearn/_native_parallel_shard.py, host_surface.py); no
+# native caller connects through it (the GP owners and the shard worker read
+# the table below, core/gp_entry_table.mojo).
 def gp_native_api_v1_binding() raises -> PythonObject:
     var api = GP_DEVICE_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_gp_table(module: PythonObject) raises:
+    # The device column of the GP table (core/gp_entry_table.mojo): the GP
+    # owners (bindings/gp_native_boundary.mojo) and the GPC shard worker read
+    # the key from the module attribute `gp_native_key` and call this entry
+    # with plain values.
+    var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), gp_entry_vendor(COMPILED_VENDOR), GP_COLUMN_DEVICE)
+    if key.vendor < 0:
+        raise Error("native GP entries: unknown compiled vendor " + String(COMPILED_VENDOR))
+    var api = GP_DEVICE_NATIVE_API.get_or_create_ptr()
+    gp_table_publish(key, Int(api[].entries.unsafe_ptr()), api[].entries[0])
+    py_setattr(module, "gp_native_key", Python.tuple(PythonObject(key.mode), PythonObject(key.vendor),
+                                                     PythonObject(key.column)))
 
 def build__mojolearn_gp() -> PythonObject:
     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
@@ -1521,6 +1541,7 @@ def build__mojolearn_gp() -> PythonObject:
         # it in finalize(); see bindings/native_owner_registry.mojo).
         var published = m.finalize()
         register_native_owner_type[GpResidentLease](published, native_owner_no_pins)
+        _publish_gp_table(published)
         return published
     except e:
         abort(String("failed to create _mojolearn_gp: ", e))
