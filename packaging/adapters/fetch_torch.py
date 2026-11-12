@@ -298,10 +298,22 @@ def main(argv=None):
     with urllib.request.urlopen(project, timeout=120) as response:
         page = response.read().decode("utf-8", "replace")
     chosen = choose_wheel(index_files(page, project), pin["version"], system, a.python_tag)
-    expected = pin.get("wheel_sha256") or chosen["index_sha256"]
-    if pin.get("wheel_sha256") and chosen["index_sha256"] and chosen["index_sha256"] != pin["wheel_sha256"]:
+    # One pinned digest per wheel file name: the build box's Python decides
+    # which wheel is fetched (the Linux default environment moved from 3.14 to
+    # 3.13 with MAX 26.7), and a digest pinned for another tag's wheel must not
+    # refuse this one (2026-11-12: the hip leg refused the cp313 wheel with the
+    # cp314 digest). The single `wheel_sha256` applies only to the wheel
+    # `wheel_sha256_of` names, or to any wheel when it names none.
+    by_wheel = pin.get("wheel_sha256_by_wheel") or {}
+    pinned = by_wheel.get(chosen["wheel"])
+    if not pinned and pin.get("wheel_sha256"):
+        named = str(pin.get("wheel_sha256_of") or "")
+        if not named or chosen["wheel"] in named:
+            pinned = pin["wheel_sha256"]
+    expected = pinned or chosen["index_sha256"]
+    if pinned and chosen["index_sha256"] and chosen["index_sha256"] != pinned:
         raise SystemExit(f"fetch_torch: the index serves {chosen['wheel']} with sha256 {chosen['index_sha256']}, "
-                         f"pins.json pins {pin['wheel_sha256']}")
+                         f"pins.json pins {pinned}")
     if not expected:
         raise SystemExit(f"fetch_torch: {project} serves no sha256 for {chosen['wheel']} and pins.json pins none")
     a.cache.mkdir(parents=True, exist_ok=True)
