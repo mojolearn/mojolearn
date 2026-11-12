@@ -192,7 +192,7 @@ def str_unique_into(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
     if n <= 0:
         return List[Int]()
     var units = (n + _UNIQUE_CHUNK - 1) // _UNIQUE_CHUNK
-    var local_cap = _pow2_at_least(2 * min(n, _UNIQUE_CHUNK) + 2)
+    var local_cap = _pow2_at_least(2 * min(n, _UNIQUE_CHUNK))  # load at most one half: a probe always ends
     var hashes = List[UInt64](length=n, fill=0)
     var local_rows = List[Int](length=units * local_cap, fill=-1)
     var tp = UnsafePointer(to=table)
