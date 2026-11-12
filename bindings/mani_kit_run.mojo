@@ -649,21 +649,28 @@ struct MRun(Movable):
             return self.fitted[fi].on_device and self.fitted[fi].key == self.images[k].key
         return self.mats[a].device >= 0 and self.mats[a].image == k
 
+    def host_snapshot(mut self, address: Int, rows: Int, cols: Int, ndim: Int, name: String) raises -> Int:
+        """`mk_from_snapshot`: one host copy of the admitted C-order float32
+        words, refused when empty or not finite."""
+        if ndim != 2 or rows == 0 or cols == 0:
+            raise Error(name + ": a nonempty two-dimensional input is required")
+        var out = self.zeros(rows, cols)
+        var src = MK_F32P(unsafe_from_address=address)
+        unsafe_memcpy(dest=self.ptr(out), src=src, count=rows * cols)
+        if not host_all_finite_f32(src, rows * cols):
+            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+        return out
+
     def from_snapshot(mut self, k: Int, address: Int, rows: Int, cols: Int, ndim: Int, name: String) raises -> Int:
         """`from_snapshot` / `mk_from_snapshot`: the admitted C-order float32
         input, refused when it is empty or not finite. A resident image
         uploads straight from the admitted address (the finiteness test runs
         on the device over the uploaded words, lane a8d); a host image copies
         the words once and scans them."""
+        if not self.images[k].resident:
+            return self.host_snapshot(address, rows, cols, ndim, name)
         if ndim != 2 or rows == 0 or cols == 0:
             raise Error(name + ": a nonempty two-dimensional input is required")
-        if not self.images[k].resident:
-            var out = self.zeros(rows, cols)
-            var src = MK_F32P(unsafe_from_address=address)
-            unsafe_memcpy(dest=self.ptr(out), src=src, count=rows * cols)
-            if not host_all_finite_f32(src, rows * cols):
-                raise Error(name + ": input must be finite; NaN/inf are unsupported")
-            return out
         var handle = self.alloc(k, rows * cols)
         var flagged = self.hcall(k, XD_DEV_UPLOAD_FINITE, [address], [handle, rows * cols])
         if flagged != 0:
