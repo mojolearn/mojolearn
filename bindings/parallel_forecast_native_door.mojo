@@ -32,9 +32,17 @@ from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _
 from bindings.tsa_admission import tsa_hw_fields
 from bindings.tsa_arima_native import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common import (
-    shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state, shard_model,
-    shard_array, shard_identity,
+    shard_ranges,
+    shard_devices,
+    shard_run,
+    shard_rows,
+    shard_concat,
+    shard_state,
+    shard_model,
+    shard_array,
+    shard_identity,
 )
+from bindings.parallel_shard_common_run import shard_read_shift
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.shared_slot import SharedSlot
 

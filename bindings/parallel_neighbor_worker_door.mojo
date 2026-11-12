@@ -12,7 +12,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, classical_decode_labels
 from bindings.admitted_input import admit_ids
 from bindings.family_common import family_call, family_entry, family_array
-from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_item, shard_array
+from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_array
+from bindings.parallel_shard_common_run import shard_item
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from providers.python.array_metadata_pyapi import ArrayPin
 from bindings.neighbors_knn_native import (

@@ -35,6 +35,14 @@ from bindings.native_process_pool import process_pool_create, process_pool_map, 
 from bindings.native_worker_inventory import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native import tsa_array
 from core.shared_slot import SharedSlot
+from bindings.parallel_shard_common_run import (
+    shard_fault_mark,
+    shard_read_shift,
+    shard_faults_take,
+    _numerical,
+    shard_store_token,
+    shard_item,
+)
 
 
 def shard_b() raises -> PythonObject:
@@ -76,47 +84,29 @@ def shard_devices(devices: PythonObject) raises -> Int:
         _ = py_call(seen.add, selected[i])
     return len(selected)
 
-
-def shard_read_shift(index: Int, first: Int, n_devices: Int) -> Int:
-    """`_parallel_pool.driver_read_shift(index, first, devices)`: 1 for a
-    shard on an owner above rank 0 (rank = index % n_devices) whose true
-    start is above 0 when both switch variables are set, else 0. Read at
-    call time, never cached."""
-    if first < 1 or n_devices < 2 or index % n_devices == 0:
-        return 0
-    if (String(getenv("MOJOLEARN_PAR_DRIVER_SABOTAGE")) == "1"
-            and String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1"):
-        return 1
-    return 0
-
-
 struct ShardTrace(Defaultable, Movable):
+    # The fault counter is typed RUN state (bindings/parallel_shard_common_run.mojo).
     var records: PythonObject
-    var faults: Int
 
     def __init__(out self):
         self.records = PythonObject(None)
-        self.faults = 0
 
 
 #: Every pool the sharded drivers started in this process since the last
 #: `shard_trace_take`: its devices and its workers' own driver inventories
 #: (the record the verifier's two-device witness reads,
 #: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
-comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV1"]
+comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV2", 2]
 
 
 struct ShardIdle(Defaultable, Movable):
     #: {(child module, devices tuple): [pool, parent environment snapshot, owner pid]}
     var pools: PythonObject
-    #: `shard_run_stored` calls made by this process (its store tokens)
-    var stored_calls: Int
     #: a WORKER's stored call operands, {token: payload tuple} (`shard_store`)
     var stored: PythonObject
 
     def __init__(out self):
         self.pools = PythonObject(None)
-        self.stored_calls = 0
         self.stored = PythonObject(None)
 
 
@@ -190,7 +180,7 @@ def _is_stored_ref(item: PythonObject) raises -> Bool:
 #: workers by identity and starts its own trace record, as a fresh pool
 #: does. A failed call closes its pool and nothing is kept. Workers held
 #: here end when the parent process ends (their socket closes).
-comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV1"]
+comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV2", 2]
 
 
 def shard_identity() raises -> PythonObject:
@@ -249,30 +239,11 @@ def shard_trace_take() raises -> PythonObject:
     t[].records = shard_b().list()
     return shard_b().list() if out is None else out
 
-
-def shard_faults_take() raises -> Int:
-    """How many transport faults the verifier's switch injected since the
-    last take (`shard_map`), and zero."""
-    var t = SHARD_TRACE.get_or_create_ptr()
-    var n = t[].faults
-    t[].faults = 0
-    return n
-
-
 def _operation(request: PythonObject) raises -> String:
     var name = String(request[0])
     if name == "py":
         return String(request[1])
     return name
-
-
-def _numerical(name: String) -> Bool:
-    return (name == "arima_predict_shard" or name == "hw_predict_shard" or name == "gpc_class_fit"
-            or name == "gpc_class_predict" or name == "ivf_search" or name == "rbf_rows"
-            or name == "scaler_fit" or name == "scaler_transform" or name == "forest_fit"
-            or name == "arima_fit_shard" or name == "hw_fit_shard" or name == "reference_shard"
-            or name == "reference_query" or name == "query_rows")
-
 
 def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
     """`process_pool_map(pool, requests)`, with every request's worker and
@@ -298,9 +269,7 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
         var fault = String()
         if String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1":
             fault = String(getenv("MOJOLEARN_PAR_TRANSPORT_FAULT"))
-        var t = SHARD_TRACE.get_or_create_ptr()
-        if t[].faults == 0 and (fault == "drop_result" or fault == "reverse_results"):
-            t[].faults = 1
+        if (fault == "drop_result" or fault == "reverse_results") and shard_fault_mark():
             var altered = py_call(b.list, results)
             if fault == "drop_result":
                 _ = py_call(altered.pop)
@@ -392,14 +361,6 @@ def shard_stored_ref(token: String, index: Int) raises -> PythonObject:
     `shard_run_stored` stored under `token` on every worker."""
     return Python.tuple(PythonObject(SHARD_STORED_MARK), PythonObject(token), PythonObject(index))
 
-
-def shard_store_token() raises -> String:
-    """A token unique to this process and call (pid plus a counter)."""
-    var idle = SHARD_IDLE.get_or_create_ptr()
-    idle[].stored_calls += 1
-    return String("ss-") + String(Int(external_call["getpid", Int32]())) + "-" + String(idle[].stored_calls)
-
-
 def shard_run_stored(payload: PythonObject, token: String, requests: PythonObject, devices: PythonObject,
                      child: String) raises -> PythonObject:
     """`shard_run` with the call's shared operands sent ONCE per worker
@@ -436,24 +397,6 @@ def shard_run_stored(payload: PythonObject, token: String, requests: PythonObjec
         raise error^
     _shard_keep(acquired)
     return results
-
-
-def shard_item(dtype: String) raises -> Tuple[String, Int]:
-    """(array type code, item size) of a C-ordered native dtype string."""
-    if dtype == "<f4":
-        return (String("f"), 4)
-    if dtype == "<f8":
-        return (String("d"), 8)
-    if dtype == "<i4":
-        return (String("i"), 4)
-    if dtype == "<i8":
-        return (String("q"), 8)
-    if dtype == "<u4":
-        return (String("I"), 4)
-    if dtype == "|u1" or dtype == "<u1":
-        return (String("B"), 1)
-    raise Error("ValueError: shard arrays require float32, float64, int32, int64, uint32 or uint8, got " + dtype)
-
 
 def shard_dtype(value: PythonObject) raises -> String:
     """The typestr ("<f4", "<i8", ...) of a mojolearn Array or an ndarray.
