@@ -547,8 +547,31 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     return out
 
 
+struct _PairAdmit(Movable):
+    """The builtins and connected number types the non-exact pair and weight
+    admissions call, read ONCE per `_pairs_arrays` call (as the per-pair
+    loop before lane loops-trees-ab hoisted them; perf audit 2-b: the helper
+    split re-read `trees_builtins()`, `context[...]` and four builtin
+    attributes per element on this branch)."""
+    var isinstance_: PythonObject
+    var integral_t: PythonObject
+    var real_t: PythonObject
+    var bool_t: PythonObject
+    var int_t: PythonObject
+    var float_t: PythonObject
+
+    def __init__(out self, context: PythonObject) raises:
+        var b = _b()
+        self.isinstance_ = b.isinstance
+        self.integral_t = context["trees_integral_type"]
+        self.real_t = context["trees_real_type"]
+        self.bool_t = b.bool
+        self.int_t = b.int
+        self.float_t = b.float
+
+
 def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word: Int,
-                      context: PythonObject) raises -> Int:
+                      admit: _PairAdmit) raises -> Int:
     """One end of `pairs[i]`: an exact Python int is read with one
     PyLong_AsLongLong (it is Integral and not bool); any other object takes
     the `isinstance(numbers.Integral)` / not-bool admission and `int()` of
@@ -557,12 +580,11 @@ def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word
     if borrowed_type_word(index._obj_ptr) == int_word:
         v = read_int(index)
     else:
-        var b = _b()
-        if (not Bool(py=py_call(b.isinstance, index, context["trees_integral_type"]))
-                or Bool(py=py_call(b.isinstance, index, b.bool))):
+        if (not Bool(py=py_call(admit.isinstance_, index, admit.integral_t))
+                or Bool(py=py_call(admit.isinstance_, index, admit.bool_t))):
             raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
                         + "type=" + _str(py_type(index)) + ": must be an integer.")
-        v = Int(py=py_call_typed(b.int, index))
+        v = Int(py=py_call_typed(admit.int_t, index))
     _pair_end_range(v, i, j, n_rows)
     return v
 
@@ -573,7 +595,7 @@ def _pair_end_range(v: Int, i: Int, j: Int, n_rows: Int) raises:
                     + String(n_rows) + " rows")
 
 
-def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, context: PythonObject) raises -> Float32:
+def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, admit: _PairAdmit) raises -> Float32:
     """One `pairs_weight[i]`: an exact Python float is read with one
     PyFloat_AsDouble; any other object takes the `isinstance(numbers.Real)`
     admission and `float()`. Finite and nonnegative, else the refusal."""
@@ -583,9 +605,9 @@ def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, context: Pyth
         ok = True
         f = read_float(w)
     else:
-        ok = Bool(py=py_call(_b().isinstance, w, context["trees_real_type"]))
+        ok = Bool(py=py_call(admit.isinstance_, w, admit.real_t))
         if ok:
-            f = _float(w)
+            f = Float64(py=py_call_typed(admit.float_t, w))
     if ok:
         ok = isfinite(f) and f >= 0
     if not ok:
@@ -638,12 +660,13 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
         pair_view.value().release()
     else:
         var int_word = borrowed_type_word(PythonObject(1)._obj_ptr)
+        var admit = _PairAdmit(context)
         for i in range(m):  # boundary-read: one exact-type slot read per pair end of a user list (no buffer to view)
             var pair = rows[i]
             if len(pair) != 2:
                 raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
-            var w0 = _pair_end_checked(pair[0], i, 0, n_rows, int_word, context)
-            var w1 = _pair_end_checked(pair[1], i, 1, n_rows, int_word, context)
+            var w0 = _pair_end_checked(pair[0], i, 0, n_rows, int_word, admit)
+            var w1 = _pair_end_checked(pair[1], i, 1, n_rows, int_word, admit)
             if w0 == w1:
                 raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
             fp[2 * i] = UInt32(w0)
@@ -681,8 +704,9 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
             raise Error("mojolearn: len(pairs_weight) = " + String(len(listed)) + " is not equal to "
                         + "len(pairs) = " + String(m) + " ")
         var float_word = borrowed_type_word(PythonObject(1.5)._obj_ptr)
+        var admit = _PairAdmit(context)
         for i in range(m):  # boundary-read: one exact-type slot read per weight of a user list (no buffer to view)
-            wp[i] = _pair_weight_checked(listed[i], i, float_word, context)
+            wp[i] = _pair_weight_checked(listed[i], i, float_word, admit)
     _ = weight_view^
     _ = weights  # keep the Python object alive through the native writes above
     return Python.tuple(flat, weights)
