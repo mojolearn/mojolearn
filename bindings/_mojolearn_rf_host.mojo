@@ -69,6 +69,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.forest_export_binding import (
+    forest_export_descriptor_py,
     ForestExportRegistry,
     copy_forest_export_leaves,
     forest_export_py_list_f64,
@@ -536,7 +537,7 @@ def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:
     var registry = RF_HOST_EXPORTS.get_or_create_ptr()
     if export:
         try:
-            return registry[].descriptor_py(handle)
+            return forest_export_descriptor_py(registry[], handle)
         except error:
             registry[].release(handle)
             raise error^

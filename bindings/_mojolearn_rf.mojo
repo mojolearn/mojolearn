@@ -450,6 +450,7 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises ->
 # DEVIATION 2482: both RF label types own the same typed tree list. Moving it
 # into the export registry retains existing native storage without flattening.
 from forest_export_binding import (
+    forest_export_descriptor_py,
     ForestExportRegistry, validate_forest_export_destinations,
     copy_forest_export_leaves, forest_export_py_list_f64,
     forest_export_py_list_i64,
@@ -741,7 +742,7 @@ def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:
     var registry = RF_EXPORTS.get_or_create_ptr()
     if export:
         try:
-            return registry[].descriptor_py(handle)
+            return forest_export_descriptor_py(registry[], handle)
         except error:
             registry[].release(handle)
             raise error^

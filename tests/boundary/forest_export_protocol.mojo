@@ -3,9 +3,10 @@
 from std.python import Python
 from std.memory import bitcast
 from forest_export_binding import (
-    ForestExportRegistry, validate_forest_export_counts,
+    ForestExportRegistry, forest_export_insert_py,
     validate_forest_export_destinations, copy_forest_export_leaves,
 )
+from core.forest_export_binding_impl import validate_forest_export_counts
 
 
 @fieldwise_init
@@ -17,7 +18,7 @@ def main() raises:
     _ = Python.import_module("builtins")
     var registry = ForestExportRegistry[CheckModel]()
     var meta: List[Int64] = [2, 1]
-    var descriptor = registry.insert(CheckModel(73), 2, 4, 1, meta^)
+    var descriptor = forest_export_insert_py(registry, CheckModel(73), 2, 4, 1, meta^)
     var handle = Int(py=descriptor[0])
     registry.validate(handle, 2, 4, 1)
     if registry.entries[handle].model.marker != 73:

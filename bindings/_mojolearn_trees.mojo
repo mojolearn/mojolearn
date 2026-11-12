@@ -94,6 +94,7 @@ from core.forest_inference_model import (
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
 from std.sys.compile import is_defined
 from forest_export_binding import (
+    forest_export_descriptor_py,
     ForestExportRegistry, validate_forest_export_destinations,
     copy_forest_export_leaves, forest_export_py_list_f64,
     forest_export_py_list_i64,
@@ -591,7 +592,7 @@ def _et_handle_py(handle: Int, export: Bool) raises -> PythonObject:
     var registry = ET_EXPORTS.get_or_create_ptr()
     if export:
         try:
-            return registry[].descriptor_py(handle)
+            return forest_export_descriptor_py(registry[], handle)
         except error:
             registry[].release(handle)
             raise error^
