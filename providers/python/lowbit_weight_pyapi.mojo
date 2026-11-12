@@ -11,7 +11,8 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_wrap_array
 from bindings.sequential_inputs import sequential_sequence_f32
-from bindings.linalg_ops_buffers import lin_is_f32, lin_dtype_name
+from bindings.linalg_ops_buffers import lin_dtype_name
+from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.linalg_ops_lowbit import lin_connected_binding, lin_lowbit, lin_call, lin_ints
 from bindings.tensor_view import base_format, shape_text

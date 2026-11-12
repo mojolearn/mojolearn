@@ -18,7 +18,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, ne
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance
 from bindings.tensor_view import TensorView, shape_text
-from bindings.linalg_ops_buffers import lin_truth, lin_is_f32, lin_dtype_name
+from bindings.linalg_ops_buffers import lin_truth, lin_dtype_name
+from bindings.linalg_ops_buffers_run import lin_is_f32
 from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0

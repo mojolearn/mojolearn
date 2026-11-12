@@ -25,11 +25,6 @@ def lin_truth(value: PythonObject) raises -> Bool:
     return Bool(py=py_call(native_loaded_module("builtins").bool, value))
 
 
-def lin_is_f32(v: TensorView) -> Bool:
-    """`_bufcheck.is_native_f32(pb.format)`."""
-    return base_format(v.fmt) == "f"
-
-
 def lin_dtype_name(obj: PythonObject, v: TensorView) raises -> String:
     # The admitted layout already carries dtype information. Reading an
     # arbitrary object's dtype/name properties would re-enter user metadata.
