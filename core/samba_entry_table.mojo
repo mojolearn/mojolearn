@@ -37,6 +37,7 @@ comptime SAMBA_PRIM_EMBEDDING_FORWARD = 0  # (embedding_forward)
 comptime SAMBA_PRIM_RMS_NORM_FORWARD = 2  # (rms_norm_forward)
 comptime SAMBA_PRIM_LINEAR_FORWARD = 4  # (linear_forward)
 comptime SAMBA_PRIM_CE_LOSS = 8  # (ce_loss)
+comptime SAMBA_PRIM_ACCUMULATE = 9  # (accumulate, the ordered pair fold)
 comptime SAMBA_PRIM_OPTIMIZER_STEP = 25  # (optimizer_step, per-call step)
 
 

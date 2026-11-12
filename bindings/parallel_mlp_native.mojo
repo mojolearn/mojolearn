@@ -23,6 +23,12 @@ from bindings.small_mlp_native import (
     small_mlp_call, small_mlp_from_state, small_mlp_grads_open, small_mlp_grads_close, small_mlp_grads_rows,
 )
 from core.shared_slot import SharedSlot
+from std.python._cpython import GILReleased
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_unresolved
+from core.samba_entry_table import (
+    SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_ACCUMULATE,
+    SAMBA_PRIM_OPTIMIZER_STEP,
+)
 
 
 struct ParallelMlpBoundary(Defaultable, Movable):
@@ -33,6 +39,15 @@ struct ParallelMlpBoundary(Defaultable, Movable):
     var entries: PythonObject
     var environ: PythonObject
     var mode: String
+    # The training image's neural primitive entry (core/samba_entry_table.mojo,
+    # SAMBA_TABLE_TRAINING), resolved ONCE at initialize for the admitted
+    # (mode, vendor) key. `accumulate` (op 9) and `optimizer_step` (op 25)
+    # are called through it with plain words; they were Python attribute
+    # fetches of the binding called through CPython (lane
+    # entangled-native-modules, 2026-11-12). A resolution refusal is kept and
+    # raised at the first call, so initialize refuses exactly what it did.
+    var primitives: EntryRef
+    var primitives_error: String
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -42,9 +57,19 @@ struct ParallelMlpBoundary(Defaultable, Movable):
         self.entries = PythonObject(None)
         self.environ = PythonObject(None)
         self.mode = String()
+        self.primitives = entry_ref_unresolved()
+        self.primitives_error = String("parallel MLP: training primitives are not connected")
 
 
-comptime PARALLEL_MLP_BOUNDARY = SharedSlot[ParallelMlpBoundary, "MojolearnParallelMlpBoundaryV1"]
+# V2: the layout gained the resolved primitive entry (V1 held Python entries).
+comptime PARALLEL_MLP_BOUNDARY = SharedSlot[ParallelMlpBoundary, "MojolearnParallelMlpBoundaryV2"]
+
+
+def _mlp_primitives() raises -> EntryRef:
+    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    if b[].primitives.word == 0:
+        raise Error(b[].primitives_error)
+    return b[].primitives
 
 
 def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: PythonObject,
@@ -57,8 +82,7 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
     b[].environ = environ
     b[].mode = mode
     b[].entries = b[].bi.dict()
-    for name in [String("accumulate"), String("optimizer_step"),  # small-loop(the fixed training entry names)
-                 String("training_numeric_mode"), String("training_vendor"),
+    for name in [String("training_numeric_mode"), String("training_vendor"),  # small-loop(the fixed training entry names)
                  String("optimizer_parallel_available"), String("accumulate_parallel_available"),
                  String("clip_parallel_available")]:
         var entry = PythonObject(None)
@@ -71,6 +95,15 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
         py_setitem(b[].entries, name, entry)
     if Int(py=b[].entries["training_numeric_mode"]()) != (1 if mode == "identical" else 0) or String(b[].entries["training_vendor"]()) != vendor:
         raise Error("parallel MLP: compiled mode/vendor admission mismatch")
+    b[].primitives = entry_ref_unresolved()
+    var word = samba_vendor_word(vendor)
+    if word < 0:
+        b[].primitives_error = String("parallel MLP: unsupported native vendor ") + vendor
+    else:
+        try:
+            b[].primitives = samba_ref[SAMBA_TABLE_TRAINING](SambaEntryKey(1 if mode == "identical" else 0, word))
+        except problem:
+            b[].primitives_error = String(problem)
 
 
 def _mlp_names() -> List[String]:
@@ -353,12 +386,18 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
             offset += counts[j]
             _ = value^
     var base = Int(py=stacked._addr)
-    for shard in range(1, n_shards):  # driver-loop: over fixed ascending logical gradient shard order
-        var addresses = b[].bi.list()
-        _ = py_call(addresses.append, PythonObject(base + 4 * shard * count))
-        _ = py_call(addresses.append, PythonObject(base + 4 * (shard - 1) * count))
-        _ = py_call(b[].entries["accumulate"], addresses, py_ints([count, 2, -1]))
-        _ = stacked  # keep the Python object alive through the native call above
+    # Primitive op 9 (the former `accumulate` entry: addresses [out, parts],
+    # ints [n, a, t_tokens]) through the entry resolved at initialize. One GIL
+    # release covers the whole ordered fold (the Python entry released it per
+    # shard); the fold order and every pair add are unchanged.
+    var primitives = _mlp_primitives()
+    with GILReleased(Python()):
+        for shard in range(1, n_shards):  # driver-loop: over fixed ascending logical gradient shard order
+            var addresses: Array[Int, 2] = [base + 4 * shard * count, base + 4 * (shard - 1) * count]
+            var ints: Array[Int, 3] = [count, 2, -1]
+            var floats: Array[Float64, 0] = []
+            _ = entry_ref_call(primitives, SAMBA_PRIM_ACCUMULATE, addresses, ints, floats)
+    _ = stacked  # keep the Python owner alive through the native calls above
     var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=base) + (n_shards - 1) * count
     offset = 0
     for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
@@ -386,7 +425,6 @@ def neural_cooperative_admit() raises:
 
 def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises -> PythonObject:
     neural_cooperative_admit()
-    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
     var next = mlp_validate_state(state)
     var step = Int(py=next["optimizer"]["step"])
     if step == 2147483647:
@@ -414,15 +452,23 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
         _ = value^
     op[4] = Int32(offset)
     var cfg = next["config"]
-    var plan = py_ints([4, 2, step + 1, 0])
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
-        _ = py_call(plan.append, cfg[name])
-    for i in range(4):  # small-loop(the four trailing plan words)
-        _ = py_call(plan.append, 0)
+    # Primitive op 25 (the former `optimizer_step` entry's words): ints
+    # [J, kind, t, nesterov, maximize], floats [lr, beta1, beta2, eps,
+    # weight_decay, momentum, dampening, max_norm]; the same AdamW plan as
+    # the former 13-word Python list (momentum, dampening, max_norm and
+    # maximize 0), the same Float64 -> Float32 narrowing in the callee.
+    var ints: Array[Int, 5] = [4, 2, step + 1, 0, 0]
+    var floats: Array[Float64, 8] = [Float64(py=cfg["lr"]), Float64(py=cfg["beta1"]), Float64(py=cfg["beta2"]),
+        Float64(py=cfg["eps"]), Float64(py=cfg["weight_decay"]), 0.0, 0.0, 0.0]
     var saved = next["optimizer"]
-    var written = py_call(b[].entries["optimizer_step"], params._addr, grads._addr,
-        saved["m"]._addr, saved["v"]._addr, offsets._addr, saved["flags"]._addr, info._addr, plan)
-    if Int(py=written) != 195:
+    var addresses: Array[Int, 7] = [Int(py=params._addr), Int(py=grads._addr), Int(py=saved["m"]._addr),
+        Int(py=saved["v"]._addr), Int(py=offsets._addr), Int(py=saved["flags"]._addr), Int(py=info._addr)]
+    var primitives = _mlp_primitives()
+    var written = 0
+    with GILReleased(Python()):
+        written = entry_ref_call(primitives, SAMBA_PRIM_OPTIMIZER_STEP, addresses, ints, floats)
+    _ = saved  # the moment and flag owners stay alive through the native call above
+    if written != 195:
         raise Error("RuntimeError: SmallMLPTrainer update returned incomplete state")
     _mlp_finite(params, "updated parameter")
     _mlp_finite(saved["m"], "first moment")
