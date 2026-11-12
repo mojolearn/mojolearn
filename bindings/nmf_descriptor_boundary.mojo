@@ -5,32 +5,19 @@ from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from core.pca_native_api import pca_vendor_name
 from core.nmf_native_api import (
-    NMF_NATIVE_ABI, NMF_NATIVE_COUNT, NMF_MODE, NMF_VENDOR, NMF_CAPABILITIES,
-    NMFNativeDriver, NMFFitRequest, NMFFitResult, NMFInverseRequest,
+    NMF_NATIVE_ABI, NMF_NATIVE_COUNT, NMFNativeDriver, NMFFitRequest, NMFFitResult, NMFInverseRequest,
 )
+from x_decomp.nmf_descriptor_boundary_run import (
+    nmf_connection_index, nmf_connection_add, nmf_mode, nmf_vendor, nmf_capabilities, nmf_driver,
+)
+from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type
 from bindings.decomp_owner_common import decomp_attr
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
-@fieldwise_init
-struct NMFConnection(Movable):
-    var provider: PythonObject
-    var driver: NMFNativeDriver
-    var mode: Int
-    var vendor: Int
-    var capabilities: Int
-
-
-struct NMFConnections(Defaultable, Movable):
-    var records: List[NMFConnection]
-
-    def __init__(out self):
-        self.records = List[NMFConnection]()
-
-
-comptime NMF_CONNECTIONS = SharedSlot[NMFConnections, "MojolearnNMFConnectionsV1"]
+comptime NMF_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnNMFProviderPinsV1"]
 
 
 def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObject,
@@ -59,24 +46,17 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
                     + "_mojolearn_x_decomp does not export " + legacy_name
                     + "; rebuild it with bindings/build_x_decomp.sh")
     var provider = neural_descriptor_connect_factory_once(factory, String(NMF_NATIVE_ABI), NMF_NATIVE_COUNT)
-    var cache = NMF_CONNECTIONS.get_or_create_ptr()
-    var index = -1
-    for candidate in range(len(cache[].records)):  # driver-loop: admitted native provider images
-        if cache[].records[candidate].provider is provider:
-            index = candidate
-            break
+    var index = nmf_connection_index(provider_word(provider))
     if index < 0:
-        var driver = NMFNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var native_mode = driver.metadata(NMF_MODE)
-        var vendor = driver.metadata(NMF_VENDOR)
-        var capabilities = driver.metadata(NMF_CAPABILITIES)
-        index = len(cache[].records)
-        cache[].records.append(NMFConnection(provider, driver^, native_mode, vendor, capabilities))
-    if pca_vendor_name(cache[].records[index].vendor) != String(context["vendor"]):
+        # The typed record and the door pin are appended together, under the GIL.
+        index = nmf_connection_add(provider_word(provider),
+            NMFNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        NMF_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
+    if pca_vendor_name(nmf_vendor(index)) != String(context["vendor"]):
         raise Error("RuntimeError: NMF native vendor differs from selected execution")
-    if cache[].records[index].mode != (1 if name == "identical" else 0):
+    if nmf_mode(index) != (1 if name == "identical" else 0):
         raise Error("RuntimeError: NMF native mode differs from selected execution")
-    if (cache[].records[index].capabilities & capability) == 0:
+    if (nmf_capabilities(index) & capability) == 0:
         raise Error("NotImplementedError: mojolearn " + String(py_type(model).__name__) + ": this build of "
                     + "_mojolearn_x_decomp does not export " + legacy_name
                     + "; rebuild it with bindings/build_x_decomp.sh")
@@ -84,9 +64,8 @@ def nmf_connection(model: PythonObject, fields: PythonObject, context: PythonObj
 
 
 def nmf_run_fit(connection: Int, request: NMFFitRequest) raises -> NMFFitResult:
-    var cache = NMF_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = NMF_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
+    var driver = nmf_driver(connection)
     try:
         with GILReleased(Python()):
             return driver.fit(request)
@@ -95,9 +74,8 @@ def nmf_run_fit(connection: Int, request: NMFFitRequest) raises -> NMFFitResult:
 
 
 def nmf_run_inverse(connection: Int, request: NMFInverseRequest) raises:
-    var cache = NMF_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = NMF_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
+    var driver = nmf_driver(connection)
     try:
         with GILReleased(Python()):
             driver.inverse(request)
