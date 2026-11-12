@@ -10,7 +10,7 @@ from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from providers.python.resample_pandas_pyapi import resample_pandas_array
 from bindings.sequential_arrays import sequential_array
 from bindings.xseq_native_common import xseq_input, xseq_addr
-from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi import ArrayPin, array_shape_once, array_metadata_once
 from providers.python.prophet_lifecycle_pyapi import prophet_scalar
 from core.cast_in import cast_in_kind
 from core.prophet_input_marshal import prophet_numeric_copy, prophet_datetime_copy
@@ -169,7 +169,8 @@ def prophet_contiguous(source: PythonObject, wide: Bool, context: PythonObject) 
         var words = py_call(source.view, context["xseq_prophet_big_i64"] if String(dtype.byteorder) == ">" else context["int64"])
         return prophet_contiguous(words, wide, context)
     var shape = array_shape_once(source, lifecycle)
-    var info = array_metadata_once(source, shape^, "ProphetForecaster input", lifecycle,
+    var info_pin = ArrayPin()
+    var info = array_metadata_once(source, shape^, "ProphetForecaster input", lifecycle, info_pin,
                                   allow_non_native=True, allow_unsupported=True)
     var out = sequential_array(source.shape, context["float64"] if wide else context["float32"], context)
     if info.count == 0:
@@ -180,11 +181,14 @@ def prophet_contiguous(source: PythonObject, wide: Bool, context: PythonObject) 
         # admitted before conversion, so no user __float__ can be invoked.
         _numbers(py_call(source.tolist), values, context)
         var numbers = xseq_input(values, context)
-        var numbers_info = array_metadata_once(numbers, array_shape_once(numbers, lifecycle), "ProphetForecaster values", lifecycle)
+        var numbers_pin = ArrayPin()
+        var numbers_info = array_metadata_once(numbers, array_shape_once(numbers, lifecycle), "ProphetForecaster values",
+                                               lifecycle, numbers_pin)
         prophet_numeric_copy(numbers_info.source.addr, numbers_info.shape, numbers_info.strides,
             numbers_info.source.itemsize, numbers_info.source.kind, numbers_info.native_byte_order,
             Int(py=xseq_addr(out)), wide)
         _ = numbers_info
+        _ = numbers_pin
     else:
         var kind = -1 if info.dtype_number == 13 else (-2 if info.dtype_number == 14 else (-3 if info.dtype_number == 15 else -4))
         if info.dtype_number < 13 or info.dtype_number > 16:
@@ -195,6 +199,7 @@ def prophet_contiguous(source: PythonObject, wide: Bool, context: PythonObject) 
         prophet_numeric_copy(info.source.addr, info.shape, info.strides, info.source.itemsize,
             kind, info.native_byte_order, Int(py=xseq_addr(out)), wide)
     _ = info
+    _ = info_pin
     return out
 
 
@@ -213,10 +218,13 @@ def prophet_temporal_into(source: PythonObject, target_dtype: PythonObject, dest
     # in Mojo, with common-unit promotion kept separate from ns time axes.
     var words = py_call(source.view, context["int64"])
     var lifecycle = context["xseq_lifecycle_context"]
-    var info = array_metadata_once(words, array_shape_once(words, lifecycle), "ProphetForecaster times", lifecycle, allow_unsupported=True)
+    var info_pin = ArrayPin()
+    var info = array_metadata_once(words, array_shape_once(words, lifecycle), "ProphetForecaster times", lifecycle,
+                                   info_pin, allow_unsupported=True)
     prophet_datetime_copy(info.source.addr, info.shape, info.strides, little, String(unit[0]), Int(py=unit[1]),
                           destination, String(target[0]), Int(py=target[1]), common)
     _ = info
+    _ = info_pin
 
 
 def prophet_nanoseconds(source: PythonObject, context: PythonObject) raises -> PythonObject:
