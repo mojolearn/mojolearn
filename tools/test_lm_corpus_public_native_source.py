@@ -8,6 +8,8 @@ PUBLIC = ROOT / "python/mojolearn/lm_corpus.py"
 NATIVE = ROOT / "bindings/lm_corpus_public_native.mojo"
 METADATA = ROOT / "bindings/lm_corpus_metadata.mojo"
 SCALARS = ROOT / "bindings/lm_corpus_scalars.mojo"
+# lane rs-embedding-bytelm: the typed floating product is RUN code.
+SCALARS_RUN = ROOT / "training/lm_corpus_scalars_run.mojo"
 
 
 class CorpusPublicSource(unittest.TestCase):
@@ -113,7 +115,7 @@ class CorpusPublicSource(unittest.TestCase):
         self.assertNotIn('corpus_int(step,', base)
 
     def test_numpy_step_arithmetic_is_typed_and_promotion_is_captured(self):
-        source = SCALARS.read_text()
+        source = SCALARS.read_text() + SCALARS_RUN.read_text()
         self.assertIn('native_numpy_module_fields(owner)', source)
         self.assertIn('py_type(getter) is not py_type(bi.len)', source)
         self.assertIn('getter.__self__ is not owner', source)
