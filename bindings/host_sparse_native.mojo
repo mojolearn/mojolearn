@@ -46,7 +46,8 @@ def host_sparse_format(value: PythonObject) raises -> String:
     if parent is None or py_type(parent) is not module_type:
         return ""
     var abc_read = False
-    var abc_meta = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var abc_meta = Optional[PythonObject]()
     var formats: List[String] = ["csr", "csc", "coo", "bsr", "dia", "dok", "lil"]
     for i in range(len(formats)):  # driver-loop: seven supported native sparse storage schemas
         var name = String(formats[i])
@@ -72,7 +73,7 @@ def host_sparse_format(value: PythonObject) raises -> String:
                     var found = py_get(py_fields(abc_module), PythonObject("ABCMeta"))
                     if py_type(found) is b.type:
                         abc_meta = found
-            if abc_meta is not None and meta is abc_meta:
+            if Bool(abc_meta) and meta is abc_meta.value():
                 return name
         _ = module
     return ""
