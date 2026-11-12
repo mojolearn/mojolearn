@@ -21,7 +21,14 @@ from x_decomp.ipca_run import _state_name
 from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
 from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
-from bindings.ipca_descriptor_boundary import ipca_connection, ipca_resident, ipca_run_fit, ipca_run_partial, ipca_run_query, ipca_run_free
+from bindings.ipca_descriptor_boundary import (
+    ipca_connection,
+    ipca_run_fit,
+    ipca_run_partial,
+    ipca_run_query,
+    ipca_run_free,
+)
+from x_decomp.ipca_descriptor_boundary_run import ipca_resident
 from bindings.ipca_owner_boundary import ipca_owner_drop, ipca_owner_adopt, ipca_owner_cached, ipca_owner_operand, ipca_owner_handle
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]

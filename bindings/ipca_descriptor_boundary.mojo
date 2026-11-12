@@ -1,37 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
-"""IPCA import-connected native descriptors and compiled-image lifetime pins."""
+"""IPCA import-connected native descriptors and compiled-image lifetime pins (door).
+
+The typed connection records are in `x_decomp/ipca_descriptor_boundary_run.mojo`; this door admits
+the provider, keeps its pin and releases the GIL around each typed driver call."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from core.pca_native_api import pca_vendor_name
 from core.ipca_native_api import (
-    IPCA_NATIVE_ABI, IPCA_NATIVE_COUNT, IPCA_MODE, IPCA_VENDOR, IPCA_CAPABILITIES,
+    IPCA_NATIVE_ABI, IPCA_NATIVE_COUNT,
     IPCANativeDriver, IPCAFitRequest, IPCAFitResult, IPCAPartialRequest, IPCAQueryRequest,
-    IPCA_CAP_FIT, IPCA_CAP_PARTIAL, IPCA_CAP_QUERY, IPCA_CAP_RESIDENT,
+    IPCA_CAP_FIT, IPCA_CAP_PARTIAL, IPCA_CAP_QUERY,
 )
+from x_decomp.ipca_descriptor_boundary_run import (
+    ipca_connection_index, ipca_connection_add, ipca_mode, ipca_vendor, ipca_capabilities, ipca_driver,
+)
+from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type
 from bindings.decomp_owner_common import decomp_attr
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
-@fieldwise_init
-struct IPCAConnection(Movable):
-    var provider: PythonObject
-    var driver: IPCANativeDriver
-    var mode: Int
-    var vendor: Int
-    var capabilities: Int
-
-
-struct IPCAConnections(Defaultable, Movable):
-    var records: List[IPCAConnection]
-
-    def __init__(out self):
-        self.records = List[IPCAConnection]()
-
-
-comptime IPCA_CONNECTIONS = SharedSlot[IPCAConnections, "MojolearnIPCAConnectionsV1"]
+comptime IPCA_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnIPCAProviderPinsV1"]
 
 
 def ipca_connection(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> Int:
@@ -61,24 +52,17 @@ def ipca_connection(model: PythonObject, fields: PythonObject, context: PythonOb
                     + "_mojolearn_x_decomp does not export the x_decomp_ipca_* drivers"
                     + "; rebuild it with bindings/build_x_decomp.sh")
     var provider = neural_descriptor_connect_factory_once(factory, String(IPCA_NATIVE_ABI), IPCA_NATIVE_COUNT)
-    var cache = IPCA_CONNECTIONS.get_or_create_ptr()
-    var index = -1
-    for candidate in range(len(cache[].records)):  # driver-loop: admitted native provider images
-        if cache[].records[candidate].provider is provider:
-            index = candidate
-            break
+    var index = ipca_connection_index(provider_word(provider))
     if index < 0:
-        var driver = IPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var native_mode = driver.metadata(IPCA_MODE)
-        var vendor = driver.metadata(IPCA_VENDOR)
-        var capabilities = driver.metadata(IPCA_CAPABILITIES)
-        index = len(cache[].records)
-        cache[].records.append(IPCAConnection(provider, driver^, native_mode, vendor, capabilities))
-    if pca_vendor_name(cache[].records[index].vendor) != String(context["vendor"]):
+        # The typed record and the door pin are appended together, under the GIL.
+        index = ipca_connection_add(provider_word(provider),
+            IPCANativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        IPCA_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
+    if pca_vendor_name(ipca_vendor(index)) != String(context["vendor"]):
         raise Error("RuntimeError: IPCA native vendor differs from selected execution")
-    if cache[].records[index].mode != (1 if name == "identical" else 0):
+    if ipca_mode(index) != (1 if name == "identical" else 0):
         raise Error("RuntimeError: IPCA native mode differs from selected execution")
-    if (cache[].records[index].capabilities & (IPCA_CAP_FIT | IPCA_CAP_PARTIAL | IPCA_CAP_QUERY)) != (IPCA_CAP_FIT | IPCA_CAP_PARTIAL | IPCA_CAP_QUERY):
+    if (ipca_capabilities(index) & (IPCA_CAP_FIT | IPCA_CAP_PARTIAL | IPCA_CAP_QUERY)) != (IPCA_CAP_FIT | IPCA_CAP_PARTIAL | IPCA_CAP_QUERY):
         raise Error("NotImplementedError: mojolearn IncrementalPCA: this build of "
                     + "_mojolearn_x_decomp does not export the x_decomp_ipca_* drivers"
                     + "; rebuild it with bindings/build_x_decomp.sh")
@@ -86,9 +70,8 @@ def ipca_connection(model: PythonObject, fields: PythonObject, context: PythonOb
 
 
 def ipca_run_fit(connection: Int, request: IPCAFitRequest) raises -> IPCAFitResult:
-    var cache = IPCA_CONNECTIONS.get_or_create_ptr()
-    var pin = cache[].records[connection].provider
-    var driver = cache[].records[connection].driver.copy()
+    var pin = ipca_provider(connection)
+    var driver = ipca_driver(connection)
     try:
         with GILReleased(Python()):
             return driver.fit(request)
@@ -118,15 +101,7 @@ def ipca_run_query(connection: Int, request: IPCAQueryRequest) raises:
 
 
 def ipca_provider(connection: Int) raises -> PythonObject:
-    return IPCA_CONNECTIONS.get_or_create_ptr()[].records[connection].provider
-
-
-def ipca_driver(connection: Int) raises -> IPCANativeDriver:
-    return IPCA_CONNECTIONS.get_or_create_ptr()[].records[connection].driver.copy()
-
-
-def ipca_resident(connection: Int) raises -> Bool:
-    return (IPCA_CONNECTIONS.get_or_create_ptr()[].records[connection].capabilities & IPCA_CAP_RESIDENT) != 0
+    return IPCA_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
 
 
 def ipca_run_free(connection: Int, handle: Int) raises:
