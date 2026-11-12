@@ -49,6 +49,7 @@ from xtrees.api_kernels import (
 # The device/host choice and the moved glue bodies (lane calltable-trees):
 # this file keeps only their Python unpack.
 from xtrees.glue_abi import XtOwned
+from xtrees.xtrees_api_run import _count, _kshap_check
 from xtrees.glue_runs import (
     XTREES_DEVICE_OPS, accumulate_run, accumulate_cols_run, accumulate_onehot_run, accumulate_rows_run,
     apply_run, argmax_rows_run, bag_rows_run, binary_proba_run, class_counts_run, class_priors_run,
@@ -88,12 +89,6 @@ def _i(params: PythonObject, k: Int) raises -> Int:
 
 def _f(params: PythonObject, k: Int) raises -> Float64:
     return Float64(py=params[k])
-
-
-def _count(v: Int, who: String) raises -> Int:
-    if v < 0:
-        raise Error(who + ": negative count")
-    return v
 
 
 def _xt_owned(var addrs: List[Int], params: PythonObject) raises -> XtOwned:
@@ -694,9 +689,6 @@ def isotonic_predict_binding(
 # `isotonic_predict`'s (they now call these with stride 1).
 
 
-
-
-
 def platt_apply_strided_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
     # Unpack only; the body is xtrees/glue_runs.mojo::platt_apply_strided_run, also reached
     # natively through the trees entry table (XT_PLATT_APPLY_STRIDED).
@@ -1089,16 +1081,6 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
     return PythonObject(m)
 
 
-def _kshap_check(p: List[Int], who: String) raises:
-    for i in range(9):  # driver-loop: over fixed call structure, small-loop(the nine params words)
-        if p[i] < 0:
-            raise Error(who + ": negative count")
-    if p[1] < 1 or p[2] < 1 or p[4] < p[3]:
-        raise Error(who + ": needs background rows, features and samples >= fixed samples")
-    if p[4] > p[3] and p[6] < 1:
-        raise Error(who + ": sampled coalitions need a size distribution")
-
-
 def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
     out[i] = w[i] / sum(w) in float64 from float32 w, the sum in
@@ -1402,7 +1384,6 @@ def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject,
 # operations in the same order as the Python they replace, so the same bits
 # on every column (the device round reads the thresholds and float32
 # coefficients these write).
-
 
 
 def class_priors_binding(counts: PythonObject, priors: PythonObject, params: PythonObject) raises -> PythonObject:

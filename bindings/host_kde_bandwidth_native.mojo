@@ -4,14 +4,12 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.classical_warnings import classical_warning
 from bindings.native_caller_frame import native_frame_globals
-from core.native_scalar_decode import native_scalar_real
-from core.native_temporal_scalar import temporal_result_kind
+from core.host_kde_bandwidth_run import kde_temporal_unit_run, kde_temporal_decode_run
 
 
 def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> String:
@@ -55,12 +53,14 @@ def kde_bandwidth_warning(message: String, category: PythonObject, context: Pyth
     _ = current^
     if not pointer:
         if cpython_table()[].PyErr_Occurred():
-            raise cpy.unsafe_get_error()
+            var failure = cpy.unsafe_get_error()
+            raise failure^
         raise Error("ValueError: call stack is not deep enough")
     var frame = PythonObject(from_owned=pointer)
     pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
     if not pointer:
-        raise cpy.unsafe_get_error()
+        var failure = cpy.unsafe_get_error()
+        raise failure^
     var code = PythonObject(from_owned=pointer)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
     var module = py_get(native_frame_globals(frame), "__name__", "")
@@ -99,21 +99,9 @@ def kde_bandwidth_array_policy(value: PythonObject, context: PythonObject) raise
 def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
     var dtype = value.dtype
     var text = String(dtype.str)
-    var parts = text.split("[")
     var unit = String("generic")
     var multiplier = 1
-    if len(parts) == 2:
-        var tail = String(parts[1])
-        var length = tail.byte_length() - 1
-        var start = 0
-        while start < length:  # driver-loop: parse exact native dtype unit metadata
-            var digit = String(tail[byte=start:start + 1])
-            if digit < "0" or digit > "9":
-                break
-            start += 1
-        if start > 0:
-            multiplier = Int(String(tail[byte=0:start]))
-        unit = String(tail[byte=start:length])
+    kde_temporal_unit_run(text, unit, multiplier)
     # Acquire only an admitted exact native temporal owner. Public no-format
     # buffers support byte-swapped temporals even where memoryview formatting
     # does not. Both storage allocations precede acquisition; every export
@@ -125,7 +113,8 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
     ref cpy = Python().cpython()
     var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x118))
     if status != 0:
-        raise cpy.unsafe_get_error()
+        var failure = cpy.unsafe_get_error()
+        raise failure^
     try:
         # Exact NumPy temporal scalars expose their signed word as eight byte
         # elements; temporal ndarrays expose one eight-byte element. The
@@ -134,28 +123,19 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
             raise Error("TypeError: temporal scalar decoding requires one native element")
         status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(data, pointer, 8, Int8(67))
         if status != 0:
-            raise cpy.unsafe_get_error()
+            var failure = cpy.unsafe_get_error()
+            raise failure^
     finally:
         cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
         # Keep the Py_buffer storage alive past the release on every path
         # (ASAP destruction could free it before PyBuffer_Release reads it).
         _ = len(view)
     var little = String(dtype.byteorder) != ">"
-    var word = UInt64(0)
-    for i in range(8):  # driver-loop: one signed native temporal word, either byte order
-        word |= UInt64(bytes[i]) << UInt64(8 * (i if little else 7 - i))
     var release = kde_numpy_release(context)
-    var kind = temporal_result_kind(Int(bitcast[DType.int64](word)), code == "M", unit,
-                                   multiplier, release < 202, release >= 205)
-    var number = native_scalar_real(data, 0, String("q"), 8, little)
+    var number = kde_temporal_decode_run(bytes, data, little, code, unit, multiplier, release)
     _ = bytes^
     _ = view^
-    if kind == 5:
-        raise Error("OverflowError: Overflow when converting between datetime64 units")
-    if kind != 0:
-        var name = String("NoneType") if kind == 1 else String("datetime.date") if kind == 2 else String("datetime.datetime") if kind == 3 else String("datetime.timedelta")
-        raise Error("TypeError: float() argument must be a string or a real number, not '" + name + "'")
-    return PythonObject(bitcast[DType.float64](number.float64_bits()))
+    return PythonObject(number)
 
 
 def kde_native_bandwidth(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:

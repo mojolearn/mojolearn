@@ -41,6 +41,7 @@ from bindings.admitted_input import AdmittedX, admit_f32, admit_ids, admitted_ar
 from bindings.py_optional import py_present
 from gbdt.trees_gbdt_run import (
     gbdt_known_vendor, gbdt_remember_vendor, gbdt_known_mode, gbdt_mode_of_code, gbdt_mode_checked, gbdt_text_has_ctr,
+    _type_or_value,
 )
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / TreesMatrix / trees_view / trees_check_rank / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -562,14 +563,6 @@ def ordered_option_values(settings: PythonObject, context: PythonObject) raises:
         if not ok:
             raise Error("mojolearn: " + reals[i] + " must be finite float32 and "
                         + ("positive" if positive else "non-negative"))
-
-
-def _type_or_value(error: Error) -> Bool:
-    """A refusal Python's `except (TypeError, ValueError)` catches."""
-    var message = String(error)
-    return not (message.startswith("RuntimeError:") or message.startswith("ImportError:")
-                or message.startswith("AttributeError:") or message.startswith("IndexError:")
-                or message.startswith("NotImplementedError:") or message.startswith("OverflowError:"))
 
 
 def _reduce(addr: Int, code: Int, n: Int, what: Int, context: PythonObject) raises -> PythonObject:
