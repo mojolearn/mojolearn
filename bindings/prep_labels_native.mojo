@@ -29,7 +29,7 @@ from bindings.prep_entry_cache import prep_entry_word
 from bindings.x_prep_native_owner import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
-from bindings.str_labels_native import str_lookup, StrTable, _is_str, _sorted as _str_order
+from bindings.str_labels_native import str_lookup, StrTable, _is_str, str_unique_into, str_classes, str_find
 from bindings.boundary_read import text_buffer_view, read_text_rows_into, read_str_points, pack_ucs4_str, admitted_buffer_view
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT
 from bindings.classical_pandas import classical_admit_value
@@ -635,55 +635,17 @@ def _text_labels(y: PythonObject, context: PythonObject, mut table: StrTable) ra
     return True
 
 
-def _text_cross(rows: StrTable, i: Int, known: StrTable, j: Int) -> Int:
-    # Code-point order of label i of `rows` against label j of `known`.
-    var la = rows.lengths[i]
-    var lb = known.lengths[j]
-    var sa = rows.starts[i]
-    var sb = known.starts[j]
-    for q in range(min(la, lb)):  # driver-loop: over one label's code points (native)
-        var x = rows.points[sa + q]
-        var y = known.points[sb + q]
-        if x != y:
-            return -1 if x < y else 1
-    if la == lb:
-        return 0
-    return -1 if la < lb else 1
-
-
-def _text_find(rows: StrTable, i: Int, known: StrTable, distinct: List[Int], index: List[Int]) -> Int:
-    # Binary search of the distinct sorted classes; the class index or -1.
-    var lo = 0
-    var hi = len(distinct)
-    while lo < hi:
-        var mid = (lo + hi) // 2
-        var c = _text_cross(rows, i, known, distinct[mid])
-        if c == 0:
-            return index[mid]
-        if c > 0:
-            lo = mid + 1
-        else:
-            hi = mid
-    return -1
-
-
 def _text_fit(table: StrTable, context: PythonObject) raises -> LabelFit:
     """`_label_classes` of a 'U' label vector and its codes: the ORDER RULE
-    for str labels (the distinct values in code-point order) by the native
-    stable sort, ONE str per distinct class, each label's int32 code
-    written natively."""
+    for str labels (the distinct values in code-point order), ONE str per
+    distinct class, each label's int32 code written natively. The labels are
+    hashed across the host pool and only the distinct classes are sorted
+    (bindings/str_labels_native.mojo `str_unique_into`); the former route
+    merge-sorted all n labels on one thread."""
     var n = len(table.starts)
-    var order = _str_order(table, n)
     var codes = classical_wrap_array(native_array_zeros("i", n), Python.tuple(n), "<i4", "C", _out(context))
-    var dest = I32P(unsafe_from_address=Int(py=classical_address(codes)))
-    var firsts = List[Int](length=n, fill=0)
-    var k = 0
-    for t in range(n):  # driver-loop: native run scan of the sorted labels (no CPython call)
-        var i = order[t]
-        if t == 0 or table.compare(order[t - 1], i) != 0:
-            firsts[k] = i
-            k += 1
-        dest[i] = Int32(k - 1)
+    var firsts = str_unique_into(table, n, Int(py=classical_address(codes)))
+    var k = len(firsts)
     _ = codes  # keep the Python object alive through the native writes above
     var classes = Python.list()
     var base = Int(table.points.unsafe_ptr())
@@ -716,28 +678,19 @@ def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context:
         known.lengths.append(len(points))
         for q in range(len(points)):  # driver-loop: over one class's code points (native)
             known.points.append(points[q])
-    var order = _str_order(known, k)
-    var distinct = List[Int]()
-    var index = List[Int]()
-    for t in range(k):  # driver-loop: over the sorted classes
-        if t == 0 or known.compare(order[t - 1], order[t]) != 0:
-            distinct.append(order[t])
-            index.append(order[t])
-        else:
-            index[len(index) - 1] = max(index[len(index) - 1], order[t])
+    var lookup_classes = str_classes(known, k)
     var n = len(table.starts)
     var codes = classical_wrap_array(native_array_zeros("f" if as_float else "i", n), Python.tuple(n),
                                      "<f4" if as_float else "<i4", "C", _out(context))
     var address = Int(py=classical_address(codes))
     var tp = UnsafePointer(to=table)
     var kp = UnsafePointer(to=known)
-    var dp = UnsafePointer(to=distinct)
-    var ip = UnsafePointer(to=index)
+    var cp = UnsafePointer(to=lookup_classes)
     var units = (n + _TEXT_LOOKUP_CHUNK - 1) // _TEXT_LOOKUP_CHUNK
-    def lookup(unit: Int) {imm tp, imm kp, imm dp, imm ip, imm n, imm address, imm as_float}:
+    def lookup(unit: Int) {imm tp, imm kp, imm cp, imm n, imm address, imm as_float}:
         var stop = min(n, (unit + 1) * _TEXT_LOOKUP_CHUNK)
         for i in range(unit * _TEXT_LOOKUP_CHUNK, stop):  # driver-loop: labels of one lookup chunk (native, no Python)
-            var found = _text_find(tp[], i, kp[], dp[], ip[])
+            var found = str_find(tp[], i, kp[], cp[])
             if as_float:
                 F32P(unsafe_from_address=address)[i] = Float32(found)
             else:
@@ -745,8 +698,7 @@ def _text_codes(classes: PythonObject, table: StrTable, as_float: Bool, context:
     host_parallelize(lookup, units)
     _ = table  # read by every lookup task above
     _ = known
-    _ = distinct
-    _ = index
+    _ = lookup_classes
     var unseen = List[Int](length=5, fill=0)
     var count = 0
     for i in range(n):  # driver-loop: native scan for unseen labels (no CPython call)
