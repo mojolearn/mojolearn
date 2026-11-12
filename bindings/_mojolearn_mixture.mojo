@@ -167,7 +167,7 @@ def build__mojolearn_mixture() -> PythonObject:
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[mixture_vendor_binding]("mixture_vendor")
         m.def_function[mixture_numeric_mode_binding]("mixture_numeric_mode")
-        # TOMBSTONE: the GaussianMixture Python entries gmm_fit, gmm_fit_predict, gmm_score_samples, gmm_predict_proba, gmm_predict and gmm_score_bic_aic (dead: the mixture door calls mixture_native_api_v1 and no Python, tool or verify code calls them) deleted 2026-11-11 by lane/round2-fixes; code recoverable at the deletion commit^.
+        # TOMBSTONE: the GaussianMixture Python entries gmm_fit, gmm_fit_predict, gmm_score_samples, gmm_predict_proba, gmm_predict and gmm_score_bic_aic (dead: the mixture door calls mixture_native_api_v1 and no Python, tool or verify code calls them) deleted 2026-11-11 by 04229c83d5; code recoverable at 04229c83d5^.
         # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
         m.def_function[gmm_sample_binding]("gmm_sample")
         m.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
