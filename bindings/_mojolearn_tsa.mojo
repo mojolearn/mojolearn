@@ -43,7 +43,7 @@ THE GIL is released around every device call.
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_series import SERIES_GUARDS_OK
-from core.hostptr import f32_ptr, i32_ptr
+from tsa.mojolearn_tsa_run import _f32_ptr, _i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -58,14 +58,6 @@ from holtwinters.resident_state import (
     holtwinters_query_resident,
 )
 from tsa.estimator import kpss_test_host, select_d_host
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def holtwinters_fit_binding(

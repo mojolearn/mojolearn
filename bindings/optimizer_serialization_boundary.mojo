@@ -10,12 +10,7 @@ from bindings.optimizer_public_door import OPT_DOOR, owner_kind
 from bindings.optimizer_public_words import stash_python_error
 from bindings.optimizer_scalar_boundary import optimizer_truth
 from training.optimizer_owner_control import optimizer_restored_pristine
-
-
-def optimizer_serialized_field(name: String) -> Bool:
-    # Old state dictionaries may contain these retired control mirrors. They
-    # are accepted only as external serialization input, never retained state.
-    return name != "_native_optimizer_owner" and name != "_native_optimizer_pristine" and name != "_res" and name != "_res_binding" and name != "_res_host" and name != "_host_fresh" and name != "_pristine" and name != "_p_dev" and name != "_g_dev" and name != "_where" and name != "_KIND"
+from training.optimizer_serialization_run import optimizer_serialized_field
 
 
 def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:

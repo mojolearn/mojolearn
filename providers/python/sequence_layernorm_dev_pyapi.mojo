@@ -7,9 +7,8 @@ from std.python import PythonObject
 
 from sequence.layernorm_dev import layer_norm_dev
 from providers.python.sequence_pyapi import py_f64s, py_ints
-from providers.python.sequence_seq_tensor_pyapi import (
-    seq_tensor_alloc_slots, seq_tensor_free_made, seq_tensor_handles_list,
-)
+from providers.python.sequence_seq_tensor_pyapi import seq_tensor_handles_list
+from sequence.sequence_seq_tensor_run import seq_tensor_alloc_slots, seq_tensor_free_made
 
 
 def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObject,

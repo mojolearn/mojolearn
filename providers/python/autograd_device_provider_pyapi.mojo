@@ -8,35 +8,13 @@ from bindings.native_loaded_module import native_loaded_module
 from providers.python.autograd_program_arrays_pyapi import program_admit_value
 from providers.python.neural_descriptor_pyapi import NativeDescriptorResource, NeuralDescriptorProvider, neural_descriptor_execute, neural_descriptor_entry
 from sequence.neural_model_dispatch import PROGRAM_DEVICE_RUN
-from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
+from autograd.autograd_device_provider_run import _descriptor_kind
 
 
 def _metadata_sequence(value: PythonObject) raises:
     var b = native_loaded_module("builtins")
     if py_type(value) is not b.list and py_type(value) is not b.tuple:
         raise Error("TypeError: program descriptors require native list or tuple metadata")
-
-
-def _descriptor_kind(dtype: String) raises -> Tuple[Int, Int]:
-    if dtype == "float32":
-        return (CAST_KIND_FLOAT, 4)
-    if dtype == "float64":
-        return (CAST_KIND_FLOAT, 8)
-    if dtype == "float16":
-        return (CAST_KIND_FLOAT, 2)
-    if dtype == "int64":
-        return (CAST_KIND_SIGNED, 8)
-    if dtype == "int32":
-        return (CAST_KIND_SIGNED, 4)
-    if dtype == "int16":
-        return (CAST_KIND_SIGNED, 2)
-    if dtype == "int8":
-        return (CAST_KIND_SIGNED, 1)
-    if dtype == "uint8":
-        return (CAST_KIND_UNSIGNED, 1)
-    if dtype == "bool":
-        return (CAST_KIND_BOOL, 1)
-    raise Error("TypeError: unsupported Torch program input dtype " + dtype)
 
 
 def imported_device_provider_run(snapshot: PythonObject, descriptors: PythonObject,

@@ -34,8 +34,9 @@ from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence import admitted_array_f32
 from bindings.native_prepared_owner import prepared_get
 from bindings.tsa_arima_resident import (
-    ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
+    ARIMA_RESIDENT_SLOT, arima_resident_hit, arima_resident_mint, arima_resident_call,
 )
+from arima.tsa_arima_resident_run import arima_resident_words
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _A = "mojolearn ARIMA: "
