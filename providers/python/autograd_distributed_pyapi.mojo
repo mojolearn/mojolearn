@@ -3,7 +3,7 @@
 # Python forwards arrays/options in one call; this file converts them and
 # builds results. Topology, ownership, graph walks and checkpoint bytes stay
 # in the typed entries.
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem, py_type
 from sequence.exec_trait import Exec

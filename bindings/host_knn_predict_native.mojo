@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.family_common import family_call, family_min
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.host_archive_native import host_archive_neighbor_metric
+from bindings.host_archive_native_door import host_archive_neighbor_metric
 from bindings.host_array_native import host_archive_typed
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64
 

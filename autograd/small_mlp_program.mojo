@@ -61,7 +61,7 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
               through it.
 """
 # Inline tombstones carried here verbatim from files and blocks lane/m2-neural-leftovers deleted
-# (training/mlp_ops.mojo, training/neural_session_mlp.mojo, bindings/parallel_mlp_native.mojo's old shard route):
+# (training/mlp_ops.mojo, training/neural_session_mlp.mojo, bindings/parallel_mlp_native_door.mojo's old shard route):
 # TOMBSTONE: the fused-gradient route through mlp_train_step (the deleted hand small-MLP step, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. The worker gradients take the per-operation primitives below.
 # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
 # TOMBSTONE: mlp_train_step_host, its step GEMM dispatch (MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF), the tape rules autograd/rules_small_mlp.mojo and the Apple FAST fused step training/mlp_fast.mojo (superseded by SmallMLPTrainer's captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.

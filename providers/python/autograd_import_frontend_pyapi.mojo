@@ -11,7 +11,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_storage_allocate
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from bindings.optimizer_public_words import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from providers.python.autograd_python_errors_pyapi import graph_python_error, graph_int
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py, ops_session_fields

@@ -9,7 +9,7 @@ from autograd.ops_api import ops_session
 from providers.python.autograd_program_pyapi import _integer
 from providers.python.autograd_pyapi import program_info
 from autograd.control_checkpoint import control_save, control_load
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 
 
 def control_save_py[E: Exec & Movable & Deinitable, KIND: Int](

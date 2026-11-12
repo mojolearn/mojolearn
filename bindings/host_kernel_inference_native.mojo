@@ -11,7 +11,7 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.host_array_native import host_archive_typed
 from bindings.host_tree_native import host_tree_input, host_tree_wide
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
 from bindings.host_inference_scalars import host_inference_scalar

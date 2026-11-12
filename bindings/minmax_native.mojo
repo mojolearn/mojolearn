@@ -19,7 +19,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
-from bindings.scaler_native import _ptr, _copy_row, scaler_door_calls, scaler_transform_calls, ScalerDoorCalls
+from bindings.scaler_native_door import _ptr, _copy_row, scaler_door_calls, scaler_transform_calls, ScalerDoorCalls
 from core.scaler_core import (
     ScalerTransformSpec, scaler_minmax_fit_core, scaler_minmax_keep_extrema, scaler_transform_rows,
     scaler_transform_rows_valid, scaler_transform_core,

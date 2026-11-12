@@ -4,7 +4,7 @@ from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.ffi import c_int
 from std.python._cpython import ExternalFunction, PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 # int Py_IsFinalizing(void): public from CPython 3.13; _Py_IsFinalizing is

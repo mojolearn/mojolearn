@@ -2,7 +2,7 @@
 """Preference UNPACK: retained input storage and native sequence capture only."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.classical_arrays import classical_numpy
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_loaded_module import native_loaded_module

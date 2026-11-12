@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
 from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns

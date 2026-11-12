@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native validation of the existing Python-style class index range, and the
 code-space helpers that keep SVC score's CPython work per used class instead
-of per row (bindings/svc_score_boundary.mojo)."""
+of per row (bindings/svc_score_boundary_door.mojo)."""
 from std.builtin.sort import sort
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk

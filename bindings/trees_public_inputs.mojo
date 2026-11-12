@@ -23,7 +23,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.native_array_storage import native_array_zeros, native_scratch_bytes, native_scratch_address

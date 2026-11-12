@@ -2,7 +2,7 @@
 """KernelDensity door RUN: the checks on typed values, the host copies and the
 typed native requests.
 
-`bindings/neighbors_kde_native.mojo` is the UNPACK/PACK side: it reads the
+`bindings/neighbors_kde_native_door.mojo` is the UNPACK/PACK side: it reads the
 estimator's fields once, compares the admitted scalars, formats the
 diagnostics it alone can read, allocates and publishes the arrays, releases
 the GIL around native work (`bindings/kde_native_boundary.mojo`) and calls

@@ -6,14 +6,14 @@
 # `sparse_encode`. Each public operation is one call into dict_learning_c,
 # which checks the parameters, converts the inputs once and runs the steps
 # the Python shells ran (`_dict_learning`, `_sparse_encode`, the mini-batch
-# loop, the SparsePCA ridge projection) through bindings/decomp_kit_native.mojo:
+# loop, the SparsePCA ridge projection) over the typed kit (bindings/dict_learning_run.mojo):
 # the same x_decomp entries with the same words in the same order, so the
 # bits are unchanged. fit_transform keeps X (host and device copies) and the
 # fitted matrices between its fit and transform steps: X is converted and
 # uploaded once, and the dictionary, mean and components are not downloaded
 # and re-uploaded between the two.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -28,11 +28,18 @@ from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
-    DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
-    decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS,
-    XD_SUB, XD_ADD, XD_MUL, XD_DIV, XD_MAXS, XD_MINS, XD_SCALE, XD_SOFT, XD_SQ, XD_SQRT, XD_SELECT,
+    DecompDoor, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
+    decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS, decomp_kit_unpack, decomp_kit_publish,
+    decomp_kit_out_shape, decomp_door_borrow, decomp_door_input, decomp_door_resident_hit,
+    decomp_door_resident_input, decomp_door_resident_derived, decomp_door_resident_keep,
 )
-from x_decomp.descriptor_schema import XD_DICT_LEARNING, XD_DICT_MINIBATCH
+from bindings.decomp_kit_run import DKit
+from bindings.dict_learning_run import (
+    EncodeWords, Gram, DictWords, DictFit, MiniBatchWords, SpcaFit, dl_split_sign, dl_sparse_encode, dl_encode_run,
+    dl_inverse_run, dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,
+)
+from bindings.py_lists import py_list_f64
+from std.python._cpython import GILReleased
 
 
 def _name(model: PythonObject) raises -> String:
@@ -112,43 +119,41 @@ def _check_fitted(model: PythonObject, fields: PythonObject) raises:
         raise Error("RuntimeError: " + _name(model) + " is not fitted; call fit first")
 
 
-def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    var array = decomp_input(source, name, context)
-    return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+def _matrix(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+            context: PythonObject) raises -> Int:
+    return decomp_door_input(door, kit, source, name, context)
 
 
-def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    # A fitted operand: converted per call as before; on a query its device
-    # copy is kept across calls (DecompKit.resident_input), else as _matrix.
-    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+def _fitted_matrix(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                   context: PythonObject) raises -> Int:
+    # UNPACK a fitted operand: on a query its device copy is kept across
+    # calls (the model's record), else borrowed as _matrix.
+    var hit = decomp_door_resident_hit(door, kit, source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
     var array = decomp_input(source, name, context)
     var rows = Int(py=array.shape[0])
     var cols = Int(py=array.shape[1])
-    var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, rows, cols)
+    var held = decomp_door_resident_input(door, kit, source, name, array, Int(py=classical_address(array)), array,
+                                          rows, cols)
     if held >= 0:
         return held
-    return kit.input(array, rows, cols)
+    return decomp_door_borrow(door, kit, array, rows, cols)
 
 
-def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+def _fitted_row(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix, resident as _fitted_matrix.
-    var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
+    var hit = decomp_door_resident_hit(door, kit, source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
     var array = admit_x(source, 1, name, context)
     var cols = Int(py=array.shape[0])
-    var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, 1, cols)
+    var held = decomp_door_resident_input(door, kit, source, name, array, Int(py=classical_address(array)), array,
+                                          1, cols)
     if held >= 0:
         return held
-    return kit.input(array, 1, cols)
-
-
-def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    # A fitted 1-D float32 vector (mean_) as a 1 x n matrix.
-    var array = admit_x(source, 1, name, context)
-    return kit.input(array, 1, Int(py=array.shape[0]))
+    return decomp_door_borrow(door, kit, array, 1, cols)
 
 
 def _copy_out(array: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
@@ -160,44 +165,34 @@ def _copy_out(array: PythonObject, rows: Int, cols: Int, context: PythonObject) 
     return result
 
 
-def _split_sign(mut kit: DecompKit, code: Int) raises -> Int:
-    # [max(code, 0), -min(code, 0)] side by side.
-    var positive = kit.ew(XD_MAXS, code, scalar=0.0)
-    var low = kit.ew(XD_MINS, code, scalar=0.0)
-    var negative = kit.ew(XD_SCALE, low, scalar=-1.0)
-    return kit.hstack([positive, negative])
+comptime _GRAM_NAME = "components_#gram"
 
 
-def _query_gram(mut kit: DecompKit, d: Int, gram_source: PythonObject) raises -> Int:
-    # G = D D^T of the dictionary matrix `d`. On a query of a fitted model
-    # (`gram_source` the fitted components_ Array `d` was read from; None on
-    # every other call) G depends only on that frozen Array, so its device
-    # copy is kept with the model's resident record and served while the
-    # Array is the same object at the same generation (N339, N333;
-    # DecompKit.resident_derived / resident_keep, lane
-    # ne1-a-decomp-resident). The words are the ones this gemm computes, so
-    # no bit changes. A host binding keeps nothing and computes it per call.
-    if gram_source is not None:
-        var held = kit.resident_derived(gram_source, "components_#gram")
-        if held >= 0:
-            return held
-    var g = kit.mm(d, d, tb=True)
-    if gram_source is not None:
-        _ = kit.resident_keep(gram_source, "components_#gram", g)
-    return g
+def _gram(mut door: DecompDoor, mut kit: DKit, gram_source: PythonObject, words: EncodeWords) raises -> Gram:
+    # UNPACK the Gram G = D D^T of a query's fitted components (N339, N333):
+    # served from the model's resident record while `gram_source` (the
+    # fitted components_ Array D was read from; None on every other call)
+    # is the same frozen object at the same generation. -1 on a miss, a
+    # host binding, or an algorithm that needs no Gram (threshold).
+    if gram_source is None or words.algorithm == 4:
+        return Gram(-1)
+    return Gram(decomp_door_resident_derived(door, kit, gram_source, _GRAM_NAME))
 
 
-def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, alpha: PythonObject,
-                   nnz: PythonObject, init: Int, max_iter: PythonObject, positive: PythonObject,
-                   gram_source: PythonObject) raises -> Int:
-    # `_expansion_decomp._sparse_encode`. `gram_source`: see _query_gram.
+def _keep_gram(mut door: DecompDoor, mut kit: DKit, gram_source: PythonObject, gram: Gram) raises:
+    # PACK: a Gram RUN computed for a query goes to the model's record.
+    if gram_source is not None and gram.computed >= 0:
+        _ = decomp_door_resident_keep(door, kit, gram_source, _GRAM_NAME, gram.computed)
+
+
+def _encode_words(m: Int, kc: Int, algorithm: PythonObject, alpha: PythonObject, nnz: PythonObject,
+                  max_iter: PythonObject, positive: PythonObject, split_sign: Bool) raises -> EncodeWords:
+    # UNPACK `_sparse_encode`'s options, each read only where its route reads
+    # it (`m` the code's input width, `kc` the dictionary's atom count).
     var index = _algo_index(algorithm)
     if index < 0:
         raise Error("algorithm=" + String(py=py_call(native_loaded_module("builtins").repr, algorithm))
                     + " is not carried; one of " + String(XD_SPARSE_ALGOS))
-    var n = kit.nrows(x)
-    var m = kit.ncols(x)
-    var kc = kit.nrows(d)
     var count = 0
     var reg = Float64(1.0)
     if index == 2 or index == 3:
@@ -208,166 +203,54 @@ def _sparse_encode(mut kit: DecompKit, x: Int, d: Int, algorithm: PythonObject, 
             count = Int(min(max(Float64(m) / 10.0, Float64(1.0)), Float64(kc)))
     elif alpha is not None:
         reg = decomp_float(alpha)
-    if index == 2:
-        var g = _query_gram(kit, d, gram_source)
-        var q = kit.mm(x, d, tb=True)
-        return kit.lars_rows(g, q, m, count)
-    var q = kit.mm(x, d, tb=True)
+    var iterations = 0
+    var positive_word = 0
+    var positive_flag = False
     if index == 4:
-        var code = kit.ew(XD_SOFT, q, scalar=reg)
-        if Bool(py=positive):
-            return kit.ew(XD_MAXS, code, scalar=0.0)
-        return code
-    var g = _query_gram(kit, d, gram_source)
-    if index == 3:
-        return kit.omp_rows(g, q, count)
-    var w = kit.copy_host(init) if (index == 1 and init >= 0) else kit.zeros(n, kc)
-    return kit.lasso_rows(g, q, w, reg, decomp_int(max_iter), 1e-8, decomp_int(positive))
+        positive_flag = Bool(py=positive)
+    elif index == 0 or index == 1:
+        iterations = decomp_int(max_iter)
+        positive_word = decomp_int(positive)
+    return EncodeWords(index, count, reg, iterations, positive_word, positive_flag, split_sign)
 
 
-def _dict_learning(mut kit: DecompKit, x: Int, nc: Int, alpha: Float64, max_iter: PythonObject, tol: PythonObject,
-                   method: Int, seed: PythonObject, ci: Int, di: Int, positive_dict: Bool, positive_code: Bool,
-                   method_max_iter: PythonObject) raises -> Tuple[Int, Int, PythonObject, Int]:
-    # `_expansion_decomp._dict_learning`: (code, D, errors, n_iter).
-    var code: Int
-    var d: Int
-    if ci >= 0 and di >= 0:
-        code = ci
-        d = di
-    else:
-        var usv = kit.thin_svd(x, min(kit.nrows(x), kit.ncols(x)), True)
-        code = usv[0]
-        var st = kit.transpose(usv[1])
-        d = kit.ew(XD_MUL, usv[2], st)
-    var r = kit.nrows(d)
-    if nc <= r:
-        code = kit.cols_of(code, 0, nc)
-        d = kit.rows_of(d, 0, nc)
-    else:
-        var code_pad = kit.zeros(kit.nrows(code), nc - r)
-        code = kit.hstack([code, code_pad])
-        var d_pad = kit.zeros(nc - r, kit.ncols(d))
-        d = kit.vstack([d, d_pad])
-    # The loop (encode, atom update, cost, stopping test) is ONE binding call
-    # on host copies of the code and the dictionary, written in place.
-    code = kit.copy_host(code)
-    d = kit.copy_host(d)
-    var iterations = decomp_int(max_iter)
-    var slots = max(iterations, 1)
-    var errors_store = classical_typed(Python.tuple(slots), "<f8", kit.context)
-    var params: List[Int] = [kit.nrows(x), kit.ncols(x), nc, method, iterations, decomp_int(method_max_iter),
-                             Int(positive_dict), Int(positive_code), decomp_seed_word(seed), -1, -1]
-    var floats: List[Float64] = [alpha, decomp_float(tol)]
-    # XD_DICT_LEARNING (was the Python entry x_decomp_dict_learning): ii is
-    # the result, the count of recorded errors comes back in `written`.
-    var written = List[Int](length=1, fill=0)
-    var addresses: List[Int] = [kit.at(x), kit.at(code), kit.at(d), Int(py=classical_address(errors_store)),
-                                Int(written.unsafe_ptr())]
-    var done = kit.xd(XD_DICT_LEARNING, addresses, params, floats, True)
-    _ = errors_store  # keep the Python object alive through the native call above
-    kit.wrote_host(code)
-    kit.wrote_host(d)
-    var recorded = min(written[0], slots)
-    _ = written^
-    _ = errors_store  # keep the Python object alive through the native call above
-    var errors = Python.list()
-    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(errors_store)))
-    _ = errors_store  # keep the Python object alive through the native call above
-    for i in range(recorded):  # driver-loop: over the fit's recorded iterations
-        _ = py_call(errors.append, PythonObject(words[i]))
-        _ = errors_store  # keep the Python object alive through the native call above
-    _ = errors_store^
-    return (code, d, errors, done)
-
-
-def _minibatch_fit(mut kit: DecompKit, x: Int, nc: Int, dict_init: Int, p: PythonObject) raises -> Tuple[Int, Int, Int]:
-    # MiniBatchDictionaryLearning.fit's steps on X (n x m): (D, n_steps_, steps per pass).
-    var n = kit.nrows(x)
-    var m = kit.ncols(x)
-    var batch = min(decomp_int(p["batch_size"]), n)
-    var seed = decomp_seed(p["random_state"])
-    var d: Int
-    if dict_init >= 0:
-        d = dict_init
-    else:
-        var usv = kit.thin_svd(x, min(n, m), True)
-        var st = kit.transpose(usv[1])
-        d = kit.ew(XD_MUL, usv[2], st)
-    if nc <= kit.nrows(d):
-        d = kit.rows_of(d, 0, nc)
-    else:
-        var pad = kit.zeros(nc - kit.nrows(d), m)
-        d = kit.vstack([d, pad])
-    var xt = x
-    if Bool(py=p["shuffle"]):
-        var draws = kit.rand(1, n, decomp_seed_word(seed), 50, 0)
-        var order = kit.order(draws)
-        xt = kit.take_rows(x, order)
-    if batch <= 0:
-        raise Error("integer division or modulo by zero")
-    var per_pass = -((-n) // batch)
-    var n_steps = p["max_iter"] * PythonObject(per_pass)
-    # The step loop is ONE binding call on a host copy of the dictionary.
-    d = kit.copy_host(d)
-    var patience = p["max_no_improvement"]
-    var params: List[Int] = [n, m, nc, _fit_index(p["fit_algorithm"]), 0, decomp_int(p["transform_max_iter"]),
-                             Int(Bool(py=p["positive_dict"])), Int(Bool(py=p["positive_code"])),
-                             decomp_seed_word(seed), -1, -1 if patience is None else decomp_int(patience), batch,
-                             Int(py=n_steps)]
-    var floats: List[Float64] = [decomp_float(p["alpha"]), decomp_float(p["tol"])]
-    # XD_DICT_MINIBATCH (was the Python entry x_decomp_dict_minibatch)
-    var addresses: List[Int] = [kit.at(xt), kit.at(d)]
-    var step = kit.xd(XD_DICT_MINIBATCH, addresses, params, floats, True) - 1
-    kit.wrote_host(d)
-    return (d, step + 1, per_pass)
-
-
-def _normalize(mut kit: DecompKit, c: Int) raises -> Int:
-    # `_BaseSparsePCA._normalize`: each row over its norm (a zero row kept).
-    var squares = kit.ew(XD_SQ, c)
-    var sums = kit.rowsum(squares)
-    var norms = kit.ew(XD_SQRT, sums)
-    var one = kit.const(1.0)
-    var safe = kit.ew(XD_SELECT, norms, norms, one, 0.0)
-    return kit.ew(XD_DIV, c, safe)
-
-
-def _spca_project(mut kit: DecompKit, x: Int, mean: Int, comps: Int, ridge_alpha: PythonObject,
-                  gram_source: PythonObject) raises -> Int:
-    # `_BaseSparsePCA.transform`: ridge regression of the centered rows.
-    # `gram_source`: see _query_gram (the Gram of the fitted components is
-    # kept; the ridge diagonal and the factor depend on ridge_alpha too and
-    # are formed per call).
-    var xc = kit.ew(XD_SUB, x, mean)
-    var gram = _query_gram(kit, comps, gram_source)
-    var alpha = kit.const(Float32(decomp_float(ridge_alpha)))
-    var g = kit.diag_add(gram, alpha)
-    var factor = kit.lu(g)
-    var rhs = kit.mm(comps, xc, tb=True)
-    var solved = kit.lu_solve(factor[0], factor[1], rhs)
-    return kit.transpose(solved)
-
-
-def _coding_encode(mut kit: DecompKit, x: Int, d: Int, fields: PythonObject, gram_source: PythonObject) raises -> Int:
-    # `_SparseCoding._encode`. `gram_source`: see _query_gram.
+def _coding_words(m: Int, kc: Int, fields: PythonObject) raises -> EncodeWords:
+    # UNPACK `_SparseCoding._encode`'s options.
     var alpha = py_get(fields, "transform_alpha")
     if alpha is None:
         alpha = py_get(fields, "alpha", PythonObject(1.0))
-    var code = _sparse_encode(kit, x, d, fields["transform_algorithm"], alpha, fields["transform_n_nonzero_coefs"],
-                              -1, fields["transform_max_iter"], fields["positive_code"], gram_source)
-    if Bool(py=fields["split_sign"]):
-        return _split_sign(kit, code)
-    return code
+    var words = _encode_words(m, kc, fields["transform_algorithm"], alpha, fields["transform_n_nonzero_coefs"],
+                              fields["transform_max_iter"], fields["positive_code"], False)
+    words.split_sign = Bool(py=fields["split_sign"])
+    return words^
 
 
-def _coding_inverse(mut kit: DecompKit, var c: Int, d: Int, fields: PythonObject) raises -> PythonObject:
-    # `_SparseCoding.inverse_transform`: code @ components_.
-    if Bool(py=fields["split_sign"]):
-        var h = kit.nrows(d)
-        var plus = kit.cols_of(c, 0, h)
-        var minus = kit.cols_of(c, h, 2 * h)
-        c = kit.ew(XD_SUB, plus, minus)
-    return kit.publish(kit.mm(c, d))
+def _dict_words(nc: Int, alpha: PythonObject, max_iter: PythonObject, tol: PythonObject, method: Int,
+                random_state: PythonObject, positive_dict: Bool, positive_code: Bool,
+                method_max_iter: PythonObject) raises -> DictWords:
+    # UNPACK `_dict_learning`'s options (alpha and the seed's refusal first).
+    var a = decomp_float(alpha)
+    var seed = decomp_seed(random_state)
+    return DictWords(nc, a, decomp_int(max_iter), decomp_float(tol), method, decomp_seed_word(seed), positive_dict,
+                     positive_code, decomp_int(method_max_iter))
+
+
+def _minibatch_words(n: Int, batch_size: PythonObject, random_state: PythonObject, shuffle: PythonObject,
+                     max_iter: PythonObject, patience: PythonObject, fit_algorithm: PythonObject,
+                     transform_max_iter: PythonObject, positive_dict: PythonObject, positive_code: PythonObject,
+                     alpha: PythonObject, tol: PythonObject, mut per_pass: Int) raises -> MiniBatchWords:
+    # UNPACK the mini-batch loop's options, in the order the Python fit read them.
+    var batch = min(decomp_int(batch_size), n)
+    var seed = decomp_seed(random_state)
+    var mix = Bool(py=shuffle)
+    if batch <= 0:
+        raise Error("integer division or modulo by zero")
+    per_pass = -((-n) // batch)
+    var steps = Int(py=max_iter * PythonObject(per_pass))
+    var limit = -1 if patience is None else decomp_int(patience)
+    return MiniBatchWords(batch, decomp_seed_word(seed), mix, steps, limit, _fit_index(fit_algorithm),
+                          decomp_int(transform_max_iter), Bool(py=positive_dict), Bool(py=positive_code),
+                          decomp_float(alpha), decomp_float(tol))
 
 
 # ------------------------------------------------------------ the estimators
@@ -380,30 +263,37 @@ def dictionary_learning_fit(model: PythonObject, args: PythonObject, project: Bo
     _check_algos(fields["fit_algorithm"], fields["transform_algorithm"])
     if py_get(fields, "callback") is not None:
         raise Error("NotImplementedError: callback is not carried")
-    var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
+    var entries = decomp_entries(mode, context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var x = _matrix(kit, args[0], "X", context)
+        var x = _matrix(door, kit, args[0], "X", context)
         var requested = fields["n_components"]
         var nc = kit.ncols(x) if requested is None else decomp_int(requested)
-        var ci = -1 if fields["code_init"] is None else _matrix(kit, fields["code_init"], "code_init", context)
-        var di = -1 if fields["dict_init"] is None else _matrix(kit, fields["dict_init"], "dict_init", context)
-        var fit = _dict_learning(kit, x, nc, decomp_float(fields["alpha"]), fields["max_iter"], fields["tol"],
-                                 _fit_index(fields["fit_algorithm"]), decomp_seed(fields["random_state"]), ci, di,
-                                 Bool(py=fields["positive_dict"]), Bool(py=fields["positive_code"]),
-                                 fields["transform_max_iter"])
-        var d = fit[1]
-        py_setitem(fields, "components_", kit.publish(d))
-        py_setitem(fields, "error_", fit[2])
-        py_setitem(fields, "n_iter_", PythonObject(fit[3]))
+        var ci = -1 if fields["code_init"] is None else _matrix(door, kit, fields["code_init"], "code_init", context)
+        var di = -1 if fields["dict_init"] is None else _matrix(door, kit, fields["dict_init"], "dict_init", context)
+        var method = _fit_index(fields["fit_algorithm"])
+        var words = _dict_words(nc, fields["alpha"], fields["max_iter"], fields["tol"], method, fields["random_state"],
+                                Bool(py=fields["positive_dict"]), Bool(py=fields["positive_code"]),
+                                fields["transform_max_iter"])
+        var split = project and Bool(py=fields["split_sign"])
+        var fit = DictFit()
+        var code = -1
+        var py = Python()
+        with GILReleased(py):
+            fit = dl_dict_learning(kit, x, words, ci, di)
+            if project:
+                code = dl_split_sign(kit, fit.code) if split else fit.code
+        py_setitem(fields, "components_", decomp_kit_publish(door, kit, fit.d))
+        py_setitem(fields, "error_", py_list_f64(fit.errors))
+        py_setitem(fields, "n_iter_", PythonObject(fit.done))
         py_setitem(fields, "n_features_in_", PythonObject(kit.ncols(x)))
         if not project:
             return model
-        var code = fit[0]
-        if Bool(py=fields["split_sign"]):
-            code = _split_sign(kit, code)
-        return kit.publish(code)
+        return decomp_kit_publish(door, kit, code)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: Bool,
@@ -416,9 +306,11 @@ def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: B
     _check_algos(fields["fit_algorithm"], fields["transform_algorithm"])
     if py_get(fields, "callback") is not None:
         raise Error("NotImplementedError: callback is not carried")
-    var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
+    var entries = decomp_entries(mode, context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var x = _matrix(kit, args[0], "X", context)
+        var x = _matrix(door, kit, args[0], "X", context)
         var requested = fields["n_components"]
         var nc = kit.ncols(x) if requested is None else decomp_int(requested)
         var init = -1
@@ -426,37 +318,71 @@ def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: B
             # (after the batch size and the seed are read, as the Python fit did)
             _ = min(decomp_int(fields["batch_size"]), kit.nrows(x))
             _ = decomp_seed(fields["random_state"])
-            init = _matrix(kit, fields["dict_init"], "dict_init", context)
-        var fit = _minibatch_fit(kit, x, nc, init, fields)
-        var n_steps = fit[1]
+            init = _matrix(door, kit, fields["dict_init"], "dict_init", context)
+        var per_pass = 1
+        var words = _minibatch_words(kit.nrows(x), fields["batch_size"], fields["random_state"], fields["shuffle"],
+                                     fields["max_iter"], fields["max_no_improvement"], fields["fit_algorithm"],
+                                     fields["transform_max_iter"], fields["positive_dict"], fields["positive_code"],
+                                     fields["alpha"], fields["tol"], per_pass)
+        var encode = EncodeWords(0, 0, 1.0, 0, 0, False, False)
+        if project:
+            # X against the nc atoms the fit keeps
+            encode = _coding_words(kit.ncols(x), nc, fields)
+        var d = -1
+        var n_steps = 0
+        var code = -1
+        var py = Python()
+        with GILReleased(py):
+            var fit = dl_minibatch_fit(kit, x, nc, init, words)
+            d = fit[0]
+            n_steps = fit[1]
+            if project:
+                var gram = Gram(-1)
+                code = dl_encode_run(kit, x, d, encode, gram)
         py_setitem(fields, "n_steps_", PythonObject(n_steps))
-        py_setitem(fields, "n_iter_", PythonObject(-((-n_steps) // fit[2])))
-        py_setitem(fields, "components_", kit.publish(fit[0]))
+        py_setitem(fields, "n_iter_", PythonObject(-((-n_steps) // per_pass)))
+        py_setitem(fields, "components_", decomp_kit_publish(door, kit, d))
         py_setitem(fields, "n_features_in_", PythonObject(kit.ncols(x)))
         if not project:
             return model
-        return kit.publish(_coding_encode(kit, x, fit[0], fields, PythonObject(None)))
+        return decomp_kit_publish(door, kit, code)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
     # DictionaryLearning / MiniBatchDictionaryLearning transform and inverse_transform.
     var fields = py_fields(model)
     _check_fitted(model, fields)
-    var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
+    var door = DecompDoor(entries, context["output_context"])
     # A query: the fitted dictionary stays on the device across calls.
-    kit.owner = model
+    door.owner = model
+    var kit = decomp_kit_unpack(entries)
     try:
+        var py = Python()
         if inverse:
-            var c = _matrix(kit, args[0], "code", context)
-            var d = _fitted_matrix(kit, fields["components_"], "components_", context)
-            return _coding_inverse(kit, c, d, fields)
-        var x = _matrix(kit, args[0], "X", context)
-        var d = _fitted_matrix(kit, fields["components_"], "components_", context)
-        return kit.publish(_coding_encode(kit, x, d, fields, fields["components_"]))
+            var c = _matrix(door, kit, args[0], "code", context)
+            var d = _fitted_matrix(door, kit, fields["components_"], "components_", context)
+            var split = Bool(py=fields["split_sign"])
+            var out = -1
+            with GILReleased(py):
+                out = dl_inverse_run(kit, c, d, split)
+            return decomp_kit_publish(door, kit, out)
+        var x = _matrix(door, kit, args[0], "X", context)
+        var source = fields["components_"]
+        var d = _fitted_matrix(door, kit, source, "components_", context)
+        var words = _coding_words(kit.ncols(x), kit.nrows(d), fields)
+        var gram = _gram(door, kit, source, words)
+        var code = -1
+        with GILReleased(py):
+            code = dl_encode_run(kit, x, d, words, gram)
+        _keep_gram(door, kit, source, gram)
+        return decomp_kit_publish(door, kit, code)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def _coder_dictionary(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -485,16 +411,28 @@ def sparse_coder(model: PythonObject, operation: String, args: PythonObject, con
         py_setitem(fields, "n_features_in_", PythonObject(cols))
         return model
     var dictionary = _coder_dictionary(fields, context)
-    var kit = DecompKit(decomp_entries(fields["numeric_mode"], context), context["output_context"])
+    var entries = decomp_entries(fields["numeric_mode"], context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var d = kit.input(dictionary, Int(py=dictionary.shape[0]), Int(py=dictionary.shape[1]))
+        var d = decomp_door_borrow(door, kit, dictionary, Int(py=dictionary.shape[0]), Int(py=dictionary.shape[1]))
+        var py = Python()
+        var out = -1
         if operation == "coder_inverse":
-            var c = _matrix(kit, args[0], "code", context)
-            return _coding_inverse(kit, c, d, fields)
-        var x = _matrix(kit, args[0], "X", context)
-        return kit.publish(_coding_encode(kit, x, d, fields, PythonObject(None)))
+            var c = _matrix(door, kit, args[0], "code", context)
+            var split = Bool(py=fields["split_sign"])
+            with GILReleased(py):
+                out = dl_inverse_run(kit, c, d, split)
+            return decomp_kit_publish(door, kit, out)
+        var x = _matrix(door, kit, args[0], "X", context)
+        var words = _coding_words(kit.ncols(x), kit.nrows(d), fields)
+        with GILReleased(py):
+            var gram = Gram(-1)
+            out = dl_encode_run(kit, x, d, words, gram)
+        return decomp_kit_publish(door, kit, out)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, context: PythonObject) raises -> PythonObject:
@@ -506,97 +444,114 @@ def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, conte
     var minibatch = _is_a(model, context["minibatch_sparse_pca_class"])
     if not minibatch and not _is_str(fields["method"], "lars") and not _is_str(fields["method"], "cd"):
         raise Error("method must be 'lars' or 'cd'")
-    var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
+    var entries = decomp_entries(mode, context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var x = _matrix(kit, args[0], "X", context)
+        # UNPACK: X, the inits and every option, once.
+        var x = _matrix(door, kit, args[0], "X", context)
         var cols = kit.ncols(x)
         var requested = fields["n_components"]
         var nc = cols if requested is None else decomp_int(requested)
-        var mean = kit.colmean(x)
-        var xc = kit.ew(XD_SUB, x, mean)
-        var comps: Int
+        var vi = -1
+        var ui = -1
+        var dict_words = DictWords(nc, 0.0, 0, 0.0, 0, 0, False, False, 0)
+        var mb_words = MiniBatchWords(1, 0, False, 0, -1, 0, 0, False, False, 0.0, 0.0)
+        var encode = EncodeWords(0, 0, 1.0, 0, 0, False, False)
+        var per_pass = 1
         if not minibatch:
-            var ci = -1
             if fields["V_init"] is not None:
-                ci = kit.transpose(_matrix(kit, fields["V_init"], "V_init", context))
-            var di = -1
+                vi = _matrix(door, kit, fields["V_init"], "V_init", context)
             if fields["U_init"] is not None:
-                di = kit.transpose(_matrix(kit, fields["U_init"], "U_init", context))
-            var xct = kit.transpose(xc)
-            var fit = _dict_learning(kit, xct, nc, decomp_float(fields["alpha"]), fields["max_iter"], fields["tol"],
-                                     _fit_index(fields["method"]), decomp_seed(fields["random_state"]), ci, di,
-                                     False, False, PythonObject(1000))
-            var code_t = kit.transpose(fit[0])
-            comps = _normalize(kit, code_t)
-            py_setitem(fields, "components_", kit.publish(comps))
-            py_setitem(fields, "n_components_", PythonObject(kit.nrows(comps)))
-            py_setitem(fields, "error_", fit[2])
-            py_setitem(fields, "n_iter_", PythonObject(fit[3]))
+                ui = _matrix(door, kit, fields["U_init"], "U_init", context)
+            dict_words = _dict_words(nc, fields["alpha"], fields["max_iter"], fields["tol"], _fit_index(fields["method"]),
+                                     fields["random_state"], False, False, PythonObject(1000))
         else:
             # MiniBatchDictionaryLearning(n_components=nc, fit_algorithm=method,
             # transform_algorithm="lasso_lars", transform_alpha=alpha, ...) on X^T.
             _check_algos(fields["method"], PythonObject("lasso_lars"))
-            var xt = kit.transpose(xc)
-            var p = Python.dict()
-            py_setitem(p, "alpha", fields["alpha"])
-            py_setitem(p, "max_iter", fields["max_iter"])
-            py_setitem(p, "batch_size", fields["batch_size"])
-            py_setitem(p, "shuffle", fields["shuffle"])
-            py_setitem(p, "fit_algorithm", fields["method"])
-            py_setitem(p, "random_state", fields["random_state"])
-            py_setitem(p, "positive_dict", PythonObject(False))
-            py_setitem(p, "positive_code", PythonObject(False))
-            py_setitem(p, "transform_max_iter", PythonObject(1000))
-            py_setitem(p, "tol", fields["tol"])
-            py_setitem(p, "max_no_improvement", fields["max_no_improvement"])
-            var fit = _minibatch_fit(kit, xt, nc, -1, p)
-            var code = _sparse_encode(kit, xt, fit[0], PythonObject("lasso_lars"), fields["alpha"], PythonObject(None),
-                                      -1, PythonObject(1000), PythonObject(False), PythonObject(None))
-            var code_t = kit.transpose(code)
-            comps = _normalize(kit, code_t)
-            py_setitem(fields, "components_", kit.publish(comps))
-            py_setitem(fields, "n_components_", PythonObject(kit.nrows(comps)))
-            py_setitem(fields, "n_iter_", PythonObject(-((-fit[1]) // fit[2])))
-        py_setitem(fields, "mean_", kit.out_shape(mean, Python.tuple(cols)))
+            mb_words = _minibatch_words(cols, fields["batch_size"], fields["random_state"], fields["shuffle"],
+                                        fields["max_iter"], fields["max_no_improvement"], fields["method"],
+                                        PythonObject(1000), PythonObject(False), PythonObject(False), fields["alpha"],
+                                        fields["tol"], per_pass)
+            # lasso_lars on X^T (rows: the features) against the nc atoms
+            encode = _encode_words(kit.nrows(x), nc, PythonObject("lasso_lars"), fields["alpha"],
+                                   PythonObject(None), PythonObject(1000), PythonObject(False), False)
+        var ridge = Float32(decomp_float(fields["ridge_alpha"])) if project else Float32(0.0)
+        # RUN: the centering, the fit and the normalization (and the projection).
+        var fit = SpcaFit()
+        var py = Python()
+        with GILReleased(py):
+            fit = dl_spca_fit_run(kit, x, vi, ui, minibatch, dict_words, mb_words, encode, project, ridge)
+        # PACK: the fitted fields, once.
+        py_setitem(fields, "components_", decomp_kit_publish(door, kit, fit.comps))
+        py_setitem(fields, "n_components_", PythonObject(kit.nrows(fit.comps)))
+        if not minibatch:
+            py_setitem(fields, "error_", py_list_f64(fit.errors))
+            py_setitem(fields, "n_iter_", PythonObject(fit.done))
+        else:
+            py_setitem(fields, "n_iter_", PythonObject(-((-fit.steps) // per_pass)))
+        py_setitem(fields, "mean_", decomp_kit_out_shape(door, kit, fit.mean, Python.tuple(cols)))
         py_setitem(fields, "n_features_in_", PythonObject(cols))
         if not project:
             return model
-        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"], PythonObject(None)))
+        return decomp_kit_publish(door, kit, fit.projected)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
     # `_BaseSparsePCA.transform` / `inverse_transform`.
     var fields = py_fields(model)
     _check_fitted(model, fields)
-    var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
+    var door = DecompDoor(entries, context["output_context"])
     # A query: the fitted mean and components stay on the device across calls.
-    kit.owner = model
+    door.owner = model
+    var kit = decomp_kit_unpack(entries)
     try:
-        var x = _matrix(kit, args[0], "X", context)
-        var mean = _fitted_row(kit, fields["mean_"], "mean_", context)
-        var comps = _fitted_matrix(kit, fields["components_"], "components_", context)
+        var x = _matrix(door, kit, args[0], "X", context)
+        var mean = _fitted_row(door, kit, fields["mean_"], "mean_", context)
+        var source = fields["components_"]
+        var comps = _fitted_matrix(door, kit, source, "components_", context)
+        var py = Python()
+        var out = -1
         if inverse:
-            var product = kit.mm(x, comps)
-            return kit.publish(kit.ew(XD_ADD, product, mean))
-        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"], fields["components_"]))
+            with GILReleased(py):
+                out = dl_spca_inverse(kit, x, mean, comps)
+            return decomp_kit_publish(door, kit, out)
+        var ridge = Float32(decomp_float(fields["ridge_alpha"]))
+        var gram = Gram(decomp_door_resident_derived(door, kit, source, _GRAM_NAME))
+        with GILReleased(py):
+            out = dl_spca_project(kit, x, mean, comps, ridge, gram)
+        _keep_gram(door, kit, source, gram)
+        return decomp_kit_publish(door, kit, out)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # `sparse_encode(X, dictionary, algorithm, n_nonzero_coefs, alpha, init,
     # max_iter, positive, numeric_mode)`.
-    var kit = DecompKit(decomp_entries(args[8], context), context["output_context"])
+    var entries = decomp_entries(args[8], context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var init = -1 if args[5] is None else _matrix(kit, args[5], "init", context)
-        var x = _matrix(kit, args[0], "X", context)
-        var d = _matrix(kit, args[1], "dictionary", context)
-        return kit.publish(_sparse_encode(kit, x, d, args[2], args[4], args[3], init, args[6], args[7],
-                                          PythonObject(None)))
+        var init = -1 if args[5] is None else _matrix(door, kit, args[5], "init", context)
+        var x = _matrix(door, kit, args[0], "X", context)
+        var d = _matrix(door, kit, args[1], "dictionary", context)
+        var words = _encode_words(kit.ncols(x), kit.nrows(d), args[2], args[4], args[3], args[6], args[7], False)
+        var out = -1
+        var py = Python()
+        with GILReleased(py):
+            var gram = Gram(-1)
+            out = dl_sparse_encode(kit, x, d, words, init, gram)
+        return decomp_kit_publish(door, kit, out)
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def _dict_learning_dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:

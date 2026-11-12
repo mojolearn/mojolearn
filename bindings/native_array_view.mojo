@@ -2,7 +2,7 @@
 # Zero-copy ndarray view of an admitted Array's retained native exporter.
 # Imported by both input and public-output owners; no model-specific routing.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_buffer_owner import native_buffer_view

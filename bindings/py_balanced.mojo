@@ -12,7 +12,7 @@
 # reference to compensate for the standard library; when Modular ships the
 # balanced operations, call sites can go back to the ordinary syntax.
 from bindings.native_loaded_module import native_loaded_module
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced_run import _EXACT_DICT_TYPE

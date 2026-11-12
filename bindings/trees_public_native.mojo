@@ -26,7 +26,7 @@ from bindings.trees_public_meta import meta_operation
 from bindings.trees_public_meta_lifecycle import meta_public_operation
 from bindings.trees_public_mixin_score import boost_score, gbdt_adapter_score
 from bindings.trees_explainer_native import trees_explainer_operation
-from bindings.trees_agnostic_native import trees_agnostic_operation
+from bindings.trees_agnostic_native_door import trees_agnostic_operation
 from bindings.trees_public_gbdt_fit import (
     gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
     adapter_regressor_fit, gbdt_ordered_construct, gbdt_feature_freq_construct,

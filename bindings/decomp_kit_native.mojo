@@ -1,22 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-# The native twin of python/mojolearn/_expansion_decomp.py's `_Kit` and `_M`
-# for the native decomposition owners: the same x_decomp binding entries,
-# with the same parameter words, in the same order, under the same route
-# rules (a GPU binding, one with the resident `x_decomp_dev_ew`, runs every
-# non-empty operation on the device, as `_Kit._use` with `_RES_MIN` 1 does;
-# a CPU-only host binding takes the host-address entries). So the bits are
-# the ones the Python kit produced.
-#
-# One difference is data movement only: a matrix keeps both its host and its
-# device words once it has both (the Python `_M` dropped one and moved the
-# same words again when it next needed them). The words are equal, so no
-# value changes; every route `_Kit` chose by residency reads `on_device`,
-# which follows the Python `_M` exactly; an operation that writes a matrix
-# in place drops the copy that went stale (`wrote_device` / `wrote_host`).
-from std.ffi import external_call, c_size_t
+# The UNPACK and PACK half of the native decomposition owners' kit (lane
+# entangled-decompkit, 2026-11-12): the admission helpers (decomp_input,
+# decomp_shape, decomp_seed, decomp_entries, ...), the door's typed-kit
+# construction (decomp_kit_unpack: the image's dispatch and optional entries
+# read once), the borrowed inputs and resident fitted operands a door adds
+# (DecompDoor, decomp_door_*), PACK's copies into public Arrays
+# (decomp_kit_publish / decomp_kit_out_shape) and the model's resident records.
+# The RUN half, python/mojolearn/_expansion_decomp.py's `_Kit` / `_M` with no
+# Python, is bindings/decomp_kit_run.mojo (DKit).
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
-from std.python._cpython import PyObjectPtr
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.native_resident_capsule import resident_capsule
@@ -25,54 +18,24 @@ from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_a
 from std.memory import unsafe_memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
-from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
-from bindings.admitted_input import admit_x, admitted_finite_refuse
+from bindings.classical_arrays import classical_typed, classical_address, classical_kind
+from bindings.admitted_input import admit_x
 from std.python._cpython import GILReleased
 from core.linear_entry_table import LinearEntryKey
 from core.entry_table import EntryRef, entry_ref_unresolved
 from core.decomp_entry_table import decomp_ref, decomp_table_call
-from x_decomp.descriptor_schema import (
-    XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_MOVE, XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD,
-    XD_DEV_EW, XD_DEV_GEMM, XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE, XD_DEV_UPLOAD_FINITE, XD_FLAGS, XD_ORDER,
-    XD_DEV_REDUCE, XD_DEV_ORDER, XD_SVD, XD_DEV_SVD, XD_RANK, XD_ORTH_DIAG, XD_DEV_ORTH_DIAG, XD_GEQRF, XD_ORGQR,
-    XD_RAND, XD_LU, XD_LU_SOLVE, XD_EIGH, XD_LASSO_ROWS, XD_LARS_ROWS, XD_OMP_ROWS, XD_LU_AUX, XD_ABSMAX_SIGN,
-    XD_REDUCE, XD_SELECT_SMALLEST, XD_ARGMIN_ALL, XD_LU_RESID, XD_S_FLAGS, XD_QFIX_FLAGS, XD_DEV_RAND,
-    XD_DEV_ABSMAX, XD_DEV_LU, XD_DEV_LU_AUX, XD_DEV_CODE_ROWS, XD_DEV_EIGH_TO, XD_DEV_ARGMIN_ALL,
-    XD_DEV_SELECT_SMALLEST,
-)
+from x_decomp.descriptor_schema import XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD
 from bindings.classical_validate import classical_view
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
-from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
+from bindings.decomp_kit_run import (
+    DKit, DK_HAS_DEV_SVD, DK_HAS_DEV_LU, DK_HAS_DEV_CODE_ROWS, DK_HAS_DEV_EIGH_TO, DK_HAS_S_FLAGS,
+    DK_HAS_QFIX_FLAGS, DK_HAS_IDN_FLAGS,
+)
 
 comptime DecompF32 = MutPointer[Float32, MutUntrackedOrigin]
 
-# x_decomp/cells.mojo elementwise codes (`_expansion_decomp._OP`).
-comptime XD_ADD = 0
-comptime XD_SUB = 1
-comptime XD_MUL = 2
-comptime XD_DIV = 3
-comptime XD_MAXS = 5
-comptime XD_SQRT = 7
-comptime XD_SQ = 8
-comptime XD_SCALE = 14
-comptime XD_SOFT = 17
-comptime XD_LOGS = 10
-comptime XD_ABS = 13
-comptime XD_ADDS = 22
-comptime XD_GTS = 23
-comptime XD_LE = 34
-comptime XD_RECIP = 16
-comptime XD_MINS = 19
-comptime XD_SELECT = 35
-
-# x_decomp/moves.mojo move codes.
-comptime XD_TAKE_ROWS = 0
-comptime XD_TRANSPOSE = 1
-comptime XD_PLACE_COLS = 2
-comptime XD_TAKE_COLS = 4
-comptime XD_F32_INDEX_MAX = 1 << 24
-comptime XD_I32_MAX = (1 << 31) - 1
-
+# TOMBSTONE: DecompKit's elementwise and move code copies (XD_ADD .. XD_SELECT, XD_TAKE_ROWS ..
+# XD_I32_MAX) moved with the kit to bindings/decomp_kit_run.mojo (DK_*) by lane entangled-decompkit, 2026-11-12.
 comptime XD_SPARSE_ALGOS = "('lasso_lars', 'lasso_cd', 'lars', 'omp', 'threshold')"
 comptime XD_RESHAPE_HINT = ". Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
 
@@ -244,1211 +207,11 @@ comptime _DK_RESIDENT_SLOT = "decomp_resident_operands_v1"
 # owners, lane ne1-a-decomp-tsa).
 
 
-struct DecompMatrix(Copyable, Movable):
-    var host: PythonObject   # a float32 Array of rows * cols words (at least one), or None
-    var host_address: Int    # -1 until captured, otherwise operation-local native address
-    var device: Int          # an x_decomp device buffer id, or -1
-    var rows: Int
-    var cols: Int
-    # Whether the Python `_M` would be on the device (its `_d` set): every
-    # route `_Kit` chose by residency reads this, never the buffers kept.
-    var on_device: Bool
-
-    def __init__(out self, host: PythonObject, device: Int, rows: Int, cols: Int, on_device: Bool):
-        self.host = host
-        self.host_address = -1
-        self.device = device
-        self.rows = rows
-        self.cols = cols
-        self.on_device = on_device
-
-
-# Removed (lane calltable-prep-decomp, 2026-11-11): DecompKit's
-# per-kit entry handle cache (the `_DK_DEV_MOVE` .. `_DK_HOT_COUNT` slots, `_entry`) and its kernel-call
-# provider (`xd`, bindings/kit_call.mojo) went with the Python entry calls they
-# served: every operation now calls the image's published x_decomp dispatch
-# (core/decomp_entry_table.mojo) with plain words.
-
-
-struct DecompKit(Movable):
-    var entries: PythonObject
-    var context: PythonObject   # the NumPy-free output context: every buffer is an Array
-    var matrices: List[DecompMatrix]
-    var allocations: List[Int]
-    var input_owners: List[PythonObject]
-    var resident: Bool
-    var one_device: Int
-    var one_host: Int
-    # The fitted model of a query (predict/transform/...), or None: its fitted
-    # operands stay on the device across calls (`resident_input`).
-    var owner: PythonObject
-    # A binding's compiled-route words (`flags`), read once per kit: they are
-    # compile-time constants (p3 rank 414: 3 to 6 binding calls per call).
-    var flag_names: List[String]
-    var flag_words: List[Int]
-    # The connected x_decomp image's table key (the bridge's
-    # `x_decomp_native_key`); `keyed` False when the image published none.
-    var key: LinearEntryKey
-    var keyed: Bool
-    # The image's dispatch, resolved once at kit construction (lane
-    # entry-table-zero-alloc); every kit operation calls through it.
-    var entry: EntryRef
-
-    def __init__(out self, entries: PythonObject, context: PythonObject) raises:
-        self.entries = entries
-        self.context = context
-        # UNPACK: the image key, read once per kit from the connected entries.
-        var key = py_get(entries, "x_decomp_native_key")
-        var mode = -1
-        var vendor = -1
-        if key is not None:
-            mode = Int(py=key[0])
-            vendor = Int(py=key[1])
-        self.key = LinearEntryKey(mode, vendor)
-        self.keyed = key is not None
-        self.entry = entry_ref_unresolved()
-        if key is not None:
-            self.entry = decomp_ref(LinearEntryKey(mode, vendor))
-        self.owner = PythonObject(None)
-        self.flag_names = List[String]()
-        self.flag_words = List[Int]()
-        self.matrices = List[DecompMatrix]()
-        self.allocations = List[Int]()
-        self.input_owners = List[PythonObject]()
-        self.resident = py_get(entries, "x_decomp_dev_ew") is not None
-        self.one_device = -1
-        self.one_host = -1
-        # `_M._one`: the unused broadcast operand, a 0.
-        self.one_host = self.zeros(1, 1)
-
-    def close(mut self) raises:
-        # Views share ids, so only the allocation ledger frees buffers.
-        for i in range(len(self.allocations) - 1, -1, -1):  # driver-loop: over native device allocation handles
-            self.dev_free(self.allocations[i])
-        self.allocations.clear()
-
-    def xd(self, op: Int, addresses: List[Int], ints: List[Int], floats: List[Float64], release: Bool) raises -> Int:
-        """One x_decomp operation (x_decomp/descriptor_schema.mojo) through
-        the connected image's published dispatch (core/decomp_entry_table.mojo).
-        `release` follows the door the operation replaces: the doors that
-        released the GIL still release it; the enqueue-only device doors kept
-        it. The caller keeps every addressed buffer alive."""
-        if not self.keyed:
-            raise Error("ImportError: mojolearn: the x_decomp binding publishes no native entry table")
-        var result = 0
-        if release:
-            var py = Python()
-            with GILReleased(py):
-                result = decomp_table_call(self.entry, op, addresses, ints, floats)
-        else:
-            result = decomp_table_call(self.entry, op, addresses, ints, floats)
-        return result
-
-    def dev_alloc(self, n: Int) raises -> Int:
-        return self.xd(XD_DEV_ALLOC, List[Int](), [n], List[Float64](), False)
-
-    def dev_free(self, handle: Int) raises:
-        _ = self.xd(XD_DEV_FREE, List[Int](), [handle], List[Float64](), False)
-
-    def dev_upload(self, handle: Int, address: Int, n: Int) raises:
-        _ = self.xd(XD_DEV_UPLOAD, [address], [handle, n], List[Float64](), True)
-
-    def dev_download(self, handle: Int, address: Int, n: Int) raises:
-        _ = self.xd(XD_DEV_DOWNLOAD, [address], [handle, n], List[Float64](), True)
-
-    def at(mut self, a: Int) raises -> Int:
-        """The host address of matrix a's words (the kit's matrix list holds
-        the owning Array, so the address stays valid through a call)."""
-        return Int(py=self.address(a))
-
-    def has(self, name: String) raises -> Bool:
-        return py_get(self.entries, PythonObject(name)) is not None
-
-    def flags(mut self, name: String) raises -> Int:
-        # A binding's compiled-route word (`x_decomp_s_flags`, ...): 0 when
-        # the binding has no such entry, as `_Kit.s_flags` and its siblings.
-        for i in range(len(self.flag_names)):  # small-loop(the few route-word names one kit reads)
-            if self.flag_names[i] == name:
-                return self.flag_words[i]
-        var op = (XD_S_FLAGS if name == "x_decomp_s_flags" else XD_QFIX_FLAGS if name == "x_decomp_qfix_flags"
-                  else XD_FLAGS if name == "x_decomp_idn_flags" else -1)
-        if op < 0:
-            raise Error("x_decomp: no compiled route word " + name)
-        var word = 0
-        if self.has(name):
-            word = self.xd(op, List[Int](), List[Int](), List[Float64](), False)
-        self.flag_names.append(name)
-        self.flag_words.append(word)
-        return word
-
-    def opt_dev(self, name: String) raises -> Bool:
-        # `_Kit._opt_dev`: an optional resident entry this binding exports.
-        return self.resident and self.has(name)
-
-    # ---- matrices
-    def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1,
-            host_address: Int = -1) -> Int:
-        var result = len(self.matrices)
-        self.matrices.append(DecompMatrix(host, device, rows, cols, device >= 0))
-        self.matrices[result].host_address = host_address
-        return result
-
-    def size(self, a: Int) -> Int:
-        return self.matrices[a].rows * self.matrices[a].cols
-
-    def nrows(self, a: Int) -> Int:
-        return self.matrices[a].rows
-
-    def ncols(self, a: Int) -> Int:
-        return self.matrices[a].cols
-
-    def zeros(mut self, rows: Int, cols: Int) raises -> Int:
-        # One spare word gives an empty matrix a safe address, as `_M._one`.
-        return self.add(classical_array(max(rows * cols, 1), 0, self.context), rows, cols)
-
-    def input(mut self, array: PythonObject, rows: Int, cols: Int) -> Int:
-        # A C-order float32 Array the caller converted (decomp_input): read,
-        # never written (every operation writes a fresh output).
-        return self.add(array, rows, cols)
-
-    def input_snapshot(mut self, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int, cols: Int) -> Int:
-        # The provider admitted shape/dtype/address once (the typed view);
-        # the door's pin hands the kit the original storage owner, kept
-        # independently of mutable caller Array slots for the kit's life.
-        self.input_owners.append(pin.owner)
-        var index = self.add(pin.keep, rows, cols)
-        self.matrices[index].host_address = snapshot.source.addr
-        return index
-
-    def defers_finite(self) raises -> Bool:
-        """Whether this kit's binding tests an input on its upload (the
-        kernel-call op XD_DEV_UPLOAD_FINITE, compiled into every resident GPU
-        binding with the other XD_DEV_* ops): a door may then admit a
-        borrowed X with `defer_finite` and add it through `input_tested`."""
-        return self.resident and self.keyed
-
-    def input_tested(mut self, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int, cols: Int, est: String) raises -> Int:
-        """`input_snapshot` of an X the door admitted with `defer_finite`
-        (no host pass over a borrowed X; lane a8c-device-x-linear-prep-rfe):
-        the words go up now through the op XD_DEV_UPLOAD_FINITE, which
-        tests them on the device in the upload's own wait, and a NaN or an
-        infinity is refused with admit_x's wording. The upload is the one
-        the matrix's first device op would make (`device`); the matrix
-        still starts as a host matrix (`on_device` False), so every route
-        is the one `input_snapshot` gave and no bit moves. Only for a kit
-        where `defers_finite()` holds."""
-        var index = self.input_snapshot(snapshot, pin, rows, cols)
-        var n = rows * cols
-        if n < 1:
-            return index
-        var handle = self.dev_alloc(n)
-        self.allocations.append(handle)
-        # Integration (integ/pre-0867-w5): lane a8c's named entry
-        # x_decomp_dev_upload_finite duplicated lane a8d's op; the one op serves both kits.
-        var source: List[Int] = [self.at(index)]
-        var word = self.xd(XD_DEV_UPLOAD_FINITE, source, [handle, n], List[Float64](), True)
-        self.matrices[index].device = handle
-        self.matrices[index].on_device = False
-        admitted_finite_refuse(word, est)
-        return index
-
-    def resident_input(mut self, source: PythonObject, name: String, host: PythonObject, address: Int,
-                       keep: PythonObject, rows: Int, cols: Int) raises -> Int:
-        """A fitted operand of the query model (`self.owner`) whose device
-        copy is kept across calls, as the Python `_M` the fitted model held
-        stayed on the device after its first upload: uploaded at the first
-        query after a fit and reused while the model's stored `source` is the
-        same object (the record holds it, so the address cannot be recycled),
-        with the same shape, on the binding that minted it, at the model's
-        generation word. -1 when this kit keeps nothing resident (a host
-        binding, no query model, an empty operand): the caller adds the
-        operand as before. The values are the ones uploaded, so no route or
-        bit changes; the matrix starts as a host matrix (`on_device` False)
-        exactly as `input_snapshot` adds it."""
-        var n = rows * cols
-        if self.owner is None or not self.resident or n < 1:
-            return -1
-        # Hazard class A (p3 brief): a device copy is served only while the
-        # host words cannot change under it. The stored operand is made
-        # read-only at the buffer level here (its `_readonly` flag and a
-        # read-only memoryview, so `np.asarray(m.coef_)[:] = W` and
-        # `m.coef_[...] = v` raise NumPy's read-only error instead of
-        # diverging from the device copy); replacing the attribute is still
-        # noticed by identity below. An operand that cannot be frozen (a
-        # NumPy array or a view of another owner the caller assigned) keeps
-        # the per-call upload: correct first.
-        if not self._freeze(source):
-            return -1
-        # The record names its binding by the alloc / free entries (identity
-        # only: no call goes through them here; the record's capsule frees
-        # through `free` when the record is dropped).
-        var alloc = self.entries["x_decomp_dev_alloc"]
-        var free = self.entries["x_decomp_dev_free"]
-        var held = decomp_resident_find(self.owner, alloc, free, source, name, False)
-        if held is not None and (Int(py=held[3]) != rows or Int(py=held[4]) != cols):
-            held = PythonObject(None)
-        if held is None:
-            var handle = self.dev_alloc(n)
-            try:
-                self.dev_upload(handle, address, n)
-            except error:
-                self.dev_free(handle)
-                raise error^
-            _ = keep  # keep the host owner alive through the upload above
-            # From here the record's capsule owns the device buffer:
-            # replacing or dropping the record (refit, a new array, the
-            # model's death) returns it to the minting binding's pool. Word
-            # 7: the uploaded words are the frozen source's own (no cast
-            # copy), so `resident_hit` may serve it without re-admission.
-            held = decomp_resident_hold(self.owner, alloc, free, source, name, rows, cols, handle, host is source)
-        # The kit holds the entry (and its capsule) until it is dropped, so
-        # the buffer outlives this operation even when the model cannot be
-        # weakly referenced (no record kept) or a nested call replaces it.
-        self.input_owners.append(held)
-        self.input_owners.append(keep)
-        var index = self.add(host, rows, cols, Int(py=held[5]), address)
-        self.matrices[index].on_device = False
-        return index
-
-    def resident_hit(mut self, source: PythonObject, name: String) raises -> Int:
-        """A fitted operand already resident on this kit's binding, served
-        before the per-call admission (view, float32 cast, finite scan):
-        the stored `source` is the same frozen float32 Array whose own
-        words were uploaded, so neither its values nor its shape can have
-        changed since. -1 on any miss: the caller admits it and calls
-        `resident_input` as before."""
-        if self.owner is None or not self.resident:
-            return -1
-        var held = decomp_resident_find(self.owner, self.entries["x_decomp_dev_alloc"],
-                                        self.entries["x_decomp_dev_free"], source, name, True)
-        if held is None:
-            return -1
-        self.input_owners.append(held)
-        var index = self.add(source, Int(py=held[3]), Int(py=held[4]), Int(py=held[5]), Int(py=source._addr))
-        self.matrices[index].on_device = False
-        return index
-
-    def resident_derived(mut self, source: PythonObject, name: String) raises -> Int:
-        """A device matrix an earlier query computed from the fitted operand
-        `source` and kept with `resident_keep` (lane ne1-a-decomp-resident:
-        ALS's unit-normalised item factors): served while `source` is the
-        same frozen Array at the same generation, so the words are the ones
-        this call would compute again. It is added as the computing call
-        left it (a device matrix, `on_device` True), so every later route is
-        the one that call took. -1 on any miss: the caller computes it."""
-        if self.owner is None or not self.resident:
-            return -1
-        var held = decomp_resident_find(self.owner, self.entries["x_decomp_dev_alloc"],
-                                        self.entries["x_decomp_dev_free"], source, name, False)
-        if held is None or Bool(py=held[7]):
-            return -1
-        self.input_owners.append(held)
-        return self.add(PythonObject(None), Int(py=held[3]), Int(py=held[4]), Int(py=held[5]))
-
-    def resident_keep(mut self, source: PythonObject, name: String, a: Int) raises -> Bool:
-        """Keep matrix `a`, computed by this call from the frozen fitted
-        operand `source` and left on the device, for later queries of the
-        model (`resident_derived`): its pool buffer leaves this kit's
-        allocation ledger for a record capsule. False (nothing kept) for a
-        host binding, no query model, an unfrozen source, a matrix not on
-        the device, or a buffer this kit does not own (a view's or a
-        resident input's)."""
-        if self.owner is None or not self.resident:
-            return False
-        if not decomp_resident_frozen(source):
-            return False
-        if not self.matrices[a].on_device or self.matrices[a].device < 0:
-            return False
-        var handle = self.matrices[a].device
-        var found = -1
-        for i in range(len(self.allocations)):  # driver-loop: over this kit's device allocation handles
-            if self.allocations[i] == handle:
-                found = i
-                break
-        if found < 0:
-            return False
-        _ = self.allocations.pop(found)
-        var held = decomp_resident_hold(self.owner, self.entries["x_decomp_dev_alloc"],
-                                        self.entries["x_decomp_dev_free"], source, name,
-                                        self.matrices[a].rows, self.matrices[a].cols, handle, False)
-        self.input_owners.append(held)
-        return True
-
-    def _freeze(self, source: PythonObject) raises -> Bool:
-        # A mojolearn Array (the class of the kit's own zero matrix) that owns
-        # its words (`_base` None) is frozen in place; anything else is not.
-        if py_type(source) is not py_type(self.matrices[self.one_host].host):
-            return False
-        if source._base is not None:
-            return False
-        decomp_freeze_array(source)
-        return True
-
-    def const(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
-        # `_M.of([v] * (r * c), r, c)`: the value rounded once to float32.
-        var out = self.zeros(rows, cols)
-        tsqr_fill_constant(DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                           rows * cols, value)
-        return out
-
-    def indices(mut self, start: Int, stop: Int) raises -> Int:
-        # `array.array("f", range(start, stop))`: row or column numbers as exact floats.
-        var out = self.zeros(stop - start, 1)
-        tsqr_fill_indices(DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                          start, stop)
-        return out
-
-    def device_output(mut self, rows: Int, cols: Int) raises -> Int:
-        var handle = self.dev_alloc(max(rows * cols, 1))
-        self.allocations.append(handle)
-        return self.add(PythonObject(None), rows, cols, handle)
-
-    def host(mut self, a: Int) raises -> PythonObject:
-        # `_M.s`: a device-only matrix comes down once; as in `_M.s`, the
-        # matrix then counts as a host matrix (its device words stay valid
-        # and are reused by a later upload, the same words).
-        self.matrices[a].on_device = False
-        if self.matrices[a].host is None:
-            var n = self.size(a)
-            var result = classical_array(max(n, 1), 0, self.context)
-            if n:
-                self.dev_download(self.matrices[a].device, Int(py=classical_address(result)), n)
-                _ = result  # keep the Python object alive through the native call above
-            self.matrices[a].host = result
-        return self.matrices[a].host
-
-    def address(mut self, a: Int) raises -> PythonObject:
-        var owner = self.host(a)
-        if self.matrices[a].host_address < 0:
-            self.matrices[a].host_address = Int(py=classical_address(owner))
-        return PythonObject(self.matrices[a].host_address)
-
-    def device(mut self, a: Int) raises -> Int:
-        # `_Kit._did`: a host matrix goes up once.
-        if self.matrices[a].device < 0:
-            var n = self.size(a)
-            var owner = self.host(a)
-            var handle = self.dev_alloc(max(n, 1))
-            self.allocations.append(handle)
-            if n:
-                var address = self.at(a)
-                self.dev_upload(handle, address, n)
-                _ = owner  # keep the Python object alive through the native call above
-            self.matrices[a].device = handle
-            _ = owner^
-        self.matrices[a].on_device = True
-        return self.matrices[a].device
-
-    def dev_one(mut self) raises -> Int:
-        # `_dev_one`: the unused operand on the device, uploaded once.
-        if self.one_device < 0:
-            var handle = self.dev_alloc(1)
-            self.allocations.append(handle)
-            self.dev_upload(handle, Int(py=classical_address(self.matrices[self.one_host].host)), 1)
-            self.one_device = handle
-        return self.one_device
-
-    def wrote_device(mut self, a: Int):
-        # The device copy was written in place: the host words are stale.
-        self.matrices[a].host = PythonObject(None)
-        self.matrices[a].host_address = -1
-
-    def wrote_host(mut self, a: Int):
-        # The host copy was written in place: the device words are stale.
-        self.matrices[a].device = -1
-        self.matrices[a].on_device = False
-
-    def use(self, a: Int, b: Int = -1, c: Int = -1) -> Bool:
-        # `_Kit._use` with `_RES_MIN` 1: a GPU binding, and an operand on the
-        # device or with at least one value.
-        if not self.resident:
-            return False
-        var found = False
-        for k in range(3):  # small-loop(operands): the three operand slots of one call
-            var m = a if k == 0 else (b if k == 1 else c)
-            if m < 0:
-                continue
-            if self.matrices[m].device >= 0 or self.size(m) >= 1:
-                found = True
-        return found
-
-    def publish(mut self, a: Int) raises -> PythonObject:
-        # `_M.out()`: a fresh (rows, cols) float32 Array of the matrix.
-        var shape = Python.tuple(self.matrices[a].rows, self.matrices[a].cols)
-        return self.out_shape(a, shape)
-
-    def out_shape(mut self, a: Int, shape: PythonObject) raises -> PythonObject:
-        var n = self.size(a)
-        var result = classical_typed(shape, "<f4", self.context)
-        if n:
-            var source = self.host(a)
-            unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
-                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
-            _ = result  # keep the Python object alive through the native call above
-            _ = source  # keep the Python object alive through the native call above
-            _ = source^
-        return result
-
-    def copy_host(mut self, a: Int) raises -> Int:
-        # `_M.copy()`: a host copy (a device-only matrix's download is the copy).
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var n = rows * cols
-        self.matrices[a].on_device = False
-        if self.matrices[a].host is None:
-            var result = classical_array(max(n, 1), 0, self.context)
-            if n:
-                self.dev_download(self.matrices[a].device, Int(py=classical_address(result)), n)
-                _ = result  # keep the Python object alive through the native call above
-            return self.add(result, rows, cols)
-        var out = self.zeros(rows, cols)
-        if n:
-            var source = self.host(a)
-            unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
-            _ = source  # keep the Python object alive through the native call above
-            _ = source^
-        return out
-
-    # ---- elementwise
-    def _mode_of(self, a: Int, x: Int) raises -> Int:
-        if x < 0:
-            return 3
-        var ar = self.matrices[a].rows
-        var ac = self.matrices[a].cols
-        var xr = self.matrices[x].rows
-        var xc = self.matrices[x].cols
-        if xr == ar and xc == ac:
-            return 0
-        if xr == 1 and xc == ac:
-            return 1
-        if xc == 1 and xr == ar:
-            return 2
-        if xr == 1 and xc == 1:
-            return 3
-        raise Error("x_decomp: cannot broadcast " + String(xr) + "x" + String(xc) + " against "
-                    + String(ar) + "x" + String(ac))
-
-    def ew(mut self, op: Int, a: Int, b: Int = -1, c: Int = -1, scalar: Float64 = 0.0) raises -> Int:
-        var bm = self._mode_of(a, b)
-        var cm = self._mode_of(a, c)
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var nb = 1 if b < 0 else self.size(b)
-        var nc = 1 if c < 0 else self.size(c)
-        if rows * cols and self.use(a, b, c):
-            var out = self.device_output(rows, cols)
-            var da = self.device(a)
-            var db = self.dev_one() if b < 0 else self.device(b)
-            var dc = self.dev_one() if c < 0 else self.device(c)
-            _ = self.xd(XD_DEV_EW, List[Int](), [da, db, dc, self.matrices[out].device, op, rows * cols, cols, nb, bm,
-                        nc, cm], [scalar], False)
-            return out
-        var out = self.zeros(rows, cols)
-        if rows * cols:
-            var one = self.one_host
-            var ib = one if b < 0 else b
-            var ic = one if c < 0 else c
-            var addresses: List[Int] = [self.at(a), self.at(ib), self.at(ic), self.at(out)]
-            _ = self.xd(XD_EW, addresses, [op, rows * cols, cols, nb, bm, nc, cm], [scalar], True)
-        return out
-
-    # ---- products and sums
-    def mm(mut self, a: Int, b: Int, ta: Bool = False, tb: Bool = False) raises -> Int:
-        var m = self.matrices[a].cols if ta else self.matrices[a].rows
-        var k = self.matrices[a].rows if ta else self.matrices[a].cols
-        var k2 = self.matrices[b].cols if tb else self.matrices[b].rows
-        var n = self.matrices[b].rows if tb else self.matrices[b].cols
-        if k != k2:
-            raise Error("x_decomp: gemm inner dimensions " + String(k) + " and " + String(k2) + " differ")
-        if m * n and m * k and k * n and self.use(a, b):
-            var out = self.device_output(m, n)
-            var da = self.device(a)
-            var db = self.device(b)
-            _ = self.xd(XD_DEV_GEMM, List[Int](), [da, db, self.matrices[out].device, m, k, n, Int(ta), Int(tb)],
-                        List[Float64](), False)
-            return out
-        var out = self.zeros(m, n)
-        if m * n:
-            var addresses: List[Int] = [self.at(a), self.at(b), self.at(out)]
-            _ = self.xd(XD_GEMM, addresses, [m, k, n, Int(ta), Int(tb)], List[Float64](), True)
-        return out
-
-    def _sum(mut self, a: Int, columns: Bool) raises -> Int:
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var nr = 1 if columns else rows
-        var nc = cols if columns else 1
-        if rows * cols and self.use(a):
-            var out = self.device_output(nr, nc)
-            var da = self.device(a)
-            _ = self.xd(XD_DEV_COLSUM if columns else XD_DEV_ROWSUM, List[Int](),
-                        [da, self.matrices[out].device, rows, cols], List[Float64](), False)
-            return out
-        var out = self.zeros(nr, nc)
-        var addresses: List[Int] = [self.at(a), self.at(out)]
-        _ = self.xd(XD_COLSUM if columns else XD_ROWSUM, addresses, [rows, cols], List[Float64](), True)
-        return out
-
-    def colsum(mut self, a: Int) raises -> Int:
-        return self._sum(a, True)
-
-    def rowsum(mut self, a: Int) raises -> Int:
-        return self._sum(a, False)
-
-    def colmean(mut self, a: Int) raises -> Int:
-        # `_Kit.colmean`: the column sums scaled by 1.0 / rows (binary64, rounded by the cell).
-        var sums = self.colsum(a)
-        return self.ew(XD_SCALE, sums, scalar=1.0 / Float64(self.matrices[a].rows))
-
-    # ---- moves
-    def dev_move(self, src: Int, idx: Int, dst: Int, params: List[Int]) raises:
-        # XD_DEV_MOVE: [src, idx, dst] then the ten move words, as dev_move_py.
-        var words: List[Int] = [src, idx, dst]
-        words.extend(params.copy())
-        _ = self.xd(XD_DEV_MOVE, List[Int](), words, List[Float64](), False)
-
-    def host_move(mut self, a: Int, idx: Int, dst: Int, params: List[Int]) raises:
-        # XD_MOVE: the host addresses of matrices a, idx and dst, then the ten
-        # move words, as move_py.
-        var addresses: List[Int] = [self.at(a), self.at(idx), self.at(dst)]
-        _ = self.xd(XD_MOVE, addresses, params, List[Float64](), True)
-
-    def _move(mut self, a: Int, idx: Int, rows: Int, cols: Int, params: List[Int], resident: Bool) raises -> Int:
-        if rows * cols and resident:
-            var out = self.device_output(rows, cols)
-            var da = self.device(a)
-            var di = self.device(idx)
-            self.dev_move(da, di, self.matrices[out].device, params)
-            return out
-        var out = self.zeros(rows, cols)
-        if rows * cols:
-            self.host_move(a, idx, out, params)
-        return out
-
-    def take_rows(mut self, a: Int, idx: Int, radd: Int = 0) raises -> Int:
-        # `_Kit.take_rows(A, idx, radd=radd)`: rows idx[t] + radd of A.
-        var m = self.size(idx)
-        var cols = self.matrices[a].cols
-        var count = m * cols
-        var params: List[Int] = [XD_TAKE_ROWS, count, cols, radd, 0, 1, 0, self.size(a), count, m]
-        return self._move(a, idx, m, cols, params, count > 0 and self.use(a, idx))
-
-    def _moves_on_device(self, a: Int, count: Int) -> Bool:
-        # `_res_moves`: a device matrix's move runs on the device.
-        return (self.matrices[a].on_device and count > 0 and self.matrices[a].rows < XD_F32_INDEX_MAX
-                and self.matrices[a].cols < XD_F32_INDEX_MAX)
-
-    def rows_of(mut self, a: Int, start: Int, stop: Int) raises -> Int:
-        # `_M.rows(a, b)`: gathered on the device, a slice of the host store otherwise.
-        var cols = self.matrices[a].cols
-        var count = (stop - start) * cols
-        if 0 <= start and start < stop and stop <= self.matrices[a].rows and self._moves_on_device(a, count):
-            var idx = self.indices(start, stop)
-            var w = stop - start
-            return self._move(a, idx, w, cols, [XD_TAKE_ROWS, count, cols, 0, 0, 1, 0, self.size(a), count, w], True)
-        var lo = max(0, min(start, self.matrices[a].rows))
-        var hi = max(lo, min(stop, self.matrices[a].rows))
-        var out = self.zeros(hi - lo, cols)
-        var source = self.host(a)      # `self.s[...]`: the store is read (A is a host matrix after)
-        if (hi - lo) * cols:
-            unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))) + lo * cols,
-                   count=(hi - lo) * cols)
-            _ = source  # keep the Python object alive through the native call above
-        _ = source^
-        return out
-
-    def cols_of(mut self, a: Int, start: Int, stop: Int) raises -> Int:
-        # `_M.cols(a, b)` (`take_cols(range(a, b))`).
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var width = stop - start
-        if start < 0 or stop > cols:
-            raise Error("x_decomp: column range " + String(start) + ".." + String(stop) + " exceeds "
-                        + String(cols) + " columns")
-        if width > 0 and self._moves_on_device(a, rows * width):
-            var idx = self.indices(start, stop)
-            return self._move(a, idx, rows, width, [XD_TAKE_COLS, rows * width, width, cols, 0, 0, 0,
-                              rows * cols, rows * width, width], True)
-        var out = self.zeros(rows, max(width, 0))
-        if rows * width > 0:
-            var source = self.host(a)
-            tsqr_copy_columns(DecompF32(unsafe_from_address=Int(py=self.address(a))),
-                              DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                              rows, cols, start, width)
-            _ = source  # keep the Python object alive through the native call above
-            _ = source^
-        return out
-
-    def transpose(mut self, a: Int) raises -> Int:
-        # `_M.T`.
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var n = rows * cols
-        var vector = rows == 1 or cols == 1
-        if not self.matrices[a].on_device and n and not vector and n < XD_I32_MAX and self.resident:
-            _ = self.device(a)
-        var d = self.matrices[a].device
-        if vector:
-            # The same words, a view: of the device words for a device
-            # matrix, else of the host store.
-            if self.matrices[a].on_device:
-                var shared = self.matrices[a].host
-                return self.add(shared, cols, rows, d, self.matrices[a].host_address)
-            var store = self.host(a)
-            var view = self.add(store, cols, rows, d, self.matrices[a].host_address)
-            self.matrices[view].on_device = False
-            return view
-        if self.matrices[a].on_device and n < XD_I32_MAX:
-            var out = self.device_output(cols, rows)
-            self.dev_move(d, d, self.matrices[out].device, [XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1])
-            return out
-        var out = self.zeros(cols, rows)
-        self.host_move(a, self.one_host, out, [XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1])
-        return out
-
-    def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
-        # `_M.reshape`: a view of the same words (of the host store for a host matrix).
-        if self.matrices[a].on_device:
-            var shared = self.matrices[a].host
-            var handle = self.matrices[a].device
-            return self.add(shared, rows, cols, handle, self.matrices[a].host_address)
-        var store = self.host(a)
-        var view = self.add(store, rows, cols, self.matrices[a].device, self.matrices[a].host_address)
-        self.matrices[view].on_device = False
-        return view
-
-    def hstack(mut self, ms: List[Int]) raises -> Int:
-        # `_Kit.hstack`: PLACE_COLS moves, copies only.
-        var rows = self.matrices[ms[0]].rows
-        var width = 0
-        for i in range(len(ms)):  # driver-loop: over the stacked matrices
-            width += self.matrices[ms[i]].cols
-        var resident = self.resident and rows * width > 0
-        var out = self.device_output(rows, width) if resident else self.zeros(rows, width)
-        var offset = 0
-        for i in range(len(ms)):  # driver-loop: over the stacked matrices
-            var m = ms[i]
-            var count = self.size(m)
-            if count:
-                var params: List[Int] = [XD_PLACE_COLS, count, self.matrices[m].cols, width, offset, 0, 0, count, rows * width, 1]
-                if resident:
-                    var dm = self.device(m)
-                    var one = self.dev_one()
-                    self.dev_move(dm, one, self.matrices[out].device, params)
-                else:
-                    self.host_move(m, self.one_host, out, params)
-            offset += self.matrices[m].cols
-        return out
-
-    def vstack(mut self, ms: List[Int]) raises -> Int:
-        # `_Kit.vstack`: PLACE_COLS moves on the device, the stores joined on the host.
-        var cols = self.matrices[ms[0]].cols
-        var rows = 0
-        var values = 0
-        for i in range(len(ms)):  # driver-loop: over the stacked matrices
-            rows += self.matrices[ms[i]].rows
-            values += self.size(ms[i])
-        if self.resident and values:
-            var out = self.device_output(rows, cols)
-            var offset = 0
-            for i in range(len(ms)):  # driver-loop: over the stacked matrices
-                var m = ms[i]
-                var count = self.size(m)
-                if count:
-                    var dm = self.device(m)
-                    var one = self.dev_one()
-                    self.dev_move(dm, one, self.matrices[out].device,
-                                  [XD_PLACE_COLS, count, cols, cols, offset * cols, 0, 0, count, rows * cols, 1])
-                offset += self.matrices[m].rows
-            return out
-        var out = self.zeros(rows, cols)
-        var at = 0
-        for i in range(len(ms)):  # driver-loop: over the stacked matrices
-            var count = self.size(ms[i])
-            if count:
-                var source = self.host(ms[i])
-                unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))) + at,
-                       src=DecompF32(unsafe_from_address=Int(py=self.address(ms[i]))), count=count)
-                _ = source  # keep the Python object alive through the native call above
-                _ = source^
-            at += count
-        return out
-
-    def strided(mut self, a: Int, count: Int, stride: Int, off: Int = 0) raises -> Int:
-        # `_Kit.strided`: A[off + t * stride] for t < count, 1 x count.
-        var step = off + 1 if count == 1 else stride
-        var idx = self.const(Float32(off))
-        var n = self.size(a)
-        return self._move(a, idx, 1, count, [XD_TAKE_COLS, count, 1, step, 0, 0, 0, n, count, 1],
-                          count > 0 and self.use(a))
-
-    def place_strided(mut self, d: Int, v: Int, stride: Int, off: Int = 0) raises -> Int:
-        # `_Kit.place_strided`: D[off + t * stride] = V[t], in place.
-        var count = self.size(v)
-        if count == 0:
-            return d
-        var params: List[Int] = [XD_PLACE_COLS, count, 1, stride, off, 0, 0, count, self.size(d), 1]
-        if self.use(d, v):
-            var dv = self.device(v)
-            var dd = self.device(d)
-            var one = self.dev_one()
-            self.dev_move(dv, one, dd, params)
-            self.wrote_device(d)
-            return d
-        self.host_move(v, self.one_host, d, params)
-        self.wrote_host(d)
-        return d
-
-    def copy(mut self, a: Int) raises -> Int:
-        # `_Kit.copy`: a device copy of a device matrix, else `_M.copy()`.
-        var n = self.size(a)
-        if n and self.matrices[a].on_device and self.use(a):
-            var rows = self.matrices[a].rows
-            var cols = self.matrices[a].cols
-            var out = self.device_output(rows, cols)
-            var da = self.device(a)
-            var one = self.dev_one()
-            self.dev_move(da, one, self.matrices[out].device, [XD_PLACE_COLS, n, cols, cols, 0, 0, 0, n, n, 1])
-            return out
-        return self.copy_host(a)
-
-    def diag_add(mut self, a: Int, v: Int) raises -> Int:
-        # `_Kit.diag_add`: a copy of square A with v added to its diagonal.
-        var rows = self.matrices[a].rows
-        var copied = self.copy(a)
-        var diagonal = self.strided(a, rows, rows + 1, 0)
-        var added = self.ew(XD_ADD, diagonal, v)
-        return self.place_strided(copied, added, rows + 1, 0)
-
-    # ---- orders and signs
-    def word(mut self, a: Int, i: Int = 0) raises -> Float64:
-        # `_Kit.word`: one value down.
-        var index = a
-        var at = i
-        if self.matrices[a].on_device and self.size(a) > 1:
-            index = self.strided(a, 1, 1, i)
-            at = 0
-        var owner = self.host(index)
-        var value = Float64(DecompF32(unsafe_from_address=Int(py=self.address(index)))[at])
-        _ = owner  # keep the Python object alive through the native call above
-        _ = owner^
-        return value
-
-    def order(mut self, a: Int) raises -> Int:
-        # `_Kit.order`: the stable ascending order, NaN refused.
-        var n = self.size(a)
-        if n and self.use(a):
-            if n >= XD_F32_INDEX_MAX:
-                raise Error("x_decomp: order_f exceeds the float32 index bound")
-            var maximum = self.device_output(1, 1)
-            var da = self.device(a)
-            _ = self.xd(XD_DEV_REDUCE, List[Int](), [da, self.matrices[maximum].device, n, 1], List[Float64](), False)
-            var v = self.word(maximum)
-            if v != v:
-                raise Error("x_decomp: a NaN has no order (refused)")
-            var out = self.device_output(n, 1)
-            var count = self.device_output(1, 1)
-            _ = self.xd(XD_DEV_ORDER, List[Int](), [da, da, self.matrices[out].device, self.matrices[count].device, n, 0, 0],
-                        List[Float64](), False)
-            return out
-        var out = self.zeros(n, 1)
-        if n:
-            var addresses: List[Int] = [self.at(a), self.at(out)]
-            _ = self.xd(XD_ORDER, addresses, [n], List[Float64](), False)
-        return out
-
-    def neg_signs(mut self, v: Int) raises -> Int:
-        # `_Kit.neg_signs`: -1 where V < 0, else +1.
-        var negated = self.ew(XD_SCALE, v, scalar=-1.0)
-        var minus = self.const(-1.0)
-        var plus = self.const(1.0)
-        return self.ew(XD_SELECT, negated, minus, plus, 0.0)
-
-    def absmax_signs(mut self, a: Int, by_col: Bool) raises -> Int:
-        # `_Kit.absmax_signs`.
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var count = cols if by_col else rows
-        var flag = 1 if by_col else 0
-        var out: Int
-        if count and rows * cols and self.use(a):
-            out = self.device_output(1, count)
-            var da = self.device(a)
-            _ = self.xd(XD_DEV_ABSMAX, List[Int](), [da, self.matrices[out].device, rows, cols, flag], List[Float64](), False)
-        else:
-            out = self.zeros(1, count)
-            if count and rows * cols:
-                var addresses: List[Int] = [self.at(a), self.at(out)]
-                _ = self.xd(XD_ABSMAX_SIGN, addresses, [rows, cols, flag], List[Float64](), True)
-        return self.neg_signs(out if by_col else self.reshape(out, count, 1))
-
-    def rand(mut self, rows: Int, cols: Int, seed: Int, stream: Int, kind: Int) raises -> Int:
-        # `_Kit.rand` (seed already masked to 32 bits).
-        if rows * cols >= 1024 and self.resident:
-            var out = self.device_output(rows, cols)
-            _ = self.xd(XD_DEV_RAND, List[Int](), [self.matrices[out].device, rows * cols, seed, stream, kind],
-                        List[Float64](), False)
-            return out
-        var out = self.zeros(rows, cols)
-        if rows * cols:
-            var addresses: List[Int] = [self.at(out)]
-            _ = self.xd(XD_RAND, addresses, [rows * cols, seed, stream, kind], List[Float64](), True)
-        return out
-
-    # ---- small dense linear algebra
-    def svd(mut self, a: Int) raises -> Tuple[Int, Int]:
-        # `_Kit.svd`: (S 1 x n descending, Vt n x n) of a tall A.
-        var m = self.matrices[a].rows
-        var n = self.matrices[a].cols
-        var s = self.zeros(1, n)
-        var v = self.zeros(n, n)
-        if m >= n and n >= 1 and self.opt_dev("x_decomp_dev_svd") and self.use(a):
-            var da = self.device(a)
-            var addresses: List[Int] = [self.at(s), self.at(v)]
-            _ = self.xd(XD_DEV_SVD, addresses, [da, m, n], List[Float64](), True)
-        else:
-            var addresses: List[Int] = [self.at(a), self.at(s), self.at(v)]
-            _ = self.xd(XD_SVD, addresses, [m, n], List[Float64](), False)
-        var negated = self.ew(XD_SCALE, s, scalar=-1.0)
-        var o = self.order(negated)
-        var st = self.transpose(s)
-        var sorted = self.take_rows(st, o)
-        var s_desc = self.transpose(sorted)
-        var vt = self.transpose(v)
-        return (s_desc, self.take_rows(vt, o))
-
-    def thin_svd(mut self, x: Int, nc: Int, u_based: Bool) raises -> Tuple[Int, Int, Int]:
-        # `_thin_svd`: (U n x nc, S 1 x nc, Vt nc x d) with svd_flip.
-        var n = self.matrices[x].rows
-        var d = self.matrices[x].cols
-        var u: Int
-        var s: Int
-        var vt: Int
-        if d <= n:
-            var sv = self.svd(x)
-            s = self.cols_of(sv[0], 0, nc)
-            vt = self.rows_of(sv[1], 0, nc)
-            var xv = self.mm(x, vt, tb=True)
-            u = self.ew(XD_DIV, xv, s)
-        else:
-            var xt = self.transpose(x)
-            var su = self.svd(xt)
-            s = self.cols_of(su[0], 0, nc)
-            var ut = self.rows_of(su[1], 0, nc)
-            u = self.transpose(ut)
-            var ux = self.mm(u, x, ta=True)
-            var st = self.transpose(s)
-            vt = self.ew(XD_DIV, ux, st)
-        if u_based:
-            var sg = self.absmax_signs(u, True)
-            var sgt = self.transpose(sg)
-            var u2 = self.ew(XD_MUL, u, sg)
-            var vt2 = self.ew(XD_MUL, vt, sgt)
-            return (u2, s, vt2)
-        var sg = self.absmax_signs(vt, False)
-        var sgt = self.transpose(sg)
-        var u2 = self.ew(XD_MUL, u, sgt)
-        var vt2 = self.ew(XD_MUL, vt, sg)
-        return (u2, s, vt2)
-
-    def lu(mut self, a: Int) raises -> Tuple[Int, PythonObject, Int]:
-        # `_Kit.lu`: (the factor, its int32 pivots, info).
-        var n = self.matrices[a].rows
-        var piv = py_call(self.context["array_type"], PythonObject("i"), py_call(self.context["native_bytes_type"], 4 * max(n, 1)))
-        var info = self.zeros(1, 1)
-        var pa = Int(py=py_call(piv.buffer_info)[0])
-        var lu: Int
-        if n >= 1 and self.matrices[a].cols == n and self.opt_dev("x_decomp_dev_lu") and self.use(a):
-            lu = self.device_output(n, n)
-            var da = self.device(a)
-            var addresses: List[Int] = [pa, self.at(info)]
-            _ = self.xd(XD_DEV_LU, addresses, [da, self.matrices[lu].device, n], List[Float64](), True)
-        else:
-            lu = self.copy_host(a)
-            var addresses: List[Int] = [self.at(lu), pa, self.at(info)]
-            _ = self.xd(XD_LU, addresses, [n], List[Float64](), True)
-            self.wrote_host(lu)
-        _ = piv  # keep the pivot store alive through the native calls above
-        return (lu, piv, Int(self.word(info)))
-
-    def lu_resid(mut self, a: Int, x: Int, b: Int) raises -> Int:
-        # `_Kit.lu_resid`: B - A X, folded in float-float on the device.
-        var out = self.zeros(self.matrices[b].rows, self.matrices[b].cols)
-        var addresses: List[Int] = [self.at(a), self.at(x), self.at(b), self.at(out)]
-        _ = self.xd(XD_LU_RESID, addresses, [self.matrices[a].rows, self.matrices[b].cols], List[Float64](), True)
-        return out
-
-    def lu_solve(mut self, lu: Int, piv: PythonObject, b: Int) raises -> Int:
-        # `_Kit.lu_solve(lu, piv, B)` (trans 0): on a host copy of B.
-        var out = self.copy_host(b)
-        var pa = Int(py=py_call(piv.buffer_info)[0])
-        var addresses: List[Int] = [self.at(lu), pa, self.at(out)]
-        # lu_solve_py's trans, absent from the kit's words: 0
-        _ = self.xd(XD_LU_SOLVE, addresses, [self.matrices[lu].rows, self.matrices[b].cols, 0], List[Float64](), True)
-        _ = piv  # keep the pivot store alive through the native call above
-        self.wrote_host(out)
-        return out
-
-    # ---- sparse coding rows
-    def lasso_rows(mut self, g: Int, q: Int, w: Int, alpha: Float64, max_iter: Int, tol: Float64, positive: Int) raises -> Int:
-        # `_Kit.lasso_rows`: W the warm start, updated in place.
-        var rows = self.matrices[q].rows
-        var cols = self.matrices[q].cols
-        if rows * cols and self.opt_dev("x_decomp_dev_code_rows") and self.use(g, q, w):
-            var dg = self.device(g)
-            var dq = self.device(q)
-            var dw = self.device(w)
-            _ = self.xd(XD_DEV_CODE_ROWS, List[Int](), [dg, dq, dw, 0, rows, cols, max_iter, positive], [alpha, tol], True)
-            self.wrote_device(w)
-            return w
-        var its = self.zeros(rows, 1)
-        var addresses: List[Int] = [self.at(g), self.at(q), self.at(w), self.at(its)]
-        _ = self.xd(XD_LASSO_ROWS, addresses, [rows, cols, max_iter, positive], [alpha, tol], True)
-        self.wrote_host(w)
-        return w
-
-    def lars_rows(mut self, g: Int, q: Int, m: Int, nnz: Int) raises -> Int:
-        # `_Kit.lars_rows`.
-        var rows = self.matrices[q].rows
-        var cols = self.matrices[q].cols
-        if rows * cols and self.opt_dev("x_decomp_dev_code_rows") and self.use(g, q):
-            var w = self.device_output(rows, cols)
-            var dg = self.device(g)
-            var dq = self.device(q)
-            _ = self.xd(XD_DEV_CODE_ROWS, List[Int](), [dg, dq, self.matrices[w].device, 1, rows, cols, m, nnz],
-                        [Float64(0.0), Float64(0.0)], True)
-            return w
-        var w = self.zeros(rows, cols)
-        var na = self.zeros(rows, 1)
-        if rows * cols:
-            var addresses: List[Int] = [self.at(g), self.at(q), self.at(w), self.at(na)]
-            _ = self.xd(XD_LARS_ROWS, addresses, [rows, cols, m, nnz], List[Float64](), True)
-        return w
-
-    def omp_rows(mut self, g: Int, q: Int, nnz: Int) raises -> Int:
-        # `_Kit.omp_rows`.
-        var rows = self.matrices[q].rows
-        var cols = self.matrices[q].cols
-        if rows * cols and self.opt_dev("x_decomp_dev_code_rows") and self.use(g, q):
-            var w = self.device_output(rows, cols)
-            var dg = self.device(g)
-            var dq = self.device(q)
-            _ = self.xd(XD_DEV_CODE_ROWS, List[Int](), [dg, dq, self.matrices[w].device, 2, rows, cols, nnz, 0],
-                        [Float64(0.0), Float64(0.0)], True)
-            return w
-        var w = self.zeros(rows, cols)
-        var na = self.zeros(rows, 1)
-        var addresses: List[Int] = [self.at(g), self.at(q), self.at(w), self.at(na)]
-        _ = self.xd(XD_OMP_ROWS, addresses, [rows, cols, nnz], List[Float64](), True)
-        return w
-
-    # ---- reductions, selections and factor companions (MinCovDet)
-    def reduce(mut self, a: Int, op: Int) raises -> Int:
-        # `_Kit.reduce`: max |A| (0), max A (1) or min A (2) as 1 x 1.
-        var n = self.size(a)
-        if n == 0:
-            raise Error("x_decomp: reduce of an empty matrix")
-        if self.use(a):
-            var out = self.device_output(1, 1)
-            var da = self.device(a)
-            _ = self.xd(XD_DEV_REDUCE, List[Int](), [da, self.matrices[out].device, n, op], List[Float64](), False)
-            return out
-        var out = self.zeros(1, 1)
-        var addresses: List[Int] = [self.at(a), self.at(out)]
-        _ = self.xd(XD_REDUCE, addresses, [n, op], List[Float64](), False)
-        return out
-
-    def total_word(mut self, a: Int) raises -> Float64:
-        # `k.total(A).s[0]`: the sum of every entry, rows ascending, one word down.
-        var rows = self.rowsum(a)
-        var total = self.colsum(rows)
-        return self.word(total)
-
-    def eigh(mut self, a: Int) raises -> Tuple[Int, Int]:
-        # `_Kit.eigh(A)` (uplo 0): ascending values (1 x n), vectors in columns.
-        var n = self.matrices[a].rows
-        if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh_to"):
-            # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
-            # device (`x_decomp_dev_eigh_to`, the executor op eigh_op_sym;
-            # one status wait). Was `x_decomp_dev_eigh` into host words that
-            # the next device op (MinCovDet's pinvh product) uploaded again.
-            var wd = self.device_output(1, n)
-            var vd = self.device_output(n, n)
-            _ = self.xd(XD_DEV_EIGH_TO, List[Int](), [self.matrices[a].device, self.matrices[wd].device,
-                        self.matrices[vd].device, n, 0], List[Float64](), True)
-            return (wd, vd)
-        var w = self.zeros(1, n)
-        var v = self.zeros(n, n)
-        var addresses: List[Int] = [self.at(a), self.at(w), self.at(v)]
-        _ = self.xd(XD_EIGH, addresses, [n, 0], List[Float64](), False)
-        return (w, v)
-
-    def refuse_nan(mut self, a: Int) raises:
-        # `_Kit._refuse_nan`: a device operand's max is NaN when any value is.
-        var maximum = self.reduce(a, 1)
-        var v = self.word(maximum)
-        if v != v:
-            raise Error("x_decomp: a NaN has no order (refused)")
-
-    def argmin_all(mut self, a: Int) raises -> Int:
-        # `_Kit.argmin_all`: every position (exact floats, c x 1) of the minimum.
-        var n = self.size(a)
-        if n and self.use(a):
-            if n >= XD_F32_INDEX_MAX:
-                raise Error("x_decomp: argmin_all exceeds the float32 index bound")
-            var out = self.device_output(n, 1)
-            var count = self.device_output(1, 1)
-            var da = self.device(a)
-            _ = self.xd(XD_DEV_ARGMIN_ALL, List[Int](), [da, self.matrices[out].device, self.matrices[count].device, n],
-                        List[Float64](), False)
-            var c = Int(self.word(count))
-            return self.rows_of(out, 0, c) if c else self.zeros(0, 1)
-        var buffer = self.zeros(max(n, 1), 1)
-        var c = 0
-        if n:
-            var addresses: List[Int] = [self.at(a), self.at(buffer)]
-            c = self.xd(XD_ARGMIN_ALL, addresses, [n], List[Float64](), False)
-        return self.rows_of(buffer, 0, c)
-
-    def select_smallest(mut self, a: Int, h: Int) raises -> Tuple[Int, Int, PythonObject]:
-        # `_Kit.select_smallest`: (the h smallest positions ascending, h x 1;
-        # the membership as an n x 1 0/1 device matrix, or -1 and the host
-        # int32 membership store).
-        var n = self.size(a)
-        if n and self.use(a):
-            if n >= XD_F32_INDEX_MAX or h < 0 or h > n:
-                raise Error("x_decomp: select_smallest out of range")
-            self.refuse_nan(a)
-            var sel = self.device_output(h, 1)
-            var mask = self.device_output(n, 1)
-            var da = self.device(a)
-            _ = self.xd(XD_DEV_SELECT_SMALLEST, List[Int](), [da, self.matrices[sel].device, self.matrices[mask].device,
-                        n, h], List[Float64](), False)
-            return (sel, mask, PythonObject(None))
-        var sel = self.zeros(h, 1)
-        var store = py_call(self.context["array_type"], PythonObject("i"), py_call(self.context["native_bytes_type"], 4 * max(n, 1)))
-        if n:
-            var addresses: List[Int] = [self.at(a), self.at(sel), Int(py=py_call(store.buffer_info)[0])]
-            _ = self.xd(XD_SELECT_SMALLEST, addresses, [n, h], List[Float64](), False)
-            _ = store  # keep the membership store alive through the native call above
-        return (sel, Int(-1), store)
-
-    def lu_aux(mut self, lu: Int, piv: PythonObject) raises -> Tuple[Int, Int]:
-        # `_Kit.lu_aux(lu, piv)` (clamp False): (stats 1 x 4 = [max |u_ii|,
-        # zero pivots, negative pivots, swaps], the diagonal 1 x n), host.
-        var n = self.matrices[lu].rows
-        var pm = self.zeros(n, 1)
-        var im = self.zeros(n, 1)
-        var diag = self.zeros(1, n)
-        var st = self.zeros(1, 4)
-        var pa = Int(py=py_call(piv.buffer_info)[0])
-        if n >= 1 and self.matrices[lu].on_device and self.opt_dev("x_decomp_dev_lu"):
-            var dl = self.matrices[lu].device
-            var addresses: List[Int] = [pa, self.at(pm), self.at(im), self.at(diag), self.at(st)]
-            _ = self.xd(XD_DEV_LU_AUX, addresses, [dl, n, 0], List[Float64](), True)
-            _ = piv  # keep the pivot store alive through the native call above
-            return (st, diag)
-        var addresses: List[Int] = [self.at(lu), pa, self.at(pm), self.at(im), self.at(diag), self.at(st)]
-        _ = self.xd(XD_LU_AUX, addresses, [n, 0], List[Float64](), True)
-        _ = piv  # keep the pivot store alive through the native call above
-        return (st, diag)
-
-    # ---- top-N orders (AlternatingLeastSquares)
-    def order_dev(mut self, a: Int, neg: Int, skip: Int) raises -> Tuple[Int, Int]:
-        # `_Kit._order_dev(A, neg, skip)` on a resident kit: (n x 1 order, 1 x 1 count).
-        var n = self.size(a)
-        if n >= XD_F32_INDEX_MAX:
-            raise Error("x_decomp: order_f exceeds the float32 index bound")
-        self.refuse_nan(a)
-        var out = self.device_output(n, 1)
-        var count = self.device_output(1, 1)
-        var sid = self.device(skip) if skip >= 0 else self.device(a)
-        var da = self.device(a)
-        _ = self.xd(XD_DEV_ORDER, List[Int](), [da, sid, self.matrices[out].device, self.matrices[count].device, n, neg,
-                    1 if skip >= 0 else 0], List[Float64](), False)
-        return (out, count)
-
-    def take_cols_m(mut self, a: Int, idx: Int, w: Int) raises -> Int:
-        # `_Kit.take_cols_m`: columns idx[0 .. w) of A.
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var params: List[Int] = [XD_TAKE_COLS, rows * w, w, cols, 0, 0, 0, rows * cols, rows * w, w]
-        return self._move(a, idx, rows, w, params, rows * w > 0 and self.use(a, idx))
-
-    # TOMBSTONE: DecompKit.orth, order_small and grown (used only by the per-step randomized_svd, now x_decomp/randomized_svd_owner.mojo) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
-    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
-    def count_gt(mut self, a: Int, s: Float64) raises -> Int:
-        # `_Kit.count_gt`: how many values of A are > s.
-        if not self.size(a):
-            return 0
-        var flags = self.ew(XD_GTS, a, scalar=s)
-        return Int(self.total_word(flags))
-
-    # ---- the tall SVD of `_linalg_impl._svd_tall` (lstsq)
-    def orth_diag(mut self, a: Int) raises -> Tuple[Int, Int]:
-        # `_Kit.orth_diag`: (orth(A), the passes' R-diagonal products 1 x c).
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        var diag = self.zeros(1, cols)
-        if rows * cols and self.use(a):
-            var q = self.device_output(rows, cols)
-            var da = self.device(a)
-            var addresses: List[Int] = [self.at(diag)]
-            _ = self.xd(XD_DEV_ORTH_DIAG, addresses, [da, self.matrices[q].device, rows, cols], List[Float64](), True)
-            return (q, diag)
-        var q = self.copy_host(a)
-        var addresses: List[Int] = [self.at(q), self.at(diag)]
-        _ = self.xd(XD_ORTH_DIAG, addresses, [rows, cols], List[Float64](), True)
-        self.wrote_host(q)
-        return (q, diag)
-
-    def svd_tall(mut self, a: Int) raises -> Tuple[Int, Int, Int]:
-        # `_linalg_impl._svd_tall(k, A, full=False)`: (U m x n, S 1 x n, Vt n x n).
-        var m = self.matrices[a].rows
-        var n = self.matrices[a].cols
-        var sv = self.svd(a)
-        var s = sv[0]
-        var vt = sv[1]
-        var r = 0
-        if n:
-            _ = self.word(s, 0)      # `S.s[0]`: S comes to the host, as before
-            var addresses: List[Int] = [self.at(s)]
-            r = self.xd(XD_RANK, addresses, [n], [Float64(0.00000095367431640625)], False)
-        var av = self.mm(a, vt, tb=True)
-        var left = self.cols_of(av, 0, r) if r < n else av
-        var right = self.cols_of(s, 0, r) if r < n else s
-        var ug = self.ew(XD_DIV, left, right)
-        if r == n:
-            var qd = self.orth_diag(ug)
-            var absolute = self.ew(XD_ABS, qd[1])
-            var zero = self.zeros(1, 1)
-            var guarded = self.ew(XD_LE, absolute, zero)
-            if self.total_word(guarded) == 0:
-                var signs = self.neg_signs(qd[1])
-                return (self.ew(XD_MUL, qd[0], signs), s, vt)
-        if r == 0:
-            var eye = self.zeros(m, n)
-            tsqr_fill_eye(DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[eye].host))), m, n)
-            return (eye, s, vt)
-        # geqrf + orgqr of A V / s, Q's columns signed by R's diagonal.
-        var h = self.copy_host(ug)
-        var tau = self.zeros(1, min(self.matrices[ug].rows, self.matrices[ug].cols))
-        var hq: List[Int] = [self.at(h), self.at(tau)]
-        _ = self.xd(XD_GEQRF, hq, [self.matrices[ug].rows, self.matrices[ug].cols], List[Float64](), True)
-        self.wrote_host(h)
-        var qc = self.zeros(self.matrices[h].rows, n)
-        var hq2: List[Int] = [self.at(h), self.at(tau), self.at(qc)]
-        _ = self.xd(XD_ORGQR, hq2, [self.matrices[h].rows, self.matrices[h].cols, self.matrices[tau].cols, n],
-                    List[Float64](), True)
-        self.wrote_host(qc)
-        var diagonal = self.strided(h, r, r + 1, 0)
-        var sg = self.neg_signs(diagonal)
-        if n > r:
-            var ones = self.const(1.0, 1, n - r)
-            sg = self.hstack([sg, ones])
-        return (self.ew(XD_MUL, qc, sg), s, vt)
+# TOMBSTONE: DecompMatrix and the Python-holding DecompKit (its entries dict, output context,
+# one Python Array per matrix, input owners and query model) deleted 2026-11-12 by lane
+# entangled-decompkit; the typed DKit (bindings/decomp_kit_run.mojo) is the kit, the door
+# half (DecompDoor, decomp_kit_unpack, decomp_door_*, decomp_kit_publish) is below. Code
+# recoverable at 2999c0855c (git show 2999c0855c:bindings/decomp_kit_native.mojo).
 
 
 # ---------------------------------------------------------------------------
@@ -1608,23 +371,6 @@ def _decomp_dev(key: EntryRef, op: Int, addresses: List[Int], ints: List[Int], r
     return result
 
 
-def decomp_entries_call(entries: PythonObject, op: Int, addresses: List[Int], ints: List[Int],
-                        floats: List[Float64], release: Bool) raises -> Int:
-    """One x_decomp operation (an `XD_*` code) outside a kit, in the image the
-    connected entries dict names (its `x_decomp_native_key`); `release` as
-    the door the call replaces (lane pyout-decomp-linalg, 2026-11-11). The
-    caller keeps every addressed buffer alive until the call returns."""
-    var entry = _decomp_key(entries)
-    var result = 0
-    if release:
-        var py = Python()
-        with GILReleased(py):
-            result = decomp_table_call(entry, op, addresses, ints, floats)
-    else:
-        result = decomp_table_call(entry, op, addresses, ints, floats)
-    return result
-
-
 def decomp_resident_binding(entries: PythonObject) raises -> Bool:
     """A GPU x_decomp binding's entries dict: the pool entries a resident
     operand is held through (`DecompKit.resident` reads the same marker)."""
@@ -1699,3 +445,214 @@ def decomp_resident_adopt(owner: PythonObject, entries: PythonObject, source: Py
         return PythonObject(None)
     return decomp_resident_hold(owner, entries["x_decomp_dev_alloc"], free, source, name, rows, cols, handle, True,
                                 True)
+
+
+# ---------------------------------------------------------------------------
+# The typed kit's door half (lane entangled-decompkit, 2026-11-12). A public
+# operation of a decomposition owner is UNPACK (read the Python arrays,
+# options, the image and the model's resident records into a `DKit` and
+# plain words), RUN (bindings/<estimator>_run.mojo over the `DKit`, the GIL
+# released, no Python) and PACK (fresh public Arrays, fitted fields
+# published once, resident records written). `DecompDoor` is what UNPACK
+# and PACK hold that the RUN must not: the connected entries dict (the
+# resident records name their binding by its pool entries), the output
+# context, the query model, and every Python owner a borrowed matrix reads,
+# kept alive until the door is dropped (after RUN and `kit.close()`).
+# ---------------------------------------------------------------------------
+
+
+struct DecompDoor(Movable):
+    var entries: PythonObject
+    var output: PythonObject    # the NumPy-free output context: every buffer is an Array
+    var owner: PythonObject     # the fitted model of a query, or None
+    var keeps: List[PythonObject]
+
+    def __init__(out self, entries: PythonObject, output: PythonObject):
+        self.entries = entries
+        self.output = output
+        self.owner = PythonObject(None)
+        self.keeps = List[PythonObject]()
+
+    def keep(mut self, value: PythonObject):
+        self.keeps.append(value)
+
+    def keep_alive(self):
+        """A named use after RUN and `kit.close()`: Mojo frees a local at its
+        last use, and the kit reads the kept owners' words by address."""
+        pass
+
+
+def decomp_kit_unpack(entries: PythonObject) raises -> DKit:
+    """UNPACK: the typed kit over a connected x_decomp entries dict: its image
+    dispatch (`x_decomp_native_key`, resolved once), whether it is resident
+    (`x_decomp_dev_ew`) and which optional entries it exports."""
+    var key = py_get(entries, "x_decomp_native_key")
+    var entry = entry_ref_unresolved()
+    var keyed = key is not None
+    if keyed:
+        entry = decomp_ref(LinearEntryKey(Int(py=key[0]), Int(py=key[1])))
+    var present = 0
+    if py_get(entries, "x_decomp_dev_svd") is not None:
+        present |= DK_HAS_DEV_SVD
+    if py_get(entries, "x_decomp_dev_lu") is not None:
+        present |= DK_HAS_DEV_LU
+    if py_get(entries, "x_decomp_dev_code_rows") is not None:
+        present |= DK_HAS_DEV_CODE_ROWS
+    if py_get(entries, "x_decomp_dev_eigh_to") is not None:
+        present |= DK_HAS_DEV_EIGH_TO
+    if py_get(entries, "x_decomp_s_flags") is not None:
+        present |= DK_HAS_S_FLAGS
+    if py_get(entries, "x_decomp_qfix_flags") is not None:
+        present |= DK_HAS_QFIX_FLAGS
+    if py_get(entries, "x_decomp_idn_flags") is not None:
+        present |= DK_HAS_IDN_FLAGS
+    return DKit(entry, keyed, py_get(entries, "x_decomp_dev_ew") is not None, present)
+
+
+def decomp_door_borrow(mut door: DecompDoor, mut kit: DKit, array: PythonObject, rows: Int, cols: Int) raises -> Int:
+    """UNPACK `kit.input`: a C-order float32 Array the door converted
+    (decomp_input), read in place; the door keeps it alive."""
+    door.keep(array)
+    return kit.borrow(Int(py=classical_address(array)), rows, cols)
+
+
+def decomp_door_input(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                      context: PythonObject) raises -> Int:
+    """UNPACK `_M.from_input` into the kit: decomp_input, then borrowed."""
+    var array = decomp_input(source, name, context)
+    return decomp_door_borrow(door, kit, array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+
+
+def decomp_door_snapshot(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int,
+                         cols: Int) raises -> Int:
+    """UNPACK `input_snapshot`: the provider's admitted address (the typed
+    view), the pin's storage owners kept by the door for the call."""
+    door.keep(pin.owner)
+    door.keep(pin.keep)
+    return kit.borrow(snapshot.source.addr, rows, cols)
+
+
+def decomp_door_tested(mut door: DecompDoor, mut kit: DKit, snapshot: ArrayMetadata, pin: ArrayPin, rows: Int,
+                       cols: Int, est: String) raises -> Int:
+    """UNPACK `input_tested`: `decomp_door_snapshot` of an X admitted with
+    `defer_finite`, tested on its upload (the GIL released, as before)."""
+    door.keep(pin.owner)
+    door.keep(pin.keep)
+    var index = -1
+    var py = Python()
+    with GILReleased(py):
+        index = kit.borrow_tested(snapshot.source.addr, rows, cols, est)
+    return index
+
+
+def decomp_door_resident_hit(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String) raises -> Int:
+    """UNPACK `resident_hit`: a fitted operand already resident on this
+    image (the stored `source` is the same frozen Array whose own words were
+    uploaded), served before the per-call admission. -1 on any miss."""
+    if door.owner is None or not kit.resident:
+        return -1
+    var held = decomp_resident_find(door.owner, door.entries["x_decomp_dev_alloc"],
+                                    door.entries["x_decomp_dev_free"], source, name, True)
+    if held is None:
+        return -1
+    door.keep(held)
+    door.keep(source)
+    return kit.add_resident(Int(py=source._addr), Int(py=held[5]), Int(py=held[3]), Int(py=held[4]))
+
+
+def decomp_door_resident_input(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                               host: PythonObject, address: Int, keep: PythonObject, rows: Int,
+                               cols: Int) raises -> Int:
+    """UNPACK `resident_input`: a fitted operand of the query model whose
+    device copy is kept across calls in the model's record (uploaded at the
+    first query after a fit, reused while the stored `source` is the same
+    frozen object of the same shape on the minting binding at the model's
+    generation). -1 when nothing is kept (a host image, no query model, an
+    empty operand, storage that cannot be frozen): the caller borrows the
+    operand as before. Same words, same routes (a host matrix at first)."""
+    var n = rows * cols
+    if door.owner is None or not kit.resident or n < 1:
+        return -1
+    # Hazard class A: a device copy is served only while the host words
+    # cannot change under it (the read-only rule, decomp_resident_freeze).
+    if not decomp_resident_freeze(source):
+        return -1
+    var alloc = door.entries["x_decomp_dev_alloc"]
+    var free = door.entries["x_decomp_dev_free"]
+    var held = decomp_resident_find(door.owner, alloc, free, source, name, False)
+    if held is not None and (Int(py=held[3]) != rows or Int(py=held[4]) != cols):
+        held = PythonObject(None)
+    if held is None:
+        var handle = kit.dev_alloc(n)
+        try:
+            var py = Python()
+            with GILReleased(py):
+                kit.dev_upload(handle, address, n)
+        except error:
+            kit.dev_free(handle)
+            raise error^
+        _ = keep  # keep the host owner alive through the upload above
+        # From here the record's capsule owns the device buffer. Word 7:
+        # the uploaded words are the frozen source's own (no cast copy).
+        held = decomp_resident_hold(door.owner, alloc, free, source, name, rows, cols, handle, host is source)
+    door.keep(held)
+    door.keep(keep)
+    door.keep(host)
+    return kit.add_resident(address, Int(py=held[5]), rows, cols)
+
+
+def decomp_door_resident_derived(mut door: DecompDoor, mut kit: DKit, source: PythonObject,
+                                 name: String) raises -> Int:
+    """UNPACK `resident_derived`: a device matrix an earlier query computed
+    from the fitted operand `source` and kept, served while `source` is the
+    same frozen Array at the same generation (the words this call would
+    compute again), added as that call left it. -1 on any miss."""
+    if door.owner is None or not kit.resident:
+        return -1
+    var held = decomp_resident_find(door.owner, door.entries["x_decomp_dev_alloc"],
+                                    door.entries["x_decomp_dev_free"], source, name, False)
+    if held is None or Bool(py=held[7]):
+        return -1
+    door.keep(held)
+    return kit.add_device(Int(py=held[5]), Int(py=held[3]), Int(py=held[4]))
+
+
+def decomp_door_resident_keep(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+                              a: Int) raises -> Bool:
+    """PACK `resident_keep`: matrix `a`, computed by RUN from the frozen
+    fitted operand `source` and left on the device, goes to the model's
+    record for later queries (its pool buffer leaves the kit's ledger for a
+    record capsule). False (nothing kept) for a host image, no query model,
+    an unfrozen source, or a buffer the kit does not own."""
+    if door.owner is None or not kit.resident:
+        return False
+    if not decomp_resident_frozen(source):
+        return False
+    var handle = kit.release_device(a)
+    if handle < 0:
+        return False
+    var held = decomp_resident_hold(door.owner, door.entries["x_decomp_dev_alloc"], door.entries["x_decomp_dev_free"],
+                                    source, name, kit.nrows(a), kit.ncols(a), handle, False)
+    door.keep(held)
+    return True
+
+
+def decomp_kit_out_shape(mut door: DecompDoor, mut kit: DKit, a: Int, shape: PythonObject) raises -> PythonObject:
+    """PACK `_M.out(shape)`: a fresh float32 Array of matrix a's words (a
+    device matrix comes down once, the GIL released)."""
+    var n = kit.size(a)
+    var result = classical_typed(shape, "<f4", door.output)
+    if n:
+        var src = 0
+        var py = Python()
+        with GILReleased(py):
+            src = kit.at(a)
+        unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
+                      src=DecompF32(unsafe_from_address=src), count=n)
+        _ = result  # keep the Python object alive through the copy above
+    return result
+
+
+def decomp_kit_publish(mut door: DecompDoor, mut kit: DKit, a: Int) raises -> PythonObject:
+    """PACK `_M.out()`: a fresh (rows, cols) float32 Array of matrix a."""
+    return decomp_kit_out_shape(door, kit, a, Python.tuple(kit.nrows(a), kit.ncols(a)))

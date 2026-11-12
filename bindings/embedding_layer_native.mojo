@@ -8,7 +8,7 @@
                          `embedding_forward` (or `embedding_forward_dev` for
                          device=True) call, the result in the ids' shape
     load                 the saved table read natively (the NPZ reader of
-                         bindings/classical_archive_read.mojo), the checks of
+                         bindings/classical_archive_read_door.mojo), the checks of
                          the constructor, the layer built without running
                          Python
 and its lifetime (`embedding_layer_lifetime_c`, installed at import as the
@@ -36,8 +36,8 @@ from bindings.optimizer_public_door import new_array, door_ready
 from bindings.tensor_view import base_format
 from training.optimizer_input_plan import same_shape
 from providers.python.array_layout_boundary import native_shape_pack
-from bindings.optimizer_device_native import shape_count, device_shape
-from bindings.training_embedding_native import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
+from bindings.optimizer_device_native_door import shape_count, device_shape
+from bindings.training_embedding_native_door import embedding_indices, embedding_leaves, embedding_leaf_store, embedding_int_list
 from bindings.sequence_device_native import seq_device_make, sequence_device_operation
 from bindings.sequence_optimizer_native import seq_device_get
 from bindings.optimizer_admission import opt_value, opt_scalar, opt_guards, opt_exact, opt_numpy
@@ -51,7 +51,7 @@ from core.admitted_input_nd import admitted_cast_nd_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
-from bindings.classical_archive_read import classical_archive_read, _archive_string, _archive_exact
+from bindings.classical_archive_read_door import classical_archive_read, _archive_string, _archive_exact
 from bindings.optimizer_public_words import optimizer_python_error
 from core.shared_slot import SharedSlot
 

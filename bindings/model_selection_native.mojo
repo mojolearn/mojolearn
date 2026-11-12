@@ -17,12 +17,12 @@ from bindings.msel_common import msel_get_scorer, msel_score, msel_admit, msel_f
 from bindings.msel_scorer_native import msel_metric_plan, msel_scorer_call, msel_scorer_create
 from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan, msel_native_clone
 from bindings.parallel_cv_native import msel_parallel_operation
-from bindings.msel_cv import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
+from bindings.msel_cv_door import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
 from bindings.msel_search import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
     msel_learning_curve, msel_permutation_test_score, _search_index,
 )
-from bindings.msel_parameter_grid import PreparedParameterGrid
+from bindings.msel_parameter_grid_door import PreparedParameterGrid
 from bindings.msel_public_metadata import msel_splitter_repr, msel_scorer_repr, msel_estimator_classes
 from bindings.msel_search_state import msel_search_fields, msel_search_plan, msel_search_initialize, msel_search_update
 from bindings.msel_split import (

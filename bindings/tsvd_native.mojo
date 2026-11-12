@@ -13,7 +13,7 @@
 # fit_transform projects the X the fit converted (tsvd_transform), with no
 # second conversion and no Python between the two.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from std.python._cpython import PyObjectPtr
@@ -36,9 +36,14 @@ from core.tsvd_native_api import (
     TSVD_RANDOMIZED, TSVD_TSQR, TSVD_FOLD, TSVD_CAP_FUSED, TSVD_CAP_RANDOMIZED,
     TSVD_CAP_TSQR, TSVD_CAP_RESIDENT,
 )
-from bindings.tsvd_descriptor_boundary import (
-    tsvd_factory, tsvd_connect, tsvd_connection, tsvd_capabilities, tsvd_qfix, tsvd_run_fit, tsvd_run_query,
+from bindings.tsvd_descriptor_boundary_door import (
+    tsvd_factory,
+    tsvd_connect,
+    tsvd_connection,
+    tsvd_run_fit,
+    tsvd_run_query,
 )
+from x_decomp.tsvd_descriptor_boundary_run import tsvd_capabilities, tsvd_qfix
 from bindings.tsvd_owner_boundary import tsvd_owner_drop, tsvd_owner_lease, TSVDLeasePin
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes

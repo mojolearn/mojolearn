@@ -235,7 +235,7 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         _assert_state_equal(audit_native_call(owner.checkpoint).assert_native()['state'],
                             audit_native_call(replay.checkpoint).assert_native()['state'])
         # one device: the update runs on the gradient worker (one shared
-        # pool, one process; bindings/parallel_neural_native.mojo)
+        # pool, one process; bindings/parallel_neural_native_door.mojo)
         assert owner._update_pool is owner._pool
         pids = sorted({row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']})
     finally:

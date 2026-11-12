@@ -270,7 +270,7 @@ def _connect_pass(package):
             trees._TREES_CONTEXT.update(native_estimator_entry=selection._NATIVE,
                                         native_estimator_context=selection._NATIVE_CONTEXT)
             # PermutationExplainer's resident linear route recognizes this
-            # library's linear predict by identity (bindings/trees_agnostic_native.mojo).
+            # library's linear predict by identity (bindings/trees_agnostic_native_door.mojo).
             linear = loaded("_expansion_linear")
             trees._TREES_CONTEXT["trees_linear_predict"] = linear._LinearRegressorMixin.__dict__["predict"]
         # Parameter-read schemas capture the final built-in installers' method

@@ -17,7 +17,7 @@ The two CPU images can be loaded in one process (the host surface binds the
 regressor to one and the classifier's inference to the other), so the column
 word keeps their slots apart. Each image records its key as the module
 attribute `gp_native_key` = `(mode, vendor, column)`; a caller reads it once
-at UNPACK (`bindings/gp_native_boundary.mojo` `gp_entry_key`), resolves the
+at UNPACK (`bindings/gp_native_boundary_door.mojo` `gp_entry_key`), resolves the
 entry once (`gp_table_resolve`) and calls it natively (`GPDriver`). No
 `gp_native_api_v1` capsule factory is called and no Python object crosses
 into RUN. The GPC shard worker (`bindings/parallel_shard_native.mojo`) calls

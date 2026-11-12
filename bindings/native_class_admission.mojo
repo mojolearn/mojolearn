@@ -32,7 +32,7 @@ matches. A record must not strongly retain the class it belongs to.
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module, shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call

@@ -5,7 +5,7 @@
 # outside any graph run/fit. No ndarray.ctypes (a Python helper) is invoked.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import sequential_admit_value, _one_of
 from bindings.native_array_view import native_array_ndarray_view

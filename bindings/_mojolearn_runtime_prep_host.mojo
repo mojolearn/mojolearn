@@ -13,7 +13,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from bindings.scaler_native import scaler_fit_c
+from bindings.scaler_native_door import scaler_fit_c
 from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
 from bindings.minmax_native import minmax_lifecycle_c
 from bindings.maxabs_native import maxabs_lifecycle_c

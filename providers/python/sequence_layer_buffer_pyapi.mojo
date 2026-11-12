@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_value
 from providers.python.array_layout_boundary import native_shape_pack
-from bindings.optimizer_device_native import device_shape, shape_count
+from bindings.optimizer_device_native_door import device_shape, shape_count
 from bindings.sequence_optimizer_native import seq_binding
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
 from bindings.classical_attributes import classical_connect_numpy

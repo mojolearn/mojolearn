@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.admitted_call import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_metadata_native import _fields

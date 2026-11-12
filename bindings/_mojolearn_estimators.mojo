@@ -766,7 +766,7 @@ def pca_fit_owned_binding(
     otherwise).
     UNPACK and PACK only: the body is decomposition/pca_ops_entry_device.mojo `pca_fit_owned_device_run`, which
     the PCA owned-fit table (core/decomp_entry_table_pca.mojo) also calls.
-    The export remains for bindings/pca_fit_native.mojo,
+    The export remains for bindings/pca_fit_native_door.mojo,
     bindings/msel_device.mojo and python/mojolearn/host_surface.py."""
     if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")

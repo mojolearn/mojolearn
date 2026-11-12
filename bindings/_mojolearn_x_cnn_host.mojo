@@ -8,7 +8,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 comptime _TPFLAGS_LIST_SUBCLASS = UInt64(1) << 25  # Py_TPFLAGS_LIST_SUBCLASS
 from std.python._cpython import GILReleased

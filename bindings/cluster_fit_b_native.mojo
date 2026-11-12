@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.cfb_dbscan import cfb_dbscan_operation
 from bindings.cfb_agglo import cfb_agglo_operation
-from bindings.cfb_spectral import cfb_spectral_operation
+from bindings.cfb_spectral_door import cfb_spectral_operation
 
 
 def cluster_fit_b_operation(model: PythonObject, operation: String, args: PythonObject,

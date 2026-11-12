@@ -6,21 +6,32 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.native_transport import (
-    transport_initialize, transport_send, transport_receive, transport_receive_owned, _transport_exact,
-    transport_listen, transport_accept, transport_close, transport_clock, transport_sleep, transport_connect,
-    transport_port, transport_address, transport_timeout, transport_hostname,
+from bindings.native_transport_door import (
+    transport_initialize,
+    transport_send,
+    transport_receive,
+    transport_receive_owned,
+    _transport_exact,
+    transport_listen,
+    transport_accept,
+    transport_close,
+    transport_sleep,
+    transport_connect,
+    transport_port,
+    transport_address,
+    transport_timeout,
     _transport_json,
 )
+from bindings.native_transport_run import transport_clock, transport_hostname
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.parallel_byte_native import parallel_byte_call, parallel_byte_init, _parallel_array, _parallel_int, _parallel_float
 from bindings.generation_buffers import generation_array
 from bindings.cross_vendor_admission import (
     cv_types_initialize, cv_int, cv_float, cv_bool, cv_text, cv_sequence, cv_buffer, cv_path, cv_json, cv_state,
 )
-from bindings.byte_checkpoint_native import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
+from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
-from bindings.native_json import native_json_parse
+from bindings.native_json_door import native_json_parse
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer

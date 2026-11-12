@@ -1,0 +1,556 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The shared parts of the native Python-sharded multi-GPU drivers
+(lane/native-parallel-driver-20261024,
+docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md, "kind B").
+
+These drivers cut their work into logical shards (`*_per_shard` rows,
+columns, series, trees or classes), run each shard's plain native owner in a
+worker process per device and place every shard's block at its own offset.
+The old Python driver (`_parallel_pool.DevicePool` plus pickle) did the same
+in Python; here the partition, the request records, the native local
+process pool (bindings/native_process_pool_door.mojo: one process per device, the
+visibility mask narrowed to it, every device count 1) and the join are
+native. The wave order is the old pool's: `process_pool_map` sends waves of
+`len(devices)` requests and hands wave position j to worker j, so shard i
+runs on rank i % len(devices), as `DevicePool.map` did.
+
+The driver negative control is the old `_parallel_pool.driver_read_shift`,
+word for word: with MOJOLEARN_PAR_DRIVER_SABOTAGE=1 and
+MOJOLEARN_HOST_ALLOW_SABOTAGE=1 every shard on an owner above rank 0 whose
+true start is above 0 READS one position early while its block is still
+PLACED at the true offset. Inert at one device.
+
+No floating-point value is computed here: copies only.
+"""
+from std.ffi import external_call
+from std.memory import unsafe_memcpy
+from std.os import getenv
+from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_attr import py_attr
+from bindings.classical_arrays import classical_address
+from bindings.native_loaded_module import native_loaded_module
+from bindings.native_process_pool_door import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
+from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
+from bindings.tsa_hw_native import tsa_array
+from core.shared_slot import SharedSlot
+from bindings.parallel_shard_common_run import (
+    shard_fault_mark,
+    shard_read_shift,
+    shard_faults_take,
+    _numerical,
+    shard_store_token,
+    shard_item,
+)
+
+
+def shard_b() raises -> PythonObject:
+    return native_loaded_module("builtins")
+
+
+def shard_ranges(count: Int, width: PythonObject, name: String, empty_message: String) raises -> List[Int]:
+    """The shard bounds [lo0, hi0, lo1, hi1, ...] of `range(0, count, width)`
+    with `min(start + width, count)` ends; `width` must be a positive int
+    (`name` names it in the refusal)."""
+    if py_type(width) is not shard_b().int or Int(py=width) < 1:
+        raise Error("ValueError: " + name + " must be a positive integer")
+    if count < 1 and empty_message != "":
+        raise Error("ValueError: " + empty_message)
+    var w = Int(py=width)
+    var out = List[Int]()
+    var i = 0
+    while i < count:  # driver-loop: over the shard boundaries for the device pool
+        out.append(i)
+        out.append(min(i + w, count))
+        i += w
+    return out^
+
+
+def shard_devices(devices: PythonObject) raises -> Int:
+    """`DevicePool`'s admission of the device list, in its words; the number
+    of devices."""
+    var b = shard_b()
+    if py_type(devices) is not b.tuple and py_type(devices) is not b.list and py_type(devices) is not b.range:
+        raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
+    var selected = py_call(b.tuple, devices)
+    var seen = b.set()
+    if len(selected) == 0:
+        raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    for i in range(len(selected)):  # driver-loop: over the admitted device indices
+        if (py_type(selected[i]) is not b.int or Int(py=selected[i]) < 0
+                or Bool(py=py_call(py_attr(seen, "__contains__"), selected[i]))):
+            raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        _ = py_call(seen.add, selected[i])
+    return len(selected)
+
+struct ShardTrace(Defaultable, Movable):
+    # The fault counter is typed RUN state (bindings/parallel_shard_common_run.mojo).
+    var records: PythonObject
+
+    def __init__(out self):
+        self.records = PythonObject(None)
+
+
+#: Every pool the sharded drivers started in this process since the last
+#: `shard_trace_take`: its devices and its workers' own driver inventories
+#: (the record the verifier's two-device witness reads,
+#: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
+comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV2", 2]
+
+
+struct ShardIdle(Defaultable, Movable):
+    #: {(child module, devices tuple): [pool, parent environment snapshot, owner pid]}
+    var pools: PythonObject
+    #: a WORKER's stored call operands, {token: payload tuple} (`shard_store`)
+    var stored: PythonObject
+
+    def __init__(out self):
+        self.pools = PythonObject(None)
+        self.stored = PythonObject(None)
+
+
+def shard_store_put(token: PythonObject, payload: PythonObject) raises -> PythonObject:
+    """A worker's `shard_store`: keep `payload` under `token` for the call."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].stored is None:
+        idle[].stored = shard_b().dict()
+    if py_type(payload) is not shard_b().tuple:
+        raise Error("parallel shards: a stored payload is a tuple")
+    py_setitem(idle[].stored, token, payload)
+    return PythonObject(True)
+
+
+def shard_store_drop(token: PythonObject) raises -> PythonObject:
+    """A worker's `shard_release`: drop the call's stored operands."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].stored is not None:
+        _ = py_call(idle[].stored.pop, token, PythonObject(None))
+    return PythonObject(True)
+
+
+def shard_resolve_stored(value: PythonObject) raises -> PythonObject:
+    """A request's state or argument tuple with every top-level
+    `shard_stored_ref` replaced by the stored operand it names; any other
+    value is returned as is."""
+    var b = shard_b()
+    if py_type(value) is not b.tuple:
+        return value
+    var any_ref = False
+    for i in range(len(value)):  # small-loop(a request tuple's few operands)
+        if _is_stored_ref(value[i]):
+            any_ref = True
+    if not any_ref:
+        return value
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    var out = b.list()
+    for i in range(len(value)):  # small-loop(a request tuple's few operands)
+        var item = value[i]
+        if _is_stored_ref(item):
+            var payload = PythonObject(None)
+            if idle[].stored is not None:
+                payload = py_get(idle[].stored, item[1], PythonObject(None))
+            if payload is None:
+                raise Error("parallel shards: no stored operands for this call on this worker")
+            var k = Int(py=item[2])
+            if k < 0 or k >= len(payload):
+                raise Error("parallel shards: a stored operand index is out of range")
+            _ = py_call(out.append, payload[k])
+        else:
+            _ = py_call(out.append, item)
+    return py_call(b.tuple, out)
+
+
+def _is_stored_ref(item: PythonObject) raises -> Bool:
+    var b = shard_b()
+    if py_type(item) is not b.tuple or len(item) != 3:
+        return False
+    var mark = item[0]
+    return py_type(mark) is b.str and String(mark) == SHARD_STORED_MARK
+
+
+#: Lane perf-trees-misc (2026-11-05): the started one-shot shard pools kept
+#: between `shard_run` calls. Each call used to spawn a fresh worker per
+#: device (interpreter start, package import, binding connection: about 5 s
+#: per open on Linux, `~/mojolearn-evidence/svl-partA.txt`), so a
+#: par-forecast fit, predict and forecast paid it three times per cell. An
+#: idle pool is reused only for the same child module, the same device tuple
+#: and an unchanged parent environment (the worker environment, visibility
+#: mask included, is derived from it at spawn); every reuse re-admits the
+#: workers by identity and starts its own trace record, as a fresh pool
+#: does. A failed call closes its pool and nothing is kept. Workers held
+#: here end when the parent process ends (their socket closes).
+comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV2", 2]
+
+
+def shard_identity() raises -> PythonObject:
+    """A worker's answer to an identity request: its own process and the
+    devices its visibility mask leaves it (bindings/native_worker_inventory_door.mojo)."""
+    var p = PROCESS_BOUNDARY.get_or_create_ptr()
+    return native_worker_inventory(p[].vendor, p[].environ)
+
+
+def shard_open(devices: PythonObject, child: String) raises -> PythonObject:
+    """A started pool of one worker per device whose placement is admitted:
+    every worker answers an identity request first, and the replies must be
+    distinct processes started here and, on CUDA and HIP, distinct physical
+    GPUs, one per worker (`native_require_worker_inventory`, the CV pool's
+    rule). The pool and its inventory are recorded in the trace."""
+    var pool = process_pool_create(devices, False, child)
+    return _shard_admit(pool, devices)
+
+
+def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObject:
+    """`shard_open`'s admission of a pool's workers (a fresh pool, or an idle
+    one `shard_run` reuses): the identity round, the inventory check and a
+    new trace record. The pool is closed on a refusal."""
+    var b = shard_b()
+    var requests = b.list()
+    for i in range(len(devices)):  # driver-loop: one identity request per worker
+        _ = py_call(requests.append, Python.tuple("identity"))
+    var identities = process_pool_map(pool, requests)
+    var pids = b.list()
+    for i in range(len(pool["workers"])):  # driver-loop: over the spawned workers
+        _ = py_call(pids.append, pool["workers"][i]["pid"])
+    var p = PROCESS_BOUNDARY.get_or_create_ptr()
+    try:
+        native_require_worker_inventory(identities, p[].vendor, pids, Int(external_call["getpid", Int32]()))
+    except error:
+        process_pool_close(pool)
+        raise error^
+    var t = SHARD_TRACE.get_or_create_ptr()
+    if t[].records is None:
+        t[].records = b.list()
+    var record = b.dict()
+    py_setitem(record, "devices", py_call(b.list, devices))
+    py_setitem(record, "inventory", identities)
+    py_setitem(record, "calls", b.list())
+    py_setitem(pool, "trace_record", record)
+    _ = py_call(t[].records.append, record)
+    if len(t[].records) > 256:
+        _ = py_call(t[].records.pop, 0)
+    return pool
+
+
+def shard_trace_take() raises -> PythonObject:
+    """The pools recorded since the last take, and an empty trace."""
+    var t = SHARD_TRACE.get_or_create_ptr()
+    var out = t[].records
+    t[].records = shard_b().list()
+    return shard_b().list() if out is None else out
+
+def _operation(request: PythonObject) raises -> String:
+    var name = String(request[0])
+    if name == "py":
+        return String(request[1])
+    return name
+
+def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
+    """`process_pool_map(pool, requests)`, with every request's worker and
+    operation added to the pool's trace record.
+
+    THE TRANSPORT NEGATIVE CONTROL (python/mojolearn/_verify_distributed.py):
+    with MOJOLEARN_PAR_TRANSPORT_FAULT=drop_result or reverse_results and
+    MOJOLEARN_HOST_ALLOW_SABOTAGE=1, the first numerical batch of more than
+    one result in this process is returned without its last result or in
+    reverse order, once. The driver's own checks or the hash must catch it.
+    No build, workflow or gate sets either variable."""
+    var b = shard_b()
+    var results = process_pool_map(pool, requests)
+    var record = py_get(pool, PythonObject("trace_record"), PythonObject(None))
+    var workers = pool["workers"]
+    if record is not None and len(workers) > 0:
+        for i in range(len(requests)):  # driver-loop: one trace entry per request
+            var call = b.dict()
+            py_setitem(call, "pid", workers[i % len(workers)]["pid"])
+            py_setitem(call, "operation", _operation(requests[i]))
+            _ = py_call(record["calls"].append, call)
+    if len(results) > 1 and len(requests) > 0 and _numerical(_operation(requests[0])):
+        var fault = String()
+        if String(getenv("MOJOLEARN_HOST_ALLOW_SABOTAGE")) == "1":
+            fault = String(getenv("MOJOLEARN_PAR_TRANSPORT_FAULT"))
+        if (fault == "drop_result" or fault == "reverse_results") and shard_fault_mark():
+            var altered = py_call(b.list, results)
+            if fault == "drop_result":
+                _ = py_call(altered.pop)
+            else:
+                _ = py_call(altered.reverse)
+            return altered
+    return results
+
+
+def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
+    """`shard_run`'s pool: the idle pool kept for this child, devices and
+    environment, re-admitted, or a fresh one. Returns [pool, key, environ,
+    pid] for `_shard_keep`."""
+    var b = shard_b()
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].pools is None:
+        idle[].pools = b.dict()
+    var key = Python.tuple(PythonObject(child), py_call(b.tuple, devices))
+    var environ = py_call(b.dict, PROCESS_BOUNDARY.get_or_create_ptr()[].environ)
+    var pid = Int(external_call["getpid", Int32]())
+    var reused = PythonObject(None)
+    var held = py_call(idle[].pools.pop, key, PythonObject(None))
+    if held is not None:
+        if Int(py=held[2]) != pid:
+            # Inherited across os.fork: the pool's workers and sockets belong
+            # to the parent process. Drop the record without closing (a close
+            # here would end the parent's workers on the shared sockets).
+            pass
+        elif (Bool(py=held[1] == environ) and not Bool(py=held[0]["closed"])
+                and len(held[0]["workers"]) == len(devices)):
+            try:
+                reused = _shard_admit(held[0], devices)
+            except:
+                # a worker that died while idle: the identity round closed
+                # the pool; a fresh one is opened below
+                reused = PythonObject(None)
+        else:
+            try:
+                process_pool_close(held[0])
+            except:
+                pass
+    if reused is None:
+        var pool = shard_open(devices, child)
+        reused = pool
+    return Python.list(reused, key, environ, PythonObject(pid))
+
+
+def _shard_keep(acquired: PythonObject) raises:
+    """Keep a pool whose call succeeded idle for the next call (`SHARD_IDLE`)."""
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    var key = acquired[1]
+    var pid = Int(py=acquired[3])
+    var other = py_call(idle[].pools.pop, key, PythonObject(None))
+    if other is not None and Int(py=other[2]) == pid:  # another thread kept a pool under this key meanwhile
+        try:
+            process_pool_close(other[0])
+        except:
+            pass
+    # [pool, parent environment snapshot, owning process id]
+    py_setitem(idle[].pools, key, Python.list(acquired[0], acquired[2], PythonObject(pid)))
+
+
+def shard_run(requests: PythonObject, devices: PythonObject, child: String) raises -> PythonObject:
+    """The workers' results in request order (waves of len(devices), wave
+    position j on worker j). A pool whose call succeeded is kept idle for the
+    next call with the same child, devices and environment (`SHARD_IDLE`);
+    a failed call closes it."""
+    var acquired = _shard_acquire(devices, child)
+    var reused = acquired[0]
+    var results = PythonObject(None)
+    try:
+        results = shard_map(reused, requests)
+    except error:
+        process_pool_close(reused)
+        raise error^
+    if len(results) != len(requests):
+        process_pool_close(reused)
+        raise Error("ValueError: shard workers returned an incomplete batch")
+    _shard_keep(acquired)
+    return results
+
+
+#: The marker of a stored operand in a shard request (`shard_stored_ref`).
+comptime SHARD_STORED_MARK = "mojolearn.shard-stored.v1"
+
+
+def shard_stored_ref(token: String, index: Int) raises -> PythonObject:
+    """The placeholder a request carries for operand `index` of the payload
+    `shard_run_stored` stored under `token` on every worker."""
+    return Python.tuple(PythonObject(SHARD_STORED_MARK), PythonObject(token), PythonObject(index))
+
+def shard_run_stored(payload: PythonObject, token: String, requests: PythonObject, devices: PythonObject,
+                     child: String) raises -> PythonObject:
+    """`shard_run` with the call's shared operands sent ONCE per worker
+    (lane ne2-i-j, 2026-11-07, plan row N452). `payload` (a tuple: X, labels,
+    ...) is stored under `token` on every worker of the one pool this call
+    holds (one `shard_store` request per worker, wave position j on worker
+    j); each request names its operands by `shard_stored_ref(token, i)`,
+    which the worker resolves from its store (`shard_resolve_stored`); one
+    `shard_release` per worker drops the store before the pool goes idle.
+    The shards, their order and their workers are `shard_run`'s, so the
+    results are the same words; only the bytes on the sockets change (X once
+    per worker, not once per shard). A failed call closes the pool, which
+    ends its workers and their stores."""
+    var b = shard_b()
+    var acquired = _shard_acquire(devices, child)
+    var pool = acquired[0]
+    var workers = len(pool["workers"])
+    var results = PythonObject(None)
+    try:
+        var stores = b.list()
+        var releases = b.list()
+        for i in range(workers):  # driver-loop: one store and one release per worker
+            _ = py_call(stores.append, Python.tuple("shard_store", PythonObject(token), payload))
+            _ = py_call(releases.append, Python.tuple("shard_release", PythonObject(token), PythonObject(None)))
+        var stored = process_pool_map(pool, stores)
+        if len(stored) != workers:
+            raise Error("ValueError: shard workers did not store the call's operands")
+        results = shard_map(pool, requests)
+        if len(results) != len(requests):
+            raise Error("ValueError: shard workers returned an incomplete batch")
+        _ = process_pool_map(pool, releases)
+    except error:
+        process_pool_close(pool)
+        raise error^
+    _shard_keep(acquired)
+    return results
+
+def shard_dtype(value: PythonObject) raises -> String:
+    """The typestr ("<f4", "<i8", ...) of a mojolearn Array or an ndarray.
+    An Array's `dtype` is its typestr; an ndarray's `dtype` prints its name
+    ("float32"), so its typestr is `dtype.str`. A driver input admitted
+    in place (already C-ordered float32) is the caller's ndarray."""
+    var module = py_get(native_loaded_module("sys").modules, "mojolearn._array")
+    if module is not None and py_type(value) is module.Array:
+        return String(py=value.dtype)
+    return String(py=value.dtype.str)
+
+
+def shard_array(dtype: String, shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    """A zero-filled C-ordered Array of `dtype` and `shape` (`count` items)."""
+    var item = shard_item(dtype)
+    return tsa_array(item[0], dtype, shape, count, item[1], context)
+
+
+def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) raises -> PythonObject:
+    """A copy of rows [lo, hi) of a C-ordered Array (any rank >= 1), with the
+    source's trailing shape."""
+    var b = shard_b()
+    var shape = py_call(b.list, source.shape)
+    var rows = Int(py=shape[0])
+    if lo < 0 or hi > rows or hi < lo:
+        raise Error("ValueError: shard rows outside the source")
+    var inner = 1
+    for k in range(1, len(shape)):  # small-loop(the source's trailing dimensions)
+        inner *= Int(py=shape[k])
+    py_setitem(shape, 0, hi - lo)
+    var dtype = shard_dtype(source)
+    var item = shard_item(dtype)
+    var out = shard_array(dtype, py_call(b.tuple, shape), (hi - lo) * inner, context)
+    var bytes = (hi - lo) * inner * item[1]
+    if bytes > 0:
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
+               + lo * inner * item[1],
+               count=bytes)
+        _ = out  # keep the Python object alive through the native call above
+        _ = source  # keep the Python object alive through the native call above
+    return out
+
+
+def shard_row_vector(source: PythonObject, row: Int, context: PythonObject) raises -> PythonObject:
+    """Row `row` of a C-ordered 2-D Array, as a 1-D copy."""
+    var b = shard_b()
+    var width = Int(py=source.shape[1])
+    var dtype = shard_dtype(source)
+    var item = shard_item(dtype)
+    var out = shard_array(dtype, Python.tuple(width), width, context)
+    if width > 0:
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
+               + row * width * item[1],
+               count=width * item[1])
+        _ = out  # keep the Python object alive through the native call above
+        _ = source  # keep the Python object alive through the native call above
+    _ = b
+    return out
+
+
+def shard_concat(parts: PythonObject, name: String, total: Int, context: PythonObject) raises -> PythonObject:
+    """The arrays `parts[k][name]` joined along their first axis in shard
+    order (`shard_join_rows`)."""
+    var b = shard_b()
+    var arrays = b.list()
+    for p in range(len(parts)):  # driver-loop: one array per device shard
+        _ = py_call(arrays.append, parts[p][name])
+    return shard_join_rows(arrays, total, context)
+
+
+def shard_join_rows(arrays: PythonObject, total: Int, context: PythonObject) raises -> PythonObject:
+    """The C-ordered arrays joined along their first axis in shard order (a
+    byte copy per shard): the first array's dtype and trailing shape, `total`
+    leading rows. Every array must share them."""
+    var b = shard_b()
+    var first = arrays[0]
+    var shape = py_call(b.list, first.shape)
+    var inner = 1
+    for k in range(1, len(shape)):  # small-loop(the trailing dimensions)
+        inner *= Int(py=shape[k])
+    var dtype = shard_dtype(first)
+    var item = shard_item(dtype)
+    py_setitem(shape, 0, total)
+    var out = shard_array(dtype, py_call(b.tuple, shape), total * inner, context)
+    var cursor = 0
+    for p in range(len(arrays)):  # driver-loop: one block copy per device shard
+        var value = arrays[p]
+        if shard_dtype(value) != dtype:
+            raise Error("ValueError: shard workers returned different dtypes")
+        var rows = Int(py=value.shape[0])
+        var bytes = rows * inner * item[1]
+        if cursor + rows > total:
+            raise Error("ValueError: shard workers returned too many rows")
+        if bytes > 0:
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
+                   + cursor * inner * item[1],
+                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
+                   count=bytes)
+            _ = out  # keep the Python object alive through the native call above
+            _ = value  # keep the Python object alive through the native call above
+        cursor += rows
+    if cursor != total:
+        raise Error("ValueError: shard workers returned an incomplete result")
+    return out
+
+
+def shard_state(fields: PythonObject, drop: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A worker state record: the instance fields whose values the native
+    codec carries (None, bool, int, float, str, native Arrays and tuples,
+    lists and str-keyed dicts of them), without the names in `drop`.
+    Device handles and other objects stay in this process."""
+    var b = shard_b()
+    var state = b.dict()
+    var keys = py_call(b.list, fields)
+    for k in range(len(keys)):  # driver-loop: over the estimator's instance fields
+        var key = keys[k]
+        if py_type(key) is not b.str or Bool(py=py_call(py_attr(drop, "__contains__"), key)):
+            continue
+        var value = fields[key]
+        if _carried(value, context, 0):
+            py_setitem(state, key, value)
+    return state
+
+
+def _carried(value: PythonObject, context: PythonObject, depth: Int) raises -> Bool:
+    var b = shard_b()
+    if depth > 8:
+        return False
+    var cls = py_type(value)
+    if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.str:
+        return True
+    if cls is context["array_class"]:
+        return True
+    if cls is b.tuple or cls is b.list:
+        for i in range(len(value)):  # driver-loop: over a structural field's entries
+            if not _carried(value[i], context, depth + 1):
+                return False
+        return True
+    if cls is b.dict:
+        var keys = py_call(b.list, value)
+        for i in range(len(keys)):  # driver-loop: over a structural field's entries
+            if py_type(keys[i]) is not b.str or not _carried(value[keys[i]], context, depth + 1):
+                return False
+        return True
+    return False
+
+
+def shard_model(cls: PythonObject, state: PythonObject) raises -> PythonObject:
+    """A model of `cls` whose instance dictionary is `state`, built without a
+    Python constructor (the old worker's `cls(**params)` carried the same
+    fields)."""
+    var b = shard_b()
+    var model = py_call(b.object.__new__, cls)
+    _ = py_call(py_fields(model).update, state)
+    return model

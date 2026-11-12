@@ -5,7 +5,7 @@
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.admitted_family import admit_family_meta
 from bindings.native_class_admission import class_record, class_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.p3nc_scan import P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists import p3nc_float_list_verdict
@@ -29,7 +29,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.family_common import FAMILY_F32P
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin

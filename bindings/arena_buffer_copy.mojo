@@ -9,7 +9,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
 from bindings.optimizer_public_words import stash_python_error
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _typecode_width(code: String) raises -> Int:

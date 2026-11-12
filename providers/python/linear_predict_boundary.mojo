@@ -13,9 +13,9 @@ from bindings.classical_validate import classical_check_x_snapshot, classical_es
 from bindings.admitted_input import admit_x
 from bindings.sequential_description import sequential_fields
 from core.linear_model_state import LinearModelState, linear_state_require_coef, linear_state_check_width, linear_state_check_coefficients
-from providers.python.linear_state_boundary import LinearStateOwner, linear_state_owner, linear_state_refresh
+from providers.python.linear_state_boundary_door import LinearStateOwner, linear_state_owner, linear_state_refresh
 from core.linear_registry import LINEAR_STATES, linear_lease_predict
-from providers.python.linear_entry_boundary import linear_entry_connection
+from providers.python.linear_entry_boundary_door import linear_entry_connection
 
 
 def _linear_predict_boundary(model: PythonObject, value: PythonObject,

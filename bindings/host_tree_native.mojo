@@ -3,7 +3,7 @@
 # validation, buffer ownership, kernel calls and completed output publication.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_key_value, trees_key_same
 from bindings.native_loaded_module import native_loaded_module
@@ -14,7 +14,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order, classical_wrap_array
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.host_archive_native import host_archive_check_layout, host_archive_typed, host_archive_allocate, host_archive_class_values, host_archive_gbdt_state
+from bindings.host_archive_native_door import host_archive_check_layout, host_archive_typed, host_archive_allocate, host_archive_class_values, host_archive_gbdt_state
 from bindings.host_archive_lifetime import host_archive_finalize
 from bindings.native_numpy_metadata import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast

@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_warnings import classical_warning
 from bindings.native_caller_frame import native_frame_globals

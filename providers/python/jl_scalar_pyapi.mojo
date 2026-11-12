@@ -4,7 +4,7 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.py_typed_call import typed_python_error
 from bindings.sequential_admission import _one_of

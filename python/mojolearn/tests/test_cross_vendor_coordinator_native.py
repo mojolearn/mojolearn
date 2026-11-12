@@ -41,7 +41,7 @@ def _transport():
 def native_pair(native):
     """(independent Python peer, owned native coordinator socket). Since the
     cross-vendor protocol moved into native code (e28c8bcf3, cc4c14732) the
-    coordinator reads only owned native sockets (bindings/native_transport.mojo
+    coordinator reads only owned native sockets (bindings/native_transport_door.mojo
     refuses a Python socket object); the peer stays an independent Python
     socket oracle."""
     server = native('listen', ('127.0.0.1', 0, 5.0))

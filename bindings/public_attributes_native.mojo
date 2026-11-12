@@ -4,7 +4,7 @@
 # caller-frame inspection is part of the operation.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.admitted_call import AdmittedCall

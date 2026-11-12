@@ -9,7 +9,7 @@ from bindings.classical_arrays import classical_input, classical_is_array
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get
 from bindings.classical_warnings import COLUMN_WARNING, _warning_category
 from bindings.metrics_native_support import metric_warn
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.sequential_inputs import _promote

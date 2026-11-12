@@ -263,7 +263,7 @@ _native_parallel_byte = _connect_parallel_byte_native()
 
 def _connect_parallel_corpus_native():
     # glue: import-time connection only. The corpus-fed step is one native
-    # call (bindings/lm_corpus_public_native.mojo, batches_parallel_step):
+    # call (bindings/lm_corpus_public_native_door.mojo, batches_parallel_step):
     # the batches owner is admitted there and its rows gathered natively.
     from .tokenizer import _binding as _tokenizer_binding
     return _tokenizer_binding()._module.lm_corpus_public_call

@@ -18,7 +18,7 @@ from bindings.sequential_admission import _one_of, sequential_admit_value, _Sequ
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_type_word, p3_item
 
 

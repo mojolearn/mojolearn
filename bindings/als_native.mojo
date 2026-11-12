@@ -15,16 +15,20 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
+from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
-    DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
-    decomp_input, decomp_resident_drop, XD_SCALE, XD_SQ, XD_SQRT, XD_DIV,
+    DecompF32, DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
+    decomp_input, decomp_resident_drop, decomp_kit_unpack, decomp_kit_publish, decomp_kit_out_shape,
+    decomp_door_borrow, decomp_door_input, decomp_door_resident_hit, decomp_door_resident_input,
+    decomp_door_resident_derived, decomp_door_resident_keep,
 )
+from bindings.decomp_kit_run import DKit
+from bindings.als_run import AlsFitWords, AlsTop, als_fit_run, als_recommend_run, als_unit_run, als_similar_run
 from core.decomp_native_impl import decomp_f32_to_i32
-from x_decomp.descriptor_schema import XD_ALS_FIT, XD_TOPN_DESC, XD_GATHER
+from std.python._cpython import GILReleased
 from bindings.py_lists import py_list_f64
 
 
@@ -32,29 +36,25 @@ from bindings.py_lists import py_list_f64
 comptime _ALS_UNIT = "item_factors.unit"
 
 
-def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    var array = decomp_input(source, name, context)
-    return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
-
-
-def _fitted(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    # A fitted factor matrix (lane ne1-a-decomp-resident, row N325): on a
-    # query its device copy is kept across calls (DecompKit.resident_input,
-    # the PCA/PLS scheme), so recommend / similar_items no longer upload the
-    # whole user_factors / item_factors per call; a frozen hit skips the
-    # re-admission. Same words, same routes (the matrix is added as a host
-    # matrix, as `_matrix` adds it), so no bit change. Any other storage
-    # (a caller-assigned ndarray) is admitted and uploaded per call, as before.
-    var hit = kit.resident_hit(source, name)
+def _fitted(mut door: DecompDoor, mut kit: DKit, source: PythonObject, name: String,
+            context: PythonObject) raises -> Int:
+    # UNPACK a fitted factor matrix (row N325): on a query its device copy is
+    # kept across calls in the model's record (decomp_door_resident_input),
+    # so recommend / similar_items do not upload the whole factors per call;
+    # a frozen hit skips the re-admission. Same words, same routes (added as
+    # a host matrix, as a borrowed input), so no bit change. Any other
+    # storage (a caller-assigned ndarray) is admitted and uploaded per call.
+    var hit = decomp_door_resident_hit(door, kit, source, name)
     if hit >= 0:
         return hit
     var array = decomp_input(source, name, context)
     var rows = Int(py=array.shape[0])
     var cols = Int(py=array.shape[1])
-    var held = kit.resident_input(source, name, array, Int(py=classical_address(array)), array, rows, cols)
+    var held = decomp_door_resident_input(door, kit, source, name, array, Int(py=classical_address(array)), array,
+                                          rows, cols)
     if held >= 0:
         return held
-    return kit.input(array, rows, cols)
+    return decomp_door_borrow(door, kit, array, rows, cols)
 
 
 def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
@@ -63,59 +63,49 @@ def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObje
     return classical_wrap_array(store, Python.tuple(n), typestr, "C", output)
 
 
+def _row_check(kit: DKit, a: Int, index: Int) raises:
+    # `_M.rows(i, i + 1)`, whose store must hold one row.
+    if index < 0 or index >= kit.nrows(a):
+        raise Error("x_decomp: matrix store does not match its shape")
+
+
 def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     # New factors replace the old: their device copies go now (N325).
     decomp_resident_drop(model)
     var mode = decomp_mode(fields["numeric_mode"], context)
     py_setitem(fields, "numeric_mode_", mode)
-    var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
+    # UNPACK: the image, user_items and every option, once.
+    var entries = decomp_entries(mode, context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var r = _matrix(kit, args[0], "user_items", context)
-        var n = kit.nrows(r)
-        var m = kit.ncols(r)
+        var r = decomp_door_input(door, kit, args[0], "user_items", context)
         var alpha = fields["alpha"]
         var unit = Bool(py=py_call(native_loaded_module("operator").eq, alpha, PythonObject(1.0)))
-        var c = r if unit else kit.ew(XD_SCALE, r, scalar=decomp_float(alpha))
+        var scale = 1.0 if unit else decomp_float(alpha)
         var seed = decomp_seed_word(decomp_seed(fields["random_state"]))
         var f = decomp_int(fields["factors"])
-        var user_draws = kit.rand(n, f, seed, 80, 0)
-        var x = kit.ew(XD_SCALE, user_draws, scalar=0.01)
-        var item_draws = kit.rand(m, f, seed, 81, 0)
-        var y = kit.ew(XD_SCALE, item_draws, scalar=0.01)
         var use_cg = Bool(py=fields["use_cg"])
-        if use_cg and decomp_int(fields["cg_steps"]) < 1:
+        var cg_steps = decomp_int(fields["cg_steps"])
+        if use_cg and cg_steps < 1:
             raise Error("AlternatingLeastSquares: cg_steps must be >= 1")
-        # The sweeps (and the losses) are ONE binding call on host copies of
-        # the factors, written in place.
-        x = kit.copy_host(x)
-        y = kit.copy_host(y)
-        var iterations = decomp_int(fields["iterations"])
-        var slots = max(iterations, 1)
-        var losses_store = classical_typed(Python.tuple(slots), "<f8", context["output_context"])
-        var loss = Bool(py=fields["calculate_training_loss"])
-        var params: List[Int] = [n, m, f, iterations, Int(use_cg), decomp_int(fields["cg_steps"]), Int(loss)]
-        var reg: List[Float64] = [decomp_float(fields["regularization"])]
-        var addresses: List[Int] = [kit.at(c), kit.at(x), kit.at(y), Int(py=classical_address(losses_store))]
-        # The x_decomp table's XD_ALS_FIT (was the binding's Python entry x_decomp_als_fit).
-        var count = kit.xd(XD_ALS_FIT, addresses, params, reg, True)
-        _ = losses_store  # keep the Python object alive through the native call above
-        kit.wrote_host(x)
-        kit.wrote_host(y)
-        if loss:
-            # p3-neighbors-cluster: the recorded losses are copied out once and
-            # published as one list (PyList_New + direct slot stores,
-            # bindings/py_lists.mojo), not one `append` call per iteration.
-            var recorded = max(min(count, slots), 0)
-            var values = List[Float64](length=recorded, fill=0.0)
-            if recorded > 0:
-                unsafe_memcpy(dest=values.unsafe_ptr(),
-                       src=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(losses_store))),
-                       count=recorded)
-            _ = losses_store  # keep the Python object alive through the copy above
-            py_setitem(fields, "training_loss_", py_list_f64(values))
-        var users = kit.publish(x)
-        var items = kit.publish(y)
+        var words = AlsFitWords(unit, scale, seed, f, use_cg, cg_steps, decomp_int(fields["iterations"]),
+                                Bool(py=fields["calculate_training_loss"]), decomp_float(fields["regularization"]))
+        # RUN: the draws and the one sweep call, the GIL released.
+        var losses = List[Float64]()
+        var user_m = -1
+        var item_m = -1
+        var py = Python()
+        with GILReleased(py):
+            var factors = als_fit_run(kit, r, words, losses)
+            user_m = factors[0]
+            item_m = factors[1]
+        # PACK: the losses as one list, the factors as fresh Arrays, published once.
+        if words.loss:
+            py_setitem(fields, "training_loss_", py_list_f64(losses))
+        var users = decomp_kit_publish(door, kit, user_m)
+        var items = decomp_kit_publish(door, kit, item_m)
         py_setitem(fields, "user_factors", users)
         py_setitem(fields, "item_factors", items)
         py_setitem(fields, "user_factors_", users)
@@ -123,117 +113,92 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         return model
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
-def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObject) raises -> PythonObject:
-    # `AlternatingLeastSquares._topn`: (ids int32, scores float32) of the N
-    # best entries of the score row by (-score, id), the skip row's nonzero
-    # entries left out (skip: a 1 x m host matrix, or -1).
-    var m = kit.size(s)
-    var n = max(min(count, m), 0)
-    if n and kit.use(s):
-        var order = kit.order_dev(s, 1, skip)
-        var c = min(n, Int(kit.word(order[1])))
-        if c == 0:
-            return Python.tuple(_typed(0, "<i4", "i", 4, context), _typed(0, "<f4", "f", 4, context))
-        var ids = kit.rows_of(order[0], 0, c)
-        var row = kit.reshape(s, 1, m)
-        var values = kit.take_cols_m(row, ids, c)
+def _topn_pack(mut door: DecompDoor, mut kit: DKit, top: AlsTop, context: PythonObject) raises -> PythonObject:
+    # PACK `_topn`: (ids int32, scores float32).
+    var c = top.count
+    if top.ids >= 0:
         var labels = _typed(c, "<i4", "i", 4, context)
-        var source = kit.host(ids)
-        decomp_f32_to_i32(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
-                          MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)), c)
-        _ = source  # keep the Python object alive through the native call above
+        decomp_f32_to_i32(kit.ptr(top.ids), MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)), c)
         _ = labels  # keep the Python object alive through the native call above
-        _ = source^
-        return Python.tuple(labels, kit.out_shape(values, Python.tuple(c)))
-    var order = py_call(context["output_context"]["array_type"], PythonObject("i"),
-                        py_call(context["output_context"]["native_bytes_type"], 4 * max(n, 1)))
-    var order_address = Int(py=py_call(order.buffer_info)[0])
-    var skip_address = 0 if skip < 0 else kit.at(skip)
-    var c = 0
-    if n:
-        # XD_TOPN_DESC (was the Python entry x_decomp_topn_desc)
-        var top: List[Int] = [kit.at(s), skip_address, order_address]
-        c = kit.xd(XD_TOPN_DESC, top, [m, n], List[Float64](), False)
-    var values = kit.zeros(max(c, 1), 1)
-    if c:
-        # XD_GATHER (was the Python entry x_decomp_gather)
-        var moved: List[Int] = [kit.at(s), order_address, kit.at(values)]
-        _ = kit.xd(XD_GATHER, moved, [c], List[Float64](), True)
+        return Python.tuple(labels, decomp_kit_out_shape(door, kit, top.values, Python.tuple(c)))
     var labels = _typed(c, "<i4", "i", 4, context)
     var scores = _typed(c, "<f4", "f", 4, context)
     if c:
         unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)),
-               src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=order_address), count=c)
+               src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=kit.iaddr(top.order)), count=c)
         _ = labels  # keep the Python object alive through the native call above
-        unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=scores._addr)),
-               src=DecompF32(unsafe_from_address=Int(py=kit.address(values))), count=c)
+        unsafe_memcpy(dest=DecompF32(unsafe_from_address=Int(py=scores._addr)), src=kit.ptr(top.values), count=c)
         _ = scores  # keep the Python object alive through the native call above
-        _ = values  # keep the Python object alive through the native call above
-    _ = order^
     return Python.tuple(labels, scores)
-
-
-def _one_row(mut kit: DecompKit, a: Int, index: Int) raises -> Int:
-    # `_M.rows(i, i + 1)`, whose store must hold one row.
-    if index < 0 or index >= kit.nrows(a):
-        raise Error("x_decomp: matrix store does not match its shape")
-    return kit.rows_of(a, index, index + 1)
 
 
 def als_query(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if not py_contains(fields, "user_factors"):
         raise Error("RuntimeError: AlternatingLeastSquares is not fitted; call fit first")
-    var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
+    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
+    var door = DecompDoor(entries, context["output_context"])
     # The fitted model of this query: its factors stay on the device (N325).
-    kit.owner = model
+    door.owner = model
+    var kit = decomp_kit_unpack(entries)
     try:
+        var py = Python()
         if operation == "recommend":
             # args: (userid, user_items, N, filter_already_liked_items)
-            var users = _fitted(kit, fields["user_factors"], "user_factors", context)
-            var items = _fitted(kit, fields["item_factors"], "item_factors", context)
+            var users = _fitted(door, kit, fields["user_factors"], "user_factors", context)
+            var items = _fitted(door, kit, fields["item_factors"], "item_factors", context)
             var userid = decomp_int(args[0])
-            var u = _one_row(kit, users, userid)
-            var s = kit.mm(u, items, tb=True)
+            _row_check(kit, users, userid)
             var count = decomp_int(args[2])
             if count < 0:
                 raise Error("recommend: N must be non-negative, got " + String(py=py_call(native_loaded_module("builtins").str, args[2])))
-            var skip = -1
+            var r = -1
+            var skip_row = 0
             if Bool(py=args[3]) and args[1] is not None:
-                var r = _matrix(kit, args[1], "user_items", context)
+                r = decomp_door_input(door, kit, args[1], "user_items", context)
                 var rows = kit.nrows(r)
                 var cols = kit.ncols(r)
-                if cols != kit.ncols(s) or not (rows == 1 or (0 <= userid and userid < rows)):
+                var width = kit.nrows(items)
+                if cols != width or not (rows == 1 or (0 <= userid and userid < rows)):
                     raise Error("recommend: user_items of shape (" + String(rows) + ", " + String(cols) + ") has no row "
-                                + String(userid) + " over the " + String(kit.ncols(s)) + " items")
-                skip = kit.rows_of(r, 0 if rows == 1 else userid, (0 if rows == 1 else userid) + 1)
-            return _topn(kit, s, count, skip, context)
+                                + String(userid) + " over the " + String(width) + " items")
+                skip_row = 0 if rows == 1 else userid
+            var top = AlsTop(0, -1, -1, -1)
+            with GILReleased(py):
+                top = als_recommend_run(kit, users, items, userid, count, r, skip_row)
+            return _topn_pack(door, kit, top, context)
         if operation == "similar_items":
             # args: (itemid, N)
             var source = fields["item_factors"]
             # The unit-normalised item factors depend on item_factors alone:
             # computed by the first similar_items of a fitted state and kept on
-            # the device for the next (DecompKit.resident_keep), the same words
-            # the same steps would compute again (N325).
-            var unit = kit.resident_derived(source, _ALS_UNIT)
+            # the device for the next (decomp_door_resident_keep), the same
+            # words the same steps would compute again (N325).
+            var unit = decomp_door_resident_derived(door, kit, source, _ALS_UNIT)
+            var y = -1
             if unit < 0:
-                var y = _fitted(kit, source, "item_factors", context)
-                var squares = kit.ew(XD_SQ, y)
-                var sums = kit.rowsum(squares)
-                var norms = kit.ew(XD_SQRT, sums)
-                unit = kit.ew(XD_DIV, y, norms)
-                _ = kit.resident_keep(source, _ALS_UNIT, unit)
-            var row = _one_row(kit, unit, decomp_int(args[0]))
-            var s = kit.mm(row, unit, tb=True)
+                y = _fitted(door, kit, source, "item_factors", context)
+            var itemid = decomp_int(args[0])
+            _row_check(kit, unit if unit >= 0 else y, itemid)
             var count = decomp_int(args[1])
             if count < 0:
                 raise Error("similar_items: N must be non-negative, got " + String(py=py_call(native_loaded_module("builtins").str, args[1])))
-            return _topn(kit, s, count, -1, context)
+            var computed = unit < 0
+            var top = AlsTop(0, -1, -1, -1)
+            with GILReleased(py):
+                if computed:
+                    unit = als_unit_run(kit, y)
+                top = als_similar_run(kit, unit, itemid, count)
+            if computed:
+                _ = decomp_door_resident_keep(door, kit, source, _ALS_UNIT, unit)
+            return _topn_pack(door, kit, top, context)
         raise Error("unknown native AlternatingLeastSquares operation")
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def als_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

@@ -71,7 +71,7 @@ def mixture_numeric_mode_binding() raises -> PythonObject:
 
 def mixture_native_api_v1_binding() raises -> PythonObject:
     """The typed GaussianMixture transport (core/mixture_native_api.mojo)
-    the mixture door (bindings/mixture_native.mojo) scores a saved model
+    the mixture door (bindings/mixture_native_door.mojo) scores a saved model
     through; its fit refuses (this binding compiles none)."""
     var api = GMM_NATIVE_INFER_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)

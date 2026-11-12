@@ -441,7 +441,7 @@ class KernelDensity(NumericModeMixin):
 
     # The constructor checks (`_validate_params`), the device-resident fit
     # handle and its release live in the native owner
-    # (bindings/neighbors_kde_native.mojo): `fit`, `score_samples` and `score`
+    # (bindings/neighbors_kde_native_door.mojo): `fit`, `score_samples` and `score`
     # are one native call each.
 
     def _release_resident_fit(self):
@@ -564,7 +564,7 @@ class KernelDensity(NumericModeMixin):
 
 
 # `save` and `load` are one native call each: the schema below, and
-# bindings/host_archive_native.mojo `host_archive_density` with the load's
+# bindings/host_archive_native_door.mojo `host_archive_density` with the load's
 # refusals. The resident device fit is released by the native finalizer.
 _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     _native_archive_bridge.fitted("_x"),

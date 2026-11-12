@@ -32,7 +32,7 @@
 # (internal readers take an Array or an ndarray over the same storage).
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules, native_loaded_module, native_namespace_string_keys
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.native_instance_item import native_instance_find_admitted

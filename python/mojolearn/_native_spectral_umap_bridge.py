@@ -10,7 +10,7 @@ _SYMBOLS = {
         "spectral_fit_predict_dataset", "spectral_fit_predict_dataset_state", "spectral_predict",
         "spectral_embedding_dense", "spectral_embedding_graph", "spectral_embedding_dataset",
         # The resident prediction state (lane ne1-a-cluster-spectral, N326;
-        # bindings/cfb_spectral.mojo `_sc_resident`): optional, absent on the
+        # bindings/cfb_spectral_door.mojo `_sc_resident`): optional, absent on the
         # CPU host binding, where predict keeps the per-call entry.
         "spectral_predict_prepare", "spectral_predict_release", "spectral_predict_resident",
     )),

@@ -21,7 +21,7 @@ from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.sequential_inputs import sequential_input
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from bindings.xcnn_common import (

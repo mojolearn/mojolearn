@@ -2,7 +2,7 @@
 """Capture native Array slots and retained buffer metadata without input hooks."""
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.mode_metadata_native import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem

@@ -14,7 +14,7 @@ result method applies to the native result: the plain method's public
 conversion for a caller outside the package, the native result otherwise.
 
 THE DRIVER NEGATIVE CONTROL keeps its two variables, now read natively
-(bindings/parallel_shard_common.mojo `shard_read_shift`): with
+(bindings/parallel_shard_common_door.mojo `shard_read_shift`): with
 MOJOLEARN_PAR_DRIVER_SABOTAGE=1 and MOJOLEARN_HOST_ALLOW_SABOTAGE=1 every
 shard on an owner above rank 0 whose true start is above 0 reads one position
 early while it is still placed at its true offset. Inert at one device.
@@ -26,7 +26,7 @@ PAR_DRIVER_SABOTAGE = 'MOJOLEARN_PAR_DRIVER_SABOTAGE'
 
 def par_driver_sabotage():
     """True when both switch variables are set: what the native drivers read
-    at call time (bindings/parallel_shard_common.mojo `shard_read_shift`),
+    at call time (bindings/parallel_shard_common_door.mojo `shard_read_shift`),
     for a record that states whether the run carried the control."""
     import os
     return (os.environ.get(PAR_DRIVER_SABOTAGE) == '1'

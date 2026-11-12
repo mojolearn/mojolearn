@@ -25,7 +25,7 @@ from bindings.linalg_ops_native import linalg_ops_operation
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_dtype
 from bindings.native_buffer_owner import native_storage_allocate
-from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
+from providers.python.byte_lm_metadata_pyapi_door import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
 from bindings.admitted_sequence import admit_nd_owned_f32
 from core.training_state_validation import training_byte_shape_validate
 from core.sha256 import sha256_hex_addr

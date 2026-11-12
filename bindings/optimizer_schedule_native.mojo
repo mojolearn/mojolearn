@@ -3,7 +3,7 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
 from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec_admitted

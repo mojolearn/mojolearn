@@ -54,7 +54,7 @@ def test_fold_equals_an_independent_numpy_oracle_bit_for_bit():
 def test_frame_round_trip_and_oversize_refusal():
     # Since the cross-vendor protocol moved into native code (e28c8bcf3,
     # cc4c14732) framing runs on owned native sockets only; a Python socket
-    # object is refused by bindings/native_transport.mojo.
+    # object is refused by bindings/native_transport_door.mojo.
     import socket
     from mojolearn import _backend
     native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call

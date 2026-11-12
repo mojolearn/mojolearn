@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def native_numpy_module_fields(module: PythonObject) raises -> PythonObject:

@@ -88,7 +88,7 @@ def _labels_1d(y):
 def _flatten(obj):
     """Every leaf of a nested list/tuple (or anything with `tolist()`) as
     one flat Python list; a scalar is a one-element list."""
-    # read once natively (bindings/user_objects_native.mojo flatten)
+    # read once natively (bindings/user_objects_native_door.mojo flatten)
     from . import _user_objects
     return _user_objects.call("flatten", obj)
 

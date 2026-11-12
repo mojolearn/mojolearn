@@ -16,8 +16,8 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.cfb_dbscan import cfb_dbscan_operation
-from bindings.dbscan_native_boundary import dbscan_holder_admit, dbscan_holder_empty, dbscan_release
-from bindings.neighbors_kde_native import neighbors_kde_operation, _kde_release
+from bindings.dbscan_native_boundary_door import dbscan_holder_admit, dbscan_holder_empty, dbscan_release
+from bindings.neighbors_kde_native_door import neighbors_kde_operation, _kde_release
 from bindings.kde_native_boundary import kde_owner_admit
 from bindings.kde_admission_boundary import kde_admission_hit, kde_admission_remember, kde_admission_drop
 from bindings.public_lifecycle_owner import lifecycle_admit_fields

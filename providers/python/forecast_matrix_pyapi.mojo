@@ -6,7 +6,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from bindings.sequential_admission import _one_of
-from providers.python.arima_buffer_pyapi import ArimaBuffer, arima_buffer
+from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from providers.python.autoarima_lifecycle_pyapi import _integer, _number
 from providers.python.forecast_initialize_pyapi import _scalar
 from providers.python.forecast_owner_pyapi import forecast_commit

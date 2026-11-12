@@ -11,7 +11,7 @@ from std.python import Python, PythonObject
 from std.memory import bitcast
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get, _pd_type_fields
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from providers.python.resample_pandas_pyapi import _rp_sparse_field

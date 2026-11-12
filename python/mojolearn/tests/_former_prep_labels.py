@@ -40,7 +40,7 @@ def _numeric_labels(values):
     """The labels as floats when every one is a real number that float32
     holds exactly (so the device's categories are the labels themselves),
     else None (str labels, ints beyond 2**24: the Python route)."""
-    # every label read once natively (bindings/user_objects_native.mojo f32_exact)
+    # every label read once natively (bindings/user_objects_native_door.mojo f32_exact)
     from mojolearn import _user_objects
     return _user_objects.call("f32_exact", values)
 
@@ -93,7 +93,7 @@ def _multilabel_indicator(y):
         return None
     if len(y[0]) < 2:
         return None
-    # the rows read once natively (bindings/user_objects_native.mojo indicator)
+    # the rows read once natively (bindings/user_objects_native_door.mojo indicator)
     status, words, width = _user_objects.call("indicator", y)
     if status == 1:
         raise ValueError("mojolearn: y rows have different lengths")

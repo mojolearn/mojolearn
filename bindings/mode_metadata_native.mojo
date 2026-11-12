@@ -4,7 +4,7 @@
 # default_mode, getattr hooks, or a Python truth/string conversion protocol.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys, native_mapping_string_keys
 from bindings.native_error_class import error_without_class

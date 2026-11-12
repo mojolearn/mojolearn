@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """`operator.index` through the one CPython table, for the tokenizer, causal
 LM and byte LM bindings. The table this module held moved into
-`bindings/cpython_table.mojo` (lane ne1-e-table, 2026-11-06); call sites use
+`bindings/py_cpython_table.mojo` (lane ne1-e-table, 2026-11-06); call sites use
 `cpython_table()[].<Name>`."""
 
 from std.python import PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def lm_try_index(value: PythonObject, mut word: Int) raises -> Bool:

@@ -29,7 +29,10 @@ from bindings.admitted_input import AdmittedBuf, admitted_zeros
 from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
 from providers.python.linalg_result_pyapi import linalg_result_new
 from bindings.kit_call import kit_connect, kit_capabilities, kit_entry_ref
-from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES
+from x_decomp.descriptor_schema import (
+    XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES, XD_TSQR_R, XD_TSQR_Q, XD_R_SIGNS,
+)
+from core.entry_table import EntryRef, entry_ref_call
 from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_svd_hermitian_run
 from bindings.linalg_ops_decomp_run import _lin_tsqr_on
 
@@ -120,36 +123,58 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
     return out
 
 
-def _lin_tsqr_release(binding: PythonObject, context: PythonObject):
-    """`_tsqr_release`: drop the factorization the binding kept."""
+def _lin_entry(binding: PythonObject) raises -> EntryRef:
+    """UNPACK: the x_decomp image's dispatch alone (the TSQR route needs no
+    kit), from the binding's connected snapshot (bindings/kit_call.mojo)."""
+    var snapshot = kit_connect(binding, "x_decomp_native_api_v1", String(XD_ABI_NAME),
+                               XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES)
+    var entry = kit_entry_ref(snapshot, XD_OPERATION_COUNT)
+    _ = snapshot  # keep the snapshot alive through the read above
+    return entry
+
+
+def _lin_tsqr_call(entry: EntryRef, op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
+    """One TSQR table operation (XD_TSQR_R / XD_TSQR_Q / XD_R_SIGNS; were the
+    binding's Python entries x_decomp_tsqr_r / _tsqr_q / _r_signs), the GIL
+    released as the doors released it. The caller keeps every address alive."""
+    var result = 0
+    var py = Python()
+    with GILReleased(py):
+        result = entry_ref_call(entry, op, addresses, ints, List[Float64]())
+    return result
+
+
+def _lin_tsqr_release(entry: EntryRef):
+    """`_tsqr_release`: drop the factorization the image kept (XD_TSQR_Q with
+    k == 0 reads no word; one native word stands in for both buffers)."""
     try:
-        var one = admitted_zeros([1], "<f4", context)
-        _ = family_call(neural_descriptor_entry(binding, "x_decomp_tsqr_q"), PythonObject(one.addr),
-                        PythonObject(one.addr), lin_ints(1, 1, 0))
-        _ = one  # keep the Python object alive through the native call above
+        var one = List[Float32](length=1, fill=0.0)
+        var addresses: List[Int] = [Int(one.unsafe_ptr()), Int(one.unsafe_ptr())]
+        _ = _lin_tsqr_call(entry, XD_TSQR_Q, addresses, [1, 1, 0])
+        _ = one^  # keep the word alive through the call above
     except:
         pass
 
 
-def _lin_tsqr_r(binding: PythonObject, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool,
+def _lin_tsqr_r(entry: EntryRef, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool,
                 context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_r`: R (cols x cols) of the TSQR of a; `keep` holds the
-    factorization in the binding for one `_tsqr_q`."""
+    factorization in the image for one `_tsqr_q`."""
     var r = admitted_zeros([cols, cols], "<f4", context)
     # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
     # (m, d, nrhs, keep); b is not read when nrhs is 0
-    _ = family_call(neural_descriptor_entry(binding, "x_decomp_tsqr_r"), PythonObject(a.addr), PythonObject(a.addr),
-                    PythonObject(r.addr), lin_ints(rows, cols, 0, 1 if keep else 0))
+    var addresses: List[Int] = [a.addr, a.addr, r.addr]
+    _ = _lin_tsqr_call(entry, XD_TSQR_R, addresses, [rows, cols, 0, 1 if keep else 0])
     _ = r  # keep the Python object alive through the native call above
     return r^
 
 
-def _lin_tsqr_q(binding: PythonObject, c_addr: Int, rows: Int, cols: Int, k: Int,
+def _lin_tsqr_q(entry: EntryRef, c_addr: Int, rows: Int, cols: Int, k: Int,
                 context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_q`: Q C (rows x k) for the kept factorization; C is cols x k."""
     var out = admitted_zeros([rows, k], "<f4", context)
-    _ = family_call(neural_descriptor_entry(binding, "x_decomp_tsqr_q"), PythonObject(c_addr), PythonObject(out.addr),
-                    lin_ints(rows, cols, k))
+    var addresses: List[Int] = [c_addr, out.addr]
+    _ = _lin_tsqr_call(entry, XD_TSQR_Q, addresses, [rows, cols, k])
     _ = out  # keep the Python object alive through the native call above
     return out^
 
@@ -234,21 +259,22 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> Pyt
     # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
     if mode == "reduced" and _lin_tsqr_on(rows, cols):
         # `_qr_tsqr`: (Q, R), R's diagonal non-negative
-        var r = _lin_tsqr_r(binding, a, rows, cols, True, context)
+        var entry = _lin_entry(binding)
+        var r = _lin_tsqr_r(entry, a, rows, cols, True, context)
         var signs = admitted_zeros([cols, cols], "<f4", context)
         var signed = False
         try:
             # R's rows signed so its diagonal is non-negative, and C the
             # diagonal of those signs (x_decomp/api.mojo r_signs_py)
-            _ = family_call(neural_descriptor_entry(binding, "x_decomp_r_signs"), PythonObject(r.addr),
-                            PythonObject(signs.addr), lin_ints(cols))
+            var addresses: List[Int] = [r.addr, signs.addr]
+            _ = _lin_tsqr_call(entry, XD_R_SIGNS, addresses, [cols])
             _ = signs  # keep the Python object alive through the native call above
             _ = r  # keep the Python object alive through the native call above
             signed = True
         finally:
             if not signed:
-                _lin_tsqr_release(binding, context)
-        var q = _lin_tsqr_q(binding, signs.addr, rows, cols, cols, context)
+                _lin_tsqr_release(entry)
+        var q = _lin_tsqr_q(entry, signs.addr, rows, cols, cols, context)
         _ = signs  # keep the Python object alive through the native call above
         var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
         _ = signs  # keep the Python object alive through the native call above
@@ -350,7 +376,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
         if not hermitian and not full and _lin_tsqr_on(rows, cols):
             # `_svd_tsqr`: the SVD of the TSQR's R, then U = Q U_R
             var rtol = _lin_rtol(context)
-            var r = _lin_tsqr_r(binding, a, rows, cols, True, context)
+            var r = _lin_tsqr_r(kit.entry, a, rows, cols, True, context)
             var s = 0
             var vt = 0
             var c_store = PythonObject(None)
@@ -368,8 +394,8 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 done = True
             finally:
                 if not done:
-                    _lin_tsqr_release(binding, context)
-            var u = _lin_tsqr_q(binding, Int(py=classical_address(c_store)), rows, cols, cols, context)
+                    _lin_tsqr_release(kit.entry)
+            var u = _lin_tsqr_q(kit.entry, Int(py=classical_address(c_store)), rows, cols, cols, context)
             _ = c_store  # keep the Python object alive through the native call above
             var result = _lin_named("SVDResult", Python.tuple(u.keep, _lin_out_vector(kit, s, cols, context),
                                                               _lin_out(kit, vt, context)), context)

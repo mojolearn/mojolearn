@@ -14,7 +14,7 @@ from bindings.native_array_storage import native_array_from_bytes
 from bindings.optimizer_public_words import stash_python_error
 from bindings.umap_parameters_native import umap_is_string
 from bindings.manifold_temporal_native import temporal_object_kind
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.native_scalar_decode import NativeRealBits
 
 

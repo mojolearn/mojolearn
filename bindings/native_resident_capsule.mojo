@@ -17,7 +17,7 @@ from std.ffi import external_call, c_size_t
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_resident_capsule_run import _RESIDENT_NAMES, _ResidentWords, _ResidentBytes
 
 

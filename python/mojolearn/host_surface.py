@@ -3641,7 +3641,7 @@ FAMILIES = (
         classes=(),
         display="the model catalog and language-model corpora",
         host_modules=("bindings/model_catalog_native.mojo",
-                      "bindings/lm_corpus_public_native.mojo",),
+                      "bindings/lm_corpus_public_native_door.mojo",),
         exports=(
             "catalog_public_call",
             "lm_corpus_public_call",
@@ -3717,7 +3717,7 @@ FAMILIES = (
         display="the multi-device drivers, neighbor queries, forecasting and the small MLP",
         host_modules=("bindings/parallel_shard_native.mojo",
                       "bindings/neighbor_query_native.mojo",
-                      "bindings/parallel_forecast_native.mojo",
+                      "bindings/parallel_forecast_native_door.mojo",
                       "bindings/tsa_public_native.mojo",
                       "bindings/small_mlp_native.mojo",),
         exports=(

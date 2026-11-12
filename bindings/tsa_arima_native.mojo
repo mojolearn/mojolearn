@@ -22,7 +22,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.mode_metadata_native import _fields, _class_fields, _truth
 from providers.python.arima_lifecycle_pyapi import arima_order
 from providers.python.autoarima_lifecycle_pyapi import _buffer, _packed, _integer, _integer_object
-from providers.python.arima_buffer_pyapi import ArimaBuffer, arima_buffer
+from providers.python.arima_buffer_pyapi_door import ArimaBuffer, arima_buffer
 from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed

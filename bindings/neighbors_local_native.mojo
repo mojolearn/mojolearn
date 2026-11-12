@@ -18,7 +18,7 @@
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.admitted_family import admit_family
@@ -30,7 +30,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_pandas import classical_admit_value
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.label_admission_native import labels_primitive_kind
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native_door import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
     FAMILY_F64P, family_repr, family_call, family_field,
@@ -40,7 +40,7 @@ from bindings.classical_labels import (
     labels_cast, classical_encode_labels,
     labels_decode_i32_codes, classical_accuracy,
 )
-from bindings.labels_descriptor_boundary import labels_class_ratio_f64
+from bindings.labels_descriptor_boundary_door import labels_class_ratio_f64
 from bindings.nearest_centroid_provider import NcConnection
 from bindings.lof_provider import LofConnection
 from core.lof_plan import LofLabelsPlan, lof_f32_address, lof_offset

@@ -11,7 +11,7 @@ from bindings.host_kernel_inference_native import _kernel_entry
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_svc_native import _svc_input
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native_door import host_sparse_format
 from bindings.host_tree_native import host_tree_wide
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_pandas import classical_admit_value

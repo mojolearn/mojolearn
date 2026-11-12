@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Python door for model/tensor/pipeline partitioned captured graphs
 # (partition_entries.mojo): argument unpacking and results only.
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_setitem

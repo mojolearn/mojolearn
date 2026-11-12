@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_arrays import classical_input, classical_is_array, classical_typed, classical_address
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, _pd_class, _pd_fields, _pd_get, _pd_locations
 from bindings.classical_validate import RESHAPE_HINT
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch, _one_of, sequential_admit_value
 from bindings.sequential_inputs import _promote

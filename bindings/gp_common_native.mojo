@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# The shared pieces of the Gaussian process owners (bindings/gp_regressor_native.mojo,
-# bindings/gp_classifier_native.mojo): the binding's compile-time mode cross-check
+# The shared pieces of the Gaussian process owners (bindings/gp_regressor_native_door.mojo,
+# bindings/gp_classifier_native_door.mojo): the binding's compile-time mode cross-check
 # (`_extension`), its typed descriptor capability word, `numeric_mode_used`, and the
 # kernel objects read natively from their instance fields: the postfix spec
 # `_kernel_arrays` packed (bindings/archive_schema_native.mojo reads the same node
@@ -12,13 +12,13 @@ from bindings.gp_kernel_storage_boundary import GPPackedKernel
 from bindings.admitted_family import admit_family, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _plan
-from bindings.gp_native_boundary import GPConnection
+from bindings.gp_native_boundary_door import GPConnection
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from std.memory import unsafe_memcpy
 from bindings.family_common import family_repr, family_is_str, family_call, family_array, FAMILY_F32P
 from bindings.classical_arrays import classical_address
 from bindings.archive_schema_native import _schema_kernel_layouts
-from bindings.gp_kernel_public_native import gp_kernel_native_nodes
+from bindings.gp_kernel_public_native_door import gp_kernel_native_nodes
 
 
 
@@ -48,7 +48,7 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
     var b = native_loaded_module("builtins")
     var want = gp_mode_wanted(model, context)
     var connection = GPConnection(binding)
-    var got = connection.mode
+    var got = connection.native.mode
     if got >= 0:
         var wanted = py_get(context["family_gp_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:
@@ -60,15 +60,15 @@ def gp_extension(model: PythonObject, binding: PythonObject, prefix: String, reb
 
 def gp_caps(binding: PythonObject) raises -> Int:
     var connection = GPConnection(binding)
-    return connection.capabilities
+    return connection.native.capabilities
 
 
 def gp_numeric_mode_used(binding: PythonObject, context: PythonObject) raises -> PythonObject:
     var connection = GPConnection(binding)
-    var code = PythonObject(connection.mode)
+    var code = PythonObject(connection.native.mode)
     var table = context["backend_fields"]["_CODE_MODE"]
     if not py_contains(table, code):
-        raise Error("RuntimeError: Mojolearn: GP provider returned unknown numeric mode " + String(connection.mode))
+        raise Error("RuntimeError: Mojolearn: GP provider returned unknown numeric mode " + String(connection.native.mode))
     return table[code]
 
 

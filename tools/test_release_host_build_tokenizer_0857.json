@@ -73,7 +73,7 @@
    "230e8acb6c7562e561592597bb463c71ea51f6fad192e3353c7e1d6546340703"
   ],
   [
-   "bindings/byte_checkpoint_native.mojo",
+   "bindings/byte_checkpoint_native_door.mojo",
    "0dcef429c2303bd0424d3cfd4363b30190fff157893432f467377800207c4d40"
   ],
   [
@@ -109,7 +109,7 @@
    "037d2dbea17df481ca1ed76ed79f6b1ee340087439629cfda9702a504491051e"
   ],
   [
-   "bindings/classical_archive_read.mojo",
+   "bindings/classical_archive_read_door.mojo",
    "bec2b085e644da69f7275368e9a03be487030bc39f48cf941c4c8d8060460712"
   ],
   [
@@ -193,7 +193,7 @@
    "51cc766e7099859a7346bf34ddfc66072220d268f68943d39e759a563370db9d"
   ],
   [
-   "bindings/gp_classifier_native.mojo",
+   "bindings/gp_classifier_native_door.mojo",
    "761f488a015393ecc950a58f54e4625c2596fb14975c8cd790680012d93da160"
   ],
   [
@@ -205,7 +205,7 @@
    "66273eacde2a51892e6e5d0d572781dcb651f4bbc5df813ac01f8ec6c9d1c997"
   ],
   [
-   "bindings/host_archive_native.mojo",
+   "bindings/host_archive_native_door.mojo",
    "f8957bbbaa7167e24e08f847d78e03b8435a03ff683f5d2d63b498ab3c1237a6"
   ],
   [
@@ -217,7 +217,7 @@
    "324ce82639985eb20fce824a2eff54a1b4c6c9b5bc83d0fb6c098fcb9ae11605"
   ],
   [
-   "bindings/host_sparse_native.mojo",
+   "bindings/host_sparse_native_door.mojo",
    "973469efa66ffb4dc9c9c9babc2e37e87ae5fcb016dbf6989cc79789b39015ac"
   ],
   [
@@ -293,7 +293,7 @@
    "b031089f524cb58d5eeae575721c1a5aa475d9996e24648c7c8c9cb760258794"
   ],
   [
-   "bindings/native_idna.mojo",
+   "bindings/native_idna_door.mojo",
    "06577b25fdad42bb13ee53e230972a5ebff39a1767c66d6310232e576f306443"
   ],
   [
@@ -305,7 +305,7 @@
    "0c5e683f4f7bdd7a1abf8365aa89354dbc0c242849f856b50d008878d00bbe29"
   ],
   [
-   "bindings/native_json.mojo",
+   "bindings/native_json_door.mojo",
    "8d39d463d449aef6b0fb0d01adbb9468ea2e4f9b77e4d27a05e45c3c89451e97"
   ],
   [
@@ -325,7 +325,7 @@
    "005e93066074acd4d0af05fe980c23ac2574141ebe73720bf193263bf1fa16e6"
   ],
   [
-   "bindings/native_process_pool.mojo",
+   "bindings/native_process_pool_door.mojo",
    "e4741e6a46c8b0c8caa3e628588acba5afe9a1c2c67fec99c1cb3981a0fda88c"
   ],
   [
@@ -337,11 +337,11 @@
    "03de954c312670b734faa8b6e4a7feec1ae80147afb58674815e1fee5cbe8cd8"
   ],
   [
-   "bindings/native_transport.mojo",
+   "bindings/native_transport_door.mojo",
    "9f673109f2c71a4f0b655a768448cb08e4bfafc2e23687ba892e8211c2e430ad"
   ],
   [
-   "bindings/native_worker_inventory.mojo",
+   "bindings/native_worker_inventory_door.mojo",
    "0d40a8b51d2357a9f1c511b439f0fc15b465f7da202116492aed65752dfdc9eb"
   ],
   [
@@ -353,7 +353,7 @@
    "83331982196583d6c1a8d343ee7598d3754cca012a4e7784e3e6b864cd9c73c2"
   ],
   [
-   "bindings/neighbors_kde_native.mojo",
+   "bindings/neighbors_kde_native_door.mojo",
    "a00e26feeb251f8fd5b9143fa22540fd8b3d9f653411051c843a764db31e8fdd"
   ],
   [
@@ -373,7 +373,7 @@
    "9c4deaaf5a920d1ee79504fad19f45df67737cab9102c96638d5d93c40b1943a"
   ],
   [
-   "bindings/optimizer_device_native.mojo",
+   "bindings/optimizer_device_native_door.mojo",
    "de43309367e70c3fc28f245aafc8eb9fb0449a3cda8e31fe0815d54076891173"
   ],
   [
@@ -409,15 +409,15 @@
    "b0471994c26f6224245285d2441dc1852f5e217ae198a66d1599717d6d130295"
   ],
   [
-   "bindings/parallel_forecast_native.mojo",
+   "bindings/parallel_forecast_native_door.mojo",
    "ef84cc3305bd7137b4286a8897793ce1d6a8a1a25b76a4468235b27094cd01d1"
   ],
   [
-   "bindings/parallel_mlp_native.mojo",
+   "bindings/parallel_mlp_native_door.mojo",
    "4028292639fee41939a8911a34d56c5eeed8c3712c414bde732fac5d472762f4"
   ],
   [
-   "bindings/parallel_neighbor_worker.mojo",
+   "bindings/parallel_neighbor_worker_door.mojo",
    "ef8435496af785a1c692a1731276f1ff0ddb6d0934de78b15c68e52b4ab572ed"
   ],
   [
@@ -425,7 +425,7 @@
    "850bdaef9dd0a127dfdb8bef0205d163e0d31f0499c9f9fabbd915a2e0fb9216"
   ],
   [
-   "bindings/parallel_neural_native.mojo",
+   "bindings/parallel_neural_native_door.mojo",
    "9c1a1cb1099528d173161d7062be3e6bbaab372df73a6345c740aab6a7a315f7"
   ],
   [
@@ -437,7 +437,7 @@
    "29324004c919c00bbbd0b52540979b736dd3fa9c6680c2a03082a3944b436b93"
   ],
   [
-   "bindings/parallel_shard_common.mojo",
+   "bindings/parallel_shard_common_door.mojo",
    "75687b7245cb3fb861267caab2373618acbff3f957f6ae26896f33aa78e78a61"
   ],
   [
@@ -525,7 +525,7 @@
    "f741c1fdfd19de3a18e3089d407b767c129c4d840bc23dff038aef8ff8f9d2f6"
   ],
   [
-   "bindings/scaler_native.mojo",
+   "bindings/scaler_native_door.mojo",
    "a05efc8dba3dc546d369c246287791e0879dd038e11abe46ceadd6b9bbb122e0"
   ],
   [
@@ -561,7 +561,7 @@
    "b76ac2b083b09c671ed035533fef5623f48afa2e9268186aada5ddbd7d271c16"
   ],
   [
-   "bindings/sequence_string_storage.mojo",
+   "bindings/sequence_string_storage_door.mojo",
    "94a76c35d519d52fc2505409f7a012b9ba25ea599594fc99d36f1ab4f1eff889"
   ],
   [
@@ -593,11 +593,11 @@
    "bed8b7544cefb94dbe076fd92760df516bbbb829b037c49ce663d782960ddc3b"
   ],
   [
-   "bindings/training_embedding_native.mojo",
+   "bindings/training_embedding_native_door.mojo",
    "169df21d6444523010271c9e76c7a667029de2c574e3a4508ad9f428dd95c681"
   ],
   [
-   "bindings/training_extra_native.mojo",
+   "bindings/training_extra_native_door.mojo",
    "35c5f3ca018205488734188a7873ed7954a1feeb43905f9fddbff0109337c34e"
   ],
   [
@@ -649,7 +649,7 @@
    "3c1026f14396df06000e32160dbd79f96bf8ba5bee5789527f4f103086da5d5e"
   ],
   [
-   "bindings/user_objects_native.mojo",
+   "bindings/user_objects_native_door.mojo",
    "6ec3ef05717b304f195ffde61062063ef17c814030706fc45f4be74ecde94ab0"
   ],
   [

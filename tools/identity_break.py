@@ -11244,7 +11244,7 @@ def _run_reference(args):
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
     # THE NON-COOPERATIVE DRIVERS' ARM (lane/par-sabotage-defines, 2026-09-20): the same two
-    # variables the native drivers read at call time (bindings/parallel_shard_common.mojo
+    # variables the native drivers read at call time (bindings/parallel_shard_common_door.mojo
     # `shard_read_shift`), BOTH `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
     # `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`, so the column cannot say "clean" while the drivers
     # shift. It is NOT a harness switch: nothing in this file is perturbed. What moves is the

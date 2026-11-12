@@ -21,13 +21,13 @@
 #   UTF-8 form: the helper answers P3_TEXT_FALLBACK and the caller runs its
 #   former code-point path unchanged.
 #
-# The C entries come from the one CPython table, bindings/cpython_table.mojo
+# The C entries come from the one CPython table, bindings/py_cpython_table.mojo
 # (this module's own table moved there, lane ne1-e-table, 2026-11-06).
 from std.python import Python, PythonObject
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 from bindings.py_balanced import py_call, py_setitem
 from core.p3_labels_metrics_run import (

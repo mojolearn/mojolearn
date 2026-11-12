@@ -7,7 +7,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_buffer_owner import native_buffer_view
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from providers.python.autograd_import_metadata_pyapi import _fields, _raise_object
 from providers.python.autograd_python_errors_pyapi import graph_python_error
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING

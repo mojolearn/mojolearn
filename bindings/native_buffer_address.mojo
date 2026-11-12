@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Read the address of an already-admitted, owned native contiguous buffer.
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def native_buffer_address(value: PythonObject) raises -> Int:

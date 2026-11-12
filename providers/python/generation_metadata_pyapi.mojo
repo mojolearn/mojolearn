@@ -6,7 +6,7 @@
 from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_get, py_type, py_call, py_contains
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_array_snapshot, generation_buffer_view
@@ -359,8 +359,8 @@ from bindings.generation_buffers import generation_mutable
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
 from providers.python.transformer_block_session_pyapi import transformer_block_session_open, transformer_block_session_handle
 from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
-from providers.python.native_execution_pyapi import AdmittedNativeExecution
-from providers.python.operation_lock_pyapi import OperationLockLease
+from providers.python.native_execution_pyapi_door import AdmittedNativeExecution
+from providers.python.operation_lock_pyapi_door import OperationLockLease
 from core.generation_metadata import generation_transformer_addresses
 from transformer.native_generation_engine import NativeGenerationLayer, NativeGenerationModel
 

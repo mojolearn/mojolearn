@@ -406,7 +406,7 @@ _GP_FORMAT = "mojolearn-gp-1"
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled owner of the public methods, connected once at import:
 # GaussianProcessRegressor's fit, predict, sample_y, log_marginal_likelihood
-# and score are one native call each (bindings/gp_regressor_native.mojo).
+# and score are one native call each (bindings/gp_regressor_native_door.mojo).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.connect_bindings("_mojolearn_gp")
 

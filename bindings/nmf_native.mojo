@@ -15,7 +15,7 @@ from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_
 from bindings.decomp_scalar_compare import decomp_equal_admitted as _equal, decomp_name_admitted as _name
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.public_lifecycle_owner import lifecycle_admit_fields
-from bindings.nmf_descriptor_boundary import nmf_connection, nmf_run_fit, nmf_run_inverse
+from bindings.nmf_descriptor_boundary_door import nmf_connection, nmf_run_fit, nmf_run_inverse
 from core.nmf_native_state import NMFScratch, nmf_output_shape
 from bindings.classical_arrays import classical_typed_native
 from core.nmf_native_api import (

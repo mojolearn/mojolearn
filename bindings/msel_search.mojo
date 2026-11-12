@@ -24,7 +24,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.arena_materialize_native import _cast
-from bindings.msel_parameter_grid import parameter_grid_dicts, PreparedParameterGrid
+from bindings.msel_parameter_grid_door import parameter_grid_dicts, PreparedParameterGrid
 from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
     family_type_name,
@@ -44,11 +44,24 @@ from bindings.msel_helpers_released import msel_gather_i64
 # linked into this door instead of called through CPython.
 from core.array_helpers_impl import row_means_f64, row_stds_f64
 from bindings.family_common import FAMILY_I32P
-from bindings.msel_cv import (
-    msel_clone, msel_cv_folds, msel_cv_splitter, msel_cv_folds_admitted, msel_materialize_y, msel_device_rows_ok,
-    msel_unit_jobs, msel_cv_units, msel_scorers, MselFoldRows, MselScores,
-    msel_cross_validate_run, msel_seconds, msel_fit, msel_fit_planned, msel_error_value,
+from bindings.msel_cv_door import (
+    msel_clone,
+    msel_cv_folds,
+    msel_cv_splitter,
+    msel_cv_folds_admitted,
+    msel_materialize_y,
+    msel_device_rows_ok,
+    msel_unit_jobs,
+    msel_cv_units,
+    msel_scorers,
+    MselFoldRows,
+    MselScores,
+    msel_cross_validate_run,
+    msel_fit,
+    msel_fit_planned,
+    msel_error_value,
 )
+from bindings.msel_cv_run import msel_seconds
 from bindings.msel_estimator_native import msel_native_clone_planned
 
 from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan

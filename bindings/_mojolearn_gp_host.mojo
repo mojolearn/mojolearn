@@ -601,7 +601,7 @@ def gp_native_api_v1_binding() raises -> PythonObject:
 def _publish_gp_table(module: PythonObject) raises:
     # The _mojolearn_gp_host column of the GP table (core/gp_entry_table.mojo), CPU
     # vendor word 0; the key is recorded as the module attribute
-    # `gp_native_key` for the GP owners (bindings/gp_native_boundary.mojo).
+    # `gp_native_key` for the GP owners (bindings/gp_native_boundary_door.mojo).
     var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), 0, GP_COLUMN_HOST)
     var api = GP_HOST_NATIVE_API.get_or_create_ptr()
     gp_table_publish(key, Int(api[].entries.unsafe_ptr()), api[].entries[0])

@@ -3,7 +3,7 @@
 # descriptors may bind; arbitrary Python properties/hooks are never called.
 from bindings.native_loaded_module import native_loaded_module, NativeModules, native_namespace_string_keys
 from bindings.admitted_call import AdmittedCall
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_key_same, prepared_class_stamp, prepared_class_matches
 from std.python import Python, PythonObject

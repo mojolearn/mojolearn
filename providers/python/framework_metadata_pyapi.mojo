@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_json import native_path_exists, native_json_parse
+from bindings.native_json_door import native_path_exists, native_json_parse
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.optimizer_public_words import stash_python_error

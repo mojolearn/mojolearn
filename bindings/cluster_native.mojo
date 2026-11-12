@@ -21,7 +21,7 @@ from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.agglo_native_boundary import agglo_reference_labels, agglo_scalar_repr, agglo_hash_admitted
+from bindings.agglo_native_boundary_door import agglo_reference_labels, agglo_scalar_repr, agglo_hash_admitted
 from core.agglo_native_state import agglo_metric_code
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
@@ -29,7 +29,7 @@ from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.cluster_resident_table import (
     cres_variant_lookup, cres_variant_store,
 )
-from bindings.kmeans_variants_boundary import (
+from bindings.kmeans_variants_boundary_door import (
     variants_connection, variants_span, variants_pack_f32, variants_pack_i32,
 )
 from bindings.kmeans_variants_resident_boundary import VariantsResidentLease, variants_resident_prepare, variants_resident_retire
@@ -63,7 +63,7 @@ def _xc_fitted(mut mods: NativeModules, model: PythonObject, attr: String) raise
 def _xc_f32_ready(source: PythonObject, context: PythonObject) raises -> Bool:
     """`source` is an exact Array or ndarray, 2-D, non-empty, float32 in C
     order: `as_f32_c(source, ndim=2)` would admit it and return its own
-    storage (the test of bindings/mixture_native.mojo `_f32_ready`)."""
+    storage (the test of bindings/mixture_native_door.mojo `_f32_ready`)."""
     var cls = py_type(source)
     if cls is not context["array_class"] and cls is not py_get(context, "ndarray"):
         return False

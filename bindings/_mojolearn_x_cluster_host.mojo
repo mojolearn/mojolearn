@@ -45,7 +45,7 @@ def hierarchy_cluster_native_api_v1_binding() raises -> PythonObject:
 
 def bgmm_native_api_v1_binding() raises -> PythonObject:
     # The typed BGMM / GaussianMixture option-parity transport
-    # (core/bgmm_native_api.mojo); bindings/mixture_native.mojo reads it.
+    # (core/bgmm_native_api.mojo); bindings/mixture_native_door.mojo reads it.
     var api = BGMM_NATIVE_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 

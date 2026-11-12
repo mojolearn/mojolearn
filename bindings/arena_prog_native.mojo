@@ -32,7 +32,7 @@ from bindings.x_prep_native_owner import xprep_address, _resident, _cached_slot,
 from bindings.x_prep_native_inputs import _values, _rows_fields, _dense_values
 from bindings.x_prep_native_owner import xprep_drop_resident
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_array_arena_records import P3_DICT_NATIVE_STRING_KEYS, p3_dict_admitted, p3_dict_admit
 from bindings.arena_prog_run import _switch, _add_input, _merge_pairs, _pad, MetricArenaOwner, MetricProgramInput, metrics_plan_execute
 from std.python._cpython import GILReleased

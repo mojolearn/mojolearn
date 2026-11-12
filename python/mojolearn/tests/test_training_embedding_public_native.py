@@ -223,7 +223,7 @@ def test_public_embedding_refuses_replaced_native_entries(monkeypatch, entry):
     operation = 'embedding_backward' if entry == 'embedding_backward' else 'embedding_forward'
     source, ids = np.ones((4, 3), dtype='f4'), np.array([2, 0, 2, 1], dtype='i8')
     # An exact int list is read natively without the array constructor
-    # (bindings/training_embedding_native.mojo embedding_int_list); a list with
+    # (bindings/training_embedding_native_door.mojo embedding_int_list); a list with
     # a float leaf still builds its index storage through it.
     if entry == 'array_type': ids = [2.0, 0, 2, 1]
     args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)

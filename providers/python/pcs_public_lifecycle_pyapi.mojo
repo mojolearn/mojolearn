@@ -20,7 +20,7 @@ from core.native_scalar_decode import native_scalar_real
 from core.cast_in import CAST_KIND_FLOAT
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin
 from providers.python.radius_public_lifecycle_pyapi import radius_target
-from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall
+from providers.python.neighbors_public_lifecycle_pyapi_door import NeighborPublicCall
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_feature_check
 
 

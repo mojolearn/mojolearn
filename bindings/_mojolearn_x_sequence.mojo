@@ -37,7 +37,7 @@ from sequence.opt_resident import AF_RESIDENT
 from providers.python.sequence_opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
 from providers.python.autograd_program_device_pyapi import ops_imported_run_device_py
-from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
+from providers.python.autograd_torch_program_pyapi_door import ops_torch_program_run_py
 from providers.python.autograd_program_control_pyapi import ops_program_control_py
 from providers.python.autograd_distributed_pyapi import (
     distributed_object,

@@ -9,7 +9,7 @@ from bindings.native_array_snapshot import native_array_snapshot, native_array_s
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit, NATIVE_TORCH, _torch_type_fields
 from bindings.array_native import _as_c, _values, _row, _ints, _tuple
 from bindings.array_native_run import _prod, _both_orders
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 comptime SMALL_MLP_ITEMS_PENDING = "small-mlp-items: native iterator exception pending"
 

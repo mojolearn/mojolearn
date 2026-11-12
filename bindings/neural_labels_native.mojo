@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, ExternalFunction
 from std.ffi import c_int
 from bindings.py_balanced import py_call, py_type
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from core.borrowed_buffer import BorrowedBufferLayout
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype

@@ -15,7 +15,7 @@ from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, n
 from x_decomp.descriptor_schema import xd_vendor_code
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 
-from providers.python.linear_entry_boundary import linear_entry_connection
+from providers.python.linear_entry_boundary_door import linear_entry_connection
 from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_METRICS, linear_table_entry
 
 

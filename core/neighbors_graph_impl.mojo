@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Host marshaling helper of the graph and SVGP doors
-# (bindings/neighbors_graph_native.mojo, lane native-neighbors-20261024):
+# (bindings/neighbors_graph_native_door.mojo, lane native-neighbors-20261024):
 # integer index bookkeeping only, no arithmetic on data.
 
 

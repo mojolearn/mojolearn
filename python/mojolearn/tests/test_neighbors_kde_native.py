@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """KernelDensity `fit`, `score_samples` and `score` are one native call each
-(bindings/neighbors_kde_native.mojo, `family_xn_kde_*`): the stored state,
+(bindings/neighbors_kde_native_door.mojo, `family_xn_kde_*`): the stored state,
 the scores and every refusal equal the former Python path
 (`_legacy_neighbors_kde`, frozen at b32103c00) bit for bit."""
 

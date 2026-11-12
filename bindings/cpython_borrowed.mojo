@@ -5,7 +5,7 @@
 # them as p3_type_word / p3_item). No loops here.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def borrowed_type_word(raw: PyObjectPtr) raises -> Int:

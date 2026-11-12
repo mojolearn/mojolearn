@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """LabelPropagation / LabelSpreading and the chi2 samplers: each public method
-is one native call (bindings/neighbors_semi_native.mojo) whose outputs and
+is one native call (bindings/neighbors_semi_native_door.mojo) whose outputs and
 fitted state equal the former Python path's bit for bit
 (`_legacy_neighbors_semi`, frozen at b32103c00), with the same refusals."""
 import struct

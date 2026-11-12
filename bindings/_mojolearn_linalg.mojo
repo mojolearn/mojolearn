@@ -128,7 +128,7 @@ from gemm.checks.gemm_int15 import (
 from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.apple_fast_bf16_public import (
+from bindings.apple_fast_bf16_public_door import (
     initialize_fast_bf16_boundary,
     fast_bf16_available_binding,
     fast_to_bf16_binding,

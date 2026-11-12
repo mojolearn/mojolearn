@@ -157,7 +157,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.classical_attributes import _type_mro
 from providers.python.array_metadata_pyapi import array_shape_once
-from bindings.gp_kernel_public_native import gp_kernel_nodes
+from bindings.gp_kernel_public_native_door import gp_kernel_nodes
 from bindings.gp_mapping_boundary import gp_mapping_snapshot
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_label_snapshot_native import gp_label_list as _label_list
@@ -169,7 +169,7 @@ from bindings.classical_arrays import classical_address, classical_wrap_array, c
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_archive import classical_archive_write, _archive_array, _archive_unpack_member, _archive_class_name_unpack
-from bindings.classical_archive_read import _archive_builtin_repr
+from bindings.classical_archive_read_door import _archive_builtin_repr
 from bindings.trees_public_iforest import iforest_validate
 from bindings.cholesky_archive_native import cholesky_archive_write
 from providers.python.array_layout_boundary import native_shape_unpack

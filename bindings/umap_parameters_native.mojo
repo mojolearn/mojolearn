@@ -4,7 +4,7 @@
 # constructor checks does not require invoking UMAP._parameters or _extras.
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_instance_item import native_instance_item

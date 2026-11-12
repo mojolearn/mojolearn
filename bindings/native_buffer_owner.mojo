@@ -3,7 +3,7 @@
 # These acquire owned references without looking up mutable builtins fields.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def native_buffer_view(value: PythonObject) raises -> PythonObject:

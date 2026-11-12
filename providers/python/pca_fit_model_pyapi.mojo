@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_ty
 from bindings.sequential_admission import sequential_admit_value
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
-from bindings.pca_descriptor_boundary import pca_connection, pca_mode_name
+from bindings.pca_descriptor_boundary_door import pca_connection, pca_mode_name
 
 
 def pca_fit_fields(state: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:

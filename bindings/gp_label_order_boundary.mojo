@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_labels import _TextCodeStorage, _TextLabels
-from bindings.labels_score_boundary import score_keys_unpack, score_keys_index
+from bindings.labels_score_boundary_door import score_keys_unpack, score_keys_index
 from bindings.p3_labels_metrics_native import p3_text_classes
 from core.labels_score_keys import score_key_codes
 

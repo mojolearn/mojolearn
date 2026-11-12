@@ -11,7 +11,7 @@
 # compute the same bits.
 from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_type_word
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate

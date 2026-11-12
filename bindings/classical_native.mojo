@@ -13,7 +13,7 @@ from providers.python.linear_score_boundary import classical_linear_score
 from providers.python.linear_metadata_boundary import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
 from bindings.classical_attributes import classical_check_layout_call, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save, classical_archive_hash as classical_host_hash
-from bindings.classical_archive_read import classical_archive_load, classical_host_model
+from bindings.classical_archive_read_door import classical_archive_load, classical_host_model
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
 from bindings.native_operation_codes import operation_table
@@ -34,7 +34,7 @@ from bindings.admitted_call import AdmittedCall
 from core.linear_fit_types import LF_MODE, LF_VENDOR
 from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
 from providers.python.linear_execution_boundary import linear_execution_word
-from providers.python.linear_entry_boundary import linear_entry_identity
+from providers.python.linear_entry_boundary_door import linear_entry_identity
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -85,11 +85,11 @@
 set -u
 
 DEFAULT_SUSPECTS="bindings/admitted_call.mojo
-bindings/classical_archive_read.mojo
+bindings/classical_archive_read_door.mojo
 bindings/classical_native.mojo
 bindings/classical_pandas.mojo
 bindings/family_native.mojo
-bindings/gp_classifier_native.mojo
+bindings/gp_classifier_native_door.mojo
 bindings/host_inference_native.mojo
 bindings/logistic_native.mojo
 bindings/mcd_native.mojo
@@ -97,8 +97,8 @@ bindings/mcls_cluster.mojo
 bindings/mcls_common.mojo
 bindings/native_scalar_decode.mojo
 bindings/neighbors_ann_native.mojo
-bindings/neighbors_semi_native.mojo
-bindings/pca_fit_native.mojo
+bindings/neighbors_semi_native_door.mojo
+bindings/pca_fit_native_door.mojo
 bindings/prep_classify_native.mojo
 bindings/prep_composition_lifecycle.mojo
 bindings/prep_labels_native.mojo

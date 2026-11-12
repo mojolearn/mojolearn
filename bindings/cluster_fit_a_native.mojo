@@ -45,10 +45,10 @@ from core.hdbscan_fit_api import (
     HdbscanPredictionRequest, HdbscanPredictionPlan,
 )
 from bindings.hdbscan_fit_boundary import hdbscan_fit_connection, hdbscan_pack_head, hdbscan_buffer_span
-from bindings.optics_fit_boundary import optics_fit_connection, OpticsPackedResult
-from bindings.cluster_centroid_fit_boundary import centroid_fit_connection, CentroidPackedResult
+from bindings.optics_fit_boundary_door import optics_fit_connection, OpticsPackedResult
+from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection, CentroidPackedResult
 from bindings.affinity_preference_boundary import affinity_preference_prepare
-from bindings.kmeans_variants_boundary import (
+from bindings.kmeans_variants_boundary_door import (
     variants_connection, variants_span, VariantsAuxiliaryPins, VariantsPackedResult,
 )
 from providers.python.estimator_binding_pyapi import _estimator_mode_word
@@ -702,7 +702,7 @@ def _hdbscan_mode(model: PythonObject, binding: PythonObject, context: PythonObj
         # Perf (lane perf3-cluster-gp-gate): the compiled mode word is a
         # constant of the loaded binary, read once per (module, getter) for
         # the process, as GaussianMixture's _check_mode reads it
-        # (bindings/mixture_native.mojo), not called on every fit and query.
+        # (bindings/mixture_native_door.mojo), not called on every fit and query.
         var got = _estimator_mode_word(binding, getter)
         var wanted = py_get(context["family_cfa_hdbscan_mode_codes"], want, PythonObject(None))
         if wanted is None or Int(py=wanted) != got:

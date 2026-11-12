@@ -18,7 +18,7 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.x_prep_native_inputs import _target
-from bindings.scaler_native import _input, _ptr
+from bindings.scaler_native_door import _input, _ptr
 from core.preprocessing_program import prep_program_stage as _stage
 from x_prep.robust_native_run import _robust_fit_program
 from bindings.p3_prep_fitted import prep_fitted_vector

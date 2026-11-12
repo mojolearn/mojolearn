@@ -6,7 +6,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries, sequential_forward
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_descriptor, sequential_curve

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# PCA helpers shared by the native PCA owner (bindings/pca_fit_native.mojo,
+# PCA helpers shared by the native PCA owner (bindings/pca_fit_native_door.mojo,
 # bindings/pca_query_native.mojo) and the decomposition doors: the
 # input_copied_ rule, the compiled-entry refusal and too-small refusal text.
 from std.python import Python, PythonObject
@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_get, py_type
 from bindings.sequential_inputs import sequential_input
 from bindings.classical_arrays import classical_dtype_is
 
-# TOMBSTONE: pca_exact_fit, pca_input, pca_keep_fit, pca_prefix, pca_solver_checks and PCADimensions (the pre-owner PCA exact door; zero callers since bindings/pca_fit_native.mojo owns fit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# TOMBSTONE: pca_exact_fit, pca_input, pca_keep_fit, pca_prefix, pca_solver_checks and PCADimensions (the pre-owner PCA exact door; zero callers since bindings/pca_fit_native_door.mojo owns fit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 
 

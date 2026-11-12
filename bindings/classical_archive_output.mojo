@@ -7,7 +7,7 @@ native host pool. Arrays receive one writable owned copy of native payload bytes
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_setitem
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_numpy, classical_wrap_layout, classical_typed_native, classical_address

@@ -4,7 +4,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -21,7 +21,14 @@ from x_decomp.ipca_run import _state_name
 from bindings.public_lifecycle_owner import lifecycle_end, lifecycle_admit_fields
 from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPrevious, IPCAQueryRequest, IPCAFitResult, IPCAStateIds
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
-from bindings.ipca_descriptor_boundary import ipca_connection, ipca_resident, ipca_run_fit, ipca_run_partial, ipca_run_query, ipca_run_free
+from bindings.ipca_descriptor_boundary_door import (
+    ipca_connection,
+    ipca_run_fit,
+    ipca_run_partial,
+    ipca_run_query,
+    ipca_run_free,
+)
+from x_decomp.ipca_descriptor_boundary_run import ipca_resident
 from bindings.ipca_owner_boundary import ipca_owner_drop, ipca_owner_adopt, ipca_owner_cached, ipca_owner_operand, ipca_owner_handle
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]

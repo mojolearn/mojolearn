@@ -847,7 +847,7 @@ class OneClassSVM(_XNeighbors):
 
 
 # OneClassSVM's public methods are one call into the compiled SVM family
-# owner (bindings/svc_ocsvm_native.mojo); it reads this module's x_neighbors
+# owner (bindings/svc_ocsvm_native_door.mojo); it reads this module's x_neighbors
 # kernel codes and the MOJOLEARN_XN_OLD_ITEMS arm.
 _native_family_bridge.tables(family_svc_xn_kernels=dict(_KERNELS), family_svc_xn_old_items=_OLD_ITEMS)
 
@@ -1382,7 +1382,7 @@ class SkewedChi2Sampler(_XNeighbors):
     def random_weights_(self):
         """Random projection weights, shape (n_features, n_components)."""
         # SCHI2_LAZYW: made from z on the first read (one native call:
-        # bindings/neighbors_semi_native.mojo `schi2_public_weights`, main's
+        # bindings/neighbors_semi_native_door.mojo `schi2_public_weights`, main's
         # kernel and words) when no transform has made it yet. Stored under
         # `_random_weights` (an older pickle's plain attribute still reads).
         return _NATIVE(self, _OP.family_xn_schi2_weights, (), _NATIVE_CONTEXT)
@@ -1688,7 +1688,7 @@ class LabelSpreading(_LabelPropagationBase):
         return _NATIVE(self, _OP.family_xn_semi_lp_fit, (None, X, y), _NATIVE_CONTEXT)
 
 
-# The label propagation / chi2 sampler doors (bindings/neighbors_semi_native.mojo)
+# The label propagation / chi2 sampler doors (bindings/neighbors_semi_native_door.mojo)
 # read the import-time k-NN A/B arm from the shared context.
 _native_family_bridge.tables(family_xn_semi_unfused_knn=_UNFUSED_KNN)
 

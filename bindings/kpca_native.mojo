@@ -18,10 +18,17 @@ from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCAScratch, KPCADenseFit,
     KPCAFitPrepareRequest, KPCAAlphaRequest, KPCAQueryRequest, KPCA_PRECOMPUTED, kpca_shape,
 )
-from bindings.kpca_descriptor_boundary import (
-    kpca_near_connection, kpca_decomp_connection, kpca_resident,
-    kpca_run_prepare, kpca_run_eigen, kpca_run_alpha, kpca_run_fused, kpca_run_centered, kpca_run_finish,
+from bindings.kpca_descriptor_boundary_door import (
+    kpca_near_connection,
+    kpca_decomp_connection,
+    kpca_run_prepare,
+    kpca_run_eigen,
+    kpca_run_alpha,
+    kpca_run_fused,
+    kpca_run_centered,
+    kpca_run_finish,
 )
+from x_decomp.kpca_descriptor_boundary_run import kpca_resident
 
 
 def _field(fields: PythonObject, name: String) raises -> PythonObject:

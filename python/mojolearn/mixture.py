@@ -9,7 +9,7 @@
 # The default binding implements covariance_type='full', init_params 'kmeans'
 # (through the identity-certified k-means) and 'random' (position-mapped Philox
 # draws, DEVIATION 1733), n_init=1, warm_start=False; every other option is
-# routed to the cluster lane's mixture driver (bindings/mixture_native.mojo `_gmm_ext_fit`).
+# routed to the cluster lane's mixture driver (bindings/mixture_native_door.mojo `_gmm_ext_fit`).
 # A collapsed component raises (DEVIATION 1723). No speed claim.
 """Gaussian mixture models.
 
@@ -23,8 +23,8 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 
 # The compiled family owners, connected once at import: fit, fit_predict,
 # predict, predict_proba, score_samples, score, bic and aic of
-# GaussianMixture and BayesianGaussianMixture (bindings/mixture_native.mojo)
-# and `sample` (bindings/svm_mixture_native.mojo) are one native call each,
+# GaussianMixture and BayesianGaussianMixture (bindings/mixture_native_door.mojo)
+# and `sample` (bindings/svm_mixture_native_door.mojo) are one native call each,
 # with binding selection owned by native code. The covariance-type and init tables
 # are the option-parity solver's codes (x_cluster/entries.mojo::bgmm_entry).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
@@ -154,7 +154,7 @@ class GaussianMixture(NumericModeMixin):
     # EM runs one shot on the device (`gaussian_mixture_fit`). Option parity
     # (2026-09-27, lane/algos-cluster): any option this binding does not carry
     # runs the same EM on the cluster lane's mixture driver
-    # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native.mojo `_gmm_ext_fit`).
+    # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native_door.mojo `_gmm_ext_fit`).
     # The default fit is untouched and keeps its recorded bits.
     def _extension(self):
         return _NATIVE(self, "family_mix_gmm_public_binding", (), _NATIVE_CONTEXT)

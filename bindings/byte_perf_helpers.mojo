@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def byte_int_list_from_i32(address: Int, count: Int) raises -> PythonObject:

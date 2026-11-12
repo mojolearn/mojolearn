@@ -1105,7 +1105,7 @@ def _classification_labels(values, name, *, allow_empty=False):
     if not allow_empty and not labels:
         raise ValueError(f"{name} must contain at least one label")
     # the kind test and the conversion read the labels once natively
-    # (bindings/user_objects_native.mojo kinds, strs, ints)
+    # (bindings/user_objects_native_door.mojo kinds, strs, ints)
     got = _user_objects.kinds(labels)
     if got[_user_objects.KIND_STR] == len(labels):
         return _user_objects.call("strs", labels), "string"

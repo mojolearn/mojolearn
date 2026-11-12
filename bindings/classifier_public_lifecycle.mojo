@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_attr import py_attr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
 from bindings.classical_labels import _flatten_labels
 from bindings.native_buffer_owner import native_buffer_view

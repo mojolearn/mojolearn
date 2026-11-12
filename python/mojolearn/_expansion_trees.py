@@ -2654,7 +2654,7 @@ class TreeExplainer(_TreesEnsembleBase):
 
 
 # KernelExplainer / PermutationExplainer: every operation is one call into the
-# native owner (bindings/trees_agnostic_native.mojo). It admits the model
+# native owner (bindings/trees_agnostic_native_door.mojo). It admits the model
 # through its compiled model-selection plan, evaluates it there (never its
 # Python predict) and drives the xtrees agnostic kernels and chunk loops.
 class KernelExplainer(_TreesEnsembleBase):

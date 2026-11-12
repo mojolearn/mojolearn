@@ -196,7 +196,7 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
                                              msel_word(aa, 2), msel_word(aa, 3))
     if op == MH_STORE_FREE_BYTES:
         # The host column has no device memory to bound concurrent
-        # cross-validation units by (bindings/msel_cv.mojo msel_cv_units).
+        # cross-validation units by (bindings/msel_cv_door.mojo msel_cv_units).
         return -1
     raise Error("model-selection helpers: unknown operation " + String(op))
 

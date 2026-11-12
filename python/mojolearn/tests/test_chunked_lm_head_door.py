@@ -92,7 +92,7 @@ def test_the_door_is_public_and_its_debt_is_declared():
     impl = _read("python/mojolearn/_training_impl.py")
     assert "def chunked_lm_head_loss(" in impl
     # the public door is one native call; the owner runs both entries
-    owner = _read("bindings/training_extra_native.mojo")
+    owner = _read("bindings/training_extra_native_door.mojo")
     for name in NAMES:
         assert f'"{name}"' in owner, name
     # it left DECLARED_LANELESS on 2026-10-21: the coverage lane

@@ -51,11 +51,11 @@ def test_exports_registered_on_both_bindings_and_listed():
 
 
 def test_fused_doors_keep_the_op_chain_fallback():
-    ocsvm = _read('bindings/svc_ocsvm_native.mojo')
+    ocsvm = _read('bindings/svc_ocsvm_native_door.mojo')
     assert '_ocsvm_labels_available(binding)' in ocsvm and '"p2m_sign_label"' in ocsvm
     local = _read('bindings/neighbors_local_native.mojo')
     assert '_nc_fused_available(binding)' in local and '"row_argmax"' in local and '"knn_select"' in local
-    semi = _read('bindings/neighbors_semi_native.mojo')
+    semi = _read('bindings/neighbors_semi_native_door.mojo')
     assert '_lp_dense_available(binding)' in semi and '"row_normalize"' in semi
     cluster = _read('bindings/mcls_cluster.mojo')
     assert '"homogeneity_completeness_v_measure", False' in cluster and '"v_measure_score"' in cluster

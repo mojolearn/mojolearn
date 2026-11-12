@@ -279,7 +279,7 @@ def test_logistic_input_protocols_are_refused_before_python(tmp_path, method):
 @pytest.mark.parametrize("entry,count,method", [
     ("qn_predict_binary", 2, "predict"), ("qn_decision_function", 3, "decision_function"),
     # predict_proba runs decision and link in one fused `qn_proba` call when the
-    # binding exports it (bindings/host_logistic_native.mojo); qn_sigmoid and
+    # binding exports it (bindings/host_logistic_native_door.mojo); qn_sigmoid and
     # qn_softmax are only the fallback for a binding without it.
     ("qn_proba", 2, "predict_proba"), ("qn_proba", 3, "predict_proba"),
     ("py2mojo_linear_flags", 2, "predict_log_proba"), ("py2mojo_rows", 2, "predict_log_proba")])

@@ -49,7 +49,7 @@ from bindings.metrics_reg_native import _reg_weights
 from bindings.native_array_storage import native_array_zeros
 from bindings.p3_labels_metrics_native import (
     p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_present
 
 comptime MC_NONE = -1

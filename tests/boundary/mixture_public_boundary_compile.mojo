@@ -5,7 +5,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, raise_python_exception
 from providers.python.classical_family_admission_pyapi import classical_family_admit
-from bindings.mixture_native import mixture_operation
+from bindings.mixture_native_door import mixture_operation
 
 
 def mixture_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

@@ -7,7 +7,7 @@ from bindings.native_loaded_module import native_loaded_module
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session, ops_session_registry_token
 from autograd.program_save import program_save_verified
-from bindings.native_json import native_path
+from bindings.native_json_door import native_path
 from providers.python.autograd_import_metadata_pyapi import _fields
 from providers.python.autograd_session_frontend_pyapi import ops_session_fields
 from providers.python.autograd_program_arrays_pyapi import program_admission_context

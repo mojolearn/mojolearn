@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Exact scalar UNPACK for optimizers; no mutable builtin calls or hooks."""
 from std.python import PythonObject
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.optimizer_admission import opt_scalar
 from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_type

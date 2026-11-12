@@ -16,8 +16,6 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.math import ceil, floor, inf
-from std.memory import bitcast
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -30,54 +28,35 @@ from bindings.decomp_public_lifecycle import decomp_public_begin, decomp_public_
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner import lifecycle_end
 from bindings.decomp_kit_native import (
-    DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
-    decomp_input, decomp_is_a, XD_SUB, XD_ADD, XD_MUL, XD_SCALE, XD_ABS, XD_RECIP, XD_SELECT, XD_LOGS,
-    XD_ADDS, XD_LE,
+    DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries, decomp_is_a,
+    decomp_kit_unpack, decomp_kit_publish, decomp_kit_out_shape, decomp_door_borrow, decomp_door_input,
+    decomp_door_resident_hit, decomp_door_resident_input,
 )
-from core.decomp_native_impl import (
-    decomp_f32_to_u8, decomp_i32_to_u8, decomp_u8_to_f32, decomp_f32_to_i32, decomp_count_u8,
-)
-
-from x_decomp.descriptor_schema import XD_MCD, XD_CONSISTENCY_FACTOR, XD_CHI2_QUANTILE
-
-comptime MCD_F32_EPS = 1.1920928955078125e-07
-comptime MCD_LOG_2PI = 1.8378770664093453
-comptime MCD_TINY = 1.1754943508222875e-38
-
-
-def _mcd_scalar(kit: DecompKit, op: Int, floats: List[Float64]) raises -> Float64:
-    # One float64 result of the x_decomp table (XD_CONSISTENCY_FACTOR or
-    # XD_CHI2_QUANTILE; were the Python entries x_decomp_consistency_factor
-    # and x_decomp_chi2_quantile), written to a host word.
-    var word = List[Float64](length=1, fill=0.0)
-    var addresses: List[Int] = [Int(word.unsafe_ptr())]
-    _ = kit.xd(op, addresses, List[Int](), floats, True)
-    var value = word[0]
-    _ = word^
-    return value
+from bindings.decomp_kit_run import DKit, DK_SCALE, DK_ADDS
+from bindings.mcd_run import McdFit, mcd_fit_run, mcd_labels_run, mcd_score_run, mcd_mahal
+from core.decomp_native_impl import decomp_f32_to_i32
+from std.python._cpython import GILReleased
+from std.memory import unsafe_memcpy
 
 
 def _name(model: PythonObject) raises -> String:
     return String(py=py_type(model).__name__)
 
 
-def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    var array = decomp_input(source, name, context)
-    return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
-
-
-def _fitted(mut kit: DecompKit, fields: PythonObject, name: String, rows: Int, context: PythonObject) raises -> Int:
-    # A fitted float32 Array (location_ (p,) as 1 x p, _precision p x p).
-    var hit = kit.resident_hit(fields[name], name)  # frozen and resident: no re-admission
+def _fitted(mut door: DecompDoor, mut kit: DKit, fields: PythonObject, name: String, rows: Int,
+            context: PythonObject) raises -> Int:
+    # UNPACK a fitted float32 Array (location_ (p,) as 1 x p, _precision p x p).
+    var hit = decomp_door_resident_hit(door, kit, fields[name], name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
     var array = admit_x(fields[name], 1 if rows == 1 else 2, name, context)
     var size = Int(py=array.size)
-    # On a query its device copy is kept across calls (DecompKit.resident_input).
-    var held = kit.resident_input(fields[name], name, array, Int(py=classical_address(array)), array, rows, size // rows)
+    # On a query its device copy is kept across calls (the model's record).
+    var held = decomp_door_resident_input(door, kit, fields[name], name, array, Int(py=classical_address(array)),
+                                          array, rows, size // rows)
     if held >= 0:
         return held
-    return kit.input(array, rows, size // rows)
+    return decomp_door_borrow(door, kit, array, rows, size // rows)
 
 
 def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
@@ -87,262 +66,24 @@ def _typed(n: Int, typestr: String, code: String, item: Int, context: PythonObje
     return classical_wrap_array(store, Python.tuple(n), typestr, "C", output)
 
 
-def _f32_below(x: Float64) -> Float32:
-    # `_f32_below`: the largest float32 strictly below x.
-    var f = Float32(x)
-    if Float64(f) < x:
-        return f
-    var u = bitcast[DType.uint32](f)
-    if f > 0.0:
-        u -= 1
-    elif f == 0.0:
-        u = UInt32(0x80000001)
-    else:
-        u += 1
-    return bitcast[DType.float32](u)
+def _support_pack(support: List[UInt8], n: Int, context: PythonObject) raises -> PythonObject:
+    # PACK: the support words as the public '<u1' (n,) Array.
+    var out = _typed(n, "<u1", "B", 1, context)
+    if n:
+        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)),
+                      src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(support.unsafe_ptr())), count=n)
+        _ = out  # keep the Python object alive through the copy above
+    return out
 
 
-def _pinvh(mut kit: DecompKit, a: Int) raises -> Int:
-    # `_pinvh`: V diag(1/w) V^T over |w| > max|w| * n * float32 eps.
-    var wv = kit.eigh(a)
-    var w = wv[0]
-    var wmax = Float64(0.0)
-    if kit.ncols(w):
-        var top = kit.reduce(w, 0)
-        wmax = kit.word(top)
-    var cut = Float64(Float32(wmax * Float64(kit.nrows(a)) * MCD_F32_EPS))
-    var absolute = kit.ew(XD_ABS, w)
-    var inverse = kit.ew(XD_RECIP, w)
-    var zero = kit.zeros(1, 1)
-    var kept = kit.ew(XD_SELECT, absolute, inverse, zero, cut)
-    var scaled = kit.ew(XD_MUL, wv[1], kept)
-    return kit.mm(scaled, wv[1], tb=True)
-
-
-def _emp_cov(mut kit: DecompKit, xs: Int, assume_centered: Bool) raises -> Int:
-    # `_emp_cov`: (X - mean)^T (X - mean) / n.
-    var rows = kit.nrows(xs)
-    if assume_centered:
-        var gram = kit.mm(xs, xs, ta=True)
-        return kit.ew(XD_SCALE, gram, scalar=1.0 / Float64(rows))
-    var mean = kit.colmean(xs)
-    var centered = kit.ew(XD_SUB, xs, mean)
-    var gram = kit.mm(centered, centered, ta=True)
-    return kit.ew(XD_SCALE, gram, scalar=1.0 / Float64(rows))
-
-
-def _mahal(mut kit: DecompKit, x: Int, loc: Int, precision: Int) raises -> Int:
-    var centered = kit.ew(XD_SUB, x, loc)
-    var product = kit.mm(centered, precision)
-    var terms = kit.ew(XD_MUL, product, centered)
-    return kit.rowsum(terms)
-
-
-def _masked_cov(mut kit: DecompKit, m: Int, mask: Int, assume_centered: Bool) raises -> Tuple[Int, Int]:
-    # `_masked_cov`: the location and covariance of the masked rows.
-    var count = kit.total_word(mask)
-    var masked = kit.ew(XD_MUL, m, mask)
-    var loc: Int
-    var centered: Int
-    if assume_centered:
-        loc = kit.zeros(1, kit.ncols(m))
-        centered = masked
-    else:
-        var sums = kit.colsum(masked)
-        loc = kit.ew(XD_SCALE, sums, scalar=1.0 / count)
-        var shifted = kit.ew(XD_SUB, m, loc)
-        centered = kit.ew(XD_MUL, shifted, mask)
-    var rows = kit.nrows(centered)
-    var cols = kit.ncols(centered)
-    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
-    # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
-    var gram = kit.mm(centered, centered, ta=True)
-    return (loc, kit.ew(XD_SCALE, gram, scalar=1.0 / count))
-
-
-def _slogdet(mut kit: DecompKit, a: Int) raises -> Tuple[Float64, Float64]:
-    # `_slogdet`: (sign, log|det|) from the LU factor (sums ascending).
-    var factor = kit.lu(a)
-    var aux = kit.lu_aux(factor[0], factor[1])
-    # The small aux vector comes down once; the three words below are then
-    # host reads (they were three strided gathers and downloads; p3 rank 529).
-    _ = kit.host(aux[0])
-    if kit.word(aux[0], 1) > 0:
-        return (Float64(0.0), -inf[DType.float64]())
-    var negative = Int(kit.word(aux[0], 2)) + Int(kit.word(aux[0], 3))
-    var absolute = kit.ew(XD_ABS, aux[1])
-    var logs = kit.ew(XD_LOGS, absolute, scalar=MCD_TINY)
-    var ld = kit.total_word(logs)
-    return (Float64(-1.0) if negative % 2 != 0 else Float64(1.0), ld)
-
-
-def _mask_store(mut kit: DecompKit, mask: Int, n: Int, context: PythonObject) raises -> PythonObject:
-    # An n x 1 0/1 float32 matrix as the public '<u1' (n,) support.
-    var support = _typed(n, "<u1", "B", 1, context)
-    var source = kit.host(mask)
-    decomp_f32_to_u8(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
-                     MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)), n)
-    _ = source  # keep the Python object alive through the native call above
-    _ = support  # keep the Python object alive through the native call above
-    _ = source^
-    return support
-
-
-def _int_store(store: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    # `_support_of`: a 0/1 int32 membership store as the public '<u1' (n,) support.
-    var support = _typed(n, "<u1", "B", 1, context)
-    decomp_i32_to_u8(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
-                     MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)), n)
-    _ = support  # keep the Python object alive through the native call above
-    return support
-
-
-def _support_count(support: PythonObject, n: Int) raises -> Int:
-    return decomp_count_u8(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)), n)
-
-
-def _mcd_1d(mut kit: DecompKit, x: Int, h: Int, context: PythonObject) raises -> Tuple[Int, Int, PythonObject, Int]:
-    # `MinCovDet._mcd_1d_native`: (loc, cov, support, dist) for one feature.
-    var n = kit.nrows(x)
-    var order = kit.order(x)
-    var xs = kit.take_rows(x, order)
-    var loc: Int
-    var support: PythonObject
-    var chosen: Int
-    if h < n:
-        var upper = kit.rows_of(xs, h, n)
-        var lower = kit.rows_of(xs, 0, n - h)
-        var diff = kit.ew(XD_SUB, upper, lower)
-        var starts = kit.argmin_all(diff)
-        var ends = kit.take_rows(xs, starts, h)
-        var begins = kit.take_rows(xs, starts)
-        var sums = kit.ew(XD_ADD, ends, begins)
-        var mids = kit.ew(XD_SCALE, sums, scalar=0.5)
-        loc = kit.colmean(mids)
-        var shifted = kit.ew(XD_SUB, x, loc)
-        var centered = kit.ew(XD_ABS, shifted)
-        var selected = kit.select_smallest(centered, h)
-        chosen = kit.take_rows(x, selected[0])
-        if selected[1] >= 0:
-            support = _mask_store(kit, selected[1], n, context)
-        else:
-            support = _int_store(selected[2], n, context)
-    else:
-        loc = kit.colmean(x)
-        chosen = x
-        # every row is in the support: `_support_of(array("i", [1]) * n, n)`
-        var ones = py_call(context["output_context"]["array_type"], PythonObject("i"), Python.list(1)) * PythonObject(n)
-        support = _int_store(ones, n, context)
-    var cov = _emp_cov(kit, chosen, False)
-    var precision = _pinvh(kit, cov)
-    return (loc, cov, support, _mahal(kit, x, loc, precision))
-
-
-def mcd_fit(model: PythonObject, args: PythonObject, mut kit: DecompKit, context: PythonObject) raises -> Tuple[Int, Int]:
-    # `MinCovDet.fit` after the kit is connected: (X, dist_) as kit matrices.
-    var fields = py_fields(model)
-    var x = _matrix(kit, args[0], "X", context)
-    var n = kit.nrows(x)
-    var p = kit.ncols(x)
-    if n < 2:
-        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
-                    + ")) while a minimum of 2 is required by MinCovDet.")
-    var seed = decomp_seed(fields["random_state"])
-    py_setitem(fields, "_seed", seed)
-    py_setitem(fields, "_draws", PythonObject(0))
-    var fraction = fields["support_fraction"]
-    var h: Int
-    if fraction is None:
-        h = min((n + p + 2) // 2, n)        # min(int(ceil(0.5 * (n + p + 1))), n)
-    else:
-        h = decomp_int(fraction * PythonObject(n))
-    var loc: Int
-    var cov: Int
-    var support: PythonObject
-    var dist: Int
-    if p == 1:
-        var one = _mcd_1d(kit, x, h, context)
-        loc = one[0]
-        cov = one[1]
-        support = one[2]
-        dist = one[3]
-    else:
-        # fast_mcd in ONE binding call; only the O(1) plan integers here, with
-        # the float expressions they always used.
-        var params: List[Int] = [n, p, h, decomp_seed_word(seed), 0, 0, 0, 0, 0, 0, 0]
-        if n > 500:
-            var n_sub = n // 300
-            var n_ss = n // n_sub
-            var n_m = min(1500, n)
-            var share = Float64(h) / Float64(n)
-            params = [n, p, h, decomp_seed_word(seed), n_sub, n_ss, Int(ceil(Float64(n_ss) * share)),
-                      max(10, 500 // n_sub), n_m, Int(ceil(Float64(n_m) * share)), 10 if n > 1500 else 1]
-        loc = kit.zeros(1, p)
-        cov = kit.zeros(p, p)
-        dist = kit.zeros(n, 1)
-        var store = py_call(context["output_context"]["array_type"], PythonObject("i"),
-                            py_call(context["output_context"]["native_bytes_type"], 4 * n))
-        # XD_MCD (was the Python entry x_decomp_mcd)
-        var addresses: List[Int] = [kit.at(x), kit.at(loc), kit.at(cov), Int(py=py_call(store.buffer_info)[0]),
-                                    kit.at(dist)]
-        _ = kit.xd(XD_MCD, addresses, params, List[Float64](), True)
-        _ = store  # keep the Python object alive through the native call above
-        kit.wrote_host(loc)
-        kit.wrote_host(cov)
-        kit.wrote_host(dist)
-        support = _int_store(store, n, context)
-    var assume_centered = Bool(py=fields["assume_centered"])
-    if assume_centered:
-        loc = kit.zeros(1, p)
-        var weights = kit.zeros(n, 1)
-        decomp_u8_to_f32(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)),
-                         DecompF32(unsafe_from_address=Int(py=kit.address(weights))), n)
-        _ = weights  # keep the Python object alive through the native call above
-        cov = _masked_cov(kit, x, weights, True)[1]
-        var inverse = _pinvh(kit, cov)
-        var product = kit.mm(x, inverse)
-        var terms = kit.ew(XD_MUL, product, x)
-        dist = kit.rowsum(terms)
-    py_setitem(fields, "raw_location_", kit.out_shape(loc, Python.tuple(p)))
-    py_setitem(fields, "raw_covariance_", kit.publish(cov))
-    py_setitem(fields, "raw_support_", support)
-    # correct_covariance: consistency at the normal model (dist_ is rescaled)
-    var n_support = _support_count(support, n)
-    var corr = _mcd_scalar(kit, XD_CONSISTENCY_FACTOR, [Float64(p), Float64(n_support), Float64(n)])
-    dist = kit.ew(XD_SCALE, dist, scalar=1.0 / corr)
-    # reweight_covariance: the mask dist < thr (`le` against the float32 just below thr)
-    var thr = _mcd_scalar(kit, XD_CHI2_QUANTILE, [Float64(p), 0.025])
-    var below = kit.const(_f32_below(thr))
-    var mask = kit.ew(XD_LE, dist, below)
-    var moments = _masked_cov(kit, x, mask, assume_centered)
-    var factor = _mcd_scalar(kit, XD_CONSISTENCY_FACTOR, [Float64(p), 0.975, 1.0])
-    var covr = kit.ew(XD_SCALE, moments[1], scalar=factor)
-    var reweighted = _mask_store(kit, mask, n, context)
-    var precision = _pinvh(kit, covr)
-    py_setitem(fields, "location_", kit.out_shape(moments[0], Python.tuple(p)))
-    py_setitem(fields, "covariance_", kit.publish(covr))
-    var stored = kit.publish(precision)
-    py_setitem(fields, "_precision", stored)
-    py_setitem(fields, "precision_", stored if Bool(py=fields["store_precision"]) else PythonObject(None))
-    py_setitem(fields, "support_", reweighted)
-    var distances = _mahal(kit, x, moments[0], precision)
-    py_setitem(fields, "dist_", kit.out_shape(distances, Python.tuple(n)))
-    py_setitem(fields, "n_features_in_", PythonObject(p))
-    return (x, distances)
-
-
-def _offset(model: PythonObject, mut kit: DecompKit, dist: Int) raises:
-    # EllipticEnvelope's offset_: the contamination percentile of -dist_.
-    var fields = py_fields(model)
-    var nv = kit.size(dist)
-    var contamination = decomp_float(fields["contamination"])
-    var q = 100.0 * contamination / 100.0 * Float64(nv - 1)
-    var lo = Int(floor(q))
-    var hi = min(lo + 1, nv - 1)
-    var order = kit.order(dist)
-    var vlo = -kit.word(dist, Int(kit.word(order, nv - 1 - lo)))
-    var vhi = -kit.word(dist, Int(kit.word(order, nv - 1 - hi)))
-    py_setitem(fields, "offset_", PythonObject(Float64(Float32(vlo + (vhi - vlo) * (q - Float64(lo))))))
+def _labels_pack(mut kit: DKit, chosen: Int, rows: Int, context: PythonObject) raises -> PythonObject:
+    # PACK EllipticEnvelope.predict: the +1 / -1 float32 matrix as int32 labels.
+    var labels = _typed(rows, "<i4", "i", 4, context)
+    if chosen >= 0:
+        decomp_f32_to_i32(kit.ptr(chosen), MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)),
+                          rows)
+        _ = labels  # keep the Python object alive through the native call above
+    return labels
 
 
 def _check_fitted(model: PythonObject, fields: PythonObject) raises:
@@ -350,35 +91,65 @@ def _check_fitted(model: PythonObject, fields: PythonObject) raises:
         raise Error("RuntimeError: " + _name(model) + " is not fitted; call fit first")
 
 
-def _distances(mut kit: DecompKit, x: Int, fields: PythonObject, context: PythonObject) raises -> Int:
-    var p = kit.ncols(x)
-    var loc = _fitted(kit, fields, "location_", 1, context)
-    var precision = _fitted(kit, fields, "_precision", p, context)
-    return _mahal(kit, x, loc, precision)
-
-
-def _labels(mut kit: DecompKit, x: Int, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    # EllipticEnvelope.predict: 1 where -dist - offset_ >= 0, else -1.
-    var d = _distances(kit, x, fields, context)
-    var rows = kit.nrows(d)
-    var negated = kit.ew(XD_SCALE, d, scalar=-1.0)
-    var decision = kit.ew(XD_ADDS, negated, scalar=-Float64(py=fields["offset_"]))
-    var labels = _typed(rows, "<i4", "i", 4, context)
-    if rows == 0:
-        return labels
-    var flipped = kit.ew(XD_SCALE, decision, scalar=-1.0)
-    var zero = kit.const(0.0)
-    var ge = kit.ew(XD_LE, flipped, zero)
-    var plus = kit.const(1.0)
-    var minus = kit.const(-1.0)
-    var chosen = kit.ew(XD_SELECT, ge, plus, minus, 0.5)
-    var source = kit.host(chosen)
-    decomp_f32_to_i32(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
-                      MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)), rows)
-    _ = source  # keep the Python object alive through the native call above
-    _ = labels  # keep the Python object alive through the native call above
-    _ = source^
-    return labels
+def mcd_fit(model: PythonObject, args: PythonObject, envelope: Bool, predict: Bool,
+            context: PythonObject) raises -> PythonObject:
+    # `MinCovDet.fit` (and fit_predict): one UNPACK, one RUN, one PACK.
+    var fields = py_fields(model)
+    var mode = decomp_mode(fields["numeric_mode"], context)
+    py_setitem(fields, "numeric_mode_", mode)
+    var entries = decomp_entries(mode, context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
+    try:
+        # UNPACK: X, the seed, h and the options.
+        var x = decomp_door_input(door, kit, args[0], "X", context)
+        var n = kit.nrows(x)
+        var p = kit.ncols(x)
+        if n < 2:
+            raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
+                        + ")) while a minimum of 2 is required by MinCovDet.")
+        var seed = decomp_seed(fields["random_state"])
+        py_setitem(fields, "_seed", seed)
+        py_setitem(fields, "_draws", PythonObject(0))
+        var fraction = fields["support_fraction"]
+        var h: Int
+        if fraction is None:
+            h = min((n + p + 2) // 2, n)        # min(int(ceil(0.5 * (n + p + 1))), n)
+        else:
+            h = decomp_int(fraction * PythonObject(n))
+        var seed_word = decomp_seed_word(seed)
+        var assume_centered = Bool(py=fields["assume_centered"])
+        var contamination = decomp_float(fields["contamination"]) if envelope else 0.0
+        # RUN: fast_mcd, the corrections, the precision, the distances (and
+        # fit_predict's labels over the fit's own distances: predict(X) on the
+        # X the fit converted computes exactly these mahalanobis words again).
+        var fit = McdFit()
+        var chosen = -1
+        var py = Python()
+        with GILReleased(py):
+            fit = mcd_fit_run(kit, x, h, seed_word, assume_centered, envelope, contamination)
+            if predict:
+                chosen = mcd_labels_run(kit, fit.dist, fit.offset)
+        # PACK: the fitted fields, once.
+        py_setitem(fields, "raw_location_", decomp_kit_out_shape(door, kit, fit.raw_loc, Python.tuple(p)))
+        py_setitem(fields, "raw_covariance_", decomp_kit_publish(door, kit, fit.raw_cov))
+        py_setitem(fields, "raw_support_", _support_pack(fit.raw_support, n, context))
+        py_setitem(fields, "location_", decomp_kit_out_shape(door, kit, fit.loc, Python.tuple(p)))
+        py_setitem(fields, "covariance_", decomp_kit_publish(door, kit, fit.cov))
+        var stored = decomp_kit_publish(door, kit, fit.precision)
+        py_setitem(fields, "_precision", stored)
+        py_setitem(fields, "precision_", stored if Bool(py=fields["store_precision"]) else PythonObject(None))
+        py_setitem(fields, "support_", _support_pack(fit.support, n, context))
+        py_setitem(fields, "dist_", decomp_kit_out_shape(door, kit, fit.dist, Python.tuple(n)))
+        py_setitem(fields, "n_features_in_", PythonObject(p))
+        if envelope:
+            py_setitem(fields, "offset_", PythonObject(fit.offset))
+        if not predict:
+            return model
+        return _labels_pack(kit, chosen, n, context)
+    finally:
+        kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def mcd_operation(model: PythonObject, operation: String, args: PythonObject, envelope: Bool,
@@ -392,59 +163,54 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, en
             var op = native_loaded_module("operator")
             if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
                 raise Error("contamination must be in (0, 0.5]")
-        var mode = decomp_mode(fields["numeric_mode"], context)
-        py_setitem(fields, "numeric_mode_", mode)
-        var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
-        try:
-            var held = mcd_fit(model, args, kit, context)
-            if envelope:
-                _offset(model, kit, held[1])
-            if operation == "fit":
-                return model
-            # predict(X) on the X the fit converted and uploaded.
-            return _labels(kit, held[0], fields, context)
-        finally:
-            kit.close()
-    if operation == "get_precision":
-        _check_fitted(model, fields)
-        var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
-        try:
-            var p = Int(py=fields["_precision"].shape[0])
-            return kit.publish(_fitted(kit, fields, "_precision", p, context))
-        finally:
-            kit.close()
+        return mcd_fit(model, args, envelope, operation == "fit_predict", context)
     _check_fitted(model, fields)
-    var kit = DecompKit(decomp_entries(py_get(fields, "numeric_mode_"), context), context["output_context"])
-    # A query: the fitted location and precision stay on the device across calls.
-    kit.owner = model
+    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
+    var door = DecompDoor(entries, context["output_context"])
+    var kit = decomp_kit_unpack(entries)
     try:
-        var x = _matrix(kit, args[0], "X", context)
-        if operation == "mahalanobis":
-            var d = _distances(kit, x, fields, context)
-            return kit.out_shape(d, Python.tuple(kit.nrows(d)))
+        if operation == "get_precision":
+            var p = Int(py=fields["_precision"].shape[0])
+            return decomp_kit_publish(door, kit, _fitted(door, kit, fields, "_precision", p, context))
+        # A query: the fitted location and precision stay on the device across calls.
+        door.owner = model
+        # UNPACK: X, then the fitted location and precision (and offset_).
+        var x = decomp_door_input(door, kit, args[0], "X", context)
+        var p = kit.ncols(x)
+        var loc = _fitted(door, kit, fields, "location_", 1, context)
+        var precision = _fitted(door, kit, fields, "_precision", p, context)
+        var py = Python()
         if operation == "score":
-            # EmpiricalCovariance.score: X's covariance around location_ under the precision.
-            var p = kit.ncols(x)
-            var loc = _fitted(kit, fields, "location_", 1, context)
-            var precision = _fitted(kit, fields, "_precision", p, context)
-            var shifted = kit.ew(XD_SUB, x, loc)
-            var cov = _emp_cov(kit, shifted, True)
-            var product = kit.ew(XD_MUL, cov, precision)
-            var trace = kit.total_word(product)
-            var logdet = _slogdet(kit, precision)
-            return PythonObject(-(Float64(p) * MCD_LOG_2PI) / 2.0 - 0.5 * trace + 0.5 * logdet[1])
-        if operation == "score_samples" or operation == "decision_function":
-            var d = _distances(kit, x, fields, context)
-            var negated = kit.ew(XD_SCALE, d, scalar=-1.0)
-            if operation == "score_samples":
-                return kit.out_shape(negated, Python.tuple(kit.nrows(d)))
-            var decision = kit.ew(XD_ADDS, negated, scalar=-Float64(py=fields["offset_"]))
-            return kit.out_shape(decision, Python.tuple(kit.nrows(d)))
-        if operation == "predict":
-            return _labels(kit, x, fields, context)
+            var value = Float64(0.0)
+            with GILReleased(py):
+                value = mcd_score_run(kit, x, loc, precision)
+            return PythonObject(value)
+        if operation == "mahalanobis" or operation == "score_samples":
+            var out = -1
+            with GILReleased(py):
+                out = mcd_mahal(kit, x, loc, precision)
+                if operation == "score_samples":
+                    out = kit.ew(DK_SCALE, out, scalar=-1.0)
+            return decomp_kit_out_shape(door, kit, out, Python.tuple(kit.nrows(out)))
+        if operation == "decision_function" or operation == "predict":
+            var offset = Float64(py=fields["offset_"])
+            var out = -1
+            var rows = 0
+            with GILReleased(py):
+                var d = mcd_mahal(kit, x, loc, precision)
+                rows = kit.nrows(d)
+                if operation == "predict":
+                    out = mcd_labels_run(kit, d, offset)
+                else:
+                    var negated = kit.ew(DK_SCALE, d, scalar=-1.0)
+                    out = kit.ew(DK_ADDS, negated, scalar=-offset)
+            if operation == "predict":
+                return _labels_pack(kit, out, rows, context)
+            return decomp_kit_out_shape(door, kit, out, Python.tuple(rows))
         raise Error("unknown native MinCovDet operation")
     finally:
         kit.close()
+        door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
 def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, context: PythonObject) raises -> PythonObject:

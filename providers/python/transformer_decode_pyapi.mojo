@@ -21,7 +21,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, ne
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
 from core.shared_slot import SharedSlot
 

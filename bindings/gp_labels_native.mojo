@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # `_labels.encode_labels` and `_labels.decode_labels` for the Gaussian process
-# classifier's owner (bindings/gp_classifier_native.mojo), under the ORDER RULE
+# classifier's owner (bindings/gp_classifier_native_door.mojo), under the ORDER RULE
 # python/mojolearn/_labels.py states. A numeric label vector (a C-ordered Array
 # or ndarray of a native dtype, or a flat list of exact ints or exact floats) is
 # encoded by ONE call of the base binding's `prepare_targets` (the device encoder
@@ -43,7 +43,7 @@ from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
 from bindings.gp_labels_boundary import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
 from bindings.gp_label_input_boundary import gp_label_input
 from bindings.gp_label_order_boundary import gp_integer_classes
-from bindings.gp_mixed_label_boundary import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
+from bindings.gp_mixed_label_boundary_door import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"

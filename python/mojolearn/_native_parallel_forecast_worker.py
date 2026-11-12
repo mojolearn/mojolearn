@@ -16,7 +16,7 @@ _native_parallel_forecast('worker', sys.argv)
 # close request, when every reply has been delivered and the owner discards
 # this worker's state. End the process here instead of finalizing the
 # interpreter and every loaded native runtime, which the owner's reap would
-# otherwise wait for (bindings/native_process_pool.mojo, _process_reap_group).
+# otherwise wait for (bindings/native_process_pool_door.mojo, _process_reap_group).
 sys.stdout.flush()
 sys.stderr.flush()
 os._exit(0)

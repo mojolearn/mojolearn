@@ -21,9 +21,9 @@ from providers.python.estimator_binding_pyapi import estimator_binding, estimato
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding_mode
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit
 from providers.python.hierarchy_public_lifecycle_pyapi import hierarchy_public_begin, hierarchy_public_end, hierarchy_public_finish, hierarchy_public_refusal
-from providers.python.hierarchy_connectivity_pyapi import HierarchyConnectivity, hierarchy_connectivity
+from providers.python.hierarchy_connectivity_pyapi_door import HierarchyConnectivity, hierarchy_connectivity
 from providers.python.hierarchy_settings_pyapi import AggloSettings
-from bindings.agglo_native_boundary import (
+from bindings.agglo_native_boundary_door import (
     AggloBindings, AggloSolverConnection, AggloClusterConnection, AggloZeroRowsConnection,
     agglo_solver_run, agglo_cluster_run, agglo_zero_rows_run, agglo_array, agglo_publish, agglo_scalar_repr,
     agglo_hash_admitted, agglo_integer_admitted, agglo_float_admitted,

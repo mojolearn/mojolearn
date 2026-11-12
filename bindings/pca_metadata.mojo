@@ -7,7 +7,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
-from bindings.pca_descriptor_boundary import pca_connection
+from bindings.pca_descriptor_boundary_door import pca_connection
 
 
 def pca_dictionary(context: PythonObject) raises -> PythonObject:

@@ -438,7 +438,7 @@ class IVFIndex(NumericModeMixin):
     # save and load are one native call each: the schema below the class
     # (a resident build's `list_data_`, held only on the device, is exported
     # into the file by the binding's ivf_flat_index_export, leaving the
-    # index unchanged) and bindings/host_archive_native.mojo
+    # index unchanged) and bindings/host_archive_native_door.mojo
     # `host_archive_ivf`, as HostIVFIndex loads.
     def save(self, path):
         """Write the built index to `path` as an ``.npz`` file.

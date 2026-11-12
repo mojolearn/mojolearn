@@ -14,7 +14,7 @@ from bindings.classical_warnings import _warning_category, COLUMN_WARNING
 from bindings.classifier_public_lifecycle import _feature_names
 from bindings.metrics_native_support import metric_warn
 from bindings.sequential_admission import _one_of, _ordinary_torch
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.family_common import FAMILY_F32P, family_array, family_repr
 from bindings.classical_arrays import classical_address
 from bindings.parallel_public_result import parallel_public_result

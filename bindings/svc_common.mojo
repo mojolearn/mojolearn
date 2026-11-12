@@ -21,7 +21,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
 from bindings.classical_labels import _pandas_values, labels_type_name
@@ -30,7 +30,7 @@ from bindings.classical_labels import labels_accuracy, classical_score_from_code
 from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.p3_labels_metrics_native import p3_decode_list
-from bindings.labels_descriptor_boundary import labels_gather
+from bindings.labels_descriptor_boundary_door import labels_gather
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
     family_array, family_shape_repr,

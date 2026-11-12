@@ -13,7 +13,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
 from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_namespace_string_keys
 from bindings.p3_array_arena_records import (
     P3_CACHE_LAYOUT, p3_layout_admitted, p3_layout_admit,
@@ -73,7 +73,7 @@ def _store_free(entries: PythonObject, prefix: String, slot: Int) raises:
 def xprep_address(value: PythonObject) raises -> Int:
     # Only retained native array.array/mmap/memoryview storage reaches here.
     # The two buffer calls go through the process-wide CPython table
-    # (bindings/cpython_table.mojo), not a dlsym per call (perf2-prep).
+    # (bindings/py_cpython_table.mojo), not a dlsym per call (perf2-prep).
     ref cpy = Python().cpython()
     var view = List[Int](length=10,fill=0)
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()

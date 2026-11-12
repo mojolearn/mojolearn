@@ -11,7 +11,7 @@ from training.checks.optimizer_contract import microbatch_split_is_identical
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease
-from bindings.optimizer_descriptor_boundary import optimizer_driver
+from bindings.optimizer_descriptor_boundary_door import optimizer_driver
 from bindings.samba_optimizer_boundary import samba_optimizer_provider, samba_optimizer_primitives, samba_optimizer_execute, samba_optimizer_transfer
 from core.samba_optimizer_plan import SambaOptimizerPlan
 from training.optimizer_public_common import OptHyper

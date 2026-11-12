@@ -9,7 +9,7 @@ from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_type
 from bindings.gp_mapping_boundary import gp_mapping_snapshot
 from bindings.gp_common_native import gp_kernel_arrays
-from bindings.gp_kernel_public_native import gp_kernel_snapshot
+from bindings.gp_kernel_public_native_door import gp_kernel_snapshot
 
 comptime GP_KERNEL_PACK_SLOT = "gp_kernel_pack_v1"
 comptime GP_KERNEL_CLASS_SLOT = "gp_kernel_class_admitted_v1"

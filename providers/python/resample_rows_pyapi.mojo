@@ -17,7 +17,7 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_buffer_address import native_buffer_address
 
 

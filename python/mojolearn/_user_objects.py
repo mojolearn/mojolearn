@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The door of the user-object reader (bindings/user_objects_native.mojo).
+"""The door of the user-object reader (bindings/user_objects_native_door.mojo).
 
 A Python object that cannot cross into Mojo as a buffer (a list of label
 objects, a ragged nested list, a user's index pairs or group ids) is handed
@@ -18,7 +18,7 @@ _CALL = []
 _REFUSALS = {"TypeError": TypeError, "ValueError": ValueError, "IndexError": IndexError,
              "OverflowError": OverflowError}
 
-# ("kinds", values) counters, bindings/user_objects_native.mojo KIND_*
+# ("kinds", values) counters, bindings/user_objects_native_door.mojo KIND_*
 KIND_STR, KIND_BOOL, KIND_EXACT_INT, KIND_INTEGRAL, KIND_REAL = 0, 1, 2, 3, 4
 KIND_INTVAL, KIND_SEQ, KIND_INT_OR_BOOL, KIND_PLAIN_INT, KIND_REAL_NONBOOL = 5, 6, 7, 8, 9
 

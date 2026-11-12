@@ -5,7 +5,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_item
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequence_dtype_native import sequence_dtype_create
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_namespace_string_keys, native_mapping_string_keys
 from bindings.p3_array_arena_records import P3_STATS_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit
 

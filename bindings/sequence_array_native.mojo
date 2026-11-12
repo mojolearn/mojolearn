@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native dtype-schema admission and result ownership for sequence __array__.
 from bindings.native_loaded_module import native_loaded_module
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.memory import bitcast
@@ -13,7 +13,7 @@ from bindings.sequence_print_options import sequence_print_mode
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize, sequence_dtype_allocation_shape
-from bindings.sequence_string_storage import sequence_string_admit, sequence_string_leaf
+from bindings.sequence_string_storage_door import sequence_string_admit, sequence_string_leaf
 
 
 def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObject,

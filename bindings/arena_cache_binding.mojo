@@ -6,7 +6,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_item
 from bindings.arena_cache_stats import _attribute, _mapping, _string_keys
 from bindings.optimizer_public_words import stash_python_error
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def _cache_entry_name(prefix: PythonObject, suffix: String,

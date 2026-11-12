@@ -18,7 +18,7 @@ def test_device_execution_is_shared_and_native():
 
 
 def test_torch_uses_common_provider_without_internal_packed_execution():
-    frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi.mojo').read_text()
+    frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi_door.mojo').read_text()
     assert 'imported_device_provider_run(snapshot, descriptors, addresses)' in frontend
     assert 'py_call(run,' not in frontend
     provider = (ROOT / 'providers/python/autograd_device_provider_pyapi.mojo').read_text()
@@ -29,7 +29,7 @@ def test_torch_uses_common_provider_without_internal_packed_execution():
 
 
 def test_device_metadata_captured_once_and_kept_natively():
-    frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi.mojo').read_text()
+    frontend = (ROOT / 'providers/python/autograd_torch_program_pyapi_door.mojo').read_text()
     assert frontend.count('native_torch_device(inputs[') == 1
     assert 'struct TorchDeviceSnapshot(Movable):' in frontend
     route = frontend.split('def _torch_route_with_devices(')[1].split('def _torch_run_host(')[0]
@@ -101,7 +101,7 @@ def test_host_trainer_public_frontdoors_and_shared_metadata():
         expected.remove(method.name)
     assert not expected
     for name in ('bindings/byte_lm_host_trainer_native.mojo', 'bindings/byte_lm_trainer_native.mojo'):
-        assert 'from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of' in (ROOT / name).read_text()
+        assert 'from providers.python.byte_lm_metadata_pyapi_door import _Shape, _shape_of' in (ROOT / name).read_text()
     # The cast-owned training buffer is the one admission path's
     # admit_nd_owned_f32 (lane A4): metadata read once, one parallel cast
     # whose finite flag is the refusal.
@@ -148,7 +148,7 @@ def test_byte_config_keeps_frozen_dataclass_and_native_public_methods():
             body = body[1:]
         assert len(body) == 1 and isinstance(body[0], ast.Return), method.name
         assert body[0].value.func.id == '_CONFIG', method.name
-    native = (ROOT / 'providers/python/byte_lm_metadata_pyapi.mojo').read_text()
+    native = (ROOT / 'providers/python/byte_lm_metadata_pyapi_door.mojo').read_text()
     assert 'byte_lm_config_frozen_error' in native and 'stash_python_error()' in native
     assert 'native_storage_allocate(context["byte_lm_config_class"])' in native
     assert 'training_byte_shape_validate(shape.d, shape.chunked)' in native

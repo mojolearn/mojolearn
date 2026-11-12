@@ -45,7 +45,7 @@ CPython resolves in C for functions and slot wrappers.
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_attr import py_attr
 from bindings.py_version_tags_run import (
     _DICT_USED, _DICT_VERSION, _TYPE_FLAGS, _TYPE_VERSION, _TPFLAGS_VALID_VERSION_TAG,

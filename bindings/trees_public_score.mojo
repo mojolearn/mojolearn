@@ -23,8 +23,8 @@ from bindings.py_balanced import py_call, py_type, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import trees_builtins, trees_table, trees_entry, trees_address
 from bindings.classical_labels import ScoreLabels, LABELS_GATHER_I32
-from bindings.labels_descriptor_boundary import labels_gather
-from bindings.labels_score_boundary import score_keys_index
+from bindings.labels_descriptor_boundary_door import labels_gather
+from bindings.labels_score_boundary_door import score_keys_index
 from core.labels_score_keys import score_key_codes
 from std.python._cpython import GILReleased
 from bindings.admitted_input import AdmittedX, admit_f32, admitted_vector

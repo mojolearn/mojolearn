@@ -12,7 +12,7 @@ from providers.python.classical_family_admission_pyapi import classical_family_a
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_admit
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.native_model_records import records_open, model_generation
-from bindings.pca_descriptor_boundary import pca_connection, pca_connection_matches, pca_mode_name
+from bindings.pca_descriptor_boundary_door import pca_connection, pca_connection_matches, pca_mode_name
 from core.pca_query_state import PCAQueryState
 from x_decomp.pca_model_run import _pca_query_decoded
 from providers.python.pca_query_cache_pyapi import PCAQueryPins, PCAQueryAdmission, PCAQueryCache

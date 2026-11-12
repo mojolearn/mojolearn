@@ -5,7 +5,7 @@ from std.math import isfinite
 from std.python import PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_transport import _transport_json
+from bindings.native_transport_door import _transport_json
 from bindings.classical_pandas import classical_admit_value
 
 

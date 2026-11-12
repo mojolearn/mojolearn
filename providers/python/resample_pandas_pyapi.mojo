@@ -5,11 +5,11 @@
 # by owned CPython references. The caller supplies the shared classical context.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.memory import bitcast, unsafe_memcpy
 from std.sys import size_of
 from std.sys.info import CompilationTarget
-from bindings.sequence_string_storage import sequence_storage_image, sequence_string_nan_raw
+from sequence.sequence_string_storage_run import sequence_storage_image, sequence_string_nan_raw
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.arena_materialize_native import _address
 from bindings.py_attr import py_attr

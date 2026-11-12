@@ -8,7 +8,7 @@ from bindings.classical_attributes import _type_mro
 from bindings.mode_metadata_native import _class_fields
 from bindings.native_loaded_module import NativeModules
 from bindings.native_class_admission import class_record, class_admit
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 # Per class state: the MRO row of the connected result owner (an int, so the
 # record never retains the class). A type watcher drops it when the class or

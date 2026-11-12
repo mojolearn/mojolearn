@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed SmallMLPTrainer buffer checks moved from bindings/parallel_mlp_native.mojo."""
+"""Typed SmallMLPTrainer buffer checks moved from bindings/parallel_mlp_native_door.mojo."""
 from std.math import isfinite
 
 

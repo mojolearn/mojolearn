@@ -25,14 +25,14 @@ from bindings.classical_validate import classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.family_common import FAMILY_F32P
 from core.host_finite_scan import host_all_finite_f32
 from bindings.cluster_side_records import cluster_refuse_fit_callbacks
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,
 )
-from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, _target, _public_result
+from providers.python.neighbors_public_lifecycle_pyapi_door import NeighborPublicCall, _target, _public_result
 from bindings.device_rows_door import door_is_device_rows
 from bindings.admitted_input import admit_x
 from providers.python.family_public_lifecycle_run import FamilyLifecycle

@@ -10,7 +10,7 @@ par-mlp takes.
 
 Source checks (run on a box with nothing built): every
 Python-sharded driver is one native call whose owner runs its shards on the
-native local pool (bindings/parallel_shard_common.mojo `shard_run`, one
+native local pool (bindings/parallel_shard_common_door.mojo `shard_run`, one
 worker process per device index on the CPU route); every cooperative driver
 binds a device plan and refuses the CPU route by name
 (bindings/parallel_plan_door.mojo `plan_devices`). Since 2026-10-24 there is
@@ -66,8 +66,8 @@ def test_python_sharded_drivers_are_native_pools():
         for op in operations:
             assert f"{entry}('{op}'" in text, f"{op} is not one native call in {rel}"
     owner = _read("bindings/parallel_shard_native.mojo")
-    common = _read("bindings/parallel_shard_common.mojo")
-    forecast = _read("bindings/parallel_forecast_native.mojo")
+    common = _read("bindings/parallel_shard_common_door.mojo")
+    forecast = _read("bindings/parallel_forecast_native_door.mojo")
     # one worker process per device index, never a cooperative pool, every
     # worker admitted by its own identity before it receives work
     assert "var pool = process_pool_create(devices, False, child)" in common
@@ -94,7 +94,7 @@ def test_python_sharded_drivers_are_native_pools():
     trainer = _read("python/mojolearn/parallel_training.py")
     assert 'return _native_parallel_neural("init", (self, model, devices, logical_shards))' in trainer
     assert 'return _native_parallel_neural("train", (self, shards))' in trainer
-    coordinator = _read("bindings/parallel_neural_native.mojo")
+    coordinator = _read("bindings/parallel_neural_native_door.mojo")
     assert 'operation = "mlp_gradient"' in coordinator
     assert 'operation = "samba_gradient"' in coordinator
     assert 'process_pool_create(devices, False, child_module)' in coordinator
@@ -234,7 +234,7 @@ def test_sharded_samba_publishes_the_ordered_sum_of_its_shard_gradients_when_bui
     lane/cpu-verifier-par-samba).
 
     Since 2e09ef628 ParallelNeuralTrainer is a native coordinator over the
-    compiled process pool (bindings/parallel_neural_native.mojo), so the old
+    compiled process pool (bindings/parallel_neural_native_door.mojo), so the old
     spy on the Python `DevicePool._send/_receive` sees no request. The shard
     gradients are now taken independently: the same starting model trained
     on each shard alone (logical_shards=1 publishes that shard's gradient).
@@ -292,7 +292,7 @@ def test_sharded_samba_publishes_the_ordered_sum_of_its_shard_gradients_when_bui
 
 def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
     """The non-cooperative drivers' negative control, now native
-    (bindings/parallel_shard_common.mojo `shard_read_shift`).
+    (bindings/parallel_shard_common_door.mojo `shard_read_shift`).
 
     Three properties, and the third is the one that was measured WRONG first.
     A switch that quietly returns wrong answers on ONE env var is a footgun
@@ -307,8 +307,8 @@ def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
     worker process, so the two-device case runs here as two processes.
     """
     import os
-    source = _read("bindings/parallel_shard_common.mojo")
-    shift = source[source.index("def shard_read_shift("):source.index("struct ShardTrace")]
+    source = _read("bindings/parallel_shard_common_run.mojo")
+    shift = source[source.index("def shard_read_shift("):source.index("def shard_faults_take(")]
     assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
     assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE"' in shift and '"MOJOLEARN_HOST_ALLOW_SABOTAGE"' in shift
     if not _cpu_only_with("_mojolearn_preprocessing_host"):

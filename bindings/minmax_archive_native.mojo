@@ -8,7 +8,7 @@ from bindings.classical_archive import (
     _archive_unpack_member, _archive_class_name_unpack,
     _archive_open, _archive_methods, _archive_pack_members, _archive_file_call,
 )
-from bindings.classical_archive_read import _archive_read_input
+from bindings.classical_archive_read_door import _archive_read_input
 from bindings.classical_archive_output import archive_events_pack, archive_numeric_pack
 from bindings.classical_archive_linear import archive_print_mode_unpack
 from bindings.native_buffer_owner import native_storage_allocate

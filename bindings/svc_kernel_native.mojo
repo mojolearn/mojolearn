@@ -88,7 +88,7 @@ from bindings.device_rows_door_run import DoorRowsStore
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from core.host_finite_scan import host_all_finite_f32_strided
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
-from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
+from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
 from std.os import getenv
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME

@@ -87,10 +87,10 @@ def test_codes_cross_the_binding_in_one_order():
 
 def test_parallel_driver_forwards_the_method():
     # The multi-GPU Holt-Winters driver is native
-    # (bindings/parallel_forecast_native.mojo `_fit_hw`): every shard's state
+    # (bindings/parallel_forecast_native_door.mojo `_fit_hw`): every shard's state
     # is the estimator's fields minus the fitted ones (`_hw_fitted`), so the
     # constructor's initialization_method reaches each shard's fit.
-    text = (ROOT / "bindings/parallel_forecast_native.mojo").read_text(encoding="utf-8")
+    text = (ROOT / "bindings/parallel_forecast_native_door.mojo").read_text(encoding="utf-8")
     fit = text[text.index("def _fit_hw("):]
     fit = fit[:fit.index("\ndef ")]
     assert "var state = shard_state(fields, drop, context)" in fit

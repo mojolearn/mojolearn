@@ -4,7 +4,7 @@
 # ownership machinery, not permission to invoke arbitrary __getitem__/__index__.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 
 
 def py_slice(value: PythonObject, start: PythonObject, stop: PythonObject,

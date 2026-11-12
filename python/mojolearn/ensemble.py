@@ -1146,7 +1146,7 @@ class GradientBoosting(NumericModeMixin):
 # writes this schema, the members, dtypes and refusals of the 0.8.55 Python
 # `save` (the model text as UTF-8 `<u1` bytes, the numeric mode `predict` would
 # use now, the int64 meta and the float64 bias), and
-# bindings/host_archive_native.mojo `host_archive_public_gbdt` builds the loaded
+# bindings/host_archive_native_door.mojo `host_archive_public_gbdt` builds the loaded
 # model, reading the output dimension through the GBDT binding connected here.
 _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("need", "model_", "AttributeError", "'{cls}' object has no attribute 'model_'"),

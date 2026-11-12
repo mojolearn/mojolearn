@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.collections import Dict
 from bindings.native_identity_key import NativeIdentityKey
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot

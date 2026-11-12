@@ -14,8 +14,8 @@ from bindings.py_balanced import py_setitem
 from bindings.sequential_description import sequential_fields
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
 from core.linear_fit_run import linear_ridge_run
-from providers.python.linear_state_boundary import linear_state_publish
-from providers.python.linear_entry_boundary import linear_entry_connection
+from providers.python.linear_state_boundary_door import linear_state_publish
+from providers.python.linear_entry_boundary_door import linear_entry_connection
 from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_X_LINEAR, linear_table_entry
 
 

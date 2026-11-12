@@ -25,7 +25,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_get, py_type
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error

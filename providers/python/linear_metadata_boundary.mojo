@@ -7,7 +7,7 @@ decisions; this boundary only admits and transfers those external owners.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_model_records import bump_model_generation
 from bindings.native_owner_lifetime import native_release_admit
@@ -19,7 +19,7 @@ from core.linear_metadata import (
     linear_public_fitted_key, linear_fitted_names,
 )
 from core.linear_model_state import LinearModelState, linear_state_is_fitted
-from providers.python.linear_state_boundary import linear_state_clear
+from providers.python.linear_state_boundary_door import linear_state_clear
 
 
 def _linear_dict_items(value: PythonObject) raises -> Tuple[List[PythonObject], List[PythonObject]]:

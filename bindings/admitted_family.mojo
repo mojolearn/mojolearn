@@ -53,7 +53,7 @@ from bindings.classical_arrays import (
 from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from bindings.family_common import family_array, family_repr
 from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from core.admitted_input import admitted_cast_f32, admitted_cast_f64

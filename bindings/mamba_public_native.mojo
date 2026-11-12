@@ -21,7 +21,7 @@ from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from std.python import Python, PythonObject
 from std.os import getenv
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type

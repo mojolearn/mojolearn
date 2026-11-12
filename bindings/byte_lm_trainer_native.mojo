@@ -30,16 +30,16 @@ from bindings.native_buffer_owner import native_buffer_view, native_storage_allo
 from bindings.neural_block_public import _neural_lengths
 from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.host_helpers_impl import argmax_rows_f32
-from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_config_operation
+from providers.python.byte_lm_metadata_pyapi_door import _Shape, _shape_of, byte_lm_config_operation
 from providers.python.training_metadata_pyapi import training_f32_scalar, training_schedule_json
-from providers.python.training_buffer_pyapi import training_f32_owned, training_i32_owned
+from providers.python.training_buffer_pyapi_door import training_f32_owned, training_i32_owned
 from core.training_state_validation import training_admit_moments_and_flags, training_byte_shape_validate
-from bindings.native_json import native_json_parse, native_path_exists
-from bindings.native_transport import _transport_json
+from bindings.native_json_door import native_json_parse, native_path_exists
+from bindings.native_transport_door import _transport_json
 from core.sha256_file import sha256_file
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
-from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
+from bindings.byte_checkpoint_native_door import byte_checkpoint_save, byte_checkpoint_load
 from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native import tsa_array
 from core.admitted_ids import admitted_ids_i32

@@ -42,7 +42,7 @@ from bindings.arena_prog_run import MetricArenaOwner
 from core.metrics_program_plan import MetricProgramPlan
 from core.labels_accuracy_plan import label_accuracy_plan
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
-from bindings.labels_score_boundary import (
+from bindings.labels_score_boundary_door import (
     ScoreKeyOwner, score_keys_unpack, score_keys_pack, score_keys_pack_pair, score_keys_index, score_keys_union,
 )
 from bindings.classical_attributes import classical_connect_numpy
@@ -55,10 +55,10 @@ from bindings.label_input_sources import (
 from bindings.str_labels_native import _read_source, str_unique_into
 from bindings.str_labels_native_run import StrTable
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.class_weight_boundary import class_weight_admit_dictionary
 from bindings.class_weight_rows_boundary import class_weight_rows_admitted
-from bindings.labels_descriptor_boundary import (
+from bindings.labels_descriptor_boundary_door import (
     labels_prepare_targets, labels_reduce_stat, labels_argmax_rows as labels_argmax_run,
     labels_gather, labels_fsum_f64,
 )

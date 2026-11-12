@@ -37,14 +37,13 @@ FAMILIES = (
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr",
             # lane apple-fast-py2mojo-decomp (2026-10-03): the rest of the module's data path
             "x_decomp_move", "x_decomp_select_smallest", "x_decomp_argmin_all", "x_decomp_pca_mle_rank",
             # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order
             "x_decomp_reduce", "x_decomp_order_small",
             "x_decomp_numeric_mode", "x_decomp_vendor",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "x_decomp_r_signs",
             "x_decomp_rank_above",
             # lane entangled-mkit (2026-11-12): the Isomap / LLE graph builds (lane hr2-graph-embed),
             # the Lanczos steps and T solve, the MDS / LLE solver drivers (lane py-runtime-b),

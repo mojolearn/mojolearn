@@ -2,7 +2,7 @@
 """The typed request of a parallel worker RPC (lane parallel-workers-typed-rpc,
 2026-11-12).
 
-A request to a pool worker (a separate process, `bindings/native_process_pool.mojo`)
+A request to a pool worker (a separate process, `bindings/native_process_pool_door.mojo`)
 is a plain Mojo struct: an operation code, a handle id that is valid only in
 the addressed worker (a layer index or a state token in the worker's own
 registry) and a few Int words. It travels as its bytes, never as a Python

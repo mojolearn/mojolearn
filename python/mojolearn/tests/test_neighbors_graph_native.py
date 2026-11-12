@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """PageRank.fit, Louvain.fit/fit_predict, connected_components and
 SVGP.fit/predict/score are one native call each
-(bindings/neighbors_graph_native.mojo); every output, fitted attribute and
+(bindings/neighbors_graph_native_door.mojo); every output, fitted attribute and
 refusal equals the former Python path's (tests/_legacy_neighbors_graph.py),
 bit for bit."""
 import numpy as np

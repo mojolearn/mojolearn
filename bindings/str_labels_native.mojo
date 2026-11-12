@@ -12,7 +12,7 @@ from std.python import Python, PythonObject
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
 from bindings.str_labels_native_run import (

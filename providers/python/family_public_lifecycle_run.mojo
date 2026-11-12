@@ -46,7 +46,7 @@ struct FamilyLifecycle(Copyable, Movable):
 def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     """The lifecycle of a connected public operation. The positions are the
     owner argument tuple's: 0 the resolved binding, 1 X, then the rest."""
-    # OneClassSVM (bindings/svc_ocsvm_native.mojo). sample_weight is not a target.
+    # OneClassSVM (bindings/svc_ocsvm_native_door.mojo). sample_weight is not a target.
     if operation == "family_svc_ocsvm_fit":
         return FamilyLifecycle("fit", scan=True)
     if operation == "family_svc_ocsvm_fit_predict":
@@ -73,7 +73,7 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("fit_transform", scan=True)
     # LabelPropagation / LabelSpreading: y (-1 marks unlabeled) at position 2.
     # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
-    # owner's first op upload (bindings/neighbors_semi_native.mojo).
+    # owner's first op upload (bindings/neighbors_semi_native_door.mojo).
     if operation == "family_xn_semi_lp_fit":
         return FamilyLifecycle("fit", scan=True, target=2, classifier=True, required=True, defer=True)
     if operation == "family_xn_semi_lp_predict_proba":
@@ -111,7 +111,7 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("predict", device_x=True)
     if operation == "family_kmeans_transform":
         return FamilyLifecycle("transform", device_x=True)
-    # LinearSVC / LinearSVR (bindings/svc_linear_native.mojo, svm_mixture_native.mojo).
+    # LinearSVC / LinearSVR (bindings/svc_linear_native_door.mojo, svm_mixture_native.mojo).
     if operation == "family_svc_linear_svc_fit":
         return FamilyLifecycle("fit", scan=True, replace=False, target=2, classifier=True, required=True)
     if operation == "family_svm_linear_svc_decision":

@@ -3,18 +3,18 @@
 # methods (python/mojolearn/_svm_impl.py, svm.py, _expansion_neighbors.py
 # OneClassSVM): one native call per public method, reached from
 # bindings/family_native.mojo for every `family_svc_*` operation. The linear
-# machines are bindings/svc_linear_native.mojo, the kernel machines
-# bindings/svc_kernel_native.mojo, OneClassSVM bindings/svc_ocsvm_native.mojo.
+# machines are bindings/svc_linear_native_door.mojo, the kernel machines
+# bindings/svc_kernel_native.mojo, OneClassSVM bindings/svc_ocsvm_native_door.mojo.
 from std.python import Python, PythonObject
-from bindings.svc_linear_native import svc_linear_operation
+from bindings.svc_linear_native_door import svc_linear_operation
 from bindings.svc_kernel_native import svc_kernel_operation
-from bindings.svc_ocsvm_native import svc_ocsvm_operation
+from bindings.svc_ocsvm_native_door import svc_ocsvm_operation
 from providers.python.svc_public_state_pyapi import svc_public_state_operation
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
-from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.gp_svm_gp_state import gp_x_mark, gp_x_release
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native_door import host_sparse_format
 from bindings.py_optional import py_present
 
 
@@ -45,7 +45,7 @@ def svc_operation(model: PythonObject, operation: String, args: PythonObject,
     # door replaced a dense X by its admitted C-order float32 snapshot
     # (family_lifecycle_begin: rank, emptiness and finite scan). Register it
     # for this operation (the GP door's registry, bindings/gp_svm_gp_state.mojo)
-    # so bindings/svc_ocsvm_native.mojo does not snapshot it again. A sparse X
+    # so bindings/svc_ocsvm_native_door.mojo does not snapshot it again. A sparse X
     # is not replaced and not registered; the registry also takes only an
     # exact ndarray or Array.
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).

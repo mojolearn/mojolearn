@@ -7,13 +7,13 @@ publishes the writable coefficient owner plus its native state pin.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_archive_output import archive_numeric_pack
 from bindings.classical_arrays import classical_numpy
 from bindings.classical_archive import _archive_class_name_unpack
-from providers.python.linear_state_boundary import linear_state_publish
+from providers.python.linear_state_boundary_door import linear_state_publish
 from core.native_archive_read import NativeArchiveDecoded
 from core.native_archive_linear import NativeLinearArchivePlan, native_archive_needs_float_text
 

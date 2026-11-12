@@ -13,7 +13,7 @@ Zero observed nested calls is never a Python-free qualification.
 `--cpython-count perf` (Linux, root, `perf` with uprobes; lane
 thin-unpack-kit, 2026-11-11) closes that gap for the thin-UNPACK work: every
 CPython C-API function our native code calls (each entry of
-bindings/cpython_table.mojo plus the standard library's own calls) gets a
+bindings/py_cpython_table.mojo plus the standard library's own calls) gets a
 uprobe, and each public operation runs in its own `perf stat` process with
 counting enabled only around that one operation (perf's control FIFO). The
 count is every entry into those functions during the operation, from native
@@ -112,7 +112,7 @@ CLASSIFIERS = ("LogisticRegression", "RandomForestClassifier", "GaussianProcessC
 PERF_GROUP = "mojolearn_cpy"
 
 # C-API functions the standard library's PythonObject calls directly (the
-# ones bindings/cpython_table.mojo does not list; it says the stdlib handle
+# ones bindings/py_cpython_table.mojo does not list; it says the stdlib handle
 # keeps reference counts, PyObject_Type, PyObject_Call, the tuple builders
 # and errors). Together with the table they are every CPython entry a
 # Mojolearn binding reaches.
@@ -458,7 +458,7 @@ def run_case(case):
 
 def cpython_symbols(root):
     """Every CPython function our bindings call: the entries of
-    bindings/cpython_table.mojo plus STDLIB_CPYTHON."""
+    bindings/py_cpython_table.mojo plus STDLIB_CPYTHON."""
     import re
     table = (Path(root) / "bindings" / "cpython_table.mojo").read_text()
     names = re.findall(r'ExternalFunction\[\s*"(Py[A-Za-z_]+)"', table)
