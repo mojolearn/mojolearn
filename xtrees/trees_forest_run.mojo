@@ -175,9 +175,6 @@ def _classifier(kind: String) -> Bool:
     return kind.endswith("_classifier")
 
 
-# ------------------------------------------------------- parameters
-
-
 def _y_rows_check(n: Int, rows: Int) raises:
     if n != rows:
         raise Error("y has " + String(n) + " rows, X has " + String(rows))
