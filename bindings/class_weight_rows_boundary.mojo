@@ -13,7 +13,8 @@ from bindings.class_weight_boundary import (
 from bindings.label_weights_boundary import label_weights_run
 from bindings.labels_descriptor_boundary import labels_class_ratio_f64
 from core.admitted_cast_elements import admitted_cast_elements
-from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan, class_weight_all_one, class_weight_plan
+from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan
+from bindings.class_weight_rows_run import class_weight_rows_plan
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
 
 
@@ -39,9 +40,7 @@ def class_weight_plan_admitted[Profile: Int = CLASS_WEIGHT_CLASSICAL](
         inputs = class_weight_dictionary_values[Profile](class_weight, classes, context)
     var plan = ClassWeightPlan(True, List[Float32]())
     with GILReleased(Python()):
-        if balanced:
-            inputs.all_one = class_weight_all_one(inputs.values)
-        plan = class_weight_plan(inputs.values, inputs.all_one)
+        plan = class_weight_rows_plan(inputs, balanced)
     _ = inputs^
     return plan^
 
