@@ -29,6 +29,8 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
         raise Error("SambaInference: weight dict mismatch: missing or unknown registry names")
     var arrays = bi.dict()
     var format = "float32"
+    # The route's (tier, vendor) key is read once, not once per parameter.
+    var entry_key = causal_entry_key(bindings)
     for i in range(len(registry)):  # driver-loop: over copied CPU inference parameter owners
         var item = registry[i]
         var name = item["name"]
@@ -38,7 +40,7 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
             if format != "float32" and format != tag:
                 raise Error("SambaInference: weights mix packed formats")
             format = tag
-        var unpacked = _model_unpack(value, causal_entry_key(bindings), nc)
+        var unpacked = _model_unpack(value, entry_key, nc)
         var shape = List[Int]()
         for axis in range(len(item["shape"])):  # driver-loop: over tensor shape metadata
             shape.append(Int(py=item["shape"][axis]))
