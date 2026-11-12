@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """LabelEncoder, LabelBinarizer and MultiLabelBinarizer run each public
-method as ONE native call (bindings/prep_labels_native.mojo through the
+method as ONE native call (bindings/prep_labels_native_door.mojo through the
 family door bindings/prep_owner_native_door.mojo). The source checks run
 without bindings; the oracle checks compare every public method's output
 bytes and fitted attributes with the former Python routes
@@ -12,7 +12,7 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 PREP = ROOT / "python" / "mojolearn" / "_expansion_prep.py"
-OWNER = ROOT / "bindings" / "prep_labels_native.mojo"
+OWNER = ROOT / "bindings" / "prep_labels_native_door.mojo"
 DOOR = ROOT / "bindings" / "prep_owner_native.mojo"
 
 CLASSES = {

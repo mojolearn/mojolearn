@@ -2037,7 +2037,7 @@ class Binarizer(_PrepBase):
 _F32_EXACT = 2 ** 24
 
 
-# Each public operation is one native call (bindings/prep_labels_native.mojo):
+# Each public operation is one native call (bindings/prep_labels_native_door.mojo):
 # numeric labels run on the device (sort + run scan for classes_, a binary
 # search for transform), a numeric label buffer crossing as its raw words, so
 # fit_transform is one program; str labels take the native str-label lookup.
@@ -2084,7 +2084,7 @@ class LabelEncoder(_PrepBase):
         return _ENCODE_CALL(self, "inverse_transform", (y,), _ENCODE_CONTEXT)
 
 
-# One native call per public operation (bindings/prep_labels_native.mojo):
+# One native call per public operation (bindings/prep_labels_native_door.mojo):
 # numeric labels take the device route, str labels the native lookup.
 class LabelBinarizer(_PrepBase):
     """Binarize labels in a one-vs-all fashion.
@@ -2155,7 +2155,7 @@ class LabelBinarizer(_PrepBase):
         return _ENCODE_CALL(self, "inverse_transform", (Y, threshold), _ENCODE_CONTEXT)
 
 
-# One native call per public operation (bindings/prep_labels_native.mojo):
+# One native call per public operation (bindings/prep_labels_native_door.mojo):
 # numeric labels take the device route (a sort, a binary search, a scatter
 # of ones), str labels the native lookup.
 class MultiLabelBinarizer(_PrepBase):
@@ -2626,7 +2626,7 @@ class SelectKBest(_SelectorMixin):
 
 
 #: MOJOLEARN_MI_WORK=1: the mutual-information work blocks are device scratch on
-#: the FAST tier (read once at import; bindings/prep_select_native.mojo).
+#: the FAST tier (read once at import; bindings/prep_select_native_door.mojo).
 _MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
 
 
@@ -2677,7 +2677,7 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
 
 
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native.mojo.
+# from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native_door.mojo.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
     """Estimate the mutual information between each feature and a continuous target.
@@ -3031,8 +3031,8 @@ from ._native_prep_classify_bridge import connect as _connect_classify
 _CLS_CALL, _CLS_CONTEXT = _connect_classify(
     {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",
      LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
-# RFE and the mutual-information functions (bindings/prep_select_native.mojo) run
+# RFE and the mutual-information functions (bindings/prep_select_native_door.mojo) run
 # their programs on the classifier owner's arena-runner context.
 # prep_encode_entry: SelectKBest's mutual_info score functions re-enter the
-# encode owner's compiled entry (bindings/prep_encode_native.mojo `_select_fit`).
+# encode owner's compiled entry (bindings/prep_encode_native_door.mojo `_select_fit`).
 _ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK, prep_encode_entry=_ENCODE_CALL)

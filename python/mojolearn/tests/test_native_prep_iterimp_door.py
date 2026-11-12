@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """IterativeImputer runs as one native call per public method
-(bindings/prep_iterimp_native.mojo, through the prep family door). The former
+(bindings/prep_iterimp_native_door.mojo, through the prep family door). The former
 Python route is kept below as the oracle: the door must give the same bytes and
 the same fitted attributes on small fixtures."""
 import array

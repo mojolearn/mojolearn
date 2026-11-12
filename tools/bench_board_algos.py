@@ -3536,7 +3536,7 @@ def _est_factory(lane, arm, D):
             # 0.8.66 AMD measurement smoke (select-mutual-info, select-mutual-info-reg on istella and taxi:
             # "SelectKBest score_func must be f_classif, ...; a user callable is not supported"): ours' fit runs
             # its score functions natively and refuses any other callable, a functools.partial of its own
-            # mutual_info_* included (bindings/prep_encode_native.mojo _select_fit; no Python runs in fit).
+            # mutual_info_* included (bindings/prep_encode_native_door.mojo _select_fit; no Python runs in fit).
             # Ours gets the function itself and runs it at its defaults (random_state=None, the native fixed
             # seed); scikit-learn's arm keeps random_state=SEED. The two noise draws differ (a 1e-10-scale
             # jitter on continuous features), named in the lane's mism.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The univariate score functions and TargetEncoder.fit_transform are one
-native call (bindings/prep_owner_native_door.mojo, bindings/prep_encode_native.mojo).
+native call (bindings/prep_owner_native_door.mojo, bindings/prep_encode_native_door.mojo).
 The former Python routines are kept below as the oracle: the door must return
 the same bytes. The shell checks run without bindings; the rest need the
 compiled package."""
