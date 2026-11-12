@@ -14,7 +14,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-NAMES = {name: "mojolearn_" + name for name in ("log", "log2", "log2f", "log10", "frexp", "ldexp", "lround", "modf")}
+# MAX 26.7 (Mojo 1.2): libAsyncRTRuntimeGlobals.so newly imports `sqrt` (the 26.6 runtime libraries imported
+# none of it); the helper's mojolearn_sqrt is the hardware square root (correctly rounded on every platform),
+# so the redirect keeps the bits. Any other new runtime math import still fails the audit closed.
+NAMES = {name: "mojolearn_" + name for name in ("sqrt", "log", "log2", "log2f", "log10", "frexp", "ldexp", "lround", "modf")}
 
 
 def sha(path):
