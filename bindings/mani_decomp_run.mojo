@@ -116,7 +116,7 @@ def mani_lanczos_top(mut run: MRun, k: Int, a: Int, nc: Int) raises -> Tuple[Boo
     var n = run.r(a)
     var cap = min(n, _LANCZOS_MAX_M)
     if (cap + 1) * n > _LANCZOS_DEV_MAX_FLOATS:
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var q = run.ew(k, OP_ADDS, run.rand(k, n, 1, 0x1A2C05, 91, 0), s=-0.5)
     q = run.ew(k, OP_SCALE, q, s=1.0 / sqrt(mani_kdot(run, k, q, q)))
     # the batch's alphas and betas: a host store, made once per solve
@@ -184,7 +184,7 @@ def mani_lanczos_top(mut run: MRun, k: Int, a: Int, nc: Int) raises -> Tuple[Boo
             top.append(t)
             t -= 1
         if len(top) < nc:
-            return (False, -1, -1)
+            return Tuple[Bool, Int, Int](False, -1, -1)
         var big = run.word(k, run.reduce(k, run.take_cols(th, top), SEL_MAXABS), 0)
         if big == 0.0:
             big = 1.0
@@ -193,7 +193,7 @@ def mani_lanczos_top(mut run: MRun, k: Int, a: Int, nc: Int) raises -> Tuple[Boo
         if stop or res <= _LANCZOS_TOL * big:
             break
         if m >= cap:
-            return (False, -1, -1)
+            return Tuple[Bool, Int, Int](False, -1, -1)
         m = min(min(n, 2 * m), _LANCZOS_MAX_M)
     var yt = run.take_cols(yv, top)
     var qm: Int
@@ -566,11 +566,11 @@ def lle_smallest_run(mut run: MRun, k: Int, f: Int, nc: Int, max_iter: Int, seed
     the caller to the full SVD. A refusal is left in `outcome`."""
     var n = run.c(f)
     if run.r(f) != n:
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var n1 = n - 1
     var p = min(n1, max(2 * nc + 1, 20))
     if p <= nc:
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var rn = 1.0 / sqrt(Float64(n))
     var hv = List[Float64](length=n, fill=rn)
     hv[n - 1] = rn - 1.0
@@ -597,7 +597,7 @@ def lle_smallest_run(mut run: MRun, k: Int, f: Int, nc: Int, max_iter: Int, seed
     var kept = Float64(0.0) if 0.0 > tot else tot
     var rms = sqrt(kept / Float64(n))
     if not (g <= _LLE_NULL_GUARD * rms):
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     var fac = run.lu(k, f0)
     var lu = fac[0]
@@ -606,13 +606,13 @@ def lle_smallest_run(mut run: MRun, k: Int, f: Int, nc: Int, max_iter: Int, seed
     var pm = aux[2]
     var im = aux[3]
     if not (big > 0.0 and mani_finite(big)):
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var en = run.zeros(n, 1)
     run.ptr(en)[n - 1] = 1.0
     var z = run.trisolve(k, lu, im, en, 1)
     var zn = sqrt(run.dsum_sq(k, z))
     if not zn > 0.0 or not mani_finite(zn):
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     z = run.ew(k, OP_SCALE, z, s=1.0 / zn)
     # `_lle_iterate`
     var xm = run.zeros(n1, p)
@@ -630,7 +630,7 @@ def lle_smallest_run(mut run: MRun, k: Int, f: Int, nc: Int, max_iter: Int, seed
     if status == 2:
         outcome.refusal = 1
         outcome.change = change[0]
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var sv = run.take_cols(sm, mani_desc_range(p - 1, nc))
     # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
     var t = run.mm(k, hrow, ym, False, False)
@@ -644,7 +644,7 @@ def lle_smallest_run(mut run: MRun, k: Int, f: Int, nc: Int, max_iter: Int, seed
         for i in range(run.n(sq)):  # driver-loop: over (components: the refusal lists each column's squared norm): bounded by n_components
             outcome.norms.append(Float64(sp[i]))
         outcome.refusal = 2
-        return (False, -1, -1)
+        return Tuple[Bool, Int, Int](False, -1, -1)
     var signs = run.absmax_signs(k, v, True)
     return (True, run.ew(k, OP_MUL, v, signs), sv)
 

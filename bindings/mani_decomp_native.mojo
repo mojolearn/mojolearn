@@ -180,9 +180,9 @@ def _mani_metric(metric: PythonObject, metric_params: PythonObject, who: String,
     """ClassicalMDS / MDS: 'precomputed', 'euclidean' (the two named routes),
     else `_metric_spec(metric, 2, metric_params, who)`."""
     if _mani_eq(metric, "precomputed", context):
-        return (MANI_METRIC_PRECOMPUTED, Float64(0.0))
+        return (Int(MANI_METRIC_PRECOMPUTED), Float64(0.0))
     if _mani_eq(metric, "euclidean", context):
-        return (MANI_METRIC_EUCLIDEAN, Float64(2.0))
+        return (Int(MANI_METRIC_EUCLIDEAN), Float64(2.0))
     return _mani_metric_spec(metric, PythonObject(2), metric_params, who, context)
 
 
