@@ -88,6 +88,7 @@ from bindings.trees_public_forest_door import (
     _is_integral,
     _launch,
     _dt_tier_bins,
+    forest_fit_request,
 )
 from xtrees.trees_forest_run import (
     _refuse,
@@ -687,7 +688,9 @@ def _member_fit_weighted(member: PythonObject, xcm: AdmittedX, codes: PythonObje
     else:
         var fit = ForestFit(True, weights=weights.address)
         _ = weights  # keep the Python object alive through the native call above
-        result = _launch(rf, fit, xcm, trees_address(labels.codes), params, criterion, False, context)
+        var request = forest_fit_request(fields, fields["_cfg"], "dt_classifier", xcm.rows, xcm.cols, k, xcm.address,
+                                         trees_address(labels.codes), fit, rf, context)
+        result = _launch(rf, fit, xcm.view(), request, False, context)
         _ = weights  # keep the Python object alive through the native call above
     # Both fit routes receive only the codes' address. The model owns the
     # classes table, not this freshly encoded label buffer.

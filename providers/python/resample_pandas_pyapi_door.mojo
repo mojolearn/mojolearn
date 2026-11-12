@@ -131,7 +131,7 @@ struct _RPArray(Movable):
     var time_from: PythonObject
 
     def __init__(out self, value: PythonObject, context: PythonObject) raises:
-        self.layout = _RPLayout()
+        var layout = _RPLayout()
         if py_type(value) is not context["ndarray"]:
             raise Error("TypeError: pandas storage requires an exact native ndarray")
         var snapshots = context["resample_pandas_array_snapshots"]
@@ -140,24 +140,25 @@ struct _RPArray(Movable):
             if snapshot[0] is value:
                 self.owner = snapshot[1]
                 self.dtype = snapshot[2]
-                self.layout.code = String(snapshot[3])
-                self.layout.kind = String(snapshot[4])
-                self.layout.item = Int(py=snapshot[5])
-                self.layout.rank = Int(py=snapshot[6])
-                self.layout.rows = Int(py=snapshot[7])
-                self.layout.cols = Int(py=snapshot[8])
-                self.layout.row_stride = Int(py=snapshot[9])
-                self.layout.col_stride = Int(py=snapshot[10])
-                self.layout.address = Int(py=snapshot[11])
-                self.layout.native = Bool(py=snapshot[12])
-                self.layout.number = Int(py=snapshot[13])
+                layout.code = String(snapshot[3])
+                layout.kind = String(snapshot[4])
+                layout.item = Int(py=snapshot[5])
+                layout.rank = Int(py=snapshot[6])
+                layout.rows = Int(py=snapshot[7])
+                layout.cols = Int(py=snapshot[8])
+                layout.row_stride = Int(py=snapshot[9])
+                layout.col_stride = Int(py=snapshot[10])
+                layout.address = Int(py=snapshot[11])
+                layout.native = Bool(py=snapshot[12])
+                layout.number = Int(py=snapshot[13])
                 self.api_owner = snapshot[14]
                 var table = Int(py=self.api_owner[2])
                 self.scalar_box = MutPointer[_RPScalarBox, MutUntrackedOrigin](unsafe_from_address=table + 60 * size_of[Int]())[0]
-                var cell_entries = _rp_cell_entries(self.layout.kind, context)
+                var cell_entries = _rp_cell_entries(layout.kind, context)
                 self.na = cell_entries[0]
                 self.nat = cell_entries[1]
                 self.time_from = cell_entries[2]
+                self.layout = layout^
                 return
         # Exact ndarray C descriptor; no subtype/finalize callback. The view
         # pins the original storage and owns independent shape/stride metadata.
@@ -169,36 +170,36 @@ struct _RPArray(Movable):
             admitted_dtype = admitted_dtype or py_type(self.dtype) is classes[i]
         if not admitted_dtype:
             raise Error("TypeError: pandas storage cannot invoke custom dtype metadata or scalar hooks")
-        self.layout.kind = String(self.dtype.kind)
-        self.layout.number = Int(py=self.dtype.num)
+        layout.kind = String(self.dtype.kind)
+        layout.number = Int(py=self.dtype.num)
         self.api_owner = context["resample_pandas_scalar_api"]
         var table = Int(py=self.api_owner[2])
         self.scalar_box = MutPointer[_RPScalarBox, MutUntrackedOrigin](unsafe_from_address=table + 60 * size_of[Int]())[0]
-        self.layout.item = Int(py=self.dtype.itemsize)
+        layout.item = Int(py=self.dtype.itemsize)
         # No custom dtype getitem/cast, structured-descr Python helpers, or
         # reference-bearing user dtype can enter raw storage copies.
-        if self.dtype.fields is not None or self.dtype.subdtype is not None or (self.layout.number < 0 or self.layout.number > 23):
+        if self.dtype.fields is not None or self.dtype.subdtype is not None or (layout.number < 0 or layout.number > 23):
             raise Error("TypeError: pandas resample storage requires a built-in scalar dtype")
-        if self.layout.kind != "O" and Bool(py=self.dtype.hasobject):
+        if layout.kind != "O" and Bool(py=self.dtype.hasobject):
             raise Error("TypeError: pandas resample storage has unsupported object-bearing dtype")
-        self.layout.code = String(self.dtype.str)
-        self.layout.native = Bool(py=self.dtype.isnative)
-        self.layout.rank = Int(py=self.owner.ndim)
+        layout.code = String(self.dtype.str)
+        layout.native = Bool(py=self.dtype.isnative)
+        layout.rank = Int(py=self.owner.ndim)
         var shape = self.owner.shape
         var strides = self.owner.strides
-        if self.layout.rank != 1 and self.layout.rank != 2:
+        if layout.rank != 1 and layout.rank != 2:
             raise Error("ValueError: pandas block rank must be one or two")
-        self.layout.rows = Int(py=shape[self.layout.rank - 1])
-        self.layout.cols = 1 if self.layout.rank == 1 else Int(py=shape[0])
-        self.layout.row_stride = Int(py=strides[self.layout.rank - 1])
-        self.layout.col_stride = 0 if self.layout.rank == 1 else Int(py=strides[0])
-        self.layout.address = Int(py=sequential_address(self.owner))
-        var cell_entries = _rp_cell_entries(self.layout.kind, context)
+        layout.rows = Int(py=shape[layout.rank - 1])
+        layout.cols = 1 if layout.rank == 1 else Int(py=shape[0])
+        layout.row_stride = Int(py=strides[layout.rank - 1])
+        layout.col_stride = 0 if layout.rank == 1 else Int(py=strides[0])
+        layout.address = Int(py=sequential_address(self.owner))
+        var cell_entries = _rp_cell_entries(layout.kind, context)
         self.na = cell_entries[0]
         self.nat = cell_entries[1]
         self.time_from = cell_entries[2]
-        py_call(snapshots.append, Python.tuple(value, self.owner, self.dtype, self.layout.code, self.layout.kind, self.layout.item, self.layout.rank, self.layout.rows, self.layout.cols, self.layout.row_stride, self.layout.col_stride, self.layout.address, self.layout.native, self.layout.number, self.api_owner))
-
+        py_call(snapshots.append, Python.tuple(value, self.owner, self.dtype, layout.code, layout.kind, layout.item, layout.rank, layout.rows, layout.cols, layout.row_stride, layout.col_stride, layout.address, layout.native, layout.number, self.api_owner))
+        self.layout = layout^
 
 def _rp_new(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
     return py_call(context["ndarray"], shape, dtype=dtype)
