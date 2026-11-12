@@ -22,6 +22,12 @@ from core.samba_entry_table import (
     SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD, SAMBA_PRIM_CE_LOSS,
 )
 from bindings.samba_training_native import samba_ids
+from std.python._cpython import GILReleased
+from core.samba_entry_table_programs import (
+    samba_programs_ref, samba_programs_call, samba_programs_available,
+    SAMBA_PROGRAM_OPEN, SAMBA_PROGRAM_STATUS, SAMBA_PROGRAM_FORWARD,
+)
+from core.samba_program_handle import SambaProgramHandle
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
@@ -200,30 +206,63 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
-def samba_program_arm(fields: PythonObject, entries: PythonObject) raises -> Bool:
-    """Whether this stack runs on the Samba stack program: a device training
-    binding (it registers `samba_program_open`) and not the CPU inference
-    route. Otherwise the host per-layer route below runs (CPU builds)."""
+def samba_program_arm(fields: PythonObject, key: SambaEntryKey) raises -> Bool:
+    """Whether this stack runs on the Samba stack program: its GPU training
+    image published the program entry (core/samba_entry_table_programs.mojo)
+    and it is not the CPU inference route. Otherwise the host per-layer route
+    below runs (CPU builds). Lane samba-sessions-native (2026-11-12): the key
+    decides, not `hasattr` on a Python module."""
     if Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False))):
         return False
-    return Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "samba_program_open"))
+    return samba_programs_available(key)
 
 
-def samba_program_params(fields: PythonObject, config: PythonObject, b: Int, smax: Int) raises -> PythonObject:
-    """`samba_program_open`'s layer codes and integer/float words."""
-    var bi = native_loaded_module("builtins")
-    var kinds = bi.list()
-    for i in range(len(config["layers"])):  # driver-loop: over model layer metadata at program creation
-        _ = py_call(kinds.append, 0 if String(config["layers"][i]) == "mamba3" else 1)
-    var params = Python.list(config["vocab"], config["d_model"])
+def samba_program_words(fields: PythonObject, config: PythonObject, b: Int, smax: Int) raises -> Tuple[List[Int], Float64]:
+    """UNPACK, once per program open: SAMBA_PROGRAM_OPEN's integer words
+    ([n_layers, layer codes, vocab, d_model, n_heads, n_kv_heads, head_dim,
+    intermediate, tie, n_total, batch_size, max_tokens]) and norm_eps."""
+    var layers = config["layers"]
+    var n = len(layers)
+    var words = List[Int](capacity=n + 11)
+    words.append(n)
+    for i in range(n):  # driver-loop: over model layer metadata at program creation
+        words.append(0 if String(layers[i]) == "mamba3" else 1)
+    words.append(Int(py=config["vocab"]))
+    words.append(Int(py=config["d_model"]))
     for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over program shape metadata
-        _ = py_call(params.append, PythonObject(0) if config[name] is None else config[name])
-    _ = py_call(params.append, 1 if Bool(py=config["tie_embeddings"]) else 0)
-    _ = py_call(params.append, config["norm_eps"])
-    _ = py_call(params.append, fields["n_total"])
-    _ = py_call(params.append, b)
-    _ = py_call(params.append, smax)
-    return Python.tuple(kinds, params)
+        var value = config[name]
+        words.append(0 if value is None else Int(py=value))
+    words.append(1 if Bool(py=config["tie_embeddings"]) else 0)
+    words.append(Int(py=fields["n_total"]))
+    words.append(b)
+    words.append(smax)
+    return (words^, Float64(py=config["norm_eps"]))
+
+
+def samba_program_open_owner(key: SambaEntryKey, addresses: List[Int], words: List[Int], eps: Float64,
+                             b: Int, smax: Int) raises -> PythonObject:
+    """Open a program through the table entry of `key` (resolved here, once)
+    and PACK its native handle owner (core/samba_program_handle.mojo). The
+    GIL is released around the native open, as the former Python entry
+    released it around the state load."""
+    var entry = samba_programs_ref(key)
+    var floats: List[Float64] = [eps]
+    var handle = 0
+    with GILReleased(Python()):
+        handle = samba_programs_call(entry, SAMBA_PROGRAM_OPEN, addresses, words, floats)
+    return PythonObject(alloc=SambaProgramHandle(key, entry, handle, b, smax))
+
+
+def samba_program_call(program: PythonObject, operation: Int, addresses: List[Int], words: List[Int]) raises -> Int:
+    """One program operation through the handle owner `program` (its handle
+    word and entry read once here), the GIL released around the native call.
+    The caller keeps every addressed buffer alive."""
+    var owner = program.downcast_value_ptr[SambaProgramHandle]()
+    var result = 0
+    with GILReleased(Python()):
+        result = owner[].call(operation, addresses, words)
+    _ = program
+    return result
 
 
 def samba_state_words(
@@ -276,20 +315,21 @@ def samba_state_words(
     return (pieces^, cursors^)
 
 
-def samba_set_cursors(model: PythonObject, state: PythonObject, cursors: PythonObject) raises:
-    """The program's post-call cursor words onto the state's layer records."""
+def samba_set_cursors(model: PythonObject, state: PythonObject, cursors: List[Int]) raises:
+    """PACK: the program's post-call cursor words onto the state's layer
+    records."""
     var config = samba_fields(samba_fields(model)["config"])
     var layers = samba_fields(state)["layers"]
     for i in range(len(layers)):  # driver-loop: over the stack's layer state owners
         var lslots = samba_fields(layers[i])
         if String(config["layers"][i]) == "attention":
-            py_setitem(lslots, "cached_tokens", PythonObject(Int(py=cursors[2 * i])))
+            py_setitem(lslots, "cached_tokens", PythonObject(cursors[2 * i]))
         else:
-            py_setitem(lslots, "buffered_tokens", PythonObject(Int(py=cursors[2 * i])))
-            py_setitem(lslots, "pending", PythonObject(Int(py=cursors[2 * i + 1]) != 0))
+            py_setitem(lslots, "buffered_tokens", PythonObject(cursors[2 * i]))
+            py_setitem(lslots, "pending", PythonObject(cursors[2 * i + 1] != 0))
 
 
-def _samba_program_reports(fields: PythonObject, config: PythonObject, b: Int, addresses: PythonObject) raises -> PythonObject:
+def _samba_program_reports(fields: PythonObject, config: PythonObject, b: Int, mut addresses: List[Int]) raises -> PythonObject:
     """Fresh report arrays for every Mamba-3 layer (four each, the shapes
     `_m3_state_call` gives them), their addresses appended to `addresses`
     in layer order; returns them per layer (None for an attention layer)."""
@@ -304,7 +344,7 @@ def _samba_program_reports(fields: PythonObject, config: PythonObject, b: Int, a
         var four = Python.list(generation_array([b, h, 64, 128]), generation_array([b, h, 128]),
                                generation_array([b, h, 64]), generation_array([b, h, 32]))
         for k in range(4):  # small-loop(the four Mamba-3 reports)
-            _ = py_call(addresses.append, four[k]._addr)
+            addresses.append(Int(py=four[k]._addr))
         _ = py_call(out.append, four)
     return out
 
@@ -321,13 +361,15 @@ def _samba_publish_reports(fields: PythonObject, config: PythonObject, reports: 
             py_setitem(block_fields, names[k], reports[i][k])
 
 
-def _samba_program_call(model: PythonObject, fields: PythonObject, config: PythonObject, entries: PythonObject,
+def _samba_program_call(model: PythonObject, fields: PythonObject, config: PythonObject, key: SambaEntryKey,
                         ids: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     """One per-call run on the stack's program: (B, L) ids -> (B, L, vocab)
     logits, from a zero state (stateless) or from the caller's state, which
     holds the post-call state afterwards. The stateless and the stateful
     programs are kept apart (their attention capacity differs: L versus the
-    state's max_tokens); each is reopened when its (B, capacity) changes."""
+    state's max_tokens); each is reopened when its (B, capacity) changes or
+    a failed call lost it. The model keeps each program as its native handle
+    owner (core/samba_program_handle.mojo); RUN is native table calls."""
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
     var smax = l
@@ -337,38 +379,53 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
         slot = String("_samba_state_program")
     var program = py_get(fields, slot)
     if program is not None:
-        var shape = py_call(_native_function(entries, "samba_program_shape"), program)
-        if Int(py=shape[0]) != b or Int(py=shape[1]) != smax or not Bool(py=shape[2]):
+        var owner = program.downcast_value_ptr[SambaProgramHandle]()
+        if (owner[].b != b or owner[].smax != smax
+                or samba_program_call(program, SAMBA_PROGRAM_STATUS, List[Int](), List[Int]()) == 0):
+            # Dropping the owner releases its program.
             py_setitem(fields, slot, PythonObject(None))
             program = PythonObject(None)
+    var registry = Int(py=fields["flat"]._addr)
     if program is None:
-        var opened = samba_program_params(fields, config, b, smax)
-        program = py_call(_native_function(entries, "samba_program_open"), opened[0], opened[1], fields["flat"]._addr)
+        var opened = samba_program_words(fields, config, b, smax)
+        var open_addresses: List[Int] = [registry]
+        program = samba_program_open_owner(key, open_addresses, opened[0], opened[1], b, smax)
         py_setitem(fields, slot, program)
     var output = generation_array([b, l, Int(py=config["vocab"])])
-    var addresses = Python.list(fields["flat"]._addr, ids._addr, output._addr)
-    # The Mamba-3 blocks' public reports (h_last_, k_last_, v_last_,
-    # theta_last_), as the host route's per-block calls assign them: the
-    # program's step ops keep the last run's reports, read back with the
-    # run's one wait (training/samba_program.mojo enqueue_reports).
-    var reports = _samba_program_reports(fields, config, b, addresses)
+    # [registry, ids, logits, cursors_out], the Mamba-3 blocks' public
+    # reports (h_last_, k_last_, v_last_, theta_last_), as the host route's
+    # per-block calls assign them: the program's step ops keep the last
+    # run's reports, read back with the run's one wait
+    # (training/samba_program.mojo enqueue_reports); then the state pieces.
+    var addresses: List[Int] = [registry, Int(py=ids._addr), Int(py=output._addr), 0]
+    var report_addresses = List[Int]()
+    var reports = _samba_program_reports(fields, config, b, report_addresses)
+    for i in range(len(report_addresses)):  # driver-loop: over the Mamba-3 layers' report addresses
+        addresses.append(report_addresses[i])
+    var words: List[Int] = [b, l, len(report_addresses)]
     if state is None:
-        _ = py_call(_native_function(entries, "samba_program_forward"), program, addresses, py_ints([b, l]),
-                    Python.list(), Python.list())
+        _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, addresses, words)
         _ = ids  # keep the Python object alive through the native call above
+        _ = output
         _samba_publish_reports(fields, config, reports)
         return output
     # The state was admitted at the public door (samba_admit).
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
-    var words = samba_state_words(model, state, "SambaStack", keep, copies)
-    var cursors = py_call(_native_function(entries, "samba_program_forward"), program, addresses, py_ints([b, l]),
-                          py_ints(words[0]), py_ints(words[1]))
+    var state_words = samba_state_words(model, state, "SambaStack", keep, copies)
+    var cursors = List[Int](length=len(state_words[1]), fill=0)
+    addresses[3] = Int(cursors.unsafe_ptr())
+    for i in range(len(state_words[0])):  # driver-loop: over the state's piece addresses (per layer)
+        addresses.append(state_words[0][i])
+    for i in range(len(state_words[1])):  # driver-loop: over the state's cursor words (two per layer)
+        words.append(state_words[1][i])
+    _ = samba_program_call(program, SAMBA_PROGRAM_FORWARD, addresses, words)
     _samba_publish_reports(fields, config, reports)
     _writeback(copies)
     _ = keep^
     _ = ids  # keep the Python object alive through the native call above
     samba_set_cursors(model, state, cursors)
+    _ = cursors
     return output
 
 
@@ -440,15 +497,16 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
                     + "caller's arrays are stale); call sync_state() or close() on the session first")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
-    var entries = PythonObject(None)
     var cpu_inference = Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False)))
     # UNPACK: the Samba table key of the primitives this model runs on (the
     # identical `_mojolearn_neural_host` image for the CPU inference model).
+    # The binding reads below load and admit the image that publishes the
+    # key's entries; RUN reaches them through the tables only.
     var key = SambaEntryKey(1, 0)
     if cpu_inference:
-        entries = _model_bindings(PythonObject("cpu"), "mamba3", context["neural"], PythonObject("identical"))["primitives"]
+        _ = _model_bindings(PythonObject("cpu"), "mamba3", context["neural"], PythonObject("identical"))["primitives"]
     else:
-        entries = samba_entries(context, fields["numeric_mode"])
+        _ = samba_entries(context, fields["numeric_mode"])
         key = samba_entry_key(context, fields["numeric_mode"])
     var d = Int(py=config["d_model"])
     var v = Int(py=config["vocab"])
@@ -457,9 +515,9 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
     var output = PythonObject(None)
-    if samba_program_arm(fields, entries):
+    if samba_program_arm(fields, key):
         # ONE path on a device build: the stack program (lane x6).
-        output = _samba_program_call(model, fields, config, entries, ids, state, context)
+        output = _samba_program_call(model, fields, config, key, ids, state, context)
     else:
         # The host route (CPU builds and the CPU inference model): the
         # installed CPU kernels layer by layer. Device builds never come

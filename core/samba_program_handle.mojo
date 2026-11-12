@@ -13,9 +13,7 @@ collection. It holds no Python object and no device state of its own.
 """
 from core.entry_table import EntryRef
 from core.samba_entry_table import SambaEntryKey
-from core.samba_entry_table_programs import (
-    samba_programs_ref, samba_programs_call, SAMBA_PROGRAM_OPEN, SAMBA_PROGRAM_RELEASE,
-)
+from core.samba_entry_table_programs import samba_programs_call, SAMBA_PROGRAM_RELEASE
 
 
 struct SambaProgramHandle(Movable, Writable):
@@ -77,13 +75,3 @@ struct SambaProgramHandle(Movable, Writable):
             # with its registry entry's last lease.
             pass
 
-
-def samba_program_open(key: SambaEntryKey, addresses: List[Int], words: List[Int], eps: Float64,
-                       b: Int, smax: Int) raises -> SambaProgramHandle:
-    """Open a program (SAMBA_PROGRAM_OPEN: the registry, optionally a state
-    to load) and return its owner. The entry is resolved here, once. The
-    caller releases the GIL around it."""
-    var entry = samba_programs_ref(key)
-    var floats: List[Float64] = [eps]
-    var handle = samba_programs_call(entry, SAMBA_PROGRAM_OPEN, addresses, words, floats)
-    return SambaProgramHandle(key, entry, handle, b, smax)
