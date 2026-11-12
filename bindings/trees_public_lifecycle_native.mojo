@@ -141,15 +141,12 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         # X is the entry's to test (defer_finite above).
         if admitted.finite:
             trees_finite_mark(x)
-        try:
-            result = forest_fit(model, Python.tuple(x, y, args[2], args[3], args[4]), context)
-        except error:
-            # The fit entry's own refusal of a deferred non-finite X
-            # (TREES_NONFINITE) in the one scikit-learn wording (lane a7c).
-            _forest_fit_restore(model, depth)
-            if not admitted.finite:
-                admitted_finite_entry_refuse(error, name)
-            raise error^
+        # The try/except lives in `_forest_fit_guarded`, which returns the
+        # result: no PythonObject is reassigned inside a try (suspected wrong
+        # reference drop under Mojo 1.2.0, the modular/modular#7546 family;
+        # runtime-fix-save-forest).
+        result = _forest_fit_guarded(model, Python.tuple(x, y, args[2], args[3], args[4]), depth,
+                                     admitted.finite, name, context)
         _forest_fit_restore(model, depth)
         fields = py_fields(model)
         if classifier:
@@ -163,6 +160,20 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
         return result
     raise Error("unknown native public forest operation " + operation)
+
+
+def _forest_fit_guarded(model: PythonObject, fit_args: PythonObject, depth: Int, finite: Bool, name: String,
+                        context: PythonObject) raises -> PythonObject:
+    """`forest_fit`, restoring the fitting depth on a refusal. The fit
+    entry's own refusal of a deferred non-finite X (TREES_NONFINITE) is
+    raised in the one scikit-learn wording (lane a7c)."""
+    try:
+        return forest_fit(model, fit_args, context)
+    except error:
+        _forest_fit_restore(model, depth)
+        if not finite:
+            admitted_finite_entry_refuse(error, name)
+        raise error^
 
 
 def _forest_fit_restore(model: PythonObject, depth: Int) raises:

@@ -109,12 +109,17 @@ def boost_tree_admit(model: PythonObject, context: PythonObject, cloning: Bool =
     var defaults = context["trees_defaults"]
     var cls = py_type(model)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
-    var parameters = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel read and reassigned in the
+    # loop (modular/modular#7546 pattern; runtime-fix-save-forest).
+    var found = Optional[PythonObject]()
     for i in range(len(mro)):  # driver-loop: connected tree parameter schema for passive subclasses
-        if parameters is None:
-            parameters = py_get(defaults, mro[i])
-    if parameters is None:
+        if not found:
+            var candidate = py_get(defaults, mro[i])
+            if candidate is not None:
+                found = candidate
+    if not found:
         raise Error("TypeError: native boosting requires a connected tree member")
+    var parameters = found.value()
     if cloning:
         var names = py_call(b.list, parameters)
         for i in range(len(names)):  # driver-loop: parameters consumed by native member clone/fit

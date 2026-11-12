@@ -94,7 +94,10 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
     var native_type = py_type(native_str)
     var mro = py_call(native_type.__dict__["__mro__"].__get__, cls)
     var bases = context["archive_path_bases"]
-    var parts = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel read and reassigned in the
+    # loop (the modular/modular#7546 pattern, suspected of a wrong reference
+    # drop under Mojo 1.2.0; runtime-fix-save-forest).
+    var stored = Optional[PythonObject]()
     for storage in range(2):  # driver-loop: over the two standard pathlib storage names
         var field = "_raw_paths" if storage == 0 else "_parts"
         for i in range(len(mro)):  # driver-loop: connected standard pathlib ancestry
@@ -108,12 +111,15 @@ def _archive_path(value: PythonObject, context: PythonObject, normalize: Bool = 
                 var slot = fields[field]
                 if py_type(slot) is not context["archive_path_member_type"]:
                     raise Error("TypeError: Python path storage descriptors are unsupported")
-                parts = py_call(slot.__get__, value, cls)
+                var read = py_call(slot.__get__, value, cls)
+                if read is not None:
+                    stored = read
                 break
-        if parts is not None:
+        if stored:
             break
-    if parts is None:
+    if not stored:
         raise Error("TypeError: path requires native component storage")
+    var parts = stored.value()
     if py_type(parts) is not py_type(Python.list()) and py_type(parts) is not py_type(Python.tuple()):
         raise Error("TypeError: path components require native storage")
     var native_parts = List[List[UInt32]](capacity=len(parts))

@@ -248,25 +248,32 @@ def _criterion_code(criterion: PythonObject, table: PythonObject, unsupported: P
                 + _repr(py_call(b.sorted, table)))
 
 
-def _min_weight_fraction(value: PythonObject, who: String) raises -> PythonObject:
-    """`randomforest._min_weight_fraction`."""
+def _float_or_absent(value: PythonObject) raises -> Optional[PythonObject]:
+    """`float(value)`, or absent when it raises TypeError or ValueError."""
+    # Returned from inside try/except, not a PythonObject reassigned in both
+    # arms (suspected wrong reference drop under Mojo 1.2.0, the
+    # modular/modular#7546 family; runtime-fix-save-forest).
     var b = trees_builtins()
-    var f = PythonObject(None)
     try:
-        f = py_call_typed(b.float, value)
+        return Optional[PythonObject](py_call_typed(b.float, value))
     except error:
         var message = String(error)
         if not message.startswith("TypeError: ") and not message.startswith("ValueError: "):
             raise error^
-        f = PythonObject(None)
-    var ok = f is not None and not _is_bool(value)
+        return Optional[PythonObject]()
+
+
+def _min_weight_fraction(value: PythonObject, who: String) raises -> PythonObject:
+    """`randomforest._min_weight_fraction`."""
+    var f = _float_or_absent(value)
+    var ok = Bool(f) and not _is_bool(value)
     if ok:
-        var x = Float64(py=f)
+        var x = Float64(py=f.value())
         ok = x >= 0.0 and x <= 0.5
     if not ok:
         raise Error("The 'min_weight_fraction_leaf' parameter of " + who + " must be a float"
                     + " in the range [0.0, 0.5]. Got " + _repr(value) + " instead.")
-    return f
+    return f.value()
 
 
 def _max_leaves_slot(value: PythonObject, context: PythonObject) raises -> PythonObject:
