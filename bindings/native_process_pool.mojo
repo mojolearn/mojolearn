@@ -18,6 +18,8 @@ from bindings.native_transport import (
 )
 from bindings.native_codec import codec_pack_owned, codec_unpack
 from bindings.native_json import native_json_parse
+from bindings.native_process_wire import WireOutgoing, wire_send, wire_receive
+from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.shared_slot import SharedSlot
 
@@ -290,6 +292,8 @@ def process_pool_close(pool: PythonObject) raises:
 def _process_pool_close(pool: PythonObject, abort: Bool) raises:
     var workers = pool["workers"]
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
+    # A typed pool's workers read typed frames only; tell them to close in one.
+    var typed = Bool(py=py_get(pool, "typed", PythonObject(False)))
     py_setitem(pool, "workers", bi.list())
     py_setitem(pool, "closed", True)
     var failure = String()
@@ -314,7 +318,10 @@ def _process_pool_close(pool: PythonObject, abort: Bool) raises:
                 # Cleanup must not inherit the unbounded training timeout.
                 # A nonreading worker can fill its socket before close starts.
                 transport_timeout(worker["socket"], 1.0)
-                process_send(worker["socket"], "close", -1, PythonObject(None))
+                if typed:
+                    wire_send(worker["socket"], WIRE_CLOSE, -1, List[Int64](), WireOutgoing())
+                else:
+                    process_send(worker["socket"], "close", -1, PythonObject(None))
             except:
                 # Failed workers can already have closed their socket. Their
                 # process is still reaped below; no owner is abandoned.
@@ -487,25 +494,37 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
     return result
 
 
-def process_pool_call(pool: PythonObject, worker_index: Int, request: PythonObject) raises -> PythonObject:
-    # Persistent layer owners require an addressed request. A reported model
-    # error preserves the living worker; a transport/protocol failure tears
-    # down the pool because remote state ownership can no longer be trusted.
+def process_pool_request(pool: PythonObject, worker_index: Int, request: List[Int64], outgoing: WireOutgoing) raises -> PythonObject:
+    # One addressed typed request (lane parallel-payload-transport): the
+    # request's words and its record travel as one typed frame, the reply
+    # comes back as one (bindings/native_process_wire.mojo); no codec, no
+    # JSON header, no Python container crosses the pipe. Persistent layer
+    # owners require an addressed request. A reported model error preserves
+    # the living worker; a transport/protocol failure tears down the pool
+    # because remote state ownership can no longer be trusted.
+    # REMOVED: process_pool_call (the codec-framed addressed call; its one
+    # product caller was ParallelCausalLM) and its "call" operation.
+    if not Bool(py=py_get(pool, "typed", PythonObject(False))):
+        raise Error("process: typed requests require a typed worker pool")
     var count = 1 if Bool(py=pool["cooperative"]) else len(pool["devices"])
     if worker_index < 0 or worker_index >= count:
         raise Error("process: addressed worker index outside the selected group")
     process_pool_start(pool)
     var sequence = Int(py=pool["sequence"])
-    var reply = PythonObject(None)
+    var value = PythonObject(None)
+    var failed = False
     try:
-        var worker = pool["workers"][worker_index]
-        process_send(worker["socket"], "request", sequence, request)
-        reply = process_receive(worker["socket"])
-        if Int(py=py_get(reply[0], "sequence", -1)) != sequence:
+        var workers = pool["workers"]
+        var worker = workers[worker_index]
+        var socket = worker["socket"]
+        wire_send(socket, WIRE_REQUEST, sequence, request, outgoing)
+        var reply = wire_receive(socket)
+        if reply.sequence != sequence:
             raise Error("process: response sequence mismatch")
-        var kind = String(py_get(reply[0], "kind", ""))
-        if kind != "result" and kind != "error":
+        if reply.kind != WIRE_RESULT and reply.kind != WIRE_ERROR:
             raise Error("process: unexpected addressed worker response")
+        failed = reply.kind == WIRE_ERROR
+        value = reply.value
         py_setitem(pool, "sequence", sequence + 1)
     except error:
         try:
@@ -514,9 +533,9 @@ def process_pool_call(pool: PythonObject, worker_index: Int, request: PythonObje
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
         raise error
-    if String(reply[0]["kind"]) == "error":
-        raise Error("RuntimeError: native model worker failed: " + String(reply[1]))
-    return reply[1]
+    if failed:
+        raise Error("RuntimeError: native model worker failed: " + String(value))
+    return value
 
 
 def process_worker_connect(argv: PythonObject) raises -> PythonObject:
@@ -572,8 +591,6 @@ def process_call(operation: String, args: PythonObject) raises -> PythonObject:
         return process_pool_create(args[0], Bool(py=args[1]), String(args[2]))
     elif operation == "map":
         return process_pool_map(args[0], args[1])
-    elif operation == "call":
-        return process_pool_call(args[0], Int(py=args[1]), args[2])
     elif operation == "close":
         process_pool_close(args[0])
     elif operation == "worker_echo":
