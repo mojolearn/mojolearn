@@ -86,9 +86,9 @@ def _addrs(a: List[Int], k: Int) raises:
         raise Error("x_cnn: this entry takes " + String(k) + " addresses")
 
 
-def _tail(p: List[Int], what: String) raises -> List[Int]:
-    """The parameter words after a `_m` operation's residency word."""
-    _need(p, 1, what)
+def _tail(p: List[Int]) -> List[Int]:
+    """The parameter words after a `_m` operation's residency word (the
+    caller admitted the residency word)."""
     var out = List[Int](capacity=len(p))
     for k in range(1, len(p)):  # small-loop(the caller's int parameter words)
         out.append(p[k])
@@ -869,8 +869,11 @@ def x_cnn_run(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> I
         return gcn_backward_t_run(a, p)
     if op == XC_SAGE_BACKWARD_T:
         return sage_backward_t_run(a, p)
-    var name = xcnn_op_name(op)
-    var q = _tail(p, name)
+    # perf-audit-3 (pattern 3/9): the operation's name is built only for a
+    # refusal, never on the resident path of every `_m` call.
+    if len(p) < 1:
+        _need(p, 1, xcnn_op_name(op))
+    var q = _tail(p)
     var d = p[0]
     if op == XC_GEMM_M:
         return gemm_m_run(a, d, q)
@@ -908,7 +911,7 @@ def x_cnn_run(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> I
         return pad2d_m_run(a, d, q)
     if op == XC_CHAN_COPY_M:
         return chan_copy_m_run(a, d, q)
-    raise Error("AttributeError: the CNN binding has no " + name)
+    raise Error("AttributeError: the CNN binding has no " + xcnn_op_name(op))
 
 
 def _float_words(address: Int, count: Int) raises -> List[Float64]:
