@@ -52,7 +52,7 @@ from bindings.label_integer_storage import _ndarray_buffer_address
 from bindings.label_input_sources import (
     labels_list_scalar_kind, labels_series_values, labels_text_storage,
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
-from bindings.str_labels_native import StrTable, _read, _sorted, _read_source
+from bindings.str_labels_native import StrTable, _read_source, str_unique_into
 from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
 from bindings.cpython_table import cpython_table
 from bindings.class_weight_boundary import class_weight_admit_dictionary
@@ -806,18 +806,16 @@ def _text_buffer_labels_into[S: _TextCodeStorage](y: PythonObject, context: Pyth
             index[axis] = 0
             axis -= 1
     _ = y  # the caller's ndarray owns the buffer read above
-    var order = _sorted(table, n)
+    # perf-audit-3: the classes (each its FIRST label in C order) and the
+    # codes from the parallel hash unique, which sorts only the k distinct
+    # classes; the former stable sort of all n labels ran on one thread.
     var classes = Python.list()
     var codes = S(n, context)
-    var out = _I32P(unsafe_from_address=codes.address())
+    var firsts = str_unique_into(table, n, codes.address())
     var item = ndarray.item
-    var current = -1
-    for t in range(n):  # driver-loop: over the sorted labels; a Python str only per distinct class
-        var i = order[t]
-        if t == 0 or table.compare(order[t - 1], i) != 0:
-            current += 1
-            _ = py_call(classes.append, py_call(item, y, PythonObject(i)))
-        out[i] = Int32(current)
+    for c in range(len(firsts)):  # driver-loop: over the distinct classes (one str each)
+        _ = py_call(classes.append, py_call(item, y, PythonObject(firsts[c])))
+    _ = table
     _ = codes  # keep the Python object alive through the native writes above
     return _TextLabels[S](classes, codes^, n)
 
@@ -859,17 +857,14 @@ def _text_list_labels_source[S: _TextCodeStorage, native: Bool](flat: PythonObje
     var table = StrTable()
     if not _read_source[native](flat, pins, table):
         return None
-    var order = _sorted(table, n)
+    # perf-audit-3: hash unique across the host pool, sort only the k
+    # distinct classes (was a one-thread stable sort of all n labels).
     var classes = Python.list()
     var codes = S(n, context)
-    var out = _I32P(unsafe_from_address=codes.address())
-    var current = -1
-    for t in range(n):  # driver-loop: over the sorted labels
-        var i = order[t]
-        if t == 0 or table.compare(order[t - 1], i) != 0:
-            current += 1
-            _ = py_call(classes.append, label_source_value[native](flat, pins, i))
-        out[i] = Int32(current)
+    var firsts = str_unique_into(table, n, codes.address())
+    for c in range(len(firsts)):  # driver-loop: over the distinct classes (one str each)
+        _ = py_call(classes.append, label_source_value[native](flat, pins, firsts[c]))
+    _ = table
     _ = flat
     _ = pins
     _ = codes  # keep the Python object alive through the native writes above
