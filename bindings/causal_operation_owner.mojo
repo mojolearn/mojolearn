@@ -15,6 +15,8 @@ from bindings.generation_buffers import generation_array_snapshot, generation_bu
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
+# RUN (lane rs-neural): the live field names, no Python import.
+from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names
 
 
 struct CausalFieldNames(Defaultable, Movable):
@@ -267,23 +269,6 @@ def _causal_model_names() raises -> PythonObject:
         "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15", "_runtime",
         "_parameters_exposed", "_resident_busy", "_resident_sessions", "_decode_program", "_closed", "_failed", "layer_devices", "_worker_index", "_pool", "_pools", "_causal_entries_owner")
     return names[].model
-
-
-def _causal_model_runtime_names() -> List[String]:
-    # Model fields a call itself updates (lifecycle words, resident sessions):
-    # read and normalized from the live model on every call, as before.
-    return [String("_parameters_exposed"), String("_resident_busy"), String("_resident_sessions"),
-            String("_decode_program"), String("_closed"), String("_failed")]
-
-
-def _causal_block_runtime_names() -> List[String]:
-    # Block fields an operation writes back (sessions, provider caches,
-    # arithmetic profile words, reports): taken live on every call.
-    return [String("_arithmetic_profile"), String("_arithmetic_profile_mode"), String("_arithmetic_profile_changed"),
-            String("_native_session"), String("h_last_"),
-            String("_native_block_provider_cache"), String("_native_mamba_block_provider_cache"), String("_native_mamba_state"),
-            String("_native_primitives_provider_cache"),
-            String("_native_mamba_provider_cache")]
 
 
 def _causal_model_key(mut mods: NativeModules, model: PythonObject, live: PythonObject, context: PythonObject) raises -> PythonObject:
