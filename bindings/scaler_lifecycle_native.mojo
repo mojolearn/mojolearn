@@ -29,7 +29,7 @@ from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input, scaler_snapshot_write_back
-from bindings.scaler_native import scaler_fit, _input, _ptr, _copy_row, _bool, scaler_transform_calls
+from bindings.scaler_native import scaler_fit, _input, _ptr, _copy_row, _bool, scaler_transform_calls, ScalerDoorCalls
 from core.scaler_core import ScalerTransformSpec, scaler_transform_rows, scaler_transform_rows_valid, scaler_transform_core
 from core.preprocessing_program import prep_program_stage as _stage
 from core.scaler_fit_impl import scaler_counts_f32, scaler_counts_i64, scaler_equal_f32, scaler_equal_i64, scaler_counts_f64, scaler_merge_count_only, scaler_narrow_counts
@@ -155,6 +155,27 @@ def _statistic(value: PythonObject, d: Int, name: String, context: PythonObject)
 comptime _STANDARD_ROWS_SLOT = "standard_transform_rows_v1"
 
 
+def scaler_standard_rows(calls: ScalerDoorCalls, mean: PythonObject, scale: PythonObject, d: Int, with_mean: Bool,
+                         with_std: Bool, context: PythonObject) raises -> List[Float32]:
+    """UNPACK the fitted mean_ / scale_ (None, or a contiguous Float32 row
+    of d) and RUN the core's derived-rows program; shared by the public
+    transform and the shard worker (lane scaler-typed-core)."""
+    if with_mean and mean is None:
+        raise Error("StandardScaler mean_ is missing for a centered transform")
+    if with_std and scale is None:
+        raise Error("StandardScaler scale_ is missing for a scaled transform")
+    var center = 0
+    var spread = 0
+    if mean is not None:
+        center = Int(py=classical_address(_statistic(mean, d, "mean_", context)))
+    if scale is not None:
+        spread = Int(py=classical_address(_statistic(scale, d, "scale_", context)))
+    var rows = scaler_transform_rows(calls, center, spread, d, with_mean, with_std)
+    _ = mean  # keep the Python objects alive through the native call above
+    _ = scale
+    return rows^
+
+
 def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, copy_option: PythonObject, context: PythonObject) raises -> PythonObject:
     return scaler_transform(model, source, inverse, copy_option, context, PythonObject(None))
 
@@ -179,10 +200,6 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var with_std = _bool(fields["with_std_"], context)
     var mean = fields["mean_"]
     var scale = fields["scale_"]
-    if with_mean and mean is None:
-        raise Error("StandardScaler mean_ is missing for a centered transform")
-    if with_std and scale is None:
-        raise Error("StandardScaler scale_ is missing for a scaled transform")
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     # The derived and validated rows of the fitted statistics (the stage 264
@@ -202,18 +219,8 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         unsafe_memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
         _ = held  # keep the Python object alive through the copy above
     else:
-        var center = 0
-        var spread = 0
-        if mean is not None:
-            mean = _statistic(mean, d, "mean_", context)
-            center = Int(py=classical_address(mean))
-        if scale is not None:
-            scale = _statistic(scale, d, "scale_", context)
-            spread = Int(py=classical_address(scale))
-        arena = scaler_transform_rows(calls, center, spread, d, with_mean, with_std)
+        arena = scaler_standard_rows(calls, mean, scale, d, with_mean, with_std, context)
         ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-        _ = mean  # keep the Python objects alive through the native call above
-        _ = scale
         if scaler_transform_rows_valid(ap, d):
             var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
             unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)

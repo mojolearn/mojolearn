@@ -84,6 +84,30 @@ def _statistic(value: PythonObject, d: Int, name: String, context: PythonObject)
 comptime _ROWS_SLOT = "minmax_transform_rows_v1"
 
 
+def minmax_rows(calls: ScalerDoorCalls, min_value: PythonObject, scale_value: PythonObject, d: Int,
+                context: PythonObject) raises -> List[Float32]:
+    """UNPACK the fitted min_ / scale_ rows and RUN the core's derived-rows
+    program; shared by the public transform and the shard worker."""
+    var center = _statistic(min_value,d,"min_",context)
+    var spread = _statistic(scale_value,d,"scale_",context)
+    var rows = scaler_transform_rows(calls, Int(py=classical_address(center)), Int(py=classical_address(spread)), d, True, True)
+    _ = center  # keep the Python objects alive through the native call above
+    _ = spread
+    return rows^
+
+
+def minmax_fit_publish(fields: PythonObject, rows: List[Float32], n: Int, d: Int, configuration: PythonObject,
+                       context: PythonObject) raises:
+    """PACK: a MinMaxScaler fit's fitted fields; shared by the public fit and
+    the shard worker."""
+    _publish_extrema(fields, rows, d, context)
+    py_setitem(fields,"n_features_in_",d)
+    py_setitem(fields,"n_samples_seen_",n)
+    py_setitem(fields,"numeric_mode_",configuration[0])
+    py_setitem(fields,"feature_range_",Python.tuple(configuration[1],configuration[2]))
+    py_setitem(fields,"clip_",configuration[4])
+
+
 def _minmax_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("TypeError: MinMaxScaler numeric_mode_ must remain a native string")
@@ -156,12 +180,7 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject,
                                       Float32(Float64(py=configuration[2])))
     _ = values  # keep the Python object alive through the native call above
     # PACK
-    _publish_extrema(fields, rows, d, context)
-    py_setitem(fields,"n_features_in_",d)
-    py_setitem(fields,"n_samples_seen_",n)
-    py_setitem(fields,"numeric_mode_",mode)
-    py_setitem(fields,"feature_range_",Python.tuple(configuration[1],configuration[2]))
-    py_setitem(fields,"clip_",configuration[4])
+    minmax_fit_publish(fields, rows, n, d, configuration, context)
     _ = values^
     return model
 
@@ -323,12 +342,8 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         unsafe_memcpy(dest=ap, src=_ptr(held[2]), count=7*d+5)
         _ = held  # keep the Python object alive through the copy above
     else:
-        var mean = _statistic(min_value,d,"min_",context)
-        var scale = _statistic(scale_value,d,"scale_",context)
-        arena = scaler_transform_rows(calls, Int(py=classical_address(mean)), Int(py=classical_address(scale)), d, True, True)
+        arena = minmax_rows(calls, min_value, scale_value, d, context)
         ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-        _ = mean  # keep the Python objects alive through the native call above
-        _ = scale
         if scaler_transform_rows_valid(ap, d):
             var rows = classical_typed(Python.tuple(7*d+5), "<f4", context["output_context"])
             unsafe_memcpy(dest=_ptr(rows), src=ap, count=7*d+5)
