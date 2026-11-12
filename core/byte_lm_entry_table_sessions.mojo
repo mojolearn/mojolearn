@@ -32,7 +32,11 @@ the layout requires a new V suffix. Publication and lookup are small
 metadata operations with no independent numerical work to split.
 """
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word, entry_table_publish, entry_table_read
+from std.sys import is_defined
+from std.sys.info import size_of
+from core.native_call_output import NativeCallOutput
 from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call_spans
 from core.state_registry import StateHandle
 from core.byte_lm_entry_table import ByteLmEntryKey
 
@@ -205,25 +209,36 @@ def byte_lm_sessions_write_handle(a: List[Int], handle: StateHandle) raises -> I
     return 0
 
 
-@fieldwise_init
-struct ByteLmSessionRequest(Movable):
-    """A run request rewritten for the image's trainer entry: the session
-    address first, then the caller's descriptors and trainer words."""
-    var operation: Int
-    var addresses: List[Int]
-    var ints: List[Int]
-
-
-def byte_lm_sessions_request(session: Int, a: List[Int], p: List[Int]) raises -> ByteLmSessionRequest:
+def byte_lm_sessions_run(entry: NativeDescriptorCall, session: Int, a: List[Int], p: List[Int],
+                         f: List[Float64]) raises -> Int:
+    """One run request on the image's trainer entry: the session address
+    first, then the caller's descriptors; the trainer words p[3:] and the
+    scalars pass as spans of the admitted request, not copied into new Lists
+    (perf-audit-3: the former `ByteLmSessionRequest` copied p[3:] per step)."""
     if len(p) < 3 or session == 0:
         raise Error("native byte LM sessions: invalid run request")
-    var addresses: List[Int] = [session]
+    var addresses = List[Int](capacity=len(a) + 1)
+    addresses.append(session)
     for i in range(len(a)):  # small-loop(the trainer descriptors of one call)
         addresses.append(a[i])
-    var ints = List[Int]()
-    for i in range(3, len(p)):  # small-loop(the trainer plan words)
-        ints.append(p[i])
-    return ByteLmSessionRequest(p[2], addresses^, ints^)
+    var ints = Int(p.unsafe_ptr()) + 3 * size_of[Int]()
+    var result = 0
+    comptime if is_defined["MOJOLEARN_ENTRY_TABLE_HEAP_OUTPUT"]():
+        var held = List[NativeCallOutput]()
+        held.append(NativeCallOutput())
+        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
+            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), held[0])
+        _ = held
+    else:
+        var output = NativeCallOutput()
+        result = native_descriptor_call_spans(entry, p[2], Int(addresses.unsafe_ptr()), len(addresses),
+            ints, len(p) - 3, Int(f.unsafe_ptr()), len(f), output)
+        _ = output
+    # Raw span addresses do not themselves retain their List owners.
+    _ = addresses
+    _ = p
+    _ = f
+    return result
 
 
 def byte_lm_sessions_floats(ff: Int, nf: Int) raises -> List[Float64]:

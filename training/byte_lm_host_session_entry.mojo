@@ -11,12 +11,12 @@ HOST ONLY: nothing here imports device code.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_call, native_descriptor_words, native_descriptor_report
+from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.state_registry import StateRegistry
 from core.byte_lm_entry_table_sessions import (
     BS_CREATE, BS_RUN, BS_CLOSE, BS_OP_COUNT, byte_lm_sessions_handle, byte_lm_sessions_write_handle,
     byte_lm_sessions_check_create,
-    byte_lm_sessions_request, byte_lm_sessions_floats,
+    byte_lm_sessions_run, byte_lm_sessions_floats,
 )
 from training.byte_lm_host_session import ByteHostSession
 from training.byte_lm_host_trainer_dispatch import host_trainer_native_v1
@@ -54,8 +54,7 @@ def byte_lm_host_sessions_operation(op: Int, a: List[Int], p: List[Int], f: List
         return 0
     if op == BS_RUN:
         var lease = BYTE_LM_HOST_SESSIONS.acquire(handle)
-        var request = byte_lm_sessions_request(lease[].address, a, p)
-        var result = native_descriptor_call(host_trainer_native_v1, request.operation, request.addresses, request.ints, f)
+        var result = byte_lm_sessions_run(host_trainer_native_v1, lease[].address, a, p, f)
         _ = lease  # the session outlives the synchronous trainer call
         return result
     raise Error("byte LM sessions: unknown operation " + String(op))

@@ -14,12 +14,12 @@ words and bits. Releasing the last lease runs `ByteLMSession.__deinit__`
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from core.native_descriptor_abi import NativeDescriptorError
-from core.native_descriptor_call import native_descriptor_call, native_descriptor_words, native_descriptor_report
+from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.state_registry import StateRegistry
 from core.byte_lm_entry_table_sessions import (
     BS_CREATE, BS_RUN, BS_CLOSE, BS_OP_COUNT, byte_lm_sessions_handle, byte_lm_sessions_write_handle,
     byte_lm_sessions_check_create,
-    byte_lm_sessions_request, byte_lm_sessions_floats,
+    byte_lm_sessions_run, byte_lm_sessions_floats,
 )
 from training.byte_lm_binding_impl import ByteLMSession
 from training.byte_lm_native_dispatch import byte_lm_native_v1
@@ -69,8 +69,7 @@ def byte_lm_device_sessions_operation(op: Int, a: List[Int], p: List[Int], f: Li
         return 0
     if op == BS_RUN:
         var lease = BYTE_LM_DEVICE_SESSIONS.acquire(handle)
-        var request = byte_lm_sessions_request(lease[].address, a, p)
-        var result = native_descriptor_call(byte_lm_native_v1, request.operation, request.addresses, request.ints, f)
+        var result = byte_lm_sessions_run(byte_lm_native_v1, lease[].address, a, p, f)
         _ = lease  # the session outlives the synchronous trainer call
         return result
     raise Error("byte LM sessions: unknown operation " + String(op))
