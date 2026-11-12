@@ -2001,8 +2001,6 @@ struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
 comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable[LABELS_NATIVE_ABI_NAME], ("MojolearnLabelsNativeTableIdenticalV4" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV4")]
 
 
->>>
-
 def labels_native_api_v3_binding() raises -> PythonObject:
     var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
@@ -2045,8 +2043,7 @@ def build__mojolearn() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
->>>
-
+        # TOMBSTONE: LABELS_NATIVE_API_V1_V2 registrations deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b. Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
         m.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")

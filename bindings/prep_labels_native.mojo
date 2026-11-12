@@ -34,8 +34,6 @@ from bindings.boundary_read import text_buffer_view, read_text_rows_into, pack_u
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
 from bindings.classical_pandas import classical_admit_value
 from bindings.label_admission_native import LabelTypeKinds
->>>
-
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
 from bindings.cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
@@ -628,7 +626,6 @@ def _class_list(fitted: PythonObject, codes: List[Int], context: PythonObject) r
 # refusal) become Python str objects. `tolist()` made one str per row and the
 # lookups then read each back.
 
->>>
 
 def _text_labels(y: PythonObject, context: PythonObject, mut table: StrTable) raises -> Bool:
     """A one-dimensional, non-empty NumPy 'U' label vector read ONCE into

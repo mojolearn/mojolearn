@@ -1131,8 +1131,6 @@ def labels_native_api_v3_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
->>>
-
 from core.spectral_preparation_api import SpectralPreparationAPI
 from core.spectral_preparation_host import SpectralPreparationHost
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
@@ -1151,8 +1149,7 @@ def build__mojolearn_core_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
         module.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
->>>
-
+        # TOMBSTONE: LABELS_NATIVE_API_V1_V2 registrations deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b. Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
         module.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
         module.def_function[core_host_vendor_binding]("core_host_vendor")
