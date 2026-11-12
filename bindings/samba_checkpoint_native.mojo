@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native, bounded streaming for the existing Samba v2 checkpoint format."""
-from std.ffi import external_call
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_path_exists, native_json_parse
@@ -10,13 +9,14 @@ from bindings.causal_checkpoint import checkpoint_array
 from bindings.samba_state_native import samba_snapshot, samba_from_state, _samba_registry
 from bindings.samba_config_native import samba_config_from_dict
 from bindings.sha256_door import sha256_update, sha256_digest
-from core.sha256 import Sha256, sha256_hex_addr
+from core.sha256 import sha256_hex_addr
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+# RUN (lane rs-neural): names, hash and the native chunked write, no Python import.
+from training.samba_checkpoint_run import SAMBA_TRANSFER_CHUNK, _checkpoint_names, _checkpoint_hash, _checkpoint_write
 
 
 comptime SAMBA_HEADER_LIMIT = 1048576
-comptime SAMBA_TRANSFER_CHUNK = 1048576
 
 
 def _checkpoint_path(value: PythonObject) raises -> PythonObject:
@@ -29,16 +29,8 @@ def _checkpoint_path(value: PythonObject) raises -> PythonObject:
     return native_path(value)
 
 
-def _checkpoint_names() -> List[String]:
-    return [String("parameters"), String("exp_avg"), String("exp_avg_sq"), String("buf_initialized")]
-
-
 def _checkpoint_magic() raises -> PythonObject:
     return py_call(PythonObject("MOJOLEARN-SAMBA").encode, "ascii") + py_call(native_loaded_module("builtins").bytes, py_ints([2, 10]))
-
-
-def _checkpoint_hash() -> Sha256:
-    return Sha256()
 
 
 def _checkpoint_raw(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
@@ -59,29 +51,6 @@ def _checkpoint_digest(raw: PythonObject) raises -> PythonObject:
     for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file hashing chunks
         sha256_update(hash, raw[py_call(bi.slice, start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))])
     return PythonObject(hash.hexdigest())
-
-
-def _checkpoint_write(fd: Int, address: Int, count: Int, mut written: Sha256, mut whole: Sha256) raises:
-    """Write `count` bytes at `address` to `fd` in bounded chunks with the
-    libc `write` (non-variadic), hashing each chunk into `written` and
-    `whole` from the same bytes as it is written (row N168: formerly a slice
-    object, a Python `stream.write` and two `array('B')` copies per MiB)."""
-    var start = 0
-    while start < count:  # driver-loop: over bounded file write chunks
-        var size = min(SAMBA_TRANSFER_CHUNK, count - start)
-        var done = 0
-        while done < size:  # driver-loop: over partial writes of one chunk
-            # The std declares libc `write` as (Int32 fd, byte pointer, Int count)
-            # -> Int under Mojo 1.2 (probed 2026-11-11, r6 build: any other
-            # lowering is "existing function with conflicting signature"; one C
-            # symbol admits one signature per binary).
-            var put = external_call["write", Int](Int32(fd), UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address + start + done), size - done)
-            if put <= 0:
-                raise Error("OSError: Samba checkpoint short write")
-            done += put
-        written.update(address + start, size)
-        whole.update(address + start, size)
-        start += size
 
 
 def _checkpoint_validate(metadata: PythonObject, descriptors: PythonObject, context: PythonObject) raises:
