@@ -28,7 +28,7 @@ A handle word is `generation << 32 | index` (never 0: generations start at 1);
 0 means "no handle". Creation and release are small metadata operations with
 no independent numerical work to split.
 """
-from core.entry_table import EntryRef, entry_ref_call
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_same
 from core.neural_entry_table import NEURAL_BLOCK_SESSION_CREATE, NEURAL_BLOCK_SESSION_CLOSE
 from core.state_registry import StateHandle
 
@@ -64,10 +64,11 @@ struct TransformerBlockSession(Movable, Writable):
 
     def serves(self, entry: EntryRef) -> Bool:
         """Whether this open session belongs to the image `entry` was
-        resolved for: the same table layout, tier and vendor (one GPU
-        Transformer image per tier and vendor publishes the block entry).
+        resolved for: the same published pointer and layout word (one GPU
+        Transformer image per tier and vendor publishes the block entry, in
+        the forward and the training family alike).
         Replaces the former `_session_binding is <binding module>` check."""
-        return self.handle != 0 and self.entry.word == entry.word
+        return self.handle != 0 and entry_ref_same(self.entry, entry)
 
     def word(self) raises -> Int:
         """The handle word a session operation leads with."""
