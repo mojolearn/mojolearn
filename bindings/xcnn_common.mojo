@@ -39,7 +39,7 @@ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter,
 # imported here so the doors keep one import site.
 from x_cnn.door_run import (
     XCNN_F_ADAPT, XCNN_F_GRAPH, XCNN_F_PAD, XCNN_F_GROUP, XCNN_F_LAYER_IO, XCNN_F_PIN, XCNN_F_RESIDENT,
-    XCNN_F2_ALL_OFF, XcnnRoute, xcnn_run_call_f, xcnn_run_call, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
+    XCNN_F2_ALL_OFF, xcnn_run_call, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
     xcnn_run_copy_f32,
 )
 
@@ -136,30 +136,18 @@ def xcnn_ref(entries: PythonObject) raises -> EntryRef:
     return xcnn_entry_ref(xcnn_key(entries))
 
 
-def xcnn_call_f(xc: EntryRef, op: Int, addrs: List[Int], ints: List[Int],
-                floats: List[Float64]) raises -> Int:
-    """One RUN call (`x_cnn/door_run.mojo` `xcnn_run_call_f`) through the
+# perf-audit-3 (pattern 14): the unused `xcnn_call_f` and `xcnn_route` (a
+# second, eager-reading route beside the per-operation `xcnn_ref`; no door
+# called them) are deleted. `XcnnRoute` stays in x_cnn/door_run.mojo for its
+# native test suite.
+
+
+def xcnn_call(xc: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
+    """One RUN call (`x_cnn/door_run.mojo` `xcnn_run_call`) through the
     resolved entry, with the GIL released. Plain words only: the caller
     converted every address and handle and keeps the buffers alive. An image
     without the operation refuses with the text a missing Python entry raised
     ("the CNN binding has no x_cnn_<name>")."""
-    var result = 0
-    var py = Python()
-    with GILReleased(py):
-        result = xcnn_run_call_f(xc, op, addrs, ints, floats)
-    return result
-
-
-def xcnn_route(entries: PythonObject, context: PythonObject) raises -> XcnnRoute:
-    """UNPACK: the connected image's route as typed words for RUN, with its
-    entry resolved once."""
-    return XcnnRoute(xcnn_ref(entries), xcnn_mixed(entries), Int(py=entries["idn"]), Int(py=entries["idn2"]),
-                     Bool(py=context["xcnn_device_io_off"]))
-
-
-def xcnn_call(xc: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
-    """`xcnn_call_f` for the operations that read no Float64 scalar (no empty
-    float List is built)."""
     var result = 0
     var py = Python()
     with GILReleased(py):
