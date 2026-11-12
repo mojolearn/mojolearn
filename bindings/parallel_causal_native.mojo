@@ -18,7 +18,14 @@ from bindings.native_json import native_path, native_path_exists
 from bindings.native_process_pool import process_pool_create, process_pool_start, process_pool_call, process_pool_close, process_worker_connect, process_worker_next, process_send
 from bindings.native_transport import transport_close, _transport_state
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.boundary_read import buffer_view
+from core.parallel_worker_request import (
+    WorkerRequest, worker_request_decode, parallel_causal_op_code, WORKER_NO_HANDLE,
+    PC_CONFIGURE, PC_BLOCK, PC_TENSORS, PC_EMBEDDING, PC_FINAL, PC_HEAD, PC_HEAD_INT15, PC_NORM, PC_ROUTE,
+    PC_ALLOCATE, PC_RELEASE, PC_STATE, PC_PUBLISH_STATE, PC_RUN_LAYERS, PC_PARAMETERS, PC_RUN, PC_BLOCK_FIELDS,
+)
 from core.shared_slot import SharedSlot
+from std.collections import Dict
 
 
 struct ParallelCausalBoundary(Defaultable, Movable):
@@ -318,12 +325,56 @@ def _parallel_causal_wire_plan(plan: PythonObject) raises -> PythonObject:
     return result
 
 
-def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject, operation: String, args: PythonObject) raises -> PythonObject:
+struct CausalWorkerRegistry(Movable):
+    """The worker's own handles: a layer index names a block holder and a
+    state token names a layer state, both valid only in this worker. A typed
+    request carries the id; nothing about the parent's model object crosses.
+    (Replaces the Python `world` dict and its "blocks"/"states"/"next_state"
+    entries; lane parallel-workers-typed-rpc.)"""
+    var plan: PythonObject
+    var top: PythonObject
+    var bindings: PythonObject
+    var blocks: Dict[Int, PythonObject]
+    var states: Dict[Int, PythonObject]
+    var state_layers: Dict[Int, Int]
+    var next_state: Int
+
+    def __init__(out self):
+        self.plan = PythonObject(None)
+        self.top = PythonObject(None)
+        self.bindings = PythonObject(None)
+        self.blocks = Dict[Int, PythonObject]()
+        self.states = Dict[Int, PythonObject]()
+        self.state_layers = Dict[Int, Int]()
+        self.next_state = 0
+
+
+def _registry_block(registry: CausalWorkerRegistry, index: Int) raises -> PythonObject:
+    if index not in registry.blocks:
+        raise Error("ParallelCausalLM: layer not initialized in this worker")
+    return registry.blocks.get(index, PythonObject(None))
+
+
+def _registry_state(registry: CausalWorkerRegistry, token: Int, layer: Int = WORKER_NO_HANDLE) raises -> PythonObject:
+    """The state `token` names; with `layer`, it must belong to that layer."""
+    if token not in registry.states:
+        raise Error("ParallelCausalLM: state released")
+    if layer != WORKER_NO_HANDLE and registry.state_layers.get(token, WORKER_NO_HANDLE) != layer:
+        raise Error("ParallelCausalLM: state belongs to another layer")
+    return registry.states.get(token, PythonObject(None))
+
+
+def _parallel_causal_worker_request(mut mods: NativeModules, mut registry: CausalWorkerRegistry, request: WorkerRequest,
+                                    args: PythonObject) raises -> PythonObject:
+    # RUN of one typed request: `request` is the decoded struct (operation
+    # code, handle id, words); `args` is only the tensor or structural payload
+    # that rides beside it (None for handle-only operations).
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var bi = p[].bi
     var context = p[].context
-    if operation == "configure":
-        if py_get(world, "top") is not None:
+    var op = request.op
+    if op == PC_CONFIGURE:
+        if registry.top is not None:
             raise Error("ParallelCausalLM: worker already configured")
         var route = PythonObject("cpu" if String(context["selected_vendor"]) == "cpu" else "gpu")
         if Bool(py=args[0]["device"] != route):
@@ -345,23 +396,20 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         py_setitem(entries, "entry_mode", bindings["entry_mode"])
         py_setitem(entries, "entry_vendor", bindings["entry_vendor"])
         py_setattr(top, "_native_entries", entries)
-        py_setitem(world, "plan", plan)
-        py_setitem(world, "top", top)
-        py_setitem(world, "bindings", bindings)
-        py_setitem(world, "blocks", bi.dict())
-        py_setitem(world, "states", bi.dict())
-        py_setitem(world, "next_state", 0)
+        registry.plan = plan
+        registry.top = top
+        registry.bindings = bindings
         return PythonObject(True)
-    var top = py_get(world, "top")
+    var top = registry.top
     if top is None:
         raise Error("ParallelCausalLM: worker was not told its route")
-    if operation == "block":
-        var index = args[0]
-        if py_contains(world["blocks"], index):
+    if op == PC_BLOCK:
+        var index = request.handle
+        if index in registry.blocks:
             raise Error("ParallelCausalLM: layer already initialized")
-        var block = _model_block(mods, args[1], world["plan"], top.numeric_profile, top.device, world["bindings"], context)
+        var block = _model_block(mods, args, registry.plan, top.numeric_profile, top.device, registry.bindings, context)
         var holder = neural_block_owner(mods, block, context)
-        py_setitem(world["blocks"], index, holder)
+        registry.blocks[index] = holder
         var result = bi.dict()
         py_setitem(result, "weight_format", _parallel_causal_fields(block)["weight_format"])
         py_setitem(result, "weight_names", holder._native_entries["weight_names"])
@@ -369,7 +417,7 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         py_setitem(result, "numeric_mode", holder._native_numeric_mode)
         py_setitem(result, "mamba1_profile", py_get(holder._native_entries, "mamba1_profile", 1))
         return result
-    if operation == "tensors":
+    if op == PC_TENSORS:
         var fields = _parallel_causal_fields(top)
         var keys = py_call(bi.list, args)
         for i in range(len(keys)):  # driver-loop: over the embedding and final-head tensor owners
@@ -378,26 +426,26 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
                 raise Error("ParallelCausalLM: unknown top-level tensor")
             py_setitem(fields, "_" + name, args[keys[i]])
         if py_contains(args, "head") and String(top.numeric_profile) == "fixed15_v1":
-            py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, causal_entry_key(world["bindings"])))
+            py_setattr(top, "_head_int15", _model_quantize15(mods, top._head, causal_entry_key(registry.bindings)))
         return top._head_int15
-    if operation == "embedding":
+    if op == PC_EMBEDDING:
         var windowed_result12 = causal_model_embedding(top, args)
         mods.released()
         return windowed_result12^
-    if operation == "final" or operation == "head" or operation == "head_int15":
+    if op == PC_FINAL or op == PC_HEAD or op == PC_HEAD_INT15:
         # Generation head admission reads only a captured native namespace
         # (generation_metadata_pyapi._generation_fields), never a live model
         # owner. Capture the worker's private top-level fields per operation,
         # as the single-process path captures its model.
         var captured_top = _causal_namespace(mods, _parallel_causal_fields(top))
-        if operation == "final":
+        if op == PC_FINAL:
             var windowed_result11 = causal_model_head(captured_top, args)
             mods.released()
             return windowed_result11^
-        var windowed_result10 = causal_model_head(captured_top, args, False, operation == "head_int15")
+        var windowed_result10 = causal_model_head(captured_top, args, False, op == PC_HEAD_INT15)
         mods.released()
         return windowed_result10^
-    if operation == "norm":
+    if op == PC_NORM:
         var x = args[0]
         var dims = List[Int]()
         for i in range(len(x.shape)):  # driver-loop: over activation shape metadata
@@ -410,29 +458,32 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
         mods.released()
         _ = keep^
         return out
-    if operation == "route":
+    if op == PC_ROUTE:
         if Bool(py=args != top.device):
             raise Error("ParallelCausalLM: worker already owns a different route")
         return PythonObject(True)
-    if operation == "allocate":
-        var holder = world["blocks"][args[0]]
-        var state = neural_block_allocate_binding(mods, holder._blocks[0], args[1], args[2], context)
-        var token = Int(py=world["next_state"])
-        py_setitem(world, "next_state", token + 1)
-        py_setitem(world["states"], token, Python.list(args[0], state))
+    if op == PC_ALLOCATE:
+        # words: [batch, capacity or -1 for none]
+        var holder = _registry_block(registry, request.handle)
+        var capacity = PythonObject(None) if request.words[1] < 0 else PythonObject(request.words[1])
+        var state = neural_block_allocate_binding(mods, holder._blocks[0], PythonObject(request.words[0]), capacity, context)
+        var token = registry.next_state
+        registry.next_state = token + 1
+        registry.states[token] = state
+        registry.state_layers[token] = request.handle
         return PythonObject(token)
-    if operation == "release":
-        _ = py_call(world["states"].pop, args, PythonObject(None))
+    if op == PC_RELEASE:
+        # A token this worker no longer holds is a quiet success, as before.
+        if request.handle in registry.states:
+            _ = registry.states.pop(request.handle)
+            _ = registry.state_layers.pop(request.handle)
         return PythonObject(True)
-    if operation == "state" or operation == "publish_state":
-        var token = args if operation == "state" else args[0]
-        if not py_contains(world["states"], token):
-            raise Error("ParallelCausalLM: state released")
-        var state = world["states"][token][1]
+    if op == PC_STATE or op == PC_PUBLISH_STATE:
+        var state = _registry_state(registry, request.handle)
         var fields = _parallel_causal_fields(state)
-        if operation == "state":
+        if op == PC_STATE:
             return py_call(bi.dict, fields)
-        var supplied = args[1]
+        var supplied = args
         if Bool(py=py_call(bi.set, supplied) != py_call(bi.set, fields)):
             raise Error("ParallelCausalLM: restored state fields differ")
         var keys = py_call(bi.list, fields)
@@ -446,63 +497,69 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
                 raise Error("ParallelCausalLM: restored state metadata type differs")
         _ = py_call(fields.update, supplied)
         return PythonObject(True)
-    if operation == "run_layers":
+    if op == PC_RUN_LAYERS:
         # Lane p3-msel-parallel-and-process-pool (audit B worst path 9): one
         # request runs this worker's consecutive layers for a token batch,
         # with the embedding when the batch starts here and the final head
-        # when it ends here. args: ([(layer index, state token)], method, x,
-        # ids or None, final flag). The same entries in the same order as the
-        # per-layer requests: no bits change.
-        var items = args[0]
-        var step = PythonObject(String(args[1]) == "step")
-        var x = args[2]
-        if args[3] is not None:
-            x = causal_model_embedding(top, args[3])
+        # when it ends here. words: [step, has ids, final, n, (layer index,
+        # state token or -1) * n]; args: (x, ids or None). The same entries in
+        # the same order as the per-layer requests: no bits change.
+        var count = request.words[3]
+        if count < 0 or len(request.words) != 4 + 2 * count:
+            raise Error("ParallelCausalLM: malformed run_layers request")
+        var step = PythonObject(request.words[0] != 0)
+        var x = args[0]
+        if request.words[1] != 0:
+            x = causal_model_embedding(top, args[1])
             mods.released()
-        for i in range(len(items)):  # driver-loop: over this worker's consecutive layers
-            var item = items[i]
-            var layer_holder = world["blocks"][item[0]]
+        for i in range(count):  # driver-loop: over this worker's consecutive layers
+            var index = request.words[4 + 2 * i]
+            var token = request.words[5 + 2 * i]
+            var layer_holder = _registry_block(registry, index)
             var layer_state = PythonObject(None)
-            if item[1] is not None:
-                if not py_contains(world["states"], item[1]):
-                    raise Error("ParallelCausalLM: state released")
-                var saved = world["states"][item[1]]
-                if Bool(py=saved[0] != item[0]):
-                    raise Error("ParallelCausalLM: state belongs to another layer")
-                layer_state = saved[1]
+            if token != WORKER_NO_HANDLE:
+                layer_state = _registry_state(registry, token, index)
             x = neural_block_forward_binding(mods, layer_holder._blocks[0], x, layer_state, step, PythonObject(None), context)
-        if Bool(py=args[4]):
+        if request.words[2] != 0:
             var head_top = _causal_namespace(mods, _parallel_causal_fields(top))
             x = causal_model_head(head_top, x)
             mods.released()
         return x
-    var holder = world["blocks"][args if operation == "parameters" else args[0]]
+    var holder = _registry_block(registry, request.handle)
     var block = holder._blocks[0]
-    if operation == "parameters":
+    if op == PC_PARAMETERS:
         var fields = _parallel_causal_fields(block)
         var result = bi.dict()
         var names = holder._native_entries["weight_names"]
         for i in range(len(names)):  # driver-loop: over the original block parameter registry
             py_setitem(result, names[i], fields["_w"][i])
         return result
-    if operation == "run":
+    if op == PC_RUN:
+        # words: [step, state token or -1]; args: x
         var state = PythonObject(None)
-        if args[3] is not None:
-            if not py_contains(world["states"], args[3]):
-                raise Error("ParallelCausalLM: state released")
-            var saved = world["states"][args[3]]
-            if Bool(py=saved[0] != args[0]):
-                raise Error("ParallelCausalLM: state belongs to another layer")
-            state = saved[1]
-        return neural_block_forward_binding(mods, block, args[2], state, PythonObject(String(args[1]) == "step"), PythonObject(None), context)
-    if operation == "block_fields":
+        if request.words[1] != WORKER_NO_HANDLE:
+            state = _registry_state(registry, request.words[1], request.handle)
+        return neural_block_forward_binding(mods, block, args, state, PythonObject(request.words[0] != 0), PythonObject(None), context)
+    if op == PC_BLOCK_FIELDS:
         var fields = _parallel_causal_fields(block)
         var result = bi.dict()
         for key in [String("_w"), String("_wopt"), String("_int15"), String("_opts_tail"), String("n_heads"), String("n_kv_heads"), String("window"), String("dt_limit"), String("weight_format")]:  # driver-loop: over serializable parameter/fingerprint metadata
             if py_contains(fields, key):
                 py_setitem(result, key, fields[key])
         return result
-    raise Error("ParallelCausalLM: unknown worker operation " + operation)
+    raise Error("ParallelCausalLM: unknown worker operation code " + String(op))
+
+
+def _parallel_causal_decode(envelope: PythonObject) raises -> WorkerRequest:
+    """UNPACK in the worker: the typed request from its wire bytes, one
+    buffer export of the received `bytes`."""
+    if py_type(envelope) is not PARALLEL_CAUSAL.get_or_create_ptr()[].bi.bytes:
+        raise Error("ParallelCausalLM: worker request must be a typed request")
+    var view = buffer_view(envelope)
+    var request = worker_request_decode(view.address(), view.count() * view.itemsize)
+    view.release()
+    _ = envelope
+    return request^
 
 
 def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
@@ -511,7 +568,7 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
         _ = model_string(mods, argv[i])
     var socket = process_worker_connect(argv)
     mods.released()
-    var world = PARALLEL_CAUSAL.get_or_create_ptr()[].bi.dict()
+    var registry = CausalWorkerRegistry()
     try:
         while True:  # driver-loop: over native remote model/layer/state requests
             var request = process_worker_next(socket)
@@ -520,7 +577,9 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
                 break
             var sequence = Int(py=request[0]["sequence"])
             try:
-                var result = _parallel_causal_worker_request(mods, world, String(request[1][0]), request[1][1])
+                var envelope = request[1]
+                var typed = _parallel_causal_decode(envelope[0])
+                var result = _parallel_causal_worker_request(mods, registry, typed, envelope[1])
                 process_send(socket, "result", sequence, result)
                 mods.released()
             except error:
