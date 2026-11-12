@@ -33,6 +33,7 @@ from bindings.trees_public_inputs import (
     TreesLabels, trees_builtins, trees_entry, trees_need, trees_helper, trees_address,
     trees_forest_x, trees_finite_f32, trees_call, trees_encode_labels,
 )
+from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_vector, admitted_array, classical_view, admitted_dtype,
 )
@@ -804,7 +805,7 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
     return _keep_ret_xe^
 
 
-def _has_nan(x: AdmittedX, context: PythonObject) raises -> Bool:
+def _has_nan(x: AdmittedXView, context: PythonObject) raises -> Bool:
     """Whether a float32 X holds a NaN (an infinity is not one): the label
     encoder refuses a NaN by name and accepts an infinity. Reached only when
     the finite scan already failed."""
@@ -933,7 +934,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi_output else "")
                     + " (GradientBoosting).")
     if _eq(_field(fields, model, "nan_mode"), "Forbidden") and not trees_finite_f32(x.address, n_rows * n_features):
-        if _has_nan(x, context):
+        if _has_nan(x.view(), context):
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
                         + "CatBoost refuses this pair; this implementation would otherwise "
                         + "bin the NaNs silently with no NaN bin. Use "

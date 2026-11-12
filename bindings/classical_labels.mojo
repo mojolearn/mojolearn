@@ -73,6 +73,7 @@ from bindings.labels_descriptor_boundary_door import (
 )
 from bindings.label_input_sources_unpack import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
+from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admit_c_view,
     admitted_dtype,
@@ -1578,7 +1579,7 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     var inputs: List[PythonObject] = [yt, yp]
     var w_array = PythonObject(None)
     if weighted:
-        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
+        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value().view(), context)
         inputs.append(w_array)
     var arena = _accuracy_run(plan.program, inputs, mode, context)
     var base = arena.base()
@@ -1738,7 +1739,7 @@ def labels_score_from_codes(y_true: PythonObject, var classes: PythonObject, cod
     return _accuracy_codes(yt, yp, n, len(classes), w^, mode, context)
 
 
-def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
+def _owned_f32(w: AdmittedXView, context: PythonObject) raises -> PythonObject:
     """A float32 Array copy of weights that borrow a foreign buffer (the
     program runner copies Arrays into its arena; `put` took `as_f32_c`'s
     Array). Copy the already-admitted contiguous float32 words natively."""
@@ -1747,7 +1748,6 @@ def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
     # `array` owns the admitted storage; it need not itself export bytes.
     unsafe_memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
            src=_F32P(unsafe_from_address=w.address), count=count)
-    _ = w  # retain the source export until the copy finishes
     return out
 
 

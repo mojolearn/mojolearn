@@ -33,6 +33,7 @@ from bindings.trees_public_inputs import (
     trees_reshape, trees_address, trees_itemsize,
     trees_encode_labels, trees_decode_labels, trees_cast, trees_finite_f32,
 )
+from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype,
@@ -298,7 +299,7 @@ def _index_of_one(member: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=_member_class_codes(member, context)[3])
 
 
-def _one_col(xt: PythonObject, p: AdmittedX, j: Int, context: PythonObject) raises -> PythonObject:
+def _one_col(xt: PythonObject, p: AdmittedXView, j: Int, context: PythonObject) raises -> PythonObject:
     """Column j of a float32 (n, c) block as an (n, 1) Array (`_gather`)."""
     var rows = _arange(xt, p.rows, context)
     var col = _codes_array(Python.list(PythonObject(j)), context)
@@ -335,7 +336,7 @@ def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int,
     _ = codes
 
 
-def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: AdmittedX, rows: PythonObject,
+def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: AdmittedXView, rows: PythonObject,
            col0: Int) raises -> Int:
     """`_TreesWrapperBase._place`: the block's columns into dst (an Array)
     at col0, at the rows of `rows` (an int32 Array)."""
@@ -344,7 +345,6 @@ def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: A
                    Int(py=rows.shape[0]), blk.cols, col0)
     _ = dst
     _ = rows
-    _ = blk  # retain every address owner until the native call completes
     return blk.cols
 
 
@@ -784,11 +784,11 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
             var p = _zeros(n * k, context)
             _acc_cols_w(xt, p, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
             var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
-            _ = _place(xt, out, n, width, blk, rows, j * k)
+            _ = _place(xt, out, n, width, blk.view(), rows, j * k)
             _ = blk^
         else:
             var blk = _out2d(prep_estimator_call(e, "predict", Python.tuple(Xa), context), n, context)
-            _ = _place(xt, out, n, width, blk, rows, j)
+            _ = _place(xt, out, n, width, blk.view(), rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
 
@@ -850,7 +850,7 @@ def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonOb
     var out = prep_estimator_call(est, method, Python.tuple(Xs), context)
     if method == "predict_proba" and binary:
         var p = _out2d(out, n, context)
-        var col = _one_col(xt, p, 1, context)
+        var col = _one_col(xt, p.view(), 1, context)
         _ = p^
         return col
     return out
@@ -947,7 +947,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
             _fit_member(e, Xtr, y_tr, w_tr, context)
             var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
             _ = Xa  # keep the Python object alive through the native call above
-            var got = _place(xt, meta_view, n, width, blk, te_view, col0)
+            var got = _place(xt, meta_view, n, width, blk.view(), te_view, col0)
             _ = blk^
             if got != native_widths[i]:
                 raise Error("a member's output width changed between folds (a class missing from a fold)")
@@ -955,7 +955,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
-        _ = _place(xt, meta_view, n, width, xb, _arange(xt, n, context), total)
+        _ = _place(xt, meta_view, n, width, xb.view(), _arange(xt, n, context), total)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -994,12 +994,12 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var methods = _attr(model, "stack_method_", Python.list())
     for i in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_stack_out(xt, members[i], String(methods[i]), Xa, n, binary, context), n, context)
-        col0 += _place(xt, meta_view, n, width, blk, rows_view, col0)
+        col0 += _place(xt, meta_view, n, width, blk.view(), rows_view, col0)
         _ = blk^
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
-        _ = _place(xt, meta_view, n, width, xb, rows_view, col0)
+        _ = _place(xt, meta_view, n, width, xb.view(), rows_view, col0)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -1248,7 +1248,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var rows = _arange(xt, n, context)
     for j in range(m):  # driver-loop: over members
         var blk = _out2d(prep_estimator_call(members[j], "predict", Python.tuple(Xa), context), n, context)
-        _ = _place(xt, out, n, m, blk, rows, j)
+        _ = _place(xt, out, n, m, blk.view(), rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)
 
@@ -1638,7 +1638,7 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
     if at < 0:
         _ = p^
         return admitted_vector(n, "<f4", context)
-    var col = _one_col(xt, p, at, context)
+    var col = _one_col(xt, p.view(), at, context)
     _ = p^
     return trees_reshape(col, Python.tuple(n), context)
 
@@ -1715,7 +1715,7 @@ def _ovr_codes(model: PythonObject, X: PythonObject, context: PythonObject) rais
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_positive(xt, members[j], Xa, context), n, context)
-        _ = _place(xt, acc, n, k, blk, rows, j)
+        _ = _place(xt, acc, n, k, blk.view(), rows, j)
         _ = blk^
     return _argmax(xt, acc, n, k, context)
 
@@ -1741,7 +1741,7 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var rows = _arange(xt, n, context)
     for j in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
-        _ = _place(xt, acc, n, k, blk, rows, j)
+        _ = _place(xt, acc, n, k, blk.view(), rows, j)
         _ = blk^
     _ = xt_normalize_rows(glue, trees_address(acc), n, k)
     _ = acc  # keep the Python object alive through the native call above
@@ -1785,7 +1785,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
             var at = _index_of_one(e, context)
             if at < 0:
                 raise Error("1 is not in list")
-            var col = _one_col(xt, blk, at, context)
+            var col = _one_col(xt, blk.view(), at, context)
             _ = xt_accumulate(glue, trees_address(acc), trees_address(col), n, 1.0)
             _ = col  # keep the Python object alive through the native call above
             _ = acc  # keep the Python object alive through the native call above
@@ -2056,7 +2056,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
         var S = _zeros(n * c, context)
         for f in range(len(splits)):  # driver-loop: over the cv folds (placing each fold's scores)
             var blk = admit_f32(units.results[f], 2, "scores", context, finite=False)
-            _ = _place(xt, S, n, c, blk, splits[f][1], 0)
+            _ = _place(xt, S, n, c, blk.view(), splits[f][1], 0)
             _ = blk^
         var e = _clone(base, context)
         _fit_member(e, Xa, labels.codes, PythonObject(None), context)
