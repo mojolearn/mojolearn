@@ -22,7 +22,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_error_boundary import classical_python_error
-from bindings.classical_validate import classical_check_width
+from bindings.classical_validate_run import classical_check_width
 from bindings.parallel_public_result import parallel_public_result
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check

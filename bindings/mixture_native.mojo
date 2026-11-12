@@ -36,7 +36,8 @@ from core.admitted_input import admitted_cast_f32
 from core.host_finite_scan import host_all_finite_f32
 from checks.numerics import pinned_mul_f64, portable_log64
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_x, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit

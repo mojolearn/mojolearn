@@ -55,7 +55,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_estimator_name, classical_check_width
+from bindings.classical_validate import classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.native_owner_lifetime import native_release_admit

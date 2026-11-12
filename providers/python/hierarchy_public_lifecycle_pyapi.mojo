@@ -17,7 +17,8 @@ from bindings.mode_metadata_native import _fields, _class_fields, _fitted
 from bindings.public_attributes_native import _plan, _lookup
 from bindings.classical_attributes import classical_connect_numpy, _type_mro
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_estimator_name, classical_check_width
+from bindings.classical_validate import classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage import labels_integer_storage, labels_float_storage

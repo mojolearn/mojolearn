@@ -58,8 +58,3 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
     """sample_weight as rows float32 words: None stays None, a scalar fills
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
     return admit_weights(source, rows, context, admitted)
-
-
-def classical_check_width(cols: Int, fitted: Int, est: String) raises:
-    if cols != fitted:
-        raise Error("X has " + String(cols) + " features, but " + est + " is expecting " + String(fitted) + " features as input.")

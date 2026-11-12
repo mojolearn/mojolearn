@@ -20,7 +20,8 @@ from bindings.admitted_call import AdmittedCall, admitted_input_dense, admitted_
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _fitted
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_validate import classical_estimator_name, classical_check_width
+from bindings.classical_validate import classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields

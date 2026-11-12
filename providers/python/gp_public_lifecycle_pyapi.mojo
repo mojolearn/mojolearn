@@ -14,7 +14,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.mode_metadata_native import _fields, _class_fields, _plan, _configuration_value
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_y, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.admitted_input import admit_x_unrecorded
 from bindings.device_rows_door import door_is_device_rows
 from bindings.classical_labels import _flatten_labels, labels_shape_of

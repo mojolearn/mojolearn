@@ -5,7 +5,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_get, py_type
 from bindings.admitted_call import AdmittedCall
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_x, classical_check_y, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.trees_boost_admission import boost_admit

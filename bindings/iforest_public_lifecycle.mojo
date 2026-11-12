@@ -13,7 +13,8 @@ from bindings.classical_attributes import _type_mro
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_side_records import trees_finite_mark, trees_finite_clear
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admitted_finite_entry_refuse
-from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name, classical_view
+from bindings.classical_validate import classical_check_x, classical_estimator_name, classical_view
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_scalars import host_inference_scalar

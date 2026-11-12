@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.device_rows_door import door_rows_refuse
 from bindings.admitted_input import admitted_finite_refuse
-from bindings.classical_validate import classical_check_width
+from bindings.classical_validate_run import classical_check_width
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.pca_exact import pca_refusal
 from bindings.pca_descriptor_boundary import pca_mode, pca_fold_connection, pca_whiten_capability, pca_run_query

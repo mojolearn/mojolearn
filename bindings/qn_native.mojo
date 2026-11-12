@@ -34,7 +34,8 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed
-from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_x, classical_check_y, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from providers.python.linear_score_boundary import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 

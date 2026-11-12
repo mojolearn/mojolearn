@@ -9,7 +9,8 @@ from bindings.family_raw_attr import family_raw_get, family_raw_get_or
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.cluster_side_records import cluster_is_subclass, cluster_refuse_fit_callbacks
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_x, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit

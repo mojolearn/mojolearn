@@ -14,7 +14,8 @@ from bindings.public_attributes_native import _plan, _lookup, _string_keys
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_kind
-from bindings.classical_validate import classical_check_x, classical_view, classical_estimator_name, classical_check_width
+from bindings.classical_validate import classical_check_x, classical_view, classical_estimator_name
+from bindings.classical_validate_run import classical_check_width
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
