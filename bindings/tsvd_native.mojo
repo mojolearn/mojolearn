@@ -37,8 +37,13 @@ from core.tsvd_native_api import (
     TSVD_CAP_TSQR, TSVD_CAP_RESIDENT,
 )
 from bindings.tsvd_descriptor_boundary import (
-    tsvd_factory, tsvd_connect, tsvd_connection, tsvd_capabilities, tsvd_qfix, tsvd_run_fit, tsvd_run_query,
+    tsvd_factory,
+    tsvd_connect,
+    tsvd_connection,
+    tsvd_run_fit,
+    tsvd_run_query,
 )
+from x_decomp.tsvd_descriptor_boundary_run import tsvd_capabilities, tsvd_qfix
 from bindings.tsvd_owner_boundary import tsvd_owner_drop, tsvd_owner_lease, TSVDLeasePin
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes

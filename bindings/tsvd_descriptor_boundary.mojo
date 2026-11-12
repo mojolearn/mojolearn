@@ -5,32 +5,18 @@ from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from core.pca_native_api import pca_vendor_name
 from core.tsvd_native_api import (
-    TSVD_NATIVE_ABI, TSVD_NATIVE_COUNT, TSVD_MODE, TSVD_VENDOR, TSVD_CAPABILITIES, TSVD_QFIX,
-    TSVDNativeDriver, TSVDFitRequest, TSVDFitResult, TSVDQueryRequest,
+    TSVD_NATIVE_ABI, TSVD_NATIVE_COUNT, TSVDNativeDriver, TSVDFitRequest, TSVDFitResult, TSVDQueryRequest,
 )
+from x_decomp.tsvd_descriptor_boundary_run import (
+    tsvd_connection_index, tsvd_connection_add, tsvd_mode, tsvd_vendor, tsvd_driver,
+)
+from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
-@fieldwise_init
-struct TSVDConnection(Movable):
-    var provider: PythonObject
-    var driver: TSVDNativeDriver
-    var mode: Int
-    var vendor: Int
-    var capabilities: Int
-    var qfix: Int
-
-
-struct TSVDConnections(Defaultable, Movable):
-    var records: List[TSVDConnection]
-
-    def __init__(out self):
-        self.records = List[TSVDConnection]()
-
-
-comptime TSVD_CONNECTIONS = SharedSlot[TSVDConnections, "MojolearnTSVDConnectionsV1"]
+comptime TSVD_PROVIDER_PINS = SharedSlot[ProviderPins, "MojolearnTSVDProviderPinsV1"]
 
 
 def tsvd_factory(context: PythonObject, table_name: String, mode: String) raises -> PythonObject:
@@ -50,23 +36,15 @@ def tsvd_connect(factory: PythonObject, mode: Int, vendor: String) raises -> Int
     if py_type(factory) is py_type(PythonObject("")):
         raise Error(String(factory))
     var provider = neural_descriptor_connect_factory_once(factory, String(TSVD_NATIVE_ABI), TSVD_NATIVE_COUNT)
-    var cache = TSVD_CONNECTIONS.get_or_create_ptr()
-    var index = -1
-    for candidate in range(len(cache[].records)):  # driver-loop: connected native provider images
-        if cache[].records[candidate].provider is provider:
-            index = candidate
-            break
+    var index = tsvd_connection_index(provider_word(provider))
     if index < 0:
-        var driver = TSVDNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry)
-        var native_mode = driver.metadata(TSVD_MODE)
-        var native_vendor = driver.metadata(TSVD_VENDOR)
-        var capabilities = driver.metadata(TSVD_CAPABILITIES)
-        var qfix = driver.metadata(TSVD_QFIX)
-        index = len(cache[].records)
-        cache[].records.append(TSVDConnection(provider, driver^, native_mode, native_vendor, capabilities, qfix))
-    if pca_vendor_name(cache[].records[index].vendor) != vendor:
+        # The typed record and the door pin are appended together, under the GIL.
+        index = tsvd_connection_add(provider_word(provider),
+            TSVDNativeDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].entry))
+        TSVD_PROVIDER_PINS.get_or_create_ptr()[].providers.append(provider)
+    if pca_vendor_name(tsvd_vendor(index)) != vendor:
         raise Error("RuntimeError: TruncatedSVD native vendor differs from selected execution")
-    if cache[].records[index].mode != mode:
+    if tsvd_mode(index) != mode:
         raise Error("RuntimeError: TruncatedSVD native mode differs from selected execution")
     return index
 
@@ -76,20 +54,8 @@ def tsvd_connection(mode: String, context: PythonObject) raises -> Int:
         1 if mode == "identical" else 0, String(context["vendor"]))
 
 
-def tsvd_capabilities(connection: Int) raises -> Int:
-    return TSVD_CONNECTIONS.get_or_create_ptr()[].records[connection].capabilities
-
-
-def tsvd_qfix(connection: Int) raises -> Int:
-    return TSVD_CONNECTIONS.get_or_create_ptr()[].records[connection].qfix
-
-
 def tsvd_provider(connection: Int) raises -> PythonObject:
-    return TSVD_CONNECTIONS.get_or_create_ptr()[].records[connection].provider
-
-
-def tsvd_driver(connection: Int) raises -> TSVDNativeDriver:
-    return TSVD_CONNECTIONS.get_or_create_ptr()[].records[connection].driver.copy()
+    return TSVD_PROVIDER_PINS.get_or_create_ptr()[].providers[connection]
 
 
 def tsvd_run_fit(connection: Int, request: TSVDFitRequest) raises -> TSVDFitResult:
