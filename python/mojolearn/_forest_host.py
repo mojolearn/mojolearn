@@ -294,7 +294,7 @@ from ._native_ops import codes as _operation_codes  # noqa: E402
 _OP = _operation_codes()
 from . import _classical_host as _archive_registry
 
-# TreeExplainer's native owner (bindings/trees_explainer_native.mojo) reads a
+# TreeExplainer's native owner (bindings/trees_explainer_native_door.mojo) reads a
 # HostForest's flat arrays; connect the exact class once, at import.
 from . import _native_trees_bridge as _explainer_bridge
 _explainer_bridge.connect()[1].setdefault("trees_explainer_host_forest", HostForest)

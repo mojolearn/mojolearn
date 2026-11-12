@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only native public safetensors/checkpoint/configuration entry points.
 from std.python._cpython import PyObjectPtr
-from bindings.causal_checkpoint import checkpoint_c
+from bindings.causal_checkpoint_door import checkpoint_c
 
 
 @export

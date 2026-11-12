@@ -25,7 +25,7 @@ def _read(rel):
 
 class ResidentSourceContract(unittest.TestCase):
     def test_shared_record_helpers(self):
-        kit = _read("bindings/decomp_kit_native.mojo")
+        kit = _read("bindings/decomp_kit_native_door.mojo")
         for token in ("def decomp_resident_find(", "def decomp_resident_hold(", "def decomp_resident_operand(",
                       "def decomp_resident_adopt(", "def decomp_resident_drop(", "model_generation",
                       "fitted_freeze_any", "resident_capsule(free, handle)", "def decomp_door_resident_keep(",
@@ -36,18 +36,18 @@ class ResidentSourceContract(unittest.TestCase):
         self.assertNotIn("hash(", tail)
 
     def test_doors_use_the_shared_helpers(self):
-        als = _read("bindings/als_native.mojo")
+        als = _read("bindings/als_native_door.mojo")
         self.assertIn("door.owner = model", als)
         self.assertIn("decomp_door_resident_derived(", als)
         self.assertIn("decomp_door_resident_keep(", als)
-        rp = _read("bindings/rp_native.mojo")
+        rp = _read("bindings/rp_native_door.mojo")
         self.assertIn("decomp_resident_operand(", rp)
         self.assertIn("decomp_resident_drop(model)", rp)
-        ipca = _read("bindings/ipca_native.mojo")
+        ipca = _read("bindings/ipca_native_door.mojo")
         for token in ("decomp_resident_adopt(", "decomp_resident_cached(", "decomp_resident_operand(",
                       "decomp_resident_drop(model)"):
             self.assertIn(token, ipca)
-        tsvd = _read("bindings/tsvd_native.mojo")
+        tsvd = _read("bindings/tsvd_native_door.mojo")
         for token in ("fitted_resident_lease(", "fitted_resident_drop(", '"tsvd_transform_resident"',
                       '"tsvd_inverse_transform_resident"'):
             self.assertIn(token, tsvd)

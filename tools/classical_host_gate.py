@@ -80,7 +80,7 @@ def _same_pair(name_a, a, name_b, b):
     the recording hashed an AGREEING pair, so a disagreement always differs
     from it and the fixture reads moved, which is what the sabotage set must
     show. Raising there made the gate exit 2 on a sabotage that worked: the
-    core host set's copy helper (bindings/hotpath_helpers.mojo, reversed
+    core host set's copy helper (bindings/hotpath_helpers_door.mojo, reversed
     runs of eight) moves `forecast(h, index=0)`'s row copy and not the flat
     buffer. The production arm still refuses any disagreement by name."""
     message = identity_tool()._mismatch_bytes(name_a, a, name_b, b)

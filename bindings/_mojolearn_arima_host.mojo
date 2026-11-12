@@ -62,7 +62,7 @@ from arima.host.arima_oracle import (
 # since 2026-09-15, shared with the inference binding
 # bindings/_mojolearn_forecast_host.mojo; `_order` (the device's own
 # `validate_order(order)`) and `_refuse_shape` are in arima/host/arima_host_entries.mojo.
-from bindings.arima_host_predict import (
+from bindings.arima_host_predict_pack import (
     arima_forecast_binding,
     arima_predict_binding,
 )

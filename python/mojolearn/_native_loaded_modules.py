@@ -80,14 +80,14 @@ connect_module('array', array, ('array',))
 # Resident fold storage admits an exact native thread-local object before
 # reading its dictionary. This standard-library owner is needed even when
 # NumPy is absent; connect the consumed type once rather than importing at use.
-connect_module('_thread', _thread, ('_local', 'LockType', 'RLock'))  # LockType, RLock: PCS RNG lock admission (providers/python/pcs_rng_pyapi.mojo; NumPy 2.5 holds an RLock)
+connect_module('_thread', _thread, ('_local', 'LockType', 'RLock'))  # LockType, RLock: PCS RNG lock admission (providers/python/pcs_rng_pyapi_pack.mojo; NumPy 2.5 holds an RLock)
 # SmallMLP item iteration over a 1-D float16 Array reads _struct.unpack
-# (bindings/small_mlp_items.mojo); without this connection it always refused.
+# (bindings/small_mlp_items_door.mojo); without this connection it always refused.
 connect_module('_struct', _struct, ('unpack',))
 connect_module('operator', operator, tuple(name for name in vars(operator)  # glue: fixed scalar/index operator exports
                                           if not name.startswith('_')))
 # glue: only the exact integer-valued math exports the model-selection
-# bindings read (bindings/msel_search.mojo floor, msel_common.mojo ceil,
+# bindings read (bindings/msel_search_door.mojo floor, msel_common.mojo ceil,
 # msel_split.mojo comb). libm transcendental math (sin, exp, sqrt, log, pow...)
 # is platform-dependent and forbidden in the runtime; exact rounding to an
 # integer and exact binomials are not arithmetic the platform can vary. The
@@ -96,7 +96,7 @@ connect_module('operator', operator, tuple(name for name in vars(operator)  # gl
 connect_module('math', math, ('floor', 'ceil', 'comb'))
 connect_module('itertools', itertools, tuple(name for name in vars(itertools) if not name.startswith('_')))  # glue: fixed native iterator types
 connect_module('os', os, ('stat', 'urandom', 'getcwd'))
-# The Samba checkpoint file calls (bindings/samba_checkpoint_native.mojo): one
+# The Samba checkpoint file calls (bindings/samba_checkpoint_native_unpack.mojo): one
 # exclusive create, fsync, close and rename per save, fstat per load.
 connect_module('posix', posix, ('open', 'close', 'fsync', 'rename', 'unlink', 'urandom', 'fstat',
                                 'O_WRONLY', 'O_CREAT', 'O_EXCL'))

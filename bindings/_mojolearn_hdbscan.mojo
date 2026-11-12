@@ -21,7 +21,7 @@ THE GIL is released around the device call, and nothing inside the
 """
 
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.sys.compile import is_defined
 from core.hostptr import read_f32, read_i32

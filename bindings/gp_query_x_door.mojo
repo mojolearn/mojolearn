@@ -21,12 +21,12 @@
 # DEVIATION 1768 query refusals are no longer reached from the doors.
 # Numerics: none (the same words reach the same kernels).
 from std.python import PythonObject
-from bindings.admitted_family import admit_family
-from bindings.classical_arrays import classical_address
+from bindings.admitted_family_door import admit_family
+from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input import admit_x_unrecorded
 from bindings.device_rows_door import door_is_device_rows
 from bindings.device_rows_door_run import DoorRowsStore
-from bindings.gp_svm_gp_state import gp_x_known, gp_x_deferred
+from bindings.gp_svm_gp_state_door import gp_x_known, gp_x_deferred
 
 
 struct GpQuery(Movable):

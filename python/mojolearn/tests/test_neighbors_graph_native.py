@@ -170,7 +170,7 @@ def test_svgp_fit_predict_score_match_former_path(params):
     assert _state(native, SV_ATTRS) == _state(old, SV_ATTRS)
     q = x[::3]
     # The public predict widens the float32 mean to float64 alongside NumPy
-    # (providers/python/family_public_lifecycle_pyapi.mojo
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo
     # family_lifecycle_finish, as the former `_mode` wrapper did); the frozen
     # helper is the inner float32 method, and the widening is exact.
     predicted = audit_native_call(native.predict, q).assert_native()
@@ -193,7 +193,7 @@ def test_svgp_refusals_match_former_path(params, data):
     native, old = mojolearn.SVGP(**params), mojolearn.SVGP(**params)
     if data == "short_y":
         # The public fit's shared lifecycle validates y before the owner runs
-        # (providers/python/family_public_lifecycle_pyapi.mojo, target=2),
+        # (providers/python/family_public_lifecycle_pyapi_door.mojo, target=2),
         # with scikit-learn's wording, as the former `_mode` wrapper did; the
         # frozen helper is the inner fit only.
         assert _outcome(native.fit, x, y) == (

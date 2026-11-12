@@ -47,9 +47,10 @@ the wrapper holds the caller's arrays for the length of the call.
 """
 
 from core.experiment_guards_trees import TREES_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from bindings.py_lists import py_list_int
-from bindings.gbdt_fit_boundary import gbdt_fit_args_py, gbdt_fit_outcome_py
+from bindings.gbdt_fit_boundary_unpack import gbdt_fit_args_py
+from bindings.gbdt_fit_boundary_pack import gbdt_fit_outcome_py
 from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, GbdtImage
 from core.native_descriptor_abi import NativeDescriptorError
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome

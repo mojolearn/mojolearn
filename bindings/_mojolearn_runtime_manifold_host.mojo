@@ -8,11 +8,11 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.runtime_manifold_entry import (
+from bindings.runtime_manifold_entry_pack import (
     runtime_manifold_c, RUNTIME_MANIFOLD_SABOTAGE,
 )
-from bindings.manifold_storage_native import ManifoldMatrix
-from bindings.manifold_scalar_native import ManifoldScalarSnapshot
+from bindings.manifold_storage_native_unpack import ManifoldMatrix
+from bindings.manifold_scalar_native_door import ManifoldScalarSnapshot
 
 
 def runtime_manifold_host_numeric_mode_binding() raises -> PythonObject:

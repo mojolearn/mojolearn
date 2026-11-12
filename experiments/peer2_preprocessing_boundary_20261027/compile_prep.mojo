@@ -2,7 +2,7 @@
 # Focused compilation of the real preprocessing entry and all its branches.
 # This exported forwarding root is compile evidence only; no runtime is claimed.
 from std.python._cpython import PyObjectPtr
-from bindings.prep_stateless_native import prep_stateless_c
+from bindings.prep_stateless_native_door import prep_stateless_c
 
 
 @export

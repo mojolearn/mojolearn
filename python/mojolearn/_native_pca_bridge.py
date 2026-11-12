@@ -17,7 +17,7 @@ def connect(pca_class):
 
     # The PCA owner reads and returns ndarrays: it connects NumPy natively
     # when the caller has loaded it and refuses a fit or transform by name
-    # otherwise (bindings/pca_native.mojo), so connecting never imports it.
+    # otherwise (bindings/pca_native_door.mojo), so connecting never imports it.
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
     descriptor = next((vars(base)["__dict__"] for base in pca_class.__mro__  # glue: connect the native instance dictionary descriptor

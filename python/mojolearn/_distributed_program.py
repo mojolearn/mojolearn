@@ -55,7 +55,7 @@ def _connect_owned_programs(connections):
     records = tuple(vars(value) for value in connections.values() if type(value) is SimpleNamespace)  # glue: installed native mode connections
     # The owned-program registry is one process-wide native global
     # (_Global name "MojolearnOwnedProgramPublicV2" in
-    # providers/python/autograd_owned_program_public_pyapi.mojo), shared by
+    # providers/python/autograd_owned_program_public_pyapi_door.mojo), shared by
     # every loaded image, so each mode's provider is connected exactly once.
     # Connecting it again through a second image (identical + fast, as on
     # Apple) re-registers the same binding and the registry refuses it.

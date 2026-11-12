@@ -117,7 +117,7 @@ def test_cpu_cooperative_session_refusal_preserves_public_contract():
     state, _ = state_fixture()
     owner = construct(state)
     try:
-        # The declared CPU-by-design sentence (bindings/parallel_byte_native.mojo,
+        # The declared CPU-by-design sentence (bindings/parallel_byte_native_door.mojo,
         # b4f87a24c; tools/identity_break.py CPU_BY_DESIGN_REFUSAL).
         assert 'no CPU implementation of the cooperative multi-GPU driver byte_lm_' in native_failure(owner._open, NotImplementedError)
     finally:

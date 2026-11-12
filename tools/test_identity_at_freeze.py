@@ -93,7 +93,7 @@ def test_a_record_at_exactly_the_freeze_says_so(repo):
 
 def test_a_freeze_that_moved_after_the_record_owes_the_selected_lanes_loudly(repo):
     x, m, t = recorded_then_admitted(repo)
-    y = commit(repo, {"bindings/classifier_public_lifecycle.mojo": "fn f(): pass\n"}, "product fix")
+    y = commit(repo, {"bindings/classifier_public_lifecycle_door.mojo": "fn f(): pass\n"}, "product fix")
     asked = []
 
     def select(paths, ref, backend):
@@ -102,13 +102,13 @@ def test_a_freeze_that_moved_after_the_record_owes_the_selected_lanes_loudly(rep
     report = F.judge(repo, y, t, select=select)
     row = report["columns"]["nvidia"]
     assert row["state"] == "owed" and row["owed"] == 1 and row["owed_lanes"] == ["lane1"] and row["held"]
-    assert row["first_paths"] == ["bindings/classifier_public_lifecycle.mojo"]   # record outputs dropped
-    assert asked[0] == (["bindings/classifier_public_lifecycle.mojo"], x, "cuda")
+    assert row["first_paths"] == ["bindings/classifier_public_lifecycle_door.mojo"]   # record outputs dropped
+    assert asked[0] == (["bindings/classifier_public_lifecycle_door.mojo"], x, "cuda")
     assert len(asked) == 1        # nvidia and ptx share (commit, cuda): one selection
     assert report["adopted"] is False and report["held"] == ["nvidia"]
     text = "\n".join(F.lines(report))
     assert ("IDENTITY RECORDED AT %s, FREEZE IS %s: 1 lane(s) of nvidia owed (1 source path(s) differ: "
-            "bindings/classifier_public_lifecycle.mojo)" % (x[:12], y[:12])) in text
+            "bindings/classifier_public_lifecycle_door.mojo)" % (x[:12], y[:12])) in text
     assert "HOLD BEFORE ANY BUILD" in text and "tools/reference_refresh.sh " + y[:12] in text
 
 

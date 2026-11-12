@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'providers/python/estimator_binding_pyapi.mojo'
+SOURCE = ROOT / 'providers/python/estimator_binding_pyapi_door.mojo'
 
 
 def _body(name):

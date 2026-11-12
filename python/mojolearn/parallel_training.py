@@ -224,7 +224,7 @@ class ParallelNeuralTrainer:
 
 def _connect_parallel_byte_native():
     # glue: import-time ABI connection only. Product methods hand off once to
-    # native Mojo (bindings/parallel_byte_native.mojo), which admits the exact
+    # native Mojo (bindings/parallel_byte_native_door.mojo), which admits the exact
     # trainer classes and the installed binding's schedule descriptor table.
     from . import _backend
     from ._array import Array
@@ -243,7 +243,7 @@ def _connect_parallel_byte_native():
         # only with MOJOLEARN_PACKAGE_BYTE_LM=1, so a Linux process in fast
         # mode (or any set built with it off) has none. The byte-LM trainers
         # then refuse at use ("Byte-LM numeric mode is not installed",
-        # bindings/parallel_byte_native.mojo) instead of the whole package
+        # bindings/parallel_byte_native_door.mojo) instead of the whole package
         # failing at `import mojolearn` (AMD verify fast, 2026-10-23).
         modes = {}
     else:

@@ -42,7 +42,7 @@ _LINEAR_FORMAT = "mojolearn-linear-1"
 _LOGISTIC_FORMAT = "mojolearn-logistic-1"
 
 # The compiled saved-model owner, connected once at import: LogisticRegression's
-# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -145,7 +145,7 @@ def _accuracy_host(pred, y):
 
 
 # TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners
-# are core/linear_score_program.mojo and bindings/svc_common.mojo `svc_r2_sums`) deleted 2026-11-11 by lane
+# are core/linear_score_program.mojo and bindings/svc_common_door.mojo `svc_r2_sums`) deleted 2026-11-11 by lane
 # pyout-metrics-cnn; code recoverable at 6f82d0255d.
 
 
@@ -401,7 +401,7 @@ class LinearRegression(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
 
     #: The methods below are one call each into the compiled classical owner
-    #: (bindings/classical_native.mojo), connected once at import. It
+    #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
     #: the fitted attributes; NumericModeMixin leaves these methods unwrapped.
     _mojolearn_native_public = True
@@ -677,7 +677,7 @@ class Ridge(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
 
     #: The methods below are one call each into the compiled classical owner
-    #: (bindings/classical_native.mojo), connected once at import. It
+    #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
     #: the fitted attributes; NumericModeMixin leaves these methods unwrapped.
     _mojolearn_native_public = True
@@ -1442,7 +1442,7 @@ _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, L
 
 
 # The compiled QNRegressor owner, connected once at import: fit, predict and
-# score are one call each into it (bindings/qn_native.mojo).
+# score are one call each into it (bindings/qn_native_door.mojo).
 from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
 _QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)
 _QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_intercept', 'l1_strength', 'l2_strength', 'max_iter', 'tol', 'delta', 'linesearch_max_iter', 'lbfgs_memory', 'warm_start', 'penalty_normalized', 'numeric_mode'))

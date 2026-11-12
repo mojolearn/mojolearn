@@ -31,7 +31,7 @@ def _function(text, signature):
 
 
 def test_record_fields():
-    text = _read("bindings/admitted_call.mojo")
+    text = _read("bindings/admitted_call_door.mojo")
     record = text[text.index("struct AdmittedCall("):]
     for field in ("var modules: NativeModules", "var binding: PythonObject", "var fields: PythonObject",
                   "var inputs: List[AdmittedInput]", "var layout_checked: Bool", "var layout_plan: PythonObject"):
@@ -43,11 +43,11 @@ def test_record_fields():
     # The record imports only the module loader: every group imports it.
     imports = [line for line in text.splitlines() if line.startswith(("from ", "import "))]
     assert imports == ["from std.python import Python, PythonObject",
-                       "from bindings.native_loaded_module import NativeModules"]
+                       "from bindings.native_loaded_module_door import NativeModules"]
 
 
 def test_classical_door_builds_one_record():
-    text = _read("bindings/classical_native.mojo")
+    text = _read("bindings/classical_native_pack.mojo")
     door = _function(text, "def classical_c(")
     assert door.count("AdmittedCall()") == 1
     assert "NativeModules()" not in door
@@ -59,7 +59,7 @@ def test_classical_door_builds_one_record():
 
 
 def test_attribute_helpers_share_the_door_modules():
-    text = _read("bindings/public_attributes_native.mojo")
+    text = _read("bindings/public_attributes_native_door.mojo")
     for name in ("def _available(", "def _property("):
         body = _function(text, name)
         assert "mut mods: NativeModules" in body.split(")", 1)[0] + ")"
@@ -69,10 +69,10 @@ def test_attribute_helpers_share_the_door_modules():
 
 
 def test_bindings_resolve_once_per_call():
-    text = _read("providers/python/estimator_binding_pyapi.mojo")
+    text = _read("providers/python/estimator_binding_pyapi_door.mojo")
     assert "def estimator_binding_mode(mut call: AdmittedCall" in text
     assert "def estimator_arguments(mut call: AdmittedCall" in text
-    gp = _read("providers/python/gp_public_lifecycle_pyapi.mojo")
+    gp = _read("providers/python/gp_public_lifecycle_pyapi_door.mojo")
     door = _function(gp, "def gp_public_operation(")
     assert door.count("AdmittedCall()") == 1
     assert 'estimator_binding_mode(call, PythonObject("identical"), "_mojolearn", context)' in door
@@ -80,20 +80,20 @@ def test_bindings_resolve_once_per_call():
 
 
 def test_second_admissions_removed():
-    boost = _read("providers/python/tree_boost_public_lifecycle_pyapi.mojo")
+    boost = _read("providers/python/tree_boost_public_lifecycle_pyapi_pack.mojo")
     operation = _function(boost, "def tree_boost_public_operation(")
     assert "labels_shape_of(" not in operation
     assert "classical_check_x(call, args[0], name, context, 0, admitted=True)" in operation
     assert "labels_shape_of(" not in _function(boost, "def _boost_classifier_target(").split('"""', 2)[2]
     admission = _read("bindings/admitted_input.mojo")
     assert "admitted_typed_once(prepared, context, hold, prepared is source)" in _function(admission, "def admit_typed(")
-    projection = _function(_read("bindings/host_projection_native.mojo"), "def host_projection_inference(")
+    projection = _function(_read("bindings/host_projection_native_door.mojo"), "def host_projection_inference(")
     assert "host_tree_cast(raw, context)" in projection
-    assert re.search(r"lin_operand\(args\[0\], \"a\", context\)(?!, True)", _read("bindings/linalg_ops_decomp.mojo")) is None
+    assert re.search(r"lin_operand\(args\[0\], \"a\", context\)(?!, True)", _read("bindings/linalg_ops_decomp_door.mojo")) is None
 
 
 def test_mode_plan_reused_per_class_state():
-    text = _function(_read("bindings/mode_metadata_native.mojo"),
+    text = _function(_read("bindings/mode_metadata_native_door.mojo"),
                      "def _plan(mut mods: NativeModules, model: PythonObject, state: PythonObject")
     assert "class_record(mods, _MODE_PLAN_SLOT, cls)" in text
     assert "class_admit(mods, _MODE_PLAN_SLOT, cls" in text

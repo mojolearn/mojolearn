@@ -2,8 +2,8 @@
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.resample_rows_pyapi import ResampleRows, resample_rows_indices, resample_rows_gpu, resample_rows_narrow
-from bindings.classical_attributes import classical_connect_numpy
+from providers.python.resample_rows_pyapi_door import ResampleRows, resample_rows_indices, resample_rows_gpu, resample_rows_narrow
+from bindings.classical_attributes_door import classical_connect_numpy
 
 def rows_compile(source: PythonObject, binding: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)

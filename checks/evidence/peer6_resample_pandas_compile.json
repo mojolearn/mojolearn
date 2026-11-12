@@ -58,7 +58,7 @@
   "source_manifest_sha256": "42f75a887ec76d40a21c14b117ec79e10a3bf6a8db2643a5be73a081e75c4768",
   "archive_scope": "3639 Mojo/build source files: superset of fixture import closure; archive is not compiled coverage",
   "source_hashes": {
-    "providers/python/resample_pandas_pyapi.mojo": "eb2427037f2d5149d088d04a1ae148c405506146f8048bf729964245ed3115dd",
+    "providers/python/resample_pandas_pyapi_door.mojo": "eb2427037f2d5149d088d04a1ae148c405506146f8048bf729964245ed3115dd",
     "checks/peer6_resample_pandas_compile.mojo": "1228b91d9fe30e4b1aa97d91ebcfb41c978252ca8044eb059baaa36779ac54db"
   },
   "public_operation_integrated": false,

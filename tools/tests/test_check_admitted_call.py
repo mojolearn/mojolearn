@@ -50,8 +50,8 @@ def test_debt_may_shrink_never_grow():
 
 
 def test_admitted_call_module_is_a_door():
-    assert "bindings/admitted_call.mojo" in chk.DOORS
-    assert "bindings/classical_native.mojo" in chk.DOORS
+    assert "bindings/admitted_call_door.mojo" in chk.DOORS
+    assert "bindings/classical_native_pack.mojo" in chk.DOORS
 
 
 def test_tree_is_within_allowance():

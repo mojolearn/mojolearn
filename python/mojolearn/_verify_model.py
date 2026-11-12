@@ -132,7 +132,7 @@ def _names(entries, items, stem):
 
 
 # The save-time report is written natively beside the saved file
-# (autograd/program_save.mojo, bindings/sequential_checkpoint.mojo); the
+# (autograd/program_save.mojo, bindings/sequential_checkpoint_door.mojo); the
 # Python copies record_program / record_sequential were never called and
 # could drift from the native writer, so they were removed.
 

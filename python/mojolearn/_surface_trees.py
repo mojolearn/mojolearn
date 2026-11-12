@@ -76,7 +76,7 @@ FAMILIES = (
             "PermutationExplainer",
         ),
         display="the trees expansion lane's ensemble glue",
-        host_modules=("xtrees/ops.mojo", "providers/python/xtrees_api_pyapi.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
+        host_modules=("xtrees/ops.mojo", "providers/python/xtrees_api_pyapi_door.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
                       "xtrees/dart_units.mojo", "xtrees/dart_host.mojo"),
         exports=(
             # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source

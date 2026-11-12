@@ -9,10 +9,10 @@ from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_get, py_fields, py_type, py_setitem
-from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
-from bindings.native_torch_admission import (
+from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
+from bindings.native_torch_admission_door import (
     native_torch_admit, native_torch_modes_admit, native_torch_device, native_torch_storage_metadata,
     native_torch_contiguous, native_torch_to,
 )
@@ -23,10 +23,10 @@ from autograd.rankn import ShapeN
 from autograd.program import PROGRAM_IN_IDS, same_shape
 from autograd.program_io import ProgramInput
 from autograd.program_host_request import NativeProgramHostRun
-from providers.python.autograd_host_provider_pyapi import imported_host_provider_request
+from providers.python.autograd_host_provider_pyapi_unpack import imported_host_provider_request
 from autograd.autograd_program_run import _imported_session_dims
-from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
-from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
+from providers.python.autograd_device_provider_pyapi_unpack import imported_device_provider_run
+from providers.python.autograd_import_metadata_pyapi_door import imported_program_snapshot
 from bindings.py_cpython_table import cpython_table
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present

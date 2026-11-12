@@ -11,7 +11,7 @@
 # reference owned by the returned PythonObject. Nothing here adds or removes a
 # reference to compensate for the standard library; when Modular ships the
 # balanced operations, call sites can go back to the ordinary syntax.
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

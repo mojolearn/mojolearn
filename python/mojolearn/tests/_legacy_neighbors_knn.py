@@ -2,7 +2,7 @@
 """Frozen 4398cd5b6 Python bodies of NearestNeighbors.fit and the k-NN
 classifier/regressor fit, predict, predict_proba and score, used only as an
 independent test oracle for their one-call native doors
-(bindings/neighbors_knn_native.mojo). Each function takes the estimator as
+(bindings/neighbors_knn_native_door.mojo). Each function takes the estimator as
 `self` and runs the former statements in the former order."""
 from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from mojolearn._labels import decode_labels, encode_labels
@@ -45,7 +45,7 @@ def _resident_index_handle(self, binding, idx):
 def _dist_params(self):
     # The former `self._dist_params()`, `[metric, metric_arg, weights]`. Its
     # `_weights_value` property is a Python data descriptor that the native
-    # attribute guard refuses (bindings/classical_attributes.mojo), so the
+    # attribute guard refuses (bindings/classical_attributes_door.mojo), so the
     # oracle resolves the same three values from the public parameters.
     value, arg = _resolve_metric(type(self).__name__, self.metric, self.p)
     has_weights = type(self)._HAS_WEIGHTS if hasattr(type(self), "_HAS_WEIGHTS") else False

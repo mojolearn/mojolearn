@@ -16,7 +16,7 @@ _SYMBOLS = {
     )),
     "decomp": ("_mojolearn_x_decomp", (
         # The kernel-call provider the typed manifold kit (UMAP's random/PCA
-        # start, bindings/mani_kit.mojo `mk_image`) and the spectral affinity
+        # start, bindings/mani_kit_door.mojo `mk_image`) and the spectral affinity
         # connect once; every kit primitive is one of its table operations
         # (x_decomp/descriptor_schema.mojo), so no other entry is read by name
         # (lane entangled-mkit, 2026-11-12: the 26 named x_decomp_* cells

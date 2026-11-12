@@ -70,9 +70,9 @@ from training.neural_arithmetic_profile import neural_training_profile
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
-from bindings.native_class_admission import static_builtin_type
+from bindings.native_class_admission_door import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """OPTICS provider admission and output exporters; no numerical decisions."""
 from std.python import PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
-from providers.python.x_cluster_out_pyapi import _py_array
+from providers.python.x_cluster_out_pyapi_pack import _py_array
 from core.optics_fit_api import OPTICS_FIT_ABI, OPTICS_FIT_COUNT, OpticsFitDriver, OpticsFitResultSlot
 
 

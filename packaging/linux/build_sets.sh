@@ -597,7 +597,7 @@ for t in $TIERS; do
     v=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" "$REPO" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, os, sys
 # The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
-# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module.mojo).
+# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module_door.mojo).
 # This read-back imports ONE binary standalone, so it loads that registry the same way first; without
 # it the host tokenizer member's transport_initialize refused on 2026-10-24 (import-time module connections).
 _reg = "mojolearn._native_loaded_modules"
@@ -634,7 +634,7 @@ if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
       hv=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" "$REPO" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, os, sys
 # The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
-# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module.mojo).
+# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module_door.mojo).
 # This read-back imports ONE binary standalone, so it loads that registry the same way first; without
 # it the host tokenizer member's transport_initialize refused on 2026-10-24 (import-time module connections).
 _reg = "mojolearn._native_loaded_modules"

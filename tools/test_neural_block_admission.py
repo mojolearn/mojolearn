@@ -3,9 +3,9 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = (ROOT / "bindings/neural_block_public.mojo").read_text()
-ADMISSION = (ROOT / "bindings/neural_block_admission.mojo").read_text()
-ARRAY_ADMISSION = (ROOT / "bindings/native_array_snapshot.mojo").read_text()
+PUBLIC = (ROOT / "bindings/neural_block_public_door.mojo").read_text()
+ADMISSION = (ROOT / "bindings/neural_block_admission_door.mojo").read_text()
+ARRAY_ADMISSION = (ROOT / "bindings/native_array_snapshot_door.mojo").read_text()
 
 
 class NeuralAdmissionSource(unittest.TestCase):

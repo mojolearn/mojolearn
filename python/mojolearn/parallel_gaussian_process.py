@@ -12,7 +12,7 @@ from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
 # GaussianProcessClassifier, for the Python-sharded drivers' native owner
-# (bindings/parallel_shard_native.mojo): one class column's binary fit or
+# (bindings/parallel_shard_native_door.mojo): one class column's binary fit or
 # latent pass is the plain native one in a worker process.
 _shard.register(gpc_class=_gpc_impl.GaussianProcessClassifier)
 
@@ -25,7 +25,7 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     worker; class-level scheduling helps multiclass throughput, not binary fit
     capacity. Binary classification creates only one task.
     """
-    # One native call (bindings/parallel_shard_native.mojo
+    # One native call (bindings/parallel_shard_native_door.mojo
     # `fit_gaussian_process_classifier`): one binary Laplace fit per
     # one-vs-rest class column on a worker process per device (column i on
     # device i % len(devices)), stored as the plain fit stores them.

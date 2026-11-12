@@ -1,5 +1,5 @@
 """Lane ne1-h-labels: the one label entry (`labels_native_call`,
-bindings/labels_native_entry.mojo) gives the answers of the shell steps it
+bindings/labels_native_entry_pack.mojo) gives the answers of the shell steps it
 replaced: `encode_labels` the ORDER RULE classes and codes of
 `sorted_classes(flatten_labels(y))`, the metric pair the per-side encodes and
 the sorted union, a classifier score from predicted codes the accuracy of the

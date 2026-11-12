@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-NATIVE = ROOT / "bindings/tokenizer_public_native.mojo"
+NATIVE = ROOT / "bindings/tokenizer_public_native_door.mojo"
 
 
 class TokenizerPublicSource(unittest.TestCase):

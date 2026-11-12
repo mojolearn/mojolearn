@@ -60,7 +60,7 @@ from kernel_methods.host.kernel_methods_host_run import (
 )
 
 
-from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from providers.python.svm_host_scale_gamma_host_pyapi_pack import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 from kernel_methods.descriptor_host import KERNEL_METHOD_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 

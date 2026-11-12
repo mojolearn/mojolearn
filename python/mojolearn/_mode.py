@@ -582,7 +582,7 @@ class ParamsMixin(SklearnTagsMixin):
         self : object
             This estimator with its updated parameters.
         """
-        # One native call (bindings/full_reset_params_native.mojo): connected
+        # One native call (bindings/full_reset_params_native_door.mojo): connected
         # native schemas first, else the generic rebuild (_generic_reset).
         return _GENERIC_PARAMS(self, params, _GENERIC_PARAMS_CONTEXT)
 

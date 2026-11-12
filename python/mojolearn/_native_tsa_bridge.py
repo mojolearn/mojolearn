@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the stationarity functions
-(`kpss_test`, `select_d`; bindings/tsa_public_native.mojo). Python here
+(`kpss_test`, `select_d`; bindings/tsa_public_native_door.mojo). Python here
 only connects the compiled `_mojolearn_tsa` entries of both tiers (the lane
 is identical only: a tier without a binary keeps its refusal, raised by the
 call that asks for it) and the shared context, once, at import."""
@@ -46,7 +46,7 @@ def connect():
     context["tsa_bindings"] = bindings
     hw = {}
     names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict",
-             # resident components (bindings/tsa_hw_native.mojo); absent on the host binding
+             # resident components (bindings/tsa_hw_native_door.mojo); absent on the host binding
              "holtwinters_resident_prepare", "holtwinters_resident_release",  # glue: fixed compiled entry names
              "holtwinters_resident_count", "holtwinters_query_resident")  # glue: fixed compiled entry names
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
@@ -70,7 +70,7 @@ def connect():
                    "arima_fast_search_mode", "arima_order_caps", "arima_ndiffs_kpss",
                    "arima_order_batch_enabled", "arima_order_search_device", "arima_order_search",
                    "arima_search_reuse_enabled", "arima_order_search_fit",
-                   # resident fitted state (bindings/tsa_arima_resident.mojo); absent on the host binding
+                   # resident fitted state (bindings/tsa_arima_resident_unpack.mojo); absent on the host binding
                    "arima_resident_prepare", "arima_resident_release",  # glue: fixed compiled entry names
                    "arima_resident_count", "arima_predict_resident",  # glue: fixed compiled entry names
                    "arima_forecast_resident")  # glue: fixed compiled entry names

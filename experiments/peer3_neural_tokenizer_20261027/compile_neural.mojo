@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Small compile-only public boundary roots. Do not execute these raw doors.
 from std.python._cpython import PyObjectPtr
-from bindings.neural_block_public import neural_block_c
+from bindings.neural_block_public_door import neural_block_c
 
 
 @export

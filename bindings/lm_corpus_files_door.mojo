@@ -13,9 +13,9 @@ from std.math import isfinite
 from core.sha256 import Sha256, sha256_hex_addr
 from core.sha256_file import sha256_file
 from bindings.py_cpython_table import cpython_table
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_json_door import native_path, native_json_parse
-from bindings.mode_metadata_native import _class_fields
+from bindings.mode_metadata_native_door import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from core.shared_slot import SharedSlot
 

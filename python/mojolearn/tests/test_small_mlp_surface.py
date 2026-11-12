@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """SmallMLPTrainer surface gates on the selected native route.
 
-Every public method is one native call (bindings/small_mlp_native.mojo); these
+Every public method is one native call (bindings/small_mlp_native_door.mojo); these
 tests run it on whatever binding this process selected and check the contract:
 copies, shapes, refusals before any state change, transactional updates,
 serialized concurrent steps, canonical checkpoints and the one-call boundary.

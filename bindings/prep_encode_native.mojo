@@ -14,32 +14,32 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.native_loaded_module import native_loaded_module, NativeModules
-from bindings.native_prepared_owner import prepared_get, prepared_put
+from bindings.native_loaded_module_door import native_loaded_module, NativeModules
+from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_warnings import classical_warning
-from bindings.native_caller_frame import native_frame_globals
+from bindings.classical_warnings_unpack import classical_warning
+from bindings.native_caller_frame_pack import native_frame_globals
 from bindings.py_cpython_table import cpython_table
-from bindings.prep_native_estimator import prep_native_split, prep_entry_call
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
+from bindings.prep_native_estimator_door import prep_native_split, prep_entry_call
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array, classical_c_order
 from bindings.scaler_native_door import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
-from bindings.scaler_lifecycle_native import _entries
-from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
-from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.scaler_lifecycle_native_door import _entries
+from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
+from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
 from bindings.x_prep_native_owner_run import xprep_r3
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
-from bindings.classical_validate import classical_estimator_name
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.classical_validate_unpack import classical_estimator_name
 from core.host_finite_scan import host_all_finite_f32
-from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f, _select_transform
+from bindings.prep_stateless_native_door import _fam, _int_like, _repr, _name, _take_f, _select_transform
 from bindings.classical_labels import ClassicalLabels, labels_address, labels_cast, classical_encode_labels
 from bindings.admitted_input import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f64
 from bindings.py_optional import py_or_none, py_present
 

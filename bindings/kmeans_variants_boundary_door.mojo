@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native variant connection and unpack/pack owners; no numerical algorithms."""
 from std.python import PythonObject
-from bindings.admitted_family import admit_family
-from bindings.classical_arrays import classical_address
-from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_family_door import admit_family
+from bindings.classical_arrays_door import classical_address
+from bindings.native_loaded_module_door import native_loaded_module
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_entry, neural_descriptor_connect_factory_once,
 )
-from providers.python.x_cluster_out_pyapi import _py_array
+from providers.python.x_cluster_out_pyapi_pack import _py_array
 from core.kmeans_variants_api import (
     KMEANS_VARIANTS_ABI, KMEANS_VARIANTS_COUNT, VARIANTS_MODE, VARIANTS_CAPABILITIES,
     KMeansVariantsDriver, VariantsSpan, VariantsResultSlot,

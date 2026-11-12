@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
+from bindings.neighbor_query_native_door import neighbor_query_c, neighbor_query_attribute_c
 
 @export
 def peer1_query_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

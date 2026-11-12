@@ -81,7 +81,7 @@ def test_application_classes_are_not_registered_as_trusted_package_owners(monkey
 
 
 def test_native_family_door_admits_storage_before_dispatch_and_operation_coercion():
-    source = (ROOT / 'bindings/classical_native.mojo').read_text()
+    source = (ROOT / 'bindings/classical_native_pack.mojo').read_text()
     body = source.split('def classical_c(', 1)[1]
     assert body.index('py_type(call[1]) is not b.str') < body.index('var operation = String(call[1])')
     family = body.split('if operation.startswith("family_"):', 1)[1]
@@ -89,7 +89,7 @@ def test_native_family_door_admits_storage_before_dispatch_and_operation_coercio
 
 
 def test_guard_keeps_none_passive_subclasses_and_native_dictionary_boundary():
-    source = (ROOT / 'providers/python/classical_family_admission_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/classical_family_admission_pyapi_unpack.mojo').read_text()
     assert source.index('if model is None:') < source.index('native_loaded_module("mojolearn._native_family_layouts")')
     assert 'len(ancestry) - start != len(connected)' in source
     assert 'String(name) == "__init__" or not py_contains(names, name)' in source

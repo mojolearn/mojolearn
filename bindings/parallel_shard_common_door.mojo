@@ -29,11 +29,11 @@ from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
-from bindings.classical_arrays import classical_address
-from bindings.native_loaded_module import native_loaded_module
+from bindings.classical_arrays_door import classical_address
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_process_pool_door import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
-from bindings.tsa_hw_native import tsa_array
+from bindings.tsa_hw_native_door import tsa_array
 from core.shared_slot import SharedSlot
 from bindings.parallel_shard_common_run import (
     shard_fault_mark,

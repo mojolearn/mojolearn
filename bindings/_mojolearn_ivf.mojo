@@ -20,7 +20,7 @@ and mirrored in `_ivf_impl.py`.
 """
 
 from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.sys.compile import is_defined
 from std.python import Python, PythonObject
@@ -30,7 +30,7 @@ from bindings.parallel_ivf_entry_device import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from bindings.ivf_index_arrays import (
+from bindings.ivf_index_arrays_unpack import (
     ivf_arrays_extent,
     ivf_build_extents,
     ivf_extend_count,

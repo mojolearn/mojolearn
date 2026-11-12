@@ -59,13 +59,13 @@ _SVC_FORMAT = "mojolearn-svc-1"
 _SVR_FORMAT = "mojolearn-svr-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schemas registered at the end of this module;
 # host_archive_native.mojo builds the loaded model with the refusals and
 # messages of the Python loaders it replaced).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-# The compiled SVM family owner (bindings/svc_native.mojo), connected once at
+# The compiled SVM family owner (bindings/svc_native_unpack.mojo), connected once at
 # import: SVC's and SVR's fit, decision_function, predict, predict_proba,
 # predict_log_proba and score are one native call each, handed the
 # `_mojolearn_svm` binding `_bind` (or `_extension`) resolves.
@@ -1238,7 +1238,7 @@ _native_archive_bridge.register(
     ),
 )
 
-# The compiled SVM family owner (bindings/svc_native.mojo) reads these fixed
+# The compiled SVM family owner (bindings/svc_native_unpack.mojo) reads these fixed
 # tables: the base binding's host-helper resolver (`_buffer._native`, the
 # entries `gather_i64`, `threshold_labels_i64`, ... the Python called) and
 # the connected public class-label type the native fit publishes `classes_` as.

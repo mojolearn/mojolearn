@@ -14,7 +14,7 @@ def test_state_restore_has_one_native_frontdoor():
 
 
 def test_validation_precedes_session_mutation_and_uses_shared_admission():
-    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    source = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     restore = source.split('def byte_lm_load_state(')[1].split('def byte_lm_train_step(')[0]
     assert restore.index('_validated_state(') < restore.index('_forget(') < restore.index('"_state", replacement')
     assert '_session_call(session, 4,' in restore
@@ -46,7 +46,7 @@ def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
         body = method.body[1:]
         assert len(body) == 1 and isinstance(body[0], ast.Return)
         assert body[0].value.func.id == '_LM_TRAINER'
-    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    source = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     checkpoint = source.split('def byte_lm_checkpoint(')[1].split('def byte_lm_train_step(')[0]
     assert 'byte_checkpoint_load(args[0], io_error)' in checkpoint
     assert 'byte_checkpoint_save(args[0], state, io_error)' in checkpoint
@@ -57,7 +57,7 @@ def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
 
 
 def test_attention_report_uses_one_native_status_snapshot():
-    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    source = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     report = source.split('def _attention_stage_report(')[1].split('def byte_lm_consume(')[0]
     assert '_session_call(fields["_native_session"], 11,' in report
     assert 'var info = List[Int]()' in report
@@ -74,7 +74,7 @@ def test_attention_report_uses_one_native_status_snapshot():
 
 
 def test_json_checkpoint_retains_bounded_format_and_native_codec():
-    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi_door.mojo').read_text()
     assert 'BYTE_JSON_LIMIT = 2097152' in source
     assert 'native_json_parse_unique(encoded)' in source
     assert 'sha256_hexdigest(_canonical(payload))' in source

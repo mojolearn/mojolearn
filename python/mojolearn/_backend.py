@@ -2457,7 +2457,7 @@ def load_set(mode):
         # loads, vendor-checks and (for gbdt) mode-checks one member when
         # it is first asked for. The native binding resolver reads only
         # members that an import-time connection resolved through
-        # `binding()` (providers/python/estimator_binding_pyapi.mojo).
+        # `binding()` (providers/python/estimator_binding_pyapi_door.mojo).
         deferred[name] = path
     if not modules and not deferred:
         raise ImportError(

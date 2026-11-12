@@ -127,7 +127,7 @@ def test_native_owner_replaces_lazy_python_getter_and_keeps_host_classes():
     host = (PACKAGE / "_classical_host.py").read_text()
     for name in ("HostNearestNeighbors", "HostKNeighborsClassifier", "HostKNeighborsRegressor", "HostRadiusNeighbors", "HostIVFIndex"):
         assert name in host[host.index("_connect_neighbor_host({"):]
-    native = (ROOT / "bindings/neighbor_query_native.mojo").read_text()
+    native = (ROOT / "bindings/neighbor_query_native_door.mojo").read_text()
     assert "Python.import_module" not in native
     for path in ("ivf_flat_index_export", "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_search"):
         assert path in native
@@ -135,5 +135,5 @@ def test_native_owner_replaces_lazy_python_getter_and_keeps_host_classes():
 
 
 def test_shared_scalar_admission_does_not_import_python_at_runtime():
-    scalar = (ROOT / "bindings/host_inference_scalars.mojo").read_text()
+    scalar = (ROOT / "bindings/host_inference_scalars_door.mojo").read_text()
     assert 'Python.import_module("builtins")' not in scalar

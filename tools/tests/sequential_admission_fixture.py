@@ -50,7 +50,7 @@ def _sequential_class(runtime_so, numeric_so, tokenizer_so):
     package.__path__ = [str(PACKAGE)]
     sys.modules["mojolearn"] = package
     # The package connects its stdlib module registry at import, before any
-    # binding initializes; native admission reads it (bindings/native_loaded_module.mojo).
+    # binding initializes; native admission reads it (bindings/native_loaded_module_door.mojo).
     import mojolearn._native_loaded_modules  # noqa: F401
     numeric = _load_extension("mojolearn._mojolearn_x_sequence_host", numeric_so)
     tokenizer = _load_extension("mojolearn._host._mojolearn_tokenizer_host", tokenizer_so)
@@ -238,7 +238,7 @@ def main(out_path, scratch):
 
 
 # Read-only operations admit only the model fields they read
-# (bindings/sequential_admission.mojo `_read_fields`). A Python-defined value
+# (bindings/sequential_admission_door.mojo `_read_fields`). A Python-defined value
 # in a field that predict/layers never read was refused by the full inventory
 # walk and is not refused by the narrow admission; fit and save still refuse
 # it (the `fit.*` and `save_checkpoint.*` cases stay equal).

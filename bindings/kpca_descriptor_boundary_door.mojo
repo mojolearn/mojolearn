@@ -23,7 +23,7 @@ from core.pca_native_api import pca_vendor_name
 from x_neighbors.descriptor_schema import XN_ABI_NAME, XN_OPERATION_COUNT
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 from bindings.py_balanced import py_call, py_type
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, neural_descriptor_connect_factory_once, neural_descriptor_connect_once,
 )

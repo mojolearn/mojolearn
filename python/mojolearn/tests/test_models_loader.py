@@ -367,7 +367,7 @@ def test_refusals_name_the_model_type_field_and_value(cfg, words):
 
 # test_block_kwargs_follow_the_live_signature DELETED (pyout-neural-lm, 2026-11-11):
 # it exercised the Python `causal_lm._block_kwargs`/`_accepted_options`, which no
-# product path called (bindings/causal_lm_construct.mojo builds the block options).
+# product path called (bindings/causal_lm_construct_door.mojo builds the block options).
 
 
 def test_greedy_argmax_ties_go_to_the_lowest_index():

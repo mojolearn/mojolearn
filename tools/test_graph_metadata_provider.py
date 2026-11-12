@@ -29,12 +29,12 @@ def test_recursive_record_protocols_are_compiled_descriptors():
     bridge = (ROOT / 'python/mojolearn/importers/_native_reader_bridge.py').read_text()
     assert 'MethodType(record_entry, (name, context))' in bridge
     assert "entry('record_descriptor', bound, None, context)" in bridge
-    source = (ROOT / 'providers/python/autograd_graph_metadata_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_graph_metadata_pyapi_door.mojo').read_text()
     for symbol in ('PyInstanceMethod_New', 'Py_ReprEnter', 'Py_ReprLeave', 'graph_record_bound', '_admit', '_fields'):
         assert symbol in source
     assert 'Python.import_module' not in source
     assert 'numpy_array_interface' in source and 'value.ctypes' not in source
-    dispatch = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    dispatch = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
     assert 'graph_record_bound' not in dispatch
     assert 'def graph_record_c(' in source
     for binding in ('_mojolearn_x_sequence.mojo', '_mojolearn_x_sequence_host.mojo'):

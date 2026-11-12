@@ -32,7 +32,7 @@ THE GIL IS RELEASED AROUND THE DEVICE WORK, and nothing inside a
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject

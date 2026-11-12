@@ -150,7 +150,7 @@ CONNECT_CALL = re.compile(r"^_?connect|native")
 # Instance attributes the compiled runtime sets on the object itself.
 NATIVE_ATTRS = frozenset({"_runtime"})
 # Compiled factories that turn a bound compiled entry into a class-slot descriptor, and
-# refuse anything else at runtime: bindings/classical_attributes.mojo
+# refuse anything else at runtime: bindings/classical_attributes_door.mojo
 # classical_attribute_descriptor_c requires MethodType over a BuiltinFunctionType and
 # returns PyInstanceMethod_New of it. The slot then calls that entry.
 NATIVE_DESCRIPTOR_FACTORIES = frozenset({"classical_attribute_descriptor"})

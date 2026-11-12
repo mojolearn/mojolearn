@@ -1,0 +1,416 @@
+# SPDX-License-Identifier: Apache-2.0
+# Native label passes shared by the label and metric doors (lane
+# p3-labels-metrics, 2026-11-06).
+#
+# The label doors read Python label lists one item at a time through boxed
+# indexing (`labels[i]`, one PyObject_GetItem and one PythonObject per item),
+# appended results through a Python `list.append` call per item, and encoded
+# str labels by an n log n code-point merge sort over every row. The helpers
+# below keep the same classes, codes, class order, outputs and refusals and
+# do the per-item work in C calls only:
+#
+# - items are read borrowed from the exact list / tuple storage
+#   (PyList_GetItem / PyTuple_GetItem), their class compared by pointer;
+# - result lists are built presized (PyList_New + PyList_SetItem);
+# - str labels are hashed to their k distinct values first (FNV-1a over the
+#   UTF-8 bytes CPython caches in the str object, PyUnicode_AsUTF8AndSize: no
+#   per-label copy), only the k classes are sorted, and each row's code comes
+#   from its hash slot. UTF-8 byte order equals code-point order, so the
+#   classes come out in Python's str order; the first label of each class is
+#   kept, as `dict.fromkeys` keeps it. A str holding a lone surrogate has no
+#   UTF-8 form: the helper answers P3_TEXT_FALLBACK and the caller runs its
+#   former code-point path unchanged.
+#
+# The C entries come from the one CPython table, bindings/py_cpython_table.mojo
+# (this module's own table moved there, lane ne1-e-table, 2026-11-06).
+from std.python import Python, PythonObject
+from bindings.label_sequence_source_unpack import label_source_count, label_source_raw
+from bindings.label_sequence_source_pack import label_source_value
+from std.python._cpython import PyObjectPtr
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_cpython_table import cpython_table
+from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.cpython_borrowed_pack import borrowed_item
+from bindings.py_balanced import py_call, py_setitem
+from core.p3_labels_metrics_run import (
+    P3TextCodes, P3Utf8, P3TextSet, _p3_probe, p3_text_codes_from_utf8, p3_class_index,
+    P3_TEXT_OK as _RUN_P3_TEXT_OK, P3_TEXT_NOT_STR as _RUN_P3_TEXT_NOT_STR, P3_TEXT_FALLBACK as _RUN_P3_TEXT_FALLBACK,
+)
+
+# Py_TPFLAGS_UNICODE_SUBCLASS
+comptime P3_UNICODE_FLAG = 1 << 28
+
+
+def p3_call_object(entry: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`entry(*args)` for an exact tuple `args`; NULL raises the pending
+    Python error. The symbol is resolved once per process."""
+    ref cpy = Python().cpython()
+    var result = cpython_table()[].PyObject_CallObject(entry._obj_ptr, args._obj_ptr)
+    if not result:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=result)
+
+
+def p3_type_word(raw: PyObjectPtr) raises -> Int:
+    """`borrowed_type_word` (bindings/cpython_borrowed.mojo)."""
+    return borrowed_type_word(raw)
+
+
+def p3_item(container: PythonObject, index: Int, is_tuple: Bool) raises -> PyObjectPtr:
+    """`borrowed_item` (bindings/cpython_borrowed.mojo)."""
+    return borrowed_item(container, index, is_tuple)
+
+
+# ------------------------------------------------------------ decode
+
+
+def p3_decode_list(classes: PythonObject, codes_addr: Int, width: Int, n: Int) raises -> PythonObject:
+    """`[classes[c] for c in codes]` for n int32 (`width` 4) or int64
+    (`width` 8) codes at `codes_addr`, `classes` an exact list or tuple: one
+    presized list filled in C with the class objects themselves (new
+    references). A negative code counts from the end, as Python indexing
+    does. None when a code is out of range (the caller's Python indexing
+    then raises its own IndexError)."""
+    var b = native_loaded_module("builtins")
+    var is_tuple = p3_type_word(classes._obj_ptr) == Int(b.tuple._obj_ptr)
+    if not is_tuple and p3_type_word(classes._obj_ptr) != Int(b.list._obj_ptr):
+        raise Error("TypeError: class labels require an exact native list or tuple")
+    var k = len(classes)
+    # Check every code first, so a refusal leaves nothing half built.
+    for i in range(n):  # driver-loop: native range check of the code words
+        var code = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_addr)[i]) if width == 4 else Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=codes_addr)[i])
+        if code < -k or code >= k:
+            return PythonObject(None)
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var out = t[].PyList_New(n)
+    if not out:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=out)
+    for i in range(n):  # driver-loop: native list fill, one borrowed class read and one C store per row
+        var code = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_addr)[i]) if width == 4 else Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=codes_addr)[i])
+        if code < 0:
+            code += k
+        var item = p3_item(classes, code, is_tuple)
+        _ = t[].PyList_SetItem(result._obj_ptr, i, cpy.Py_NewRef(item))
+    _ = classes  # keep the class container alive through the borrowed reads above
+    return result
+
+
+def p3_interleave_columns(columns: PythonObject, n: Int) raises -> PythonObject:
+    """The row-major flat list of an (n, m) block of label objects given as
+    `columns`, an exact list of m exact lists or tuples of n labels each:
+    `[columns[j][i] for i in range(n) for j in range(m)]`. One list of n * m
+    Nones, then one C extended-slice assignment per column
+    (`flat[j::m] = columns[j]`): the label objects themselves, no loop over
+    labels here (lane i3-move-data-loops)."""
+    var b = native_loaded_module("builtins")
+    if p3_type_word(columns._obj_ptr) != Int(b.list._obj_ptr):
+        raise Error("TypeError: label columns require an exact native list")
+    var list_word = Int(b.list._obj_ptr)
+    var tuple_word = Int(b.tuple._obj_ptr)
+    var m = len(columns)
+    for j in range(m):  # driver-loop: over the m columns (exact class and length)
+        var col = PythonObject(from_borrowed=p3_item(columns, j, False))
+        var word = p3_type_word(col._obj_ptr)
+        if (word != list_word and word != tuple_word) or len(col) != n:
+            raise Error("ValueError: label columns must be exact lists of " + String(n) + " labels")
+    var result = py_call(native_loaded_module("operator").mul, Python.list(PythonObject(None)), PythonObject(n * m))
+    for j in range(m):  # driver-loop: over the m columns (one C slice assignment each)
+        var col = PythonObject(from_borrowed=p3_item(columns, j, False))
+        py_setitem(result, py_call(b.slice, PythonObject(j), PythonObject(None), PythonObject(m)), col)
+    _ = columns  # keep the columns alive through the borrowed reads above
+    return result
+
+
+# ------------------------------------------------------------ str labels
+
+# The status words live with the typed passes (core/p3_labels_metrics_run.mojo);
+# the label doors keep importing them from here.
+comptime P3_TEXT_OK = _RUN_P3_TEXT_OK
+comptime P3_TEXT_NOT_STR = _RUN_P3_TEXT_NOT_STR
+comptime P3_TEXT_FALLBACK = _RUN_P3_TEXT_FALLBACK
+
+
+def p3_utf8_read(labels: PythonObject, n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
+    var pins = List[PythonObject]()
+    return _p3_utf8_read_source[False](labels, pins, n, text, any_str)
+
+
+def p3_utf8_read(labels: List[PythonObject], n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
+    return _p3_utf8_read_source[True](PythonObject(None), labels, n, text, any_str)
+
+
+def _p3_utf8_read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], n: Int, mut text: P3Utf8, any_str: Bool) raises -> Int:
+    """The UTF-8 views of the n labels of an exact list. P3_TEXT_NOT_STR at
+    the first label that is not a str (`any_str`: a str subclass counts, as
+    the code-point reader takes it; else exactly str); P3_TEXT_FALLBACK when
+    a str has no UTF-8 form (a lone surrogate; the pending error is
+    cleared). The views stay valid while the list holds the labels."""
+    var t = cpython_table()
+    var str_word = Int(native_loaded_module("builtins").str._obj_ptr)
+    var size = List[Int](length=1, fill=0)
+    var size_ptr = size.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    ref cpy = Python().cpython()
+    for i in range(n):  # driver-loop: one borrowed read and one C call per label, no Python call
+        var raw = label_source_raw[native](labels, pins, i)
+        var cls = cpy.PyObject_Type(raw)
+        var ok = Int(cls) == str_word
+        if not ok and any_str:
+            ok = (t[].PyType_GetFlags(cls) & UInt64(P3_UNICODE_FLAG)) != 0
+        cpy.Py_DecRef(cls)
+        if not ok:
+            return P3_TEXT_NOT_STR
+        var address = t[].PyUnicode_AsUTF8AndSize(raw, Int(size_ptr))
+        if address == 0:
+            t[].PyErr_Clear()
+            return P3_TEXT_FALLBACK
+        text.addr.append(address)
+        text.size.append(size[0])
+    _ = size^
+    _ = pins
+    _ = labels  # the list owns every str whose bytes were read above
+    return P3_TEXT_OK
+
+
+def p3_text_codes(labels: PythonObject, any_str: Bool = True) raises -> P3TextCodes:
+    var pins = List[PythonObject]()
+    return _p3_text_codes_source[False](labels, pins, any_str)
+
+
+def p3_text_codes(labels: List[PythonObject], any_str: Bool = True) raises -> P3TextCodes:
+    return _p3_text_codes_source[True](PythonObject(None), labels, any_str)
+
+
+def _p3_text_codes_source[native: Bool](labels: PythonObject, pins: List[PythonObject], any_str: Bool = True) raises -> P3TextCodes:
+    """`sorted(dict.fromkeys(labels))` and each label's dense code for an
+    exact nonempty list of str labels, by hash then a sort of the k
+    distinct labels only (see the file header)."""
+    var n = label_source_count[native](labels, pins)
+    if n == 0:
+        return P3TextCodes(P3_TEXT_NOT_STR)
+    var text = P3Utf8(n)
+    var status = _p3_utf8_read_source[native](labels, pins, n, text, any_str)
+    if status != P3_TEXT_OK:
+        return P3TextCodes(status)
+    var out = p3_text_codes_from_utf8(text, n)
+    _ = pins
+    _ = labels  # the list owns the str bytes read above
+    return out^
+
+
+def p3_text_classes(labels: PythonObject, first: List[Int]) raises -> PythonObject:
+    var pins = List[PythonObject]()
+    return _p3_text_classes_source[False](labels, pins, first)
+
+
+def p3_text_classes(labels: List[PythonObject], first: List[Int]) raises -> PythonObject:
+    return _p3_text_classes_source[True](PythonObject(None), labels, first)
+
+
+def _p3_text_classes_source[native: Bool](labels: PythonObject, pins: List[PythonObject], first: List[Int]) raises -> PythonObject:
+    """The class list: `labels[first[c]]` for each class, built presized."""
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var k = len(first)
+    var out = t[].PyList_New(k)
+    if not out:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=out)
+    for c in range(k):  # driver-loop: over the k classes
+        _ = t[].PyList_SetItem(result._obj_ptr, c, cpy.Py_NewRef(label_source_raw[native](labels, pins, first[c])))
+    _ = pins
+    _ = labels
+    return result
+
+
+def p3_text_lookup(classes: PythonObject, values: PythonObject, address: Int, as_float: Bool,
+                   missing: PythonObject) raises -> Int:
+    """`{c: i for i, c in enumerate(classes)}.get(v, -1)` per value for an
+    exact list of str classes (a duplicated class keeps its LAST index): the
+    codes written to `address` (float32 when `as_float`, else int32), the
+    first five missing values appended to `missing`; returns the missing
+    count, or -1 when the classes cannot take this path (a class
+    is not a str, or has no UTF-8 form: the caller runs its former path)."""
+    var k = len(classes)
+    var ctext = P3Utf8(k)
+    var status = p3_utf8_read(classes, k, ctext, True)
+    if status != P3_TEXT_OK:
+        return -1
+    var seen = P3TextSet(k)
+    var answer = List[Int]()
+    p3_class_index(ctext, k, seen, answer)
+    var t = cpython_table()
+    ref cpy = Python().cpython()
+    var str_word = Int(native_loaded_module("builtins").str._obj_ptr)
+    var size = List[Int](length=1, fill=0)
+    var size_ptr = size.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var n = len(values)
+    var one = P3Utf8(1)
+    one.addr.append(0)
+    one.size.append(0)
+    var count = 0
+    for i in range(n):  # driver-loop: one borrowed read and one hash probe per value, no Python call
+        var raw = p3_item(values, i, False)
+        var cls = cpy.PyObject_Type(raw)
+        var is_str = Int(cls) == str_word or (t[].PyType_GetFlags(cls) & UInt64(P3_UNICODE_FLAG)) != 0
+        cpy.Py_DecRef(cls)
+        var found = -1
+        if is_str:
+            var a = t[].PyUnicode_AsUTF8AndSize(raw, Int(size_ptr))
+            if a == 0:
+                # No UTF-8 form (a lone surrogate): it equals no class here,
+                # since every class has one.
+                t[].PyErr_Clear()
+            else:
+                one.addr[0] = a
+                one.size[0] = size[0]
+                var d = _p3_probe(seen, ctext, one)
+                if d >= 0:
+                    found = answer[d]
+        if found < 0:
+            count += 1
+            if len(missing) < 5:
+                _ = t[].PyList_Append(missing._obj_ptr, raw)
+        if as_float:
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Float32(found)
+        else:
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Int32(found)
+    _ = size^
+    _ = classes
+    _ = values
+    return count
+
+
+# ------------------------------------------------------------ dict codes
+
+
+def p3_dict_codes(index: PythonObject, values: PythonObject, address: Int, missing: Int) raises:
+    """`index.get(v, missing)` per item of an exact list or tuple `values`,
+    written as int32 words to `address`; `index` is an exact dict whose
+    values are Python ints within int32 (a class index table). One borrowed
+    read and one C dict probe per item: the item's own hash and equality
+    run in C for the admitted label classes, exactly as the Python lookup
+    ran them."""
+    var b = native_loaded_module("builtins")
+    var is_tuple = p3_type_word(values._obj_ptr) == Int(b.tuple._obj_ptr)
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
+    for i in range(len(values)):  # driver-loop: one borrowed read and one C dict probe per label
+        var raw = p3_item(values, i, is_tuple)
+        var hit = t[].PyDict_GetItemWithError(index._obj_ptr, raw)
+        if not hit:
+            if t[].PyErr_Occurred():
+                raise cpy.unsafe_get_error()
+            out[i] = Int32(missing)
+        else:
+            var code = t[].PyLong_AsLongLong(hit)
+            if code == -1:
+                if t[].PyErr_Occurred():
+                    raise cpy.unsafe_get_error()
+            out[i] = Int32(code)
+    _ = index
+    _ = values
+
+
+# ------------------------------------------------------------ integers
+
+
+def p3_integral_list(labels: PythonObject, bool_types: PythonObject) raises -> PythonObject:
+    """`[int(v) for v in labels]` for an exact list or tuple whose every
+    label is an admitted integral scalar (exact int, exact bool, a NumPy
+    integer or bool scalar): exact ints are kept, bools become 0 / 1
+    (PyObject_IsTrue), other integer scalars their exact int value
+    (PyNumber_Index, the scalar's C slot). `bool_types` is the connected
+    tuple of NumPy bool classes, or None. One presized list, C calls only."""
+    var b = native_loaded_module("builtins")
+    var is_tuple = p3_type_word(labels._obj_ptr) == Int(b.tuple._obj_ptr)
+    var n = len(labels)
+    var int_word = Int(b.int._obj_ptr)
+    var bool_word = Int(b.bool._obj_ptr)
+    var bools = List[Int]()
+    if bool_types is not None:
+        for j in range(len(bool_types)):  # driver-loop: over the connected bool classes
+            bools.append(Int(bool_types[j]._obj_ptr))
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var out = t[].PyList_New(n)
+    if not out:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=out)
+    for i in range(n):  # driver-loop: one borrowed read and one C conversion per label, no Python call
+        var raw = p3_item(labels, i, is_tuple)
+        var cls = p3_type_word(raw)
+        var value: PyObjectPtr
+        if cls == int_word:
+            value = cpy.Py_NewRef(raw)
+        else:
+            var is_bool = cls == bool_word
+            for j in range(len(bools)):  # driver-loop: over the connected bool classes
+                is_bool = is_bool or cls == bools[j]
+            if is_bool:
+                var truth = Int(t[].PyObject_IsTrue(raw))
+                if truth < 0:
+                    raise cpy.unsafe_get_error()
+                value = t[].PyLong_FromLongLong(Int64(truth))
+            else:
+                value = t[].PyNumber_Index(raw)
+            if not value:
+                raise cpy.unsafe_get_error()
+        _ = t[].PyList_SetItem(result._obj_ptr, i, value)
+    _ = labels
+    return result
+
+
+# ------------------------------------------------------------ arrays
+
+
+def p3_array_numbers(data: Int, sizes: List[Int], steps: List[Int], count: Int, kind: String,
+                     width: Int) raises -> PythonObject:
+    """The Python numbers of an integer ('i' / 'u', width 1, 2, 4 or 8;
+    unsigned at most 4) or float ('f', width 4 or 8) array in logical C
+    order: exact ints / floats made by PyLong_FromLongLong /
+    PyFloat_FromDouble into one presized list. None for any other dtype (the
+    caller keeps its general scalar decoder)."""
+    var integer = kind == "i" or kind == "u"
+    if integer and not (width == 1 or width == 2 or width == 4 or (width == 8 and kind == "i")):
+        return PythonObject(None)
+    if kind == "f" and width != 4 and width != 8:
+        return PythonObject(None)
+    if not integer and kind != "f":
+        return PythonObject(None)
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var out = t[].PyList_New(count)
+    if not out:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=out)
+    var rank = len(sizes)
+    for index in range(count):  # driver-loop: one native word read and one C number per element
+        var residual = index
+        var offset = 0
+        for reverse_axis in range(rank):  # driver-loop: over the array's axes (strided and reversed views)
+            var axis = rank - 1 - reverse_axis
+            offset += (residual % sizes[axis]) * steps[axis]
+            residual //= sizes[axis]
+        var at = data + offset
+        var value: PyObjectPtr
+        if kind == "f":
+            var x = Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if width == 4 else MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at)[0]
+            value = t[].PyFloat_FromDouble(x)
+        else:
+            var v: Int64
+            if width == 1:
+                v = Int64(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=at)[0]) if kind == "i" else Int64(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at)[0])
+            elif width == 2:
+                v = Int64(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=at)[0]) if kind == "i" else Int64(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=at)[0])
+            elif width == 4:
+                v = Int64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if kind == "i" else Int64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)[0])
+            else:
+                v = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=at)[0]
+            value = t[].PyLong_FromLongLong(v)
+        if not value:
+            raise cpy.unsafe_get_error()
+        _ = t[].PyList_SetItem(result._obj_ptr, index, value)
+    return result

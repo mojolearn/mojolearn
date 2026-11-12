@@ -10,8 +10,9 @@ from std.python import PythonObject
 from std.memory import ArcPointer
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
-from bindings.native_owner_registry import borrowed_native_owner, register_native_owner_type
-from bindings.classical_arrays import classical_address
+from bindings.native_owner_registry_unpack import register_native_owner_type
+from bindings.native_owner_registry_pack import borrowed_native_owner
+from bindings.classical_arrays_door import classical_address
 from bindings.native_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from core.linear_model_state import LinearModelState
 from core.linear_registry import LINEAR_STATES

@@ -82,7 +82,7 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
-from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_run import native_owner_no_pins
 from core.gp_native_provider import GPProviderAPI
 from core.gp_entry_table import GPEntryKey, GP_COLUMN_DEVICE, gp_entry_vendor, gp_table_publish
@@ -91,7 +91,7 @@ from core.gp_native_device import GPDeviceKernels
 from core.shared_slot import SharedSlot
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32

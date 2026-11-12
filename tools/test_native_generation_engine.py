@@ -35,7 +35,7 @@ def test_numerical_order_and_native_cached_token_publication_are_explicit():
 
 
 def test_reservations_and_outputs_remain_at_checked_boundary():
-    provider = text('providers/python/generation_metadata_pyapi.mojo').split('struct GenerationEngineAdmission')[1]
+    provider = text('providers/python/generation_metadata_pyapi_door.mojo').split('struct GenerationEngineAdmission')[1]
     assert '_generation_engine_state(key, [cache_count]' in provider
     assert 'self.owners.append(AdmittedNativeExecution(provider, session, handle,' in provider
     assert 'OperationLockLease(lock_owner)' in provider
@@ -50,12 +50,12 @@ def test_reservations_and_outputs_remain_at_checked_boundary():
 
 
 def test_experiment_never_silently_relabels_unsupported_routes():
-    public = text('bindings/causal_lm_public.mojo')
+    public = text('bindings/causal_lm_public_door.mojo')
     setup = public.split('def _engine_admission(')[1].split('def _run_engine(')[0]
     assert 'distributed execution is pending' in setup
     assert 'does not replace the existing resident route' in setup
     assert 'MOJOLEARN_GENERATION_NATIVE_ENGINE' in public
-    provider = text('providers/python/generation_metadata_pyapi.mojo')
+    provider = text('providers/python/generation_metadata_pyapi_door.mojo')
     assert '_generation_engine_weights(snapshot.embedding' in provider
     state = provider.split('def _generation_engine_state(', 1)[1].split('struct GenerationEngineAdmission', 1)[0]
     assert state.index('generation_buffer_view(value)') < state.index('AdmittedBorrowedBuffer(view, True)')
@@ -68,7 +68,7 @@ def test_deferred_layer_refusals_keep_earlier_progress_and_profile_publication()
     forward = src.split('def forward(mut self,')[1].split('struct NativeGenerationProgress')[0]
     assert forward.index('self.primitive_call(0,') < forward.index('layer.visited = True')
     assert forward.index('raise Error(layer.failure)') < forward.index('layer.endpoint.call(')
-    provider = text('providers/python/generation_metadata_pyapi.mojo')
+    provider = text('providers/python/generation_metadata_pyapi_door.mojo')
     assert 'native_layer.failure = String(problem)' in provider
     assert 'self.native.layers[i].visited and self.native.layers[i].profile_admitted' in provider
 
@@ -81,7 +81,7 @@ def test_delayed_foreign_copies_preserve_layer_order_and_alias_counters():
     assert 'self.state_counters[layer.state_index] = layer.cached' in body
     assert body.index('embedding_refresh[i].copy_to(') < body.index('self.primitive_call(0,')
     assert body.index('head_refresh[i].copy_to(') < body.index('self.primitive_call(2,')
-    provider=text('providers/python/generation_metadata_pyapi.mojo')
+    provider=text('providers/python/generation_metadata_pyapi_door.mojo')
     assert 'identity = py_get(fields, "_native_state_identity", py_get(fields, "_causal_original", st))' in provider
     assert 'var identity_key = Int(identity._obj_ptr)' in provider
     assert 'state_indices.get(identity_key, -1)' in provider
@@ -100,7 +100,7 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     assert 'def forward(mut self, ids: Int, length: Int)' in native
     assert 'operation += 1' not in native
     assert 'parameters = decode' not in native
-    public=text('bindings/causal_lm_public.mojo')
+    public=text('bindings/causal_lm_public_door.mojo')
     assert 'return _run_engine(mods, model, ids, state)' in public
     assert 'logits = owner.native.forward(address, length)' in public
     original=public.split('def _run_snapshot(')[1].split('\ndef ')[0]
@@ -108,7 +108,7 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     assert 'addresses[layer.output_slot]' in native
     assert 'layer.addresses[15] = _generation_zero_workspace(layer.report_workspace, layer.report_size)' in native
     assert 'layer.cached + length if kind == 1 else result' in native
-    provider=text('providers/python/generation_metadata_pyapi.mojo')
+    provider=text('providers/python/generation_metadata_pyapi_door.mojo')
     assert 'native_layer.floats = [layer.words.dt_low, layer.words.dt_high]' in provider
     assert '"absolute_position" if self.native.layers[i].kind == 1 else "buffered_tokens"' in provider
     assert 'py_setitem(self.snapshot.layers[i].block, "h_last_", report)' in provider

@@ -20,7 +20,7 @@ from ._mode import PublicOutputsMixin, _PARAMS_METADATA, _PARAMS_METADATA_CONTEX
 from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 
 # The compiled tree-ensemble owner: `decision_function`, `predict` and
-# `predict_proba` are one native call each (bindings/trees_public_gbdt.mojo).
+# `predict_proba` are one native call each (bindings/trees_public_gbdt_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
@@ -106,7 +106,7 @@ class _GBDTAdapter(PublicOutputsMixin):
             tags.classifier_tags.multi_class = False
         return tags
 
-    # save / load always refuse (bindings/trees_gbdt_adapter_lifecycle.mojo:
+    # save / load always refuse (bindings/trees_gbdt_adapter_lifecycle_door.mojo:
     # no adapter archive format; pickle keeps the adapter state). They are left
     # out of the public docs (docs-site/api_exclude.txt), never documented as a caveat.
     def save(self, path):

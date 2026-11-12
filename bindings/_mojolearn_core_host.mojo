@@ -80,7 +80,7 @@ comparison and one narrowing per kept value, no fold to sabotage.
 # parallel forest's offset merge (bindings/msel_host.mojo).
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from bindings.parallel_base_entry_host import publish_parallel_base_host
-from bindings.msel_host import (
+from bindings.msel_host_pack import (
     msel_put_binding,
     msel_alloc_binding,
     msel_read_binding,
@@ -97,14 +97,14 @@ from bindings.msel_host import (
 # for the model-selection doors (core/msel_entry_table.mojo).
 from core.msel_helpers_host import publish_msel_helpers_host
 from std.os import abort
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
 
-from bindings.host_helpers import (
+from bindings.host_helpers_pack import (
     all_finite_f32_binding,
     all_finite_f64_binding,
     argmax_last_rows_f32_binding,
@@ -115,7 +115,7 @@ from bindings.host_helpers import (
     gather_i64_binding,
     gather_rows_bytes_binding,
 )
-from bindings.hotpath_helpers import (
+from bindings.hotpath_helpers_door import (
     HOTPATH_SABOTAGE,
     cast_elements_binding,
     check_indices_i64_binding,
@@ -154,13 +154,13 @@ from bindings.hotpath_helpers import (
     strat_group_plan_i32_binding,
     bincount2_i32_host_binding,
 )
-from bindings.normal_dist_helpers import truncnorm_draws_binding
-from bindings.lr_table_helpers import (
+from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
+from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,
     lr_schedule_at_c, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
-from bindings.array_helpers import (
+from bindings.array_helpers_pack import (
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
@@ -181,7 +181,7 @@ from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
 # bindings/labels_host_ops.mojo (lane s1), the one host copy, so the label path
 # (bindings/classical_labels.mojo) runs the same host body in-process on a
 # CPU-only install instead of calling back into this module through Python.
-from bindings.labels_host_ops import unique_inverse_binding, prepare_targets_binding
+from bindings.labels_host_ops_unpack import unique_inverse_binding, prepare_targets_binding
 from core.labels_native_host_provider import LabelsHostNativeAPI
 from checks.kernel_matrix import (
     COLUMN_CPU,

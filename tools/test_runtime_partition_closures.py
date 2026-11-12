@@ -43,7 +43,7 @@ def registered_types(member):
 
 
 def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
-    closure = SourceGraph(ROOT).closure(['host_array_native'])
+    closure = SourceGraph(ROOT).closure(['host_array_native_pack'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_archive_native_door.mojo' not in closure['files']
     assert 'core/host_archive_gbdt.mojo' not in closure['files']
@@ -51,10 +51,10 @@ def test_shared_host_allocator_has_no_archive_or_tree_training_dependency():
 
 
 def test_model_selection_does_not_pull_archive_readers_through_sparse_allocation():
-    closure = SourceGraph(ROOT).closure(['model_selection_native'])
+    closure = SourceGraph(ROOT).closure(['model_selection_native_door'])
     assert closure['scope'] == 'closure', closure['unresolved']
     assert 'bindings/host_sparse_native_door.mojo' in closure['files']
-    assert 'bindings/host_array_native.mojo' in closure['files']
+    assert 'bindings/host_array_native_pack.mojo' in closure['files']
     assert 'bindings/host_archive_native_door.mojo' not in closure['files']
     assert not any(path.startswith('gbdt/') for path in closure['files'])
 
@@ -76,7 +76,7 @@ def test_model_selection_edits_invalidate_only_the_independent_development_owner
         for name, members in partitions.items():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
-            if 'bindings/msel_split.mojo' in closure['files']:
+            if 'bindings/msel_split_door.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'runtime_model_selection')}
 
@@ -98,8 +98,8 @@ def test_release_host_groups_hold_each_member_once_and_include_the_new_logical_e
 def test_manifold_implementation_edits_invalidate_only_the_manifold_owner():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
     graph = SourceGraph(ROOT)
-    paths = ('bindings/mani_kit.mojo', 'bindings/mani_decomp_native.mojo',
-             'bindings/mani_tsne_native.mojo', 'bindings/mani_umap_native.mojo')
+    paths = ('bindings/mani_kit_door.mojo', 'bindings/mani_decomp_native_door.mojo',
+             'bindings/mani_tsne_native_unpack.mojo', 'bindings/mani_umap_native_door.mojo')
     owners = {path: set() for path in paths}
     for mode, partitions in groups.items():
         for name, members in partitions.items():
@@ -114,8 +114,8 @@ def test_manifold_implementation_edits_invalidate_only_the_manifold_owner():
 def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency():
     closure = SourceGraph(ROOT).closure(['_mojolearn_runtime_manifold_host'])
     assert closure['scope'] == 'closure', closure['unresolved']
-    assert 'bindings/mani_kit.mojo' in closure['files']
-    assert 'bindings/family_native.mojo' not in closure['files']
+    assert 'bindings/mani_kit_door.mojo' in closure['files']
+    assert 'bindings/family_native_door.mojo' not in closure['files']
     assert 'bindings/host_archive_native_door.mojo' not in closure['files']
     assert 'bindings/_mojolearn_tokenizer_host.mojo' not in closure['files']
     own, shared = registered_types('_mojolearn_runtime_manifold_host')
@@ -128,7 +128,7 @@ def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency
 def test_sequential_implementation_edits_do_not_invalidate_tokenizer():
     groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
     graph = SourceGraph(ROOT)
-    paths = ('bindings/sequential_execution.mojo', 'bindings/sequential_checkpoint.mojo')
+    paths = ('bindings/sequential_execution_pack.mojo', 'bindings/sequential_checkpoint_door.mojo')
     owners = {path: set() for path in paths}
     for mode, partitions in groups.items():
         for name, members in partitions.items():
@@ -145,8 +145,8 @@ def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_own
     owner = graph.closure(['_mojolearn_runtime_sequential_host'])
     tokenizer = graph.closure(['_mojolearn_tokenizer_host'])
     assert owner['scope'] == tokenizer['scope'] == 'closure'
-    assert 'bindings/sequential_execution.mojo' in owner['files']
-    assert 'bindings/sequential_execution.mojo' not in tokenizer['files']
+    assert 'bindings/sequential_execution_pack.mojo' in owner['files']
+    assert 'bindings/sequential_execution_pack.mojo' not in tokenizer['files']
     # The sequential owner registers only its own types and attaches the shared identity key.
     own, shared = registered_types('_mojolearn_runtime_sequential_host')
     assert own and all(name.startswith('_Sequential') for name in own), own
@@ -175,11 +175,11 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
     graph = SourceGraph(ROOT)
     # The classical door and the two doors it forwards to are each in exactly
     # one unit (the import graph at file level).
-    expected = {'bindings/classical_native.mojo': {('host', 'runtime_classical')},
+    expected = {'bindings/classical_native_pack.mojo': {('host', 'runtime_classical')},
                 'bindings/classical_trees_door.mojo': {('host', 'runtime_trees')},
-                'bindings/trees_public_native.mojo': {('host', 'runtime_trees')},
+                'bindings/trees_public_native_door.mojo': {('host', 'runtime_trees')},
                 'bindings/classical_family_door.mojo': {('host', 'runtime_family')},
-                'bindings/family_native.mojo': {('host', 'runtime_family')}}
+                'bindings/family_native_door.mojo': {('host', 'runtime_family')}}
     owners = {path: set() for path in expected}
     for mode, partitions in groups.items():
         for name, members in partitions.items():
@@ -208,7 +208,7 @@ def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development
         for name in exports:
             closure = defs.closure(source, name)
             assert closure is not None, (unit, name)
-            if any(node[1] == 'bindings/trees_lifetime.mojo' for node in closure):
+            if any(node[1] == 'bindings/trees_lifetime_door.mojo' for node in closure):
                 reached.add((unit, name))
             if unit != 'runtime_trees':
                 archive = {node[2] for node in closure if node[1] == 'bindings/host_archive_native_door.mojo'}

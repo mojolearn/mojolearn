@@ -9,7 +9,7 @@ ARRAY = ROOT / 'python/mojolearn/_array.py'
 # Array's Python definitions, the oracles, live with the tests (lane
 # p5-cpu-route-relabel-and-dead-code, 2026-11-09).
 REFERENCE = ROOT / 'python/mojolearn/tests/_array_reference.py'
-NATIVE = ROOT / 'bindings/array_native.mojo'
+NATIVE = ROOT / 'bindings/array_native_door.mojo'
 
 OPS = {'__init__': 'init', 'flags': 'flags', '__array_interface__': 'interface', '__array__': 'array',
        '__buffer__': 'buffer', '__reduce__': 'reduce', 'tobytes': 'tobytes', 'tolist': 'tolist',
@@ -56,7 +56,7 @@ def test_reference_definitions_are_kept_only_as_oracles():
 
 def test_registration_and_compile_invalidation():
     registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert 'from bindings.array_native import array_native_c\n' in registration
+    assert 'from bindings.array_native_door import array_native_c\n' in registration
     assert '\n        module.def_py_c_function(array_native_c, "array_native_call")\n' in registration
     from development_build import SourceGraph
     groups = json.loads((ROOT / 'bindings/development_groups.json').read_text())['groups']
@@ -65,10 +65,10 @@ def test_registration_and_compile_invalidation():
     for mode, partitions in groups.items():
         for name, members in partitions.items():
             closure = graph.closure(members)
-            if 'bindings/array_native.mojo' in closure['files']:
+            if 'bindings/array_native_door.mojo' in closure['files']:
                 owners.add((mode, name))
     # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the small
-    # MLP's item reader (bindings/small_mlp_items.mojo) imports it too, and the
+    # MLP's item reader (bindings/small_mlp_items_door.mojo) imports it too, and the
     # small MLP entry is now the multi-device host binding's.
     assert owners == {('host', 'tokenizer'), ('host', 'runtime_parallel')}
 

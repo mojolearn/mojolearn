@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.pca_fit_native import pca_fit_operation
 
 

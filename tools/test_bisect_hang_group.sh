@@ -40,7 +40,7 @@ if [ -f "$L" ]; then
     [ "$got" = $((N + 2)) ] && ok "plan has $got candidates (2 controls + $N suspects)" || bad "plan has $got candidates, want $((N + 2))"
     grep -q $'^PLAN control-head\trevert=-\t' "$T/plan.txt" && ok "control-head reverts nothing" || bad "control-head line"
     grep -q $'^PLAN control-all\trevert=ALL\t' "$T/plan.txt" && ok "control-all reverts all" || bad "control-all line"
-    grep -q $'^PLAN c00\trevert=bindings/admitted_call.mojo\t' "$T/plan.txt" && ok "c00 is the first suspect" || bad "c00 line"
+    grep -q $'^PLAN c00\trevert=bindings/admitted_call_door.mojo\t' "$T/plan.txt" && ok "c00 is the first suspect" || bad "c00 line"
     [ "$(grep -c 'MOJOLEARN_COMPILE_JOBS=1 .*tools/development_build.py build --sets host --group _mojolearn_dev_runtime_classical_host --parallel 1 --stall-seconds 420 --group-seconds 3600 ' "$T/plan.txt")" = $((N + 2)) ] \
         && ok "every candidate runs one serial group build with the stall bound" || bad "candidate command shape"
     grep -q -- "--cache $T/work/cache/c03 --evidence $T/out/cand/c03 --json $T/out/cand/c03.json" "$T/plan.txt" \

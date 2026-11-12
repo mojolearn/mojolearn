@@ -111,7 +111,7 @@ def _numpy_free_context():
         "buffer_owner_types": (type(None), bytes, bytearray, array, mmap.mmap),
         # The base of the library's native output store (_buffer._output_store):
         # admission accepts a ctypes array class made directly from it with no
-        # Python buffer hook (bindings/sequential_admission.mojo).
+        # Python buffer hook (bindings/sequential_admission_door.mojo).
         "ctypes_array_base": ctypes.Array,
         "scalar_types": (), "integer_types": (int,), "array_fields": array_fields,
         "array_type": array, "array_class": Array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),

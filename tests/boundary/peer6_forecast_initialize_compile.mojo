@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.forecast_initialize_pyapi import forecast_initialize
+from providers.python.forecast_initialize_pyapi_pack import forecast_initialize
 
 def initialize(model: PythonObject, kind: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return forecast_initialize(model, String(py=kind), args, context)

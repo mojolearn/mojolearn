@@ -2,7 +2,7 @@
 """DistributedIVFIndex against the plain index.
 
 `from_index` and `search` are one native call each
-(bindings/parallel_shard_native.mojo `ivf_from_index` / `ivf_search`): the
+(bindings/parallel_shard_native_door.mojo `ivf_from_index` / `ivf_search`): the
 native shard plan gives every device its contiguous stored rows, each worker
 process stores its shard, and every search merges the shards' partial
 results natively. On a CPU-only install each device index is one worker

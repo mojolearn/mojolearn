@@ -27,7 +27,7 @@ EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
 and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
 weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
 truncated-normal posterior draw (in Mojo since lane py-runtime round 3:
-bindings/normal_dist_helpers.mojo) and the O(d^2) `_abs_corr` /
+bindings/normal_dist_helpers_pack.mojo) and the O(d^2) `_abs_corr` /
 `_neighbours` normalisation (n_nearest_features). IterativeImputer with a
 user `estimator` otherwise runs its data-sized plumbing as x_prep units
 (x_prep/iterative.mojo `ii_rcount` .. `ii_scatter`: row selection, gathers,
@@ -159,7 +159,7 @@ def _optional_prep_entry(binding, name):
 #:                            means and variances take the blocked order for
 #:                            n > _XB rows (GaussianNB's theta_, var_ and
 #:                            epsilon_; non-integer feature counts).
-#: _DIRECT_MIN_WORDS (2**20 words) is bindings/arena_prog_native.mojo PREP_DIRECT_MIN_WORDS
+#: _DIRECT_MIN_WORDS (2**20 words) is bindings/arena_prog_native_door.mojo PREP_DIRECT_MIN_WORDS
 #: x_prep/blocked.mojo XB: the rows a block unit folds
 _XB = 2048
 #: CategoricalNB's block histograms hold at most this many words; past it
@@ -223,8 +223,8 @@ class _Scratch:
 
 class _Prog:
     """The x_prep program record. The native owners build each program and the
-    shared runner fills this record's fields (bindings/prep_classify_prog.mojo
-    `ClsProg.run`, bindings/arena_prog_native.mojo `_prep_run`); the runner
+    shared runner fills this record's fields (bindings/prep_classify_prog_door.mojo
+    `ClsProg.run`, bindings/arena_prog_native_door.mojo `_prep_run`); the runner
     admits only this class. The Python program builder that filled it before
     the native owners (alloc, stage, put, get, the input-span read check) is
     the test oracle `mojolearn/tests/_prep_prog_oracle.py` (lane
@@ -531,7 +531,7 @@ class OrdinalEncoder(_PrepBase):
     >>> mojolearn.OrdinalEncoder().fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
@@ -628,7 +628,7 @@ class OneHotEncoder(_PrepBase):
     >>> mojolearn.OneHotEncoder(drop="first").fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
@@ -748,7 +748,7 @@ class TargetEncoder(_PrepBase):
     >>> Xt = mojolearn.TargetEncoder().fit_transform(X, y)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
@@ -828,7 +828,7 @@ class SimpleImputer(_PrepBase):
     >>> mojolearn.SimpleImputer(strategy="median").fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
@@ -922,7 +922,7 @@ class KBinsDiscretizer(_PrepBase):
     >>> Xt = mojolearn.KBinsDiscretizer(n_bins=4, encode="ordinal").fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
@@ -964,7 +964,7 @@ class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
     # Every subclass is a one-call native public class: the owner runs the
-    # whole lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # whole lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _estimator_type = "classifier"
     #: lane cpu4-misc: fit and every scoring method take a
@@ -1661,7 +1661,7 @@ class QuantileTransformer(_PrepBase):
     >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
@@ -1739,7 +1739,7 @@ class PowerTransformer(_PrepBase):
     >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
@@ -1862,7 +1862,7 @@ class PolynomialFeatures(_PrepBase):
     >>> mojolearn.PolynomialFeatures(degree=2).fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("degree", "interaction_only", "include_bias", "order")
 
@@ -1942,7 +1942,7 @@ class SplineTransformer(_PrepBase):
     >>> Xt = mojolearn.SplineTransformer(n_knots=6, degree=3).fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
@@ -2008,7 +2008,7 @@ class Binarizer(_PrepBase):
     >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("threshold", "copy")
 
@@ -2064,7 +2064,7 @@ class LabelEncoder(_PrepBase):
     >>> enc.inverse_transform(np.array([0, 2]))
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
@@ -2130,7 +2130,7 @@ class LabelBinarizer(_PrepBase):
     >>> lb.transform(np.array([1, 6]))
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
@@ -2192,7 +2192,7 @@ class MultiLabelBinarizer(_PrepBase):
     >>> mlb.fit_transform([[1, 2], [3], [2, 3]])
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags: transforms label collections, not an X matrix
     _sklearn_input_tags = {"two_d_array": False}
@@ -2350,7 +2350,7 @@ class IterativeImputer(_PrepBase):
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     # Every subclass is a one-call native public class: the owner runs the
-    # whole lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # whole lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     def get_support(self, indices=False):
         """Return the selected features.
@@ -3000,7 +3000,7 @@ _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
 
 
 # Import-time connection; Binarizer, Normalizer and PolynomialFeatures hand
-# each public operation off once to Mojo (bindings/prep_stateless_native.mojo).
+# each public operation off once to Mojo (bindings/prep_stateless_native_door.mojo).
 from ._native_prep_stateless_bridge import connect as _connect_stateless
 _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
     {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
@@ -3010,7 +3010,7 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
 
 # Import-time connection; the imputers, discretizer, encoders, SplineTransformer,
 # SelectKBest, RFE, the label encoders and the score functions hand each public
-# operation off once to Mojo (bindings/prep_owner_native.mojo, the family door).
+# operation off once to Mojo (bindings/prep_owner_native_door.mojo, the family door).
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
@@ -3026,7 +3026,7 @@ _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
 
 
 # Import-time connection; the naive Bayes and discriminant-analysis classifiers
-# hand each public operation off once to Mojo (bindings/prep_classify_native.mojo).
+# hand each public operation off once to Mojo (bindings/prep_classify_native_door.mojo).
 from ._native_prep_classify_bridge import connect as _connect_classify
 _CLS_CALL, _CLS_CONTEXT = _connect_classify(
     {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",

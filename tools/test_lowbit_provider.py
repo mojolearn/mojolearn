@@ -19,7 +19,7 @@ def test_all_public_lowbit_bodies_enter_native_once():
 
 
 def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
-    source=(ROOT/'providers/python/lowbit_weight_pyapi.mojo').read_text()
+    source=(ROOT/'providers/python/lowbit_weight_pyapi_door.mojo').read_text()
     assert 'lin_connected_binding(context)' in source and 'lin_call(' in source
     assert 'neural_descriptor_connect' not in source and 'struct ' not in source
     assert 'linalg_ops_operation(' not in source
@@ -29,7 +29,7 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
     assert 'if binding is None:' in source
     assert 'low_admit(native_instance_item(fields' in source
     assert 'native_storage_allocate(context[' in source
-    assert 'family_low_' in (ROOT/'bindings/family_native.mojo').read_text()
+    assert 'family_low_' in (ROOT/'bindings/family_native_door.mojo').read_text()
 
 
 def test_once_captured_foreign_metadata_retains_zero_copy_owner():
@@ -49,10 +49,10 @@ def test_once_captured_foreign_metadata_retains_zero_copy_owner():
 
 
 def test_sequence_target_preserves_direct_float_storage_and_other_callers():
-    source=(ROOT/'bindings/sequential_inputs.mojo').read_text()
+    source=(ROOT/'bindings/sequential_inputs_door.mojo').read_text()
     assert 'float_target: Bool = False' in source
     assert 'context, float_target)' in source
     assert 'if not float_target and (' in source
     assert 'native_array_from_values(String("f"), values)' in source
-    low=(ROOT/'providers/python/lowbit_weight_pyapi.mojo').read_text()
+    low=(ROOT/'providers/python/lowbit_weight_pyapi_door.mojo').read_text()
     assert 'sequential_sequence_f32(value, context)' in low

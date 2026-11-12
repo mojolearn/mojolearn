@@ -10,27 +10,27 @@
 # the decoded prediction is handed straight to the native accuracy program
 # (bindings/classical_labels.mojo `classical_accuracy`).
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module, NativeModules
+from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
-from bindings.causal_exception import causal_set_exception
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.causal_exception_unpack import causal_set_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.host_logistic_query_boundary import host_logistic_score_predict
+from bindings.host_logistic_query_boundary_unpack import host_logistic_score_predict
 from core.logistic_native_api import (
     QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY,
     QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
 )
 from core.logistic_config import LogisticPromotion
 from core.logistic_model_state import LogisticFitLayout, logistic_target_count, logistic_fit_target_count
-from bindings.logistic_state_boundary import LogisticQueryOwners, logistic_parameters_pack
-from bindings.logistic_query_boundary import logistic_query_width_check
+from bindings.logistic_state_boundary_unpack import LogisticQueryOwners, logistic_parameters_pack
+from bindings.logistic_query_boundary_unpack import logistic_query_width_check
 from core.logistic_query_state import logistic_query_integer_width
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
-from bindings.label_weights_boundary import label_weights_run
+from bindings.label_weights_boundary_unpack import label_weights_run
 from core.linear_metadata import linear_mode_name
-from bindings.logistic_config_boundary import (
+from bindings.logistic_config_boundary_unpack import (
     logistic_scalar_text, logistic_integer, logistic_validate_configuration,
     logistic_configuration_strengths, logistic_configuration_tolerance,
 )
@@ -38,16 +38,17 @@ from bindings.logistic_descriptor_boundary_door import (
     logistic_compiled_mode, logistic_multiclass_available, logistic_run_fit,
     logistic_run_query, logistic_run_fold_fit, logistic_run_fold_query,
 )
-from bindings.classical_attributes import classical_connect_numpy, classical_getattribute
-from bindings.classical_pandas import classical_admit_value
-from bindings.classical_exceptions import classical_require_fitted, classical_not_fitted_class
-from providers.python.linear_metadata_boundary import classical_is_fitted
-from bindings.logistic_admission import logistic_storage, logistic_fields, logistic_initialize, logistic_get_params, logistic_set_params, logistic_fit_replacements_admit
-from bindings.prep_lda_admission import lda_native_context, lda_native_labels
-from bindings.classifier_public_lifecycle import classifier_after_fit, classifier_label_list
-from bindings.scaler_lifecycle_native import _public_result
+from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.classical_exceptions_door import classical_require_fitted, classical_not_fitted_class
+from providers.python.linear_metadata_boundary_door import classical_is_fitted
+from bindings.logistic_admission_unpack import logistic_storage, logistic_fields, logistic_fit_replacements_admit
+from bindings.logistic_admission_pack import logistic_initialize, logistic_get_params, logistic_set_params
+from bindings.prep_lda_admission_door import lda_native_context, lda_native_labels
+from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list
+from bindings.scaler_lifecycle_native_door import _public_result
 from bindings.classical_labels import _flatten_labels
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.admitted_input import admit_x, admit_x_unrecorded, admitted_finite_refuse
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.classical_labels import (

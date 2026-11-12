@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native codec for the existing streamed byte-LM archive, including raw words."""
 from std.python import Python, PythonObject
-from bindings.cross_vendor_admission import cv_types_initialize, cv_buffer, cv_path, cv_int, cv_json, cv_state, CROSS_VENDOR_TYPES
+from bindings.cross_vendor_admission_unpack import cv_types_initialize, cv_buffer, cv_int, cv_json, cv_state, CROSS_VENDOR_TYPES
+from bindings.cross_vendor_admission_pack import cv_path
 from bindings.native_json_door import native_json_parse
 from bindings.native_transport_door import _transport_json, transport_initialize
-from bindings.parallel_byte_native import PARALLEL_BYTE_BOUNDARY, _parallel_shape
-from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array
-from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
+from bindings.parallel_byte_native_door import PARALLEL_BYTE_BOUNDARY, _parallel_shape
+from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array
+from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
+from bindings.byte_checkpoint_io_pack import byte_checkpoint_io
 from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_digest_of
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed

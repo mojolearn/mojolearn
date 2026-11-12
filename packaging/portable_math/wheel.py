@@ -71,8 +71,8 @@ def native_setup_numpy_imports(tree, relative):
     native type/descriptor tables once during package/reader installation.
     """
     # Package import never loads NumPy (NUMPY_FREE_CONTRACT.md): the PCS RNG
-    # (providers/python/pcs_rng_pyapi.mojo), the CNN owner
-    # (bindings/xcnn_common.mojo) and resample's result storage connect it
+    # (providers/python/pcs_rng_pyapi_pack.mojo), the CNN owner
+    # (bindings/xcnn_common_door.mojo) and resample's result storage connect it
     # natively at call time, so their former setup imports are refused here.
     setup = {
         "mojolearn/importers/_native_reader_bridge.py": "connect",

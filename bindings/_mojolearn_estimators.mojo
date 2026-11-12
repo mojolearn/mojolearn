@@ -4,7 +4,7 @@ Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
-from bindings.native_owner_registry import register_native_owner_type
+from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
@@ -28,7 +28,7 @@ from core.kde_native_device import KDE_DEVICE_API, KDEDeviceKernels
 from core.kde_native_api import KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, KDE_CAP_IMMUTABLE
 from core.pca_native_device import PCA_DEVICE_API
 from core.tsvd_native_device import TSVD_DEVICE_API
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -44,8 +44,8 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.dbscan_core_device import dbscan_core_arrays_device
-from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
+from bindings.dbscan_core_device_pack import dbscan_core_arrays_device
+from providers.python.core_py2mojo_rows_pyapi_pack import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -59,7 +59,7 @@ from core.neural_context import process_ctx
 
 
 from core.labeled_reference_predict import labeled_reference_predict
-from bindings.labeled_reference_resident_binding import (
+from bindings.labeled_reference_resident_binding_pack import (
     labeled_reference_prepare_binding,
     labeled_reference_release_binding,
     labeled_reference_predict_resident_binding,

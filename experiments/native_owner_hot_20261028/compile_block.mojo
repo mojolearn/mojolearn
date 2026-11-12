@@ -1,5 +1,5 @@
-from bindings.neural_block_public import neural_block_forward_binding, neural_block_allocate_binding, neural_block_backward_binding
-from bindings.native_loaded_module import NativeModules
+from bindings.neural_block_public_door import neural_block_forward_binding, neural_block_allocate_binding, neural_block_backward_binding
+from bindings.native_loaded_module_door import NativeModules
 from std.python import PythonObject
 
 def main() raises:

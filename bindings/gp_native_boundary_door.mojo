@@ -4,9 +4,9 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_type, py_get, py_fields
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.gp_kernel_storage_boundary import GPPackedKernel
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from core.gp_entry_table import GPEntryKey
 from gaussian_process.gp_native_boundary_run import GPNative, gp_native_run
 from core.gp_native_api import (

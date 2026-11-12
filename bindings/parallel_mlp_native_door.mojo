@@ -13,13 +13,13 @@ from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from std.os import getenv
-from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
+from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.py_cpython_table import cpython_table
-from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
+from bindings.parallel_byte_native_door import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
 from bindings.native_transport_door import _transport_json
 from bindings.native_json_door import native_json_parse
-from bindings.small_mlp_native import (
+from bindings.small_mlp_native_door import (
     small_mlp_call, small_mlp_from_state, small_mlp_grads_open, small_mlp_grads_close, small_mlp_grads_rows,
 )
 from core.shared_slot import SharedSlot

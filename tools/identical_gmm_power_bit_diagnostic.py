@@ -45,7 +45,7 @@ def child(root, out, vendor, gate):
     else:
         from mojolearn._expansion_prep import PowerTransformer
         from mojolearn import _expansion_prep as prep
-        # The PowerTransformer program is staged natively (bindings/prep_stateless_native.mojo); the
+        # The PowerTransformer program is staged natively (bindings/prep_stateless_native_door.mojo); the
         # Python `_Prog.stage` this diagnostic used to count left the package (lane pyout-small-families),
         # so the staged operations are no longer observable from Python.
         flags = prep._idn_fam('identical')
@@ -70,7 +70,7 @@ def child(root, out, vendor, gate):
                 save(prefix + '-inverse', estimator.inverse_transform(transformed))
                 assert estimator._pt_anchor is None and estimator._pt_anchor_kind is None
         routes.append({'shape': [n, d], 'idn_family_flags': flags,
-            'fast_flags': fast_flags, 'staged_operations': 'native (bindings/prep_stateless_native.mojo)',
+            'fast_flags': fast_flags, 'staged_operations': 'native (bindings/prep_stateless_native_door.mojo)',
             'anchor': 'merged argument slots present; FAST Apple-only anchor disabled in IDENTICAL',
             'block_rows': prep._XB, 'blocks': (n + prep._XB - 1) // prep._XB})
     input_info = {k: {'shape': list(v.shape), 'dtype': str(v.dtype),

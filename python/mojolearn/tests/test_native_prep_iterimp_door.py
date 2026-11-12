@@ -410,7 +410,7 @@ class _Former(ml.IterativeImputer if ml is not None else object):
 
     # A plain method, not a staticmethod: a mojolearn estimator's native
     # attribute owner binds subclass functions and refuses other Python
-    # descriptors (bindings/public_attributes_native.mojo _lookup_impl).
+    # descriptors (bindings/public_attributes_native_door.mojo _lookup_impl).
     def _ii_block(self, pr, xo, yo, m, nc):
         """(X block (m, nc), y (m,)) as float32 Arrays; a 0-row block is
         `from_list([])`, a 0-column one its m empty rows, as before."""
@@ -473,7 +473,7 @@ class _Former(ml.IterativeImputer if ml is not None else object):
 
     def _truncnorm_draws(self, mus, sig, lo, hi):
         """`_impute_one_feature`'s rule per entry, in Mojo (the core helper
-        `truncnorm_draws`, bindings/normal_dist_helpers.mojo; lane py-runtime
+        `truncnorm_draws`, bindings/normal_dist_helpers_pack.mojo; lane py-runtime
         round 3, it was Python float64 per entry): mu beyond a bound -> the
         bound, sigma <= 0 -> mu, else the inversion of the truncated normal
         at a 53-bit splitmix64 uniform on the pinned normal cdf / inverse cdf

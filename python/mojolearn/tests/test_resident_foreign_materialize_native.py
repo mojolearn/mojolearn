@@ -138,7 +138,7 @@ def test_foreign_hooks_are_refused_before_they_run(owner, hook):
 
 def test_device_rows_materialize_on_a_float64_base_is_native(owner):
     # DeviceRows reads its shape and dtype from exact Array/ndarray metadata
-    # (54cd01bff, bindings/arena_array_metadata.mojo); a list base has none
+    # (54cd01bff, bindings/arena_array_metadata_pack.mojo); a list base has none
     # and is refused at construction. model_selection only builds DeviceRows
     # over admitted arrays. The materialize step keeps the float64 dtype.
     listed = [[0.1, 1.0], [2.0, 3.0], [4.0, 5.5]]

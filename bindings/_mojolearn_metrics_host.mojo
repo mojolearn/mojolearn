@@ -57,13 +57,13 @@ The GPU binding's OTHER entries (`graph_parallel_available`) are deliberately AB
 reaches them keeps refusing BY NAME through `_HostBinding` until a lane
 lands them.
 """
-from bindings.p3_labels_metrics_native import p3_type_word
+from bindings.p3_labels_metrics_native_door import p3_type_word
 from core.experiment_guards_base import BASE_GUARDS_OK
 from std.math import isfinite
 from std.memory import unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder

@@ -23,7 +23,7 @@ def test_native_execution_closures_have_no_provider_dependencies():
 
 
 @pytest.mark.parametrize('dependency', ['std.python', 'bindings.py_balanced',
-                                       'providers.python.autograd_program_arrays_pyapi', 'adapters.torch',
+                                       'providers.python.autograd_program_arrays_pyapi_door', 'adapters.torch',
                                        'providers.python.buffers'])
 def test_transitive_provider_dependency_is_rejected(tmp_path, dependency):
     (tmp_path / 'core').mkdir()
@@ -44,13 +44,13 @@ from core.cast_in import (
 
 
 def test_sequential_snapshot_is_reused_after_admission():
-    source = (ROOT / 'bindings/sequential_execution.mojo').read_text()
+    source = (ROOT / 'bindings/sequential_execution_pack.mojo').read_text()
     assert 'sequential_descriptor(x,' not in source
     assert 'sequential_descriptor(vx,' not in source
     assert 'sequential_sample(model,' not in source
     assert not re.search(r"\b(?:xd|vxd)\[", source)
     assert source.count('sequential_x_snapshot(') == 3  # fit, validation, prediction
-    snapshot = function('bindings/sequential_arrays.mojo', '_sequential_snapshot')
+    snapshot = function('bindings/sequential_arrays_door.mojo', '_sequential_snapshot')
     for field in ('shape', 'strides', 'dtype'):
         assert snapshot.count('value.' + field) == 1
     assert 'return SequentialInputSnapshot(value, source,' in snapshot
@@ -60,24 +60,24 @@ def test_sequential_snapshot_is_reused_after_admission():
 
 
 def test_program_input_reads_provider_fields_before_native_rank_loop():
-    source = function('providers/python/autograd_program_pyapi.mojo', 'array_input')
+    source = function('providers/python/autograd_program_pyapi_door.mojo', 'array_input')
     for field in ('shape', 'strides', 'dtype'):
         assert source.count('a.' + field) == 1
     assert 'return (src, sh)' in source
 
 
 def test_samba_dropout_consumes_native_metadata_in_both_directions():
-    source = function('bindings/samba_training_native.mojo', '_samba_dropout')
+    source = function('bindings/samba_training_native_door.mojo', '_samba_dropout')
     for token in ('samba_fields(', 'config[', 'value.shape', 'value.size', 'fields['):
         assert token not in source
-    whole = function('bindings/samba_training_native.mojo', 'samba_gradients')
+    whole = function('bindings/samba_training_native_door.mojo', 'samba_gradients')
     assert whole.count('SambaDropoutMetadata(fields, dropout_probability, stream)') == 1
     assert whole.count('dropout_metadata.value()') == 2
     assert 'var i = layer_count - reverse - 1' in whole
 
 
 def test_mlp_packing_reuses_destination_address():
-    source = function('bindings/xseq_neural_native.mojo', '_mlp_forward')
+    source = function('bindings/xseq_neural_native_door.mojo', '_mlp_forward')
     assert source.count('xseq_f32p(params)') == 1
     assert source.count('dest=destination + offset') == 2
     # Current public weights are still read each prediction: no stale model cache.

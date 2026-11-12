@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: Apache-2.0
+# Dedicated preprocessing snapshots and native pandas storage descriptions.
+from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call, py_type, py_get
+from bindings.classical_arrays_door import classical_address
+from bindings.classical_pandas_door import classical_admit_value, _pd_class, _pd_fields, _pd_get
+from bindings.sequential_admission_door import sequential_admit_value
+from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
+from core.cast_in import CastIn, cast_in_kind
+
+
+# TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
+
+
+def _array_snapshot(value: PythonObject, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    classical_admit_value(value, context)
+    var shape = array_shape_once(value, context)
+    var result = array_metadata_once(value, shape^, "input", context, pin, allow_non_native=True, allow_unsupported=True)
+    if result.is_array:
+        var view = pin.owner[3]
+        if py_type(view) is not native_loaded_module("builtins").memoryview:
+            raise Error("TypeError: preprocessing Array storage requires an exact native memoryview")
+        sequential_admit_value(view, context)
+    return result^
+
+
+def _pandas_empty_shape(manager: PythonObject, context: PythonObject) raises -> List[Int]:
+    var b = native_loaded_module("builtins")
+    var axes = _pd_get("pandas._libs.internals", "BlockManager", "axes", manager)
+    if py_type(axes) is not b.list or len(axes) != 2:
+        raise Error("TypeError: pandas native axes are unavailable")
+    var shape = List[Int]()
+    for axis in [1, 0]:  # small-loop(metadata: dataframe rows and columns)
+        var index = axes[axis]
+        if py_type(index) is _pd_class("pandas.core.indexes.range", "RangeIndex"):
+            var span = py_get(_pd_fields(index), "_range")
+            if py_type(span) is not b.range:
+                raise Error("TypeError: pandas range index requires native range storage")
+            shape.append(len(span))
+        elif py_type(index) is _pd_class("pandas.core.indexes.base", "Index"):
+            var storage = py_get(_pd_fields(index), "_data")
+            if py_type(storage) is not context["ndarray"]:
+                raise Error("TypeError: empty pandas axes require native array storage")
+            var dims = array_shape_once(storage, context)
+            if len(dims) != 1:
+                raise Error("TypeError: pandas index must be one-dimensional")
+            shape.append(dims[0])
+        else:
+            raise Error("TypeError: empty pandas axes require ordinary native index metadata")
+    return shape^
+
+
+def _description(source: PythonObject, var shape: List[Int], dtype: Int,
+                 owner: PythonObject, mut pin: ArrayPin) -> ArrayMetadata:
+    # No executable pointer: this only carries the already captured public
+    # description until target validation finishes and inner preparation
+    # raises its original sparse/object/empty refusal.
+    var rows = shape[0] if len(shape) > 0 else 1
+    var cols = shape[1] if len(shape) > 1 else 1
+    pin = ArrayPin(source, owner)
+    return ArrayMetadata(shape^, CastIn(0, 0, 8, rows, cols, 0, 0),
+                         0, dtype, True, False, False, False, castable=False)
+
+
+def prep_numeric_vector(count: Int, number: Int, width: Int, owner: PythonObject,
+                        context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
+    # pandas is already loaded, so this exact ndarray constructor is the
+    # existing provider allocation boundary. Its metadata is known, not read
+    # back from mutable caller slots after allocation.
+    var kind = cast_in_kind(number, width, "input")
+    var code = String("|b1")
+    if number != 0:
+        code = "<" + ("f" if kind == 2 else ("i" if kind == 1 else "u")) + String(width)
+    var output = py_call(context["ndarray"], Python.tuple(count), dtype=PythonObject(code))
+    var shape = List[Int]()
+    shape.append(count)
+    pin = ArrayPin(output, Python.tuple(output, owner))
+    return ArrayMetadata(shape^,
+        CastIn(Int(py=classical_address(output)), kind, width, count, 1, width, 0),
+        count, number, True, True, False, True,
+        dtype_name=code)
+
+

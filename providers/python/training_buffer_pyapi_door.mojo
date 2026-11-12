@@ -2,10 +2,10 @@
 # Shared strict float32 training-buffer snapshot and owned copy at admission.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.native_loaded_module import native_loaded_module
-from bindings.classical_pandas import classical_admit_value
-from bindings.classical_arrays import classical_input, classical_address, classical_dtype_str
-from bindings.tsa_hw_native import tsa_array
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.classical_arrays_door import classical_input, classical_address, classical_dtype_str
+from bindings.tsa_hw_native_door import tsa_array
 from core.training_input_copy import training_copy_f32, training_copy_words32
 
 

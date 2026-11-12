@@ -82,11 +82,11 @@ def test_existing_import_connector_retains_only_compiled_auxiliary_entry():
 
 
 def test_auxiliary_dispatch_preserves_the_recorded_array_boundary_and_old_validation():
-    lifecycle = (ROOT / 'bindings/trees_public_lifecycle_native.mojo').read_text()
+    lifecycle = (ROOT / 'bindings/trees_public_lifecycle_native_door.mojo').read_text()
     route = lifecycle.split('if operation == "trees_public_forest_apply"', 1)[1].split('var b =', 1)[0]
     assert 'return forest_auxiliary(model, method, args, context)' in route
     assert 'parallel_public_result' not in route and 'sequential_input' not in route
-    owner = (ROOT / 'bindings/trees_public_auxiliary.mojo').read_text()
+    owner = (ROOT / 'bindings/trees_public_auxiliary_door.mojo').read_text()
     assert owner.index('this estimator is not fitted yet') < owner.index('classical_admit_value(args, context)')
     assert owner.index('classical_admit_value(args, context)') < owner.index('admit_f32(args[0]')
     assert 'x_trees_forest_auxiliary' in owner and 'NotImplementedError' in owner

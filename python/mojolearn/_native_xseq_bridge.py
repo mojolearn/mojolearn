@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the sequence-expansion
-estimators (bindings/xseq_native.mojo): the recurrent models, the
+estimators (bindings/xseq_native_pack.mojo): the recurrent models, the
 multi-layer perceptrons and the theta, Croston, ETS, GARCH, VAR and STL
 forecasters. Each public method of those classes is one call,
 `_XSEQ(self, "<operation>", args, _XSEQ_CONTEXT)`; Python here only
@@ -119,7 +119,7 @@ def connect():
     context.update(xseq_bindings=bindings, xseq_native_keys=keys, xseq_base=base, optimizer_context=_OPT_CONTEXT,
                    os_urandom=os.urandom, np_asarray=np.asarray, xseq_linalg_error=np.linalg.LinAlgError,
                    # the exact ndarray type whose read-only flag guards the
-                   # fitted-weight records (bindings/xseq_neural_native.mojo)
+                   # fitted-weight records (bindings/xseq_neural_native_door.mojo)
                    xseq_ndarray=np.ndarray,
                    xseq_metrics=metrics, xseq_r2_options=r2_options, xseq_lifecycle_context=lifecycle,
                    xseq_forecast_ownership=ownership)

@@ -39,7 +39,7 @@ arima_helpers.mojo`); the flag is `kpss_pvalue(stat) > pval_threshold`.
 from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -52,7 +52,7 @@ from checks.kernel_matrix import (
 )
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.holtwinters_host_predict import (
+from bindings.holtwinters_host_predict_door import (
     HW_PREDICT_SABOTAGE,
     holtwinters_forecast_binding,
     holtwinters_predict_binding,
@@ -67,7 +67,7 @@ from holtwinters.impl.runner import (
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
-from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
+from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 
 

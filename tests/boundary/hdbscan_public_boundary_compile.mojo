@@ -4,8 +4,8 @@ from std.os import abort
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, raise_python_exception
-from providers.python.classical_family_admission_pyapi import classical_family_admit
-from providers.python.hdbscan_public_lifecycle_pyapi import hdbscan_public_operation
+from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
+from providers.python.hdbscan_public_lifecycle_pyapi_door import hdbscan_public_operation
 
 
 def hdbscan_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

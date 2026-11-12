@@ -2,7 +2,7 @@
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.os import abort
-from bindings.backend_public_native import backend_public_c
+from bindings.backend_public_native_door import backend_public_c
 
 @export
 def PyInit__mojolearn_backend_public_compile() abi("C") -> PythonObject:

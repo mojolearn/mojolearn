@@ -21,7 +21,7 @@ def test_reuse_checks_exact_factory_module_and_session_admission_identity():
 
 
 def test_existing_mode_vendor_and_factory_admission_precedes_reuse():
-    src = text('bindings/causal_lm_public.mojo').split('def causal_lm_admit_binding(')[1].split('def _block(')[0]
+    src = text('bindings/causal_lm_public_door.mojo').split('def causal_lm_admit_binding(')[1].split('def _block(')[0]
     assert src.index('primitive_vendor != vendor or primitive_mode != mode') < src.index('neural_table_entry[NEURAL_TABLE_BLOCK_FORWARD]')
     assert 'transformer_native_session_handle_v1")' not in src
     assert '_native_function(mods, primitives, "neural_primitives_api_v1")' in src

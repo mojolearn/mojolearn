@@ -12,17 +12,17 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from providers.python.x_decomp_api_pyapi import (
+from providers.python.x_decomp_api_pyapi_pack import (
     colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, rank_above_py, move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
-from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py
+from providers.python.x_decomp_tsvd_owner_pyapi_pack import tsvd_randomized_py
 from x_decomp.ipca_owner import NoIpcaDev
-from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+from providers.python.x_decomp_ipca_owner_pyapi_door import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
-from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
-from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
+from providers.python.x_decomp_decomp_owner_pyapi_pack import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
+from providers.python.x_decomp_select_ops_pyapi_pack import order_small_py, reduce_py
 
 
 def x_decomp_host_numeric_mode_binding() raises -> PythonObject:

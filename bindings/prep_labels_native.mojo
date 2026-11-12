@@ -13,31 +13,31 @@
 # keep their classes and wording.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
-from bindings.native_array_storage import native_array_zeros, native_array_empty, native_array_from_bytes
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_array_storage_door import native_array_zeros, native_array_empty, native_array_from_bytes
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.optimizer_public_words import stash_python_error
-from bindings.classical_arrays import classical_address, classical_wrap_array
+from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.classical_arrays_door import classical_address, classical_wrap_array
 from bindings.classical_labels import (
     labels_address, labels_label_kind, labels_cast,
     labels_reduce_stat, _numeric_label_view, _flatten_labels, _sorted_classes)
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
 from core.preprocessing_program import prep_program_stage as _stage
-from bindings.scaler_lifecycle_native import _entries
-from bindings.prep_entry_cache import prep_entry_word
-from bindings.x_prep_native_owner import xprep_values
+from bindings.scaler_lifecycle_native_door import _entries
+from bindings.prep_entry_cache_unpack import prep_entry_word
+from bindings.x_prep_native_owner_door import xprep_values
 from bindings.prep_encode_native import (
     EncProg, OUT_MARK, NONE, _take1, _word, _iword, _label_chunk, _fit_categories, _codes, _default_mode, _truth)
-from bindings.str_labels_native import str_lookup, _read, str_unique_into, str_codes_into
+from bindings.str_labels_native_door import str_lookup, _read, str_unique_into, str_codes_into
 from bindings.str_labels_native_run import StrTable, str_classes
-from bindings.boundary_read import text_buffer_view, read_text_rows_into, pack_ucs4_str, admitted_buffer_view
+from bindings.boundary_read_door import text_buffer_view, read_text_rows_into, pack_ucs4_str, admitted_buffer_view
 from core.boundary_layout import BOUNDARY_KIND_UCS4, BOUNDARY_KIND_UINT, gather_i64
-from bindings.classical_pandas import classical_admit_value
-from bindings.label_admission_native import LabelTypeKinds
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.label_admission_native_unpack import LabelTypeKinds
 from bindings.user_objects_native_door import _Env, _f32_exact, _indicator, _new_list, _list_put
 from bindings.py_cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
+from bindings.p3_labels_metrics_native_door import p3_item, p3_type_word, p3_dict_codes, p3_decode_list
 from core.label_words_impl import label_codes_i32_to_f64
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]

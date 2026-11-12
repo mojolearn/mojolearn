@@ -9,7 +9,7 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     # `kinds` maps each public class to the kind the owner dispatches on,
     # `qselect` is MOJOLEARN_X_PREP_FAST_QSELECT as read at import, `scores`
     # maps the built-in score functions SelectKBest runs natively to their names.
-    # `owner_kinds` maps the classes the family door (bindings/prep_owner_native.mojo)
+    # `owner_kinds` maps the classes the family door (bindings/prep_owner_native_door.mojo)
     # serves outside the encode owner to their kinds; `owner_classes` names the
     # public classes those owners construct (IterativeImputer's SimpleImputer).
     import sys
@@ -22,7 +22,7 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     from .tokenizer import _binding
 
     context = _state_context()
-    # Native warning delivery (bindings/classical_warnings.mojo): filters read
+    # Native warning delivery (bindings/classical_warnings_unpack.mojo): filters read
     # natively, standard display hooks only, no warnings.warn call.
     from ._native_classical_warnings import connect_warnings
     context.update(connect_warnings())

@@ -37,9 +37,9 @@ def test_artifact_setup_passes_raw_values_to_one_native_owner():
 def test_both_sequence_bindings_register_the_same_native_setup():
     for name in ('_mojolearn_x_sequence.mojo', '_mojolearn_x_sequence_host.mojo'):
         source = (ROOT / 'bindings' / name).read_text()
-        assert 'from providers.python.autograd_import_frontend_pyapi import ops_import_model_c' in source
+        assert 'from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c' in source
         assert 'm.def_py_c_function(ops_import_model_c, "ops_import_model")' in source
-    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text()
     for prohibited in ('torch.onnx', 'SerializeToString', 'session._sid(', 'ImportedProgram(', 'Session(', 'buffer_address(', 'Python.import_module('):
         assert prohibited not in source
     assert 'ops_session_initialize_py(session,' in source
@@ -48,7 +48,7 @@ def test_both_sequence_bindings_register_the_same_native_setup():
     assert 'downcast_value_ptr[NativeDescriptorResource]()[].close()' in source
     owner = (ROOT / 'autograd/program_import_request.mojo').read_text()
     assert 'onnx_import_file[E, KIND]' in owner and 'onnx_buffers(request[].reader)' in owner
-    metadata = (ROOT / 'providers/python/autograd_import_metadata_pyapi.mojo').read_text()
+    metadata = (ROOT / 'providers/python/autograd_import_metadata_pyapi_door.mojo').read_text()
     assert 'py_call(b.ValueError.__new__, category,' in metadata
     assert '"PyErr_SetObject"' in metadata
 
@@ -97,7 +97,7 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
 
 
 def test_native_shape_admission_precedes_protocol_sensitive_conversion():
-    source = (ROOT / 'providers/python/autograd_import_metadata_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_import_metadata_pyapi_door.mojo').read_text()
     body = source[source.index('def _shape_words('):source.index('def _raise_object(')]
     assert 'Python mapping callbacks are unsupported' in body
     assert body.index('_scalar(key, context["shape_names"])') < body.index('py_setitem(provided, key, pair[1])')

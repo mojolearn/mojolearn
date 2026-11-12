@@ -3,21 +3,21 @@
 # and publish public fitted state. Initialization and training stay in the
 # existing x_decomp/nmf_owner kernels; no Python call envelopes reach RUN.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
-from bindings.native_buffer_address import native_buffer_address
-from bindings.native_array_storage_admission import array_storage_address
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.native_array_storage_admission_door import array_storage_address
 from bindings.admitted_input import admit_f32, AdmittedX, admitted_finite_refuse
-from bindings.decomp_inputs import decomp_admit
-from bindings.decomp_owner_common import decomp_attr, decomp_check, decomp_set_mode
+from bindings.decomp_inputs_unpack import decomp_admit
+from bindings.decomp_owner_common_unpack import decomp_attr, decomp_check, decomp_set_mode
 from x_decomp.decomp_owner_common_run import decomp_gemm_check
-from bindings.decomp_scalar_admission import decomp_scalar_admit, decomp_scalar_repr
-from bindings.decomp_scalar_compare import decomp_equal_admitted as _equal, decomp_name_admitted as _name
-from bindings.host_inference_scalars import host_inference_scalar
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_admit, decomp_scalar_repr
+from bindings.decomp_scalar_compare_unpack import decomp_equal_admitted as _equal, decomp_name_admitted as _name
+from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from bindings.nmf_descriptor_boundary_door import nmf_connection, nmf_run_fit, nmf_run_inverse
 from core.nmf_native_state import NMFScratch, nmf_output_shape
-from bindings.classical_arrays import classical_typed_native
+from bindings.classical_arrays_door import classical_typed_native
 from core.nmf_native_api import (
     NMFFitRequest, NMFFitResult, NMFInverseRequest, NMFRegularization, NMFOptions, nmf_regularization,
     NMF_CAP_FIT, NMF_CAP_INVERSE,

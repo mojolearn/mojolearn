@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A native resident-center owner with boundary-only storage/image pins."""
 from std.python import Python, PythonObject
-from bindings.native_owner_registry import borrowed_native_owner
+from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased, ExternalFunction, PyObjectPtr
 from core.shared_slot import SharedSlot
 from core.kmeans_owner_state import KMeansResidentState
@@ -9,8 +9,8 @@ from bindings.kmeans_descriptor_boundary_door import kmeans_provider
 from x_cluster.kmeans_descriptor_boundary_run import kmeans_driver
 from bindings.py_cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_contains, py_setitem, py_type
-from bindings.native_loaded_module import native_loaded_module
-from bindings.optimizer_public_words import stash_python_error
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.optimizer_public_words_unpack import stash_python_error
 
 comptime _KMeansDictDel = ExternalFunction[
     "PyDict_DelItem", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> Int32]

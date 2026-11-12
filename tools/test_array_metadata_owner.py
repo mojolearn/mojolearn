@@ -22,7 +22,7 @@ def _method(source, name):
 
 
 def test_replacement_keeps_original_owner_and_current_storage_separate():
-    source = (ROOT/'providers/python/array_metadata_pyapi.mojo').read_text()
+    source = (ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     assert len(re.findall(r'^\s+self\.owner\s*=', source, re.M)) == 1
     assert 'self.owner = owner' in _method(source, '__init__')
     for name in ('replace_f32', 'replace_f64'):
@@ -36,7 +36,7 @@ def test_replacement_keeps_original_owner_and_current_storage_separate():
 
 
 def test_original_mutable_array_slot_owners_are_snapshotted_independently():
-    source = (ROOT/'providers/python/array_metadata_pyapi.mojo').read_text()
+    source = (ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     owner = source.split('def array_owner_once(', 1)[1].split('\ndef ', 1)[0]
     for slot in ('_store', '_base', '_pin', '_mv'):
         assert f'array_slot_once(value, "{slot}", context)' in owner

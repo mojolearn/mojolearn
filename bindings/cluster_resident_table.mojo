@@ -38,9 +38,9 @@ from std.python import PythonObject
 # never reaches this table: this table polls its dead-key ring).
 from bindings.native_model_records import model_identity_key, model_generation, records_dead_keys_since
 from core.shared_slot import SharedSlot
-from bindings.kmeans_variants_resident_boundary import VariantsResidentLease, variants_resident_retire
-from bindings.spectral_native_boundary import SpectralStatePins
-from bindings.spectral_resident_boundary import SpectralResidentLease, spectral_resident_retire
+from bindings.kmeans_variants_resident_boundary_unpack import VariantsResidentLease, variants_resident_retire
+from bindings.spectral_native_boundary_unpack import SpectralStatePins
+from bindings.spectral_resident_boundary_unpack import SpectralResidentLease, spectral_resident_retire
 
 comptime CRES_X_CLUSTER = 1
 """Family code: x_cluster `cluster_centers_` (MiniBatchKMeans, BisectingKMeans,

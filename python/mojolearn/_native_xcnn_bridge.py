@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the CNN layers
-(bindings/xcnn_native.mojo). A migrated layer method is one call,
+(bindings/xcnn_native_pack.mojo). A migrated layer method is one call,
 `_XCNN(self, "<operation>", args, _XCNN_CONTEXT)`; Python here only connects
 the compiled `_mojolearn_x_cnn` entries of both numeric modes, the switch
 words the binary reports and the layer classes, once, at import. NumPy is not
@@ -148,7 +148,7 @@ def connect():
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
         # Importing the package never loads NumPy (NUMPY_FREE_CONTRACT.md):
         # the native owner connects it at the first CNN operation
-        # (bindings/xcnn_common.mojo xcnn_connect_numpy).
+        # (bindings/xcnn_common_door.mojo xcnn_connect_numpy).
         from ._native_classical_bridge import _state_context
         context = _state_context()
         # Shared neural metadata admission expects its native scalar tables

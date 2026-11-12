@@ -132,7 +132,7 @@ def test_binding_connection_returns_the_exact_compiled_module_and_refuses_python
 
 
 def test_worker_has_no_python_callback_registry_or_dynamic_estimator_call():
-    owner = (ROOT / "bindings/parallel_shard_native.mojo").read_text()
+    owner = (ROOT / "bindings/parallel_shard_native_door.mojo").read_text()
     worker = (ROOT / "bindings/parallel_neighbor_worker_door.mojo").read_text()
     assert not (PACKAGE / "_parallel_shard_ops.py").exists()
     for forbidden in ('operation == "py"', '_t("py_ops")', "_py_request", "py_call(function, args)"):

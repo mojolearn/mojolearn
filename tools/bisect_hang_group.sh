@@ -84,31 +84,31 @@
 # 5 a candidate has no verdict; 2 usage or setup error.
 set -u
 
-DEFAULT_SUSPECTS="bindings/admitted_call.mojo
+DEFAULT_SUSPECTS="bindings/admitted_call_door.mojo
 bindings/classical_archive_read_door.mojo
-bindings/classical_native.mojo
-bindings/classical_pandas.mojo
-bindings/family_native.mojo
+bindings/classical_native_pack.mojo
+bindings/classical_pandas_door.mojo
+bindings/family_native_door.mojo
 bindings/gp_classifier_native_door.mojo
-bindings/host_inference_native.mojo
+bindings/host_inference_native_unpack.mojo
 bindings/logistic_native.mojo
-bindings/mcd_native.mojo
-bindings/mcls_cluster.mojo
+bindings/mcd_native_door.mojo
+bindings/mcls_cluster_door.mojo
 bindings/mcls_common.mojo
-bindings/native_scalar_decode.mojo
-bindings/neighbors_ann_native.mojo
+bindings/native_scalar_decode_unpack.mojo
+bindings/neighbors_ann_native_door.mojo
 bindings/neighbors_semi_native_door.mojo
 bindings/pca_fit_native_door.mojo
-bindings/prep_classify_native.mojo
-bindings/prep_composition_lifecycle.mojo
+bindings/prep_classify_native_door.mojo
+bindings/prep_composition_lifecycle_door.mojo
 bindings/prep_labels_native.mojo
-bindings/prep_lda_admission.mojo
-bindings/prep_stateless_native.mojo
-bindings/trees_bagging_members_native.mojo
+bindings/prep_lda_admission_door.mojo
+bindings/prep_stateless_native_door.mojo
+bindings/trees_bagging_members_native_pack.mojo
 bindings/trees_public_meta.mojo
-bindings/trees_public_native.mojo
-providers/python/estimator_lifecycle_pyapi.mojo
-providers/python/pca_input_pyapi.mojo"
+bindings/trees_public_native_door.mojo
+providers/python/estimator_lifecycle_pyapi_unpack.mojo
+providers/python/pca_input_pyapi_unpack.mojo"
 
 die() { echo "bisect_hang_group: $*" >&2; exit 2; }
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }

@@ -2,8 +2,8 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.gp_native import gp_operation
-from bindings.archive_schema_native import archive_schema_save
+from bindings.gp_native_pack import gp_operation
+from bindings.archive_schema_native_door import archive_schema_save
 
 def compile_entry(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return gp_operation(model, String(operation), args, context)

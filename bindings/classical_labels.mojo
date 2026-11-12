@@ -19,8 +19,8 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points and C builtins connected at import
 # (python/mojolearn/_native_labels_bridge.py `label_context`).
-from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty, native_scratch_bytes, native_scratch_address
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_array_storage_door import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty, native_scratch_bytes, native_scratch_address
+from bindings.native_loaded_module_door import native_loaded_module
 from std.math import isfinite
 from core.native_array_layout import NativeArrayLayout
 from std.memory import bitcast, unsafe_memcpy
@@ -31,13 +31,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_typed_call import py_call_typed, typed_python_error
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
-from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
-from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, classical_admit_value
-from bindings.sequential_admission import _ordinary_torch
-from bindings.native_torch_admission import native_torch_numpy
-from bindings.sequential_inputs import sequential_sequence
-from bindings.arena_prog_native import _metrics_run_plan, _family_dictionary
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
+from bindings.classical_arrays_door import classical_wrap_array, _store_code, _buffer_typestr
+from bindings.classical_pandas_door import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, classical_admit_value
+from bindings.sequential_admission_door import _ordinary_torch
+from bindings.native_torch_admission_door import native_torch_numpy
+from bindings.sequential_inputs_door import sequential_sequence
+from bindings.arena_prog_native_door import _metrics_run_plan, _family_dictionary
 from bindings.arena_prog_run import MetricArenaOwner
 from core.metrics_program_plan import MetricProgramPlan
 from core.labels_accuracy_plan import label_accuracy_plan
@@ -45,31 +45,40 @@ from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_
 from bindings.labels_score_boundary_door import (
     ScoreKeyOwner, score_keys_unpack, score_keys_pack, score_keys_pack_pair, score_keys_index, score_keys_union,
 )
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds, labels_refusal
-from bindings.label_snapshot_native import label_array_list
-from bindings.label_integer_storage import _ndarray_buffer_address
-from bindings.label_input_sources import (
-    labels_list_scalar_kind, labels_series_values, labels_text_storage,
-    LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
-from bindings.str_labels_native import _read_source, str_unique_into
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.label_admission_native_unpack import labels_primitive_kind, labels_admit_primitive, LabelTypeKinds, labels_refusal
+from bindings.label_admission_native_pack import classifier_label_list
+from bindings.label_snapshot_native_unpack import label_array_list
+from bindings.label_integer_storage_unpack import _ndarray_buffer_address
+from bindings.label_input_sources_unpack import (
+    labels_list_scalar_kind,
+    labels_text_storage,
+    LABELS_LIST_OTHER,
+    LABELS_LIST_BOOL,
+    LABELS_LIST_FLOAT,
+)
+from bindings.label_input_sources_pack import (
+    labels_series_values,
+)
+from bindings.str_labels_native_door import _read_source, str_unique_into
 from bindings.str_labels_native_run import StrTable
-from bindings.label_sequence_source import label_source_count, label_source_raw, label_source_value
+from bindings.label_sequence_source_unpack import label_source_count, label_source_raw
+from bindings.label_sequence_source_pack import label_source_value
 from bindings.py_cpython_table import cpython_table
-from bindings.class_weight_boundary import class_weight_admit_dictionary
-from bindings.class_weight_rows_boundary import class_weight_rows_admitted
+from bindings.class_weight_boundary_unpack import class_weight_admit_dictionary
+from bindings.class_weight_rows_boundary_pack import class_weight_rows_admitted
 from bindings.labels_descriptor_boundary_door import (
     labels_prepare_targets, labels_reduce_stat, labels_argmax_rows as labels_argmax_run,
     labels_gather, labels_fsum_f64,
 )
-from bindings.label_input_sources import LABELS_LIST_INT
+from bindings.label_input_sources_unpack import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admit_c_view,
     admitted_dtype,
 )
-from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
-from bindings.p3_labels_metrics_native import (
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str
+from bindings.p3_labels_metrics_native_door import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
     p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR,
     _p3_text_codes_source, _p3_text_classes_source)

@@ -21,9 +21,9 @@ def test_connection_and_hot_execution_remain_separate():
     execute = provider.split('def neural_descriptor_execute(')[1].split('def neural_descriptor_info')[0]
     assert 'with GILReleased(Python())' in execute and '_ = provider' in execute
     assert 'py_call' not in execute and 'getattr' not in execute and 'getenv' not in execute
-    for file in ('bindings/samba_inference_native.mojo', 'bindings/samba_training_native.mojo'):
+    for file in ('bindings/samba_inference_native_door.mojo', 'bindings/samba_training_native_door.mojo'):
         assert 'neural_descriptor_cached' not in read(file)
-    for file in ('bindings/samba_state_native.mojo', 'bindings/causal_lm_construct.mojo'):
+    for file in ('bindings/samba_state_native_door.mojo', 'bindings/causal_lm_construct_door.mojo'):
         assert 'neural_descriptor_cached' in read(file)
 
 

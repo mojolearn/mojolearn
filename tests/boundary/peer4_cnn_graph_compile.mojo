@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.xcnn_graph_native import xcnn_graph_layers
+from bindings.xcnn_graph_native_door import xcnn_graph_layers
 
 def graph_public_call(layer: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return xcnn_graph_layers(layer, String(operation), args, context)

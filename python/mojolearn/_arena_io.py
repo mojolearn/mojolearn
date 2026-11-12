@@ -11,7 +11,7 @@ Three pieces every arena family shares:
    never come back. x_metrics (`x_metrics_run_ranges`) and x_prep
    (`x_prep_run_ranges`) run on it; `MOJOLEARN_ARENA_RANGES=0` sends both
    back to the whole-arena entries (the A/B arm). The range descriptors are
-   laid out by the native program runner, `bindings/arena_prog_native.mojo`
+   laid out by the native program runner, `bindings/arena_prog_native_door.mojo`
    (lane migrate-prog-staging), which every `_Prog.run` calls once.
 
 2. RESIDENT INPUTS (`DeviceCache`, `resident`): a device copy of a host

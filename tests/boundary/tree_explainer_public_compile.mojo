@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_explainer_native import trees_explainer_operation
+from bindings.trees_explainer_native_door import trees_explainer_operation
 
 def operation(model: PythonObject, name: PythonObject, args: PythonObject,
               context: PythonObject) raises -> PythonObject:

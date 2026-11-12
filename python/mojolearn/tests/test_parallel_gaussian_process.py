@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The class-level GaussianProcessClassifier drivers against the plain estimator.
 
-Both drivers are one native call (bindings/parallel_shard_native.mojo): one
+Both drivers are one native call (bindings/parallel_shard_native_door.mojo): one
 binary Laplace fit, or one latent pass, per one-vs-rest class column in a
 worker process per device, the columns folded in canonical order. On a
 CPU-only install each device index is one worker process.

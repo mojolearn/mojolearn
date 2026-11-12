@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.array_native import array_native_c
+from bindings.array_native_door import array_native_c
 
 @export
 def PyInit__mojolearn_array_from_buffer_compile() abi("C") -> PythonObject:

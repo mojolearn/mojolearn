@@ -42,7 +42,7 @@ from gemm.host.linalg_dispatch import LINALG_NATIVE_TABLE
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder

@@ -83,7 +83,7 @@ class ParallelQueries:
     # queries on a 1M x 32 index at 128 rows per shard). The shard cut, the
     # per-shard call and the merge are unchanged, so the bytes are too. Since
     # 2026-11-05 the snapshot stays on the workers across calls while the
-    # fitted state is unchanged (bindings/parallel_shard_native.mojo).
+    # fitted state is unchanged (bindings/parallel_shard_native_door.mojo).
     def __init__(self, estimator, *, devices=(0,), rows_per_shard=128):
         _native_parallel_shard('queries_init', (self, estimator, devices, rows_per_shard))
 
@@ -109,7 +109,7 @@ class ParallelQueries:
         -------
         The same value the estimator's method returns for ``X``.
         """
-        # One native call (bindings/parallel_shard_native.mojo `parallel_queries`).
+        # One native call (bindings/parallel_shard_native_door.mojo `parallel_queries`).
         return _native_parallel_shard('parallel_queries', (self, X, method, kwargs))
 
     def close(self):

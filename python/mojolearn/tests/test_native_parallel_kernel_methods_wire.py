@@ -59,7 +59,7 @@ def test_worker_no_longer_serves_kernel_methods():
     assert not (PKG / "_parallel_worker.py").exists()
 
 def test_door_dispatches_and_scopes_the_device_plan():
-    door = _read("bindings/kernel_methods_native.mojo")
+    door = _read("bindings/kernel_methods_native_door.mojo")
     assert 'operation == "family_km_par_fit"' in door
     assert 'operation == "family_km_par_apply"' in door
     for name in ("_km_par_fit", "_km_par_apply"):

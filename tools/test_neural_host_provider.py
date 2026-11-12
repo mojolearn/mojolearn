@@ -28,12 +28,12 @@ def test_host_binding_and_provider_share_relocated_numerical_functions():
 
 
 def test_cpu_session_and_causal_frontdoors_use_the_common_provider():
-    causal=(ROOT/'bindings/causal_lm_public.mojo').read_text()
+    causal=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
     assert 'Bool(py=e["cpu"]) and block_provider is not None' in causal
     assert '34 if head_profile else 33, a_words, p_words' in causal
-    mamba=(ROOT/'bindings/mamba_public_native.mojo').read_text()
+    mamba=(ROOT/'bindings/mamba_public_native_door.mojo').read_text()
     assert 'neural_descriptor_execute(h[].provider, 2 * kind - 1, addresses, p, f)' in mamba
-    transformer=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    transformer=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
     assert 'neural_descriptor_execute(h[].provider, 33, a, p, [])' in transformer
 
 
@@ -49,7 +49,7 @@ def test_training_hosts_use_their_original_numerical_owners_and_common_transport
         binding=(ROOT/f'bindings/_mojolearn_{family}_host.mojo').read_text()
         assert f'[{family}_block_api_binding]("{family}_block_api_v1")' in binding
         assert 'neural_descriptor_capsule(api[].name, api[].entries)' in binding
-    boundary=(ROOT/'bindings/neural_block_public.mojo').read_text()
+    boundary=(ROOT/'bindings/neural_block_public_door.mojo').read_text()
     admission=boundary.split('def neural_training_entries(')[1].split('def _neural_int_words(')[0]
     assert 'vendor != "cpu" and getenv' not in admission
 
@@ -71,7 +71,7 @@ def test_host_owned_operations_preserve_failure_state_and_original_counters():
 
 
 def test_cpu_mamba_public_admission_refreshes_both_tables():
-    public=(ROOT/'bindings/mamba_public_native.mojo').read_text()
+    public=(ROOT/'bindings/mamba_public_native_door.mojo').read_text()
     admission=public.split('def _m3_entries(')[1].split('def _m3_allocate(')[0]
     for factory in ('mamba_block_api_v1','mamba_state_api_v1'):
         assert factory in admission
@@ -99,7 +99,7 @@ def test_cpu_training_primitives_share_relocated_public_helpers():
     assert 'return ce_loss_host_into(' in provider
     assert 'op != 25' in provider
     assert '[neural_primitives_api_binding]("neural_primitives_api_v1")' in binding
-    samba=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text()
+    samba=(ROOT/'providers/python/samba_execution_pyapi_door.mojo').read_text()
     assert 'var use_session = not cpu and' in samba
     assert 'operation = 33 if cpu else (35 if packed else 11)' in samba
     assert '12 if use_session or layer_state is not None else 10' in samba

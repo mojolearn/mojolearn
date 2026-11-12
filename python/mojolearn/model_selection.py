@@ -77,7 +77,7 @@ def _sabotage_requested():
 
 #: DEVIATION 3104 (lane/python-hotpath, 2026-09-17). Below this many rows the
 #: Python routines below are the only path; above it the fold bookkeeping
-#: runs in the core helpers of bindings/hotpath_helpers.mojo when the binary
+#: runs in the core helpers of bindings/hotpath_helpers_door.mojo when the binary
 #: has them. Measured on the M4 at 1,000,000 rows, five folds: the ten
 #: `_indices` calls and five overlap tests cost 1867 ms and the default folds
 #: 195 to 416 ms, every one of them integer bookkeeping.
@@ -112,7 +112,7 @@ def _indices(value, n, name):
     return as_i64
 
 
-#: The dtype codes of core/msel_convert.mojo (bindings/hotpath_helpers.mojo's HP_*).
+#: The dtype codes of core/msel_convert.mojo (bindings/hotpath_helpers_door.mojo's HP_*).
 _MSEL_CODE = {'<f4': 0, '<f8': 1, '<i4': 2, '<i8': 3, '<u4': 4, '<u1': 5}
 
 
@@ -1740,7 +1740,7 @@ class _BaseSearch:
         return _NATIVE(self, "family_msel_search_fit", (X, y, groups), _NATIVE_CONTEXT)
 
     # The delegations and `score` are one native call each
-    # (bindings/model_selection_native.mojo): the refit check, then the
+    # (bindings/model_selection_native_door.mojo): the refit check, then the
     # best estimator's own method (or the search's scorer) on X.
     def predict(self, X):
         """Call ``predict`` on ``best_estimator_``."""
@@ -2110,7 +2110,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
 from ._native_arena_rows import connect as _connect_arena_rows
 _connect_arena_rows()
 
-# The compiled family owner (bindings/model_selection_native.mojo), connected
+# The compiled family owner (bindings/model_selection_native_door.mojo), connected
 # once at import, with the fixed tables it reads: the scorer table, the
 # scorer class `make_scorer` fills, and numbers.Real for the score check.
 from . import _native_family_bridge  # noqa: E402

@@ -64,12 +64,12 @@ so a handle is never released under a running prediction.
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call, py_type as _exact_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.host_helpers import (
+from bindings.host_helpers_pack import (
     all_finite_f32_binding,
     all_finite_f64_binding,
     argmax_rows_f32_binding,

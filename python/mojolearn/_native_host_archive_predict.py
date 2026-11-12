@@ -4,7 +4,7 @@
 `host_predict(path, X)` and `host_predict_proba(path, X)` are one native call:
 the archive reader rebuilds the saved model and the compiled owner entry its
 public method reaches runs from the fixed recipe below
-(`bindings/host_archive_predict_native.mojo`). Nothing here runs from a
+(`bindings/host_archive_predict_native_unpack.mojo`). Nothing here runs from a
 public prediction operation."""
 
 # The saved classes whose public method selected its host binding through

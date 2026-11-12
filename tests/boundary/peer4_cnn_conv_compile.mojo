@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.xcnn_conv_native import xcnn_conv_layers
+from bindings.xcnn_conv_native_door import xcnn_conv_layers
 
 def convolution_public_call(layer: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return xcnn_conv_layers(layer, String(operation), args, context)

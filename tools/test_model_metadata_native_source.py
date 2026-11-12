@@ -30,7 +30,7 @@ class ModelMetadataSource(unittest.TestCase):
         self.assertGreaterEqual(count, 35)
 
     def test_configuration_snapshots_precede_mutable_state_reads(self):
-        source = (ROOT / "bindings/causal_model_config.mojo").read_text()
+        source = (ROOT / "bindings/causal_model_config_door.mojo").read_text()
         for old in ("config._d", "plan.__dict__", "plan._layer_map", "plan.n_layers", "Python.import_module"):
             self.assertNotIn(old, source)
         for guard in ("model_record_fields", "model_plain", "model_plan_snapshot",
@@ -40,7 +40,7 @@ class ModelMetadataSource(unittest.TestCase):
         self.assertLess(owner.index('"__getattribute__"'), owner.index("_fields(mods, value)"))
 
     def test_checkpoint_slots_and_native_exports_are_admitted(self):
-        source = (ROOT / "bindings/causal_checkpoint.mojo").read_text()
+        source = (ROOT / "bindings/causal_checkpoint_door.mojo").read_text()
         for old in ("value._infos", "value._mm", "info.shape", "info.begin", "plan.__dict__",
                     'Python.import_module("array")', "bi.open", "file.close()"):
             self.assertNotIn(old, source)
@@ -52,7 +52,7 @@ class ModelMetadataSource(unittest.TestCase):
         self.assertNotIn("Python.import_module", product)
 
     def test_existing_half_conversion_routes_and_native_storage_remain(self):
-        source = (ROOT / "bindings/causal_checkpoint.mojo").read_text()
+        source = (ROOT / "bindings/causal_checkpoint_door.mojo").read_text()
         self.assertIn("checkpoint_widen_halves(source, dest, count, dtype)", source)
         self.assertIn("_lin_from_f16(Python.tuple(binding, source), linalg)", source)
         self.assertIn("native_array_from_bytes(code, bytes)", source)
@@ -71,7 +71,7 @@ class ModelMetadataSource(unittest.TestCase):
             self.assertEqual(len(body), 1, method.name)
             self.assertIsInstance(body[0], ast.Return)
             self.assertEqual(sum(isinstance(n, ast.Call) for n in ast.walk(body[0])), 1)
-        native = (ROOT / "bindings/model_catalog_native.mojo").read_text()
+        native = (ROOT / "bindings/model_catalog_native_door.mojo").read_text()
         for old in ("torch.onnx", "default_rng", "urlopen", "Python.import_module", "prog.run", "hashlib"):
             self.assertNotIn(old, native)
         for expected in ("_import(source,", "ops_imported_run_py(program, inputs, Python.dict())",
@@ -80,7 +80,7 @@ class ModelMetadataSource(unittest.TestCase):
             self.assertIn(expected, native)
 
     def test_catalog_imported_output_and_error_helpers_use_connected_builtins(self):
-        source = (ROOT / "providers/python/autograd_program_pyapi.mojo").read_text()
+        source = (ROOT / "providers/python/autograd_program_pyapi_door.mojo").read_text()
         for name in ("_result", "_imported_repr", "_imported_tuple", "ops_imported_run_py"):
             body = source.split("def " + name + "(", 1)[1].split("\n\ndef ", 1)[0]
             self.assertNotIn('Python.import_module("builtins")', body, name)

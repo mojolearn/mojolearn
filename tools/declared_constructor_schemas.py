@@ -29,7 +29,7 @@ FAMILIES = (("mojolearn._expansion_prep", "_PrepBase"), ("mojolearn._expansion_d
 # their parameters (found by the same rule; none is a NumericModeMixin).
 # The resample results are not here: their constructors are one call to the
 # resample owner's native result initializer (family_rs_result_initialize,
-# providers/python/resample_public_pyapi.mojo), which admits releases itself.
+# providers/python/resample_public_pyapi_pack.mojo), which admits releases itself.
 EXTRAS = (("mojolearn.model_selection", ("ShuffleSplit", "GroupShuffleSplit", "StratifiedShuffleSplit",
                                          "LeavePOut", "LeavePGroupsOut")),)
 

@@ -425,7 +425,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
 
 # A tree saves in the random forest format, refusing a splitter='random'
-# tree first (bindings/archive_schema_native.mojo runs the schema); `load`
+# tree first (bindings/archive_schema_native_door.mojo runs the schema); `load`
 # is the random forest's one native call.
 _TREE_SAVE_SCHEMA = (
     ("refuse_set", "_random_inner", "NotImplementedError",
@@ -440,11 +440,11 @@ _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
 # this module are BUILD-TIME defines of the x_trees binding (`-D
-# MOJOLEARN_TE_<NAME>_OFF` turns one off; providers/python/xtrees_api_pyapi.mojo `x_trees_fast_switches` is the bit
+# MOJOLEARN_TE_<NAME>_OFF` turns one off; providers/python/xtrees_api_pyapi_door.mojo `x_trees_fast_switches` is the bit
 # set the FAST + Apple build fills, 0 in every other build), read through
 # the binding once per fit: no env read. IDENTICAL (the default) runs the
 # code above and below them unchanged. Each is ON by default in the FAST +
-# Apple build since the M3 A/B (providers/python/xtrees_api_pyapi.mojo XTREES_FAST_SWITCHES):
+# Apple build since the M3 A/B (providers/python/xtrees_api_pyapi_door.mojo XTREES_FAST_SWITCHES):
 #   MOJOLEARN_TE_NATIVE_SPLITS  the cv fold bookkeeping of Stacking /
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
 #     label columns leave their Python row loops (`_trees_native_folds`;
@@ -1225,7 +1225,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
                  feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
-        # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
+        # (bindings/trees_boost_constructor_native_unpack.mojo `dart_construct`).
         _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
@@ -1363,7 +1363,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
                  feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
-        # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
+        # (bindings/trees_boost_constructor_native_unpack.mojo `dart_construct`).
         _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,

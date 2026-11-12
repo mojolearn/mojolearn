@@ -7,9 +7,9 @@ from bindings.classical_labels import (
     _label_list, _flatten_labels, _sorted_classes, labels_label_kind,
     classical_encode_labels, labels_decode_labels, _classification_labels, labels_class_weight_rows,
 )
-from bindings.classifier_public_lifecycle import classifier_label_list, _public_labels
-from bindings.svc_native import svc_operation
-from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
+from bindings.classifier_public_lifecycle_door import classifier_label_list, _public_labels
+from bindings.svc_native_pack import svc_operation
+from bindings.gp_labels_native_door import gp_encode_labels, gp_decode_labels
 
 @export
 def native_label_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

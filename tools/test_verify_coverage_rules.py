@@ -68,13 +68,13 @@ def test_composed_names_resolve_against_exports():
 
 def test_reached_needs_a_specific_value_or_the_owner_entry():
     records = [((frozenset({"FastICA"}), frozenset({"fit"})), frozenset({"x_decomp_ica_fit"}),
-                "bindings/decomp_native.mojo", frozenset()),
-               ((frozenset({"fit"}),), frozenset({"x_decomp_ipca_fit"}), "bindings/ipca_native.mojo",
+                "bindings/decomp_native_door.mojo", frozenset()),
+               ((frozenset({"fit"}),), frozenset({"x_decomp_ipca_fit"}), "bindings/ipca_native_door.mojo",
                 frozenset())]
     od = _dispatch(set(), records, generic={"fit"},
-                   owner_files={"ipca_native_call": {"bindings/ipca_native.mojo"}})
+                   owner_files={"ipca_native_call": {"bindings/ipca_native_door.mojo"}})
     ents, files = od.reached(frozenset({"FastICA", "fit"}), frozenset())
-    assert ents == {"x_decomp_ica_fit"} and files == {"bindings/decomp_native.mojo"}
+    assert ents == {"x_decomp_ica_fit"} and files == {"bindings/decomp_native_door.mojo"}
     # `fit` alone credits the IncrementalPCA branch only through its owner entry
     ents, _ = od.reached(frozenset({"fit"}), frozenset({"ipca_native_call"}))
     assert ents == {"x_decomp_ipca_fit"}
@@ -83,10 +83,10 @@ def test_reached_needs_a_specific_value_or_the_owner_entry():
 
 
 def test_reached_relays_an_owner_operation_named_by_a_branch():
-    records = [((frozenset({"family_msel_split"}),), frozenset(), "bindings/model_selection_native.mojo",
+    records = [((frozenset({"family_msel_split"}),), frozenset(), "bindings/model_selection_native_door.mojo",
                 frozenset({"family_msel_split_loo_at"})),
                ((frozenset({"family_msel_split_loo_at"}),), frozenset({"leave_range_i64"}),
-                "bindings/model_selection_native.mojo", frozenset())]
+                "bindings/model_selection_native_door.mojo", frozenset())]
     od = _dispatch(set(), records)
     ents, _ = od.reached(frozenset({"family_msel_split"}), frozenset())
     assert ents == {"leave_range_i64"}

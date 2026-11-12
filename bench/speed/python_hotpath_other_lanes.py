@@ -25,7 +25,7 @@ def cell(name):
 
 
 # linear_model._r2_sums cell removed 2026-11-11 (lane pyout-metrics-cnn): the Python R^2 program is gone; the
-# regressors' score is the native owners' R^2 program (core/linear_score_program.mojo, bindings/svc_common.mojo).
+# regressors' score is the native owners' R^2 program (core/linear_score_program.mojo, bindings/svc_common_door.mojo).
 
 
 @cell("linear_model._accuracy_host (LogisticRegression/SVC score), int64 y")

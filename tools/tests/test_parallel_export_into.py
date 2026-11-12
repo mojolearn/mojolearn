@@ -19,7 +19,7 @@ def _read(rel):
 
 
 def test_owner_has_no_instance_callables():
-    owner = _read("bindings/parallel_byte_native.mojo")
+    owner = _read("bindings/parallel_byte_native_door.mojo")
     assert "_entries" not in owner
     assert "py_call_typed" not in owner
     assert '"byte_lm_schedule_api_v1"' in owner
@@ -29,7 +29,7 @@ def test_owner_has_no_instance_callables():
 
 
 def test_into_targets_are_refused_natively_before_the_session():
-    owner = _read("bindings/parallel_byte_native.mojo")
+    owner = _read("bindings/parallel_byte_native_door.mojo")
     for message in ("export target has wrong dtype",
                     "export target must have the exact contiguous one-dimensional shape",
                     "export target is read-only",

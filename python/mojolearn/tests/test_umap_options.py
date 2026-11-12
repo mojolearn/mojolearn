@@ -24,7 +24,7 @@ def test_accepted(kw):
     (dict(output_metric="haversine"), NotImplementedError),
     (dict(metric="hamming"), ValueError),
     # A callable metric is refused natively as a non-string, before it is
-    # called (bindings/umap_parameters_native.mojo `_string`).
+    # called (bindings/umap_parameters_native_door.mojo `_string`).
     (dict(metric=lambda a, b: 0.0), TypeError),
     (dict(metric="manhattan", metric_kwds={"p": 3}), ValueError),
     (dict(a=1.0), ValueError),
@@ -39,7 +39,7 @@ def test_refused_by_name(kw, err):
 
 
 def test_target_metric_refused_by_name():
-    # The target is checked inside the compiled fit (bindings/mani_umap_native.mojo),
+    # The target is checked inside the compiled fit (bindings/mani_umap_native_door.mojo),
     # before any kernel runs.
     X = [[float(i), float(i % 3)] for i in range(10)]
     m = UMAP(target_metric="hamming", n_neighbors=2)

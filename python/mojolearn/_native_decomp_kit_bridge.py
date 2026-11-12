@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native decomposition owners that run the
-x_decomp cells through bindings/decomp_kit_native.mojo (the dictionary
+x_decomp cells through bindings/decomp_kit_native_door.mojo (the dictionary
 learning family, PLS, MinCovDet, ALS, the dense linear algebra functions):
 their compiled door and the numeric-mode x_decomp entries, retained once."""
 
-# The x_decomp entries the native kit (bindings/decomp_kit_native.mojo) still
+# The x_decomp entries the native kit (bindings/decomp_kit_native_door.mojo) still
 # reads from this dict: the image's tier and vendor (its table key), the
 # compiled route words, the optional resident entries it probes for, and the
 # pool entries its resident records name. Every operation itself runs through
@@ -44,7 +44,7 @@ _NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
 
 def _native_key(entries):
     # glue: once at import, the connected x_decomp image's (tier, vendor) key,
-    # which the native decomposition kit (bindings/decomp_kit_native.mojo)
+    # which the native decomposition kit (bindings/decomp_kit_native_door.mojo)
     # reads to call the image's published operations entry
     # (core/decomp_entry_table.mojo) instead of its Python entries. An image
     # without one leaves the key absent and the kit refuses.

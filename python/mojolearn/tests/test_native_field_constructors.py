@@ -1,6 +1,6 @@
 """Public constructor probes for the 77 full-reset owners and the 50 declared
 prep/decomp owners; run only against the integrated native build
-(bindings/full_reset_constructor_native.mojo).
+(bindings/full_reset_constructor_native_door.mojo).
 
 The oracle is the original constructor body retained at install
 (`_CONTEXT['originals']`), executed here by the test on a fresh object. It is
@@ -71,7 +71,7 @@ def assert_same(actual, expected):
 
 
 # Owners whose constructor admits values natively: UMAP validates its
-# parameters at construction (bindings/umap_parameters_native.mojo) and the
+# parameters at construction (bindings/umap_parameters_native_door.mojo) and the
 # retained Croston original is the native `croston_initialize`, which takes
 # native scalars only. Their probes pass valid values (the defaults, a str
 # alias), not opaque sentinels; the replacement in the reinitialization probe
@@ -97,7 +97,7 @@ def sentinels(cls):
 def replacement_for(cls, values):
     """The first parameter replaced. A native owner initializer (the retained
     original of the cluster and density owners) refuses to release an
-    arbitrary Python object it would drop (bindings/native_owner_lifetime.mojo,
+    arbitrary Python object it would drop (bindings/native_owner_lifetime_door.mojo,
     `native_release_admit`), so the replaced field starts as an exact str."""
     checked = _VALUE_CHECKED.get(cls.__name__)
     if checked is not None:

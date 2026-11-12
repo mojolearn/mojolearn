@@ -57,7 +57,7 @@ from ._native_neighbor_queries import native_method as _native_query_method
 # The compiled saved-model owner, connected once at import (`save`/`load`).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: `fit` is one native
-# call (bindings/neighbors_ann_native.mojo); its metric and mode tables are
+# call (bindings/neighbors_ann_native_door.mojo); its metric and mode tables are
 # added to the shared context below them.
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 
@@ -313,7 +313,7 @@ class IVFIndex(NumericModeMixin):
         self._release_resident()
         n, dim = self.n_rows_, self.n_features_in_
         handle = int(prepare(
-            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_index_prepare).
+            # ORDER MATCHES bindings/ivf_index_arrays_unpack.mojo (ivf_flat_index_prepare).
             [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
              addr_ro(self.center_norms_, name="center_norms_"),
              addr_ro(self.list_offsets_, name="list_offsets_"),
@@ -340,7 +340,7 @@ class IVFIndex(NumericModeMixin):
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected below the class
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no handle: the integer means
@@ -426,7 +426,7 @@ class IVFIndex(NumericModeMixin):
         """A new instance holding copies of this index's arrays (cuVS
         `ivf_flat::clone`'s role), so an extend on it leaves this one as it
         was. One native operation (`_ivf_clone` in
-        bindings/neighbor_query_native.mojo): stamped admission, one memcpy
+        bindings/neighbor_query_native_door.mojo): stamped admission, one memcpy
         per array, no hooked attribute reads."""
         return _NATIVE_QUERY(self, "clone", (), _QUERY_CONTEXT)
 

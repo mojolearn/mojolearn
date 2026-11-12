@@ -21,7 +21,7 @@ def test_transformer_session_public_methods_are_single_native_connections():
 
 
 def test_native_session_owner_preserves_cpu_copies_gpu_provider_and_cleanup():
-    source=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    source=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
     assert 'var weights: List[List[Float32]]' in source
     assert 'var k_cache: List[Float32]' in source
     assert 'snapshot.packed.resolve(keep)' in source
@@ -51,13 +51,13 @@ def test_resident_whole_model_uses_original_run_and_atomic_group_reservation():
     boundary=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
     assert 'List[NativeSessionGroup]()' in boundary
     assert '30, 31, 32, [], [], []' in boundary
-    public=(ROOT/'bindings/causal_lm_public.mojo').read_text()
+    public=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
     for name in ('transformer_resident_lm_run','transformer_resident_lm_open','transformer_resident_lm_close'):
         assert name+'(provider,' in public
 
 
 def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
-    source=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    source=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
     assert 'py_fields(' not in source
     assert '_native_function(' not in source
     assert 'py_call(bi.hasattr' not in source
@@ -82,7 +82,7 @@ def test_decode_captures_fields_and_uses_retained_native_entry_dictionary():
 def test_decode_session_keeps_native_handle_and_binding_words():
     # N186: the provider handle is resolved once at open and kept in the
     # owner; N192: vendor and mode words are read once per compiled entry pair.
-    source=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    source=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
     assert 'var native_handle: Int' in source
     assert 'handle.native_handle = transformer_resident_decode_handle(handle.provider, handle.device)' in source
     run=source.split('def transformer_decode_run(')[1].split('def transformer_decode_state(')[0]

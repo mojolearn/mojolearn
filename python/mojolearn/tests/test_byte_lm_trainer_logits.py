@@ -12,7 +12,7 @@ native owner now refuses before any entry is read:
   from the compiled module is refused by name at connection
   (test_byte_lm_host_trainer::test_a_binding_without_the_training_entry_is_refused_by_name).
 - test_a_wrong_returned_count_raises_runtime_error: the count check is native
-  (bindings/byte_lm_trainer_native.mojo "unexpected number of logits"); the
+  (bindings/byte_lm_trainer_native_door.mojo "unexpected number of logits"); the
   compiled entry cannot be made to miscount.
 - test_a_resident_native_failure_keeps_a_usable_session_and_loses_an_unusable_one:
   injected device failures; the compiled binding has no fault hook, so the

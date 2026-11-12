@@ -16276,7 +16276,7 @@
         }
       ],
       "validation": {
-        "native": "bindings/umap_parameters_native.mojo:umap_parameters_fields",
+        "native": "bindings/umap_parameters_native_door.mojo:umap_parameters_fields",
         "position": "after declared field writes, before NumericModeMixin mode injection",
         "runtime_evidence": "PENDING"
       }

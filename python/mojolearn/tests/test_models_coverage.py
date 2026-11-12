@@ -73,7 +73,7 @@ def test_tensor_info_refuses_what_the_header_parser_refuses(fields, error, match
 def test_pattern_name_names_every_known_spelling():
     for name, spellings in PATTERNS.items():
         assert [pattern_name(s) for s in spellings] == [name] * len(spellings)
-    # pattern_name is total (bindings/tokenizer_public_native.mojo
+    # pattern_name is total (bindings/tokenizer_public_native_door.mojo
     # vocab_pattern): an unknown spelling or a non-str is not a known
     # pattern, None; never converted. test_neural_public_coverage_p1's
     # test_pattern_name_is_total holds the same contract.

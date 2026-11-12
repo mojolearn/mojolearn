@@ -24,7 +24,7 @@ PROFILE_FILES = frozenset(('__init__.py', 'parallel_forecasting.py', 'parallel_g
                            'parallel_ivf.py', '_verify_distributed.py', '_native_parallel_shard.py',
                            '_gpu_witness.py'))
 CASES = ("arima", "holtwinters", "gpc", "ivf", "gpc_fit")
-#: the native shard workers' numerical operations (bindings/parallel_shard_native.mojo,
+#: the native shard workers' numerical operations (bindings/parallel_shard_native_door.mojo,
 #: parallel_forecast_native.mojo)
 NUMERICAL_OPERATIONS = frozenset(("arima_predict_shard", "hw_predict_shard", "gpc_class_fit", "gpc_class_predict",
                                   "ivf_search"))

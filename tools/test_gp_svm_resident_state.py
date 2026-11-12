@@ -34,7 +34,7 @@ class ResidentSourceContract(unittest.TestCase):
         self.assertNotIn("py_setitem(fields", door)  # never in the model's __dict__
         self.assertIn('"gpr_predict_resident"', _read("bindings/gp_regressor_native_door.mojo"))
         self.assertIn('"gpc_predict_all_resident"', _read("bindings/gp_classifier_native_door.mojo"))
-        svc = _read("bindings/svc_kernel_native.mojo")
+        svc = _read("bindings/svc_kernel_native_door.mojo")
         self.assertIn('"svc_predict_resident"', svc)
         self.assertIn('"svr_predict_resident"', svc)
 

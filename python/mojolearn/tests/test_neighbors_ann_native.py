@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The approximate indexes' `fit` and `refine` are one native call each
-(bindings/neighbors_ann_native.mojo): the fitted state and the outputs equal
+(bindings/neighbors_ann_native_door.mojo): the fitted state and the outputs equal
 the frozen pre-migration Python path's bit for bit
 (`_legacy_neighbors_ann`), refusals keep their class and wording, and the
 public call runs no package Python (`audit_native_call`).
@@ -66,7 +66,7 @@ def test_fit_state_equals_former_path(which, data):
     former = make()
     old(former, x)
     # The public fit's shared lifecycle epilogue marks the model fitted
-    # (providers/python/estimator_lifecycle_pyapi.mojo estimator_fit_complete);
+    # (providers/python/estimator_lifecycle_pyapi_unpack.mojo estimator_fit_complete);
     # the frozen former helpers are the inner fit only, so the marker is
     # checked on its own and the rest of the state must be equal.
     assert vars(native).get("_mojolearn_fitted") is True
@@ -132,7 +132,7 @@ def test_input_refusals_keep_class_and_wording(bad_x):
     assert got is not None and want is not None and got[0] == want[0]
     if isinstance(bad_x, list):
         # A ragged nested list is refused by the one shared native input
-        # snapshot (bindings/sequential_inputs.mojo), whose wording is the
+        # snapshot (bindings/sequential_inputs_door.mojo), whose wording is the
         # contract for every native door; the former path used another helper.
         assert got == ("ValueError", "input sequences must be rectangular")
     else:

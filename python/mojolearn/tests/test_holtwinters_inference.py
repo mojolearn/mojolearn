@@ -32,7 +32,7 @@ import pytest
 from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
-SHARED = "bindings/holtwinters_host_predict.mojo"
+SHARED = "bindings/holtwinters_host_predict_door.mojo"
 
 
 def _read(rel):
@@ -61,7 +61,7 @@ def test_forecast_family_serves_holtwinters():
 def test_three_bindings_register_predict_from_one_source():
     for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast")):
         code = _code(_read(src))
-        assert "from bindings.holtwinters_host_predict import" in code, src
+        assert "from bindings.holtwinters_host_predict_door import" in code, src
         assert 'def_function[holtwinters_predict_binding]("holtwinters_predict")' in code, src
         assert "def holtwinters_predict_binding" not in code, f"{src} defines its own predict"
     # The GPU binding predicts on the device (holtwinters/estimator.mojo::
@@ -69,7 +69,7 @@ def test_three_bindings_register_predict_from_one_source():
     gpu = _code(_read("bindings/_mojolearn_tsa.mojo"))
     assert 'def_function[holtwinters_predict_binding]("holtwinters_predict")' in gpu
     assert "holtwinters_predict_ptr(" in gpu
-    assert "from bindings.holtwinters_host_predict import" not in gpu
+    assert "from bindings.holtwinters_host_predict_door import" not in gpu
     for src in (host_surface.binding_source("tsa"), host_surface.binding_source("forecast")):
         code = _code(_read(src))
         assert 'def_function[holtwinters_forecast_binding]("holtwinters_forecast")' in code, src
@@ -88,8 +88,8 @@ def test_prediction_sources_reach_no_fit():
         # (core/holtwinters_host_predict_impl.mojo, std imports only)
         "bindings.py_balanced", "core.holtwinters_host_predict_impl",
         # the connected-module lookup through the shared CPython table
-        # (bindings/native_loaded_module.mojo imports std and that table only)
-        "bindings.native_loaded_module",
+        # (bindings/native_loaded_module_door.mojo imports std and that table only)
+        "bindings.native_loaded_module_door",
     }
     for src in ("holtwinters/host/hw_predict.mojo", SHARED, "core/holtwinters_host_predict_impl.mojo"):
         imports = set(re.findall(r"^from ([\w.]+) import", _code(_read(src)), re.M))

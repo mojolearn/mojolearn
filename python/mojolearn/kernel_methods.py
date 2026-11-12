@@ -48,11 +48,11 @@ _NYSTROEM_FORMAT = "mojolearn-nystroem-1"
 _RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-# The compiled family owner (bindings/kernel_methods_native.mojo), connected
+# The compiled family owner (bindings/kernel_methods_native_door.mojo), connected
 # once at import: KernelRidge `fit`/`predict` and Nystroem `fit`/`transform`/
 # `fit_transform` are one native call each. The native lifecycle selects the
 # binding and owns fitted checks, feature metadata and finished public results;
@@ -271,7 +271,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
                        _NATIVE_CONTEXT)
 
     # The fitted X and dual live on the device after the first predict,
-    # under `_resident_holder` (bindings/kernel_methods_native.mojo). A
+    # under `_resident_holder` (bindings/kernel_methods_native_door.mojo). A
     # pickle or a deepcopy carries no device handle; the copy uploads its
     # own at its first predict. Dropping an instance releases the handle
     # through the native finalizer connected below the classes.
@@ -690,7 +690,7 @@ del _bridge
 _native_archive_bridge.lifetime(KernelRidge, "kernel_ridge_resident_release", "_resident_holder")
 
 # The classes the multi-GPU kernel-method drivers admit
-# (bindings/kernel_methods_native.mojo `family_km_par_*`).
+# (bindings/kernel_methods_native_door.mojo `family_km_par_*`).
 _native_family_bridge.tables(family_km_par_classes=(KernelRidge, Nystroem))
 
 

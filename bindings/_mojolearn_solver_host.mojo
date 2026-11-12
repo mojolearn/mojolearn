@@ -51,7 +51,7 @@ literal `single_linkage.mojo` returns on the pairwise arm.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
 from bindings.py_balanced import py_type as _balanced_type
 from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into

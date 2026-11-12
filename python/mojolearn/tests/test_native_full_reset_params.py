@@ -51,7 +51,7 @@ def test_kernel_ridge_pilot_full_reset_preserves_dictionary_and_borrowed_paramet
 
 
 # UMAP validates its parameters natively at construction and in set_params
-# (bindings/umap_parameters_native.mojo): its probes use valid values.
+# (bindings/umap_parameters_native_door.mojo): its probes use valid values.
 def _values(cls):
     parameters = inspect.signature(cls).parameters
     if cls.__name__ == 'UMAP':

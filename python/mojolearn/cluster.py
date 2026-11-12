@@ -13,14 +13,14 @@ from ._mode import NumericModeMixin
 _KMEANS_FORMAT = "mojolearn-kmeans-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # The compiled family owner, connected once at import: `fit`, `predict`,
 # `transform`, `fit_predict` and `fit_transform` are one native call each
-# (bindings/kmeans_native.mojo), which validates the inputs with the
+# (bindings/kmeans_native_unpack.mojo), which validates the inputs with the
 # refusals below, allocates the outputs, runs the binding's kmeans_fit /
 # kmeans_predict / kmeans_transform and stores the fitted attributes. The
 # shell hands it the binding `_bind` resolves for the model's numeric mode.
@@ -77,7 +77,7 @@ _METRIC_SAVED = {
 
 
 # `KMeans.fit`, `predict` and `transform` refuse a NaN or an infinity in X,
-# sample_weight or init_centroids (bindings/kmeans_native.mojo `_kmeans_x`;
+# sample_weight or init_centroids (bindings/kmeans_native_unpack.mojo `_kmeans_x`;
 # lane a7d: X's finite status word comes from the kernel entry over its own
 # upload, the refusal is the one admission wording "Input X contains NaN or
 # infinity (KMeans)."): before that check a NaN row reached the kernel and
@@ -184,7 +184,7 @@ class KMeans(NumericModeMixin):
     >>> distances = model.transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
@@ -218,7 +218,7 @@ class KMeans(NumericModeMixin):
         self.numeric_mode = numeric_mode
 
     # A callable `init` is refused before it is called (no Python runs in
-    # the fit: bindings/kmeans_native.mojo); an array `init` takes the
+    # the fit: bindings/kmeans_native_unpack.mojo); an array `init` takes the
     # 'array' path with `init_centroids` ignored.
     def fit(self, X, y=None, sample_weight=None):
         """Compute the k-means clustering of `X`.
@@ -330,7 +330,7 @@ class KMeans(NumericModeMixin):
         return _NATIVE(self, "family_kmeans_fit_transform", (None, X, sample_weight), _NATIVE_CONTEXT)
 
     # The fitted centroids live on the device after the first query, under
-    # `_resident_holder` (bindings/kmeans_native.mojo `_kmeans_resident`).
+    # `_resident_holder` (bindings/kmeans_native_unpack.mojo `_kmeans_resident`).
     # A pickle or a deepcopy carries no device handle; the copy uploads its
     # own at its first query. The Mojo resident owner releases its native
     # handle after the last query drops its reference.

@@ -61,8 +61,8 @@ the clip, the loss, the linear operations and the RMSNorm weight gradient.
 
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
-from bindings.residual_dropout_boundary_host import residual_dropout_binding, residual_dropout_backward_binding
-from bindings.neural_gemm_boundary_host import neural_gemm_binding
+from bindings.residual_dropout_boundary_host_pack import residual_dropout_binding, residual_dropout_backward_binding
+from bindings.neural_gemm_boundary_host_pack import neural_gemm_binding
 from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
@@ -71,9 +71,9 @@ from core.samba_entry_table_training_host import publish_samba_training_host_pri
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from training.host.optimizer_native import OPTIMIZER_NATIVE_HOST_API
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
-from bindings.native_class_admission import static_builtin_type
+from bindings.native_class_admission_door import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
 from core.mojolearn_training_host_impl import (
     embedding_forward_host_into, embedding_backward_host_into, rms_norm_forward_host_into, rms_norm_backward_host_into, linear_forward_host_into, linear_backward_host_into, accumulate_host_into, chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into,
@@ -87,11 +87,19 @@ from core.mojolearn_training_host_impl import (
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.optimizer_public_door import entry_zero
-from bindings.optimizer_public_host_pyapi import (
-    optimizer_door_accumulate_host_c, optimizer_door_clip_host_c, optimizer_door_io_host_c,
-    optimizer_door_load_state_host_c, optimizer_door_state_host_c, optimizer_door_state_set_host_c,
-    optimizer_door_step_host_c, optimizer_resident_close_host_binding,
-    optimizer_resident_download_host_binding, optimizer_resident_open_host_binding,
+from bindings.optimizer_public_host_pyapi_unpack import (
+    optimizer_door_accumulate_host_c,
+    optimizer_door_clip_host_c,
+    optimizer_door_io_host_c,
+    optimizer_door_load_state_host_c,
+    optimizer_door_state_host_c,
+    optimizer_door_state_set_host_c,
+    optimizer_door_step_host_c,
+)
+from bindings.optimizer_public_host_pyapi_pack import (
+    optimizer_resident_close_host_binding,
+    optimizer_resident_download_host_binding,
+    optimizer_resident_open_host_binding,
     optimizer_resident_upload_host_binding,
 )
 

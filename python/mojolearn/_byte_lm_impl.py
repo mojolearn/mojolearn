@@ -220,7 +220,7 @@ def _sha256_hex(data):
 
 
 # The ids admission, the greedy pick, the state and schedule admission and
-# the gradient outputs live in the native door (bindings/byte_lm_trainer_native.mojo:
+# the gradient outputs live in the native door (bindings/byte_lm_trainer_native_door.mojo:
 # `_gradient_outputs`, the logits ids refusals, `training_schedule_json`); the
 # unreached Python copies were deleted (pyout-neural-lm, 2026-11-11).
 
@@ -583,7 +583,7 @@ class SmallByteLanguageModelTrainer:
         # remaining callers are tools/byte_lm_model_pool_check.py and
         # tools/byte_lm_offload_check.py (fault-hook probes). The trainer door
         # admits the binding, suspends a session on a change and computes the
-        # run metadata natively (bindings/byte_lm_trainer_native.mojo `_binding`).
+        # run metadata natively (bindings/byte_lm_trainer_native_door.mojo `_binding`).
         return _load(state_shape(self._state))
 
     def run_metadata(self):
@@ -618,7 +618,7 @@ class SmallByteLanguageModelTrainer:
             tensor name), the pre-update gradient.
         """
         # the lock, the ids, the binding and the session lifecycle and the
-        # step in one native call (bindings/byte_lm_trainer_native.mojo)
+        # step in one native call (bindings/byte_lm_trainer_native_door.mojo)
         return _LM_TRAINER(self, "train_step", (ids,), _LM_TRAINER_CONTEXT)
 
     def train_steps(self, ids):
@@ -653,7 +653,7 @@ class SmallByteLanguageModelTrainer:
         >>> losses = trainer.train_steps(ids)["losses"]
         """
         # one native call: the lock, the ids, the binding and the steps
-        # (bindings/byte_lm_trainer_native.mojo byte_lm_train_steps)
+        # (bindings/byte_lm_trainer_native_door.mojo byte_lm_train_steps)
         return _LM_TRAINER(self, "train_steps", (ids,), _LM_TRAINER_CONTEXT)
 
     def evaluate(self, ids):

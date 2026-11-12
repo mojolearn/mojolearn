@@ -33,7 +33,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_host_search import (
+from bindings.ivf_host_search_door import (
     ivf_flat_index_prepare_binding,
     ivf_flat_index_release_binding,
     ivf_flat_index_search_binding,

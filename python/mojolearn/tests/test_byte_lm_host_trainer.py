@@ -68,7 +68,7 @@ def trainer(**kwargs):
     return host_mod.LanguageModelHostTrainer(np.ones(N, np.float32), **kwargs)
 
 
-# The trainer's native owner (bindings/byte_lm_host_trainer_native.mojo) reads
+# The trainer's native owner (bindings/byte_lm_host_trainer_native_door.mojo) reads
 # the host binding connected at import into `_HOST_TRAIN_CONTEXT` and admits
 # only compiled entries owned by that module
 # (providers/python/neural_descriptor_pyapi.mojo, `neural_descriptor_entry`).

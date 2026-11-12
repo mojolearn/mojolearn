@@ -16,7 +16,7 @@ def test_layernorm_public_operations_enter_native_before_validation():
 
 
 def test_native_layernorm_keeps_validation_and_finished_gradients():
-    source = (ROOT/'bindings/sequence_layers_native.mojo').read_text()
+    source = (ROOT/'bindings/sequence_layers_native_door.mojo').read_text()
     assert 'var fields = _ln_fields(owner, context)' in source
     assert 'LayerNorm.backward: call forward first' in source
     assert 'py_setitem(fields, "weight_grad"' in source

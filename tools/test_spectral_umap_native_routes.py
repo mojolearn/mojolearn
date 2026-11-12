@@ -95,9 +95,9 @@ def test_umap_initializer_retains_its_transitive_decomp_symbols(bridge):
     _, module = bridge
     run = (ROOT / "bindings/mani_kit_run.mojo").read_text() + (ROOT / "bindings/mani_umap_init_run.mojo").read_text()
     assert '"x_decomp_' not in run
-    assert '"x_decomp_native_api_v1"' in (ROOT / "bindings/mani_kit.mojo").read_text()
+    assert '"x_decomp_native_api_v1"' in (ROOT / "bindings/mani_kit_door.mojo").read_text()
     assert "x_decomp_native_api_v1" in set(module._SYMBOLS["decomp"][1])
-    initializer = (ROOT / "bindings/mani_umap_native.mojo").read_text().split("def _umap_initial(", 1)[1].split("\ndef ", 1)[0]
+    initializer = (ROOT / "bindings/mani_umap_native_door.mojo").read_text().split("def _umap_initial(", 1)[1].split("\ndef ", 1)[0]
     initializer = "\n".join(line.split("#", 1)[0] for line in initializer.splitlines())
     assert "umap_random_start_run(" in initializer and "umap_pca_start_run(" in initializer
     assert "family_mani_binding" not in initializer

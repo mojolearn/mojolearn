@@ -19,7 +19,7 @@ from ._labels import unique_inverse
 from . import _native_xcnn_bridge
 
 # Package-import connection: the migrated layer methods are ONE call each
-# into the compiled owner (bindings/xcnn_native.mojo).
+# into the compiled owner (bindings/xcnn_native_pack.mojo).
 _XCNN, _XCNN_CONTEXT = _native_xcnn_bridge.connect()
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
@@ -90,12 +90,12 @@ class _Layer:
 # Bit 3: the candidate fold block 256. Bit 4 (lane/review-fixes): the binding
 # was built with -D MOJOLEARN_IDN_ALL_OFF.
 # Both flag words are read natively (python/mojolearn/_native_xcnn_bridge.py connects them;
-# bindings/xcnn_common.mojo decides each route).
+# bindings/xcnn_common_door.mojo decides each route).
 # TOMBSTONE: the Python layer glue `_mixed`, `_idn`, `_idn2`, `_dev_of`, `_device_io_off`, `_size`,
 # `_pin_weights`, `_pinned`, `_resident`, `_out_new`, `_auto_pin`, `_is_t`, `_on_dev`, `_host`,
 # `Conv2d._res_w/_backward_res/_padded_shape/_out_shape/_group/_res_ok`, `CNNClassifier._build`,
 # `BatchNorm2d._res_bn/_backward_res/_backward_dev` and `BasicBlock._conv_back_dev/_backward_chain`
-# (dead copies of bindings/xcnn_conv_native.mojo, xcnn_bn_native.mojo and xcnn_classifier_native.mojo;
+# (dead copies of bindings/xcnn_conv_native_door.mojo, xcnn_bn_native.mojo and xcnn_classifier_native.mojo;
 # lane pyout-metrics-cnn) deleted 2026-11-11; code recoverable at 6f82d0255d.
 
 
@@ -184,7 +184,7 @@ _DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "
 # layer's weights: after changing them (in place, or `set_weights`) call
 # `pin_weights()` again. The same entry on the same words: no bit moves.
 # p3-cnn-sequence-tsa (2026-11-06): a pinned layer's `weight_` / `bias_` are
-# read-only arrays (bindings/xcnn_conv_native.mojo `_pin_values`), so an
+# read-only arrays (bindings/xcnn_conv_native_door.mojo `_pin_values`), so an
 # in-place edit raises instead of running on the stale device copy.
 # `x_cnn_idn_flags` bit 5 (`-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`); with it off,
 # on FAST or on the CPU twin `pin_weights()` does nothing.
@@ -554,7 +554,7 @@ class CNNClassifier(_Layer):
     def fit(self, X, y):
         """Train the classifier on images X and labels y; returns self."""
         # the labels, the layers and every epoch in one native call
-        # (bindings/xcnn_classifier_native.mojo -> the x_sequence program door)
+        # (bindings/xcnn_classifier_native_door.mojo -> the x_sequence program door)
         return _XCNN(self, "cnnclf_fit", (X, y), _XCNN_CONTEXT)
 
     def predict_proba(self, X):
@@ -921,7 +921,7 @@ class GCNConv(_Layer):
 
     def forward(self, x, edge_index, edge_weight=None):
         # the graph, its cache and the propagation in one native call
-        # (bindings/xcnn_graph_native.mojo)
+        # (bindings/xcnn_graph_native_door.mojo)
         return _XCNN(self, "gcn_forward", (x, edge_index, edge_weight), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding the layer
@@ -961,7 +961,7 @@ class SAGEConv(_Layer):
 
     def forward(self, x, edge_index):
         # the graph, its cache, the aggregation and the transforms in one
-        # native call (bindings/xcnn_graph_native.mojo)
+        # native call (bindings/xcnn_graph_native_door.mojo)
         return _XCNN(self, "sage_forward", (x, edge_index), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding (aggr mean

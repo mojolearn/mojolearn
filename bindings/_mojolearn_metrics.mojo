@@ -44,7 +44,7 @@ wrappers without a leg to point at.
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.experiment_guards_base import BASE_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from metrics.mojolearn_metrics_run import (
     _f32_ptr, _i32_ptr, _load_i32, _load_f32, _guard_spectral_outputs, _guard_embedding_output,
     precision_recall_curve_run, confusion_matrix_run, _spectral_write_outputs, _spectral_write_embedding,

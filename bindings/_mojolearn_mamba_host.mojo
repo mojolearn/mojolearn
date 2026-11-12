@@ -43,7 +43,7 @@ from mamba.host.native_block_dispatch import NATIVE_MAMBA_HOST_BLOCK_API, NATIVE
 from core.mamba3_prefill_session import Mamba3PrefillHandle
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.python import Python, PythonObject
-from bindings.native_identity_type import native_identity_type
+from bindings.native_identity_type_unpack import native_identity_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 

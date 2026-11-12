@@ -1658,7 +1658,7 @@ def _label_entries():
 
 
 # The public functions above are one call each into the compiled owner of
-# the metrics (bindings/metrics_cls_native.mojo, `family_mcls_*`).
+# the metrics (bindings/metrics_cls_native_unpack.mojo, `family_mcls_*`).
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 # Lane ne1-h-labels: operations pass as integer codes from the one native

@@ -2,9 +2,9 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.xcnn_native import xcnn_c
-from bindings.xseq_neural_native import xseq_labels, xseq_take
-from bindings.xcnn_bn_native import xcnn_bn_backward_dev
+from bindings.xcnn_native_pack import xcnn_c
+from bindings.xseq_neural_native_door import xseq_labels, xseq_take
+from bindings.xcnn_bn_native_door import xcnn_bn_backward_dev
 
 def bn_device_compile(args: PythonObject) raises -> PythonObject:
     xcnn_bn_backward_dev(args[0], args[1], args[2], args[3], args[4], Bool(py=args[5]), args[6])

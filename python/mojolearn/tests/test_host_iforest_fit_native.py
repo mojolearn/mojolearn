@@ -410,7 +410,7 @@ def test_iforest_fit_without_numpy_and_with_numpy_imported_later(numpy):
 def test_iforest_resident_record_is_native_and_follows_the_estimator():
     # The CPU resident forest's token, the fitted `_x` it was minted for and
     # its release lifetime are one native side record of the estimator
-    # (bindings/host_iforest_native.mojo, bindings/trees_side_records.mojo),
+    # (bindings/host_iforest_native_door.mojo, bindings/trees_side_records_unpack.mojo),
     # keyed by a weak reference; nothing of it is visible in `__dict__`. The
     # "old_token" and "resident_finalizer" cases above cover fields an older
     # build left in a saved instance. This test checks the behaviour.

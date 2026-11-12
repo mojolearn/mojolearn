@@ -33,8 +33,8 @@ from core.device_zero import enqueue_fill
 from std.memory import bitcast, unsafe_memcmp
 from std.os import abort, getenv
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
-from bindings.p3_lm_tokenizer_cpython import lm_try_index
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call

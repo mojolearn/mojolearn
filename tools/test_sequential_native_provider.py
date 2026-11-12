@@ -16,7 +16,7 @@ def test_shared_model_execution_closure_cannot_reenter_a_provider():
 
 
 def test_sequential_no_longer_dispatches_whole_model_through_cpython():
-    text = (ROOT / 'bindings/sequential_execution.mojo').read_text()
+    text = (ROOT / 'bindings/sequential_execution_pack.mojo').read_text()
     assert 'py_call_typed' not in text
     for entry in ('model_n_params', 'model_fit', 'model_fit_labels',
                   'model_predict', 'model_predict_labels'):
@@ -29,7 +29,7 @@ def test_sequential_no_longer_dispatches_whole_model_through_cpython():
 
 
 def test_legacy_packed_doors_and_native_dispatch_share_engine():
-    packed = (ROOT / 'providers/python/autograd_pyapi.mojo').read_text()
+    packed = (ROOT / 'providers/python/autograd_pyapi_door.mojo').read_text()
     direct = (ROOT / 'autograd/model_descriptor.mojo').read_text()
     for name in ('model_fit_native', 'model_predict_native', 'model_class_count'):
         assert name in packed and name in direct
@@ -42,7 +42,7 @@ def test_legacy_packed_doors_and_native_dispatch_share_engine():
 
 
 def test_program_owners_survive_native_execution():
-    source = (ROOT / 'providers/python/autograd_program_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_program_pyapi_door.mojo').read_text()
     replay = source.index('var r = program_execute_run[E, KIND](sid_i, plan, inputs^, profiled)')
     assert source.index('_ = arrays', replay) < source.index('host_arrays_py', replay)
     fit = source.index('var branches = program_fit_native[E, KIND](')

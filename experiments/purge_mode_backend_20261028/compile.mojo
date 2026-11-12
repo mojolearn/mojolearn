@@ -4,10 +4,10 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.public_attributes_native import public_attribute_c, public_attribute_generic_c
-from bindings.full_reset_params_native import full_reset_params_c
-from bindings.full_reset_constructor_native import full_reset_constructor_c
-from bindings.backend_public_native import backend_public_c
+from bindings.public_attributes_native_door import public_attribute_c, public_attribute_generic_c
+from bindings.full_reset_params_native_door import full_reset_params_c
+from bindings.full_reset_constructor_native_door import full_reset_constructor_c
+from bindings.backend_public_native_door import backend_public_c
 from bindings.numeric_profile_native import numeric_profile_c
 
 @export

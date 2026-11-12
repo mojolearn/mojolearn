@@ -12,7 +12,7 @@ from x_decomp.tsvd_descriptor_boundary_run import (
 )
 from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 

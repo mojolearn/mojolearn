@@ -16,7 +16,7 @@ class OffloadedByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
     def __init__(self, state, *, devices=(0,), logical_shards=1):
         # One native admission for every byte-LM schedule; this exact class,
         # admitted at import, selects the one-device layer-at-a-time session
-        # (bindings/parallel_byte_native.mojo).
+        # (bindings/parallel_byte_native_door.mojo).
         return _native_parallel_byte("init", (self, state, devices, logical_shards, False))
 
     def _open(self):

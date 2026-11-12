@@ -81,14 +81,14 @@ from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
 from bindings.py_balanced import py_type as _balanced_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding
-from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
-from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
+from bindings.py2mojo_cluster_est_pack import dbscan_core_arrays_host_binding
+from providers.python.core_py2mojo_rows_pyapi_pack import py2mojo_rows_host_binding
+from providers.python.svm_host_scale_gamma_host_pyapi_pack import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_finite_scan import host_finite_status

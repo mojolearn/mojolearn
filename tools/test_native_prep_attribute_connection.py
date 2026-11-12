@@ -111,7 +111,7 @@ def test_unknown_descriptor_and_other_families_are_not_blessed():
 
 
 def test_native_availability_never_calls_predicate_or_descriptor():
-    source = (ROOT / 'bindings/public_attributes_native.mojo').read_text()
+    source = (ROOT / 'bindings/public_attributes_native_door.mojo').read_text()
     assert '"PyFunction_GetCode"' in source
     assert '"availability"' in source
     assert '"transform"' in source

@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.qn_native import qn_c
+from bindings.qn_native_door import qn_c
 
 @export
 def PyInit__mojolearn_qn_public_compile() abi("C") -> PythonObject:

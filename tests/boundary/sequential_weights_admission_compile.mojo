@@ -2,7 +2,7 @@
 # Compile the actual sequential_c entry (Sequential's native public operations,
 # including load_state_dict's exact-type admission in bindings/sequential_weights.mojo).
 from std.python._cpython import PyObjectPtr
-from bindings.sequential_native import sequential_c
+from bindings.sequential_native_pack import sequential_c
 
 @export
 def sequential_weights_admission_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

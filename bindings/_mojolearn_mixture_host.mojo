@@ -38,7 +38,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
-from bindings.mixture_host_scoring import gmm_sample_binding
+from bindings.mixture_host_scoring_pack import gmm_sample_binding
 
 
 def mixture_host_numeric_mode_binding() raises -> PythonObject:

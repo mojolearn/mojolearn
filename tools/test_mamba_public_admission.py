@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ast.parse((ROOT / "python/mojolearn/_mamba_impl.py").read_text())
-NATIVE = (ROOT / "bindings/mamba_public_native.mojo").read_text()
+NATIVE = (ROOT / "bindings/mamba_public_native_door.mojo").read_text()
 
 
 def _method(cls, name):
@@ -124,5 +124,5 @@ def test_forward_and_step_admit_the_block_once():
     assert door.index('operation != "step"') < door.index("neural_block_fields(mods, values[0], context)")
     forward = NATIVE.split("def mamba3_forward(")[1].split("def mamba3_allocate(")[0]
     assert forward.index("neural_block_snapshot_prepared(mods, block, context)") < forward.index("_mamba3_forward_captured(")
-    prepared = (ROOT / "bindings/neural_block_public.mojo").read_text().split("def neural_block_snapshot_prepared(")[1]
+    prepared = (ROOT / "bindings/neural_block_public_door.mojo").read_text().split("def neural_block_snapshot_prepared(")[1]
     assert prepared.split("\n")[2].strip() == "var live = neural_block_fields(mods, block, context)"

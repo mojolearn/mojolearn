@@ -84,19 +84,19 @@ class ReferenceShardedNeighbors:
             As ``estimator.kneighbors(X)``; only ``indices`` when
             ``return_distance=False``.
         """
-        # One native call (bindings/parallel_shard_native.mojo `reference_query`).
+        # One native call (bindings/parallel_shard_native_door.mojo `reference_query`).
         return _native_parallel_shard('reference_query', (self, X, 'kneighbors', n_neighbors, return_distance))
 
     def predict(self, X):
         """Predict labels (classifier) or values (regressor) for ``X``, as ``estimator.predict(X)``.
         """
-        # One native call (bindings/parallel_shard_native.mojo `reference_query`).
+        # One native call (bindings/parallel_shard_native_door.mojo `reference_query`).
         return _native_parallel_shard('reference_query', (self, X, 'predict', None, True))
 
     def predict_proba(self, X):
         """Class probabilities for ``X`` from a ``KNeighborsClassifier``, as ``estimator.predict_proba(X)``.
         """
-        # One native call (bindings/parallel_shard_native.mojo `reference_query`).
+        # One native call (bindings/parallel_shard_native_door.mojo `reference_query`).
         return _native_parallel_shard('reference_query', (self, X, 'predict_proba', None, True))
 
     def close(self):

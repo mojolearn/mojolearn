@@ -2,9 +2,9 @@
 # One passive capture for ARIMA's series and up-to-three-dimensional exog.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type
-from bindings.classical_arrays import classical_is_array, classical_input, classical_address
-from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
-from providers.python.array_metadata_pyapi import array_shape_once, array_slot_once, array_owner_once
+from bindings.classical_arrays_door import classical_is_array, classical_input, classical_address
+from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, native_pandas_f32
+from providers.python.array_metadata_pyapi_door import array_shape_once, array_slot_once, array_owner_once
 from core.cast_in import cast_in_kind, NPY_FLOAT, NPY_HALF, NPY_DOUBLE
 
 

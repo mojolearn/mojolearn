@@ -17,24 +17,25 @@
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
 # outputs of 64 MB or more, same zeros and the same bits) is not consulted.
-from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from x_neighbors.descriptor_schema import xn_operation_id
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.admitted_family import admit_family
-from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_family_door import admit_family
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
-from bindings.classical_arrays import classical_address
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.family_common import family_call, family_isinstance, family_str, family_array
+from bindings.classical_arrays_door import classical_address
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.family_common_unpack import family_isinstance, family_str
+from bindings.family_common_pack import family_call, family_array
 from bindings.cfb_spectral_door import _as_i32
 from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields, host_sparse_dense
-from bindings.cfb_sparse_read import cfb_sparse_triples
-from bindings.neighbors_ann_native import ann_keep_array
-from bindings.mcls_cluster import mcls_cluster_operation
-from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
+from bindings.cfb_sparse_read_unpack import cfb_sparse_triples
+from bindings.neighbors_ann_native_door import ann_keep_array
+from bindings.mcls_cluster_door import mcls_cluster_operation
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from neighbors.neighbors_graph_run import (
     XnOpRequest, xn_rows_match_check, xn_relabel_request, xn_relabel_decode, xn_fill_request,
     xn_iota_request, xn_graph_square_check, xn_graph_triples_check, xn_graph_weights_check,
@@ -47,8 +48,8 @@ from neighbors.neighbors_graph_run import (
     xn_svgp_fit_decode, xn_svgp_definite_check, xn_svgp_predict_request, xn_kernel_rbf_request,
     xn_unary_scale_request, xn_unary_shift_request, xn_matmul_request, xn_svgp_var_request,
 )
-from providers.python.estimator_binding_pyapi import estimator_binding, estimator_binding_mode
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
+from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
+from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 from bindings.py_optional import py_or_none, py_present

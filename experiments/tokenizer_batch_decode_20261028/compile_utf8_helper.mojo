@@ -1,6 +1,6 @@
 # Compile only: the exact bytes/bytearray helper is also used by the host door.
 from std.python import PythonObject
-from bindings.tokenizer_public_native import tokenizer_decode_utf8
+from bindings.tokenizer_public_native_door import tokenizer_decode_utf8
 
 
 def main() raises:

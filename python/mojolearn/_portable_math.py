@@ -140,7 +140,7 @@ def prod(values, *, start=1):
 def fsum(values):
     """Exact finite sum followed by one nearest/even binary64 rounding, with
     math.fsum's NaN and infinity rules (a zero sum is +0.0). Lane py-runtime
-    round 3: the core helper `fsum_f64` (bindings/array_helpers.mojo,
+    round 3: the core helper `fsum_f64` (bindings/array_helpers_pack.mojo,
     Shewchuk's partials in Mojo); the `math.fsum` fast path and the Python
     big-integer fold are gone. Callers pass k-sized lists (estimator
     weights, class priors)."""
@@ -164,9 +164,9 @@ _POW_CONTEXT = decimal.Context(prec=50, rounding=decimal.ROUND_HALF_EVEN, Emax=9
 # The scalar helpers no product path called (isclose, comb, frexp, ldexp,
 # powi, powr, nsum, exp_array and the standard normal erfc / normal_cdf /
 # normal_inv_cdf) are deleted (lane pyout-runtime-boundary, 2026-11-11). Their
-# native definitions are the ones the product runs: bindings/normal_dist_helpers.mojo
-# (erfc64, normal_cdf64, normal_inv_cdf64), bindings/jl_native.mojo (the exact
-# cube), bindings/array_helpers.mojo (nsum_f64) and the binding's own powers.
+# native definitions are the ones the product runs: bindings/normal_dist_helpers_pack.mojo
+# (erfc64, normal_cdf64, normal_inv_cdf64), bindings/jl_native_pack.mojo (the exact
+# cube), bindings/array_helpers_pack.mojo (nsum_f64) and the binding's own powers.
 
 
 _SQRT2 = 1.4142135623730951  # sqrt(2.0), correctly rounded

@@ -6,8 +6,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ROOT / "python/mojolearn/lm_corpus.py"
 NATIVE = ROOT / "bindings/lm_corpus_public_native_door.mojo"
-METADATA = ROOT / "bindings/lm_corpus_metadata.mojo"
-SCALARS = ROOT / "bindings/lm_corpus_scalars.mojo"
+METADATA = ROOT / "bindings/lm_corpus_metadata_door.mojo"
+SCALARS = ROOT / "bindings/lm_corpus_scalars_unpack.mojo"
 # lane rs-embedding-bytelm: the typed floating product is RUN code.
 SCALARS_RUN = ROOT / "training/lm_corpus_scalars_run.mojo"
 

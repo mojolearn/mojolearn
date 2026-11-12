@@ -3,7 +3,7 @@
 # callee raises (another native entry's ValueError/TypeError/... refusal), so
 # the caller's door re-raises that class instead of a bare Exception. Kept out
 # of bindings/py_balanced.mojo so only the doors that use it rebuild.
-from bindings.native_loaded_module import _loaded_lookup
+from bindings.native_loaded_module_door import _loaded_lookup
 from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr

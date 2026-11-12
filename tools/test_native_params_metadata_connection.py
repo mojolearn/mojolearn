@@ -102,7 +102,7 @@ class NativeParamsConnection(unittest.TestCase):
         self.assertTrue(context['ready'])
 
     def test_native_owner_uses_reference_assignment_and_recursion_guard(self):
-        source = (ROOT / 'bindings/params_metadata_native.mojo').read_text()
+        source = (ROOT / 'bindings/params_metadata_native_door.mojo').read_text()
         self.assertIn('"Py_EnterRecursiveCall"', source)
         self.assertIn('"Py_LeaveRecursiveCall"', source)
         self.assertIn('py_setitem(out, name, value)', source)

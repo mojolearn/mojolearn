@@ -4,10 +4,10 @@ the TEST ORACLE of the native prep owners (lane pyout-small-families,
 2026-11-11).
 
 Every prep public method is one native call: the native owners build the
-program and the shared runner runs it (bindings/prep_classify_prog.mojo
+program and the shared runner runs it (bindings/prep_classify_prog_door.mojo
 `ClsProg`, bindings/prep_encode_native.mojo `_category_block` / `_codes`,
 bindings/prep_select_native.mojo, bindings/prep_labels_native.mojo,
-bindings/arena_prog_native.mojo). These Python copies had no product caller,
+bindings/arena_prog_native_door.mojo). These Python copies had no product caller,
 only the door tests that compare the native bits against them, so they left
 `mojolearn/_expansion_prep.py` for here (tests never ship in the wheel).
 
@@ -82,7 +82,7 @@ _R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 
 
 #: the smallest read that is a view (the smallest mapped block, 2**18 words,
-#: is bindings/arena_prog_native.mojo PREP_MAP_MIN_WORDS)
+#: is bindings/arena_prog_native_door.mojo PREP_MAP_MIN_WORDS)
 _VIEW_MIN_WORDS = 2 ** 20
 
 
@@ -250,7 +250,7 @@ class _Prog:
         a CPU-only install): one native call that owns the arena layout and
         stores, the input copies, resident, direct and device-gathered
         inputs, the range descriptors and the run
-        (bindings/arena_prog_native.mojo). The program's refusals
+        (bindings/arena_prog_native_door.mojo). The program's refusals
         (`_after`) run before its first result is read."""
         # The runner admits only the product record class; the record shares
         # this builder's attribute dict, so the fields it fills land here.

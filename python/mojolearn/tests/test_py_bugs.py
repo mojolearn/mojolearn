@@ -219,7 +219,7 @@ def test_python_fold_spy_is_refused_before_any_callback(operation):
 
 def test_rnn_schedule_bound_is_2_31_not_2_24():
     # the epoch orders are built on the executor by rnn_fit; the schedule
-    # scalars come from the native fit (bindings/xseq_neural_native.mojo),
+    # scalars come from the native fit (bindings/xseq_neural_native_door.mojo),
     # and the 2^31 - 1 bound on epochs * n (not the old float32 2^24 cap)
     # still holds: refused before any weight is trained
     np = pytest.importorskip("numpy")

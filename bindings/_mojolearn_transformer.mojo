@@ -498,7 +498,7 @@ def transformer_session_backward_binding(
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API, BLOCK_SESSIONS
 from core.transformer_block_session import TransformerBlockSession, transformer_block_session_of
 from transformer.neural_entry_device import publish_neural_transformer_device
-from providers.python.causal_session_handles_pyapi import causal_session_handles_type
+from providers.python.causal_session_handles_pyapi_unpack import causal_session_handles_type
 
 
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """LabelEncoder, LabelBinarizer and MultiLabelBinarizer run each public
 method as ONE native call (bindings/prep_labels_native.mojo through the
-family door bindings/prep_owner_native.mojo). The source checks run
+family door bindings/prep_owner_native_door.mojo). The source checks run
 without bindings; the oracle checks compare every public method's output
 bytes and fitted attributes with the former Python routes
 (tests/_former_prep_labels.py) and need the built bindings."""

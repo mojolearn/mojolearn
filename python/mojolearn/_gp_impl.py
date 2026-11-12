@@ -401,7 +401,7 @@ _GP_FORMAT = "mojolearn-gp-1"
 
 # The compiled saved-model owner, connected once at import:
 # GaussianProcessRegressor's `save` and `load` are one native call each
-# (bindings/archive_schema_native.mojo writes the schema registered below
+# (bindings/archive_schema_native_door.mojo writes the schema registered below
 # the class; host_archive_native.mojo builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled owner of the public methods, connected once at import:
@@ -414,7 +414,7 @@ _native_family_bridge.connect_bindings("_mojolearn_gp")
 #: ("leaf", kind, param field or None for 0.0, length-scale field or None),
 #: ("pair", left, right, op field) or ("nodes", the saved node list). The
 #: compiled save reads a fitted kernel through it
-#: (bindings/archive_schema_native.mojo "kernel").
+#: (bindings/archive_schema_native_door.mojo "kernel").
 _KERNEL_NODES = {
     ConstantKernel: ("leaf", _K_CONST, "constant_value", None),
     WhiteKernel: ("leaf", _K_WHITE, "noise_level", None),
@@ -864,7 +864,7 @@ _native_archive_bridge.register(GaussianProcessRegressor, _GP_FORMAT, (
 ), host_archive_gp_saved_kernel=_SavedKernel)
 
 
-# The fixed tables the native owner reads (bindings/gp_common_native.mojo):
+# The fixed tables the native owner reads (bindings/gp_common_native_unpack.mojo):
 # the kernel classes' node layouts and bound fields, the default kernel's
 # classes, the optimizer's stop words, the mode codes, the seed bound and
 # StandardScaler with its connected context (normalize_y).

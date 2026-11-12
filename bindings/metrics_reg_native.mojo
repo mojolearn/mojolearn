@@ -15,25 +15,36 @@
 # Python `words(out, 2, "d")` read them. Same program, same kernels: the
 # bits do not move.
 from std.memory import unsafe_memcpy, bitcast
-from bindings.admitted_family import admit_family, admit_family_f64
-from bindings.native_loaded_module import native_loaded_module
+from bindings.admitted_family_door import admit_family, admit_family_f64
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
-from providers.python.metrics_vector_input_pyapi import metric_vector_exact
-from providers.python.metrics_matrix_input_pyapi import metric_reg_target, metric_sample_weights
+from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact
+from providers.python.metrics_matrix_input_pyapi_unpack import metric_sample_weights
+from providers.python.metrics_matrix_input_pyapi_pack import metric_reg_target
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_pandas import classical_admit_value
-from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
-from bindings.classical_validate import classical_view
-from bindings.arena_prog_native import _metrics_run_plan
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.metrics_native_support_door import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
+from bindings.classical_validate_unpack import classical_view
+from bindings.arena_prog_native_door import _metrics_run_plan
 from bindings.arena_prog_run import MetricArenaOwner
-from bindings.metrics_plan_admission import MetricPlanOpcodes
+from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_isinstance, family_call, family_call_kw,
-    family_array, family_shape_repr, family_min,
+from bindings.family_common_unpack import (
+    FAMILY_F32P,
+    FAMILY_F64P,
+    family_repr,
+    family_str,
+    family_isinstance,
+    family_shape_repr,
+    family_min,
+)
+from bindings.family_common_pack import (
+    family_call,
+    family_call_kw,
+    family_array,
 )
 from core.family_cast_impl import family_max_f32
 from core.host_finite_scan import host_all_finite_f32
@@ -627,7 +638,7 @@ def _regression_report(args: PythonObject, context: PythonObject) raises -> Pyth
     var b = native_loaded_module("builtins")
     if py_type(args[5]) is not b.str or String(args[5]) != "identical":
         raise Error("regression_report requires numeric_mode='identical'")
-    from bindings.host_inference_scalars import host_inference_scalar
+    from bindings.host_inference_scalars_door import host_inference_scalar
     host_inference_scalar(args[4], context, True)
     var r = _reg_new(args, args[3], "regression_report", False, context)
     r.program(0.0, context)

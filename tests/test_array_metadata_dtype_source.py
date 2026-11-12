@@ -2,7 +2,7 @@
 from pathlib import Path
 
 
-SOURCE = Path(__file__).resolve().parents[1] / 'providers/python/array_metadata_pyapi.mojo'
+SOURCE = Path(__file__).resolve().parents[1] / 'providers/python/array_metadata_pyapi_door.mojo'
 
 
 def test_dtype_overrides_are_optional_and_reject_before_cast_descriptor():

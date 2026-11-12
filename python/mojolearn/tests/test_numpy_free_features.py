@@ -94,7 +94,7 @@ def test_token_batch_prefetch_is_ordered_bounded_and_propagates(monkeypatch, tmp
 @pytest.mark.parametrize('shard_rows', [1, 3, 20])
 @pytest.mark.parametrize('fault', [None, 'drop_result', 'reverse_results'])
 def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, shard_rows, fault):
-    # transform_rbf_sampler is one native call (bindings/parallel_shard_native.mojo);
+    # transform_rbf_sampler is one native call (bindings/parallel_shard_native_door.mojo);
     # it needs no NumPy, joins row blocks in input order, and its checks or
     # the bytes catch a dropped or reordered block (the transport negative
     # control, bindings/parallel_shard_common_door.mojo `shard_map`).

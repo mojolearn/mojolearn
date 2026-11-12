@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Direct Program construction shares the capture owner's native boundary.
 
-The owner (providers/python/autograd_program_owner_pyapi.mojo
+The owner (providers/python/autograd_program_owner_pyapi_door.mojo
 program_initialize_owner) admits exact metadata only: the handle, shapes,
 parameters and kinds are exact native integers (or NumPy integer scalars) in
 native lists or tuples, so no ``__int__``/``__index__``/``__iter__`` of a

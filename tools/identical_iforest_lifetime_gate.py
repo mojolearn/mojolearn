@@ -16,8 +16,8 @@ import sys
 
 #: Instance fields an older build kept for the resident forest. The token,
 #: the training matrix it was minted for and its release lifetime are now one
-#: native side record of the estimator (bindings/trees_side_records.mojo,
-#: bindings/trees_public_iforest.mojo `_run`), keyed by a weak reference and
+#: native side record of the estimator (bindings/trees_side_records_unpack.mojo,
+#: bindings/trees_public_iforest_door.mojo `_run`), keyed by a weak reference and
 #: invisible to Python, so this gate checks the observable behaviour.
 OLD_FIELDS = ("_if_token", "_if_lifetime", "_if_finalizer")
 

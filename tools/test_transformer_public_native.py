@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "python/mojolearn/_transformer_impl.py"
-NATIVE = (ROOT / "bindings/transformer_public_native.mojo").read_text()
+NATIVE = (ROOT / "bindings/transformer_public_native_door.mojo").read_text()
 
 
 def test_public_state_methods_are_one_native_call():
@@ -54,12 +54,12 @@ def test_tape_api_is_gone():
 
 def test_public_state_uses_connected_modules_without_import_callbacks():
     assert 'Python.import_module(' not in NATIVE
-    assert 'from bindings.native_loaded_module import native_loaded_module' in NATIVE
+    assert 'from bindings.native_loaded_module_door import native_loaded_module' in NATIVE
     # Per-operation NativeModules.module() resolves through native_loaded_module.
     assert 'mods.module("builtins")' in NATIVE
-    loaded = (ROOT / "bindings/native_loaded_module.mojo").read_text()
+    loaded = (ROOT / "bindings/native_loaded_module_door.mojo").read_text()
     assert 'var module = native_loaded_module(name)' in loaded.split("struct NativeModules(Movable):", 1)[1]
-    allocation = (ROOT / "bindings/generation_buffers.mojo").read_text()
+    allocation = (ROOT / "bindings/generation_buffers_door.mojo").read_text()
     initialization = allocation.split("def generation_initialize_binding", 1)[1].split("def py_ints", 1)[0]
     assert 'Python.import_module(' not in initialization
     assert 'native_loaded_module("builtins")' in initialization

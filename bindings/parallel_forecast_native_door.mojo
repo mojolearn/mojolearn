@@ -16,21 +16,21 @@ compiled entries on the same words, so no bit moves.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map, process_pool_close,
     process_worker_connect, process_worker_next, process_send,
 )
 from bindings.native_transport_door import transport_close
-from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
-from bindings.tsa_admission import tsa_hw_fields
-from bindings.tsa_arima_native import arima_predict, arima_fit, _series_major
+from bindings.tsa_hw_native_door import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
+from bindings.tsa_admission_door import tsa_hw_fields
+from bindings.tsa_arima_native_door import arima_predict, arima_fit, _series_major
 from bindings.parallel_shard_common_door import (
     shard_ranges,
     shard_devices,

@@ -4,7 +4,7 @@
 # Python lock or callback. Legacy exact RLock instances remain explicit until
 # their caller is migrated; arbitrary lock protocols are never invoked.
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type

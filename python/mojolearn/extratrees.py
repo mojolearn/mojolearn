@@ -99,7 +99,7 @@ from ._forest_protocol import ForestProtocol, forest_estimator
 _MODEL_FORMAT = "mojolearn-extratrees-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after `_ExtraTreesBase`;
 # bindings/host_archive_native_door.mojo `host_archive_public_forest` builds the
 # loaded model).
@@ -223,7 +223,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
 
 
 #: The saved formats `load` reads, and the save schema of both extra-trees
-#: classes (bindings/archive_schema_native.mojo): the members, dtypes and
+#: classes (bindings/archive_schema_native_door.mojo): the members, dtypes and
 #: refusals the 0.8.55 Python `save` wrote.
 _MODEL_FORMATS = (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1")
 _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (

@@ -4039,7 +4039,7 @@ def feistel_order(n, seed, epoch, shuffle=True):
 
 class InitStream:
     """The restatement of ours' seeded init stream (the native `XseqStream`,
-    bindings/xseq_native_common.mojo: the base binding's counter-based
+    bindings/xseq_native_common_door.mojo: the base binding's counter-based
     `uniform_init_f32` draws plus a splitmix64 child seed), so an opponent
     starts from the SAME initial weights. Moved here from the product's
     `_buffer.InitStream` (lane pyout-runtime-boundary, 2026-11-11), which no
@@ -4081,7 +4081,7 @@ def ours_initial_state(lane, D):
     X, y = D["X"], np.asarray(D["y"])
     n = int(X.shape[0])
     if s["kind"] == "seqmodel":
-        # the recurrent fit's first steps (bindings/xseq_neural_native.mojo `_rnn_fit`), restated
+        # the recurrent fit's first steps (bindings/xseq_neural_native_door.mojo `_rnn_fit`), restated
         # in its order: every parameter U(-1/sqrt(H), 1/sqrt(H)) in layout order from the seeded
         # stream, then the schedule seed
         est.n_features_in_ = int(np.asarray(X).shape[2])

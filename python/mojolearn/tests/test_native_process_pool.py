@@ -202,7 +202,7 @@ def test_cpu_cooperative_multidevice_refusal_has_no_children():
 
 # REMOVED 2026-11-12 (lane parallel-payload-transport): the codec-framed addressed
 # 'call' operation and its test; addressed requests are typed frames now
-# (bindings/native_process_wire.mojo), exercised by the ParallelCausalLM pool.
+# (bindings/native_process_wire_door.mojo), exercised by the ParallelCausalLM pool.
 
 
 @pytest.mark.parametrize('flag', ['0', '1'])

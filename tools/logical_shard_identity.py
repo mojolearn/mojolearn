@@ -93,7 +93,7 @@ MAX_LANES = 16
 #   lasso-cd     row leaves of 128 (bench/gemm_shapes.mojo contract_leaf_size), k <= 128 stays single
 #                (solver/multi_gpu.mojo:63): rows >= 2*128 + 1; only the column mean / norm passes before the
 #                Gram sweeps reach it
-#   tsvd-gram    TruncatedSVD(algorithm="covariance_eigh") through fit_gram_estimator: bindings/tsvd_native.mojo
+#   tsvd-gram    TruncatedSVD(algorithm="covariance_eigh") through fit_gram_estimator: bindings/tsvd_native_door.mojo
 #                `_exact` -> `tsvd_fit_explained` (bindings/_mojolearn_estimators.mojo) -> decomposition/estimator.mojo
 #                plan-less `gemm_tn` -> core/gemm.mojo `gram_plan_current()` -> identical split-K arm while
 #                features <= GRAM_MAX_COLS = 128 (core/gram_splitk.mojo `gram_splitk_applies`) -> core/gram_multi_gpu.mojo

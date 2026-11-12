@@ -1,0 +1,629 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The GPU base binding's shared helpers on the device (lane fam2-shared,
+2026-10-04; cpu-gpu audit case 10).
+
+Each `<name>_binding` here has the name and the Python signature of the host
+helper in `bindings/hotpath_helpers.mojo` it replaces in
+`bindings/_mojolearn.mojo` (the GPU base binding imports these instead; the
+core host binding keeps the host helpers, which are the host column). A
+binding runs the device twin of `core/hotpath_device.mojo` when its switch is
+on and the call is one the twin covers; otherwise, and whenever the twin
+reports an input the host helper refuses, it calls the host helper, which
+raises its own words. Same bytes either way: integers, comparisons and bit
+moves.
+
+Switches (IDENTICAL builds, default ON; `-D MOJOLEARN_IDN_ALL_OFF` turns all
+five off):
+  IDN_HPDEV_ELEM    -D MOJOLEARN_IDN_HPDEV_ELEM_OFF    equal_elements,
+                    gather_i32, threshold_labels_i64, bincount_i64,
+                    count_mask_u8, fold_pair_f32, gather_i64 and gather_f64
+                    (`hpdev_try_gather_u64`, called by the base binding)
+  IDN_HPDEV_LABELS  -D MOJOLEARN_IDN_HPDEV_LABELS_OFF  encode_labels_<dtype>
+                    (`hpdev_try_encode_labels`, called by the base binding)
+  IDN_HPDEV_FOLDS   -D MOJOLEARN_IDN_HPDEV_FOLDS_OFF   fold_ids,
+                    select_fold_i64, select_folds_i64, select_mask_u8_i64,
+                    mask_from_indices_u8, arange_i64, leave_range_i64,
+                    check_indices_i64, indices_overlap_i64, first_seen_i32,
+                    strat_fold_assign_i32
+  IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
+                    max, argmax and integral test (the sequential float
+                    sum stays the host helper's)
+  IDN_HPDEV_INIT    -D MOJOLEARN_IDN_HPDEV_INIT_OFF    uniform_init_f32
+  IDN_HPDEV_ISUM    -D MOJOLEARN_IDN_HPDEV_ISUM_OFF    reduce_stat's exact
+                    integer sum (lane fix-s1-shared)
+  IDN_HPDEV_NORMAL  -D MOJOLEARN_IDN_HPDEV_NORMAL_OFF  normal_init_f32
+                    (lane fix-s1-shared)
+  IDN_HPDEV_CAST    -D MOJOLEARN_IDN_HPDEV_CAST_OFF    cast_elements between
+                    two different dtypes (lane fix-s1-shared; a same-dtype
+                    call is a byte copy and stays the host helper's)
+
+Input fixes (lane cpu2-l1-input, 2026-10-04; cpu re-audit lane L1). Not
+optimizations but the owner's rule (no CPU data work in a GPU fit, transform
+or predict, any mode), so there is NO `_OFF` arm and `MOJOLEARN_IDN_ALL_OFF`
+does not turn them off; only the sabotage builds keep the host loops. The
+host loops remain the host column (core host binding, CPU inference
+bindings) and the refusal path. Device code: `core/input_device.mojo`.
+  cast_f64_to_f32           `hpdev_try_cast_f64_to_f32` (was the candidate
+                            arm IDN_HPDEV_CAST_F64, now the default)
+  all_finite_f32/_f64       `hpdev_try_all_finite`
+  transpose_f32,
+  cast_colmajor_f64_to_f32  `hpdev_try_transpose_to_f32`
+  strided_copy_bytes, check_lengths_i64, ragged_rows_bytes
+                            the `*_binding`s below (host fallback:
+                            `bindings/array_helpers.mojo`)
+The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
+negative control still answers wrong on purpose.
+"""
+
+from std.math import isfinite
+from std.memory import bitcast
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from std.sys.compile import is_defined
+
+from bindings.array_helpers_pack import (
+    check_lengths_i64_binding as host_check_lengths_i64_binding,
+    ragged_rows_bytes_binding as host_ragged_rows_bytes_binding,
+    strided_copy_bytes_binding as host_strided_copy_bytes_binding,
+)
+from bindings.hotpath_helpers_door import (
+    HOTPATH_SABOTAGE,
+    arange_i64_binding as host_arange_i64_binding,
+    count_mask_u8_binding as host_count_mask_u8_binding,
+    first_seen_i32_binding as host_first_seen_i32_binding,
+    fold_ids_binding as host_fold_ids_binding,
+    bincount_i64_binding as host_bincount_i64_binding,
+    check_indices_i64_binding as host_check_indices_i64_binding,
+    equal_elements_binding as host_equal_elements_binding,
+    indices_overlap_i64_binding as host_indices_overlap_i64_binding,
+    leave_range_i64_binding as host_leave_range_i64_binding,
+    normal_init_f32_binding as host_normal_init_f32_binding,
+    threshold_labels_i64_binding as host_threshold_labels_i64_binding,
+    uniform_init_f32_binding as host_uniform_init_f32_binding,
+)
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.hotpath_device import (
+    HPD_MAX_N,
+    device_normal_init_f32,
+    device_uniform_init_f32,
+)
+from core.input_device import (
+    IND_MAX_N,
+    device_check_lengths,
+    device_ragged_rows,
+)
+from core.hotpath_device_run import hpdev_strided_copy_run
+from core.neural_context import process_ctx
+from core.label_device_steps import (
+    LABELS_DEVICE_BASE as _HPDEV_BASE, LABELS_DEVICE_ELEM as IDN_HPDEV_ELEM,
+    LABELS_DEVICE_REDUCE as IDN_HPDEV_REDUCE, LABELS_DEVICE_ISUM as IDN_HPDEV_ISUM,
+    LABELS_DEVICE_CAST as IDN_HPDEV_CAST, LABELS_DEVICE_INPUT as _HPDEV_INPUT,
+    LABELS_DEVICE_CONTEXT as _HPDEV_SLOT, labels_device_reduce, labels_device_cast,
+    labels_device_threshold, labels_device_threshold_eligible,
+)
+from bindings.labels_stat_boundary_pack import labels_stat_pack
+from core.base_helpers_device import (
+    IDN_HPDEV_FOLDS, check_indices_i64_device_run, equal_elements_device_run, bincount_i64_device_run,
+    bincount2_i32_device_run,
+)
+from core.hotpath_impl import HpStat
+# lane calltable-msel: the fold, index, mask and gather bodies these exports
+# unpack for are the runs the model-selection helper table publishes.
+from core.msel_helpers_device import (
+    arange_i64_device_run, count_mask_u8_device_run, first_seen_i32_device_run, fold_ids_device_run,
+    indices_overlap_i64_device_run, leave_range_i64_device_run, mask_from_indices_u8_device_run,
+    msel_gather_device_run, select_fold_i64_device_run, select_folds_i64_device_run,
+    select_mask_u8_i64_device_run, strat_fold_assign_i32_device_run,
+)
+
+
+# IDN_HPDEV_LABELS lives in core/hotpath_device_run.mojo beside hpdev_try_encode_labels.
+# IDN_HPDEV_FOLDS lives in core/base_helpers_device.mojo (imported above),
+# beside the typed runs the base helper table publishes.
+comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
+#: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
+#: lane fix-s1-shared: cast_elements between two dtypes on the device.
+#: lane fix-s1-shared: normal_init_f32 drawn on the device.
+comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"]()
+#: lane cpu2-l1-input: the input fixes (see the module docstring). On in
+#: every numeric mode; only the sabotage builds keep the host loops.
+
+#: The base binding's process-lifetime context slot
+#: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
+#: DeviceContext.
+
+#: The stratified helpers' table bound lives beside their runs
+#: (core/msel_helpers_device.mojo MSEL_HPDEV_MAX_TABLE, lane calltable-msel).
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_ELEM
+# ---------------------------------------------------------------------------
+
+
+def equal_elements_binding(
+    a_addr: PythonObject, b_addr: PythonObject, code: PythonObject,
+    n: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """`equal_elements` (see `bindings/hotpath_helpers.mojo`), on the device:
+    `core/base_helpers_device.mojo::equal_elements_device_run`, the body the
+    base helper table publishes."""
+    var count = Int(py=n)
+    var c = Int(py=code)
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    var d = Int(py=dst_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = equal_elements_device_run(a, b, c, count, d)
+    return PythonObject(status)
+
+
+def gather_i32_binding(table_addr: PythonObject, n_table: PythonObject, codes_addr: PythonObject,
+    n: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
+    """`gather_i32` on the device
+    (`core/msel_helpers_device.mojo::msel_gather_device_run`, the body the
+    model-selection helper table publishes)."""
+    var count = Int(py=n)
+    var classes = Int(py=n_table)
+    var table = Int(py=table_addr)
+    var codes = Int(py=codes_addr)
+    var dst = Int(py=dst_addr)
+    var result = 0
+    with GILReleased(Python()):
+        result = msel_gather_device_run(0, table, classes, codes, count, dst)
+    return PythonObject(result)
+
+
+def threshold_labels_i64_binding(
+    src_addr: PythonObject, code: PythonObject, n: PythonObject, thr: PythonObject,
+    strict: PythonObject, below: PythonObject, above: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """`threshold_labels_i64`, on the device (binary64 words)."""
+    comptime if IDN_HPDEV_ELEM:
+        var count = Int(py=n)
+        var c = Int(py=code)
+        var s = Int(py=src_addr)
+        var d = Int(py=dst_addr)
+        if labels_device_threshold_eligible(s, c, count, d):
+            var t = Float64(py=thr)
+            var st = Int(py=strict) != 0
+            var lo = Int64(Int(py=below))
+            var hi = Int64(Int(py=above))
+            with GILReleased(Python()):
+                _ = labels_device_threshold(s, c, count, t, st, lo, hi, d)
+            return PythonObject(0)
+    return host_threshold_labels_i64_binding(src_addr, code, n, thr, strict, below, above, dst_addr)
+
+
+def bincount_i64_binding(
+    src_addr: PythonObject, code: PythonObject, n: PythonObject, k: PythonObject,
+    counts_addr: PythonObject, accumulate: PythonObject,
+) raises -> PythonObject:
+    """`bincount_i64`, on the device; a value out of range reruns the host
+    helper, which raises (`core/base_helpers_device.mojo::bincount_i64_device_run`,
+    the body the base helper table publishes)."""
+    var count = Int(py=n)
+    var kk = Int(py=k)
+    var c = Int(py=code)
+    var s = Int(py=src_addr)
+    var ca = Int(py=counts_addr)
+    var acc = Int(py=accumulate) != 0
+    var status = 0
+    with GILReleased(Python()):
+        status = bincount_i64_device_run(s, c, count, kk, ca, acc)
+    return PythonObject(status)
+
+
+def bincount2_i32_binding(
+    a_addr: PythonObject, b_addr: PythonObject, dims: PythonObject, counts_addr: PythonObject,
+) raises -> PythonObject:
+    """dims = [n, ka, kb]: int64 counts[b * ka + a] over the n rows of two
+    int32 code columns, on the device (lane cpu4-python: StratifiedGroupKFold's
+    group x class table; there is no host route in this binding). Raises when
+    a code is outside [0, ka) x [0, kb)."""
+    if len(dims) != 3:
+        raise Error("bincount2_i32: dims [n, ka, kb]")
+    var count = Int(py=dims[0])
+    var ka = Int(py=dims[1])
+    var kb = Int(py=dims[2])
+    var ca = Int(py=counts_addr)
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = bincount2_i32_device_run(a, b, count, ka, kb, ca)
+    return PythonObject(status)
+
+
+def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """`count_mask_u8`, on the device
+    (`core/msel_helpers_device.mojo::count_mask_u8_device_run`)."""
+    var rows = Int(py=n)
+    var m = Int(py=mask_addr)
+    var c = 0
+    with GILReleased(Python()):
+        c = count_mask_u8_device_run(m, rows)
+    return PythonObject(c)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_LABELS
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_FOLDS
+# ---------------------------------------------------------------------------
+
+
+def fold_ids_binding(
+    codes_addr: PythonObject, n: PythonObject, n_classes: PythonObject,
+    n_splits: PythonObject, counts_addr: PythonObject, fold_addr: PythonObject,
+    fold_counts_addr: PythonObject,
+) raises -> PythonObject:
+    """`fold_ids`, on the device (`core/msel_helpers_device.mojo::fold_ids_device_run`,
+    the body the model-selection helper table publishes)."""
+    var rows = Int(py=n)
+    var k = Int(py=n_classes)
+    var splits = Int(py=n_splits)
+    var ca = Int(py=codes_addr)
+    var na = Int(py=counts_addr)
+    var fa = Int(py=fold_addr)
+    var fca = Int(py=fold_counts_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = fold_ids_device_run(ca, rows, k, splits, na, fa, fca)
+    return PythonObject(status)
+
+
+def select_fold_i64_binding(
+    fold_addr: PythonObject, n: PythonObject, fold: PythonObject,
+    test_addr: PythonObject, train_addr: PythonObject,
+) raises -> PythonObject:
+    """`select_fold_i64`, on the device
+    (`core/msel_helpers_device.mojo::select_fold_i64_device_run`)."""
+    var rows = Int(py=n)
+    var fa = Int(py=fold_addr)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var want = Int(py=fold)
+    var n_test = 0
+    with GILReleased(Python()):
+        n_test = select_fold_i64_device_run(fa, rows, want, ta, ra)
+    return PythonObject(n_test)
+
+
+def select_folds_i64_binding(
+    fold_addr: PythonObject, n: PythonObject, k: PythonObject, sizes_addr: PythonObject,
+    test_addrs_addr: PythonObject, train_addrs_addr: PythonObject,
+) raises -> PythonObject:
+    """`select_folds_i64`, on the device
+    (`core/msel_helpers_device.mojo::select_folds_i64_device_run`)."""
+    var rows = Int(py=n)
+    var splits = Int(py=k)
+    var fa = Int(py=fold_addr)
+    var sa = Int(py=sizes_addr)
+    var ta = Int(py=test_addrs_addr)
+    var ra = Int(py=train_addrs_addr)
+    var bad = -1
+    with GILReleased(Python()):
+        bad = select_folds_i64_device_run(fa, rows, splits, sa, ta, ra)
+    return PythonObject(bad)
+
+
+def select_mask_u8_i64_binding(
+    mask_addr: PythonObject, n: PythonObject, test_addr: PythonObject, train_addr: PythonObject,
+) raises -> PythonObject:
+    """`select_mask_u8_i64`, on the device
+    (`core/msel_helpers_device.mojo::select_mask_u8_i64_device_run`)."""
+    var rows = Int(py=n)
+    var ma = Int(py=mask_addr)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var n_test = 0
+    with GILReleased(Python()):
+        n_test = select_mask_u8_i64_device_run(ma, rows, ta, ra)
+    return PythonObject(n_test)
+
+
+def mask_from_indices_u8_binding(
+    idx_addr: PythonObject, k: PythonObject, n: PythonObject, mask_addr: PythonObject,
+) raises -> PythonObject:
+    """`mask_from_indices_u8`, on the device
+    (`core/msel_helpers_device.mojo::mask_from_indices_u8_device_run`)."""
+    var count = Int(py=k)
+    var rows = Int(py=n)
+    var ia = Int(py=idx_addr)
+    var ma = Int(py=mask_addr)
+    var set = 0
+    with GILReleased(Python()):
+        set = mask_from_indices_u8_device_run(ia, count, rows, ma)
+    return PythonObject(set)
+
+
+def arange_i64_binding(
+    dst_addr: PythonObject, start: PythonObject, n: PythonObject,
+) raises -> PythonObject:
+    """`arange_i64`, on the device
+    (`core/msel_helpers_device.mojo::arange_i64_device_run`)."""
+    var count = Int(py=n)
+    var d = Int(py=dst_addr)
+    var lo = Int(py=start)
+    var status = 0
+    with GILReleased(Python()):
+        status = arange_i64_device_run(d, lo, count)
+    return PythonObject(status)
+
+
+def leave_range_i64_binding(
+    n: PythonObject, lo: PythonObject, hi: PythonObject,
+    train_addr: PythonObject, test_addr: PythonObject,
+) raises -> PythonObject:
+    """`leave_range_i64`, on the device
+    (`core/msel_helpers_device.mojo::leave_range_i64_device_run`)."""
+    var rows = Int(py=n)
+    var a = Int(py=lo)
+    var b = Int(py=hi)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var held = 0
+    with GILReleased(Python()):
+        held = leave_range_i64_device_run(rows, a, b, ra, ta)
+    return PythonObject(held)
+
+
+def check_indices_i64_binding(
+    addr: PythonObject, n: PythonObject, bound: PythonObject,
+) raises -> PythonObject:
+    """`check_indices_i64`, on the device
+    (`core/base_helpers_device.mojo::check_indices_i64_device_run`, the body
+    the base helper table publishes)."""
+    var count = Int(py=n)
+    var limit = Int(py=bound)
+    var a = Int(py=addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = check_indices_i64_device_run(a, count, limit)
+    return PythonObject(status)
+
+
+def indices_overlap_i64_binding(
+    a_addr: PythonObject, n_a: PythonObject, b_addr: PythonObject,
+    n_b: PythonObject, bound: PythonObject,
+) raises -> PythonObject:
+    """`indices_overlap_i64`, on the device
+    (`core/msel_helpers_device.mojo::indices_overlap_i64_device_run`)."""
+    var na = Int(py=n_a)
+    var nb = Int(py=n_b)
+    var limit = Int(py=bound)
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    var hit = 0
+    with GILReleased(Python()):
+        hit = indices_overlap_i64_device_run(a, na, b, nb, limit)
+    return PythonObject(hit)
+
+
+def first_seen_i32_binding(
+    codes_addr: PythonObject, n: PythonObject, k: PythonObject, enc_addr: PythonObject,
+    counts_addr: PythonObject,
+) raises -> PythonObject:
+    """`first_seen_i32`, on the device
+    (`core/msel_helpers_device.mojo::first_seen_i32_device_run`)."""
+    var rows = Int(py=n)
+    var kk = Int(py=k)
+    var ca = Int(py=codes_addr)
+    var ea = Int(py=enc_addr)
+    var na = Int(py=counts_addr)
+    var m = 0
+    with GILReleased(Python()):
+        m = first_seen_i32_device_run(ca, rows, kk, ea, na)
+    return PythonObject(m)
+
+
+def strat_fold_assign_i32_binding(
+    enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
+    alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """`strat_fold_assign_i32`, on the device
+    (`core/msel_helpers_device.mojo::strat_fold_assign_i32_device_run`)."""
+    var rows = Int(py=n)
+    var kk = Int(py=k)
+    var K = Int(py=n_folds)
+    var ea = Int(py=enc_addr)
+    var aa = Int(py=alloc_addr)
+    var pa = Int(py=perms_addr)
+    var ca = Int(py=counts_addr)
+    var da = Int(py=dst_addr)
+    var status = 0
+    with GILReleased(Python()):
+        status = strat_fold_assign_i32_device_run(ea, rows, kk, K, aa, pa, ca, da)
+    return PythonObject(status)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_REDUCE
+# ---------------------------------------------------------------------------
+
+#: `reduce_stat`'s reductions (`bindings/hotpath_helpers.mojo` HP_MIN ...).
+
+
+
+
+
+
+
+
+def reduce_stat_binding(addr: PythonObject, code: PythonObject, n: PythonObject,
+    what: PythonObject) raises -> PythonObject:
+    var count = Int(py=n)
+    var native_code: Int
+    var address: Int
+    var operation: Int
+    # The enabled integer-sum door used to admit code/address before what;
+    # otherwise both the reduction door and host entry admitted what first.
+    comptime if IDN_HPDEV_ISUM:
+        native_code = Int(py=code)
+        address = Int(py=addr)
+        operation = Int(py=what)
+    else:
+        operation = Int(py=what)
+        native_code = Int(py=code)
+        address = Int(py=addr)
+    var result: HpStat
+    with GILReleased(Python()):
+        result = labels_device_reduce(address, native_code, count, operation)
+    return labels_stat_pack(result)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_INIT
+# ---------------------------------------------------------------------------
+
+
+def uniform_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, low: PythonObject, high: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """`uniform_init_f32`, drawn on the device: the same counter-based
+    splitmix64 stream, the arithmetic in binary64 words."""
+    comptime if IDN_HPDEV_INIT:
+        var count = Int(py=n)
+        var d = Int(py=dst_addr)
+        var lo = Float64(py=low)
+        var hi = Float64(py=high)
+        if count >= 1 and count <= HPD_MAX_N and d != 0 and isfinite(lo) and isfinite(hi) and isfinite(hi - lo):
+            var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+            var off = UInt64(Int(py=offset))
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            with GILReleased(Python()):
+                device_uniform_init_f32(ctx, d, count, lo, hi, seed, off)
+            return PythonObject(0)
+    return host_uniform_init_f32_binding(dst_addr, n, low, high, seed_lo, seed_hi, offset)
+
+
+def normal_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, mean: PythonObject, std: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """`normal_init_f32`, drawn on the device (lane fix-s1-shared): the same
+    counter-based Box-Muller, the arithmetic in binary64 words with a
+    correctly rounded root, `portable_cosf` for the angle."""
+    comptime if IDN_HPDEV_NORMAL:
+        var count = Int(py=n)
+        var d = Int(py=dst_addr)
+        var mu = Float64(py=mean)
+        var sd = Float64(py=std)
+        if count >= 1 and count <= HPD_MAX_N and d != 0 and isfinite(mu) and isfinite(sd):
+            var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+            var off = UInt64(Int(py=offset))
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            with GILReleased(Python()):
+                device_normal_init_f32(ctx, d, count, mu, sd, seed, off)
+            return PythonObject(0)
+    return host_normal_init_f32_binding(dst_addr, n, mean, std, seed_lo, seed_hi, offset)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_CAST (lane fix-s1-shared)
+# ---------------------------------------------------------------------------
+
+#: `cast_elements`' dtype codes (bindings/hotpath_helpers.mojo HP_F32 ... HP_U8).
+
+
+def cast_elements_binding(src_addr: PythonObject, src_code: PythonObject, dst_addr: PythonObject,
+    dst_code: PythonObject, n: PythonObject) raises -> PythonObject:
+    var count = Int(py=n)
+    var source_code: Int
+    var target_code: Int
+    var source: Int
+    var target: Int
+    # Preserve the old host-entry coercion order when its device switch is off.
+    comptime if IDN_HPDEV_CAST:
+        source_code = Int(py=src_code)
+        target_code = Int(py=dst_code)
+        source = Int(py=src_addr)
+        target = Int(py=dst_addr)
+    else:
+        source = Int(py=src_addr)
+        target = Int(py=dst_addr)
+        source_code = Int(py=src_code)
+        target_code = Int(py=dst_code)
+    var result = 0
+    with GILReleased(Python()):
+        result = labels_device_cast(source, source_code, target, target_code, count)
+    return PythonObject(result)
+
+
+# ---------------------------------------------------------------------------
+# Input fixes (lane cpu2-l1-input): cast, finiteness, transpose, strided
+# and ragged layout
+# ---------------------------------------------------------------------------
+
+
+def strided_copy_bytes_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, dims_addr: PythonObject,
+    ndim: PythonObject, itemsize: PythonObject,
+) raises -> PythonObject:
+    """`strided_copy_bytes` (`bindings/array_helpers.mojo`), on the device:
+    the source and destination spans go up, one thread per element moves
+    its bits, the destination span comes down. Every refusal, an empty
+    copy, and overlapping or oversized spans run the host helper."""
+    comptime if _HPDEV_INPUT:
+        var nd = Int(py=ndim)
+        var isz = Int(py=itemsize)
+        var dims = Int(py=dims_addr)
+        var src = Int(py=src_addr)
+        var dst = Int(py=dst_addr)
+        var total = -1
+        with GILReleased(Python()):
+            total = hpdev_strided_copy_run(src, dst, dims, nd, isz)
+        if total >= 0:
+            return PythonObject(total)
+    return host_strided_copy_bytes_binding(src_addr, dst_addr, dims_addr, ndim, itemsize)
+
+
+def check_lengths_i64_binding(
+    lengths_addr: PythonObject, b: PythonObject, length: PythonObject
+) raises -> PythonObject:
+    """`check_lengths_i64`, on the device: the first i whose length is
+    outside [1, length], or -1 (an integer minimum over the rows)."""
+    comptime if _HPDEV_INPUT:
+        var n = Int(py=b)
+        var la = Int(py=lengths_addr)
+        if n >= 1 and n <= IND_MAX_N and la != 0:
+            var hi = Int(py=length)
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var first = -1
+            with GILReleased(Python()):
+                first = device_check_lengths(ctx, la, n, hi)
+            return PythonObject(first)
+    return host_check_lengths_i64_binding(lengths_addr, b, length)
+
+
+def ragged_rows_bytes_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, lengths_addr: PythonObject,
+    b: PythonObject, row_bytes: PythonObject, pos_bytes: PythonObject, mode: PythonObject,
+) raises -> PythonObject:
+    """`ragged_rows_bytes` (pad, zero-tail and last-real-row passes), on the
+    device; a length that would take the host loop outside its row, or a
+    size the twin does not cover, runs the host helper."""
+    comptime if _HPDEV_INPUT:
+        var n = Int(py=b)
+        var row = Int(py=row_bytes)
+        var pos = Int(py=pos_bytes)
+        var m = Int(py=mode)
+        var s = Int(py=src_addr)
+        var d = Int(py=dst_addr)
+        var la = Int(py=lengths_addr)
+        if n >= 1 and row >= 1 and pos >= 1 and d != 0 and la != 0 and (m == 1 or s != 0):
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var done = False
+            with GILReleased(Python()):
+                done = device_ragged_rows(ctx, s, d, la, n, row, pos, m)
+            if done:
+                return PythonObject(0)
+    return host_ragged_rows_bytes_binding(src_addr, dst_addr, lengths_addr, b, row_bytes, pos_bytes, mode)

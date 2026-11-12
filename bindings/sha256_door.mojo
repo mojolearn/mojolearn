@@ -6,7 +6,7 @@ copied by C into an `array('B')`, whose address and length go to the typed
 kernel; the shell never hashes. These replace hashlib.sha256 in the shells
 with the same digests over the same bytes in the same order.
 """
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex

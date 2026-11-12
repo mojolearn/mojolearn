@@ -1,9 +1,9 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_public_native import trees_public_operation
-from bindings.public_attributes_native import _plan, _lookup
-from bindings.mode_metadata_native import _fields
+from bindings.trees_public_native_door import trees_public_operation
+from bindings.public_attributes_native_door import _plan, _lookup
+from bindings.mode_metadata_native_door import _fields
 
 def operation(model: PythonObject, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return trees_public_operation(model, String(name), args, context)

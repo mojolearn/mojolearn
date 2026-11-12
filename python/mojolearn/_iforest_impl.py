@@ -57,7 +57,7 @@ _IFOREST_REALS = 4
 
 # The compiled owners, connected once at import: `fit`, `score_samples`,
 # `decision_function`, `predict` and `fit_predict` are one call each into the
-# tree owner (bindings/trees_public_iforest.mojo); `save` and `load` one call
+# tree owner (bindings/trees_public_iforest_door.mojo); `save` and `load` one call
 # each into the saved-model owner.
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -256,7 +256,7 @@ class IsolationForest(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes this schema, the members, dtypes and order of the 0.8.55 Python
 # `save`; bindings/host_archive_native_door.mojo `host_archive_public_iforest`
 # builds the loaded model with the Python loader's refusals, the saved knobs

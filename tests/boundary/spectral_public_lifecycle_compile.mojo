@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.cluster_fit_b_native import cluster_fit_b_operation
+from bindings.cluster_fit_b_native_unpack import cluster_fit_b_operation
 
 @export
 def spectral_public_lifecycle_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

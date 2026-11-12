@@ -1,8 +1,8 @@
 # Compile only: native attribute and shared fitted/parameter metadata entry bodies.
 from std.python._cpython import PyObjectPtr
-from bindings.public_attributes_native import public_attribute_c, public_attribute_generic_c, public_attribute_generic_slot_c
-from bindings.classical_attributes import classical_attribute_descriptor_c
-from bindings.mode_metadata_native import mode_metadata_c
+from bindings.public_attributes_native_door import public_attribute_c, public_attribute_generic_c, public_attribute_generic_slot_c
+from bindings.classical_attributes_door import classical_attribute_descriptor_c
+from bindings.mode_metadata_native_door import mode_metadata_c
 
 @export
 def compile_attribute(a: PyObjectPtr, b: PyObjectPtr) abi("C") -> PyObjectPtr:

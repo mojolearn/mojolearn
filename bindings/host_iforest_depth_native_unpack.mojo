@@ -1,0 +1,166 @@
+# SPDX-License-Identifier: Apache-2.0
+# Fit guard state is product execution: native admission, NumPy-versioned
+# promotion, arithmetic, warnings and publication all stay in this owner.
+from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
+from bindings.native_scalar_decode_unpack import native_scalar_buffer
+from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.sequence_array_warnings_unpack import sequence_array_report
+from bindings.sequence_array_warnings_pack import sequence_array_errstate
+from core.sequence_array_cast import SEQ_CAST_INVALID
+from core.host_iforest_depth_run import host_iforest_depth_step_run
+
+
+from bindings.host_iforest_depth_native_pack import (
+    _depth_box,
+    _depth_dtype,
+)
+
+
+def _depth_builtin_admit(value: PythonObject, context: PythonObject) raises:
+    var types = context["host_depth_primitive_types"]
+    for i in range(len(types)):  # driver-loop: exact retained builtin primitives have no application number slots
+        if py_type(value) is types[i]:
+            return
+    raise Error("TypeError: fit depth requires native primitive values without Python arithmetic hooks")
+
+
+def host_iforest_depth_admit(value: PythonObject, context: PythonObject) raises:
+    if _depth_dtype(value,context) is None:
+        _depth_builtin_admit(value,context)
+
+
+def host_iforest_depth_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    if _depth_dtype(value,context) is not None:
+        return native_scalar_buffer(value).truth()
+    _depth_builtin_admit(value,context)
+    return Bool(py=value)
+
+
+def _depth_release(context: PythonObject) raises -> Int:
+    var module = py_get(context["modules"],"numpy")
+    if module is None or py_type(module) is not context["host_iforest_module_type"]:
+        raise Error("TypeError: fit depth requires native NumPy version metadata")
+    var version = py_get(native_numpy_module_fields(module),"__version__")
+    if py_type(version) is not py_type(PythonObject("")):
+        raise Error("TypeError: fit depth requires native NumPy version text")
+    return Int(String(String(version).split(".")[0]))
+
+
+def _depth_warning_guard(context: PythonObject) raises:
+    # The shared native warning owner still reads these builtin module
+    # fields. Refuse replacement hooks before reaching any of its calls.
+    # Fixed identities are retained at package connection, never inferred
+    # from a callable's spelling or native-looking type.
+    var module = context["host_depth_builtins"]
+    if py_get(context["modules"],"builtins") is not module:
+        raise Error("TypeError: fit-depth warnings require the connected native builtin module")
+    var fields = native_numpy_module_fields(module)
+    var expected = context["host_depth_builtin_types"]
+    for name in ["dict","int","list","object","str","tuple","type"]:  # driver-loop: fixed transitive warning implementation dependencies
+        if py_get(fields,PythonObject(name)) is not expected[PythonObject(name)]:
+            raise Error("TypeError: fit-depth warnings cannot invoke replaced builtin hooks")
+
+
+def _depth_report(status: Int, operation: String, scalar: Bool, context: PythonObject,
+                  reported_operation: String = "") raises:
+    if status == 0:
+        return
+    _depth_warning_guard(context)
+    var local = context["host_depth_warning_contexts"][PythonObject(operation)]
+    var settings = sequence_array_errstate(local)
+    var name = reported_operation if reported_operation.byte_length() > 0 else (String("scalar ") if scalar else String(""))+operation
+    sequence_array_report(status,settings,local,name)
+
+
+def host_iforest_depth_step(value: PythonObject, subtract: Bool, context: PythonObject) raises -> PythonObject:
+    var dtype = _depth_dtype(value,context)
+    if dtype is None:
+        # Exact builtin scalar admission precedes this native CPython
+        # metadata operation. No NumPy slot or application protocol enters.
+        _depth_builtin_admit(value,context)
+        ref cpy = Python().cpython()
+        var one = PythonObject(1)
+        var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Subtract" if subtract else "PyNumber_Add")(value._obj_ptr,one._obj_ptr)
+        _ = one^
+        if not pointer:
+            var failure = stash_python_error()
+            raise failure^
+        return PythonObject(from_owned=pointer)
+    var ndarray = py_type(value) is context["ndarray"]
+    var scalar_result = not ndarray or Int(py=value.ndim) == 0
+    var shape = Python.tuple() if scalar_result else value.shape
+    var code = String(dtype.char)
+    var kind = String(dtype.kind)
+    var width = Int(py=dtype.itemsize)
+    var source = native_scalar_buffer(value)
+    var release = _depth_release(context)
+    if kind == "b":
+        code = "l"
+        kind = "i"
+        width = 8
+    elif release < 2 and scalar_result:
+        if (kind == "f" and code != "g") or (kind == "u" and width == 8):
+            code = "d"
+            kind = "f"
+            width = 8
+        elif kind == "c" and code != "G":
+            code = "D"
+            width = 16
+        elif (kind == "i" or kind == "u") and width < 8:
+            code = "l"
+            kind = "i"
+            width = 8
+    var target = py_call(native_numpy_dtype(context),PythonObject(code))
+    var bytes = List[UInt8](length=32,fill=UInt8(0))
+    var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var cast_invalid = False
+    var status = host_iforest_depth_step_run(
+        source.real, source.imag, code, kind, width, subtract, ndarray, data, cast_invalid,
+    )
+    if cast_invalid:
+        # NumPy1 promotes small scalar/0-D floats before +1. A signaling
+        # NaN fails or warns during that conversion, with "cast" text,
+        # then becomes quiet for the following arithmetic operation.
+        _depth_report(SEQ_CAST_INVALID,String("subtract") if subtract else String("add"),False,context,"cast")
+    # Warning-as-error occurs before the completed operation is published.
+    # A 0-D first operation is a ufunc, whose result becomes a scalar for
+    # the second operation; this distinction controls integer overflow.
+    _depth_report(status,String("subtract") if subtract else String("add"),not ndarray,context)
+    var result = _depth_box(data,target,shape,scalar_result,context)
+    _ = bytes^
+    return result
+
+
+def host_iforest_depth_positive(value: PythonObject, context: PythonObject) raises -> Bool:
+    if _depth_dtype(value,context) is None:
+        _depth_builtin_admit(value,context)
+        ref cpy = Python().cpython()
+        var zero = PythonObject(0)
+        var result = cpy.lib.get_function[Int32]("PyObject_RichCompareBool")(value._obj_ptr,zero._obj_ptr,Int32(4))
+        _ = zero^
+        if result < 0:
+            var failure = stash_python_error()
+            raise failure^
+        return result != 0
+    var source = native_scalar_buffer(value)
+    var array = py_type(value) is context["ndarray"]
+    if source.real.special == 2:
+        if source.complex and array and _depth_release(context) >= 2:
+            _depth_report(SEQ_CAST_INVALID,"greater",False,context)
+        return False
+    if source.complex and source.imag.special == 2:
+        # Native scalar ordering short-circuits on a nonzero real part.
+        # The array ufunc rejects a NaN imaginary part even then. NumPy2
+        # emits invalid only if it actually compares that NaN component.
+        if array:
+            if not source.real.truth() and _depth_release(context) >= 2:
+                _depth_report(SEQ_CAST_INVALID,"greater",False,context)
+            return False
+        return source.real.truth() and not source.real.negative
+    if source.real.truth():
+        return not source.real.negative
+    return source.complex and source.imag.truth() and not source.imag.negative

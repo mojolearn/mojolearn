@@ -7,9 +7,9 @@ cache hides later edits to lists, dictionaries, arrays or their metadata.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_setitem
-from bindings.msel_search_state import msel_parameter_values
+from bindings.msel_search_state_door import msel_parameter_values
 
 
 def parameter_grid_dicts(param_grid_in: PythonObject, context: PythonObject,

@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.embedding_layer_native import emblayer_operation, embedding_layer_lifetime_c
+from bindings.embedding_layer_native_door import emblayer_operation, embedding_layer_lifetime_c
 
 
 def embedding_compile(operation: PythonObject, owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:

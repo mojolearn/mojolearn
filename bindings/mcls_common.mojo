@@ -20,34 +20,44 @@
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import unsafe_memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.admitted_family import admit_family
-from bindings.metrics_plan_admission import MetricPlanOpcodes
+from bindings.admitted_family_door import admit_family
+from bindings.metrics_plan_admission_unpack import MetricPlanOpcodes
 from bindings.arena_prog_run import MetricArenaOwner
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
-from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
-from bindings.metrics_native_inputs import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
-from bindings.classical_pandas import classical_admit_value
+from bindings.metrics_native_support_door import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
+from bindings.metrics_native_inputs_door import metric_shape, metric_shape_admitted, metric_flatten, metric_flatten_admitted
+from bindings.classical_pandas_door import classical_admit_value
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_attr import py_attr
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_validate import classical_view
-from bindings.arena_prog_native import _metrics_run_plan
-from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
-    family_call_kw, family_array,
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.classical_arrays_door import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_validate_unpack import classical_view
+from bindings.arena_prog_native_door import _metrics_run_plan
+from bindings.family_common_unpack import (
+    FAMILY_F32P,
+    FAMILY_F64P,
+    FAMILY_I32P,
+    FAMILY_I64P,
+    family_repr,
+    family_str,
+    family_isinstance,
+)
+from bindings.family_common_pack import (
+    family_call,
+    family_call_kw,
+    family_array,
 )
 from core.host_finite_scan import host_all_finite_f32
 from core.admitted_ids import admitted_ids_i64, admitted_narrow_i32
 from core.labels_score_encode import score_encode_signed as mc_encode_signed
 from core.metrics_exp_impl import mexp_gather_i32
-from providers.python.metrics_vector_input_pyapi import metric_vector_exact, metric_i32_vector, metric_f32_vector
+from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact, metric_i32_vector, metric_f32_vector
 from bindings.metrics_reg_native import _reg_weights
-from bindings.native_array_storage import native_array_zeros
-from bindings.p3_labels_metrics_native import (
+from bindings.native_array_storage_door import native_array_zeros
+from bindings.p3_labels_metrics_native_door import (
     p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK)
 from bindings.py_cpython_table import cpython_table
 from bindings.py_optional import py_present

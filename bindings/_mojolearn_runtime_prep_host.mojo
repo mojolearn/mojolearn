@@ -14,15 +14,15 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from bindings.scaler_native_door import scaler_fit_c
-from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
-from bindings.minmax_native import minmax_lifecycle_c
-from bindings.maxabs_native import maxabs_lifecycle_c
-from bindings.prep_stateless_native import prep_stateless_c
-from bindings.prep_classify_native import prep_classify_c
-from bindings.prep_owner_native import prep_owner_c
-from bindings.str_labels_native import str_labels_c
-from bindings.labels_native_entry import labels_native_c
-from bindings.robust_native import robust_lifecycle_c
+from bindings.scaler_lifecycle_native_door import scaler_lifecycle_c, scaler_attribute_c
+from bindings.minmax_native_door import minmax_lifecycle_c
+from bindings.maxabs_native_door import maxabs_lifecycle_c
+from bindings.prep_stateless_native_door import prep_stateless_c
+from bindings.prep_classify_native_door import prep_classify_c
+from bindings.prep_owner_native_door import prep_owner_c
+from bindings.str_labels_native_door import str_labels_c
+from bindings.labels_native_entry_pack import labels_native_c
+from bindings.robust_native_pack import robust_lifecycle_c
 
 comptime RUNTIME_PREP_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 

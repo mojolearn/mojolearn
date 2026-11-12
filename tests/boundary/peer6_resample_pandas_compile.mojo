@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.resample_pandas_pyapi import resample_pandas_array
+from providers.python.resample_pandas_pyapi_door import resample_pandas_array
 
 @export
 def PyInit__peer6_resample_pandas_compile() abi("C") -> PythonObject:

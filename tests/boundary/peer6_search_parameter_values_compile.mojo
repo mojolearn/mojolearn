@@ -4,7 +4,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.msel_search_state import msel_parameter_values
+from bindings.msel_search_state_door import msel_parameter_values
 
 
 def parameter_values_compile(value: PythonObject, context: PythonObject) raises -> PythonObject:

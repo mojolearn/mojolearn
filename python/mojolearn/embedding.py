@@ -25,7 +25,7 @@ _PLAN_CODE = {"scan": 0, "sort": 1, "auto": 2}
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
 
 # The compiled saved-model owner, connected once at import: `save` is one
-# native call (bindings/archive_schema_native.mojo writes the schema
+# native call (bindings/archive_schema_native_door.mojo writes the schema
 # registered after the class).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
@@ -122,7 +122,7 @@ class Embedding(NumericModeMixin):
     # -- the resident device table (bindings/_mojolearn_embedding.mojo) ------
     # The layer's `__setattr__` (assigning `weight` releases the table) and
     # `__del__` are the native lifetime entry, installed after the class
-    # (bindings/embedding_layer_native.mojo).
+    # (bindings/embedding_layer_native_door.mojo).
 
     def __getstate__(self):
         return _EMBEDDING_NATIVE("emblayer_state", self, (), None, _EMBEDDING_CONTEXT)
@@ -264,7 +264,7 @@ class Embedding(NumericModeMixin):
 
 # The 0.8.55 writer's members, in its order (members are written sorted).
 # `save` is connected here; `load` is the layer's own native entry
-# (bindings/embedding_layer_native.mojo), which builds the layer with its
+# (bindings/embedding_layer_native_door.mojo), which builds the layer with its
 # native lifetime.
 _native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
     *_native_archive_bridge.head(_EMBEDDING_FORMAT),
@@ -276,7 +276,7 @@ _native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
 
 
 # Package-import connection: the native forward/load owner and the native
-# `__setattr__` / `__del__` of the layer (bindings/embedding_layer_native.mojo).
+# `__setattr__` / `__del__` of the layer (bindings/embedding_layer_native_door.mojo).
 from . import _training_impl as _embedding_training  # noqa: E402
 from ._native_optimizer_bridge import connect_embedding as _connect_embedding  # noqa: E402
 _EMBEDDING_NATIVE, _EMBEDDING_CONTEXT = _connect_embedding(_embedding_training, Embedding, _ARCHIVE_CONTEXT)

@@ -41,7 +41,7 @@ def test_python_lock_frontend_only_installs_compiled_descriptors():
 
 
 def test_neural_layer_boundaries_use_lease_without_preacquiring_models():
-    for name in ('bindings/neural_block_public.mojo','bindings/neural_prefill_native.mojo'):
+    for name in ('bindings/neural_block_public_door.mojo','bindings/neural_prefill_native_door.mojo'):
         source = (ROOT/name).read_text()
         assert 'OperationLockLease(lock)' in source
         assert 'lock.acquire()' not in source and 'lock.release()' not in source
@@ -55,7 +55,7 @@ def test_transformer_serialization_restores_a_fresh_native_owner():
     for name in ('__getstate__', '__setstate__'):
         method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == name)
         assert len(method.body) == 1 and isinstance(method.body[0], ast.Return)
-    source = (ROOT/'bindings/neural_block_public.mojo').read_text()
+    source = (ROOT/'bindings/neural_block_public_door.mojo').read_text()
     restore = source.split('def neural_block_setstate_binding')[1].split('def neural_block_c')[0]
     assert 'operation_lock_create()' in restore
     assert 'py_type(state) is not bi.dict' in restore

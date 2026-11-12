@@ -454,7 +454,7 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
 
 
 # The compiled owner of this module's public functions
-# (bindings/linalg_ops_resample.mojo), connected once at import: each public
+# (bindings/linalg_ops_resample_door.mojo), connected once at import: each public
 # function is one native call; the native owner selects the numeric binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()

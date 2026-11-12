@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.gp_public_lifecycle_pyapi import gp_public_operation
+from providers.python.gp_public_lifecycle_pyapi_door import gp_public_operation
 
 def lifecycle(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return gp_public_operation(model, String(operation), args, context)

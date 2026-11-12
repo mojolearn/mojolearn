@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder, raise_python_exception
 from std.python._cpython import PyObjectPtr
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_HALF
-from providers.python.array_metadata_pyapi import ArrayMetadata, ArrayPin, array_python_shape
+from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_python_shape
 
 
 def replace_binding(source: PythonObject, original_owner: PythonObject,

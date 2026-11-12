@@ -3,7 +3,7 @@
 # the RandomProjection components_ getter/setter and __getstate__ operations.
 # Compilation is not runtime qualification.
 from std.python._cpython import PyObjectPtr
-from bindings.decomp_native import decomp_c
+from bindings.decomp_native_door import decomp_c
 
 
 @export

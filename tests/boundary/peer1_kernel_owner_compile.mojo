@@ -3,8 +3,8 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.kernel_methods_native import kernel_methods_operation
-from providers.python.classical_family_admission_pyapi import classical_family_admit
+from bindings.kernel_methods_native_door import kernel_methods_operation
+from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 
 @export
 def peer1_kernel_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

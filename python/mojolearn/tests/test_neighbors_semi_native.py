@@ -107,7 +107,7 @@ def test_label_propagation_kernel_refusal():
 def test_label_propagation_row_mismatch_refusal():
     X, y = _data()
     # The public fit's shared lifecycle checks y's length first, with
-    # scikit-learn's wording (providers/python/family_public_lifecycle_pyapi.mojo).
+    # scikit-learn's wording (providers/python/family_public_lifecycle_pyapi_door.mojo).
     with pytest.raises(ValueError, match=r"inconsistent numbers of samples: \[40, 39\]"):
         mojolearn.LabelPropagation().fit(X, y[:-1])
 

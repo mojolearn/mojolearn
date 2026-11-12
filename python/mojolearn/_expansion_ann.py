@@ -21,14 +21,14 @@ from ._mode import NumericModeMixin
 # The compiled saved-model owner, connected once at import: `save` of
 # CagraIndex, IVFSQIndex and IVFRaBitQIndex is one native call that writes
 # the schema registered at the end of this module
-# (bindings/archive_schema_native.mojo).
+# (bindings/archive_schema_native_door.mojo).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: TSNE's `fit` and
-# `fit_transform` are one native call each (bindings/mani_tsne_native.mojo).
+# `fit_transform` are one native call each (bindings/mani_tsne_native_unpack.mojo).
 from . import _native_runtime_manifold_bridge
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 # The classical family owner, connected once at import: the indexes' `fit`
-# and `refine` are one native call each (bindings/neighbors_ann_native.mojo).
+# and `refine` are one native call each (bindings/neighbors_ann_native_door.mojo).
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 from . import _backend  # noqa: E402
 
@@ -58,13 +58,13 @@ class _AnnResident:
 
     # The resident handle (`_resident_handle`, `_resident_key`,
     # `_resident_arrays`, `_materialize_device_arrays`, `_release_resident`)
-    # is native: bindings/neighbors_ann_native.mojo and
-    # bindings/neighbors_ann_query_native.mojo (lane pyout-small-families
+    # is native: bindings/neighbors_ann_native_door.mojo and
+    # bindings/neighbors_ann_query_native_door.mojo (lane pyout-small-families
     # deleted the uncalled Python copies).
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected at the end of this module
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
     def __getstate__(self):
         """No handle crosses a pickle or a deepcopy: it means something only
@@ -248,7 +248,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return _ann_int(self._NAME, name, getattr(self, name))
 
     # `codes_` of a RESIDENT fit (lane fg-ivf A7) is made on first read by the
-    # native attribute slot connected at import (bindings/neighbor_query_native.mojo
+    # native attribute slot connected at import (bindings/neighbor_query_native_door.mojo
     # `neighbor_query_attribute_c`, `ann_pq_materialize`); there is no Python
     # `__getattr__`.
 

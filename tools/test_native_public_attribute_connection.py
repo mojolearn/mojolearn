@@ -194,7 +194,7 @@ class PublicAttributeConnection(unittest.TestCase):
         self.assertLess(lazy.index('connect_attributes(sys.'), lazy.index('connect_classes(_mode.'))
 
     def test_no_python_getter_or_audited_frame_callback_in_native_owner(self):
-        source = (ROOT / 'bindings/public_attributes_native.mojo').read_text()
+        source = (ROOT / 'bindings/public_attributes_native_door.mojo').read_text()
         # The generic slot is PublicOutputsMixin's own __getattribute__ for
         # classes that hold no connected plan: it is CPython's C generic
         # lookup (object.__getattribute__ in C) followed by the native

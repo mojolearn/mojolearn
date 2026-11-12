@@ -2,9 +2,9 @@
 # Never execute this fixture; native module setup and transitive runtime pending.
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.samba_public_native import samba_public_c
-from bindings.samba_config_native import samba_config_c
-from bindings.samba_admission import samba_admit_value, _samba_metadata
+from bindings.samba_public_native_pack import samba_public_c
+from bindings.samba_config_native_door import samba_config_c
+from bindings.samba_admission_door import samba_admit_value, _samba_metadata
 
 @export
 def compile_samba_public(py_self: PyObjectPtr, args: PyObjectPtr) abi("C") -> PyObjectPtr:

@@ -14,37 +14,46 @@ from core.gp_native_api import GPCFitRequest, GPCFitAllRequest, GPCQueryRequest,
 from core.native_label_codes import NativeLabelCodes
 from core.gp_native_storage import GPCQueryScratch
 from core.gp_native_storage import GPCMemberTables, GPCQueryTables
-from bindings.gp_score_boundary import GPCPredictionCodes
+from bindings.gp_score_boundary_door import GPCPredictionCodes
 from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run
-from bindings.public_lifecycle_owner import lifecycle_admit_fields
+from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from std.python import Python, PythonObject
-from bindings.gp_argument_pins import GPArgumentPins
-from bindings.admitted_family import admit_family
-from bindings.native_loaded_module import native_loaded_module
-from bindings.mode_metadata_native import _fields
+from bindings.gp_argument_pins_unpack import GPArgumentPins
+from bindings.admitted_family_door import admit_family
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.mode_metadata_native_door import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.py_attr import py_attr
-from bindings.classical_arrays import classical_address
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_arrays_door import classical_address
+from bindings.classical_attributes_door import classical_connect_numpy
 # thin-unpack-kit (2026-11-11): one C-API read per scalar parameter in place
 # of a call of the builtin bool/int (same semantics and exceptions).
-from bindings.boundary_read import read_bool, read_int_like
-from bindings.family_common import (
-    family_repr, family_is_str, family_isinstance, family_call, family_array, family_field, FAMILY_F64P,
+from bindings.boundary_read_door import read_bool, read_int_like
+from bindings.family_common_unpack import (
+    family_repr,
+    family_is_str,
+    family_isinstance,
+    FAMILY_F64P,
+)
+from bindings.family_common_pack import (
+    family_call,
+    family_array,
+    family_field,
 )
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64
 from core.gp_native_fit_summary import GPCFitSummary
-from bindings.gp_common_native import gp_extension, gp_caps, gp_kernel_arrays, gp_f32, gp_fit_owned
-from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
-from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
+from bindings.gp_common_native_unpack import gp_caps, gp_kernel_arrays, gp_fit_owned
+from bindings.gp_common_native_pack import gp_extension, gp_f32
+from bindings.gp_labels_native_door import gp_encode_labels, gp_decode_labels
+from bindings.gp_svm_gp_state_door import gp_kernel_arrays_reused, gp_x_known
 from bindings.gp_query_x_door import GpQuery, gp_query, gp_query_address, gp_query_scan
 from gaussian_process.gp_query_x_run import gp_query_refuse
 from bindings.fitted_resident_door import fitted_resident_drop
-from bindings.gp_resident_boundary import gp_resident_lease
+from bindings.gp_resident_boundary_unpack import gp_resident_lease
 from bindings.gp_score_labels_boundary_door import gpc_score_result
-from bindings.gp_labels_native import gp_decode_score_labels
+from bindings.gp_labels_native_door import gp_decode_score_labels
 from bindings.mcls_common import mc_shape_of
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars_door import host_inference_scalar
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
 comptime _K_PROD = 5

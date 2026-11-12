@@ -671,7 +671,7 @@ _TS_MAX_N = 512
 
 
 # TruncatedSVD's TSVD_QFIX route (`_tsvd_tsqr_components`) runs in x_decomp/tsvd_owner.mojo
-# (`x_decomp_tsvd_tsqr`, called by bindings/tsvd_native.mojo), lane mca2-decomp-a 2026-10-22.
+# (`x_decomp_tsvd_tsqr`, called by bindings/tsvd_native_door.mojo), lane mca2-decomp-a 2026-10-22.
 
 
 # mode 'reduced'/'complete'/'raw': LAPACK geqrf with reflectors kept, dlarfg's sign convention,
@@ -780,7 +780,7 @@ _SVD_NULL_RTOL_MODULE = _SVD_NULL_RTOL
 # TOMBSTONE: `_svd_tall` (the Python tall SVD on the decomp kit, lstsq's and
 # LinearRegression's TSQR solve) and its `_svd_stage_timer` deleted 2026-11-11 by
 # lane pyout-decomp-linalg: no caller remained; the native twin is
-# bindings/decomp_kit_native.mojo `svd_tall` (lstsq) and bindings/linalg_ops_decomp.mojo.
+# bindings/decomp_kit_native_door.mojo `svd_tall` (lstsq) and bindings/linalg_ops_decomp_door.mojo.
 # Code recoverable at 6f82d0255d.
 
 
@@ -817,7 +817,7 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
 
 
 # The compiled owner of this module's public functions
-# (bindings/linalg_ops_native.mojo), connected once at import: each public
+# (bindings/linalg_ops_native_unpack.mojo), connected once at import: each public
 # function is one native call; that boundary admits the connected binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()

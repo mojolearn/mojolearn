@@ -97,7 +97,7 @@ class ProphetForecaster(ParamsMixin):
 
     # Every public method is one native call whose owner does the whole
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
-    # bindings/xseq_prophet_native.mojo), so no `_mode` class-creation wrappers are installed.
+    # bindings/xseq_prophet_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
 
     def __init__(self, growth="linear", changepoints=None, n_changepoints=25, changepoint_range=0.8,
@@ -178,7 +178,7 @@ class ProphetForecaster(ParamsMixin):
         return _XSEQ(self, "prophet_predict", (t, holidays), _XSEQ_CONTEXT)
 
 
-# The native owner of fit and predict (bindings/xseq_prophet_native.mojo),
+# The native owner of fit and predict (bindings/xseq_prophet_native_door.mojo),
 # connected once at import.
 from ._native_xseq_bridge import connect as _connect_xseq  # noqa: E402
 _XSEQ, _XSEQ_CONTEXT = _connect_xseq()

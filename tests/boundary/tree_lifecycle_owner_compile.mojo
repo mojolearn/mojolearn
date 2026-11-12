@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_public_state import forest_restore_state, tree_is_fitted
+from bindings.trees_public_state_pack import forest_restore_state, tree_is_fitted
 
 def fitted_call(model: PythonObject, forest: PythonObject) raises -> PythonObject:
     return tree_is_fitted(model, Bool(py=forest))

@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = (ROOT / "bindings/causal_lm_construct.mojo").read_text()
+SOURCE = (ROOT / "bindings/causal_lm_construct_door.mojo").read_text()
 
 
 def test_constructor_uses_private_metadata_after_native_calls():

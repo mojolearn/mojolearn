@@ -240,7 +240,7 @@ from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API, mamba_block_operation
 from core.mamba3_prefill_session import Mamba3PrefillHandle
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.causal_session_handles_pyapi import causal_session_handles_type
+from providers.python.causal_session_handles_pyapi_unpack import causal_session_handles_type
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,

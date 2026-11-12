@@ -115,7 +115,7 @@ def test_real_scaler_native_doors_are_in_both_censuses():
         assert exports[name] == implementation
         assert census[name] == (implementation, [])
     graph = ls._MojoDefGraph()
-    assert ('t', 'bindings/minmax_native.mojo', 'minmax_lifecycle_c') in graph.roots(source, 'minmax_scaler_native_call')
+    assert ('t', 'bindings/minmax_native_door.mojo', 'minmax_lifecycle_c') in graph.roots(source, 'minmax_scaler_native_call')
 
 
 def test_scaler_route_annotations_preserve_host_infer_execution_debt():

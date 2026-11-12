@@ -136,7 +136,7 @@ _MODEL_FORMAT = "mojolearn-gbdt-1"
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled tree-ensemble owner: `predict`, `predict_proba`,
 # `predict_classes`, the tree inspection reads and the OrderedRMSE and
-# FeatureFreq fits are one native call each (bindings/trees_public_gbdt.mojo).
+# FeatureFreq fits are one native call each (bindings/trees_public_gbdt_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
@@ -833,7 +833,7 @@ class GradientBoosting(NumericModeMixin):
     # One-call native public class (OrderedRMSE and the FeatureFreq model
     # inherit it): the constructor takes numeric_mode itself, and fit /
     # predict / predict_proba are one call each whose native owner
-    # (bindings/trees_gbdt_adapter_lifecycle.mojo `gbdt_model_public_operation`)
+    # (bindings/trees_gbdt_adapter_lifecycle_door.mojo `gbdt_model_public_operation`)
     # does the fitted check, input admission, fit tracking, feature-name
     # checks and NumPy results, so _mode installs no Python wrappers.
     _mojolearn_native_public = True
@@ -1142,7 +1142,7 @@ class GradientBoosting(NumericModeMixin):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-# `save` and `load` are one native call each: bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each: bindings/archive_schema_native_door.mojo
 # writes this schema, the members, dtypes and refusals of the 0.8.55 Python
 # `save` (the model text as UTF-8 `<u1` bytes, the numeric mode `predict` would
 # use now, the int64 meta and the float64 bias), and

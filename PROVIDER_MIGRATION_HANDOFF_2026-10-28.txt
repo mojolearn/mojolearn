@@ -379,7 +379,7 @@ final-retention-r2.json with complete-byte readback.
 Preserved earlier child draft remains in
   ~/mojolearn-wt/distributed-public-boundary-20261027
 Do NOT reset/remove that draft or mistake it for the compiled new batch.
-Next pooled/offloaded training scope: bindings/parallel_byte_native.mojo,
+Next pooled/offloaded training scope: bindings/parallel_byte_native_door.mojo,
 parallel_training/model_pool_training/offload_training import-time admission,
 NEW private native schedule descriptor/factory in _mojolearn_byte_lm.mojo.
 Only read-only design investigation existed when handoff requested. Peer3 owns
@@ -720,7 +720,7 @@ SELF-MERGE 2026-10-28 (lane norm-folds) — MOJOLEARN_IDN_NORM_FIXED_LANES, defa
 - Not done: no GPU runtime, identity or timing. The A/B and ID runs owed are in ~/mojolearn-evidence/norm-folds-20261028/HANDOFF.md.
 
 SELF-MERGE 2026-10-28 (lane overhead-module-lookup, Claude Opus 5.5): admit native module connections once per neural operation. No define.
-- What it does: bindings/native_loaded_module.mojo gains NativeModules, an additive admit-once/reuse view. The first request for a module in an
+- What it does: bindings/native_loaded_module_door.mojo gains NativeModules, an additive admit-once/reuse view. The first request for a module in an
   operation runs the full native_loaded_module() check; later requests reuse the admitted handle. mods.released() follows every GIL release
   window (GILReleased block, lock acquire, native-entry or provider call, file/process I/O) and every exception handler. The next request after
   a window re-runs the full check: one re-check per window. The transformer, mamba, byte-LM, sequential and causal-LM helpers take `mut mods`
@@ -777,7 +777,7 @@ consolidate-neural (2026-10-28, Opus): one consolidated compile for nine neural/
 - RUN OWED (A/B and same-bits fixtures, all lanes): ~/mojolearn-evidence/consolidate-neural-20261028/RUN_OWED.txt.
 
 SETUP-ONCE BATCH 1 (lane/setup-once-20261028 @ 80c61505e0, merged to main): per-call setup removed from the
-standalone neural block path (Mamba2Block.step et al.): bindings/native_prepared_owner.mojo (weak-ref registry,
+standalone neural block path (Mamba2Block.step et al.): bindings/native_prepared_owner_unpack.mojo (weak-ref registry,
 identity key), neural_block_owner prepared (snapshot, bindings, causal_lm_admit_binding, generation layer once),
 state buffer views reused, native_loaded_module validated once per process then pointer-stamped. Compile gate:
 46/46 host families + pod smoke (Mamba2 step reuse path, step==forward bits), 25/25 GPU roots sm_89 and gfx942.

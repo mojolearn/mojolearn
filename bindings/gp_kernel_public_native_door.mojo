@@ -7,12 +7,12 @@ from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
 from bindings.py_cpython_table import cpython_table
 from std.memory import bitcast
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_contains
-from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.native_instance_item import native_instance_item
-from bindings.gp_mapping_boundary import gp_mapping_snapshot, GPFieldUpdates
-from bindings.gp_argument_pins import GPArgumentPins
+from bindings.mode_metadata_native_door import _fields, _class_fields
+from bindings.native_instance_item_pack import native_instance_item
+from bindings.gp_mapping_boundary_unpack import gp_mapping_snapshot, GPFieldUpdates
+from bindings.gp_argument_pins_unpack import GPArgumentPins
 from gaussian_process.gp_kernel_public_native_run import _kernel_log, GPKernelInput
 
 
@@ -206,16 +206,16 @@ def gp_kernel_operation(kernel: PythonObject, operation: String, args: PythonObj
 # Constructor inputs are captured through the same admitted native buffers used
 # elsewhere by the public providers. Their shape, strides and scalar bytes are
 # retained for this operation, never through a user's array/float protocol.
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_pandas import classical_admit_value
-from bindings.classical_arrays import classical_is_array
-from providers.python.array_metadata_pyapi import array_slot_once, array_owner_once
-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
-from bindings.native_scalar_decode import native_scalar_buffer
-from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.classical_arrays_door import classical_is_array
+from providers.python.array_metadata_pyapi_door import array_slot_once, array_owner_once
+from bindings.native_buffer_owner_pack import native_buffer_view, native_storage_allocate
+from bindings.native_scalar_decode_unpack import native_scalar_buffer
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
 from core.native_scalar_decode import native_scalar_real
-from bindings.sequential_admission import _one_of
-from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
+from bindings.sequential_admission_door import _one_of
+from bindings.native_owner_lifetime_door import native_release_admit, native_release_weakrefs
 from bindings.py_balanced import py_get, py_setitem
 
 def _kernel_input(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> GPKernelInput:

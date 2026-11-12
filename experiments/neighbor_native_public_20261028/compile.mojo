@@ -1,12 +1,12 @@
 # Focused CPU compilation only: do not run this fixture.
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.full_reset_constructor_native import full_reset_constructor_c
-from bindings.full_reset_params_native import full_reset_params_c
-from bindings.neighbor_query_native import neighbor_query_c, neighbor_query_attribute_c
-from bindings.neighbors_knn_native import neighbors_knn_operation
-from bindings.neighbors_local_native import neighbors_local_operation
-from bindings.neighbors_ann_native import neighbors_ann_operation
+from bindings.full_reset_constructor_native_door import full_reset_constructor_c
+from bindings.full_reset_params_native_door import full_reset_params_c
+from bindings.neighbor_query_native_door import neighbor_query_c, neighbor_query_attribute_c
+from bindings.neighbors_knn_native_door import neighbors_knn_operation
+from bindings.neighbors_local_native_door import neighbors_local_operation
+from bindings.neighbors_ann_native_door import neighbors_ann_operation
 
 @export
 def compile_neighbor_constructor(py_self: PyObjectPtr, args: PyObjectPtr) abi("C") -> PyObjectPtr:

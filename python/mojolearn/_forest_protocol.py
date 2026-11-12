@@ -15,7 +15,7 @@ from ._arrays import _addr, _addr_ro
 from . import _native_trees_bridge
 
 # The compiled tree-ensemble owner: `score` predicts and scores in one native
-# call (bindings/trees_public_score.mojo).
+# call (bindings/trees_public_score_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 

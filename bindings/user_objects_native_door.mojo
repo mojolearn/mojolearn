@@ -34,17 +34,18 @@
 # raises it, so the exception type and wording are the ones the Python had.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_setitem, py_get
-from bindings.boundary_read import admitted_buffer_view
+from bindings.boundary_read_door import admitted_buffer_view
 from core.boundary_layout import gather_i64, gather_f64
 from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
-from bindings.user_object_flatten import user_object_flatten
+from bindings.user_object_flatten_door import user_object_flatten
 from bindings.py_cpython_table import cpython_table
-from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
+from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.cpython_borrowed_pack import borrowed_item
 from bindings.user_objects_native_run import _refusal, _index_at, _float_is_integer
 
 comptime KIND_STR = 0         # isinstance(v, str)

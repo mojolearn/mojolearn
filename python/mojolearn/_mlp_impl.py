@@ -2,7 +2,7 @@
 """SmallMLPTrainer: the fixed 8-16-3 FP32 trainer, one native call per public method.
 
 Every public method hands its arguments once to the native owner
-`bindings/small_mlp_native.mojo` (`small_mlp_call` in the tokenizer host
+`bindings/small_mlp_native_door.mojo` (`small_mlp_call` in the tokenizer host
 binding), which validates them, selects the numeric mode and route, runs the
 compiled training entries and builds the result. The trainer object holds only
 its native state handle (`_handle`): parameters, AdamW moments, step counter,
@@ -140,7 +140,7 @@ class SmallMLPTrainer:
     """
 
     # Every method below is the API shell: one call into the native owner
-    # (bindings/small_mlp_native.mojo), which checks the arguments, chooses the
+    # (bindings/small_mlp_native_door.mojo), which checks the arguments, chooses the
     # route and builds the result. The object holds only `_handle`; native admission reads it from passive
     # instance storage and balanced calls retain no extra owner references.
 

@@ -34,26 +34,27 @@ from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, classical_view,
     admitted_finite_refuse, admitted_finite_entry_refuse,
 )
-from bindings.classical_validate import classical_estimator_name, classical_check_y
-from bindings.classical_arrays import classical_address
+from bindings.classical_validate_unpack import classical_estimator_name, classical_check_y
+from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_view / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.trees_side_records import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
+from bindings.trees_side_records_unpack import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
 from bindings.trees_resident_table import (
     TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_unpin,
     trees_resident_watch, trees_resident_forget,
 )
 from bindings.native_model_records import model_identity_key, model_generation
-from bindings.p3nc_fitted_freeze import fitted_freeze
-from bindings.metrics_native_support import metric_is_integral, metric_warning_location
-from bindings.classical_warnings import classical_warning
+from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
+from bindings.metrics_native_support_door import metric_is_integral, metric_warning_location
+from bindings.classical_warnings_unpack import classical_warning
 from ensemble.rf_notices import rf_notice_text
 from xtrees.trees_forest_run import (
     ForestFit, ForestHandle, FOREST_MODEL_FIELDS, forest_export_selection, forest_export_counts, forest_export_dtype,
     forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features, forest_fit_core,
 )
 from checks.numerics import portable_log2_64
-from bindings.forest_fit_boundary import forest_fit_request_py, forest_request_words_py, forest_request_from_words_py
+from bindings.forest_fit_boundary_unpack import forest_fit_request_py, forest_request_from_words_py
+from bindings.forest_fit_boundary_pack import forest_request_words_py
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.trees_entry_table import TreesEntryKey
 from core.forest_fit_request import (

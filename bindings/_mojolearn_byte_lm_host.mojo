@@ -13,8 +13,8 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.memory import bitcast, unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
-from bindings.p3_lm_tokenizer_cpython import lm_try_index
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -44,7 +44,7 @@ from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from training.byte_lm_config_run import byte_config_words
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
 from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
-from providers.python.byte_lm_host_compat_pyapi import register
+from providers.python.byte_lm_host_compat_pyapi_door import register
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from training.byte_lm_host_io import (

@@ -5,7 +5,7 @@ from check_generation_native_boundary import audit
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = (ROOT / 'transformer/native_block_dispatch.mojo').read_text()
 PROVIDER = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
-PUBLIC = (ROOT / 'bindings/neural_block_public.mojo').read_text()
+PUBLIC = (ROOT / 'bindings/neural_block_public_door.mojo').read_text()
 
 
 def test_native_block_dependencies_resolve():
@@ -60,7 +60,7 @@ def test_connection_carries_named_factory_and_checked_session_admission():
     shell = (ROOT / 'bindings/_mojolearn_transformer.mojo').read_text()
     assert 'm.def_function[transformer_block_api_binding]("transformer_block_api_v1")' in shell
     assert 'NATIVE_TRANSFORMER_BLOCK_API.get_or_create_ptr()' in shell
-    causal = (ROOT / 'bindings/causal_lm_public.mojo').read_text()
+    causal = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
     assert 'py_setitem(entries, "native_block_operations", block_provider)' in causal
     # The provider connects in identical mode on every vendor, CPU included since b1c97898f5.
     assert PUBLIC.count('if code == 1 and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":') == 2

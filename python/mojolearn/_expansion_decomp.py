@@ -32,13 +32,13 @@ _BINDING = "_mojolearn_x_decomp"
 # TOMBSTONE: the Python decomp kit (`_M`, `_Kit`, the host buffer pool, `_vstack`/`_hstack`,
 # `_dev_gather`, `_host_kit`, `_OP`, `_f32`, `_is_sparse`, `_mode`, `_norm`, `_tsqr_lstsq_core`)
 # deleted 2026-11-11 by lane pyout-decomp-linalg: no product caller remained (every public
-# operation is one call into its native owner; the native twins are bindings/decomp_kit_native.mojo,
+# operation is one call into its native owner; the native twins are bindings/decomp_kit_native_door.mojo,
 # mani_kit.mojo and linalg_ops_kit.mojo). Code recoverable at 6f82d0255d.
 
 
 # A device-resident matrix id of the GPU binding: lu_factor's resident pair
 # (`_LUPair._dev`) holds its A, LU and piv as these, assembled natively by
-# bindings/linalg_decomp_native.mojo, and frees them through the binding.
+# bindings/linalg_decomp_native_unpack.mojo, and frees them through the binding.
 class _DevBuf:
     """A device-resident matrix of the GPU binding (x_decomp/resident.mojo):
     a pooled buffer id, returned to the pool when this object dies."""
@@ -113,7 +113,7 @@ class _Base(SklearnTagsMixin):
 
 # ================================================================ IncrementalPCA
 # Every public IncrementalPCA operation is one call into the compiled owner
-# (bindings/ipca_native.mojo, drivers x_decomp/ipca_owner.mojo).
+# (bindings/ipca_native_door.mojo, drivers x_decomp/ipca_owner.mojo).
 # Reference: scikit-learn `decomposition/_incremental_pca.py`, `partial_fit`;
 # the running mean and variance are `utils/extmath.py::_incremental_mean_and_var`.
 # Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
@@ -173,7 +173,7 @@ class IncrementalPCA(_Base):
     (1000, 3)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
@@ -304,7 +304,7 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     """
     # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
     # not the platform pow / log (a host's last bit can move the floor), in
-    # the compiled owner (bindings/jl_native.mojo)
+    # the compiled owner (bindings/jl_native_pack.mojo)
     return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
@@ -318,12 +318,12 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
 
     # The fitted matrix lives in the native owner's `_rp_components` field
-    # (bindings/rp_native.mojo); reading, assigning and pickling it are each
+    # (bindings/rp_native_door.mojo); reading, assigning and pickling it are each
     # one native call.
     @property
     def components_(self):
@@ -615,7 +615,7 @@ class NMF(_Base):
     >>> H = model.components_
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
@@ -771,7 +771,7 @@ class FastICA(_Base):
     >>> S = mojolearn.FastICA(n_components=3, random_state=0).fit_transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
@@ -845,7 +845,7 @@ class FastICA(_Base):
 
 # ================================================================ FactorAnalysis
 # Every public FactorAnalysis operation is one call into the compiled owner
-# (bindings/fa_native.mojo, driver x_decomp/fa_owner.mojo).
+# (bindings/fa_native_unpack.mojo, driver x_decomp/fa_owner.mojo).
 # Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
 # `transform`, `get_covariance`, `get_precision`, `score_samples`,
 # `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
@@ -911,7 +911,7 @@ class FactorAnalysis(_Base):
     >>> Z = fa.transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
@@ -1074,7 +1074,7 @@ class _LUPair(tuple):
     synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
     8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve. KEPT for
     quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
-    # bindings/linalg_decomp_native.mojo (`_lu_pair`) assembles the pair
+    # bindings/linalg_decomp_native_unpack.mojo (`_lu_pair`) assembles the pair
     # lu_factor returns from its slots: `_qfix_a` an (n, n) float32 Array,
     # `_dev` the three `_DevBuf`s and the lu / piv arrays, or None.
 
@@ -1305,7 +1305,7 @@ class _PLS(RegressorScoreMixin, _Base):
     _pmode = "A"
 
     # fit, fit_transform, transform, inverse_transform and predict are one
-    # call each into the native PLS owner (bindings/pls_native.mojo), which
+    # call each into the native PLS owner (bindings/pls_native_door.mojo), which
     # reads `_deflation` / `_pmode` from the class.
     def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
         self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
@@ -1650,7 +1650,7 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
 
 class _SparseCoding(_Base):
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     def transform(self, X):
@@ -1938,11 +1938,11 @@ class MiniBatchDictionaryLearning(_SparseCoding):
 
 class _BaseSparsePCA(_Base):
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # fit, fit_transform, transform and inverse_transform are one call each
-    # into the native dictionary-learning owner (bindings/dict_learning_native.mojo),
+    # into the native dictionary-learning owner (bindings/dict_learning_native_unpack.mojo),
     # which tells SparsePCA and MiniBatchSparsePCA apart by class.
     def fit_transform(self, X, y=None):
         """Fit the sparse components, then return ``transform(X)``.
@@ -2248,7 +2248,7 @@ class LatentDirichletAllocation(_Base):
     >>> doc_topics = lda.transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
@@ -2369,10 +2369,10 @@ _PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity":
 
 # The manifold estimators' metric rule (`_metric_spec`), distances, kNN
 # matrices, kernel centering and top eigenpairs run in their compiled owner
-# (bindings/mani_decomp_native.mojo); `_PD_KIND` is its table.
+# (bindings/mani_decomp_native_door.mojo); `_PD_KIND` is its table.
 
 
-# TOMBSTONE: _lanczos_batch, _lanczos_top (dead Python Lanczos driver: the top-eigenpair route runs in bindings/mani_decomp_native.mojo and x_decomp/kpca_owner.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# TOMBSTONE: _lanczos_batch, _lanczos_top (dead Python Lanczos driver: the top-eigenpair route runs in bindings/mani_decomp_native_door.mojo and x_decomp/kpca_owner.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
@@ -2722,7 +2722,7 @@ class MDS(_Base):
         return _NATIVE(self, "family_mani_mds_fit",
                        (None, None, X, init, y), _NATIVE_CONTEXT)
 # LocallyLinearEmbedding's shift-invert route (`_lle_smallest`) and its
-# policy run in the compiled owner (bindings/mani_decomp_native.mojo).
+# policy run in the compiled owner (bindings/mani_decomp_native_door.mojo).
 
 
 # Reference: scikit-learn `manifold/_locally_linear.py`:
@@ -2861,8 +2861,8 @@ class LocallyLinearEmbedding(_Base):
 
 # The compiled family owner, connected once at import: every public method
 # of Isomap, ClassicalMDS, MDS and LocallyLinearEmbedding is one native call
-# (bindings/mani_decomp_native.mojo). Its table: the metric kinds (the native
-# kit, bindings/mani_kit.mojo, never reads the Python _M / _DevBuf classes).
+# (bindings/mani_decomp_native_door.mojo). Its table: the metric kinds (the native
+# kit, bindings/mani_kit_door.mojo, never reads the Python _M / _DevBuf classes).
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _native_family_bridge.tables(family_mani_pd_kind=dict(_PD_KIND))
 
@@ -2923,7 +2923,7 @@ class MinCovDet(_Base):
     >>> d = mcd.mahalanobis(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
@@ -2934,7 +2934,7 @@ class MinCovDet(_Base):
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
 
     # Every operation is one call into the native MinCovDet owner
-    # (bindings/mcd_native.mojo). A covariance estimator has no transform,
+    # (bindings/mcd_native_door.mojo). A covariance estimator has no transform,
     # so it has no fit_transform either (scikit-learn's TransformerMixin).
     @available_if(lambda self: hasattr(self, "transform"))
     def fit_transform(self, X, y=None):
@@ -3214,7 +3214,7 @@ class AlternatingLeastSquares(_Base):
     >>> ids, scores = als.recommend(0, R, N=5)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
@@ -3227,7 +3227,7 @@ class AlternatingLeastSquares(_Base):
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
     # fit, recommend and similar_items are one call each into the native
-    # AlternatingLeastSquares owner (bindings/als_native.mojo).
+    # AlternatingLeastSquares owner (bindings/als_native_door.mojo).
 
     def fit(self, user_items, show_progress=False):
         """Fit user and item factors.
@@ -3436,14 +3436,14 @@ from . import _native_jl_bridge  # noqa: E402
 _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 
 
-# The native dictionary-learning owner (bindings/dict_learning_native.mojo):
+# The native dictionary-learning owner (bindings/dict_learning_native_unpack.mojo):
 # DictionaryLearning, MiniBatchDictionaryLearning, SparseCoder, SparsePCA,
 # MiniBatchSparsePCA and sparse_encode, one call per public operation.
 from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
 _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
 
 
-# The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
+# The native PLS owner (bindings/pls_native_door.mojo): PLSRegression, PLSCanonical, CCA.
 # `score` runs R^2 through the native metrics owner (family_mcls_r2) inside
 # the same call. Import connects the metrics tables; the native PLS owner
 # selects and checks the current binding after entering compiled code.
@@ -3454,15 +3454,15 @@ _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_
                                               pls_metric_owner=_native_family_bridge.connect())
 
 
-# The native MinCovDet owner (bindings/mcd_native.mojo): MinCovDet, EllipticEnvelope.
+# The native MinCovDet owner (bindings/mcd_native_door.mojo): MinCovDet, EllipticEnvelope.
 _MCD_CALL, _MCD_CONTEXT = _connect_decomp_kit("mcd_native_call", elliptic_envelope_class=EllipticEnvelope)
 
 
-# The native AlternatingLeastSquares owner (bindings/als_native.mojo).
+# The native AlternatingLeastSquares owner (bindings/als_native_door.mojo).
 _ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")
 
 
-# The native linear-algebra owner (bindings/linalg_decomp_native.mojo):
+# The native linear-algebra owner (bindings/linalg_decomp_native_unpack.mojo):
 # randomized_svd, solve, lstsq, lu_factor and lu_solve. lu_factor returns an
 # `_LUPair` whose device buffers are `_DevBuf`s.
 _LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call", lu_pair_class=_LUPair,
@@ -3470,7 +3470,7 @@ _LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call",
 
 
 # The compiled owner of the decomposition estimators whose public operations
-# are one native call each (bindings/decomp_native.mojo): FastICA, ...
+# are one native call each (bindings/decomp_native_door.mojo): FastICA, ...
 from . import _native_decomp_bridge  # noqa: E402
 _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,

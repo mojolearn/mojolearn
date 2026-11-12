@@ -1,5 +1,5 @@
 # Separate compile-only provider/publication boundary. Never run this fixture.
-from bindings.causal_lm_public import causal_lm_generate_binding, causal_lm_read_binding
+from bindings.causal_lm_public_door import causal_lm_generate_binding, causal_lm_read_binding
 from bindings._mojolearn_transformer import causal_lm_resident_read_version_binding
 from std.python import PythonObject
 

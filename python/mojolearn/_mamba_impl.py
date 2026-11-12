@@ -453,7 +453,7 @@ class Mamba1DecodeSession:
     ...         y_t = session.step(x_t)
     """
 
-    # Every method is one native call (bindings/mamba_public_native.mojo); the
+    # Every method is one native call (bindings/mamba_public_native_door.mojo); the
     # session's weights, state copies, position and open flag live in its
     # native handle.
     def __init__(self, block, state):

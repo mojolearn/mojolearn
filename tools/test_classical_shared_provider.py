@@ -4,7 +4,7 @@ import re
 from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = (ROOT / 'bindings/svc_kernel_native.mojo').read_text()
+PUBLIC = (ROOT / 'bindings/svc_kernel_native_door.mojo').read_text()
 NATIVE = (ROOT / 'svm/native_descriptor_dispatch.mojo').read_text()
 SETTINGS = (ROOT / 'svm/operation_metadata.mojo').read_text()
 
@@ -84,7 +84,7 @@ def test_pair_fold_and_calibration_calls_use_same_native_provider():
 
 
 def test_epilogue_typed_bridge_retains_numerical_owners():
-    old = (ROOT / 'providers/python/svm_impl_svc_epilogue_pyapi.mojo').read_text()
+    old = (ROOT / 'providers/python/svm_impl_svc_epilogue_pyapi_door.mojo').read_text()
     new = (ROOT / 'svm/native_epilogue_dispatch.mojo').read_text()
     numerical = r'\b(?:device_gather|device_select|device_fold_split|device_fold_finish|device_c_rows|device_pair_epilogue|device_platt_train|device_splitmix_perm)\('
     assert re.findall(numerical, old) == re.findall(numerical, new)
@@ -122,7 +122,7 @@ def test_svc_auxiliary_dispatch_retains_native_owners_and_operation_metadata():
     admit=body('_svc_provider')
     assert admit.count('neural_descriptor_execute(native, 8,')==1
     assert 'CompiledBindingSnapshot(native, binding' in admit
-    adapter=(ROOT/'providers/python/svc_descriptor_pyapi.mojo').read_text()
+    adapter=(ROOT/'providers/python/svc_descriptor_pyapi_door.mojo').read_text()
     assert 'neural_descriptor_execute(owner[].provider, op, a, p, f)' in adapter
     assert 'neural_descriptor_connect' not in adapter
 
@@ -142,16 +142,16 @@ def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
         assert 'q_meta.source.addr' in body(name)
         assert '_ = q_meta' in body(name)
     assert '_addr(q)' not in body('_machine')
-    metadata=(ROOT/'providers/python/array_metadata_pyapi.mojo').read_text()
+    metadata=(ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     for slot in ('_store', '_base', '_pin', '_mv'):
         assert f'array_slot_once(value, "{slot}", context)' in metadata
-    owned=(ROOT/'bindings/admitted_family.mojo').read_text().split('def admit_family_owned(value: ArrayMetadata',1)[1].split('\ndef ',1)[0]
+    owned=(ROOT/'bindings/admitted_family_door.mojo').read_text().split('def admit_family_owned(value: ArrayMetadata',1)[1].split('\ndef ',1)[0]
     assert 'value.owned_writable' in owned
     assert 'value.keep.' not in owned
 
 
 def test_shared_weight_snapshot_keeps_cast_order_and_reuses_admitted_address():
-    source=(ROOT/'bindings/admitted_family.mojo').read_text()
+    source=(ROOT/'bindings/admitted_family_door.mojo').read_text()
     take=lambda name: re.search(rf'^def {name}\(.*?(?=^def |\Z)', source,re.M|re.S).group()
     admission=take('_weight_buffer')
     assert admission.count('array_shape_once(view, context)') == 1
@@ -178,7 +178,7 @@ def test_cpu_svm_table_uses_same_schema_and_existing_host_owners():
     assert 'svm.estimator' not in host
     assert 'neural_descriptor_capsule(table[].name, table[].entries)' in (ROOT/'bindings/_mojolearn_svm_host.mojo').read_text()
     native=(ROOT/'svm/host/native_epilogue_dispatch.mojo').read_text()
-    old=(ROOT/'providers/python/svm_host_svc_proba_pyapi.mojo').read_text()
+    old=(ROOT/'providers/python/svm_host_svc_proba_pyapi_door.mojo').read_text()
     calls=r'\bhost_(?:gather|select|fold_split|fold_finish|c_rows|check_pairs|pair_epilogue|platt_train|splitmix_perm)\('
     assert re.findall(calls,native)==re.findall(calls,old)
     assert 'dec_addr if nsr * nsc > 0 else dst' in native

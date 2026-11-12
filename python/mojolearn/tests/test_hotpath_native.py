@@ -7,7 +7,7 @@ absent from the binary, the state `_buffer._native_optional` answers None
 for, and makes every label seam decline (return None), so each seam runs
 its Python routine; the `MOJOLEARN_HOTPATH=python` switch that did this is
 deleted (cpu-gpu-cleanup c-core). The NEW arm takes the core helper of
-`bindings/hotpath_helpers.mojo` or the C builtin. Each case
+`bindings/hotpath_helpers_door.mojo` or the C builtin. Each case
 runs both arms and holds them to the SAME RESULT, byte for byte, OR THE
 SAME REFUSAL, type and words.
 
@@ -82,7 +82,7 @@ class _Spy:
 
     def __enter__(self):
         self.saved = dict(_buffer._NATIVE)
-        # The native Array operations (bindings/array_native.mojo) call the
+        # The native Array operations (bindings/array_native_door.mojo) call the
         # helpers they captured at connection, so those are counted too.
         self.array_helpers = _array._ARRAY_CONTEXT["helpers"]
         self.saved_array = dict(self.array_helpers)
@@ -942,7 +942,7 @@ def test_flatten_fast_is_pinned(index):
 
 def test_block_copy_is_pinned():
     a = _arr(_RNG.integers(0, 99, (700, 6)).astype(np.int64))
-    # The block copy is native now (bindings/array_native.mojo _getitem); its
+    # The block copy is native now (bindings/array_native_door.mojo _getitem); its
     # Python definition, the oracle above, keeps its pinned run rule.
     _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
     _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)

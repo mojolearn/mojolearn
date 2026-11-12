@@ -10,7 +10,7 @@ np = require_numpy('_x_sequence_theta')
 from . import _native_xseq_bridge
 
 # Package-import connection: fit and predict are ONE call each into the
-# compiled owner (bindings/xseq_forecast_native.mojo).
+# compiled owner (bindings/xseq_forecast_native_door.mojo).
 _XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 _MODELS = {"STM": 0, "OTM": 1, "DSTM": 2, "DOTM": 3}
@@ -82,7 +82,7 @@ class AutoTheta(ParamsMixin):
 
     # Every public method is one native call whose owner does the whole
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
-    # bindings/xseq_forecast_native.mojo), so no `_mode` class-creation wrappers are installed.
+    # bindings/xseq_forecast_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
 
     def __init__(self, season_length=1, decomposition_type="multiplicative", model=None,

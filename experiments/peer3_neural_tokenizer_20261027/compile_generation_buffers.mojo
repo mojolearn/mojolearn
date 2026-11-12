@@ -2,7 +2,7 @@
 # Compile-only allocation, admission and retained generation-buffer operations.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.generation_buffers import (
+from bindings.generation_buffers_door import (
     generation_initialize_binding, generation_array, generation_array_snapshot,
     generation_buffer_view, generation_address, generation_ids, generation_copy,
     generation_mutable,

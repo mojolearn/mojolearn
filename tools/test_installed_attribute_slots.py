@@ -82,7 +82,7 @@ class BuildProofTests(unittest.TestCase):
             "missing compiler": lambda r: r["fields"]["toolchain"].pop("compiler_sha256"),
             "malformed compiler": lambda r: r["fields"]["toolchain"].update(compiler_sha256="name-only"),
             "wrong result identity": lambda r: r.update(stem="other"),
-            "wrong source": lambda r: r["fields"]["source"]["files"].update({"bindings/public_attributes_native.mojo": "b" * 64}),
+            "wrong source": lambda r: r["fields"]["source"]["files"].update({"bindings/public_attributes_native_door.mojo": "b" * 64}),
             "wrong recipe": lambda r: r["fields"]["builders"].update(command=[]),
             "wrong root": lambda r: r["fields"].update(root_sha256="b" * 64),
             "wrong members": lambda r: r["fields"].update(members=[]),

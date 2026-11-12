@@ -70,7 +70,7 @@ def test_subset_matches_existing_native_constructor_plans_and_inheritance():
     # 4fe4a53c9d it runs natively (_generic_reset) behind one set_params call.
     mode = (ROOT / 'python/mojolearn/_mode.py').read_text()
     assert 'return _GENERIC_PARAMS(self, params, _GENERIC_PARAMS_CONTEXT)' in mode
-    reset = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    reset = (ROOT / 'bindings/full_reset_params_native_door.mojo').read_text()
     generic = reset.split('def _generic_reset(', 1)[1].split('\ndef ', 1)[0]
     assert 'return _generic_reset(model, params, context, depth)' in reset
     assert 'cpy.PyObject_Call(cls._obj_ptr, empty._obj_ptr, values._obj_ptr)' in generic
@@ -138,7 +138,7 @@ def test_public_setter_is_one_binding_call_and_registration_has_correct_indent()
 
 
 def test_setter_preserves_references_and_never_invokes_python_estimator_protocols():
-    source = (ROOT / 'bindings/params_setter_native.mojo').read_text()
+    source = (ROOT / 'bindings/params_setter_native_door.mojo').read_text()
     for forbidden in ('Python.import_module', 'msel_clone_parameter', '.get_params(', '.set_params(', '.__init__(', 'fields.clear'):
         assert forbidden not in source
     assert 'py_setitem(fresh, parameters[i], values[parameters[i]])' in source
@@ -160,7 +160,7 @@ def test_native_slots_setter_and_getter_connection_order_preserves_snapshots():
 
 
 def test_reset_marker_preserves_legacy_user_fields_but_new_fit_wins():
-    source = (ROOT / 'bindings/mode_metadata_native.mojo').read_text()
+    source = (ROOT / 'bindings/mode_metadata_native_door.mojo').read_text()
     start = source.index('def _fitted(')
     end = source.index('\ndef _class_fields', start)
     body = source[start:end]

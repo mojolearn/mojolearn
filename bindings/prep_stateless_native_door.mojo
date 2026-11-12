@@ -1,0 +1,741 @@
+# SPDX-License-Identifier: Apache-2.0
+# The native owner of the stateless x_prep transformers: Binarizer, Normalizer
+# and PolynomialFeatures. Each public fit, transform and fit_transform is one
+# call into prep_stateless_c, which checks the parameters, records the fitted
+# metadata, builds the x_prep program (the same stages, operands and order the
+# Python `_Prog` built) and runs it through the shared transport
+# (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
+# and runs the one transform program.
+from std.memory import unsafe_memcpy, bitcast
+from std.os import getenv
+from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.prep_context_native_door import prep_operation_context
+from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
+from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_arrays_door import classical_address, classical_typed, classical_wrap_array
+from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
+from bindings.scaler_native_door import _ptr, _input
+from core.preprocessing_program import prep_program_stage as _stage
+from x_prep.prep_stateless_native_run import (
+    F32P,
+    I64P,
+    OP_BINARIZE,
+    OP_NORMALIZE,
+    OP_POLY,
+    OP_TRANSPOSE,
+    OP_GATHER_COLS,
+    OP_QT_APPLY,
+    OP_QT_INVERSE,
+    OP_RGATHER,
+    OP_PERM_ROWS,
+    OP_PT_APPLY,
+    OP_PT_INVERSE,
+    OUT_MIN_WORDS,
+    PrepLayout,
+    _col_stats_run,
+    _place_scratch,
+    _poly_terms,
+    _poly_powers,
+    _variance_program,
+    _quantile_program,
+    _power_program,
+)
+from bindings.p3_prep_fitted_unpack import prep_fitted_vector
+from bindings.scaler_lifecycle_native_door import _entries
+from bindings.prep_entry_cache_unpack import prep_entry_word
+from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner_run import xprep_r3
+from bindings.py_typed_call import py_call_typed
+from bindings.py_cpython_table import cpython_table
+from bindings.prep_support_native_pack import prep_support
+from bindings.prep_normalizer_lifecycle_pack import normalizer_transform
+from bindings.prep_normalizer_fit_pack import normalizer_fit
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+
+
+
+def _kind(model: PythonObject, context: PythonObject) raises -> String:
+    # The admitted class this model is (or subclasses), by its MRO.
+    var b = native_loaded_module("builtins")
+    var cls = py_type(model)
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native preprocessing refuses Python metaclass hooks")
+    var kinds = context["prep_stateless_kinds"]
+    # An exact admitted class is the MRO's first row: one lookup, no MRO read
+    # (pass2-prep-metrics; the same as `_kind_of` in prep_classify_native).
+    var own = py_get(kinds, cls)
+    if own is not None:
+        return String(own)
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    for k in range(len(mro)):  # driver-loop: over the model class's MRO
+        var kind = py_get(kinds, mro[k])
+        if kind is not None:
+            return String(kind)
+    raise Error("TypeError: the native prep owner does not serve this class")
+
+
+def _name(model: PythonObject) raises -> String:
+    return String(py_type(model).__name__)
+
+
+def _repr(value: PythonObject) raises -> String:
+    return String(py_call(native_loaded_module("builtins").repr, value))
+
+
+def _int_like(value: PythonObject, context: PythonObject) raises -> Bool:
+    # numbers.Integral without its Python __instancecheck__: Python ints
+    # (bool included) and NumPy integer scalars when NumPy is connected.
+    var b = native_loaded_module("builtins")
+    if Bool(py=py_call(b.isinstance, value, b.int)):
+        return True
+    var integer = py_get(context, "integer")
+    return integer is not None and Bool(py=py_call(b.isinstance, value, integer))
+
+
+def _norm_code(fields: PythonObject) raises -> Int:
+    var b = native_loaded_module("builtins")
+    var norm = fields["norm"]
+    if py_type(norm) is b.str:
+        var text = String(norm)
+        if text == "l1":
+            return 0
+        if text == "l2":
+            return 1
+        if text == "max":
+            return 2
+    raise Error("mojolearn: invalid norm " + _repr(norm))
+
+
+def _degrees(fields: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
+    var b = native_loaded_module("builtins")
+    var degree = fields["degree"]
+    var lo = 0
+    var hi = 0
+    if _int_like(degree, context):
+        hi = Int(py=py_call(b.int, degree))
+    else:
+        var pair = py_call(b.tuple, degree)
+        if len(pair) != 2:
+            raise Error("mojolearn: invalid degree " + _repr(degree))
+        lo = Int(py=py_call(b.int, pair[0]))
+        hi = Int(py=py_call(b.int, pair[1]))
+    if hi < 0 or lo < 0 or lo > hi:
+        raise Error("mojolearn: invalid degree " + _repr(degree))
+    return (lo, hi)
+
+
+def _words(values: List[Int], context: PythonObject) raises -> PythonObject:
+    # Index words as the float32 values `_Prog.put_list` packed (exact).
+    var count = max(len(values), 1)
+    var out = classical_typed(Python.tuple(count), "<f4", context["output_context"])
+    var dest = _ptr(out)
+    _ = out  # keep the Python object alive through the native call above
+    for i in range(len(values)):  # driver-loop: over polynomial term table words
+        dest[i] = Float32(values[i])
+        _ = out  # keep the Python object alive through the native call above
+    return out
+
+
+def _fit(model: PythonObject, kind: String, values: PythonObject, context: PythonObject) raises:
+    var fields = py_fields(model)
+    var d = Int(py=values[4])
+    if kind == "normalizer":
+        _ = _norm_code(fields)
+    elif kind == "polynomial":
+        var order = fields["order"]
+        if py_type(order) is not native_loaded_module("builtins").str or (String(order) != "C" and String(order) != "F"):
+            raise Error("mojolearn: PolynomialFeatures order must be 'C' or 'F'")
+        var degrees = _degrees(fields, context)
+        var replacement = not Bool(py=fields["interaction_only"])
+        var index = List[Int]()
+        var start = List[Int]()
+        _poly_terms(d, degrees[0], degrees[1], replacement, Bool(py=fields["include_bias"]), index, start)
+        var nout = len(start) - 1
+        var powers = classical_typed(Python.tuple(max(nout, 1), d), "<i8", context["output_context"])
+        var table = I64P(unsafe_from_address=Int(py=classical_address(powers)))
+        _ = powers  # keep the Python object alive through the native call above
+        _poly_powers(table, d, nout, index, start)
+        _ = powers  # keep the Python object alive through the native call above
+        py_setitem(fields, "_poly_index", _words(index, context))
+        _ = index  # keep the Python object alive through the native call above
+        py_setitem(fields, "_poly_start", _words(start, context))
+        _ = start  # keep the Python object alive through the native call above
+        py_setitem(fields, "n_output_features_", nout)
+        py_setitem(fields, "powers_", powers)
+    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
+
+
+def _take_f(storage: PythonObject, offset: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
+    # The (rows, cols) column-major block p2m_transpose wrote, as an F-order Array.
+    var b = native_loaded_module("builtins")
+    var part = py_call(b.memoryview, storage)[py_call(b.slice, offset, offset + rows * cols)]
+    var store = py_call(context["array_type"], "f")
+    _ = py_call(store.frombytes, py_call(part.cast, "B"))
+    return classical_wrap_array(store, Python.tuple(rows, cols), "<f4", "F", context["output_context"])
+
+
+def _transform(model: PythonObject, kind: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
+    var entries = _entries(fields["numeric_mode_"], context)
+    var inputs = Python.list(Python.tuple(0, values))
+    var program = List[Int32]()
+    if kind == "binarizer":
+        # X, the threshold word, then the output as arena words.
+        var threshold = classical_typed(Python.tuple(1), "<f4", context["output_context"])
+        _ptr(threshold)[0] = Float32(Float64(py=py_call(native_loaded_module("builtins").float, fields["threshold"])))
+        _ = threshold  # keep the Python object alive through the native call above
+        _ = py_call(inputs.append, Python.tuple(n * d, Python.tuple(0, threshold, PythonObject(None), 1, 1)))
+        var out = n * d + 1
+        var host = out + n * d
+        if host > 2147483647:
+            raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+        _stage(program, OP_BINARIZE, n * d, 0, n * d, n * d, out)
+        var arena = xprep_storage(host, context)
+        xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
+        var result = xprep_take(arena[0], out, n, d, context["output_context"])
+        _ = threshold^
+        _ = arena^
+        return result
+    if kind == "normalizer":
+        var code = _norm_code(fields)
+        var words = n * d
+        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+        var host = words + (0 if dev_out else words)
+        if host + (words if dev_out else 0) > 2147483647:
+            raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+        var arena = xprep_storage(host, context)
+        var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+        _stage(program, OP_NORMALIZE, n, 0, n, d, code, host if dev_out else words)
+        xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+        var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else words, n, d, context["output_context"])
+        _ = arena^
+        return result
+    # PolynomialFeatures: X, the term indices, the term starts, the products.
+    var index = fields["_poly_index"]
+    var start = fields["_poly_start"]
+    var nout = Int(py=fields["n_output_features_"])
+    if Int(py=start.size) != nout + 1:
+        raise Error("RuntimeError: PolynomialFeatures term table does not match n_output_features_")
+    var io = n * d
+    var so = io + Int(py=index.size)
+    var out = so + Int(py=start.size)
+    var words = n * nout
+    var fortran = String(fields["order"]) == "F"
+    var transpose = fortran and words > 0
+    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var host = out + words + (words if transpose and not dev_out else 0)
+    if host + (words if dev_out else 0) > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    _ = py_call(inputs.append, Python.tuple(io, Python.tuple(0, index, PythonObject(None), Int(py=index.size), 1)))
+    _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, start, PythonObject(None), Int(py=start.size), 1)))
+    _stage(program, OP_POLY, words, 0, n, d, io, so, nout, out)
+    var fo = out + words
+    if transpose:
+        _stage(program, OP_TRANSPOSE, words, out, n, nout, host if dev_out else fo)
+    var arena = xprep_storage(host, context)
+    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    var result = PythonObject(None)
+    if transpose:
+        result = _take_f(output_store[0] if dev_out else arena[0], 0 if dev_out else fo, n, nout, context)
+    elif fortran:
+        # an empty block
+        result = classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(n, nout), "<f4", "F", context["output_context"])
+    elif words == 0:
+        result = classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(n, nout), "<f4", "C", context["output_context"])
+    else:
+        result = xprep_take(arena[0], out, n, nout, context["output_context"])
+    _ = arena^
+    return result
+
+
+def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObject, entries: PythonObject,
+               xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True) raises:
+    """`_expansion_prep._cs`: the blocked order under IDN_STATS_BLOCKED on
+    the IDENTICAL tier, else one thread per column. `variance` False skips
+    the blocked variance pass (its callers read the other rows)."""
+    _col_stats_run(program, layout, _fam(mode, entries), xo, n, d, out_buf, variance)
+
+
+def _f64_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # A Python float as its binary64 word, two 4-byte words (`_f64_words`).
+    var words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
+    var bits = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    _ = words  # keep the Python object alive through the native call above
+    bits[0] = bitcast[DType.uint64](Float64(py=py_call(native_loaded_module("builtins").float, value)))
+    _ = words  # keep the Python object alive through the native call above
+    return words
+
+
+def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    """VarianceThreshold.fit: column statistics, var_ptp, then variance >
+    threshold compared in binary64 on the device (c2_key64, c2_gt): the
+    stages, operands and order of the Python program."""
+    var b = native_loaded_module("builtins")
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode, context)
+    var threshold = fields["threshold"]
+    var layout = PrepLayout(n * d, xprep_r3("work"))
+    var program = List[Int32]()
+    var placed = _variance_program(program, layout, _fam(mode, entries), n, d, Bool(py=threshold == PythonObject(0)))
+    var variance = placed[0]
+    var mask = placed[1]
+    var limit = placed[2]
+    var words = _f64_input(threshold, context)
+    var inputs = Python.list(Python.tuple(0, values), Python.tuple(limit, Python.tuple(0, words, PythonObject(None), 2, 1)))
+    var arena = _run_layout(program^, layout, inputs, entries, context)
+    py_setitem(fields, "variances_", xprep_take(arena[0], variance, d, 0, context["output_context"]))
+    var base = F32P(unsafe_from_address=Int(py=arena[1]))
+    var support = Python.list()
+    var any_kept = False
+    for j in range(d):  # driver-loop: over the fitted support mask (feature metadata)
+        var kept = base[mask + j] != 0
+        any_kept = any_kept or kept
+        _ = py_call(support.append, PythonObject(kept))
+    py_setitem(fields, "_mask", support)
+    _ = words^
+    _ = arena^
+    if not any_kept:
+        # scikit-learn's wording, with its one-sample note
+        var message = "No feature in X meets the variance threshold " + String(py_call(b.format, threshold, ".5f"))
+        if n == 1:
+            message += " (X contains only one sample)"
+        raise Error(message)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+
+
+def _support_columns(mask_value: PythonObject) raises -> List[Int]:
+    """The kept column indices of a fitted support mask. An exact list or
+    tuple of exact bools (what fit stores) is read through its C storage by
+    pointer (no Python call per feature, no list copy, p3-prep); any other
+    item takes its truth test, any other container a list() copy first."""
+    var b = native_loaded_module("builtins")
+    var mask = mask_value
+    var kind = py_type(mask)
+    if kind is not b.list and kind is not b.tuple:
+        mask = py_call(b.list, mask_value)
+        kind = b.list
+    var is_list = kind is b.list
+    var table = cpython_table()
+    var true_ptr = PythonObject(True)._obj_ptr
+    var false_ptr = PythonObject(False)._obj_ptr
+    var keep = List[Int]()
+    for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
+        var raw = table[].PyList_GetItem(mask._obj_ptr, j) if is_list else table[].PyTuple_GetItem(mask._obj_ptr, j)
+        if raw == true_ptr:
+            keep.append(j)
+        elif raw != false_ptr and Bool(py=PythonObject(from_borrowed=raw)):
+            keep.append(j)
+    _ = mask^
+    return keep^
+
+
+def _select_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """_SelectorMixin.transform: the fitted support's columns of X, by one
+    gather_cols stage."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
+    var keep = _support_columns(fields["_mask"])
+    if len(keep) == 0:
+        raise Error("mojolearn: no features were selected")
+    return _select_gather(fields, values, _words(keep, context), len(keep), context)
+
+
+def _select_gather(fields: PythonObject, values: PythonObject, columns: PythonObject, k: Int,
+                   context: PythonObject) raises -> PythonObject:
+    """The gather of `_select_transform` with the kept columns given as
+    index words (`_words`): RFE passes the words it stored at fit
+    (`_support_words_`), so a predict reads no support mask."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var entries = _entries(fields["numeric_mode_"], context)
+    var ko = n * d
+    var out = ko + k
+    var host = out + n * k
+    if host > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var program = List[Int32]()
+    _stage(program, OP_GATHER_COLS, n * k, 0, n, d, ko, k, out)
+    var inputs = Python.list(Python.tuple(0, values), Python.tuple(ko, Python.tuple(0, columns, PythonObject(None), k, 1)))
+    var arena = xprep_storage(host, context)
+    xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
+    var result = xprep_take(arena[0], out, n, k, context["output_context"])
+    _ = columns  # keep the Python object alive through the native call above
+    _ = arena^
+    return result
+
+
+def _run_layout(var program: List[Int32], layout: PrepLayout, inputs: PythonObject, entries: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    # One run of a program laid out by `PrepLayout`; returns the arena.
+    if layout.host + layout.scratch > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    _place_scratch(program, layout.host)
+    var device_scratch = layout.scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
+    var arena = xprep_storage(layout.host + (0 if device_scratch else layout.scratch), context)
+    xprep_run(arena, layout.host, layout.scratch, PythonObject(None), 0, program^, inputs, entries, context)
+    return arena
+
+
+def _vector(value: Float64, context: PythonObject) raises -> PythonObject:
+    var out = classical_typed(Python.tuple(1), "<f4", context["output_context"])
+    _ptr(out)[0] = Float32(value)
+    _ = out  # keep the Python object alive through the native call above
+    return out
+
+
+def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    """QuantileTransformer.fit: the optional keyed row subsample (f2_perm_rows,
+    p2m_rgather), the reference grid (c2_grid), sort_cols, column statistics,
+    quantile and the p2m_transpose of quantiles_: the stages and order of the
+    Python program."""
+    var b = native_loaded_module("builtins")
+    var fields = py_fields(model)
+    var distribution = fields["output_distribution"]
+    if py_type(distribution) is not b.str or (String(distribution) != "uniform" and String(distribution) != "normal"):
+        raise Error("mojolearn: invalid output_distribution " + _repr(distribution))
+    var n_all = Int(py=values[3])
+    var d = Int(py=values[4])
+    var n = n_all
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode, context)
+    var subsample = fields["subsample"]
+    var permute = subsample is not None and n_all > Int(py=py_call(b.int, subsample))
+    var seed = PythonObject(None)
+    if permute:
+        var state = fields["random_state"]
+        seed = PythonObject(0) if state is None else py_call(b.int, state)
+        n = Int(py=py_call(b.int, subsample))
+    var nq = max(1, min(Int(py=py_call(b.int, fields["n_quantiles"])), n))
+    var layout = PrepLayout(n_all * d, xprep_r3("work"))
+    var inputs = Python.list(Python.tuple(0, values))
+    var program = List[Int32]()
+    var xo = 0
+    var seed_words = PythonObject(None)
+    if permute:
+        var rows = layout.alloc(n)
+        var sample = layout.alloc(n * d)
+        var so = layout.alloc(2)
+        # The uint64 seed's (low, high) 32-bit words (`_seed_words`).
+        seed_words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seed_words)))
+        _ = seed_words  # keep the Python object alive through the native call above
+        var mask = PythonObject(0xFFFFFFFF)
+        words[0] = UInt32(Int(py=py_call(b.int.__dict__["__and__"], seed, mask)))
+        _ = seed_words  # keep the Python object alive through the native call above
+        words[1] = UInt32(Int(py=py_call(b.int.__dict__["__and__"], py_call(b.int.__dict__["__rshift__"], seed, PythonObject(32)), mask)))
+        _ = seed_words  # keep the Python object alive through the native call above
+        _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, seed_words, PythonObject(None), 2, 1)))
+        _stage(program, OP_PERM_ROWS, n, so, n_all, rows)
+        _stage(program, OP_RGATHER, n * d, xo, d, rows, sample)
+        xo = sample
+    var placed = _quantile_program(program, layout, _fam(mode, entries), xo, n, d, nq)
+    var grid = placed[0]
+    var nb = placed[1]
+    var qo = placed[2]
+    var qt = placed[3]
+    var level = _vector(Float64(nq - 1), context)
+    _ = py_call(inputs.append, Python.tuple(nb, Python.tuple(0, level, PythonObject(None), 1, 1)))
+    var arena = _run_layout(program^, layout, inputs, entries, context)
+    py_setitem(fields, "_q", xprep_take(arena[0], qo, nq * d, 0, context["output_context"]))
+    py_setitem(fields, "quantiles_", xprep_take(arena[0], qt, nq, d, context["output_context"]))
+    py_setitem(fields, "references_", xprep_take(arena[0], grid, nq, 0, context["output_context"]))
+    py_setitem(fields, "n_quantiles_", nq)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    _ = seed_words^
+    _ = level^
+    _ = arena^
+
+
+def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    """QuantileTransformer.transform / inverse_transform: one qt_apply or
+    qt_inverse stage over the fitted quantiles and references."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
+    var entries = _entries(fields["numeric_mode_"], context)
+    var nq = Int(py=fields["n_quantiles_"])
+    var quantiles = prep_fitted_vector(fields["_q"], context)  # exact fitted Array: no re-admission (p3-prep)
+    var references = prep_fitted_vector(fields["references_"], context)
+    if Int(py=quantiles.size) != nq * d or Int(py=references.size) != nq:
+        raise Error("RuntimeError: QuantileTransformer fitted quantiles do not match n_quantiles_")
+    var normal = String(fields["output_distribution"]) == "normal"
+    var words = n * d
+    var qo = words
+    var ro = qo + nq * d
+    var out = ro + nq
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var host = out + (0 if dev_out else words)
+    if host + (words if dev_out else 0) > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var inputs = Python.list(Python.tuple(0, values),
+                             Python.tuple(qo, Python.tuple(0, quantiles, PythonObject(None), nq * d, 1)),
+                             Python.tuple(ro, Python.tuple(0, references, PythonObject(None), nq, 1)))
+    var program = List[Int32]()
+    _stage(program, OP_QT_INVERSE if inverse else OP_QT_APPLY, words, 0, n, d, qo, nq, ro, 1 if normal else 0, out)
+    var arena = xprep_storage(host, context)
+    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else out, n, d, context["output_context"])
+    _ = quantiles^
+    _ = references^
+    _ = arena^
+    return result
+
+
+def _fam(mode: PythonObject, entries: PythonObject) raises -> Int:
+    # `_idn_fam`: the IDENTICAL binding's family switches, 0 on another tier.
+    if String(mode) != "identical":
+        return 0
+    return prep_entry_word(entries, "x_prep_idn_fam")  # read once per binding
+
+
+def _pt_flags(mode: PythonObject, entries: PythonObject) raises -> Int:
+    # `_ptimpute_flags`: the FAST binding's x_prep_ptimpute_flags, else 0.
+    if String(mode) != "fast":
+        return 0
+    return prep_entry_word(entries, "x_prep_ptimpute_flags")  # read once per binding
+
+
+def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    """PowerTransformer.fit: the host column's pt_fit, or the device's
+    golden-section search as stages (staged, or speculated `spec` deep, with
+    the blocked folds under IDN_PT_BLOCKED), then the standardization
+    statistics: the stages, operands and order of the Python program."""
+    var b = native_loaded_module("builtins")
+    var fields = py_fields(model)
+    var method_name = fields["method"]
+    if py_type(method_name) is not b.str or (String(method_name) != "yeo-johnson" and String(method_name) != "box-cox"):
+        raise Error("mojolearn: invalid method " + _repr(method_name))
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var method = 1 if String(method_name) == "box-cox" else 0
+    var standardize = Bool(py=fields["standardize"])
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode, context)
+    var layout = PrepLayout(n * d, xprep_r3("work"))
+    var program = List[Int32]()
+    var host = py_get(entries, "x_prep_host_column") is not None
+    var flags = _pt_flags(mode, entries)
+    var placed = _power_program(program, layout, _fam(mode, entries), flags, host, String(mode) == "identical",
+                                n, d, method, standardize)
+    var st = placed[0]
+    var lam = placed[1]
+    var anchor = placed[2]
+    var anchor_kind = placed[3]
+    var mean = placed[4]
+    var scale = placed[5]
+    var centered = placed[6]
+    var arena = _run_layout(program^, layout, Python.list(Python.tuple(0, values)), entries, context)
+    var base = F32P(unsafe_from_address=Int(py=arena[1]))
+    if method == 1:
+        for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
+            if base[st + 3 * d + j] <= 0:
+                raise Error("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
+    var output = context["output_context"]
+    py_setitem(fields, "lambdas_", xprep_take(arena[0], lam, d, 0, output))
+    var keep_anchor = centered and standardize
+    py_setitem(fields, "_pt_anchor", xprep_take(arena[0], anchor, d, 0, output) if keep_anchor else PythonObject(None))
+    py_setitem(fields, "_pt_anchor_kind", xprep_take(arena[0], anchor_kind, d, 0, output) if keep_anchor else PythonObject(None))
+    py_setitem(fields, "_mean", xprep_take(arena[0], mean, d, 0, output) if standardize else PythonObject(None))
+    py_setitem(fields, "_scale", xprep_take(arena[0], scale, d, 0, output) if standardize else PythonObject(None))
+    py_setitem(fields, "_method", method)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    _ = arena^
+
+
+def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    """PowerTransformer.transform / inverse_transform: one pt_apply or
+    pt_inverse stage over the fitted lambdas (and standardization)."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(native_loaded_module("builtins").str, fitted)))
+    var entries = _entries(fields["numeric_mode_"], context)
+    var standardize = Bool(py=fields["standardize"])
+    var words = n * d
+    var inputs = Python.list(Python.tuple(0, values))
+    var host = words
+    var lambdas = prep_fitted_vector(fields["lambdas_"], context)  # exact fitted Array: no re-admission (p3-prep)
+    var lo = host
+    host += d
+    _ = py_call(inputs.append, Python.tuple(lo, Python.tuple(0, lambdas, PythonObject(None), d, 1)))
+    var mo = -1
+    var so = -1
+    var mean = PythonObject(None)
+    var scale = PythonObject(None)
+    if standardize:
+        mean = prep_fitted_vector(fields["_mean"], context)
+        scale = prep_fitted_vector(fields["_scale"], context)
+        mo = host
+        host += d
+        so = host
+        host += d
+        _ = py_call(inputs.append, Python.tuple(mo, Python.tuple(0, mean, PythonObject(None), d, 1)))
+        _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, scale, PythonObject(None), d, 1)))
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var out = host
+    if not dev_out:
+        host += words
+    var anchor = py_get(fields, "_pt_anchor")
+    var ao = -1
+    var ko = -1
+    var anchor_values = PythonObject(None)
+    var kind_values = PythonObject(None)
+    if anchor is not None:
+        anchor_values = prep_fitted_vector(anchor, context)
+        kind_values = prep_fitted_vector(fields["_pt_anchor_kind"], context)
+        ao = host
+        host += d
+        ko = host
+        host += d
+        _ = py_call(inputs.append, Python.tuple(ao, Python.tuple(0, anchor_values, PythonObject(None), d, 1)))
+        _ = py_call(inputs.append, Python.tuple(ko, Python.tuple(0, kind_values, PythonObject(None), d, 1)))
+    if host + (words if dev_out else 0) > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    if dev_out:
+        out = host
+    var program = List[Int32]()
+    _stage(program, OP_PT_INVERSE if inverse else OP_PT_APPLY, words, 0, n, d, lo, Int(py=fields["_method"]), mo, so, out, ao, ko)
+    var arena = xprep_storage(host, context)
+    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else out, n, d, context["output_context"])
+    _ = lambdas^
+    _ = mean^
+    _ = scale^
+    _ = anchor_values^
+    _ = kind_values^
+    _ = arena^
+    return result
+
+
+def _stateless_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    var result = PythonObject(None)
+    if operation == "get_support" and (kind == "variance_threshold" or kind == "selector"):
+        result = prep_support(model, args[0], context)
+    elif operation == "transform" and kind == "normalizer":
+        result = normalizer_transform(model, args[0], context)
+    elif (operation == "fit" or operation == "fit_transform") and kind == "normalizer":
+        result = normalizer_fit(model, args[0], args[1], operation == "fit_transform", context)
+    elif operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
+        var fields = py_fields(model)
+        if not py_contains(fields, "n_features_in_"):
+            raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+        var values = xprep_values(args[0], _entries(fields["numeric_mode_"], context), context)
+        result = _quantile_apply(model, values, True, context) if kind == "quantile" else _power_apply(model, values, True, context)
+        _ = values^
+    elif operation == "fit" or operation == "fit_transform" or operation == "transform":
+        var mode = context["backend_fields"]["_DEFAULT_MODE"]
+        if operation == "transform":
+            var fields = py_fields(model)
+            if not py_contains(fields, "n_features_in_"):
+                raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+            mode = fields["numeric_mode_"]
+        var values = xprep_values(args[0], _entries(mode, context), context)
+        var selector = kind == "variance_threshold" or kind == "selector"
+        if operation == "transform" and kind == "quantile":
+            result = _quantile_apply(model, values, False, context)
+        elif operation == "transform" and kind == "power":
+            result = _power_apply(model, values, False, context)
+        elif operation == "transform":
+            result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+        elif kind == "selector":
+            raise Error("TypeError: this selector's fit is not a native stateless operation")
+        else:
+            if kind == "variance_threshold":
+                _variance_fit(model, values, context)
+            elif kind == "quantile":
+                _quantile_fit(model, values, context)
+            elif kind == "power":
+                _power_fit(model, values, context)
+            else:
+                _fit(model, kind, values, context)
+            result = model
+            if operation == "fit_transform":
+                # The X converted for the fit is the transform's input.
+                if kind == "quantile":
+                    result = _quantile_apply(model, values, False, context)
+                elif kind == "power":
+                    result = _power_apply(model, values, False, context)
+                else:
+                    result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+        _ = values^
+    else:
+        raise Error("unknown native stateless prep operation")
+    return result
+
+
+def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var call = PythonObject(from_borrowed=args_ptr)
+        var b = native_loaded_module("builtins")
+        if py_type(call) is not b.tuple or len(call) != 4 or py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
+            raise Error("TypeError: preprocessing requires its native operation argument envelope")
+        var model = call[0]
+        var operation = String(call[1])
+        var args = call[2]
+        var context = prep_operation_context(call[3])
+        classical_connect_numpy(context)
+        var kind = _kind(model, context)
+        # Every public method except Normalizer's (its own lifecycle,
+        # bindings/prep_normalizer_lifecycle.mojo) and get_support runs the
+        # former `_mode` wrappers' lifecycle here (bindings/public_lifecycle_owner.mojo).
+        var public = kind != "normalizer" and (operation == "fit" or operation == "fit_transform"
+                                               or operation == "transform" or operation == "inverse_transform")
+        if not public:
+            return _stateless_dispatch(model, kind, operation, args, context).steal_data()
+        var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
+        var result = PythonObject(None)
+        try:
+            result = _stateless_dispatch(model, kind, operation, args, context)
+        finally:
+            lifecycle_end(model, operation, depth)
+        lifecycle_complete(model, operation, args[0], False, context)
+        return lifecycle_result(model, operation, result, "", context).steal_data()
+    except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
+        if String(error).startswith("TypeError:"):
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        if String(error).startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
+        if String(error).startswith("ImportError:"):
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        if String(error).startswith("RuntimeError:"):
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

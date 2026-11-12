@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.linalg_ops_resample import rs_operation
+from bindings.linalg_ops_resample_door import rs_operation
 
 def resample_public_compile(operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return rs_operation(String(operation), args, context)

@@ -144,7 +144,7 @@ class LinearSVC(_LinearSVMBase):
     >>> labels = clf.predict(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -312,7 +312,7 @@ class LinearSVR(_LinearSVMBase):
     >>> pred = model.predict(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a

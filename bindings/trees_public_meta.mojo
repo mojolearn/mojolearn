@@ -24,9 +24,9 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_attr import py_attr
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_wrap_array, _store_code
+from bindings.classical_arrays_door import classical_wrap_array, _store_code
 from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
 from bindings.trees_public_inputs import (
     TreesLabels, trees_builtins, trees_table,
@@ -37,7 +37,7 @@ from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
     admit_c_view, admitted_dtype,
 )
-from bindings.classical_arrays import classical_address
+from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_meta_run import CalibratedProgram, meta_binary_column_check
@@ -49,19 +49,19 @@ from bindings.trees_public_boost import (
     _mode, _xt, _xr, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
-from bindings.trees_public_score import trees_r2, trees_class_codes
+from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels import labels_accuracy, _classification_encoded as score_classification_encoded
-from bindings.prep_native_estimator import (
+from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split,
 )
 from bindings.classical_labels import _label_list, classical_score_from_codes
-from bindings.p3_labels_metrics_native import p3_interleave_columns
-from bindings.metrics_cls_native import metrics_cls_operation
-from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.classical_pandas import native_pandas_exact
-from bindings.native_buffer_owner import native_buffer_view
-from bindings.native_unit_threads import (
+from bindings.p3_labels_metrics_native_door import p3_interleave_columns
+from bindings.metrics_cls_native_unpack import metrics_cls_operation
+from bindings.classifier_public_lifecycle_door import classifier_label_list
+from bindings.classical_pandas_door import native_pandas_exact
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.native_unit_threads_unpack import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
     native_unit_gate_enter, native_unit_device_workers,
 )
@@ -69,13 +69,13 @@ from bindings.native_unit_os_threads_run import native_unit_gate, native_unit_ga
 from core.host_parallel import host_fp_env, host_fp_env_set
 from std.python._cpython import GILReleased
 from std.ffi import c_int, external_call
-from bindings.native_array_storage import native_array_from_values
-from bindings.msel_inputs import msel_admit, msel_input_count
-from bindings.trees_meta_admission import meta_admit_configuration
-from bindings.trees_staged_input import trees_stage_members, trees_unstage
-from bindings.trees_side_records import trees_side_get, trees_side_put
-from bindings.base_helpers_key import base_helpers_key
-from bindings.base_helpers_released import (
+from bindings.native_array_storage_door import native_array_from_values
+from bindings.msel_inputs_unpack import msel_admit, msel_input_count
+from bindings.trees_meta_admission_door import meta_admit_configuration
+from bindings.trees_staged_input_door import trees_stage_members, trees_unstage
+from bindings.trees_side_records_unpack import trees_side_get, trees_side_put
+from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.base_helpers_released_unpack import (
     base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
 )
 from core.linear_entry_table import LinearEntryKey

@@ -71,7 +71,7 @@ def _harness_text():
 
 #: A binding may take its export list from a shared `register(m)` that the
 #: GPU binding calls too (bindings/_mojolearn_x_trees_host.mojo calls
-#: providers/python/xtrees_api_pyapi.mojo::register, so the two lists cannot drift). The
+#: providers/python/xtrees_api_pyapi_door.mojo::register, so the two lists cannot drift). The
 #: registrations it exports are that module's.
 REGISTER_IMPORT = re.compile(r"^from\s+([A-Za-z0-9_.]+)\s+import\s+(?:[A-Za-z0-9_]+\s*,\s*)*register\s*(?:,[^\n]*)?$", re.M)
 REGISTER_CALL = re.compile(r"^\s+register\(\s*(?:module|m)\s*\)", re.M)
@@ -524,7 +524,7 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     # under the family define alone.
     assert host_surface.sabotage_build_defines("linalg").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1"]
-    sources = {"runtime_model_selection": ["bindings/runtime_model_selection_entry.mojo"],
+    sources = {"runtime_model_selection": ["bindings/runtime_model_selection_entry_pack.mojo"],
                "tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo",
                              "tokenizer/impl/tokenizer_host_shell_impl.mojo"],
                "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
@@ -658,11 +658,11 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
 
     # ONE SOURCE: both bindings register kpss_test from the shared module, so
     # the reference binary and the shipped binary cannot drift apart.
-    shared = "bindings/kpss_host_test.mojo"
+    shared = "bindings/kpss_host_test_unpack.mojo"
     assert (ROOT / shared).is_file(), f"{shared} is missing"
     for binding in ("_mojolearn_tsa_host", "_mojolearn_forecast_host"):
         src = _read(f"bindings/{binding}.mojo")
-        assert "from bindings.kpss_host_test import" in src, (
+        assert "from bindings.kpss_host_test_unpack import" in src, (
             f"{binding} does not register kpss_test from the shared module")
     assert "def kpss_test_binding(" not in _read("bindings/_mojolearn_tsa_host.mojo"), (
         "the tsa binding still defines its own kpss_test_binding; the two binaries would drift")

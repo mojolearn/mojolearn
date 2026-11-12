@@ -92,7 +92,7 @@ def test_constructor_has_one_native_call_and_no_python_lifecycle_fallback():
     tree=ast.parse(CONNECTOR.read_text());factory=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_initializer')
     wrapper=factory.body[0];assert isinstance(wrapper,ast.FunctionDef)
     assert len(wrapper.body)==1 and ast.unparse(wrapper.body[0])=='return _ENTRY(self, args, kwargs, _CONTEXT)'
-    native=(ROOT/'bindings/linear_constructor_native.mojo').read_text()
+    native=(ROOT/'bindings/linear_constructor_native_pack.mojo').read_text()
     for forbidden in ('Python.import_module','.__init__(','.__setattr__(','.bind(', 'fields.clear', 'fields.pop', 'native_storage_allocate'):
         assert forbidden not in native
     assert native.index('_release_admit(previous,') < native.index('py_setitem(fields, order[i]')

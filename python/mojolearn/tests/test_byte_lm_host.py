@@ -79,7 +79,7 @@ def fake_host(monkeypatch, tmp_path):
     _backend._DOOR_HOST_MODULES.pop(host_mod._EXTENSION, None)
 
 
-# The inference owner (bindings/byte_lm_host_trainer_native.mojo) calls the
+# The inference owner (bindings/byte_lm_host_trainer_native_door.mojo) calls the
 # host binding through its compiled descriptor (`byte_lm_host_api_v1`), which
 # a Python stand-in cannot provide, and it connects the binding ONCE, when
 # `_byte_lm_host` is imported (`_connect_host_trainer` -> `_load()`). So the

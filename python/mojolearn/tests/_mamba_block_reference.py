@@ -4,7 +4,7 @@
 
 Each `mamba{1,2,3}_call(block, x, state, step)` spells the block's kernel
 arguments and layout independently of the native public forward
-(bindings/mamba_public_native.mojo) and calls the binding's
+(bindings/mamba_public_native_door.mojo) and calls the binding's
 `mamba*_forward` / `mamba*_decode_step` entry, so the native forward can be
 held to it (test_mamba_native_public.py, test_neural_block_native.py,
 test_parallel_causal_lm.py). Moved out of the product package with the

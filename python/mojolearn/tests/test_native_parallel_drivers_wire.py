@@ -19,82 +19,82 @@ PKG = REPO / "python" / "mojolearn"
 #: (driver module, function or Class.method, door operation, door file,
 #:  GPU binding source registering the plan entries or None)
 DRIVERS = (
-    ("parallel_classical", "fit_kernel_method", "family_km_par_fit", "bindings/kernel_methods_native.mojo",
+    ("parallel_classical", "fit_kernel_method", "family_km_par_fit", "bindings/kernel_methods_native_door.mojo",
      "bindings/_mojolearn_kernel_methods.mojo"),
-    ("parallel_classical", "apply_kernel_method", "family_km_par_apply", "bindings/kernel_methods_native.mojo",
+    ("parallel_classical", "apply_kernel_method", "family_km_par_apply", "bindings/kernel_methods_native_door.mojo",
      "bindings/_mojolearn_kernel_methods.mojo"),
-    ("parallel_classical", "fit_cholesky", "family_chol_par_fit", "bindings/linalg_native.mojo",
+    ("parallel_classical", "fit_cholesky", "family_chol_par_fit", "bindings/linalg_native_door.mojo",
      "bindings/_mojolearn_gp.mojo"),
-    ("parallel_classical", "solve_cholesky", "family_chol_par_solve", "bindings/linalg_native.mojo",
+    ("parallel_classical", "solve_cholesky", "family_chol_par_solve", "bindings/linalg_native_door.mojo",
      "bindings/_mojolearn_gp.mojo"),
-    ("parallel_classical", "fit_svm", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_svm", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_svm.mojo"),
-    ("parallel_classical", "predict_svm", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "predict_svm", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_svm.mojo"),
-    ("parallel_classical", "fit_gaussian_process", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_gaussian_process", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_gp.mojo"),
-    ("parallel_classical", "predict_gaussian_process", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "predict_gaussian_process", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_gp.mojo"),
-    ("parallel_classical", "fit_logistic", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_logistic", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_estimators.mojo"),
-    ("parallel_classical", "fit_coordinate_descent", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_coordinate_descent", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_solver.mojo"),
-    ("parallel_classical", "fit_gram_estimator", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_gram_estimator", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_estimators.mojo"),
-    ("parallel_classical", "fit_kmeans", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_kmeans", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn.mojo"),
-    ("parallel_classical", "fit_dbscan", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_dbscan", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_estimators.mojo"),
-    ("parallel_classical", "fit_gaussian_mixture", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_gaussian_mixture", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_mixture.mojo"),
-    ("parallel_classical", "predict_gaussian_mixture", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "predict_gaussian_mixture", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_mixture.mojo"),
-    ("parallel_classical", "fit_hdbscan", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "fit_hdbscan", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_hdbscan.mojo"),
-    ("parallel_classical", "bootstrap", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "bootstrap", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_resample.mojo"),
-    ("parallel_classical", "permutation_test", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "permutation_test", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_resample.mojo"),
-    ("parallel_classical", "monte_carlo_integrate", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_classical", "monte_carlo_integrate", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_resample.mojo"),
-    ("parallel_graph", "fit_graph", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_graph", "fit_graph", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_metrics.mojo"),
-    ("parallel_graph", "transform_umap", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_graph", "transform_umap", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_metrics.mojo"),
-    ("parallel_ensemble", "fit_boosting", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_ensemble", "fit_boosting", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_gbdt.mojo"),
-    ("parallel_ensemble", "fit_feature_freq", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_ensemble", "fit_feature_freq", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_gbdt.mojo"),
-    ("parallel_ensemble", "fit_ordered_rmse", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_ensemble", "fit_ordered_rmse", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_gbdt.mojo"),
-    ("parallel_ensemble", "fit_isolation_forest", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_ensemble", "fit_isolation_forest", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_svm.mojo"),
-    ("parallel_ensemble", "score_isolation_forest", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_ensemble", "score_isolation_forest", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_svm.mojo"),
-    ("parallel_ensemble", "ParallelForestPredictor.predict", "family_par_run", "bindings/family_native.mojo",
+    ("parallel_ensemble", "ParallelForestPredictor.predict", "family_par_run", "bindings/family_native_door.mojo",
      "bindings/_mojolearn_rf.mojo"),
     ("parallel_ensemble", "ParallelForestPredictor.predict_proba", "family_par_run",
-     "bindings/family_native.mojo", "bindings/_mojolearn_trees.mojo"),
+     "bindings/family_native_door.mojo", "bindings/_mojolearn_trees.mojo"),
     ("parallel_classical", "fit_arima", "fit_arima", "bindings/parallel_forecast_native_door.mojo", None),
     ("parallel_classical", "fit_exponential_smoothing", "fit_exponential_smoothing",
      "bindings/parallel_forecast_native_door.mojo", None),
-    ("parallel_classical", "transform_rbf_sampler", "transform_rbf_sampler", "bindings/parallel_shard_native.mojo",
+    ("parallel_classical", "transform_rbf_sampler", "transform_rbf_sampler", "bindings/parallel_shard_native_door.mojo",
      None),
-    ("parallel_preprocessing", "fit_scaler", "fit_scaler", "bindings/parallel_shard_native.mojo", None),
-    ("parallel_preprocessing", "transform_scaler", "transform_scaler", "bindings/parallel_shard_native.mojo", None),
+    ("parallel_preprocessing", "fit_scaler", "fit_scaler", "bindings/parallel_shard_native_door.mojo", None),
+    ("parallel_preprocessing", "transform_scaler", "transform_scaler", "bindings/parallel_shard_native_door.mojo", None),
     ("parallel_gaussian_process", "fit_gaussian_process_classifier", "fit_gaussian_process_classifier",
-     "bindings/parallel_shard_native.mojo", None),
+     "bindings/parallel_shard_native_door.mojo", None),
     ("parallel_gaussian_process", "predict_gaussian_process_classifier", "predict_gaussian_process_classifier",
-     "bindings/parallel_shard_native.mojo", None),
-    ("parallel_ensemble", "fit_forest", "fit_forest", "bindings/parallel_shard_native.mojo", None),
+     "bindings/parallel_shard_native_door.mojo", None),
+    ("parallel_ensemble", "fit_forest", "fit_forest", "bindings/parallel_shard_native_door.mojo", None),
     ("parallel_neighbors_reference", "ReferenceShardedNeighbors.kneighbors", "reference_query",
-     "bindings/parallel_shard_native.mojo", None),
+     "bindings/parallel_shard_native_door.mojo", None),
     ("parallel_neighbors_reference", "ReferenceShardedNeighbors.predict", "reference_query",
-     "bindings/parallel_shard_native.mojo", None),
+     "bindings/parallel_shard_native_door.mojo", None),
     ("parallel_neighbors_reference", "ReferenceShardedNeighbors.predict_proba", "reference_query",
-     "bindings/parallel_shard_native.mojo", None),
-    ("parallel_neighbors", "ParallelQueries.query", "parallel_queries", "bindings/parallel_shard_native.mojo", None),
-    ("parallel_ivf", "DistributedIVFIndex.search", "ivf_search", "bindings/parallel_shard_native.mojo", None),
+     "bindings/parallel_shard_native_door.mojo", None),
+    ("parallel_neighbors", "ParallelQueries.query", "parallel_queries", "bindings/parallel_shard_native_door.mojo", None),
+    ("parallel_ivf", "DistributedIVFIndex.search", "ivf_search", "bindings/parallel_shard_native_door.mojo", None),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
@@ -173,7 +173,7 @@ def test_each_door_dispatches_its_operation():
     assert 'operation == "family_par_public"' in _read("bindings/native_operation_codes.mojo")
     for module, name, op, door, _ in DRIVERS:
         text = _read(door)
-        if door == "bindings/family_native.mojo":
+        if door == "bindings/family_native_door.mojo":
             text += _read("bindings/native_operation_codes.mojo")
         assert 'operation == "' + op + '"' in text, (op, door)
 
@@ -188,7 +188,7 @@ def test_sharded_drivers_keep_the_partition_and_the_negative_control():
     ranges = common[common.index("def shard_ranges("):common.index("def shard_devices(")]
     assert "out.append(min(i + w, count))" in ranges and "i += w" in ranges
     forecast = _read("bindings/parallel_forecast_native_door.mojo")
-    shard = _read("bindings/parallel_shard_native.mojo")
+    shard = _read("bindings/parallel_shard_native_door.mojo")
     for source, driver, read in ((forecast, "_fit_arima", "shard_rows(data, lo - shift, hi - shift, context)"),
                                  (forecast, "_fit_hw", "shard_rows(data, lo - shift, hi - shift, context)"),
                                  (shard, "_transform_rbf_sampler", "shard_rows(x, lo - shift, hi - shift, context)"),
@@ -237,7 +237,7 @@ def test_par_run_drivers_name_only_their_spec_owners():
         # constructs its forest plan directly. The Python shell hands raw
         # arguments to that boundary, with no preparation or result helper.
         connected = _read("python/mojolearn/_native_parallel_public.py")
-        native = _read("bindings/parallel_public_native.mojo")
+        native = _read("bindings/parallel_public_native_door.mojo")
         assert repr(driver) in connected or ('"' + driver + '"') in native, driver
 
 

@@ -11,10 +11,11 @@
 # parameter words, order), run by the shared program runner, and the same
 # flag checks after the run. Same kernels: the bits do not move.
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family
+from bindings.admitted_family_door import admit_family
 from bindings.py_balanced import py_call, py_contains
-from bindings.family_common import FAMILY_F32P, family_array, family_str
-from bindings.classical_arrays import classical_address
+from bindings.family_common_unpack import FAMILY_F32P, family_str
+from bindings.family_common_pack import family_array
+from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_exp_common import (
     MX_NONE, MxProg, MxArena, MxLab, MxMat, mx_run, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_nan,

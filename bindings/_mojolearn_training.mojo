@@ -57,11 +57,11 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
 
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
-from bindings.residual_dropout_boundary import (
+from bindings.residual_dropout_boundary_pack import (
     residual_dropout_binding, residual_dropout_backward_binding,
     residual_dropout_dev_binding, residual_dropout_backward_dev_binding,
 )
-from bindings.neural_gemm_boundary import neural_gemm_binding
+from bindings.neural_gemm_boundary_pack import neural_gemm_binding
 from training.neural_session_mlp import nn_mlp_sessions_device
 
 
@@ -87,12 +87,23 @@ from max.gpu.host import DeviceContext, HostBuffer
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_public import per_call_step
 from bindings.optimizer_public_door import entry_zero
-from bindings.optimizer_public_pyapi import (
-    optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
-    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding,
-    optimizer_resident_download_binding, optimizer_resident_open_binding,
-    optimizer_resident_step_binding, optimizer_resident_step_io_binding,
-    optimizer_resident_upload_binding, maximize_dev_available_binding,
+from bindings.optimizer_public_pyapi_unpack import (
+    optimizer_door_accumulate_c,
+    optimizer_door_clip_c,
+    optimizer_door_io_c,
+    optimizer_door_load_state_c,
+    optimizer_door_state_c,
+    optimizer_door_state_set_c,
+    optimizer_door_step_c,
+)
+from bindings.optimizer_public_pyapi_pack import (
+    optimizer_resident_close_binding,
+    optimizer_resident_download_binding,
+    optimizer_resident_open_binding,
+    optimizer_resident_step_binding,
+    optimizer_resident_step_io_binding,
+    optimizer_resident_upload_binding,
+    maximize_dev_available_binding,
 )
 from training.estimator import (
     identical_clip_grad_norm_addrs_host,
@@ -130,7 +141,7 @@ from training.samba_ops import (
 # Apple FAST build with MOJOLEARN_AFN_SAMBA_FUSE (or _ALL); AFN_SAMBA_FUSE
 # is false everywhere else and nothing below registers.
 from training.samba_afn import AFN_SAMBA_FUSE
-from providers.python.training_samba_afn_pyapi import (
+from providers.python.training_samba_afn_pyapi_pack import (
     samba_afn_embedding_backward_tied_binding,
     samba_afn_tail_train_binding,
 )

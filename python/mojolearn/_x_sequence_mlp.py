@@ -22,7 +22,7 @@ from . import _native_xseq_bridge
 from ._native_full_reset_params import _INIT_ENTRY as _FULL_RESET_INIT, _CONTEXT as _FULL_RESET_CONTEXT
 
 # Package-import connection: fit, predict and predict_proba are ONE call each
-# into the compiled owner (bindings/xseq_neural_native.mojo): input casts,
+# into the compiled owner (bindings/xseq_neural_native_door.mojo): input casts,
 # label encoding, the Glorot draws (straight into the flat parameter block
 # `mlp_fit` trains), the stopping report and the predicted labels.
 _XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
@@ -44,7 +44,7 @@ class _BaseMLP(ParamsMixin):
                  beta_1=0.9, beta_2=0.999, epsilon=1e-8, n_iter_no_change=10, max_fun=15000,
                  numeric_mode=None):
         # One native call: the full-reset owner replays this constructor's field
-        # writes (bindings/full_reset_constructor_native.mojo). connect_module
+        # writes (bindings/full_reset_constructor_native_door.mojo). connect_module
         # installs the same entry as each concrete class's __init__.
         return _FULL_RESET_INIT(self, (), {"hidden_layer_sizes": hidden_layer_sizes, "activation": activation, "solver": solver, "alpha": alpha, "batch_size": batch_size, "learning_rate": learning_rate, "learning_rate_init": learning_rate_init, "power_t": power_t, "max_iter": max_iter, "shuffle": shuffle, "random_state": random_state, "tol": tol, "verbose": verbose, "warm_start": warm_start, "momentum": momentum, "nesterovs_momentum": nesterovs_momentum, "early_stopping": early_stopping, "validation_fraction": validation_fraction, "beta_1": beta_1, "beta_2": beta_2, "epsilon": epsilon, "n_iter_no_change": n_iter_no_change, "max_fun": max_fun, "numeric_mode": numeric_mode}, _FULL_RESET_CONTEXT, type(self))
 

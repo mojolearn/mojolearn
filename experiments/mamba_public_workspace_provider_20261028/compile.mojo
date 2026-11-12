@@ -1,6 +1,6 @@
 # Compile-only full shared public forward/step boundary, including Mamba2Block.step.
 from std.python import PythonObject
-from bindings.neural_block_public import neural_block_forward_binding
+from bindings.neural_block_public_door import neural_block_forward_binding
 
 
 @export

@@ -7,8 +7,8 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.parallel_byte_native import parallel_byte_c, ParallelByteOwner
-from bindings.cross_vendor_native import cross_vendor_c
+from bindings.parallel_byte_native_door import parallel_byte_c, ParallelByteOwner
+from bindings.cross_vendor_native_door import cross_vendor_c
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource
 
 

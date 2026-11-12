@@ -19,7 +19,7 @@ def test_route_connections_are_import_time_and_cover_both_families():
 
 
 def test_native_manifold_selects_fitted_and_default_modes():
-    source = _source("bindings/mani_decomp_native.mojo")
+    source = _source("bindings/mani_decomp_native_door.mojo")
     selection = source.split("def _mani_arguments(", 1)[1].split("def mani_decomp_operation(", 1)[0]
     assert 'estimator_binding_mode(requested, "_mojolearn_x_decomp", context)' in selection
     assert 'estimator_binding_mode(settings.default_mode, "_mojolearn_x_decomp", context)' in selection
@@ -29,7 +29,7 @@ def test_native_manifold_selects_fitted_and_default_modes():
 
 
 def test_native_tsne_resolves_both_optional_binding_slots():
-    source = _source("bindings/mani_tsne_native.mojo")
+    source = _source("bindings/mani_tsne_native_unpack.mojo")
     assert 'estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]' in source
     assert 'estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]' in source
     assert 'spectral_umap_optional_entry(estimators, "pca_fit_owned", context)' in source
@@ -38,7 +38,7 @@ def test_native_tsne_resolves_both_optional_binding_slots():
 def test_manifold_kit_refuses_proxies_before_looking_up_cells():
     # lane entangled-mkit: the kit is typed RUN (bindings/mani_kit_run.mojo);
     # its UNPACK admits the exact module and connects the table provider once.
-    source = _source("bindings/mani_kit.mojo")
+    source = _source("bindings/mani_kit_door.mojo")
     image = source.split("def mk_image(", 1)[1].split("\ndef ", 1)[0]
     assert 'raise Error("TypeError: manifold kit requires an exact native module")' in image
     assert image.index("raise Error") < image.index("kit_connect(")
@@ -50,7 +50,7 @@ def test_manifold_kit_refuses_proxies_before_looking_up_cells():
 
 
 def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
-    door = _source("bindings/mani_decomp_native.mojo")
+    door = _source("bindings/mani_decomp_native_door.mojo")
     mds = door.split("def _mds_fit(", 1)[1].split("\ndef ", 1)[0]
     assert mds.count("admit_family_meta(") == 1
     assert "_ = init_pin^" in mds
@@ -62,8 +62,8 @@ def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
 
 
 def test_tsne_pca_and_optimizer_share_one_x_snapshot():
-    source = _source("bindings/mani_tsne_native.mojo")
-    entry = _source("bindings/manifold_native.mojo")
+    source = _source("bindings/mani_tsne_native_unpack.mojo")
+    entry = _source("bindings/manifold_native_pack.mojo")
     assert entry.count('manifold_input(source, name, not tsne, context)') == 1
     assert 'snapshot: ArrayMetadata' in source
     assert 'admit_family_meta(args[2]' not in source
@@ -75,7 +75,7 @@ def test_tsne_pca_and_optimizer_share_one_x_snapshot():
 
 
 def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
-    source = _source("bindings/manifold_settings_native.mojo")
+    source = _source("bindings/manifold_settings_native_door.mojo")
     assert source.index('self.fields = classical_family_admit(model)') < source.index('self.values = py_call(b.dict, self.fields)')
     assert source.count('context["backend_fields"]["_DEFAULT_MODE"]') == 1
     assert 'operation.endswith("_fit_transform")' in source
@@ -86,14 +86,14 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
     # Private byte copy of the configuration array, now through the CPython
     # buffer API instead of a bound tobytes call.
     assert 'native_array_from_bytes(String("B"), manifold_buffer_bytes(value))' in source
-    assert '"PyBuffer_ToContiguous"' in _source("bindings/manifold_scalar_native.mojo")
+    assert '"PyBuffer_ToContiguous"' in _source("bindings/manifold_scalar_native_door.mojo")
     assert 'py_setitem(output, i, item)' in source
     # The private-buffer array is now snapshotted before it is returned (8c25f09b2c).
     assert ('var result = py_call(cls, shape, dtype=dtype, buffer=store)\n'
             '            _ = _snapshot(result, context)\n            return result') in source
-    dispatch = _source("bindings/manifold_native.mojo")
+    dispatch = _source("bindings/manifold_native_pack.mojo")
     assert dispatch.count('ManifoldSettings(model, operation, context)') == 1
-    for owner in ('mani_decomp_native', 'mani_tsne_native', 'mani_umap_native'):
+    for owner in ('mani_decomp_native_door', 'mani_tsne_native_unpack', 'mani_umap_native_door'):
         implementation = _source(f"bindings/{owner}.mojo")
         for forbidden in ('py_fields(model)', '_fields(model)', '_DEFAULT_MODE', 'family_raw_get(model', '_mani_mode('):
             assert forbidden not in implementation, (owner, forbidden)
@@ -102,11 +102,11 @@ def test_settings_admission_precedes_snapshot_and_is_shared_by_every_owner():
 
 
 def test_native_lifecycle_owns_checks_and_finished_results():
-    entry = _source("bindings/manifold_native.mojo")
+    entry = _source("bindings/manifold_native_pack.mojo")
     assert entry.index('manifold_require_fitted(') < entry.index('var x = manifold_input(')
     assert entry.index('manifold_ignored_target(') < entry.index('result = tsne_operation(')
     assert 'return manifold_finish(settings, result, method, names, context)' in entry
-    source = _source("bindings/manifold_lifecycle_native.mojo")
+    source = _source("bindings/manifold_lifecycle_native_door.mojo")
     conversion = source.split('def _cast(', 1)[1].split('def _target_finite(', 1)[0]
     assert conversion.index('if not snapshot.castable:') < conversion.index('admitted_cast_f32(')
     assert 'snapshot.source.kind' not in source.split('def _target_finite(', 1)[1].split('def manifold_input(', 1)[0]

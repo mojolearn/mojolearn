@@ -33,7 +33,7 @@ class DistributedIVFIndex:
         return _native_parallel_shard('ivf_from_index', (cls, index, devices))
 
     def search(self, queries):
-        # One native call (bindings/parallel_shard_native.mojo `ivf_search`).
+        # One native call (bindings/parallel_shard_native_door.mojo `ivf_search`).
         return _native_parallel_shard('ivf_search', (self, queries))
 
     def close(self):

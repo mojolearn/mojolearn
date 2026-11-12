@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.trees_public_native import trees_public_operation
+from bindings.trees_public_native_door import trees_public_operation
 
 def compile_entry(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return trees_public_operation(model, String(operation), args, context)

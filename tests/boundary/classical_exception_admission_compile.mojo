@@ -2,8 +2,8 @@
 # Compile the actual selection, restoration and C error translation paths.
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.classical_exceptions import classical_not_fitted_class, classical_error_restore, classical_error_reduce
-from bindings.classical_error_boundary import classical_python_error
+from bindings.classical_exceptions_door import classical_not_fitted_class, classical_error_restore, classical_error_reduce
+from bindings.classical_error_boundary_pack import classical_python_error
 
 
 @export

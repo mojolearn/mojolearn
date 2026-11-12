@@ -17,12 +17,12 @@ from x_linear.ops_entry_device import (
 )
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
+from providers.python.core_py2mojo_rows_pyapi_pack import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 from x_linear.device import linear_ctx as _p2m_ctx
 from checks.vendor import COMPILED_VENDOR

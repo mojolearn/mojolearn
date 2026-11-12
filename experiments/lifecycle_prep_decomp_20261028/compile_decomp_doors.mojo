@@ -2,11 +2,11 @@
 # Compile-only root: the five decomposition doors whose public lifecycle runs
 # natively (bindings/decomp_public_lifecycle.mojo). Not runtime qualification.
 from std.python._cpython import PyObjectPtr
-from bindings.decomp_native import decomp_c
-from bindings.ipca_native import ipca_c
-from bindings.dict_learning_native import dict_learning_c
-from bindings.mcd_native import mcd_c
-from bindings.als_native import als_c
+from bindings.decomp_native_door import decomp_c
+from bindings.ipca_native_door import ipca_c
+from bindings.dict_learning_native_pack import dict_learning_c
+from bindings.mcd_native_door import mcd_c
+from bindings.als_native_door import als_c
 
 
 @export

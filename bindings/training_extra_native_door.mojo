@@ -11,18 +11,18 @@ program's forward (autograd/small_mlp_program.mojo, op SESSIONS).
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.optimizer_container_boundary import OptimizerInputOwners
+from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
 from std.memory import unsafe_memcpy
 from std.sys import is_defined
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import tensor_view, new_array
 from bindings.tensor_view import TensorView, base_format, shape_text
 from training.optimizer_input_plan import optimizer_contiguous_address
-from providers.python.array_layout_boundary import native_shape_pack
+from providers.python.array_layout_boundary_pack import native_shape_pack
 from bindings.optimizer_device_native_door import shape_count, device_entries, device_shape, device_allocate
-from bindings.optimizer_admission import opt_value
+from bindings.optimizer_admission_door import opt_value
 from bindings.training_embedding_native_door import embedding_indices
 from bindings.py_cpython_table import cpython_table
 

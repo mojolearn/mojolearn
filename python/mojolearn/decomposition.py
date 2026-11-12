@@ -14,7 +14,7 @@ _PCA_FORMAT = "mojolearn-pca-1"
 _TSVD_FORMAT = "mojolearn-tsvd-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -165,7 +165,7 @@ class PCA(NumericModeMixin):
     _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS
 
     #: Every public operation below is one call into the compiled PCA owner
-    #: (bindings/pca_native.mojo), connected once at import. It validates the
+    #: (bindings/pca_native_door.mojo), connected once at import. It validates the
     #: arguments and inputs, chooses the solver and numeric-mode binding, runs
     #: the one compiled fit (projecting inside it for fit_transform) and
     #: stores the fitted attributes; NumericModeMixin leaves these unwrapped.
@@ -393,7 +393,7 @@ class TruncatedSVD(NumericModeMixin):
     _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized")
 
     #: Every public operation is one call into the native owner
-    #: (bindings/tsvd_native.mojo tsvd_c), which runs the whole lifecycle
+    #: (bindings/tsvd_native_door.mojo tsvd_c), which runs the whole lifecycle
     #: (fitted check, X and width checks, fit bookkeeping, NumPy results);
     #: the `_mode` class-creation wrappers leave this class unwrapped.
     _mojolearn_native_public = True
@@ -566,10 +566,10 @@ __getattr__ = _lazy_exports("decomposition")
 
 # The compiled PCA owner, connected once at import: every public PCA
 # operation (fit, fit_transform, transform, inverse_transform) is one call
-# into it (bindings/pca_native.mojo).
+# into it (bindings/pca_native_door.mojo).
 _PCA_ENTRY, _PCA_CONTEXT = _native_pca_bridge.connect_public(PCA)
 
 # The compiled TruncatedSVD owner, connected once at import: fit,
 # fit_transform, transform and inverse_transform are one call each into it
-# (bindings/tsvd_native.mojo).
+# (bindings/tsvd_native_door.mojo).
 _TSVD_ENTRY, _TSVD_CONTEXT = _native_tsvd_bridge.connect_public(TruncatedSVD)

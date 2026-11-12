@@ -2,7 +2,7 @@
 """Import-time connection of the native arena program runner.
 
 `_expansion_prep._Prog.run` and `_expansion_metrics._Prog.run` are one call
-into `arena_prog_native_call` (bindings/arena_prog_native.mojo), which owns
+into `arena_prog_native_call` (bindings/arena_prog_native_door.mojo), which owns
 the run: the binding entries, the arena and output stores, the input copies,
 resident and device-gathered inputs, range descriptors and stage words.
 """

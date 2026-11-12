@@ -67,14 +67,14 @@ _HDBSCAN_FORMAT = "mojolearn-hdbscan-2"
 _HDBSCAN_NAMES = "mojolearn HDBSCAN.save: metric and cluster_selection_method must be names"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 _SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}
 
 # The compiled family owner, connected once at import: `fit` and
-# `fit_predict` are one native call each (bindings/cluster_fit_a_native.mojo:
+# `fit_predict` are one native call each (bindings/cluster_fit_a_native_door.mojo:
 # the parameter refusals, the binary's numeric-mode check, `hdbscan_fit` and,
 # with prediction_data=True, `hdbscan_generate_prediction_data`), handed the
 # binding `_bind` resolves.

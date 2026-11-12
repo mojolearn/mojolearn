@@ -106,7 +106,7 @@ class DeviceArrayRefusalTest(unittest.TestCase):
     def test_python_subclass_dlpack_exporter_is_refused_without_calling_it(self):
         # A host exporter whose class is Python-defined (a heap type with a
         # Python `__dlpack__`) is refused by the native exporter admission
-        # (bindings/array_from_buffer_native.mojo) before any protocol runs:
+        # (bindings/array_from_buffer_native_door.mojo) before any protocol runs:
         # `__dlpack__` would raise RuntimeError if it were called.
         with self.assertRaisesRegex(TypeError, "native buffer exporters without Python protocols"):
             _buffer._materialize(_TorchCpuLike(), "X")

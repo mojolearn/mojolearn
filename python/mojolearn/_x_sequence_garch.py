@@ -10,7 +10,7 @@ np = require_numpy('_x_sequence_garch')
 from . import _native_xseq_bridge
 
 # Package-import connection: fit and predict are ONE call each into the
-# compiled owner (bindings/xseq_forecast_native.mojo).
+# compiled owner (bindings/xseq_forecast_native_door.mojo).
 _XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 

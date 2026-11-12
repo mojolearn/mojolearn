@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# Array label values from one retained logical dtype/shape/stride snapshot.
+# Keep the GP-specific helper and its API intact; both use native scalar bits.
+# The PACK half of the former `bindings/label_snapshot_native.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/label_snapshot_native_unpack.mojo`.
+from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
+from bindings.p3_labels_metrics_native_door import p3_array_numbers
+from bindings.native_scalar_decode_unpack import NativeScalarBuffer
+from core.native_scalar_decode import NativeRealBits, native_scalar_real
+from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
+
+
+def _label_word(snapshot: ArrayMetadata, offset: Int) raises -> PythonObject:
+    var letter = String(snapshot.dtype_name[byte=1:2])
+    var width = snapshot.source.itemsize
+    var code = String("q") if letter == "i" else String("Q")
+    if letter == "f":
+        code = String("e") if width == 2 else String("f") if width == 4 else String("d")
+    elif letter == "b":
+        code = "?"
+    elif letter != "i" and letter != "u":
+        raise Error("TypeError: Array labels require a real numeric dtype")
+    var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=snapshot.source.addr)
+    var real = native_scalar_real(data, offset, code, width, True)
+    if letter == "b":
+        return PythonObject(real.truth())
+    var decoded = NativeScalarBuffer(real, NativeRealBits(), False, False)
+    return decoded.to_python_number(letter != "f")
+
+
+def _label_axis(snapshot: ArrayMetadata, axis: Int, offset: Int) raises -> PythonObject:
+    if axis == len(snapshot.shape):
+        return _label_word(snapshot, offset)
+    if axis == len(snapshot.shape) - 1:
+        # p3-labels-metrics: the innermost run of integer / float32 /
+        # float64 labels becomes one presized list of exact Python ints /
+        # floats made by C calls (the numbers `to_python_number` made, one
+        # text parse and one Python append each). Bool, float16 and uint64
+        # keep the general decoder below.
+        var sizes: List[Int] = [snapshot.shape[axis]]
+        var steps: List[Int] = [snapshot.strides[axis]]
+        var fast = p3_array_numbers(snapshot.source.addr + offset, sizes, steps, snapshot.shape[axis],
+                                    String(snapshot.dtype_name[byte=1:2]), snapshot.source.itemsize)
+        if fast is not None:
+            return fast
+    var result = Python.list()
+    for i in range(snapshot.shape[axis]):  # driver-loop: native values follow logical strides in each captured label dimension
+        _ = py_call(result.append, _label_axis(snapshot, axis + 1, offset + i * snapshot.strides[axis]))
+    return result

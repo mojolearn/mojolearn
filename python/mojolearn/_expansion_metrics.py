@@ -608,7 +608,7 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
 
 # Import-time connection of the shared native program runner. Every x_metrics
 # program is built in Mojo (bindings/metrics_reg_native.mojo `_Prog`/`_Reg`,
-# bindings/msel_split.mojo `_fold_rows_run`, core/metrics_program_plan.mojo);
+# bindings/msel_split_door.mojo `_fold_rows_run`, core/metrics_program_plan.mojo);
 # no Python program object exists, so the runner gets no Python program class.
 # TOMBSTONE: the Python program builders `_Prog`, `_Reg`, `_group`, `_counts`, `_scan_flag`, `_proba`,
 # `_targets`, `_pos_label`, `fold_rows`, `_fold_rows_run`, `_r2_sums_of` and their helpers (dead copies of the

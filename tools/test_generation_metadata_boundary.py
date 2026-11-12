@@ -6,8 +6,8 @@ import re
 from check_neural_native_boundary import NATIVE_ROOTS, audit
 
 ROOT = Path(__file__).resolve().parents[1]
-BINDING = (ROOT / 'bindings/causal_lm_public.mojo').read_text()
-PROVIDER = (ROOT / 'providers/python/generation_metadata_pyapi.mojo').read_text()
+BINDING = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
+PROVIDER = (ROOT / 'providers/python/generation_metadata_pyapi_door.mojo').read_text()
 NATIVE = (ROOT / 'core/generation_metadata.mojo').read_text()
 
 

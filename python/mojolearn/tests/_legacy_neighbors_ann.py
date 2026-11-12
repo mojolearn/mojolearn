@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Frozen pre-migration Python paths of the approximate indexes' `fit` and `refine`
 (lane native-neighbors-20261024, base b32103c00), used only as an independent test
-oracle for the one-call native doors (bindings/neighbors_ann_native.mojo)."""
+oracle for the one-call native doors (bindings/neighbors_ann_native_door.mojo)."""
 from mojolearn._buffer import addr, addr_ro, as_f32_c, empty
 from mojolearn._ivf_impl import _int_param
 from mojolearn._expansion_ann import _ann_int
@@ -9,7 +9,7 @@ from mojolearn._expansion_ann import _ann_int
 
 def _release_resident(self):
     """The removed `_AnnResident._release_resident` (native twin:
-    bindings/neighbors_ann_native.mojo): drop the held handle, if any."""
+    bindings/neighbors_ann_native_door.mojo): drop the held handle, if any."""
     cached = self.__dict__.pop("_resident", None)
     if cached is None:
         return
@@ -21,7 +21,7 @@ def _release_resident(self):
 
 def _resident_key(self, native):
     """The removed `_AnnResident._resident_key` (native twin:
-    bindings/neighbors_ann_native.mojo `_ann_key_entry`)."""
+    bindings/neighbors_ann_native_door.mojo `_ann_key_entry`)."""
     d = self.__dict__
     arrays = tuple(d.get(a) for a, _dtype in self._SAVE_ARRAYS)
     return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
@@ -68,7 +68,7 @@ def ivf_fit(self, X, y=None):
         return self
     data = empty((n * dim,), "<f4")
     self._entry(native, "ivf_flat_build")(
-        # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_build).
+        # ORDER MATCHES bindings/ivf_index_arrays_unpack.mojo (ivf_flat_build).
         # x, centers_out, center_norms_out, offsets_out, indices_out, list_data_out
         [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
          addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_"),

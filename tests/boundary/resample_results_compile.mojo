@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from providers.python.resample_public_pyapi import resample_result_initialize
+from providers.python.resample_public_pyapi_pack import resample_result_initialize
 
 @export
 def PyInit__mojolearn_resample_results_compile() abi("C") -> PythonObject:

@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.public_attributes_native import public_attribute_c
+from bindings.public_attributes_native_door import public_attribute_c
 
 @export
 def peer1_attribute_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

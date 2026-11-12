@@ -30,7 +30,7 @@ def test_public_frontdoors_only_enter_native_owner():
             assert isinstance(calls[0].func, ast.Name) and calls[0].func.id == '_NATIVE'
 
 def test_shared_binding_admission_uses_live_registry_without_load_callbacks():
-    source = read('providers/python/estimator_binding_pyapi.mojo')
+    source = read('providers/python/estimator_binding_pyapi_door.mojo')
     assert 'backend["_SETS"]' in source and 'fields["_modules"]' in source
     assert 'context["family_mode_set_fields"]' in source
     assert 'py_type(module) is not py_type(bi)' in source
@@ -39,18 +39,18 @@ def test_shared_binding_admission_uses_live_registry_without_load_callbacks():
         assert text not in source
 
 def test_computation_transport_reuses_common_provider_and_resource():
-    source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
+    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
     assert 'struct ' not in source
     assert 'neural_descriptor_reuse(previous, factory' in source
     assert 'neural_descriptor_execute(native, operation' in source
-    source = read('bindings/kernel_methods_native.mojo')
+    source = read('bindings/kernel_methods_native_door.mojo')
     assert 'neural_descriptor_adopt(native, Int(py=handle), 5, [])' in source
     assert 'neural_descriptor_resource_close(held[3], [])' in source
     assert 'held[4] is native' in source
     assert 'state.pop, "_native_kernel_method_provider"' in source
 
 def test_compound_transform_reuses_admitted_x_and_provider():
-    source = read('bindings/kernel_methods_native.mojo')
+    source = read('bindings/kernel_methods_native_door.mojo')
     # X is admitted once per public operation by the dispatcher and handed to
     # the bodies as x_meta (312223206b, c251819d8a); no body re-admits it.
     for name, operation in [('_nys_fit', 'nystroem_transform'), ('_rbf_fit', 'rbf_sampler_transform')]:
@@ -91,19 +91,19 @@ def test_private_span_bounds_and_scalar_schemas_are_checked_before_dispatch():
     assert 'nf != np' in source
     assert 'operation == 6 and na != 3' in source
     assert 'operation == 5 and (na != 1 or np != 0)' in source
-    source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
+    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
     assert source.index('len(params) != schema[0]') < source.index('params[i]')
 
 
 def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
-    source = read('providers/python/array_metadata_pyapi.mojo')
+    source = read('providers/python/array_metadata_pyapi_door.mojo')
     assert 'var keep: PythonObject' in source and 'var source: CastIn' in source
     for field in ('value.shape', 'value.dtype', 'value.itemsize', 'value.strides'):
         assert source.count(field) == 1, field
-    # The family admission (lane a2-admit-family, bindings/admitted_family.mojo):
+    # The family admission (lane a2-admit-family, bindings/admitted_family_door.mojo):
     # the one-shot input snapshot, then the float32 pack from that snapshot;
     # both halves stay single-capture.
-    family = read('bindings/admitted_family.mojo')
+    family = read('bindings/admitted_family_door.mojo')
     conversion = body(family, 'admit_family_meta')
     assert 'admit_family_input(source, ndim, name, context, dense, admitted, empty)' in conversion
     assert 'admit_family_cast(snapshot, name, context, finite, refusal)' in conversion
@@ -113,7 +113,7 @@ def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
     pack = body(family, 'admit_family_cast')
     assert 'admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in pack
     assert 'snapshot.replace_f32(result, address)' in pack
-    source = read('bindings/kernel_methods_native.mojo')
+    source = read('bindings/kernel_methods_native_door.mojo')
     _assert_x_admitted_once_per_operation(source)
     for name in ('_krr_fit', '_krr_predict', '_nys_fit', '_nys_transform', '_rbf_fit', '_rbf_transform'):
         part = body(source, name)

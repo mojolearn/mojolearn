@@ -183,7 +183,7 @@ def test_native_route_admission_precedes_checkpoint_read(monkeypatch):
     # The layer map and the route are admitted before the path is read: an
     # invalid map is refused by name for a path that does not exist. (The
     # native owner keeps its own copy of the import-time connection metadata,
-    # bindings/parallel_causal_native.mojo `parallel_causal_initialize`, so
+    # bindings/parallel_causal_native_door.mojo `parallel_causal_initialize`, so
     # the unsupported-vendor refusal can no longer be injected through
     # `_CAUSAL_CONTEXT`.)
     refused(mod.ParallelCausalLM.load, ValueError, 'one nonnegative device index per layer',

@@ -36,7 +36,7 @@ class ModeMetadataConnection(unittest.TestCase):
             self.assertTrue(any(isinstance(n, ast.FunctionDef) and n.name == method for n in cls.body))
 
     def test_native_entry_is_registered_and_does_not_use_generic_dict_lookup(self):
-        native = (ROOT / 'bindings/mode_metadata_native.mojo').read_text()
+        native = (ROOT / 'bindings/mode_metadata_native_door.mojo').read_text()
         registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
         self.assertIn('module.def_py_c_function(mode_metadata_c, "mode_metadata_native_call")', registration)
         # CPython calls go through the process-wide typed pointer table, never a

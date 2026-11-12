@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only coverage of the new bound native owner types; never executed.
 from std.python.bindings import PythonModuleBuilder
-from bindings.native_identity_key import NativeIdentityKey
-from bindings.neural_block_public import NativeBlockPlan
-from bindings.sequential_admission import SequentialAdmissions
+from bindings.native_identity_key_door import NativeIdentityKey
+from bindings.neural_block_public_door import NativeBlockPlan
+from bindings.sequential_admission_door import SequentialAdmissions
 
 def main() raises:
     var module = PythonModuleBuilder("_native_execution_compile")

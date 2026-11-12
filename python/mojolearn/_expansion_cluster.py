@@ -25,10 +25,10 @@ from . import _native_family_bridge
 
 # The compiled family owners, connected once at import: the centers'
 # predict/transform/score, MeanShift and AffinityPropagation predict and
-# BisectingKMeans' tree predict (bindings/cluster_native.mojo), and the fits,
+# BisectingKMeans' tree predict (bindings/cluster_native_door.mojo), and the fits,
 # partial_fit, fit_predict and fit_transform of MiniBatchKMeans,
 # BisectingKMeans, MeanShift, OPTICS and AffinityPropagation
-# (bindings/cluster_fit_a_native.mojo) are one native call each, handed the
+# (bindings/cluster_fit_a_native_door.mojo) are one native call each, handed the
 # binding selected by the shared native provider after admission.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
@@ -40,7 +40,7 @@ _E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHI
 
 # The input, aux-block, weight and seed admission and the shared call
 # (`_f32`, `_aux`, `_weights`, `_seed`, `_XCluster._call`) are native:
-# bindings/mixture_native_door.mojo and bindings/cluster_fit_a_native.mojo
+# bindings/mixture_native_door.mojo and bindings/cluster_fit_a_native_door.mojo
 # (lane pyout-small-families deleted the uncalled Python copies).
 
 
@@ -181,7 +181,7 @@ class _CentersMixin:
 # fit loop. The batch
 # order comes from `random_state` through the lane's splitmix64 stream, not
 # NumPy's Mersenne Twister. A callable init is called once with every row and
-# its centers take the array path (bindings/cluster_fit_a_native.mojo); see
+# its centers take the array path (bindings/cluster_fit_a_native_door.mojo); see
 # x_cluster/NOT_IMPLEMENTED.tsv.
 class MiniBatchKMeans(_CentersMixin, _XCluster):
     """Mini-batch k-means clustering.
@@ -1107,7 +1107,7 @@ class BayesianGaussianMixture(_XCluster):
         return _NATIVE(self, "family_mix_bgmm_score", (None, X), _NATIVE_CONTEXT)
 
 
-# The fixed tables the native fits read (bindings/cluster_fit_a_native.mojo):
+# The fixed tables the native fits read (bindings/cluster_fit_a_native_door.mojo):
 # the class whose centers fit_predict/fit_transform fit, and OPTICS' metric
 # codes (x_cluster/optics.mojo; minkowski is resolved by its `p`).
 _native_family_bridge.tables(

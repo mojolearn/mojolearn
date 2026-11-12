@@ -70,7 +70,7 @@ for _ts, _c in _CODE.items():
 
 
 # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3102). dtype codes of the
-# core helpers in `bindings/hotpath_helpers.mojo`; float16, bf16 bits and the
+# core helpers in `bindings/hotpath_helpers_door.mojo`; float16, bf16 bits and the
 # 8/16-bit integers have no code and keep the Python routines. lane
 # apple-fast-py2mojo-core (2026-10-03): every non-empty block of a coded
 # dtype takes the helper, whatever its size (the `_NATIVE_MIN` cut that kept
@@ -142,7 +142,7 @@ _ALIAS = {
 
 # The shape, stride, size and layout arithmetic of an Array (C and F strides,
 # the element count, `_check_shape`, the zero-filled store and the C <-> F
-# reorder) is `bindings/array_native.mojo` (`_c_strides`, `_f_strides`,
+# reorder) is `bindings/array_native_door.mojo` (`_c_strides`, `_f_strides`,
 # `_prod`, `_checked_shape`, `_new_store`, `_reorder`); the Python copies are
 # the test oracle in python/mojolearn/tests/_array_reference.py (lane
 # pyout-runtime-boundary, 2026-11-11).
@@ -480,7 +480,7 @@ def _empty_nest(shape):
 
 
 # Every public Array operation is one call of this native entry
-# (bindings/array_native.mojo, in the tokenizer host binding). `_buffer`
+# (bindings/array_native_door.mojo, in the tokenizer host binding). `_buffer`
 # imports this module, so the binding is loaded here directly; the core
 # helpers the operations share (cast_elements, reduce_stat,
 # strided_copy_bytes) are connected by `_buffer` once it is defined.

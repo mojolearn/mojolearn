@@ -807,8 +807,8 @@ def lane_reach(ls, walker, closer=None):
 # ------------------------------------------------------------ native owners
 
 #: The variables a native owner dispatches on: `if operation == "croston_fit":`
-#: (bindings/xseq_forecast_native.mojo), `if family == "FastICA":` then
-#: `if operation == "fit":` (bindings/decomp_native.mojo), `kind == "..."`.
+#: (bindings/xseq_forecast_native_door.mojo), `if family == "FastICA":` then
+#: `if operation == "fit":` (bindings/decomp_native_door.mojo), `kind == "..."`.
 DISPATCH_VARS = ("operation", "op", "family", "kind", "kind_name", "method", "command", "name")
 _COND_RE = re.compile(r'\b(?:%s)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*)"' % "|".join(DISPATCH_VARS))
 _OP_RE = re.compile(r'\b(?:operation|op)\s*==\s*"([A-Za-z_][A-Za-z0-9_]*_[A-Za-z0-9_]+)"')
@@ -876,13 +876,13 @@ class OwnerDispatch:
                                  or v in methods)
         # owner entry -> the owner file its registration's impl is in: a
         # branch on generic values alone (`operation == "fit"` in
-        # bindings/ipca_native.mojo) is credited to a lane that reaches the
+        # bindings/ipca_native_door.mojo) is credited to a lane that reaches the
         # owner entry itself (`ipca_native_call`)
         self.owner_files = defaultdict(set)
         record_files = {r[2] for r in self.records}
         # a branch that names another branch's dispatch value relays to it
         # (`msel_split` hands its lazy iterator the owner operation
-        # "family_msel_split_loo_at", bindings/msel_split.mojo): the value
+        # "family_msel_split_loo_at", bindings/msel_split_door.mojo): the value
         # joins the lane's reached names. Generic values never relay.
         values = set(self.op_values) - self.generic
         self.records = [(c, e, p, frozenset(l & values)) for c, e, p, l in self.records]
@@ -892,7 +892,7 @@ class OwnerDispatch:
                 if not export.endswith("_call"):
                     continue
                 # the owner's own entry file: the one its registered impl is in
-                # (`ipca_c` and its `operation == "fit"` branch, bindings/ipca_native.mojo);
+                # (`ipca_c` and its `operation == "fit"` branch, bindings/ipca_native_door.mojo);
                 # an umbrella owner's other files are reached by their own values
                 roots = set(self.graph.resolve(src, impl))
                 self.owner_files[export] |= {n[1] for n in roots} & record_files
@@ -908,9 +908,9 @@ class OwnerDispatch:
     def _strings(self, node, depth):
         """(literals, prefixes) over `node` and what it calls, to `depth`
         calls deep: every identifier-shaped string literal, and every literal a
-        name is composed from (`near["xn_" + name]`, bindings/kpca_native.mojo).
+        name is composed from (`near["xn_" + name]`, bindings/kpca_native_door.mojo).
         A reached type's method is followed when a reached definition names it
-        (a kit's `self.fn("x_decomp_dev_gemm")`, bindings/mani_kit.mojo). Only
+        (a kit's `self.fn("x_decomp_dev_gemm")`, bindings/mani_kit_door.mojo). Only
         the Python-facing Mojo under bindings/ is read: a kernel names no entry."""
         key = (node, depth)
         if key in self._memo:
@@ -1441,7 +1441,7 @@ _ARM_DECISIONS_20261024 = [
     "`resample_gather_narrow` out (RESAMPLE_GPU_GATHER is fast or the opt-in C11 define, the narrow gather fast), so "
     "the entries return their not-taken flag and no identical lane can move; the resample fit's arithmetic carries "
     "`coverage-core-resample_impl`. The patch and manifest row are removed; the entries are fault n/a.",
-    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native.mojo "
+    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native_door.mojo "
     "`_resolve_gamma`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
     "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host). "
     "The re-proof was MISSED again: svc uses the package default gamma='auto'. New lane `svc-gamma-scale` "
@@ -1488,7 +1488,7 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "byte_lm_trainer_step runs the native GPU session owner")
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
-_MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
+_MAMBA_SESSION = ("bindings/mamba_public_native_door.mojo composes `<kind> + \"_session_<op>\"` and calls the "
                   "binding entry from Mojo (Mamba2Block.decode_session / Mamba3Block.decode_session -> "
                   "mamba_native_call 'session_open', 'session_step', 'session_sync', 'session_load')")
 _SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed the entry at import "
@@ -1518,7 +1518,7 @@ ANNOTATIONS = {
                       "every ordered_fold and fold_pair runs it"),
     "ivf_flat_partial_search": ("covered", ["par-ivf"], "run by bindings/parallel_neighbor_worker_door.mojo ivf_search"),
     "ivf_finalize_distances": ("covered", ["par-ivf"],
-                               "run by the native distributed IVF owner (bindings/parallel_shard_native.mojo "
+                               "run by the native distributed IVF owner (bindings/parallel_shard_native_door.mojo "
                                "`ivf_search`) on a cosine index through the IVF image's parallel table entry "
                                "(PI_FINALIZE), the same body as this door"),
     "pca_fit": ("covered", ["pca", "pca-full-whiten", "pca-whiten"],
@@ -1882,7 +1882,7 @@ ANNOTATIONS_BY_SRC.update({
 # class slot or a finalizer descriptor), so the Python graph cannot see the
 # call; each annotation names the public operation the lane runs and the
 # native call site that takes the entry.
-_HOST_TREE = ("the saved-model owner (bindings/host_tree_native.mojo) runs the same body through the forest "
+_HOST_TREE = ("the saved-model owner (bindings/host_tree_native_door.mojo) runs the same body through the forest "
               "binding's native entry in the host entry table (core/host_entry_table.mojo), keyed by the "
               "`host_tree_native_key` _native_host_archive_bridge.connect records at import; ")
 _FOREST = "bindings/_mojolearn_forest_host.mojo"
@@ -1957,7 +1957,7 @@ ANNOTATIONS_BY_SRC.update({
         "covered (new lane)", ["training-device-cross-entropy"],
         "_native_optimizer_bridge retains it at import with the training binding's entries; "
         "training.cross_entropy on a TrainDeviceArray of logits takes it "
-        "(bindings/training_cross_entropy_native.mojo, `ce_loss_dev`); GPU columns only"),
+        "(bindings/training_cross_entropy_native_door.mojo, `ce_loss_dev`); GPU columns only"),
 })
 
 
@@ -2129,7 +2129,7 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
 # each checked in the source.
 _ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
                "owner context's arena_msel_put / _free / _take_rows; the arena owners "
-               "(bindings/arena_resident_native.mojo, arena_materialize_native.mojo) put, gather and free "
+               "(bindings/arena_resident_native_door.mojo, arena_materialize_native.mojo) put, gather and free "
                "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
                "take per fold (x-metrics-search reaches msel_free by name)")
 ANNOTATIONS.update({
@@ -2144,7 +2144,7 @@ ANNOTATIONS.update({
     "causal_lm_blocks": ("n/a", [], "an accessor: CausalLM.blocks returns list(model._blocks), no arithmetic; the "
                                     "blocks it returns are the ones every hf-causal-lm forward runs"),
     "var_forecast": ("covered", ["sequence-var"],
-                     "VAR.fit's owner (bindings/xseq_forecast_native.mojo) builds the VARResults the bridge "
+                     "VAR.fit's owner (bindings/xseq_forecast_native_door.mojo) builds the VARResults the bridge "
                      "registered (_native_xseq_bridge.register(xseq_var_results=...)); its forecast calls "
                      "var_forecast, and sequence-var digests a.forecast(y, 10)"),
 })
@@ -2159,7 +2159,7 @@ _NATIVE_PARAMS = ("public-set-params (tools/identity_lanes/public_native_params.
 ANNOTATIONS.update({
     "msel_rebase_offsets_i32": (
         "covered", ["par-forest", "par-forest-et", "par-forest-et-clf", "par-forest-reg"],
-        "parallel_ensemble.fit_forest is one native call (bindings/parallel_shard_native.mojo "
+        "parallel_ensemble.fit_forest is one native call (bindings/parallel_shard_native_door.mojo "
         "fit_forest -> _fit_forest), which rebases the tree ranges' node offsets through "
         "_rebase_offsets through the base image's parallel table entry (PB_REBASE_OFFSETS; no Python "
         "door since lane calltable-parallel-archive; the core host twin on a CPU install); "
@@ -2167,7 +2167,7 @@ ANNOTATIONS.update({
     "shard_topk_merge_f32": (
         "covered", ["par-reference-knn", "par-reference-knn-reg"],
         "ReferenceShardedNeighbors.kneighbors/predict/predict_proba are one native call "
-        "(bindings/parallel_shard_native.mojo reference_query -> _reference_query), which merges every "
+        "(bindings/parallel_shard_native_door.mojo reference_query -> _reference_query), which merges every "
         "reference block's candidates through the base image's parallel table entry (PB_TOPK_MERGE_F32; "
         "no Python door since lane calltable-parallel-archive); both lanes query four reference blocks and "
         "are held to the plain estimator"),

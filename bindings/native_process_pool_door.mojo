@@ -5,7 +5,7 @@ Workers import their installed ABI connection once, then enter a compiled
 dispatch loop. The coordinator owns device visibility, framing, authentication,
 process cleanup and request ordering. No pickle or Python worker loop is used.
 """
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -28,9 +28,9 @@ from bindings.native_transport_door import (
     _transport_json,
 )
 from bindings.native_transport_run import transport_terminate, transport_clock
-from bindings.native_codec import codec_pack_owned, codec_unpack
+from bindings.native_codec_door import codec_pack_owned, codec_unpack
 from bindings.native_json_door import native_json_parse
-from bindings.native_process_wire import WireOutgoing, wire_send, wire_receive
+from bindings.native_process_wire_door import WireOutgoing, wire_send, wire_receive
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.shared_slot import SharedSlot

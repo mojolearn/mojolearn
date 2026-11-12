@@ -12,27 +12,28 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_item
+from bindings.p3_labels_metrics_native_door import p3_item
 from bindings.py_balanced import py_type, py_get
-from bindings.classical_arrays import classical_address
-from bindings.classical_pandas import classical_admit_value
+from bindings.classical_arrays_door import classical_address
+from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_labels import (
     _native_classification_input, _classification_labels, _encode_code,
     _refuse_multilabel, _accuracy_context,
 )
-from bindings.label_admission_native import classifier_label_list, LabelTypeKinds
-from bindings.label_input_sources import LABELS_LIST_INT
-from bindings.gp_label_input_boundary import gp_label_input
+from bindings.label_admission_native_unpack import LabelTypeKinds
+from bindings.label_admission_native_pack import classifier_label_list
+from bindings.label_input_sources_unpack import LABELS_LIST_INT
+from bindings.gp_label_input_boundary_unpack import gp_label_input
 from core.gp_native_label_table import GP_LABEL_OBJECT, GP_LABEL_I64, GP_LABEL_F64
-from bindings.svc_common import svc_builtins, svc_cached_class_table, svc_shape_of
+from bindings.svc_common_door import svc_builtins, svc_cached_class_table, svc_shape_of
 from bindings.labels_descriptor_boundary_door import labels_prepare_targets, labels_gather
 from bindings.labels_score_boundary_door import ScoreKeyOwner, score_keys_unpack, score_keys_union, score_keys_index
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
 from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
 from core.gp_native_accuracy import GPCAccuracyProgram
-from bindings.arena_prog_native import _family_entries
+from bindings.arena_prog_native_door import _family_entries
 from bindings.arena_prog_run import _switch
-from bindings.x_prep_native_owner import _resident_scope
+from bindings.x_prep_native_owner_door import _resident_scope
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 

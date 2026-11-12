@@ -17,8 +17,8 @@ from x_decomp.ipca_descriptor_boundary_run import (
 )
 from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_type
-from bindings.decomp_owner_common import decomp_attr
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.decomp_owner_common_unpack import decomp_attr
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 

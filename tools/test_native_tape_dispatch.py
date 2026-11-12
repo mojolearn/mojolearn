@@ -23,7 +23,7 @@ def test_tape_consumption_and_original_numerical_owners_are_preserved():
 
 
 def test_provider_retains_tape_origin_instead_of_rereading_replaced_bindings():
-    source = (ROOT/'bindings/neural_prefill_native.mojo').read_text()
+    source = (ROOT/'bindings/neural_prefill_native_door.mojo').read_text()
     assert 'native, PythonObject(opaque), PythonObject(tape_base)' in source
     assert source.count('neural_descriptor_reserved_execute(') == 3
     backward = source.split('def neural_prefill_backward')[1].split('def neural_prefill_close')[0]
@@ -53,7 +53,7 @@ def test_transformer_resident_table_preserves_packed_and_plain_native_owners():
     provider=(ROOT/'providers/python/transformer_resident_pyapi.mojo').read_text()
     assert 'neural_descriptor_value_handle(provider,' in provider
     assert 'neural_descriptor_reserved_execute(provider, session, handle,' in provider
-    public=(ROOT/'bindings/causal_lm_public.mojo').read_text()
+    public=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
     for operation in (22,23,24):
         assert f', {operation},' in public
     assert '19 if int15 else 18' in public

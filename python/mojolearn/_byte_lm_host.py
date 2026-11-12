@@ -359,7 +359,7 @@ class LanguageModelHostTrainer:
 
 def _connect_host_trainer():
     # glue: import-time connection of the native `train_step` owner
-    # (bindings/byte_lm_host_trainer_native.mojo); the compiled step it runs
+    # (bindings/byte_lm_host_trainer_native_door.mojo); the compiled step it runs
     # is the trainer's own binding entry, retained at construction
     from .tokenizer import _binding
     from . import lowbit, _linalg_impl

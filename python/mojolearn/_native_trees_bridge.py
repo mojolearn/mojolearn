@@ -4,7 +4,7 @@
 The public `fit`, `predict`, `predict_proba` and `score` methods of the
 forests (RandomForest*, ExtraTrees*, DecisionTree*) and the other tree
 ensembles are one call each into the compiled classical owner
-(`bindings/classical_native.mojo`, operations `trees_*`, implemented in
+(`bindings/classical_native_pack.mojo`, operations `trees_*`, implemented in
 `bindings/trees_public_*.mojo`). That native operation validates the
 parameters, reads X and y, encodes the labels, checks the weights, chooses
 the fit entry and the inference engine, launches the kernels and assigns the

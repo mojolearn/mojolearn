@@ -2,7 +2,7 @@
 # Compile the actual native caller of the assigned timedelta range repair.
 # This is compile coverage only; no public operation is executed.
 from std.python._cpython import PyObjectPtr
-from bindings.arena_rows_native import arena_rows_c
+from bindings.arena_rows_native_door import arena_rows_c
 
 
 @export

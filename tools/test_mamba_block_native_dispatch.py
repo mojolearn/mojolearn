@@ -4,8 +4,8 @@ from check_generation_native_boundary import audit
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = (ROOT / 'mamba/native_block_dispatch.mojo').read_text()
-PUBLIC = (ROOT / 'bindings/neural_block_public.mojo').read_text()
-PREFILL = (ROOT / 'bindings/neural_prefill_native.mojo').read_text()
+PUBLIC = (ROOT / 'bindings/neural_block_public_door.mojo').read_text()
+PREFILL = (ROOT / 'bindings/neural_prefill_native_door.mojo').read_text()
 
 
 def test_native_dependencies_resolve():
@@ -31,7 +31,7 @@ def test_session_ownership_is_a_registry_handle():
     assert 'PREFILL_SESSIONS.insert(Mamba3PrefillSession())' in NATIVE
     assert 'PREFILL_SESSIONS.acquire(mamba3_prefill_session_of(words[0]))' in NATIVE
     assert 'def neural_mamba_session_call(' not in PUBLIC
-    helpers = (ROOT / 'providers/python/mamba3_prefill_session_pyapi.mojo').read_text()
+    helpers = (ROOT / 'providers/python/mamba3_prefill_session_pyapi_door.mojo').read_text()
     assert 'downcast_value_ptr[Mamba3PrefillHandle]()' in helpers
     shell = (ROOT / 'bindings/_mojolearn_mamba.mojo').read_text()
     assert 'downcast_value_ptr[Mamba3PrefillSession]()' not in shell
@@ -49,7 +49,7 @@ def test_all_backward_and_prefill_dispatch_modes_reach_native_table():
 
 
 def test_owned_snapshot_execution_and_publication_remain_atomic():
-    source = (ROOT/'bindings/mamba_public_native.mojo').read_text()
+    source = (ROOT/'bindings/mamba_public_native_door.mojo').read_text()
     install = source.split('def mamba3_install_owned(')[1].split('def mamba3_release_owned')[0]
     assert install.index('mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_INSTALL') < install.index('py_setitem(fields, "_owned_generation"')
     assert 'return PythonObject(generation)' in install
@@ -59,7 +59,7 @@ def test_owned_snapshot_execution_and_publication_remain_atomic():
     assert 'owner[].usable = False' not in dispatch
     assert '_owned_native_provider' not in source
     assert '_prefill_binding' not in source.split('def mamba3_getstate')[1]
-    owned_state = (ROOT/'bindings/samba_inference_native.mojo').read_text()
+    owned_state = (ROOT/'bindings/samba_inference_native_door.mojo').read_text()
     assert 'mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_STATE,' in owned_state
 
 
@@ -77,7 +77,7 @@ def test_resident_decode_families_use_existing_native_owners():
     assert '_m3_session_copy_in(owner[]' in native
     assert 'owner[].usable = False' in native
     assert 'owner[].release()' in native
-    boundary=(ROOT/'bindings/mamba_public_native.mojo').read_text()
+    boundary=(ROOT/'bindings/mamba_public_native_door.mojo').read_text()
     assert 'var provider: PythonObject' in boundary
     assert 'var device_address: Int' in boundary
     for operation in (3,4,5,6):

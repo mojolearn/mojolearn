@@ -33,7 +33,7 @@ def test_score_passes_original_arguments_and_returns_finished_native_result():
 
 
 def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     assert 'estimator_binding_mode(mode, "_mojolearn_metrics", context, False)' in owner
     assert 'metrics_cls_operation(PythonObject(None), "family_mcls_r2"' in owner
     assert 'py_call(owner[0]' not in owner
@@ -41,7 +41,7 @@ def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
 
 
 def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol():
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     target = owner[owner.index("def _target("):owner.index("def _pls_store(")]
     assert '_pls_input(source, "Y", context, pin, -1)' in target
     assert 'decomp_door_snapshot(door, kit, input, pin, 1, input.shape[0])' in target
@@ -60,7 +60,7 @@ def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol(
 def test_kit_retains_snapshot_owner_and_drops_address_when_device_writes():
     # The door keeps the pin's owners for the call (lane entangled-decompkit:
     # the typed kit holds addresses only); a device write drops the host words.
-    door = (ROOT / "bindings/decomp_kit_native.mojo").read_text()
+    door = (ROOT / "bindings/decomp_kit_native_door.mojo").read_text()
     snapshot = door[door.index("def decomp_door_snapshot("):door.index("def decomp_door_tested(")]
     assert 'door.keep(pin.owner)' in snapshot
     assert 'kit.borrow(snapshot.source.addr, rows, cols)' in snapshot
@@ -77,7 +77,7 @@ def test_public_lifecycle_replaces_decorators_only_for_pls_family():
              and any(isinstance(target, ast.Name) and target.id == "_mojolearn_native_public" for target in node.targets)]
     assert len(flags) == 1 and ast.literal_eval(flags[0].value) is True
     assert not any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "_mojolearn_native_public" for target in node.targets) for node in classes["_Base"].body)
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     for step in ("_pls_require_fitted(fields, operation, context)",
                  "classical_check_width(x.shape[1], Int(py=features), name)",
                  "estimator_feature_check(model, fields, args[0], context)",
@@ -92,19 +92,19 @@ def test_public_lifecycle_replaces_decorators_only_for_pls_family():
 
 
 def test_snapshot_addresses_survive_shared_host_views():
-    kit = (ROOT / "bindings/decomp_kit_native.mojo").read_text()
+    kit = (ROOT / "bindings/decomp_kit_native_door.mojo").read_text()
     views = kit[kit.index("    def transpose("):kit.index("    def hstack(")]
     for line in views.splitlines():
         if "self.add(shared," in line or "self.add(store," in line:
             assert "self.matrices[a].host_address" in line
     assert 'Int(py=classical_address(source))' not in kit
-    score = (ROOT / "bindings/pls_native.mojo").read_text()
+    score = (ROOT / "bindings/pls_native_door.mojo").read_text()
     default = score[score.index('mode = context["backend_fields"]["_DEFAULT_MODE"]'):]
     assert default.index('if py_type(mode) is not b.str:') < default.index('mode.strip')
 
 
 def test_scalar_admission_never_converts_object_dtype_payloads():
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     scalar = owner[owner.index("def _pls_scalar("):owner.index("def _pls_settings(")]
     assert 'cls is py_get(context, "ndarray")' in scalar
     assert 'not _one_of(cls, context["scalar_types"])' in scalar
@@ -116,7 +116,7 @@ def test_scalar_admission_never_converts_object_dtype_payloads():
 
 
 def test_execution_uses_one_private_settings_snapshot_and_separate_state():
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     assert owner.count('classical_family_admit(model)') == 1
     assert owner.count('var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)') == 1
     assert 'py_fields(' not in owner
@@ -127,7 +127,7 @@ def test_execution_uses_one_private_settings_snapshot_and_separate_state():
 
 
 def test_completed_iteration_counts_are_published_from_native_words():
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     assert 'var its = native_array_zeros("i", nc)' in owner
     assert 'py_call(b.list, its)' not in owner
     assert 'py_attr(all_iterations' not in owner
@@ -135,7 +135,7 @@ def test_completed_iteration_counts_are_published_from_native_words():
 
 
 def test_fitted_check_precedes_defaults_and_fit_transform_uses_private_outputs():
-    owner = (ROOT / "bindings/pls_native.mojo").read_text()
+    owner = (ROOT / "bindings/pls_native_door.mojo").read_text()
     assert owner.index('_pls_require_fitted(fields, operation, context)') < owner.index('var default_mode = PythonObject(None)')
     assert '_transform(kit, held[0], held[1], fields, context)' in owner
     assert '_transform(kit, held[0], held[1], state, context)' not in owner

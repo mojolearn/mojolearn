@@ -245,7 +245,7 @@ def connect_embedding(training, embedding_cls, archive_context):
     # glue: connect the resident owner at import only when NumPy is already
     # loaded; importing it otherwise loaded NumPy for every `import mojolearn`.
     # Without it, device=True asks for `mojolearn._x_sequence_device` (or
-    # `to_device`) by name (bindings/embedding_layer_native.mojo).
+    # `to_device`) by name (bindings/embedding_layer_native_door.mojo).
     import sys
     if "numpy" in sys.modules:
         from . import _x_sequence_device  # noqa: F401

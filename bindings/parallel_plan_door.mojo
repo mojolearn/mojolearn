@@ -14,9 +14,9 @@ door's `finally`). No Python frame runs: every call below is a compiled
 entry or a builtin.
 """
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
-from bindings.family_common import family_call
+from bindings.family_common_pack import family_call
 from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY, device_plan_logical
 
 

@@ -1,5 +1,5 @@
 """The public Array operations are one native call each
-(bindings/array_native.mojo); run only against the integrated native build.
+(bindings/array_native_door.mojo); run only against the integrated native build.
 
 Each operation is held to its retained Python definition
 (`tests/_array_reference._ArrayReference`, never called by the product) on C- and F-order

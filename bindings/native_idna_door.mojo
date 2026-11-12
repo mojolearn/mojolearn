@@ -6,7 +6,7 @@ UseSTD3ASCIIRules false). Unicode 3.2 properties/normalization are provided by
 unicodedata's compiled C database; all mapping, validation and encoding control
 runs in Mojo. Python codec registration/search/encode functions are never used.
 """
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.native_idna_impl import idna_punycode

@@ -6,20 +6,28 @@
 # `qn_decision_function` / `gmm_sample` with the argument lists their
 # bindings document. Same entries, same inputs: the bits do not move.
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family
-from bindings.native_loaded_module import native_loaded_module
-from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
+from bindings.admitted_family_door import admit_family
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.family_raw_attr_unpack import family_raw_has
+from bindings.family_raw_attr_pack import family_raw_get, family_raw_get_or
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
-from bindings.classical_arrays import classical_address
-from bindings.linear_svc_boundary import LinearSvcConnection, linear_svc_connection, linear_svc_run_query
+from bindings.classical_arrays_door import classical_address
+from bindings.linear_svc_boundary_unpack import LinearSvcConnection, linear_svc_connection, linear_svc_run_query
 from core.linear_svc_native_api import LinearSvcScores
 from core.logistic_native_api import QnQueryRequest, QN_NATIVE_DECISION
-from bindings.classical_attributes import classical_connect_numpy
-from bindings.family_common import (
-    family_repr, family_is_int, family_isinstance, family_call, family_entry, family_array,
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.family_common_unpack import (
+    family_repr,
+    family_is_int,
+    family_isinstance,
 )
-from providers.python.family_public_lifecycle_pyapi import family_lifecycle_begin, family_lifecycle_finish
+from bindings.family_common_pack import (
+    family_call,
+    family_entry,
+    family_array,
+)
+from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
 from providers.python.family_public_lifecycle_run import family_lifecycle_spec
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
 

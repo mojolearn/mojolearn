@@ -30,6 +30,6 @@ def test_transformer_admin_and_carried_calls_reuse_original_numerical_owner():
     # Op 12 (the session tape's invalidation) went with the tape API
     # (TRANSFORMER_FORWARD_TAPE_API, docs/TOMBSTONES.md); 13 is the one admin op.
     assert 'invalidate_tape' not in source.split('def transformer_block_v1')[0].replace('invalidate-tape', '')
-    boundary = (ROOT/'bindings/neural_block_public.mojo').read_text()
+    boundary = (ROOT/'bindings/neural_block_public_door.mojo').read_text()
     assert 'transformer_block_session_close(fields["_native_session"])' in boundary
     assert 'causal_transformer_admin(mods, entries, fields["_native_session"], 12)' not in boundary

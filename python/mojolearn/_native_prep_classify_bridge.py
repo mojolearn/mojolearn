@@ -2,7 +2,7 @@
 """Import-time connection of the native owner of the prep lane's classifiers
 (GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB,
 LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis;
-bindings/prep_classify_native.mojo) and its fixed ABI."""
+bindings/prep_classify_native_door.mojo) and its fixed ABI."""
 
 #: The x_prep exports the owner probes (`_optional_prep_entry`).
 _OPTIONAL = ("x_prep_idn_int", "x_prep_idn_fam", "x_prep_idn_fam2", "x_prep_proba64",

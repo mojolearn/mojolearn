@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+# The compiled owner of SVC, SVR, LinearSVC/LinearSVR and OneClassSVM public
+# methods (python/mojolearn/_svm_impl.py, svm.py, _expansion_neighbors.py
+# OneClassSVM): one native call per public method, reached from
+# bindings/family_native.mojo for every `family_svc_*` operation. The linear
+# machines are bindings/svc_linear_native_door.mojo, the kernel machines
+# bindings/svc_kernel_native.mojo, OneClassSVM bindings/svc_ocsvm_native_door.mojo.
+# The PACK half of the former `bindings/svc_native.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/svc_native_unpack.mojo`.
+from std.python import Python, PythonObject
+from bindings.svc_linear_native_door import svc_linear_operation
+from bindings.svc_kernel_native_door import svc_kernel_operation
+from bindings.svc_ocsvm_native_door import svc_ocsvm_operation
+from providers.python.svc_public_state_pyapi_pack import svc_public_state_operation
+from providers.python.family_public_lifecycle_pyapi_door import family_lifecycle_begin, family_lifecycle_finish
+from providers.python.family_public_lifecycle_run import family_lifecycle_spec
+from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_end, neighbors_public_refusal
+from bindings.gp_svm_gp_state_door import gp_x_mark, gp_x_release
+from bindings.host_sparse_native_door import host_sparse_format
+from bindings.py_optional import py_present
+
+
+from bindings.svc_native_unpack import (
+    _svc_operation_route,
+)
+
+
+def svc_operation(model: PythonObject, operation: String, args: PythonObject,
+                  context: PythonObject) raises -> PythonObject:
+    """The public operation: the estimators that formerly took the `_mode`
+    class-creation wrappers run their whole lifecycle around the owner
+    (providers/python/family_public_lifecycle_pyapi.mojo); every other
+    operation goes straight to the owner."""
+    var lifecycle = family_lifecycle_spec(operation)
+    if lifecycle.method.byte_length() == 0:
+        return _svc_operation_route(model, operation, args, context)
+    var call = family_lifecycle_begin(model, operation, lifecycle, args, 1, context)
+    # Perf (lane perf3-cluster-gp-gate; perf2-gp-svm row 20): OneClassSVM's
+    # door replaced a dense X by its admitted C-order float32 snapshot
+    # (family_lifecycle_begin: rank, emptiness and finite scan). Register it
+    # for this operation (the GP door's registry, bindings/gp_svm_gp_state.mojo)
+    # so bindings/svc_ocsvm_native_door.mojo does not snapshot it again. A sparse X
+    # is not replaced and not registered; the registry also takes only an
+    # exact ndarray or Array.
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var marked = Optional[PythonObject]()
+    if operation.startswith("family_svc_ocsvm_") and lifecycle.replace:
+        if host_sparse_format(args[1]).byte_length() == 0:
+            marked = py_present(call.args[1])
+            gp_x_mark(marked.value())
+    var result = PythonObject(None)
+    try:
+        result = _svc_operation_route(model, operation, call.args, context)
+    except error:
+        var failure = neighbors_public_refusal(error, call, model)
+        raise failure^
+    finally:
+        if Bool(marked):
+            gp_x_release(marked.value())
+        neighbors_public_end(model, call)
+    return family_lifecycle_finish(model, lifecycle, result, call, context)

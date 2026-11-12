@@ -73,7 +73,7 @@ class CompositionDoors(unittest.TestCase):
                     self.assertEqual(actual_args, (x, None))
 
     def test_uninitialized_inner_context_connects_before_keyword_admission(self):
-        source = (ROOT / 'bindings/msel_estimator_native.mojo').read_text()
+        source = (ROOT / 'bindings/msel_estimator_native_door.mojo').read_text()
         section = source.split('if keywords is not None:', 1)[1].split('var values = Python.list()', 1)[0]
         self.assertLess(section.index('classical_connect_numpy(context)'),
                         section.index('classical_admit_value(keywords[keys[k]], context)'))
@@ -81,13 +81,13 @@ class CompositionDoors(unittest.TestCase):
         self.assertIn('py_type(keys[k]) is not b.str', section)
 
     def test_lifecycle_admits_before_conversion_and_dispatch(self):
-        source = (ROOT / 'bindings/prep_composition_lifecycle.mojo').read_text()
+        source = (ROOT / 'bindings/prep_composition_lifecycle_door.mojo').read_text()
         before = source.split('def composition_before(', 1)[1]
         self.assertLess(before.index('composition_value(args[2][keys[i]], context)'),
                         before.index('classical_check_x(args[0]'))
         self.assertIn('prep_estimator_admit(value,', source)
         self.assertNotIn('model.fit(', source)
-        owner = (ROOT / 'bindings/prep_owner_native.mojo').read_text()
+        owner = (ROOT / 'bindings/prep_owner_native_door.mojo').read_text()
         for kind, entry in [('rfe', 'prep_rfe_call'), ('iterative_imputer', 'prep_iterimp_call')]:
             section = owner.split('elif kind == "' + kind + '":', 1)[1].split('elif ', 1)[0]
             self.assertLess(section.index('composition_before('), section.index(entry + '('))
@@ -95,7 +95,7 @@ class CompositionDoors(unittest.TestCase):
         self.assertIn('parallel_public_result(result, operation, PythonObject(None), context)', owner)
 
     def test_instance_dictionary_type_is_checked_before_iteration(self):
-        source = (ROOT / 'bindings/prep_composition_lifecycle.mojo').read_text()
+        source = (ROOT / 'bindings/prep_composition_lifecycle_door.mojo').read_text()
         fields = source.split('def composition_fields(', 1)[1].split('def composition_require_fitted(', 1)[0]
         descriptor = fields.index('var fields = py_call(plan["fields_get"], model, cls)')
         guard = fields.index('if py_type(fields) is not b.dict:')

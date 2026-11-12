@@ -5,11 +5,11 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_item
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
-from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
+from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
 from core.shared_slot import SharedSlot
 
 

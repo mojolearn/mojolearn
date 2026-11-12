@@ -2,7 +2,7 @@
 # StandardScaler.fit owns admission, buffers, route selection, launches and
 # fitted-state publication here. The existing statistics kernels are unchanged.
 from std.memory import unsafe_memcpy
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -10,9 +10,9 @@ from std.os import getenv
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
-from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
-from providers.python.preprocessing_input_pyapi import ScalerInputSnapshot, scaler_operation_input
+from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
+from bindings.classical_arrays_door import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
+from providers.python.preprocessing_input_pyapi_door import ScalerInputSnapshot, scaler_operation_input
 from core.scaler_fit_impl import scaler_cast, scaler_fill, scaler_counts
 from std.python._cpython import GILReleased
 from core.entry_table import entry_ref_call, entry_ref_unresolved
@@ -25,11 +25,11 @@ from core.scaler_core import (
     SCALER_SEEN_INT, SCALER_SEEN_FLOAT, SCALER_SEEN_INT_ROW, SCALER_SEEN_FLOAT_ROW,
 )
 from x_prep.transport_abi import xp_vendor_word
-from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
-from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
-from bindings.sequential_admission import _ordinary_torch, _one_of
-from bindings.native_torch_admission import native_torch_numpy
-from bindings.prep_entry_cache import prep_mode_checked
+from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
+from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, native_pandas_f32
+from bindings.sequential_admission_door import _ordinary_torch, _one_of
+from bindings.native_torch_admission_door import native_torch_numpy
+from bindings.prep_entry_cache_unpack import prep_mode_checked
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 

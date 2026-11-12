@@ -8,16 +8,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class NativeArrayViewOwnership(unittest.TestCase):
     def test_array_input_and_public_outputs_use_same_retained_owner(self):
-        source = (ROOT / 'bindings/sequential_inputs.mojo').read_text()
+        source = (ROOT / 'bindings/sequential_inputs_door.mojo').read_text()
         body = source.split('def sequential_input(', 1)[1].split('\ndef ', 1)[0]
         self.assertIn('return native_array_ndarray_view(value, context)', body)
         self.assertNotIn('array_fields', body)
-        public = (ROOT / 'bindings/public_attributes_native.mojo').read_text()
-        self.assertIn('from bindings.native_array_view import native_array_ndarray_view as _array_view', public)
+        public = (ROOT / 'bindings/public_attributes_native_door.mojo').read_text()
+        self.assertIn('from bindings.native_array_view_pack import native_array_ndarray_view as _array_view', public)
         self.assertNotIn('def _array_view(', public)
 
     def test_retained_owner_and_mapped_slice_checks_precede_export(self):
-        source = (ROOT / 'bindings/native_array_view.mojo').read_text()
+        source = (ROOT / 'bindings/native_array_view_pack.mojo').read_text()
         self.assertIn('var store = values["_store"]', source)
         self.assertIn('store = values["_mv"]', source)
         self.assertIn('store.obj is None', source)

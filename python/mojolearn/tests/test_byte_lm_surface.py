@@ -15,7 +15,7 @@ a stand-in binding to inject a fault the compiled module cannot produce:
   test_native_failure_and_partial_writes_never_commit (a step that failed after
   writing, wrote a NaN, changed its input, returned the wrong step or left the
   gradient unwritten). The transactional rule they guarded is native
-  (bindings/byte_lm_trainer_native.mojo: results commit only after the step's
+  (bindings/byte_lm_trainer_native_door.mojo: results commit only after the step's
   checks); the real refusals that reach it are tested below
   (test_tokens_require_exact_int32_shape_and_range,
   test_bad_state_refuses_transactionally). No real-binding test injects a
@@ -149,7 +149,7 @@ def test_state_load_snapshot_isolation_and_cursor_validation():
 
 def test_mode_refuses_without_overriding_process(monkeypatch):
     # The native owner reads the backend's resolved `_DEFAULT_MODE`
-    # (bindings/byte_lm_trainer_native.mojo `_mode`); a value that is not a
+    # (bindings/byte_lm_trainer_native_door.mojo `_mode`); a value that is not a
     # tier is refused, never replaced by a default.
     model = trainer()
     before = state_digest(model)

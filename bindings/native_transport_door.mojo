@@ -4,7 +4,7 @@
 # CPython's socket/posix wrappers would invoke Python audit hooks.
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.ffi import c_int, c_uint, c_size_t, external_call
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -14,9 +14,9 @@ from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from bindings.native_json_door import native_json_parse
 from bindings.native_idna_door import idna_initialize, idna_encode
-from bindings.native_buffer_address import native_buffer_address
-from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
-from bindings.native_posix_transport import (
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.native_numpy_metadata_pack import native_numpy_type, native_numpy_module_fields
+from bindings.native_posix_transport_unpack import (
     posix_sleep, posix_open, posix_accept, posix_transfer, posix_spawn, posix_wait,
 )
 from bindings.native_posix_transport_run import (

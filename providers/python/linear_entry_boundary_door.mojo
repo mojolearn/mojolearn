@@ -2,10 +2,11 @@
 """Canonical import-time connections, with Python image pins only at UNPACK."""
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
-from bindings.native_loaded_module import native_loaded_module
-from bindings.native_owner_registry import borrowed_native_owner, register_native_owner_type
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.native_owner_registry_unpack import register_native_owner_type
+from bindings.native_owner_registry_pack import borrowed_native_owner
 from bindings.py_balanced import py_type, py_call
-from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
+from bindings.native_class_admission_door import dict_keys_admitted, dict_keys_admit
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, _neural_descriptor_dictionary,

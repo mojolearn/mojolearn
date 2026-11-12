@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only root for every public model configuration/plan operation.
 from std.python._cpython import PyObjectPtr
-from bindings.causal_model_config import model_config_c
+from bindings.causal_model_config_door import model_config_c
 
 
 @export

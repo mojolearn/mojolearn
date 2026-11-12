@@ -46,7 +46,7 @@ def test_both_columns_take_n_steps_through_operation_1():
 
 
 def test_binding_admits_once_and_runs_every_step_in_one_call():
-    native = _read('bindings/byte_lm_trainer_native.mojo')
+    native = _read('bindings/byte_lm_trainer_native_door.mojo')
     # lane byte-lm-sessions-native: the resident session runs through the
     # image's native session entry (core/byte_lm_entry_table_sessions.mojo)
     assert 'byte_lm_resident_run(key, handle, operation,' in native
@@ -62,14 +62,14 @@ def test_binding_admits_once_and_runs_every_step_in_one_call():
 
 
 def test_step_descriptors_are_native_words():
-    native = _read('bindings/byte_lm_trainer_native.mojo')
+    native = _read('bindings/byte_lm_trainer_native_door.mojo')
     resident = native.split('def _run_resident(')[1].split('def _run_stateless(')[0]
     assert '_native_execute(fields, 1, a,' in resident
     assert 'var a = List[Int]()' in resident
 
 
 def test_teardown_switch_is_read_once():
-    for name in ('bindings/byte_lm_trainer_native.mojo', 'bindings/_mojolearn_byte_lm.mojo'):
+    for name in ('bindings/byte_lm_trainer_native_door.mojo', 'bindings/_mojolearn_byte_lm.mojo'):
         source = _read(name)
         assert 'getenv("MOJOLEARN_BYTE_LM_TEARDOWN_WITH_GIL")' not in source
         assert 'byte_lm_teardown_with_gil()' in source
@@ -84,7 +84,7 @@ def test_ragged_next_bytes_picks_on_the_device_and_natively_on_the_host():
     assert 'next_bytes and len(addr) == 7' in owner
     host = _read('training/byte_lm_host_trainer_dispatch.mojo')
     assert 'owner[].next_rows(' in host
-    native = _read('bindings/byte_lm_trainer_native.mojo')
+    native = _read('bindings/byte_lm_trainer_native_door.mojo')
     body = native.split('def byte_lm_logits(')[1].split('def _registry(')[0]
     # every byte LM image carries the trainer table (lane calltable-byte-lm)
     assert 'var direct_next = next_bytes and resident' in body

@@ -260,7 +260,7 @@ def _connect_pass(package):
         _connect_native_cv(selection._NATIVE_CONTEXT, package)
         # The prep owners (RFE, IterativeImputer, TargetEncoder's cv splitter)
         # reach a wrapped estimator or splitter through the same compiled
-        # model-selection entry and plan table (bindings/prep_native_estimator.mojo).
+        # model-selection entry and plan table (bindings/prep_native_estimator_door.mojo).
         prep = loaded("_expansion_prep")
         if prep is not None:
             prep._ENCODE_CONTEXT.update(native_estimator_entry=selection._NATIVE,

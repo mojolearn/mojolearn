@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only root (lane lm-resident-generate-20261028); never invoke.
 from std.python._cpython import PyObjectPtr
-from bindings.causal_lm_public import causal_public_c
+from bindings.causal_lm_public_door import causal_public_c
 
 
 @export

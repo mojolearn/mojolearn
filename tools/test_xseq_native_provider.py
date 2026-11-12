@@ -14,13 +14,13 @@ def test_xseq_whole_model_and_consumed_output_closures_are_native():
 
 
 def test_xseq_numeric_calls_share_existing_provider_and_engine_table():
-    source = (ROOT / 'bindings/xseq_neural_native.mojo').read_text()
+    source = (ROOT / 'bindings/xseq_neural_native_door.mojo').read_text()
     assert 'py_call_typed' not in source
     assert 'stream.fill_uniform(context' not in source
     for name in ('RNN_FIT', 'RNN_PREDICT', 'MLP_FIT', 'MLP_PREDICT', 'MODEL_LABELS',
                  'MODEL_ARGMAX', 'MODEL_MIN', 'MODEL_THRESHOLD'):
         assert name in source
-    common = (ROOT / 'bindings/xseq_native_common.mojo').read_text()
+    common = (ROOT / 'bindings/xseq_native_common_door.mojo').read_text()
     assert 'neural_descriptor_reuse(' in common
     assert 'String(MODEL_ABI_NAME), MODEL_OPERATION_COUNT)' in common
     assert 'neural_descriptor_execute(provider, MODEL_UNIFORM' in common
@@ -49,7 +49,7 @@ def test_public_candidate_probe_has_all_recurrent_cells_and_two_label_shapes():
 
 
 def test_builtin_schedule_reuses_native_spec_and_kernel_directly():
-    source = (ROOT / 'bindings/optimizer_schedule_native.mojo').read_text()
+    source = (ROOT / 'bindings/optimizer_schedule_native_door.mojo').read_text()
     operation = source.split('def schedule_operation(', 1)[1]
     assert 'entries["lr_schedule_series"]' not in operation
     assert 'entries["lr_schedule_at"]' not in operation

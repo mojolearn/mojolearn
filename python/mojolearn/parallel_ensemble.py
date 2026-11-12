@@ -92,7 +92,7 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(X, y)``.
     """
-    # One native call (bindings/parallel_shard_native.mojo `fit_forest`):
+    # One native call (bindings/parallel_shard_native_door.mojo `fit_forest`):
     # whole global tree-ID ranges of `trees_per_shard` trees, each a fresh
     # forest of the estimator's parameters fitted by the plain native fit
     # from its first global tree ID in a worker process per device (range i on
@@ -233,7 +233,7 @@ class ParallelForestPredictor:
     #
     # The snapshot is a private copy of the estimator, taken here (no device
     # state is copied: the copy builds its own resident pool). Each predict is
-    # one native call (bindings/family_native.mojo `family_par_run`, driver
+    # one native call (bindings/family_native_door.mojo `family_par_run`, driver
     # `forest_predict`): the plain predict of the copy with the device plan
     # bound, so its first predict builds the parallel_groves pool on the
     # selected devices (core/forest_inference_pool.mojo) and later predicts

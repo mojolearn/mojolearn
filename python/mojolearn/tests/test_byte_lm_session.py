@@ -11,7 +11,7 @@ a stand-in binding the native owner now refuses before any entry is read:
 - test_native_and_python_failures_roll_back_and_keep_the_session and
   test_lost_session_raises_with_the_last_export_step: injected step faults
   and a failed rollback. The rollback and lost-session rules are native
-  (bindings/byte_lm_trainer_native.mojo, training/byte_lm_host_session.mojo);
+  (bindings/byte_lm_trainer_native_door.mojo, training/byte_lm_host_session.mojo);
   the compiled binding has no fault hook, so they have no real-binding test
   (a coverage gap, reported). A real refusal keeping the session is tested in
   test_invalid_restore_preserves_live_session and

@@ -3,8 +3,8 @@
 estimator classes.
 
 `save` and `load` of a connected class are one call each into the compiled
-classical owner (`bindings/classical_native.mojo`): `save` runs the class's
-fixed save schema or native family (`bindings/archive_schema_native.mojo`) and writes the
+classical owner (`bindings/classical_native_pack.mojo`): `save` runs the class's
+fixed save schema or native family (`bindings/archive_schema_native_door.mojo`) and writes the
 deterministic NPZ the Python writer wrote; `load` reads the file and builds
 the model natively (`bindings/host_archive_native_door.mojo`). Python here only
 connects fixed metadata once, at import: the shared context, each class's
@@ -71,7 +71,7 @@ def connect():
 def register(cls, formats, save, **tables):
     """Connect one public class at its definition: the saved format (a str,
     or a tuple of the formats its loader reads), its save schema (see
-    bindings/archive_schema_native.mojo), and the fixed lookup tables its
+    bindings/archive_schema_native_door.mojo), and the fixed lookup tables its
     native builder reads (host_archive_* names)."""
     from ._mode import SklearnTagsMixin
     _, context = connect()

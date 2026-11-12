@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: Apache-2.0
+# Passive storage admission for the boost owner and its fixed tree members.
+# The PACK half of the former `bindings/trees_boost_admission.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/trees_boost_admission_unpack.mojo`.
+from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_type, py_get, py_contains, py_call, py_fields
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.classifier_public_lifecycle_door import classifier_label_list
+from bindings.host_inference_scalars_door import host_inference_scalar
+from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
+from bindings.native_loaded_module_door import NativeModules
+from bindings.trees_side_records_unpack import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields
+from bindings.native_model_records import (
+    records_stamped_get, records_stamped_put, records_stampable, records_drop, ContentRecord, content_fields,
+    content_object, RECORDS_TREES,
+)
+
+from bindings.trees_boost_admission_unpack import (
+    _FITTED_STAMP,
+    _fitted_key,
+    _fitted_stamp,
+    _require_connected_member,
+    _scalar_storage,
+    boost_tree_admit,
+)
+
+
+comptime _FITTED_SLOT = "trees_boost_fitted_v1"
+def boost_admit(model: PythonObject, context: PythonObject, fitting: Bool = False) raises -> PythonObject:
+    var fields = classical_family_admit(model)
+    var b = native_loaded_module("builtins")
+    if py_contains(fields, "_mojolearn_after_fit"):
+        raise Error("TypeError: native boosting refuses Python fit callbacks")
+    if py_contains(fields, "_mojolearn_fitting") and py_type(fields["_mojolearn_fitting"]) is not b.int:
+        raise Error("TypeError: native boosting fit depth must be an exact integer")
+    for name in ["numeric_mode", "_mojolearn_fitted"]:  # small-loop(public lifecycle scalar metadata)
+        if py_contains(fields, name):
+            host_inference_scalar(fields[name], context, True)
+    if fitting:
+        for name in ["algorithm", "bagging_seed", "bootstrap", "bootstrap_features", "colsample_bytree", "drop_rate", "drop_seed", "feature_fraction_seed", "learning_rate", "loss", "max_bin", "max_delta_step", "max_depth", "max_drop", "max_features", "max_leaf_nodes", "max_samples", "min_child_samples", "min_impurity_decrease", "min_samples_leaf", "min_samples_split", "n_estimators", "n_jobs", "num_leaves", "oob_score", "random_state", "reg_alpha", "reg_lambda", "skip_drop", "sparse_output", "subsample", "subsample_freq", "uniform_drop", "verbose", "warm_start", "xgboost_dart_mode"]:  # small-loop(fixed consumed scalar fields)
+            if py_contains(fields, name):
+                host_inference_scalar(fields[name], context, True)
+        var estimator = py_get(fields, "estimator")
+        if estimator is not None:
+            _require_connected_member(model, estimator, context)
+            boost_tree_admit(estimator, context, True)
+        # A refit replaces the fitted state: forget the record now so the
+        # old members are not kept alive until the next call.
+        trees_side_drop(_FITTED_SLOT, model)
+        records_drop(RECORDS_TREES, model, _FITTED_STAMP)
+        return fields
+    # Fitted admission once per fitted state (lane perf-trees-owed,
+    # 2026-11-06): every predict admitted every member's arrays and scalars
+    # again (DART: T*K one-tree members, each ~12 full value admissions plus
+    # its class stamp). The identity key of the owner's fields and of every
+    # member's class and fields is recorded in the native side table; while
+    # it matches, the full admission below would accept again, and only one
+    # member per distinct member class repeats its class admission. Any
+    # assignment, member replacement or container edit changes the key.
+    # Generation fast path (lane ne1-e-records, row N050): one word for the
+    # owner plus native content words (member list items, member classes and
+    # member generation words) instead of the Python key list below.
+    var stamped = records_stamped_get(RECORDS_TREES, model, _FITTED_STAMP)
+    if stamped is not None and stamped[1] is fields:
+        var kept = stamped[0]
+        for i in range(len(kept)):  # small-loop(kept: one member per distinct member class)
+            _ = classical_family_admit(kept[i])
+        return fields
+    var mods = NativeModules()
+    var key = Python.list()
+    var reps = Python.list()
+    var recordable = _fitted_key(mods, fields, key, reps)
+    if recordable:
+        var held = trees_side_get(_FITTED_SLOT, model)
+        if held is not None and trees_key_same(held, key):
+            for i in range(len(reps)):  # small-loop(reps: one member per distinct member class)
+                _ = classical_family_admit(reps[i])
+            _fitted_stamp(model, fields, reps)
+            return fields
+    for name in ["n_classes_", "n_features_in_", "n_output_features_", "n_trees_"]:  # small-loop(fitted dimensions)
+        if py_contains(fields, name):
+            host_inference_scalar(fields[name], context)
+    for name in ["forest_"]:  # small-loop(fixed individual tree members)
+        var member = py_get(fields, name)
+        if member is not None:
+            boost_tree_admit(member, context)
+    for name in ["_estimators", "estimators_", "trees_", "_batched"]:  # small-loop(fixed stored member sequences)
+        var members = py_get(fields, name)
+        if members is not None:
+            if py_type(members) is not b.list and py_type(members) is not b.tuple:
+                raise Error("TypeError: native boosting requires ordinary member sequences")
+            for i in range(len(members)):  # driver-loop: each member's native storage before execution
+                boost_tree_admit(members[i], context)
+    for name in ["_node_col", "_oob_rows", "_tree_base", "estimator_weights_", "estimators_features_", "init_score_", "tree_coefs_", "tree_values_"]:  # small-loop(fixed fitted numeric arrays and lists)
+        if py_contains(fields, name):
+            classical_admit_value(fields[name], context)
+    if py_contains(fields, "classes_"):
+        classical_admit_value(classifier_label_list(fields["classes_"], context), context)
+    for name in ["init_score_", "tree_coefs_"]:  # small-loop(fitted scalar sequences)
+        if py_contains(fields, name):
+            _scalar_storage(fields[name], context)
+    if recordable:
+        _ = trees_side_put(_FITTED_SLOT, model, key)
+        _fitted_stamp(model, fields, reps)
+    return fields

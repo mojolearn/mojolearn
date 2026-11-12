@@ -543,7 +543,7 @@ finally:
     if name:setattr(builtins,name,original)
 if name:
     # A replaced connected builtin export is refused before any callback
-    # (bindings/native_loaded_module.mojo, contract of 31fc85981 and
+    # (bindings/native_loaded_module_door.mojo, contract of 31fc85981 and
     # test_native_cv_module_connections.py); the restored export then loads.
     assert type(audit.exception) is TypeError,audit.report()
     assert str(audit.exception)=="native module connection export changed: builtins."+name,str(audit.exception)

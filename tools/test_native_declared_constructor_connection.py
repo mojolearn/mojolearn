@@ -139,6 +139,6 @@ def test_constructor_wrapper_is_one_call_and_wired_before_snapshots():
                '_connect_declared_params(', '_connect_declared_constructors(']
     positions = [text.index(call) for call in ordered]
     assert positions == sorted(positions)
-    native = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    native = (ROOT / 'bindings/full_reset_constructor_native_door.mojo').read_text()
     assert 'if py_contains(context, "release_declared"):' in native
     assert '_declared_release(previous[i], context["declared"])' in native

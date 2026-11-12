@@ -12,7 +12,7 @@ import mojolearn as ml
 
 class InitStream:
     """The restatement of ours' seeded init stream (the native `XseqStream`,
-    bindings/xseq_native_common.mojo: the base binding's counter-based
+    bindings/xseq_native_common_door.mojo: the base binding's counter-based
     `uniform_init_f32` draws plus a splitmix64 child seed), so the reference
     starts from the SAME initial weights. Moved here from the product's
     `_buffer.InitStream` (lane pyout-runtime-boundary, 2026-11-11), which no
