@@ -34,10 +34,16 @@ comptime SAMBA_PRIMITIVE_OPERATIONS = 29
 # Neural primitive operation ids of PRIMITIVE_ABI_NAME (the provider
 # dispatchers' `op` words; the former Python entry name in parentheses).
 comptime SAMBA_PRIM_EMBEDDING_FORWARD = 0  # (embedding_forward)
+comptime SAMBA_PRIM_EMBEDDING_BACKWARD = 1  # (embedding_backward)
 comptime SAMBA_PRIM_RMS_NORM_FORWARD = 2  # (rms_norm_forward)
+comptime SAMBA_PRIM_RMS_NORM_BACKWARD = 3  # (rms_norm_backward)
 comptime SAMBA_PRIM_LINEAR_FORWARD = 4  # (linear_forward)
+comptime SAMBA_PRIM_LINEAR_BACKWARD = 5  # (linear_backward)
+comptime SAMBA_PRIM_NEURAL_RNG = 6  # (neural_rng)
+comptime SAMBA_PRIM_HEAD_LOSS = 7  # (samba_head_loss; device images only)
 comptime SAMBA_PRIM_CE_LOSS = 8  # (ce_loss)
 comptime SAMBA_PRIM_ACCUMULATE = 9  # (accumulate, the ordered pair fold)
+comptime SAMBA_PRIM_CHUNKED_HEAD_TRAIN = 11  # (chunked_lm_head_v2_train)
 comptime SAMBA_PRIM_OPTIMIZER_STEP = 25  # (optimizer_step, per-call step)
 
 

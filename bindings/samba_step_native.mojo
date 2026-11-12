@@ -19,14 +19,14 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_ACCUMULATED, SAMBA_CAP_CHUNKED
 from std.memory import unsafe_memcpy
 from std.os import getenv
-from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
+from bindings.generation_buffers import generation_initialize_binding, generation_array
 from bindings.generator_state_native import generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view
+from bindings.samba_state_native import samba_fields, samba_entries, samba_schedule_snapshot, samba_schedule_rate, samba_moment_view, samba_entry_key, samba_primitive
+from core.samba_entry_table import samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_ACCUMULATE
 from training.samba_state_run import samba_optimizer_device_plan
 from core.device_plan import DevicePlan
 from bindings.samba_training_native import samba_ids, samba_gradients_admitted, _samba_count
 from bindings.causal_lm_construct import _model_f32, _model_shape
-from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
 
@@ -328,14 +328,17 @@ def _samba_train_step_admitted(model: PythonObject, inputs: PythonObject, target
             if provider is not None:
                 _ = neural_descriptor_execute(provider, 9, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
             else:
-                _ = py_call(_native_function(entries, "accumulate"), Python.list(gradient._addr, stacked._addr), py_ints([n, a, b * length]))
+                # Primitive op 9 (the former `accumulate` entry), resolved for the admitted key.
+                _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"])),
+                    SAMBA_PRIM_ACCUMULATE, [Int(py=gradient._addr), Int(py=stacked._addr)], [n, a, b * length], [])
             _ = gradient  # keep the Python object alive through the native call above
             _ = stacked  # keep the Python object alive through the native call above
             var total = generation_array([1])
             if provider is not None:
                 _ = neural_descriptor_execute(provider, 9, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
             else:
-                _ = py_call(_native_function(entries, "accumulate"), Python.list(total._addr, losses._addr), py_ints([1, a, -1]))
+                _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"])),
+                    SAMBA_PRIM_ACCUMULATE, [Int(py=total._addr), Int(py=losses._addr)], [1, a, -1], [])
             _ = total  # keep the Python object alive through the native call above
             _ = losses  # keep the Python object alive through the native call above
             loss = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total._addr))[0]))
