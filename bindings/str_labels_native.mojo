@@ -46,7 +46,7 @@ def str_cross(rows: StrTable, i: Int, known: StrTable, j: Int) -> Int:
     var lb = known.lengths[j]
     var sa = rows.starts[i]
     var sb = known.starts[j]
-    for q in range(min(la, lb)):  # driver-loop: over one label's code points (native)
+    for q in range(min(la, lb)):  # native data loop, no CPython (not a driver loop): over one label's code points (native)
         var x = rows.points[sa + q]
         var y = known.points[sb + q]
         if x != y:
@@ -79,7 +79,7 @@ def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], m
     var get_length = cpy.lib.get_function[Int]("PyUnicode_GetLength")
     var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
     var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
-    for i in range(label_source_count[native](labels, pins)):  # driver-loop: the explicit label input step, one read per label
+    for i in range(label_source_count[native](labels, pins)):  # api-bound-loop: over the caller's Python list of str labels, one read per label
         var value = label_source_value[native](labels, pins, i)
         if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) == 0:
             return False
@@ -92,7 +92,7 @@ def _read_source[native: Bool](labels: PythonObject, pins: List[PythonObject], m
         var source = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)
         table.starts.append(len(table.points))
         table.lengths.append(count)
-        for k in range(count):  # driver-loop: over one label's code points
+        for k in range(count):  # native data loop, no CPython (not a driver loop): over one label's code points
             table.points.append(source[k])
         mem_free(address)
     _ = pins
@@ -105,7 +105,7 @@ def _sorted(table: StrTable, n: Int) -> List[Int]:
     # A stable bottom-up merge sort of 0..n-1 by code-point order: equal
     # labels keep their input order, so each run starts at its first label.
     var rows = List[Int](capacity=n)
-    for i in range(n):  # driver-loop: over the label indices
+    for i in range(n):  # native data loop, no CPython (not a driver loop): over the label indices
         rows.append(i)
     # The identity rows: the sorted positions are the sorted label indices.
     return _sort_by_rows(table, rows)
@@ -117,7 +117,7 @@ def _sort_by_rows(table: StrTable, rows: List[Int]) -> List[Int]:
     merge sort (equal labels keep their order)."""
     var n = len(rows)
     var order = List[Int](capacity=n)
-    for i in range(n):  # driver-loop: over the positions
+    for i in range(n):  # native data loop, no CPython (not a driver loop): over the positions
         order.append(i)
     var buffer = List[Int](length=n, fill=0)
     var width = 1
@@ -146,7 +146,7 @@ def _sort_by_rows(table: StrTable, rows: List[Int]) -> List[Int]:
                 j += 1
                 k += 1
             lo = hi
-        for t in range(n):  # driver-loop: over the positions
+        for t in range(n):  # native data loop, no CPython (not a driver loop): over the positions
             order[t] = buffer[t]
         width *= 2
     return order^
@@ -171,7 +171,7 @@ def _str_hash(table: StrTable, i: Int) -> UInt64:
     # FNV-1a over label i's code points and its length.
     var h = _FNV_OFFSET
     var s = table.starts[i]
-    for q in range(table.lengths[i]):  # driver-loop: over one label's code points (native)
+    for q in range(table.lengths[i]):  # native data loop, no CPython (not a driver loop): over one label's code points (native)
         h = (h ^ UInt64(table.points[s + q])) * _FNV_PRIME
     return (h ^ UInt64(table.lengths[i])) * _FNV_PRIME
 
@@ -204,7 +204,7 @@ def str_unique_into(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
         var base = unit * local_cap
         var mask = local_cap - 1
         var stop = min(n, (unit + 1) * _UNIQUE_CHUNK)
-        for i in range(unit * _UNIQUE_CHUNK, stop):  # driver-loop: labels of one hashing chunk (native, no Python)
+        for i in range(unit * _UNIQUE_CHUNK, stop):  # native data loop, no CPython (not a driver loop): labels of one hashing chunk (native, no Python)
             var h = _str_hash(tp[], i)
             hp[i] = h
             var s = Int(h & UInt64(mask))
@@ -222,7 +222,7 @@ def str_unique_into(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
     # a class comes from its earliest chunk, whose slot holds its earliest
     # row there, so each class keeps its global first row.
     var total = 0
-    for u in range(units * local_cap):  # driver-loop: over the per-task slots (native)
+    for u in range(units * local_cap):  # native data loop, no CPython (not a driver loop): over the per-task slots (native)
         if local_rows[u] >= 0:
             total += 1
     var cap = _pow2_at_least(2 * total + 2)
@@ -230,7 +230,7 @@ def str_unique_into(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
     var global_rows = List[Int](length=cap, fill=-1)
     var global_ids = List[Int](length=cap, fill=-1)
     var reps = List[Int](capacity=total)
-    for u in range(units * local_cap):  # driver-loop: the one merge of the per-task distinct sets, in chunk order (native)
+    for u in range(units * local_cap):  # native data loop, no CPython (not a driver loop): the one merge of the per-task distinct sets, in chunk order (native)
         var r = local_rows[u]
         if r < 0:
             continue
@@ -267,7 +267,7 @@ def str_unique_into(table: StrTable, n: Int, codes_address: Int) -> List[Int]:
         var rk = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=rank_at)
         var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_address)
         var stop = min(n, (unit + 1) * _UNIQUE_CHUNK)
-        for i in range(unit * _UNIQUE_CHUNK, stop):  # driver-loop: labels of one code chunk (native, no Python)
+        for i in range(unit * _UNIQUE_CHUNK, stop):  # native data loop, no CPython (not a driver loop): labels of one code chunk (native, no Python)
             var h = hp[i]
             var g = Int(h & UInt64(mask))
             while True:  # driver-loop: over one open-addressing probe (native)
@@ -364,7 +364,7 @@ def str_encode(labels: PythonObject) raises -> PythonObject:
     if fast.status == P3_TEXT_OK:
         var fast_codes = _store("i", n)
         var target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(fast_codes))
-        for i in range(n):  # driver-loop: native copy of the n codes
+        for i in range(n):  # native data loop, no CPython (not a driver loop): native copy of the n codes
             target[i] = fast.codes[i]
         _ = fast_codes  # keep the Python object alive through the native writes above
         return Python.tuple(p3_text_classes(labels, fast.first), fast_codes)
@@ -420,7 +420,7 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     var as_ucs4 = cpy.lib.get_function[Int]("PyUnicode_AsUCS4Copy")
     var mem_free = cpy.lib.get_function[NoneType]("PyMem_Free")
     var single = StrTable()
-    for i in range(n):  # driver-loop: the explicit label input step, one lookup per label
+    for i in range(n):  # api-bound-loop: over the caller's Python list of str labels, one lookup per label
         var value = values[i]
         var found = -1
         if (cpython_table()[].PyType_GetFlags(py_type(value)._obj_ptr) & UInt64(UNICODE_FLAG)) != 0:
@@ -436,7 +436,7 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
             single.lengths.clear()
             single.starts.append(0)
             single.lengths.append(length)
-            for k in range(length):  # driver-loop: over one label's code points
+            for k in range(length):  # native data loop, no CPython (not a driver loop): over one label's code points
                 single.points.append(source[k])
             mem_free(ucs4)
             found = str_find(single, 0, table, lookup)
