@@ -8,7 +8,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.msel_fixed_owner_unpack import fixed_owner_context, fixed_owner_fields
 from bindings.msel_fixed_owner_pack import fixed_owner_set_params
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.trees_resident_table import trees_resident_stats
+from bindings.py_trees_resident import trees_resident_stats
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
 from bindings.trees_constructor_native_pack import forest_construct
 from bindings.trees_boost_constructor_native_pack import dart_construct

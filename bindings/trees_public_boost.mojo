@@ -57,7 +57,7 @@ from bindings.trees_public_forest import (
     _check_mode, _rf_params, _store_model, _int, _float, _repr, _str, _truthy, _is_bool, _is_integral,
     _refuse, _classifier, _launch, _y_rows_check, _dt_tier_bins,
 )
-from bindings.trees_resident_table import (
+from bindings.py_trees_resident import (
     TREES_RESIDENT_DART, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_watch,
     trees_resident_forget, trees_resident_unpin,
 )

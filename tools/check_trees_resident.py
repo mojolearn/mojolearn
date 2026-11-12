@@ -5,7 +5,7 @@
 Lane ne1-a-trees (2026-11-06; docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md
 workstream A). A fitted forest keeps its prepared snapshot (the device copy,
 or the host column's strict trees) in the tree door's native resident table
-(bindings/trees_resident_table.mojo), keyed by the model's identity and
+(bindings/trees_resident_table_run.mojo), keyed by the model's identity and
 generation word and the identities of the five model arrays. This check fits
 a forest and a DART model and, for each:
 

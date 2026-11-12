@@ -23,7 +23,7 @@ from std.sys.compile import is_defined
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.trees_lifetime_door import TreesResident, trees_resident_pins
-from bindings.trees_resident_table import TreesResidentDeath
+from bindings.py_trees_resident import TreesResidentDeath
 from bindings.trees_explainer_native_door import TreeShapOwner
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
 from bindings.classical_native_pack import classical_c

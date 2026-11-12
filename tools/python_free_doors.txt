@@ -45,6 +45,5 @@ allow: bindings/trees_public_forest.mojo  # 2026-11-12 lane admitted-x-view (to 
 allow: bindings/trees_public_gbdt_fit.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/trees_public_inputs.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: bindings/trees_public_meta.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
-allow: bindings/trees_resident_table.mojo  # 2026-11-12 lane resident-pin-tables (to open): TreesResidentEntry: Python pins inside typed resident eviction (design)
 allow: bindings/x_linear_native.mojo  # 2026-11-12 lane admitted-x-view (to open; orchestrator decision 2026-11-12): AdmittedX users: composed AdmittedXView (as _RPArray) not yet done
 allow: providers/python/neural_descriptor_pyapi.mojo  # 2026-11-12 lane neural-descriptor-pins (to open): NeuralDescriptorConnections: Python modules inside typed descriptor execution (design)

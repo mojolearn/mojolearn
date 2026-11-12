@@ -39,7 +39,7 @@ from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_view / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_side_records_unpack import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
-from bindings.trees_resident_table import (
+from bindings.py_trees_resident import (
     TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put_native, trees_resident_pin, trees_resident_unpin,
     trees_resident_watch, trees_resident_forget,
 )
@@ -1401,7 +1401,7 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
               context: PythonObject) raises -> Int:
     """`ForestProtocol._prepare_resident_forest()` through the owner: the
     device snapshot of the five model arrays, prepared once and kept in the
-    tree resident table (bindings/trees_resident_table.mojo) while the
+    tree resident table (bindings/trees_resident_table_run.mojo) while the
     model, its generation, the arrays, dimensions, mode and aggregation are
     the same. Returns its handle, or 0 when nothing could be kept (the
     snapshot was released again)."""

@@ -6,7 +6,7 @@ ne1-a-trees, 2026-11-06).
 rebuild every tree from the five flat model arrays (`rf_host_trees`,
 `et_host_trees`) on every call before the walk. These entries rebuild them
 once per fitted model and keep them under a handle the tree door's resident
-table holds (bindings/trees_resident_table.mojo), so a predict walks the kept
+table holds (bindings/trees_resident_table_run.mojo), so a predict walks the kept
 trees. The walk is the same function over the same trees and the same rows
 (`rf_host_predict` / `et_host_predict`, the sequential vote), so no result
 changes.
