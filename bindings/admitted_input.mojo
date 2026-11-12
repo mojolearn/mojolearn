@@ -812,7 +812,8 @@ def admit_y(source: PythonObject, rows: Int, est: String, context: PythonObject,
     var cols = 1 if nd < 2 else Int(py=view.shape[1])
     var column_source = py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
     var plan = admitted_target_plan(nd, cols, column_source, classical_kind(view, context) == "c", est)
-    var y = PythonObject(None)
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var y = Optional[PythonObject]()
     if plan:
         try:
             y = admit_x(view, 1, "y", context, column_target=plan == 2, admitted=True)
@@ -821,9 +822,11 @@ def admit_y(source: PythonObject, rows: Int, est: String, context: PythonObject,
                 raise Error("Input y contains NaN or infinity (" + est + ").")
             raise Error(String(error))
     var length = 1 if nd == 0 else Int(py=view.shape[0])
-    admitted_target_shape(rows, length, y is not None, est)
+    admitted_target_shape(rows, length, Bool(y), est)
     _ = view^
-    return y
+    if y:
+        return y.value()
+    return PythonObject(None)
 
 
 def classical_weight_refusal(source: PythonObject, error: Error) raises -> Error:
