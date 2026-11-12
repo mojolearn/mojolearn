@@ -4,7 +4,7 @@ switch read and the typed input/output range descriptors. No Python import
 (tools/python_free_dirs.sh). Lane rs-shared-infra-b (2026-11-12): moved word
 for word; descriptor lists of one program, nothing to split across cores."""
 from std.os import getenv
-from std.memory import unsafe_memcpy
+from std.memory import unsafe_memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
@@ -105,6 +105,39 @@ struct MetricArenaOwner(Copyable, Movable):
 
     def base(self) -> Int:
         return Int(self.words.unsafe_ptr())
+
+    # Typed reads of the completed arena (lane metric-programs-2, 2026-11-12:
+    # one reader set for every metric owner; were MxArena's methods and the
+    # mc_arena_* / _arena_* copies in bindings/mcls_common.mojo and
+    # bindings/metrics_reg_native.mojo). Each read takes the base from the
+    # store this value owns.
+    def i32(self, off: Int) -> Int:
+        """`prog.ints(off, 1)[0]`: the Int32 word at arena[off]."""
+        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.base() + 4 * off)[0])
+
+    def i64(self, off: Int) -> Int:
+        """`prog.words(off, 2, "q")[0]`: the Int64 at arena[off], arena[off + 1], low first."""
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base() + 4 * off)
+        return Int(bitcast[DType.int64](UInt64(words[0]) | (UInt64(words[1]) << 32)))
+
+    def f32(self, off: Int) -> Float64:
+        """`prog.floats(off, 1)[0]`: the Float32 word at arena[off], widened exactly."""
+        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=self.base() + 4 * off)[0])
+
+    def f64(self, off: Int) -> Float64:
+        """`prog.words(off, 2, "d")[0]`: the binary64 at arena[off], arena[off + 1], low first."""
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base() + 4 * off)
+        return bitcast[DType.float64](UInt64(words[0]) | (UInt64(words[1]) << 32))
+
+    def i32_words(self, off: Int, count: Int) -> List[Int32]:
+        """A copy of `count` arena words as Int32 bits (a later program's
+        program-owned input; was an Array PACK read back as a caller buffer)."""
+        var copied = List[Int32](length=count, fill=0)
+        if count > 0:
+            unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(copied.unsafe_ptr())),
+                          src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=self.base() + 4 * off),
+                          count=count)
+        return copied^
 
 
 def metrics_plan_execute(entry: NativeDescriptorCall, plan: MetricProgramPlan, inputs: List[MetricProgramInput],
