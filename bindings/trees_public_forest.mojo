@@ -1273,7 +1273,7 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
     var request = forest_fit_request(fields, params_cfg, kind, rows, cols, k, 0, 0, ForestFit(classifier), native,
                                      context)
     var state = Python.tuple(PythonObject(not et), PythonObject(classifier), forest_request_words_py(request))
-    return ForestShardPlan(fields, kind, classifier, classes, y, weights, state, cols)
+    return ForestShardPlan(fields, kind^, classifier, classes, y, weights, state, cols)
 
 
 def forest_shard_fit(state: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
