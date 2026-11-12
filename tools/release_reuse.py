@@ -594,7 +594,7 @@ def toolchain(tree, plat):
     # build box installs the default environment only (2026-11-12: every Linux
     # leg of the first 1.2.0 measurement build failed the pin check on the
     # 3.13 package of the other environment).
-    env = re.search(r"^environments:\n  default:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", text, re.S | re.M)
+    env = re.search(r"^  default:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|^[A-Za-z]|\Z)", text, re.S | re.M)
     scope = env.group(1) if env else text
     pkgs = sorted(set(re.findall(
         r"conda\.modular\.com/max/%s/((?:mojo|mojo-compiler|max|max-core)-[^/\s]+)\.conda" % re.escape(plat), scope)))
