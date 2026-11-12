@@ -884,7 +884,7 @@ def _neural_lengths(mut mods: NativeModules, value: PythonObject, b: Int, l: Int
             raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
         var viewed = List[Int](length=b, fill=0)
         for i in range(b):
-            var n = view_int_at(view, i)
+            var n = view_int_at(view.layout, view.kind, i)
             if n < 1 or n > l:
                 raise Error("neural block: lengths must be in [1, L]")
             viewed[i] = n
