@@ -43,7 +43,9 @@ def test_schedule_descriptor_exports():
     binding = _read("bindings/_mojolearn_byte_lm.mojo")
     for name in ("byte_lm_schedule_api_v1", "byte_lm_schedule_create_v1", "byte_lm_schedule_handle_v1"):
         assert f'("{name}")' in binding, name
-    assert 'comptime BYTE_LM_SCHEDULE_ABI_NAME = "mojolearn.training.byte_lm_schedule.v1"' in binding
+    # lane rs-embedding-bytelm: the schedule table is RUN code beside the door.
+    run = _read("training/byte_lm_door_run.mojo")
+    assert 'comptime BYTE_LM_SCHEDULE_ABI_NAME = "mojolearn.training.byte_lm_schedule.v1"' in run
 
 
 def test_public_schedule_wrappers_delegate_once():

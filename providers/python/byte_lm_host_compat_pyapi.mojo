@@ -10,6 +10,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from training.byte_lm_host_session import ByteHostSession, host_optimizer
 from training.byte_lm_host_trainer_dispatch import BYTE_HOST_TRAINER_TABLE, host_trainer_operation
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+# RUN (lane rs-embedding-bytelm): the typed ByteConfig of the plan words.
+from training.byte_lm_config_run import _config
 from bindings.sha256_door import sha256_hexdigest
 from core.sha256_file import sha256_file
 from bindings.native_json import native_path
@@ -41,14 +43,6 @@ def _shape(value: PythonObject) raises -> List[Int]:
     if len(result) == 9:
         result.append(0)
     return result^
-
-
-def _config(p: List[Int]) raises -> ByteConfig:
-    if p[9] != 0 and p[9] != 1:
-        raise Error("byte LM: chunked head selector must be 0 or 1")
-    var cfg = ByteConfig(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] == 1)
-    cfg.validate()
-    return cfg^
 
 
 def _plan(shape: PythonObject, params: PythonObject) raises -> Tuple[List[Int], List[Float64]]:
