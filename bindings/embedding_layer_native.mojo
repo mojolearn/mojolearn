@@ -192,19 +192,21 @@ def _drop_table(fields: PythonObject, context: PythonObject):
         if tok is None:
             return
         var owner = py_get(fields, "_table_owner")
-        var entries = PythonObject(None)
+        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+        var connected = Optional[PythonObject]()
         if owner is None:
             # Older in-process objects had no retained binding. New tokens
             # always record their native owner, including across mode changes.
-            entries = _entries(fields, context, PythonObject(None))
+            connected = _entries(fields, context, PythonObject(None))
         else:
             for name in ["identical", "fast"]:  # small-loop(two import-connected token owners)
                 var candidate = context["embedding_bindings"][PythonObject(name)]
                 if py_type(candidate) is _b().dict and candidate["module"] is owner:
-                    entries = candidate
+                    connected = candidate
                     break
-            if entries is None:
-                raise Error("TypeError: resident Embedding table requires its original native binding")
+        if not connected:
+            raise Error("TypeError: resident Embedding table requires its original native binding")
+        var entries = connected.value()
         if py_contains(entries, "embedding_table_release"):
             var emb = _emb_ref(entries)
             _ = _emb_call(emb, EMB_OP_TABLE_RELEASE, List[Int](), [_integer(tok, "resident table token")])
@@ -361,17 +363,22 @@ def _owner_full(cls: PythonObject, context: PythonObject) raises:
     # public archive context records it (own or peer). Any other finalizer,
     # including every Python __del__, stays refused. Without this, `verify
     # --cross-check` refused embedding: the CPU arm's forward raised here.
-    var archive_finalizer = PythonObject(None)
-    var peer_finalizer = PythonObject(None)
+    # Optional, not PythonObject(None) sentinels: a descriptor the archive does not record is absent (modular/modular#7546).
+    var archive_finalizer = Optional[PythonObject]()
+    var peer_finalizer = Optional[PythonObject]()
     var archive = py_get(context, "embedding_archive_context")
     if archive is not None and _class_flag(cls, "_HOST_INFERENCE_ONLY", context):
-        archive_finalizer = py_get(archive, "host_archive_finalizer_descriptor")
-        peer_finalizer = py_get(archive, "host_archive_peer_finalizer_descriptor")
+        var own = py_get(archive, "host_archive_finalizer_descriptor")
+        if own is not None:
+            archive_finalizer = own
+        var peer = py_get(archive, "host_archive_peer_finalizer_descriptor")
+        if peer is not None:
+            peer_finalizer = peer
     for i in range(len(ancestry)):  # driver-loop: require native lifetime before allocating or retaining a subclass
         var own_finalizer = py_get(_class_fields(ancestry[i]), "__del__")
         if own_finalizer is not None and own_finalizer is not finalizer:
-            var connected = (archive_finalizer is not None and own_finalizer is archive_finalizer) or (
-                peer_finalizer is not None and own_finalizer is peer_finalizer)
+            var connected = (Bool(archive_finalizer) and own_finalizer is archive_finalizer.value()) or (
+                Bool(peer_finalizer) and own_finalizer is peer_finalizer.value())
             if not connected:
                 raise Error("TypeError: Embedding subclasses cannot install Python finalizer callbacks")
         if ancestry[i] is context["embedding_class"]:
