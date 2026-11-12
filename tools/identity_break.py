@@ -3561,7 +3561,7 @@ def _(ml, X, yc, yr, Xh=None):
     blk = ml.Mamba3Block(w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
-    # mamba3_prefill_session_info: the counters of the device prefill session the
+    # the session's info operation (op 45 on its registry handle): the counters of the device prefill session the
     # stateless forward above opened. The host column opens none (None there), so
     # the dict is checked, not hashed, and the lane's bits stay the same.
     info = blk.session_info()

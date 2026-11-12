@@ -207,6 +207,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from providers.python.transformer_block_session_pyapi import transformer_block_session_type
+from providers.python.mamba3_prefill_session_pyapi import mamba3_prefill_session_type
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_info, neural_descriptor_provider_pins, native_descriptor_resource_pins
 from providers.python.operation_lock_pyapi import ProviderOperationLock, operation_lock_connect, operation_lock_c
 from bindings.causal_operation_owner import CausalExecutionEntries
@@ -1352,6 +1353,10 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         # the neural doors keep on a block; it replaces the generation session
         # provider and link types (lane transformer-session-native, 2026-11-12).
         transformer_block_session_type(module)
+        # The Mamba-3 prefill session owner (core/mamba3_prefill_session.mojo);
+        # it replaces the images' _Mamba3PrefillSession / _M3OwnedHostSession
+        # Python types (lane mamba3-prefill-handle, 2026-11-12).
+        mamba3_prefill_session_type(module)
         _ = module.add_type[NeuralDescriptorProvider]("_NeuralDescriptorProvider")
         _ = module.add_type[NativeDescriptorResource]("_NativeDescriptorResource")
         _ = module.add_type[ProviderOperationLock]("_NativeOperationLockOwner")

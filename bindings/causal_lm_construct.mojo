@@ -29,7 +29,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
-from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD
+from core.neural_entry_table import NeuralEntryKey, neural_ref, NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_MAMBA_TRAIN, MAMBA3_CAP_SESSION_PREFILL
+from providers.python.mamba3_prefill_session_pyapi import mamba3_prefill_caps, mamba3_prefill_session_open
 from providers.python.transformer_block_session_pyapi import transformer_block_session_open
 from core.causal_lm_entry_table import (
     CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_ref, causal_table_entry, CAUSAL_TABLE_LINALG,
@@ -681,10 +682,14 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         py_setitem(fields, "_int15", planes)
     if kind == "mamba3":
         if String(route) == "gpu" and String(fields["numeric_mode"]) == "identical" and getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
-            if _native_has_entry(mods, bindings[kind], "mamba3_prefill_session_create"):
-                py_setitem(fields, "_prefill_session", _native_function(mods, bindings[kind], "mamba3_prefill_session_create")())
-                mods.released()
-                py_setitem(fields, "_prefill_binding", bindings[kind])
+            # The block's prefill session: a native registry handle of its
+            # GPU Mamba image (core/mamba3_prefill_session.mojo, lane
+            # mamba3-prefill-handle; the former Python entry
+            # mamba3_prefill_session_create and the _prefill_binding field).
+            var session_entry = neural_ref[NEURAL_TABLE_MAMBA_TRAIN](
+                NeuralEntryKey(Int(py=bindings["entry_mode"]), Int(py=bindings["entry_vendor"])))
+            if (mamba3_prefill_caps(session_entry) & MAMBA3_CAP_SESSION_PREFILL) != 0:
+                py_setitem(fields, "_prefill_session", mamba3_prefill_session_open(session_entry))
         _ = neural_descriptor_cached(fields, bindings[kind], "_native_mamba_state", "mamba_state_api_v1",
             String(MAMBA_STATE_ABI_NAME), String(route) == "gpu")
         mods.released()

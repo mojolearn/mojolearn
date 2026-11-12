@@ -5,7 +5,15 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
-from bindings.neural_block_public import neural_training_entries, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words, neural_mamba_session_call
+from bindings.neural_block_public import neural_training_selection, neural_mamba3_restore, neural_block_forward_binding, _neural_input, _neural_int_words
+from core.entry_table import entry_ref_unresolved
+from core.mamba_state_entry_table import Mamba3StateRoute
+from core.neural_entry_table import (
+    NEURAL_MAMBA3_SESSION_FORWARD, NEURAL_MAMBA3_OWNED_FORWARD, MAMBA3_CAP_SESSION_PREFILL, MAMBA3_CAP_REPORTS_OPTIONAL,
+)
+from providers.python.mamba3_prefill_session_pyapi import (
+    mamba3_prefill_caps, mamba3_prefill_session_ensure, mamba3_prefill_session_run,
+)
 from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute, neural_descriptor_construct, neural_descriptor_handle,
     neural_descriptor_reserved_execute,
@@ -23,19 +31,19 @@ struct _PrefillVerdicts(Defaultable, Movable):
     # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (the transformer forward tape: a TransformerBlock prefill keeps no tape.)
+    # The Mamba-3 prefill session answers (session forward present, reports
+    # optional) are the training image's capability bits now, one table call
+    # (lane mamba3-prefill-handle; core/neural_entry_table.mojo
+    # NEURAL_MAMBA3_SESSION_CAPS): their fields and probes are gone.
     var entries: PythonObject
     var tape_mamba3: Int
-    var session_mamba3: Int
-    var optional_mamba3: Int
 
     def __init__(out self):
         self.entries = PythonObject(None)
         self.tape_mamba3 = -1
-        self.session_mamba3 = -1
-        self.optional_mamba3 = -1
 
 
-comptime _PREFILL_VERDICTS = SharedSlot[_PrefillVerdicts, "MojolearnNeuralPrefillVerdictsV2"]
+comptime _PREFILL_VERDICTS = SharedSlot[_PrefillVerdicts, "MojolearnNeuralPrefillVerdictsV3"]
 
 
 def _prefill_hold(entries: PythonObject) raises:
@@ -45,8 +53,6 @@ def _prefill_hold(entries: PythonObject) raises:
     if v[].entries is None or v[].entries is not entries:
         v[].entries = entries
         v[].tape_mamba3 = -1
-        v[].session_mamba3 = -1
-        v[].optional_mamba3 = -1
 
 
 def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
@@ -65,36 +71,12 @@ def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
     return enabled
 
 
-def _prefill_mamba3_session_entry(entries: PythonObject) raises -> Bool:
-    _prefill_hold(entries)
-    var v = _PREFILL_VERDICTS.get_or_create_ptr()
-    if v[].session_mamba3 >= 0:
-        return v[].session_mamba3 == 1
-    var found = Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "mamba3_prefill_session_forward"))
-    _prefill_hold(entries)
-    v = _PREFILL_VERDICTS.get_or_create_ptr()
-    v[].session_mamba3 = 1 if found else 0
-    return found
-
-
-def _prefill_mamba3_reports_optional(entries: PythonObject) raises -> Bool:
-    _prefill_hold(entries)
-    var v = _PREFILL_VERDICTS.get_or_create_ptr()
-    if v[].optional_mamba3 >= 0:
-        return v[].optional_mamba3 == 1
-    var optional = Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "mamba3_prefill_session_reports_optional"))
-    if optional:
-        optional = Bool(py=_native_function(entries, "mamba3_prefill_session_reports_optional")())
-    _prefill_hold(entries)
-    v = _PREFILL_VERDICTS.get_or_create_ptr()
-    v[].optional_mamba3 = 1 if optional else 0
-    return optional
-
-
 def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject,
-                            captured_fields: PythonObject) raises -> PythonObject:
+                            captured_fields: PythonObject, route: Mamba3StateRoute) raises -> PythonObject:
     """The zero-state prefill: `(y, h_last, k_last, v_last, theta_last)`, the
-    reports None where the binding skips them. The caller assigns them."""
+    reports None where the binding skips them. The caller assigns them.
+    `route` is the block's Mamba-3 key: it names the training image holding
+    the block's prefill session (core/mamba3_prefill_session.mojo)."""
     var bi = native_loaded_module("builtins")
     # A public Mamba operation captures model metadata and weight owners once;
     # its caller publishes session/cache changes back to the live dictionary.
@@ -104,14 +86,22 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
     var d = Int(py=fields["d_model"])
     var nh = Int(py=fields["nheads"])
     var weights = fields["_w"]
-    neural_mamba3_restore(fields, entries, weights)
+    neural_mamba3_restore(fields, entries, weights, route)
     var owned = py_get(fields, "_owned_generation")
-    var session = (_prefill_mamba3_session_entry(entries) or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+    # The session image's capability bits (one table call), replacing the
+    # former hasattr probes of `mamba3_prefill_session_forward` and the
+    # `mamba3_prefill_session_reports_optional` Python entry.
+    var caps = 0
+    var session_entry = entry_ref_unresolved()
+    if route.has_sessions():
+        session_entry = route.session_ref()
+        caps = mamba3_prefill_caps(session_entry)
+    var session = ((caps & MAMBA3_CAP_SESSION_PREFILL) != 0 or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
     var skip = False
     if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))):
-        skip = _prefill_mamba3_reports_optional(entries)
+        skip = (caps & MAMBA3_CAP_REPORTS_OPTIONAL) != 0
     var reports = bi.list()
-    var report_addresses = bi.list()
+    var report_addresses = List[Int]()
     # Native report shapes; the former Python tuples were built only to be
     # read back word by word.
     var report_shapes: List[List[Int]] = [[b, nh, 64, 128], [b, nh, 128], [b, nh, 64], [b, nh, 32]]
@@ -120,47 +110,50 @@ def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: Pytho
         if not skip:
             report = generation_array(report_shapes[i])
         _ = py_call(reports.append, report)
-        _ = py_call(report_addresses.append, 0 if skip else Int(py=report._addr))
+        report_addresses.append(0 if skip else Int(py=report._addr))
     var out = generation_array([b, l, d])
-    var addresses = Python.list(x._addr)
-    for i in range(len(weights)):  # driver-loop: over fixed Mamba3 weight addresses
-        _ = py_call(addresses.append, weights[i]._addr)
-    _ = py_call(addresses.append, out._addr)
-    _ = py_call(addresses.extend, report_addresses)
-    var params = py_ints([b, l, d])
-    var native = py_get(fields, "_native_mamba_block_provider_cache")
+    var params: List[Int] = [b, l, d]
     if session:
-        if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
-            py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
-            py_setitem(fields, "_prefill_binding", entries.canonical)
+        # The block's session: a native registry handle of its training image
+        # (the former Python entries mamba3_prefill_session_create,
+        # mamba3_prefill_session_forward[_owned], the handle factory and the
+        # env-gated provider arm ran the same operations with these words).
+        var owner = mamba3_prefill_session_ensure(fields, session_entry)
+        var addresses: List[Int] = [Int(py=x._addr)]
         if owned is not None:
-            var owned_addresses = Python.list(x._addr, out._addr)
-            _ = py_call(owned_addresses.extend, report_addresses)
-            _ = py_call(params.append, owned)
-            if native is not None:
-                _ = neural_mamba_session_call(native, fields, entries, 8,
-                    _neural_int_words(owned_addresses), _neural_int_words(params))
-            else:
-                _ = py_call(_native_function(entries, "mamba3_prefill_session_forward_owned"), fields["_prefill_session"], owned_addresses, params)
+            addresses.append(Int(py=out._addr))
+            addresses.extend(report_addresses.copy())
+            params.append(Int(py=owned))
+            _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_OWNED_FORWARD, addresses, params)
         else:
-            if native is not None:
-                _ = neural_mamba_session_call(native, fields, entries, 6,
-                    _neural_int_words(addresses), _neural_int_words(params))
-            else:
-                _ = py_call(_native_function(entries, "mamba3_prefill_session_forward"), fields["_prefill_session"], addresses, params)
+            for i in range(len(weights)):  # driver-loop: over fixed Mamba3 weight addresses
+                addresses.append(Int(py=weights[i]._addr))
+            addresses.append(Int(py=out._addr))
+            addresses.extend(report_addresses.copy())
+            _ = mamba3_prefill_session_run(owner, NEURAL_MAMBA3_SESSION_FORWARD, addresses, params)
+        _ = owner^
     else:
+        var addresses = Python.list(x._addr)
+        for i in range(len(weights)):  # driver-loop: over fixed Mamba3 weight addresses
+            _ = py_call(addresses.append, weights[i]._addr)
+        _ = py_call(addresses.append, out._addr)
+        for i in range(4):  # driver-loop: over the four report addresses
+            _ = py_call(addresses.append, report_addresses[i])
+        var native = py_get(fields, "_native_mamba_block_provider_cache")
         if native is not None:
-            _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
+            _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), params, [])
         else:
-            _ = py_call(_native_function(entries, "mamba3_forward_fresh"), addresses, params)
+            _ = py_call(_native_function(entries, "mamba3_forward_fresh"), addresses, py_ints(params))
+    _ = x
+    _ = weights
     return Python.tuple(out, reports[0], reports[1], reports[2], reports[3])
 
 
-def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
+def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject, route: Mamba3StateRoute) raises -> PythonObject:
     # Pass the captured fields explicitly: a PythonObject(None) default is
     # evaluated at compile time and needs a live interpreter.
     var fields = py_call(native_loaded_module("builtins").object.__getattribute__, block, "__dict__")
-    var result = _prefill_mamba3_reports(block, x, entries, fields)
+    var result = _prefill_mamba3_reports(block, x, entries, fields, route)
     var names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over report result metadata slots
         py_setitem(fields, names[i], result[i + 1])
@@ -174,7 +167,9 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
     var kind = String(fields["_native_kind"])
     if kind != "transformer" and kind != "mamba3":
         raise Error("neural prefill tape requires TransformerBlock or Mamba3Block")
-    var entries = neural_training_entries(fields, context)
+    var selection = neural_training_selection(fields, context)
+    var entries = selection.entries
+    var route = Mamba3StateRoute(selection.key.mode, selection.key.vendor, selection.key.vendor == 0)
     var x = _neural_input(input, Int(py=fields["d_model"]), False, context)
     if kind == "transformer":
         # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
@@ -183,7 +178,7 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
         # tape; its backward is `TransformerBlock.backward` on the step op.)
         return Python.tuple(neural_block_forward_binding(block, x, PythonObject(None), False, PythonObject(None), context), PythonObject(None))
     if not _prefill_tape_enabled(entries):
-        return Python.tuple(_prefill_mamba3(block, x, entries), PythonObject(None))
+        return Python.tuple(_prefill_mamba3(block, x, entries, route), PythonObject(None))
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])

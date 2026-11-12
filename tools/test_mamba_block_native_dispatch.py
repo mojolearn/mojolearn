@@ -25,23 +25,25 @@ def test_existing_numerical_owners_and_recoverable_failure_are_retained():
     assert 'p[3] != owner[].weight_generation' in NATIVE
 
 
-def test_session_ownership_uses_common_transport_and_exact_admission():
-    body = PUBLIC.split('def neural_mamba_session_call(')[1].split('def neural_mamba3_restore')[0]
-    assert 'neural_descriptor_handle' in body
-    assert 'neural_descriptor_reserved_execute(native, session, handle, 0, 1, operation,' in body
-    assert 'unsafe_from_address' not in body
+def test_session_ownership_is_a_registry_handle():
+    # Lane mamba3-prefill-handle (2026-11-12): the prefill session lives in the
+    # image's state registry; callers hold the handle owner and its word.
+    assert 'PREFILL_SESSIONS.insert(Mamba3PrefillSession())' in NATIVE
+    assert 'PREFILL_SESSIONS.acquire(mamba3_prefill_session_of(words[0]))' in NATIVE
+    assert 'def neural_mamba_session_call(' not in PUBLIC
+    helpers = (ROOT / 'providers/python/mamba3_prefill_session_pyapi.mojo').read_text()
+    assert 'downcast_value_ptr[Mamba3PrefillHandle]()' in helpers
     shell = (ROOT / 'bindings/_mojolearn_mamba.mojo').read_text()
-    assert 'session.downcast_value_ptr[Mamba3PrefillSession]()' in shell
+    assert 'downcast_value_ptr[Mamba3PrefillSession]()' not in shell
+    assert '"mamba_prefill_native_handle_v1"' not in shell
     assert 'neural_descriptor_capsule(api[].name, api[].entries)' in shell
 
 
 def test_all_backward_and_prefill_dispatch_modes_reach_native_table():
-    for operation in (7, 9):
-        assert f'neural_mamba_session_call(mods, native, fields, entries, {operation},' in PUBLIC
-    assert 'neural_descriptor_execute(native, 4,' in PUBLIC
-    assert 'neural_descriptor_execute(native, 3 if kind == "mamba2" else 2,' in PUBLIC
-    for operation in (6, 8):
-        assert f'neural_mamba_session_call(native, fields, entries, {operation},' in PREFILL
+    for operation in ('NEURAL_MAMBA3_OWNED_BACKWARD', 'NEURAL_MAMBA3_SESSION_BACKWARD'):
+        assert f'mamba3_prefill_session_run(owner, {operation},' in PUBLIC
+    for operation in ('NEURAL_MAMBA3_OWNED_FORWARD', 'NEURAL_MAMBA3_SESSION_FORWARD'):
+        assert f'mamba3_prefill_session_run(owner, {operation},' in PREFILL
     assert 'neural_descriptor_execute(native, 5,' in PREFILL
     assert 'py_call_typed(selected["all_finite_f32"]' not in PUBLIC
 
@@ -49,16 +51,16 @@ def test_all_backward_and_prefill_dispatch_modes_reach_native_table():
 def test_owned_snapshot_execution_and_publication_remain_atomic():
     source = (ROOT/'bindings/mamba_public_native.mojo').read_text()
     install = source.split('def mamba3_install_owned(')[1].split('def mamba3_release_owned')[0]
-    assert install.index('neural_descriptor_reserved_execute') < install.index('py_setitem(fields, "_prefill_session"')
-    assert 'return generation' in install
+    assert install.index('mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_INSTALL') < install.index('py_setitem(fields, "_owned_generation"')
+    assert 'return PythonObject(generation)' in install
     for owner in ('_m3_install_weights_run', '_m3_export_weights_run', '_mamba3_run_owned'):
         assert owner in NATIVE
     dispatch = NATIVE.split('if op == 15:')[1].split('if op == 17:')[0]
     assert 'owner[].usable = False' not in dispatch
-    assert 'py_setitem(fields, "_owned_native_provider", native)' in source
-    assert 'String("_owned_native_provider")' in source.split('def mamba3_getstate')[1]
+    assert '_owned_native_provider' not in source
+    assert '_prefill_binding' not in source.split('def mamba3_getstate')[1]
     owned_state = (ROOT/'bindings/samba_inference_native.mojo').read_text()
-    assert 'neural_mamba_session_call(owned_native, fields, entries, 16,' in owned_state
+    assert 'mamba3_prefill_session_run(session, NEURAL_MAMBA3_OWNED_STATE,' in owned_state
 
 
 def test_resident_decode_families_use_existing_native_owners():

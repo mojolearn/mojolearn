@@ -51,8 +51,8 @@ WHAT IT COMPUTES, and from which functions (no arithmetic of its own):
       addresses (the four report buffers included), the arity
       `Mamba3Block._call_fresh` passes.
   `mamba1_forward`, `mamba1_decode_step` (14 addresses),
-  `mamba2_forward`, `mamba2_decode_step` (16), `mamba3_forward`,
-  `mamba3_decode_step` (25)
+  `mamba2_forward`, `mamba2_decode_step` (16) (Mamba-3's carried-state
+  forward and decode step: ops 4/5 of `mamba_state_api_v1`)
       `_mojolearn_mamba_host`'s entries of the same names and contracts: the
       same three oracles with the state pieces read at entry and written
       back, so `Mamba1Block`, `Mamba2Block` and `Mamba3Block` run their
@@ -558,46 +558,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
     return PythonObject(out_len)
 
 
-def mamba3_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """25 addresses; params B, L, d_model, buf_len, pending
-    (lane/stateful-cpu-decoding)."""
-    var a = _addrs(addrs, 25, String("mamba3_forward"))
-    if Int(py=len(params)) != 5:
-        raise Error(
-            "mamba3_forward: params must contain 5 values (B, L, d_model,"
-            " buf_len, pending)"
-        )
-    var b = _index(params[0])
-    var l = _index(params[1])
-    var dm = _index(params[2])
-    var q0 = _index(params[3])
-    var pend = _index(params[4])
-    if dm < 1:
-        raise Error("mamba3_forward: d_model must be positive")
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, l, dm, q0, pend, False)
-    return PythonObject(out_len)
-
-
-def mamba3_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The forward at L = 1; params B, d_model, buf_len, pending."""
-    var a = _addrs(addrs, 25, String("mamba3_decode_step"))
-    if Int(py=len(params)) != 4:
-        raise Error(
-            "mamba3_decode_step: params must contain 4 values (B, d_model,"
-            " buf_len, pending)"
-        )
-    var b = _index(params[0])
-    var dm = _index(params[1])
-    var q0 = _index(params[2])
-    var pend = _index(params[3])
-    if dm < 1:
-        raise Error("mamba3_decode_step: d_model must be positive")
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, 1, dm, q0, pend, False)
-    return PythonObject(out_len)
+# The Mamba-3 carried-state forward and decode step are ops 4/5 of this
+# image's `mamba_state_api_v1` descriptor and its CAUSAL_TABLE_MAMBA
+# publication (core/mamba_state_entry_table.mojo); the Python entries
+# `mamba3_forward` / `mamba3_decode_step` are gone (lane
+# mamba3-prefill-handle, 2026-11-12: no product caller).
 
 
 # ===========================================================================
@@ -702,8 +667,6 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[mamba2_forward_binding]("mamba2_forward")
         module.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         module.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
-        module.def_function[mamba3_forward_binding]("mamba3_forward")
-        module.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         module.def_function[embedding_forward_binding]("embedding_forward")
         module.def_function[rms_norm_forward_binding]("rms_norm_forward")
         module.def_function[linear_forward_binding]("linear_forward")

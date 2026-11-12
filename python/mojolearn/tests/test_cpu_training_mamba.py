@@ -90,7 +90,10 @@ def test_host_binding_registers_every_gpu_entry():
     # None fallback and takes the plain entries; the host registers the owned
     # session arm instead).
     device_only = {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape",
-                   "mamba3_prefill_session_forward", "mamba3_prefill_session_backward",
+                   # the B-arm session backward of MOJOLEARN_NEURAL_TABLE_ROUTE_OFF
+                   # (the session forward entry went with the registry handle,
+                   # lane mamba3-prefill-handle)
+                   "mamba3_prefill_session_backward",
                    # the tape's native provider handles (e1741fb6a1); the
                    # training bridge connects them only where present
                    "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1"}
