@@ -383,12 +383,14 @@ def xprep_drop_resident(values: List[PythonObject], entries: PythonObject, conte
         return "resident in-out drop: "+String(error)
 
 
-def _release_owned(owned: List[Int], entries: PythonObject) -> String:
+def _release_owned(owned: List[Int], key: EntryRef) -> String:
+    # `key` is the run's transport entry, resolved once by `xprep_run`
+    # (perf-audit-2: was one table resolution per released slot).
     var failures = String()
     for i in range(len(owned)):  # driver-loop: attempt every gather/direct release even when an earlier free raises
         var slot = owned[len(owned)-1-i]
         try:
-            _store_free(entries, "x_prep", slot)
+            _ = xprep_call(key, XP_DEV_FREE, List[Int](), [slot])
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
     return failures
@@ -486,7 +488,10 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                         cache_state = _cache_state(cache,entries,context)
                     source = _cached_slot_in(cache_state.value(),value,entries)
                 elif dev_put_on and (rows or (words >= 1048576 and direct_on)):
-                    source = _store_put(entries, "x_prep", Int(py=classical_address(value)), Int(py=value.size))
+                    # The run's resolved transport entry (perf-audit-2: `_store_put`
+                    # resolved the table again per input).
+                    var put_src: List[Int] = [Int(py=classical_address(value))]
+                    source = xprep_call(key, XP_DEV_PUT, put_src, [Int(py=value.size)])
                     owned.append(source)
                 if rows:
                     var idx: List[Int] = [Int(py=classical_address(record[2]))]
@@ -542,14 +547,14 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
         _ = ins^
         _ = outs^
     except error:
-        var cleanup = _release_owned(owned,entries)
+        var cleanup = _release_owned(owned,key)
         var dropped = xprep_drop_resident(inout_values,entries,context)
         if dropped.byte_length() > 0:
             cleanup += ("" if cleanup.byte_length() == 0 else "; ")+dropped
         if cleanup.byte_length() > 0:
             raise Error("RuntimeError: x_prep operation failed: "+String(error)+"; cleanup also failed: "+cleanup)
         raise error
-    var cleanup = _release_owned(owned,entries)
+    var cleanup = _release_owned(owned,key)
     var dropped = xprep_drop_resident(inout_values,entries,context)
     if dropped.byte_length() > 0:
         cleanup += ("" if cleanup.byte_length() == 0 else "; ")+dropped
