@@ -43,7 +43,7 @@ comptime PREFILL_SESSIONS = StateRegistry[Mamba3PrefillSession,
     ("MojolearnMamba3PrefillSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMamba3PrefillSessionsFastV1")]
 
 
-def mamba3_prefill_caps() -> Int:
+def mamba3_prefill_image_caps() -> Int:
     """The image's fixed capability bits (NEURAL_MAMBA3_SESSION_CAPS): the
     build condition under which the image registered its former session
     Python entries (`mamba3_prefill_session_*`, `mamba3_owned_weights_enabled`)."""
@@ -223,7 +223,7 @@ def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float
     if op == NEURAL_MAMBA3_SESSION_CAPS:
         if len(a) != 0 or len(words) != 0 or len(f) != 0:
             raise Error("mamba3 prefill session: capabilities take no arguments")
-        return mamba3_prefill_caps()
+        return mamba3_prefill_image_caps()
     if op == NEURAL_MAMBA3_SESSION_INFO:
         if len(words) != 1 or len(f) != 0:
             raise Error("mamba3 prefill session info: invalid native descriptor")
