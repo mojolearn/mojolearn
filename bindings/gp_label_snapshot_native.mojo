@@ -72,7 +72,7 @@ def _gp_array_label_capture[native: Bool](value: PythonObject, context: PythonOb
             else:
                 result.public_value = scalar
         else:
-            for row in range(source.rows):  # driver-loop: native scalar boxing at the label boundary
+            for row in range(source.rows):  # data loop (not a driver loop): one boxed Python scalar per label (perf-audit-3: pattern 8 left, object pins need Python identity)
                 if len(snapshot.shape) == 1:
                     var scalar = _gp_label_word(data, row * source.s0, source.kind, source.itemsize)
                     comptime if native:
@@ -83,7 +83,7 @@ def _gp_array_label_capture[native: Bool](value: PythonObject, context: PythonOb
                     var values = PythonObject(None)
                     comptime if not native:
                         values = Python.list()
-                    for column in range(source.cols):  # driver-loop: preserve logical matrix label shape and strides
+                    for column in range(source.cols):  # data loop (not a driver loop): one boxed scalar per label of a matrix row
                         var scalar = _gp_label_word(data, row * source.s0 + column * source.s1, source.kind, source.itemsize)
                         comptime if native:
                             result.pins.append(scalar)

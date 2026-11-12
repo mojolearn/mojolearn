@@ -399,7 +399,7 @@ def mk_rows(m: PythonObject, a: Int, b: Int, ctx: PythonObject) raises -> Python
     var c = mk_c(m)
     if mk_on_dev(m) and 0 <= a and a < b and b <= mk_r(m) and mk_res_moves(m, (b - a) * c):
         var idx = List[Int]()
-        for i in range(a, b):  # driver-loop: native Mojo values, no CPython call: (rows: the requested row range): bounded by the caller
+        for i in range(a, b):  # native data loop (not a driver loop), no CPython call: (rows: the requested row range): bounded by the caller
             idx.append(i)
         return mk_dev_gather(m, MV_TAKE_ROWS, idx, ctx)
     var store = mk_store(m, ctx)
@@ -439,7 +439,7 @@ def mk_take_cols(m: PythonObject, idx: List[Int], ctx: PythonObject) raises -> P
 
 def mk_col_range(a: Int, b: Int) -> List[Int]:
     var idx = List[Int]()
-    for j in range(a, b):  # driver-loop: native Mojo values, no CPython call: (columns: a column range): bounded by the caller
+    for j in range(a, b):  # native data loop (not a driver loop), no CPython call: (columns: a column range): bounded by the caller
         idx.append(j)
     return idx^
 
@@ -1636,7 +1636,7 @@ def mk_take_rows_list(m: PythonObject, idx: List[Int], mut hk: MKit, ctx: Python
     if mk_r(m) >= F32_INDEX_MAX:
         raise Error("x_decomp: take_rows exceeds the float32 row-index bound (2^24 rows)")
     var values = List[Float64]()
-    for t in range(len(idx)):  # driver-loop: native Mojo values, no CPython call: (idx: the taken row numbers): bounded by the caller's index list
+    for t in range(len(idx)):  # native data loop (not a driver loop), no CPython call: (idx: the taken row numbers): bounded by the caller's index list
         values.append(Float64(idx[t]))
     var im = mk_of(values, len(idx), 1, ctx)
     var count = len(idx)
