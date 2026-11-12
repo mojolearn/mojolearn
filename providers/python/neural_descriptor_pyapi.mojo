@@ -13,7 +13,7 @@ from bindings.native_loaded_module import native_loaded_module, native_namespace
 from bindings.cpython_table import cpython_table
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_watch_ready
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call_spans
+from core.native_descriptor_call import native_descriptor_call_spans, native_descriptor_leased_call
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
 from core.shared_slot import SharedSlot
 
@@ -537,28 +537,19 @@ def neural_descriptor_execute(
     if operation < 0 or operation >= len(owner[].calls):
         raise Error("neural native ABI: unknown operation")
     owner[].calls[operation] += 1
-    var loan = NativeCallWorkspaceLease(Int(owner[].workspace.unsafe_ptr()))
-    var scratch = loan.pointer()
+    var workspace = Int(owner[].workspace.unsafe_ptr())
     try:
         var result = 0
         if release_gil:
             with GILReleased(Python()):
-                result = native_descriptor_call_spans(owner[].entry, operation,
-                    Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-                    Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+                result = native_descriptor_leased_call(owner[].entry, workspace, operation, addresses, ints, floats)
         else:
             # Native resource registry admission/finalization whose ownership
             # requires the admission lock uses this branch; computation keeps True.
-            result = native_descriptor_call_spans(owner[].entry, operation,
-                Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-                Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+            result = native_descriptor_leased_call(owner[].entry, workspace, operation, addresses, ints, floats)
         return result
     finally:
-        loan.release()
-        # Span addresses and the workspace pointer do not retain these owners.
-        _ = addresses
-        _ = ints
-        _ = floats
+        # The workspace pointer does not retain the provider.
         _ = provider
 
 

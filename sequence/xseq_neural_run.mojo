@@ -19,8 +19,7 @@ it before the split; the plain word copies run with it held, as before.
 from std.math import sqrt
 from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.native_descriptor_call import native_descriptor_call_spans
-from core.native_call_output import NativeCallWorkspaceLease
+from core.native_descriptor_call import native_descriptor_leased_call
 from sequence.ops_impl import net_of
 from sequence.neural_model_dispatch import (
     RNN_FIT, RNN_PREDICT, MLP_FIT, MLP_PREDICT, MODEL_ARGMAX, MODEL_MIN, MODEL_THRESHOLD, MODEL_UNIFORM,
@@ -88,18 +87,7 @@ def xseq_neural_run_call(entry: XseqNeuralEntry, operation: Int, addresses: List
     call that finds it busy gets a private one. The provider's call counters
     are not bumped (nothing product-side reads them). The caller keeps every
     addressed buffer alive and has released the GIL."""
-    var loan = NativeCallWorkspaceLease(entry.workspace)
-    var scratch = loan.pointer()
-    try:
-        return native_descriptor_call_spans(entry.call, operation,
-            Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
-            Int(floats.unsafe_ptr()), len(floats), scratch[].output)
-    finally:
-        loan.release()
-        # Span addresses and the workspace pointer do not retain these owners.
-        _ = addresses
-        _ = ints
-        _ = floats
+    return native_descriptor_leased_call(entry.call, entry.workspace, operation, addresses, ints, floats)
 
 
 def xseq_run_uniform(entry: XseqNeuralEntry, address: Int, n: Int, seed: UInt64, offset: Int, low: Float64,

@@ -3,7 +3,7 @@
 from std.sys import is_defined
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
-from core.native_call_output import NativeCallOutput
+from core.native_call_output import NativeCallOutput, NativeCallWorkspaceLease
 
 
 def native_descriptor_error(context: Int, address: Int, size: Int) abi("C") -> NoneType:
@@ -68,6 +68,33 @@ def native_descriptor_call_spans(
         output.error.append(0)
         raise Error(unsafe_string_from_utf8_cstr(output.error.unsafe_ptr()))
     return output.result
+
+
+@always_inline
+def native_descriptor_leased_call(
+    entry: NativeDescriptorCall, workspace: Int, operation: Int, addresses: List[Int], ints: List[Int],
+    floats: List[Float64],
+) raises -> Int:
+    """One synchronous call of `entry` under the workspace lease at
+    `workspace` (a `NativeCallWorkspace` address, or 0 for a private one): the
+    ABI output and its error storage are the retained scratch, reused across
+    calls; a nested or concurrent call that finds it busy gets a private one.
+    The one lease-and-call body of the provider route
+    (providers/python/neural_descriptor_pyapi.mojo `neural_descriptor_execute`)
+    and the Python-free door route (sequence/xseq_neural_run.mojo
+    `xseq_neural_run_call`). The caller keeps every addressed buffer alive."""
+    var loan = NativeCallWorkspaceLease(workspace)
+    var scratch = loan.pointer()
+    try:
+        return native_descriptor_call_spans(entry, operation,
+            Int(addresses.unsafe_ptr()), len(addresses), Int(ints.unsafe_ptr()), len(ints),
+            Int(floats.unsafe_ptr()), len(floats), scratch[].output)
+    finally:
+        loan.release()
+        # Span addresses and the workspace pointer do not retain these owners.
+        _ = addresses
+        _ = ints
+        _ = floats
 
 
 def native_descriptor_words(address: Int, count: Int) raises -> List[Int]:
